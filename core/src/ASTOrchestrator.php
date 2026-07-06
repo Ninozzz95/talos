@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 final class ASTOrchestrator
 {
-    /** @var array<string, array{id: string, status: string}> */
+    /** @var array<string, array{id: string, status: string, type: string}> */
     private array $nodes = [];
 
     /** @var array<string, list<string>> */
@@ -20,7 +20,7 @@ final class ASTOrchestrator
     /**
      * @param list<string> $dependencies
      */
-    public function addNode(string $nodeId, array $dependencies = []): void
+    public function addNode(string $nodeId, array $dependencies = [], string $type = 'UNKNOWN'): void
     {
         if (isset($this->nodes[$nodeId])) {
             throw new InvalidArgumentException("Node already exists: {$nodeId}");
@@ -33,6 +33,7 @@ final class ASTOrchestrator
         $this->nodes[$nodeId] = [
             'id' => $nodeId,
             'status' => NodeStatus::PENDING,
+            'type' => $type,
         ];
         $this->dependencies[$nodeId] = array_values($dependencies);
         $this->children[$nodeId] ??= [];
@@ -96,6 +97,26 @@ final class ASTOrchestrator
         $this->assertNodeExists($nodeId);
 
         return $this->nodes[$nodeId]['status'];
+    }
+
+    /**
+     * Costruisce il context {node_id => node_type} per l'envelope IPC.
+     *
+     * @param list<array<string, mixed>> $mutations
+     * @return array<string, string>
+     */
+    public function buildContext(array $mutations): array
+    {
+        $context = [];
+        foreach ($mutations as $mutation) {
+            if (($mutation['action'] ?? '') === 'MUTATE_PAYLOAD' && isset($mutation['node_id'])) {
+                $nodeId = (string) $mutation['node_id'];
+                if (isset($this->nodes[$nodeId])) {
+                    $context[$nodeId] = $this->nodes[$nodeId]['type'];
+                }
+            }
+        }
+        return $context;
     }
 
     private function setStatus(string $nodeId, string $status): void
