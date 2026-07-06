@@ -3,6 +3,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { validateMutations } from './schemas/validate.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,6 +70,30 @@ export function buildServer() {
     } catch {
       return '<h1>Dashboard not found</h1>';
     }
+  });
+
+  // Chat relay to PHP
+  server.post('/chat', async (request) => {
+    const { message, api_key } = request.body as { message?: string; api_key?: string };
+    if (!message) return { error: 'message required' };
+
+    const phpBin = process.env.PHP_BIN || join(__dirname, '..', '.tools', 'php', 'php.exe');
+    const chatScript = join(__dirname, '..', 'core', 'talos-chat.php');
+
+    return new Promise((resolve) => {
+      const php = spawn(phpBin, [chatScript], {
+        env: { ...process.env, DEEPSEEK_API_KEY: api_key || process.env.DEEPSEEK_API_KEY || '' },
+      });
+      let output = '';
+      php.stdout.on('data', (data: Buffer) => { output += data.toString(); });
+      php.stderr.on('data', () => {});
+      php.on('close', () => {
+        try { resolve(JSON.parse(output.trim().split('\n').pop() || '{}')); }
+        catch { resolve({ error: 'chat error', raw: output.slice(-200) }); }
+      });
+      php.stdin.write(JSON.stringify({ message, api_key }) + '\n');
+      php.stdin.end();
+    });
   });
 
   // WebSocket
