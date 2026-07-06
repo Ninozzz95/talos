@@ -107,6 +107,8 @@ final class OpenAIClient implements LLMClientInterface
                 "Authorization: Bearer {$this->apiKey}",
             ],
             \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
+            \CURLOPT_SSL_VERIFYPEER => false,
+            \CURLOPT_SSL_VERIFYHOST => 0,
         ]);
 
         $response = \curl_exec($ch);
