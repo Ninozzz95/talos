@@ -1,0 +1,16 @@
+.tools/
+vendor/
+node_modules/
+
+core/vendor/
+validator/node_modules/
+control-plane/vendor/
+control-plane/node_modules/
+
+.env
+control-plane/.env
+
+*.log
+.phpunit.cache/
+.DS_Store
+Thumbs.db

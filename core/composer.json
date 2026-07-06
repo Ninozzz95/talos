@@ -1,0 +1,31 @@
+{
+    "name": "avm/core",
+    "description": "AVM Pure PHP Engine",
+    "type": "library",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.5"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "AVM\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AVM\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "php tests/ASTOrchestratorTest.php"
+    },
+    "authors": [
+        {
+            "name": "antoninorizzo",
+            "email": "ninozz142@gmail.com"
+        }
+    ]
+}
