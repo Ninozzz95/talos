@@ -25,7 +25,8 @@
   --green:#2d8a3e;--red:#c23b2c;--code-bg:#f5f5f5;--code-text:#1a6b3c;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
 
 .app{display:flex;height:100vh}
 
@@ -37,6 +38,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .sidebar-header .new-chat:hover{background:var(--bg-input)}
 .sidebar-nav{flex:1;overflow-y:auto;padding:4px 8px;display:flex;flex-direction:column;gap:2px}
 .sidebar-nav button{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:13px;font-family:inherit;width:100%;text-align:left}
+.sidebar-footer button:hover{color:var(--text)}
 .sidebar-nav button:hover{background:var(--bg-card);color:var(--text)}
 .sidebar-nav button.active{background:var(--bg-card);color:var(--text);font-weight:500}
 .sidebar-nav button .icon{font-size:16px;width:20px;text-align:center}
@@ -49,49 +51,67 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .header .badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500}
 .header .badge.ok{background:rgba(63,185,80,.12);color:var(--green)}
 .header .badge.no{background:rgba(255,255,255,.05);color:var(--text-tertiary)}
+
+/* Trace switch */
+.trace-switch{appearance:none;width:36px;height:20px;background:var(--border);border-radius:10px;position:relative;cursor:pointer;transition:background .2s;border:none;outline:none;flex-shrink:0}
+.trace-switch:checked{background:var(--accent)}
+.trace-switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text);transition:transform .2s cubic-bezier(.4,0,.2,1)}
+.trace-switch:checked::after{transform:translateX(16px)}
+
 .spacer{flex:1}
 
 /* Content */
 .content{flex:1;overflow:hidden;display:flex}
 
 /* Chat */
-.chat-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.chat-msgs{flex:1;overflow-y:auto;padding:20px 0;scroll-behavior:smooth}
+.chat-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.chat-wrap.centered{justify-content:center}
+.chat-msgs{flex:1;overflow-y:auto;scroll-behavior:smooth}
 .chat-msgs-inner{max-width:768px;margin:0 auto;padding:0 24px;display:flex;flex-direction:column;gap:24px}
 
-/* Welcome */
-.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px 20px}
-.welcome img{width:56px;height:56px;border-radius:12px;margin-bottom:20px;opacity:.9}
-.welcome h1{font-size:28px;font-weight:600;color:var(--text);margin:0 0 8px;letter-spacing:-.5px}
-.welcome p{color:var(--text-secondary);font-size:15px;margin:0 0 28px;max-width:400px}
-.welcome .suggestions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:500px}
+/* Welcome — centered when no messages */
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 20px}
+.welcome img{height:40px;margin-bottom:20px;opacity:.9}
+.welcome h1{font-size:26px;font-weight:600;color:var(--text);margin:0 0 10px;letter-spacing:-.5px}
+.welcome p{color:var(--text-secondary);font-size:14px;margin:0 0 28px;max-width:420px;line-height:1.6}
+.welcome .suggestions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:520px}
 .welcome .sugg{padding:8px 16px;border-radius:20px;border:1px solid var(--border);color:var(--text-secondary);font-size:13px;cursor:pointer;background:transparent}
 .welcome .sugg:hover{border-color:var(--accent);color:var(--accent)}
 
 /* Messages */
-.msg-row{display:flex;gap:16px;padding:4px 0}
-.msg-avatar{width:30px;height:30px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;background:var(--bg-card)}
-.msg-avatar.user{background:var(--accent);color:var(--bg)}
-.msg-body{flex:1;min-width:0}
-.msg-body .role{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
-.msg-body .text{color:var(--text);font-size:15px;line-height:1.7}
-.msg-body .text p{margin-bottom:12px}
-.msg-body .text p:last-child{margin-bottom:0}
-.msg-body pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;font-size:12px;overflow-x:auto;color:var(--code-text);margin:8px 0;border:1px solid var(--border);line-height:1.5}
-.msg-body .jmp-label{font-size:11px;font-weight:600;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
-.system-msg{text-align:center;color:var(--text-tertiary);font-size:12px;padding:4px 0}
+/* ── Messages ── */
+.msg-row{display:flex;gap:10px;padding:1px 0;animation:msgIn .3s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(12px)}}
+.msg-row.user{justify-content:flex-end}
 
-/* Input */
-.chat-input-wrap{padding:12px 0 20px}
-.chat-input-wrap.centered{padding:0;margin-top:16px}
-.chat-input-inner{max-width:768px;margin:0 auto;padding:0 24px}
-.chat-input-bar{display:flex;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:14px;padding:6px 6px 6px 16px;transition:border-color .2s}
-.chat-input-bar:focus-within{border-color:var(--accent)}
-.chat-input-bar input{flex:1;background:transparent;border:none;padding:8px 0;color:var(--text);font-size:15px;outline:none;font-family:inherit}
+.msg-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;margin-top:2px}
+.msg-avatar.assistant{background:var(--accent);color:var(--bg)}
+.msg-avatar.user{background:var(--bg-input);color:var(--text-secondary)}
+
+.msg-bubble{max-width:72%;padding:8px 13px;border-radius:18px;font-size:14px;line-height:1.55;position:relative;word-wrap:break-word}
+.msg-bubble.assistant{background:var(--bg-card);color:var(--text);border-bottom-left-radius:4px;border:1px solid var(--border)}
+.msg-bubble.user{background:var(--bg-input);color:var(--text);border-bottom-right-radius:4px;border:1px solid var(--border)}
+
+.msg-bubble .text{white-space:pre-wrap}
+.msg-bubble .time{font-size:10px;color:var(--text-tertiary);text-align:right;margin-top:3px;opacity:.6}
+
+.msg-bubble pre{background:var(--code-bg);padding:9px 11px;border-radius:7px;font-size:11px;overflow-x:auto;color:var(--code-text);margin:5px 0 0;border:1px solid var(--border-subtle)}
+
+.system-msg{text-align:center;color:var(--text-tertiary);font-size:11px;padding:8px 0;font-style:italic}
+
+/* Chat input — always in flow, naturally positioned */
+.chat-input-wrap{padding:8px 0 20px;flex-shrink:0}
+.chat-wrap.centered .welcome{flex:0 0 auto}
+.chat-wrap.centered .chat-input-wrap{margin-top:0}
+.chat-input-inner{max-width:768px;margin:0 auto;width:100%}
+.chat-input-bar{display:flex;align-items:center;gap:0;background:var(--bg-input);border:1px solid var(--border);border-radius:16px;padding:4px;transition:all .25s ease}
+.chat-input-bar:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px rgba(201,167,60,.08)}
+.chat-input-bar input{flex:1;background:transparent;border:none;padding:10px 14px;color:var(--text);font-size:15px;outline:none;font-family:inherit;min-width:0}
 .chat-input-bar input::placeholder{color:var(--text-tertiary)}
-.chat-input-bar button{background:var(--text);color:var(--bg);border:none;border-radius:10px;padding:8px 16px;font-weight:500;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap}
-.chat-input-bar button:hover:not(:disabled){background:var(--accent)}
-.chat-input-bar button:disabled{opacity:.3}
+.chat-input-bar .send-btn{width:36px;height:36px;min-width:36px;border-radius:10px;border:none;background:var(--text);color:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s ease}
+.chat-input-bar .send-btn:hover:not(:disabled){background:var(--accent);transform:scale(1.06)}
+.chat-input-bar .send-btn:active:not(:disabled){transform:scale(.94)}
+.chat-input-bar .send-btn:disabled{opacity:.2;cursor:default}
 
 /* DAG panel */
 .dag-panel{width:280px;background:var(--bg-sidebar);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;font-size:12px}
@@ -134,10 +154,13 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
 .media-grid .mname{font-size:9px;color:var(--text-tertiary);text-align:center;margin-top:3px}
 
 /* Thinking */
-.thinking{display:flex;align-items:center;gap:10px;padding:12px 0;color:var(--text-tertiary);font-size:14px}
-.thinking .dots{display:flex;gap:4px}.thinking .dots span{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:bounce 1.2s infinite}
-.thinking .dots span:nth-child(2){animation-delay:.2s}.thinking .dots span:nth-child(3){animation-delay:.4s}
-@keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+.thinking{display:flex;align-items:center;padding:2px 6px}
+.thinking .dots{display:flex;gap:3px}
+.thinking .dots span{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:wave 1.4s infinite ease-in-out}
+.thinking .dots span:nth-child(1){animation-delay:0s}
+.thinking .dots span:nth-child(2){animation-delay:.2s}
+.thinking .dots span:nth-child(3){animation-delay:.4s}
+@keyframes wave{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
 
 /* Theme toggle */
 .theme-toggle{position:fixed;bottom:16px;right:16px;z-index:100;display:flex;background:var(--bg-card);border:1px solid var(--border);border-radius:20px;padding:3px}
@@ -156,7 +179,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-header">
-        <span class="logo">TALOS</span>
+        <img src="/media/logo-full.png" style="height:24px" alt="TALOS">
         <button class="new-chat" @click="newChat" title="New chat">+</button>
       </div>
       <div class="sidebar-nav">
@@ -174,55 +197,69 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--t
     <div class="main">
       <div class="header">
         <span class="brand">{{ view==='chat' ? 'TALOS' : view==='bench' ? 'Benchmark' : view==='media' ? 'Media' : 'Settings' }}</span>
+        <span style="font-size:10px;color:var(--text-tertiary);opacity:.5;margin-left:6px">Kadmos Engine</span>
         <span class="spacer"></span>
-        <span style="font-size:11px;color:var(--text-tertiary);margin-right:10px">LLM → JMP → DAG → Execute</span>
-        <span class="badge" :class="settings.api_key ? 'ok' : 'no'">{{ settings.api_key ? 'Key set' : 'No key' }}</span>
+        <label style="font-size:11px;color:var(--text-tertiary);display:flex;align-items:center;gap:6px;cursor:pointer;margin-right:10px;user-select:none">
+          <input type="checkbox" class="trace-switch" v-model="showTrace">
+          Trace
+        </label>
+        <span class="badge" :class="settings.api_key ? 'ok' : 'no'">{{ settings.api_key ? '●' : '○' }}</span>
       </div>
 
       <div class="content">
         <!-- Chat -->
         <template v-if="view==='chat'">
-          <div class="chat-wrap">
-            <div class="chat-msgs" ref="msgEl">
+          <div class="chat-wrap" :class="{centered:!messages.length}">
+            <div class="chat-msgs" ref="msgEl" v-if="messages.length">
               <div class="chat-msgs-inner">
-                <div v-if="!messages.length" class="welcome">
-                  <img src="/media/01_talos_brand_mark.png" alt="TALOS">
-                  <h1>What workflow would you like to automate?</h1>
-                  <p>TALOS converts natural language into validated execution graphs. Every mutation is checked against type-safe schemas before reaching your infrastructure.</p>
-                  <div class="suggestions">
-                    <div class="sugg" @click="input='Monitor https://api.example.com/health every 30 seconds and alert on failure'">API health monitoring</div>
-                    <div class="sugg" @click="input='Extract data from a REST API, transform it, and insert into a PostgreSQL database'">ETL pipeline</div>
-                    <div class="sugg" @click="input='Scrape 3 competitor pricing pages in parallel and store the results'">Parallel scraping</div>
-                    <div class="sugg" @click="input='Build a CI-like pipeline: fetch repo status, run tests, deploy if green'">CI/CD workflow</div>
-                  </div>
-                </div>
                 <template v-for="(m,i) in messages" :key="i">
                   <div v-if="m.role==='system'" class="system-msg">{{ m.text }}</div>
-                  <div v-else class="msg-row">
-                    <div class="msg-avatar" :class="m.role">{{ m.role==='user' ? '👤' : '⚡' }}</div>
-                    <div class="msg-body">
-                      <div class="role">{{ m.role==='user' ? 'You' : 'TALOS' }}</div>
-                      <div class="text" v-if="!m.jmp">{{ m.text }}</div>
-                      <div v-if="m.jmp">
-                        <div class="jmp-label">JMP Mutations</div>
-                        <pre>{{ JSON.stringify(m.jmp,null,2) }}</pre>
+                  <div v-else class="msg-row" :class="m.role">
+                    <div class="msg-avatar" :class="m.role" v-if="m.role==='assistant'">T</div>
+                    <div class="msg-bubble" :class="m.role">
+                      <div class="text" v-if="m.text">{{ m.text }}</div>
+                      <div v-if="m.jmp && showTrace"><pre>{{ JSON.stringify(m.jmp,null,2) }}</pre></div>
+                      <div v-if="m.jmp && !showTrace" style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                        ⚡ {{ summarizeJmp(m.jmp) }}
                       </div>
+                      <div class="time">{{ formatTime(m.ts) }}</div>
                     </div>
+                    <div class="msg-avatar" :class="m.role" v-if="m.role==='user'">U</div>
                   </div>
                 </template>
-                <div v-if="loading" class="thinking"><div class="dots"><span></span><span></span><span></span></div>Talos is thinking...</div>
+              <div v-if="loading" class="msg-row">
+                <div class="msg-avatar assistant">T</div>
+                <div class="msg-bubble assistant thinking-bubble">
+                  <div class="thinking"><div class="dots"><span></span><span></span><span></span></div></div>
+                </div>
+              </div>
+              </div>
+              <div style="height:20px;flex-shrink:0"></div>
+            </div>
+            <!-- Welcome (only when no messages) -->
+            <div v-if="!messages.length" class="welcome">
+              <img src="/media/logo-full.png" alt="TALOS" style="height:40px;margin-bottom:20px">
+              <h1>What workflow would you like to automate?</h1>
+              <p>TALOS converts natural language into validated execution graphs. Every mutation is checked against type-safe schemas before reaching your infrastructure.</p>
+              <div class="suggestions">
+                <div class="sugg" @click="input='Monitor https://api.example.com/health every 30 seconds and alert on failure'">API health monitoring</div>
+                <div class="sugg" @click="input='Extract data from a REST API, transform it, and insert into a PostgreSQL database'">ETL pipeline</div>
+                <div class="sugg" @click="input='Scrape 3 competitor pricing pages in parallel and store the results'">Parallel scraping</div>
+                <div class="sugg" @click="input='Build a CI-like pipeline: fetch repo status, run tests, deploy if green'">CI/CD workflow</div>
               </div>
             </div>
             <div class="chat-input-wrap" :class="{centered:!messages.length}">
               <div class="chat-input-inner">
                 <div class="chat-input-bar">
                   <input v-model="input" @keyup.enter="send" placeholder="Describe your workflow..." :disabled="loading||!settings.api_key" ref="inputEl">
-                  <button @click="send" :disabled="loading||!input.trim()||!settings.api_key">Send</button>
+                  <button class="send-btn" @click="send" :disabled="loading||!input.trim()||!settings.api_key" title="Send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-          <div class="dag-panel" v-if="nodes.length">
+          <div class="dag-panel" v-if="nodes.length && showTrace">
             <div class="dp-header"><span>DAG</span><span>{{ nodes.length }} nodes</span></div>
             <div class="dag-nodes">
               <div v-for="n in nodes" :key="n.id" class="dag-node" :class="n.status">
@@ -290,6 +327,7 @@ createApp({
     const benchScenarios = ref([]); const benchScenario = ref('01_simple_http');
     const benchLive = ref(false); const benchRunning = ref(false); const benchResult = ref(null);
     const theme = ref('dark');
+    const showTrace = ref(false);
 
     function load() { const s = localStorage.getItem('talos_settings'); if (s) settings.value = JSON.parse(s); }
     function saveSettings() { localStorage.setItem('talos_settings', JSON.stringify(settings.value)); settingsSaved.value = true; setTimeout(() => settingsSaved.value = false, 2000); }
@@ -297,16 +335,34 @@ createApp({
     function mediaUrl(i) { return `/media/${F[i-1]}.png`; } function mediaName(i) { return N[i-1]; }
     function newChat() { messages.value = []; nodes.value = []; input.value = ''; }
     function parseDag(t) { if (!t) return []; const r = []; for (const l of t.split('\n')) { const m = l.match(/Node:\s*(\S+)\s*\|\s*Type:\s*(\S+)\s*\|\s*Status:\s*(\S+)/); if (m) { const x = l.match(/Result:\s*(.+)/); r.push({ id: m[1], type: m[2], status: m[3], result: x ? x[1].trim() : '' }); } } return r; }
+    function summarizeJmp(jmp) {
+      if (!jmp?.length) return '';
+      const parts = [];
+      for (const c of jmp) {
+        if (c.action === 'SPAWN_NODE') parts.push(`Created node \`${c.node_id}\` (${c.node_type})` + (c.dependencies?.length ? ` depending on ${c.dependencies.join(', ')}` : ''));
+        else if (c.action === 'MUTATE_PAYLOAD') parts.push(`Configured \`${c.node_id}\` with payload`);
+        else if (c.action === 'YIELD_EXECUTION') parts.push('Executed all pending nodes');
+      }
+      return parts.join('. ') + '.';
+    }
     function scroll() { nextTick(() => { if (msgEl.value) msgEl.value.scrollTop = msgEl.value.scrollHeight; }); }
+
+    function formatTime(ts) { if (!ts) return ''; const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); }
 
     async function send() {
       const m = input.value.trim(); if (!m || loading.value || !settings.value.api_key) return;
-      messages.value.push({ role: 'user', text: m }); input.value = ''; loading.value = true; scroll();
+      messages.value.push({ role: 'user', text: m, ts: Date.now() }); input.value = ''; loading.value = true; scroll();
       try {
         const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: m, api_key: settings.value.api_key }) });
         const d = await r.json();
         if (d.error) messages.value.push({ role: 'system', text: '⚠ ' + d.error });
-        else { if (d.mutations?.length) messages.value.push({ role: 'assistant', text: '', jmp: d.mutations }); if (d.dag) nodes.value = parseDag(d.dag); if (d.errors) messages.value.push({ role: 'system', text: '⚠ ' + d.errors.join('; ') }); }
+        else {
+          const hasJmp = d.mutations && d.mutations.length;
+          if (hasJmp) messages.value.push({ role: 'assistant', text: d.text || '', jmp: d.mutations, ts: Date.now() });
+          else if (d.text) messages.value.push({ role: 'assistant', text: d.text, ts: Date.now() });
+          if (d.dag) nodes.value = parseDag(d.dag);
+          if (d.errors) messages.value.push({ role: 'system', text: '⚠ ' + d.errors.join('; ') });
+        }
       } catch { messages.value.push({ role: 'system', text: '⚠ Connection error' }); }
       loading.value = false; scroll(); nextTick(() => inputEl.value?.focus());
     }
@@ -316,7 +372,7 @@ createApp({
 
     const savedTheme = localStorage.getItem('talos_theme') || 'dark'; setTheme(savedTheme);
     load(); loadBenchScenarios();
-    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat };
+    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime };
   },
 }).mount('#app');
 </script>

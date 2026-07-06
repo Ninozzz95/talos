@@ -71,16 +71,29 @@ while (true) {
         $llm = new OpenAIClient($apiKey, 'deepseek-chat', 'https://api.deepseek.com/v1');
     }
 
-    // Build prompt: user message + current DAG state
+    // Build prompt
     $dagState = $orchestrator->serializeDagState();
-    $prompt = "User request: {$message}\n\nCurrent DAG State:\n{$dagState}\n\nReply with a JMP JSON array of commands to fulfill the request. Include YIELD_EXECUTION when you want nodes to execute.";
+    $hasNodes = str_contains($dagState, 'Node:');
+    $prompt = $hasNodes
+        ? "User: {$message}\n\nCurrent DAG:\n{$dagState}"
+        : "User: {$message}";
 
-    // Get LLM response
-    $rawJmp = $llm->generate($prompt);
-    $batch = json_decode($rawJmp, true);
+    $rawResponse = $llm->generate($prompt);
 
+    // Try to extract JMP JSON from response
+    $jmpJson = null;
+    if (preg_match('/```(?:json)?\s*\n?(.*?)\n?```/s', $rawResponse, $matches)) {
+        $jmpJson = trim($matches[1]);
+    } elseif (str_starts_with(trim($rawResponse), '[')) {
+        $jmpJson = trim($rawResponse);
+    }
+
+    $batch = $jmpJson ? json_decode($jmpJson, true) : null;
+    $textReply = $jmpJson ? trim(str_replace($matches[0] ?? '', '', $rawResponse)) : $rawResponse;
+
+    // No JMP — just a text reply
     if (!is_array($batch)) {
-        echo json_encode(['reply' => $rawJmp, 'dag' => $dagState, 'mutations' => [], 'error' => 'Invalid JMP']) . "\n";
+        echo json_encode(['text' => trim($rawResponse), 'dag' => $dagState, 'mutations' => []]) . "\n";
         continue;
     }
 
@@ -127,5 +140,5 @@ while (true) {
     }
 
     $finalDag = $orchestrator->serializeDagState();
-    echo json_encode(['reply' => $rawJmp, 'dag' => $finalDag, 'mutations' => $batch]) . "\n";
+    echo json_encode(['text' => $textReply, 'dag' => $finalDag, 'mutations' => $batch]) . "\n";
 }
