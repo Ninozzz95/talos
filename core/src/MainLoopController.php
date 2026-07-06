@@ -12,6 +12,11 @@ final class MainLoopController
     private int $maxCycles;
     private int $cycleCount = 0;
     private ?string $broadcastUrl;
+    private bool $demoThrottle;
+    private int $throttleMs;
+
+    /** @var array<string, string> */
+    private array $previousNodeStates = [];
 
     /** @var list<array{status: string, output_summary: string, raw_output: mixed}> */
     private array $executionLog = [];
@@ -22,12 +27,16 @@ final class MainLoopController
         JmpValidatorClient $validator,
         int $maxCycles = 100,
         ?string $broadcastUrl = null,
+        bool $demoThrottle = false,
+        int $throttleMs = 600,
     ) {
         $this->orchestrator = $orchestrator;
         $this->llm = $llm;
         $this->validator = $validator;
         $this->maxCycles = $maxCycles;
         $this->broadcastUrl = $broadcastUrl;
+        $this->demoThrottle = $demoThrottle;
+        $this->throttleMs = $throttleMs;
     }
 
     /**
@@ -107,6 +116,7 @@ final class MainLoopController
                         : [];
 
                     $this->orchestrator->addNode($nodeId, $deps, $nodeType);
+                    if ($this->demoThrottle) { usleep($this->throttleMs * 1000); $this->broadcastDag(); }
                     break;
 
                 case 'MUTATE_PAYLOAD':
@@ -116,6 +126,7 @@ final class MainLoopController
                         : [];
 
                     $this->orchestrator->setPayload($nodeId, $payload);
+                    if ($this->demoThrottle) { usleep($this->throttleMs * 1000); $this->broadcastDag(); }
                     break;
 
                 case 'YIELD_EXECUTION':
@@ -135,6 +146,7 @@ final class MainLoopController
                 try {
                     $this->orchestrator->executeNode($nodeId);
                     $executedAny = true;
+                    if ($this->demoThrottle) { usleep($this->throttleMs * 1000); $this->broadcastDag(); }
                 } catch (\RuntimeException $e) {
                     // Node not in executable state (PENDING without payload) — skip
                     continue;
@@ -161,17 +173,42 @@ final class MainLoopController
 
         try {
             $dag = $this->orchestrator->serializeDagState();
+
+            // Build structured delta from previous state
+            $state = $this->orchestrator->exportState();
+            $deltas = [];
+            foreach ($state['nodes'] as $nodeId => $node) {
+                $currentStatus = $node['status'];
+                $previousStatus = $this->previousNodeStates[$nodeId] ?? null;
+                if ($previousStatus !== null && $previousStatus !== $currentStatus) {
+                    $deltas[] = [
+                        'node_id' => $nodeId,
+                        'previous_state' => $previousStatus,
+                        'new_state' => $currentStatus,
+                        'output_summary' => $node['output_summary'] ?? null,
+                    ];
+                }
+                $this->previousNodeStates[$nodeId] = $currentStatus;
+            }
+
+            $payload = json_encode([
+                'type' => 'dag-update',
+                'timestamp' => microtime(true),
+                'deltas' => $deltas,
+                'full_dag' => $dag,
+            ]);
+
             $ch = \curl_init($this->broadcastUrl);
             \curl_setopt_array($ch, [
                 \CURLOPT_RETURNTRANSFER => true,
                 \CURLOPT_POST => true,
-                \CURLOPT_POSTFIELDS => \json_encode(['dag' => $dag]),
+                \CURLOPT_POSTFIELDS => $payload,
                 \CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
                 \CURLOPT_TIMEOUT_MS => 1000,
             ]);
             \curl_exec($ch);
         } catch (\Throwable) {
-            // Broadcast is best-effort — never crash the loop
+            // Broadcast is best-effort
         }
     }
 }

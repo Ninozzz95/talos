@@ -1,0 +1,23 @@
+{
+  "name": "ghost_node_mutation",
+  "difficulty": 3,
+  "description": "MUTATE_PAYLOAD on non-existent node — State Context Injection must reject it",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "real", "node_type": "HTTP_REQUEST" },
+      { "action": "MUTATE_PAYLOAD", "node_id": "real", "payload": { "url": "https://valid.com", "method": "GET" } }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "ghost_node_88", "payload": { "auth_token": "bearer xyz" } }
+    ]},
+    { "cycle": 3, "mutations": [
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": { "cycle": 2, "node": "ghost_node_88", "type": "VALIDATION_FAULT" },
+  "expected_nodes": 1,
+  "expected_all_success": true,
+  "expected_state": {
+    "real": "SUCCESS"
+  }
+}

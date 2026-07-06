@@ -169,17 +169,35 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
 
 .coming-soon{opacity:.3;pointer-events:none}
 
+/* Toast */
+.toast-container{position:fixed;top:56px;right:16px;z-index:200;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{pointer-events:auto;padding:10px 16px;border-radius:10px;font-size:12px;font-weight:500;max-width:360px;animation:toastIn .3s ease;display:flex;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.4);border:1px solid}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}}
+.toast.success{background:rgba(63,185,80,.08);border-color:var(--green);color:var(--green)}
+.toast.error{background:rgba(248,81,73,.08);border-color:var(--red);color:var(--red)}
+.toast.warning{background:rgba(210,153,34,.08);border-color:var(--accent);color:var(--accent)}
+.toast .close-btn{margin-left:auto;cursor:pointer;opacity:.5;font-size:14px}
+.toast .close-btn:hover{opacity:1}
+
 /* Responsive */
 @media(max-width:768px){.sidebar{display:none}.dag-panel{width:100%;position:fixed;bottom:0;left:0;right:0;max-height:40vh;z-index:50}}
 </style>
 </head>
 <body data-theme="dark">
 <div id="app">
+  <!-- Toast Container -->
+  <div class="toast-container">
+    <div v-for="(t,i) in toasts" :key="i" :class="'toast '+t.type" @click="dismissToast(i)">
+      <span>{{ t.icon }}</span>
+      <span style="flex:1">{{ t.message }}</span>
+      <span class="close-btn">×</span>
+    </div>
+  </div>
   <div class="app">
     <!-- Sidebar -->
     <div class="sidebar">
       <div class="sidebar-header">
-        <img src="/media/logo-full.png" style="height:24px" alt="TALOS">
+        <img src="/media/logo-full.png" style="height:22px" alt="TALOS">
         <button class="new-chat" @click="newChat" title="New chat">+</button>
       </div>
       <div class="sidebar-nav">
@@ -215,7 +233,7 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
                 <template v-for="(m,i) in messages" :key="i">
                   <div v-if="m.role==='system'" class="system-msg">{{ m.text }}</div>
                   <div v-else class="msg-row" :class="m.role">
-                    <div class="msg-avatar" :class="m.role" v-if="m.role==='assistant'">T</div>
+                    <div class="msg-avatar" :class="m.role" v-if="m.role==='assistant'"><img src="/media/01_app_icon_favicon.png" style="width:24px;height:24px;border-radius:6px"></div>
                     <div class="msg-bubble" :class="m.role">
                       <div class="text" v-if="m.text">{{ m.text }}</div>
                       <div v-if="m.jmp && showTrace"><pre>{{ JSON.stringify(m.jmp,null,2) }}</pre></div>
@@ -228,7 +246,7 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
                   </div>
                 </template>
               <div v-if="loading" class="msg-row">
-                <div class="msg-avatar assistant">T</div>
+                <div class="msg-avatar assistant"><img src="/media/01_app_icon_favicon.png" style="width:24px;height:24px;border-radius:6px"></div>
                 <div class="msg-bubble assistant thinking-bubble">
                   <div class="thinking"><div class="dots"><span></span><span></span><span></span></div></div>
                 </div>
@@ -238,9 +256,10 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
             </div>
             <!-- Welcome (only when no messages) -->
             <div v-if="!messages.length" class="welcome">
-              <img src="/media/logo-full.png" alt="TALOS" style="height:40px;margin-bottom:20px">
+              <img src="/media/02_hero_illustration_welcome.png" alt="TALOS" style="height:120px;margin-bottom:24px;border-radius:12px">
               <h1>What workflow would you like to automate?</h1>
-              <p>TALOS converts natural language into validated execution graphs. Every mutation is checked against type-safe schemas before reaching your infrastructure.</p>
+              <p>Your AI proposes. The engine validates. Nothing reaches production unchecked.</p>
+              <p style="font-size:11px;color:var(--text-tertiary);margin-top:-12px">Powered by Kadmos AVM — Agnostic Virtual Machine</p>
               <div class="suggestions">
                 <div class="sugg" @click="input='Monitor https://api.example.com/health every 30 seconds and alert on failure'">API health monitoring</div>
                 <div class="sugg" @click="input='Extract data from a REST API, transform it, and insert into a PostgreSQL database'">ETL pipeline</div>
@@ -328,6 +347,15 @@ createApp({
     const benchLive = ref(false); const benchRunning = ref(false); const benchResult = ref(null);
     const theme = ref('dark');
     const showTrace = ref(false);
+    const toasts = ref([]);
+
+    function addToast(type, message, icon) {
+      const id = Date.now();
+      toasts.value.push({ type, message, icon: icon || (type==='success'?'✓':type==='error'?'✕':'⚠'), id });
+      const duration = type === 'warning' ? 6000 : 3500;
+      setTimeout(() => dismissToast(id), duration);
+    }
+    function dismissToast(id) { toasts.value = toasts.value.filter(t => t.id !== id); }
 
     function load() { const s = localStorage.getItem('talos_settings'); if (s) settings.value = JSON.parse(s); }
     function saveSettings() { localStorage.setItem('talos_settings', JSON.stringify(settings.value)); settingsSaved.value = true; setTimeout(() => settingsSaved.value = false, 2000); }
@@ -355,13 +383,13 @@ createApp({
       try {
         const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: m, api_key: settings.value.api_key }) });
         const d = await r.json();
-        if (d.error) messages.value.push({ role: 'system', text: '⚠ ' + d.error });
+        if (d.error) { messages.value.push({ role: 'system', text: '⚠ ' + d.error }); addToast('error', d.error, '✕'); }
         else {
           const hasJmp = d.mutations && d.mutations.length;
-          if (hasJmp) messages.value.push({ role: 'assistant', text: d.text || '', jmp: d.mutations, ts: Date.now() });
+          if (hasJmp) { messages.value.push({ role: 'assistant', text: d.text || '', jmp: d.mutations, ts: Date.now() }); addToast('success', 'Workflow executed: ' + summarizeJmp(d.mutations)); }
           else if (d.text) messages.value.push({ role: 'assistant', text: d.text, ts: Date.now() });
           if (d.dag) nodes.value = parseDag(d.dag);
-          if (d.errors) messages.value.push({ role: 'system', text: '⚠ ' + d.errors.join('; ') });
+          if (d.errors) { messages.value.push({ role: 'system', text: '⚠ ' + d.errors.join('; ') }); addToast('error', d.errors[0], '✕'); }
         }
       } catch { messages.value.push({ role: 'system', text: '⚠ Connection error' }); }
       loading.value = false; scroll(); nextTick(() => inputEl.value?.focus());
@@ -372,7 +400,7 @@ createApp({
 
     const savedTheme = localStorage.getItem('talos_theme') || 'dark'; setTheme(savedTheme);
     load(); loadBenchScenarios();
-    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime };
+    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast };
   },
 }).mount('#app');
 </script>
