@@ -3,139 +3,180 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AVM Dashboard</title>
+<title>TALOS — Cyber Forge</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; }
-.header { background: #161b22; padding: 16px 24px; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
-.header h1 { font-size: 18px; color: #58a6ff; }
-.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-.status-dot.connected { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
-.status-dot.disconnected { background: #f85149; }
-.container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
-.nodes { display: flex; flex-direction: column; gap: 8px; }
-.node { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; transition: border-color .2s; }
-.node:hover { border-color: #58a6ff; }
-.node-id { font-weight: 700; font-size: 15px; min-width: 80px; color: #e6edf3; }
-.node-type { font-size: 12px; color: #8b949e; background: #21262d; padding: 3px 8px; border-radius: 4px; }
-.node-status { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; }
-.status-PENDING { background: #1f2a37; color: #8b949e; }
-.status-VALIDATED { background: #1b2d3a; color: #79c0ff; }
-.status-RUNNING { background: #2a2610; color: #d29922; animation: pulse 1s infinite; }
-.status-SUCCESS { background: #162b1d; color: #3fb950; }
-.status-FAILED { background: #2d1417; color: #f85149; }
-.status-BLOCKED_BY_DEPENDENCY { background: #2d1a23; color: #db6d9e; }
-.status-RETRYING { background: #2d1f10; color: #d29922; }
-@keyframes pulse { 50% { opacity: .5; } }
-.node-deps { font-size: 12px; color: #484f58; margin-left: auto; }
-.node-result { font-size: 12px; color: #7d8590; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.empty { text-align: center; color: #484f58; padding: 60px 20px; font-size: 16px; }
-.info-bar { display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; color: #8b949e; }
-.info-bar span { background: #161b22; border: 1px solid #30363d; padding: 6px 12px; border-radius: 6px; }
-.btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-.btn:hover { background: #30363d; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0e14;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;overflow:hidden}
+.app{display:grid;grid-template-columns:1fr 340px;height:100vh}
+/* Chat Panel */
+.chat{display:flex;flex-direction:column;background:#0d1117;border-right:1px solid #21262d}
+.chat-header{background:#161b22;padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:10px}
+.chat-header h1{font-size:16px;color:#d29922;letter-spacing:1px}
+.chat-header .dot{width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:90%;padding:10px 14px;border-radius:8px;font-size:14px;line-height:1.5;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end;background:#1f2a37;border:1px solid #30363d;color:#e6edf3}
+.msg.assistant{align-self:flex-start;background:#161b22;border:1px solid #21262d;color:#c9d1d9}
+.msg.system{align-self:center;background:transparent;color:#484f58;font-size:12px;text-align:center;max-width:100%}
+.msg pre{background:#0d1117;padding:8px;border-radius:4px;margin-top:6px;font-size:12px;overflow-x:auto;color:#7ee787;border:1px solid #21262d}
+.msg .jmp-label{font-size:10px;color:#d29922;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.chat-input{padding:12px;border-top:1px solid #21262d;display:flex;gap:8px}
+.chat-input input{flex:1;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px 14px;color:#e6edf3;font-size:14px;outline:none}
+.chat-input input:focus{border-color:#d29922}
+.chat-input button{background:#d29922;color:#0d1117;border:none;border-radius:6px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.5px}
+.chat-input button:hover{background:#e2a533}
+.chat-input button:disabled{opacity:.4;cursor:default}
+/* DAG Panel */
+.dag{background:#0a0e14;display:flex;flex-direction:column;overflow-y:auto}
+.dag-header{background:#161b22;padding:12px 16px;border-bottom:1px solid #21262d;font-size:14px;color:#8b949e;display:flex;justify-content:space-between}
+.dag-nodes{padding:12px;display:flex;flex-direction:column;gap:6px}
+.dag-node{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 12px;font-size:12px}
+.dag-node .id{font-weight:700;color:#e6edf3}
+.dag-node .type{color:#8b949e;margin-left:6px}
+.dag-node .status{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;float:right}
+.st-PENDING{background:#1f2a37;color:#8b949e}
+.st-VALIDATED{background:#1b2d3a;color:#79c0ff}
+.st-RUNNING{background:#2a2610;color:#d29922}
+.st-SUCCESS{background:#162b1d;color:#3fb950}
+.st-FAILED{background:#2d1417;color:#f85149}
+.st-BLOCKED_BY_DEPENDENCY{background:#2d1a23;color:#db6d9e}
+.st-RETRYING{background:#2d1f10;color:#d29922}
+.dag-node .result{color:#484f58;font-size:11px;margin-top:3px}
+.empty{text-align:center;color:#30363d;padding:40px 16px;font-size:13px}
+.thinking{display:flex;align-items:center;gap:6px;padding:8px 14px;color:#d29922;font-size:13px;align-self:flex-start}
+.thinking span{width:6px;height:6px;border-radius:50%;background:#d29922;animation:bounce 1s infinite}
+.thinking span:nth-child(2){animation-delay:.2s}
+.thinking span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
 </style>
 </head>
 <body>
 <div id="app">
-  <div class="header">
-    <h1>⚡ AVM Dashboard</h1>
-    <div style="display:flex;align-items:center;gap:12px;">
-      <span><span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>{{ connected ? 'Connected' : 'Disconnected' }}</span>
-      <span style="color:#8b949e;font-size:13px;">{{ nodes.length }} nodes</span>
-      <button class="btn" @click="fetchState">🔄 Refresh</button>
+  <div class="app">
+    <!-- Chat -->
+    <div class="chat">
+      <div class="chat-header">
+        <span class="dot"></span>
+        <h1>⚒ TALOS CYBER FORGE</h1>
+      </div>
+      <div class="chat-messages" ref="msgContainer">
+        <div class="msg system">⚡ Forge online. Describe your workflow.</div>
+        <div v-for="(m,i) in messages" :key="i" :class="'msg ' + m.role">
+          <div v-if="m.role === 'assistant' && m.jmp">
+            <div class="jmp-label">JMP MUTATIONS</div>
+            <pre>{{ JSON.stringify(m.jmp, null, 2) }}</pre>
+          </div>
+          <div v-else>{{ m.text }}</div>
+        </div>
+        <div v-if="loading" class="thinking">
+          <span></span><span></span><span></span> Forging...
+        </div>
+      </div>
+      <div class="chat-input">
+        <input v-model="input" @keyup.enter="send" placeholder="Describe your workflow..." :disabled="loading" ref="inputEl">
+        <button @click="send" :disabled="loading || !input.trim()">FORGE</button>
+      </div>
     </div>
-  </div>
-  <div class="container">
-    <div class="info-bar">
-      <span>Last update: {{ lastUpdate || '—' }}</span>
-      <span>WS clients: {{ clientCount }}</span>
-    </div>
-    <div v-if="nodes.length === 0" class="empty">
-      ⏳ Waiting for DAG state...<br>
-      <span style="font-size:13px;">Start the MainLoopController to see nodes appear here.</span>
-    </div>
-    <div v-else class="nodes">
-      <div v-for="node in nodes" :key="node.id" class="node">
-        <span class="node-id">{{ node.id }}</span>
-        <span class="node-type">{{ node.type }}</span>
-        <span class="node-status" :class="'status-' + node.status">{{ node.status }}</span>
-        <span class="node-result" v-if="node.result">{{ node.result }}</span>
-        <span class="node-deps" v-if="node.deps">→ {{ node.deps }}</span>
+    <!-- DAG -->
+    <div class="dag">
+      <div class="dag-header">
+        <span>⚙ DAG STATE</span>
+        <span>{{ nodes.length }} nodes</span>
+      </div>
+      <div class="dag-nodes">
+        <div v-if="nodes.length === 0" class="empty">No nodes yet.<br>Send a message to start building.</div>
+        <div v-for="n in nodes" :key="n.id" class="dag-node">
+          <span class="id">{{ n.id }}</span>
+          <span class="type">{{ n.type }}</span>
+          <span class="status" :class="'st-' + n.status">{{ n.status }}</span>
+          <div class="result" v-if="n.result">{{ n.result }}</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
 <script>
-const { createApp } = Vue;
+const { createApp, ref, nextTick } = Vue;
 
 createApp({
-  data() {
-    return {
-      connected: false,
-      nodes: [],
-      lastUpdate: null,
-      clientCount: 0,
-      ws: null,
-    };
-  },
-  mounted() {
-    this.connect();
-    this.fetchState();
-    setInterval(() => { if (!this.connected) this.connect(); }, 3000);
-  },
-  methods: {
-    connect() {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${location.host}/ws`;
-      this.ws = new WebSocket(wsUrl);
-      this.ws.onopen = () => { this.connected = true; };
-      this.ws.onclose = () => { this.connected = false; };
-      this.ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'dag-update') {
-          this.parseDag(msg.dag);
-          this.lastUpdate = new Date(msg.timestamp).toLocaleTimeString();
-          this.clientCount = msg.clients ?? this.clientCount;
+  setup() {
+    const messages = ref([]);
+    const input = ref('');
+    const loading = ref(false);
+    const nodes = ref([]);
+    const inputEl = ref(null);
+    const msgContainer = ref(null);
+
+    function scrollDown() {
+      nextTick(() => { if (msgContainer.value) msgContainer.value.scrollTop = msgContainer.value.scrollHeight; });
+    }
+
+    function parseDag(dagText) {
+      if (!dagText) return [];
+      const parsed = [];
+      for (const line of dagText.split('\n')) {
+        const m = line.match(/Node:\s*(\S+)\s*\|\s*Type:\s*(\S+)\s*\|\s*Status:\s*(\S+)/);
+        if (m) {
+          const n = { id: m[1], type: m[2], status: m[3], result: '' };
+          const r = line.match(/Result:\s*(.+)/);
+          if (r) n.result = r[1].trim();
+          parsed.push(n);
         }
-      };
-    },
-    async fetchState() {
+      }
+      return parsed;
+    }
+
+    async function send() {
+      const msg = input.value.trim();
+      if (!msg || loading.value) return;
+      
+      messages.value.push({ role: 'user', text: msg });
+      input.value = '';
+      loading.value = true;
+      scrollDown();
+
       try {
-        const res = await fetch('/state');
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg, api_key: localStorage.getItem('talos_api_key') || '' }),
+        });
         const data = await res.json();
-        if (data.dag) {
-          this.parseDag(data.dag);
-          this.lastUpdate = new Date().toLocaleTimeString();
-        }
-      } catch {}
-    },
-    parseDag(dag) {
-      if (typeof dag === 'string') {
-        // Text format: "Node: id | Type: t | Status: s | ..."
-        const lines = dag.split('\n');
-        const parsed = [];
-        for (const line of lines) {
-          const m = line.match(/Node:\s*(\S+)\s*\|\s*Type:\s*(\S+)\s*\|\s*Status:\s*(\S+)/);
-          if (m) {
-            const node = { id: m[1], type: m[2], status: m[3], deps: '', result: '' };
-            const depMatch = line.match(/Dependencies:\s*\[([^\]]*)\]/);
-            if (depMatch) node.deps = depMatch[1];
-            const resMatch = line.match(/Result:\s*(.+)/);
-            if (resMatch) node.result = resMatch[1].trim();
-            parsed.push(node);
+
+        if (data.error) {
+          messages.value.push({ role: 'system', text: '⚠ ' + data.error });
+        } else {
+          if (data.mutations && data.mutations.length) {
+            messages.value.push({ role: 'assistant', text: '', jmp: data.mutations });
+          }
+          if (data.dag) {
+            nodes.value = parseDag(data.dag);
+          }
+          if (data.errors) {
+            messages.value.push({ role: 'system', text: '⚠ Validation fault: ' + data.errors.join('; ') });
           }
         }
-        this.nodes = parsed;
-      } else if (typeof dag === 'object') {
-        this.nodes = Object.entries(dag).map(([id, n]) => ({
-          id, type: n.type || '?', status: n.status || '?', deps: '', result: n.output_summary || '',
-        }));
+      } catch (e) {
+        messages.value.push({ role: 'system', text: '⚠ Forge offline: ' + e.message });
       }
-    },
+
+      loading.value = false;
+      scrollDown();
+      nextTick(() => { inputEl.value?.focus(); });
+    }
+
+    return { messages, input, loading, nodes, send, inputEl, msgContainer };
+  },
+  mounted() {
+    this.$refs.inputEl?.focus();
+    // Load API key from localStorage or prompt
+    if (!localStorage.getItem('talos_api_key')) {
+      const key = prompt('Enter DeepSeek API key (stored locally):');
+      if (key) localStorage.setItem('talos_api_key', key);
+    }
   },
 }).mount('#app');
 </script>
