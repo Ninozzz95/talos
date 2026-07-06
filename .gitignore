@@ -14,3 +14,4 @@ control-plane/.env
 .phpunit.cache/
 .DS_Store
 Thumbs.db
+docs/superpowers/
