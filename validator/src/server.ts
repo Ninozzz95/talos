@@ -66,7 +66,7 @@ export function buildServer() {
   server.get('/dashboard', async (_request, reply) => {
     reply.type('text/html');
     try {
-      return readFileSync(join(__dirname, 'dashboard.html'), 'utf-8');
+      return readFileSync(join(process.cwd(), 'src', 'dashboard.html'), 'utf-8');
     } catch {
       return '<h1>Dashboard not found</h1>';
     }
@@ -77,8 +77,9 @@ export function buildServer() {
     const { message, api_key } = request.body as { message?: string; api_key?: string };
     if (!message) return { error: 'message required' };
 
-    const phpBin = process.env.PHP_BIN || join(__dirname, '..', '.tools', 'php', 'php.exe');
-    const chatScript = join(__dirname, '..', 'core', 'talos-chat.php');
+    // Use absolute path to PHP binary — env var override if set
+    const phpBin = process.env.PHP_BIN || join(process.cwd(), '..', '.tools', 'php', 'php.exe');
+    const chatScript = join(process.cwd(), '..', 'core', 'talos-chat.php');
 
     return new Promise((resolve) => {
       const php = spawn(phpBin, [chatScript], {
@@ -101,9 +102,9 @@ export function buildServer() {
     const { scenario, api_key, use_live } = request.body as { scenario?: string; api_key?: string; use_live?: boolean };
     if (!scenario) return { error: 'scenario name required' };
 
-    const phpBin = process.env.PHP_BIN || join(__dirname, '..', '.tools', 'php', 'php.exe');
-    const benchScript = join(__dirname, '..', 'core', 'talos-bench-live.php');
-    const scenarioFile = join(__dirname, '..', 'core', 'tests', 'benchmarks', 'scenarios', scenario + '.json');
+    const phpBin = process.env.PHP_BIN || join(process.cwd(), '..', '.tools', 'php', 'php.exe');
+    const benchScript = join(process.cwd(), '..', 'core', 'talos-bench-live.php');
+    const scenarioFile = join(process.cwd(), '..', 'core', 'tests', 'benchmarks', 'scenarios', scenario + '.json');
 
     return new Promise((resolve) => {
       const args = [benchScript, scenarioFile];
@@ -124,7 +125,7 @@ export function buildServer() {
   // List available benchmark scenarios
   server.get('/benchmarks', async () => {
     const { readdirSync, readFileSync } = await import('node:fs');
-    const dir = join(__dirname, '..', 'core', 'tests', 'benchmarks', 'scenarios');
+    const dir = join(process.cwd(), '..', 'core', 'tests', 'benchmarks', 'scenarios');
     try {
       const files = readdirSync(dir).filter(f => f.endsWith('.json'));
       return files.map(f => {
@@ -148,7 +149,7 @@ export function buildServer() {
   // Static media files
   server.get('/media/*', async (request, reply) => {
     const file = (request.params as { '*': string })['*'];
-    const filePath = join(__dirname, '..', 'core', 'media', 'talos_png_media_suite', file);
+    const filePath = join(process.cwd(), '..', 'core', 'media', 'talos_png_media_suite', file);
     try {
       const data = readFileSync(filePath);
       reply.type('image/png');
