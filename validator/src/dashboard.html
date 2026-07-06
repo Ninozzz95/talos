@@ -1,184 +1,2709 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TALOS — Cyber Forge</title>
-<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0e14;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;overflow:hidden}
-.app{display:grid;grid-template-columns:1fr 340px;height:100vh}
-/* Chat Panel */
-.chat{display:flex;flex-direction:column;background:#0d1117;border-right:1px solid #21262d}
-.chat-header{background:#161b22;padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:10px}
-.chat-header h1{font-size:16px;color:#d29922;letter-spacing:1px}
-.chat-header .dot{width:8px;height:8px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px #3fb950}
-.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
-.msg{max-width:90%;padding:10px 14px;border-radius:8px;font-size:14px;line-height:1.5;animation:fadeIn .2s}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-.msg.user{align-self:flex-end;background:#1f2a37;border:1px solid #30363d;color:#e6edf3}
-.msg.assistant{align-self:flex-start;background:#161b22;border:1px solid #21262d;color:#c9d1d9}
-.msg.system{align-self:center;background:transparent;color:#484f58;font-size:12px;text-align:center;max-width:100%}
-.msg pre{background:#0d1117;padding:8px;border-radius:4px;margin-top:6px;font-size:12px;overflow-x:auto;color:#7ee787;border:1px solid #21262d}
-.msg .jmp-label{font-size:10px;color:#d29922;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-.chat-input{padding:12px;border-top:1px solid #21262d;display:flex;gap:8px}
-.chat-input input{flex:1;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px 14px;color:#e6edf3;font-size:14px;outline:none}
-.chat-input input:focus{border-color:#d29922}
-.chat-input button{background:#d29922;color:#0d1117;border:none;border-radius:6px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.5px}
-.chat-input button:hover{background:#e2a533}
-.chat-input button:disabled{opacity:.4;cursor:default}
-/* DAG Panel */
-.dag{background:#0a0e14;display:flex;flex-direction:column;overflow-y:auto}
-.dag-header{background:#161b22;padding:12px 16px;border-bottom:1px solid #21262d;font-size:14px;color:#8b949e;display:flex;justify-content:space-between}
-.dag-nodes{padding:12px;display:flex;flex-direction:column;gap:6px}
-.dag-node{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 12px;font-size:12px}
-.dag-node .id{font-weight:700;color:#e6edf3}
-.dag-node .type{color:#8b949e;margin-left:6px}
-.dag-node .status{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;float:right}
-.st-PENDING{background:#1f2a37;color:#8b949e}
-.st-VALIDATED{background:#1b2d3a;color:#79c0ff}
-.st-RUNNING{background:#2a2610;color:#d29922}
-.st-SUCCESS{background:#162b1d;color:#3fb950}
-.st-FAILED{background:#2d1417;color:#f85149}
-.st-BLOCKED_BY_DEPENDENCY{background:#2d1a23;color:#db6d9e}
-.st-RETRYING{background:#2d1f10;color:#d29922}
-.dag-node .result{color:#484f58;font-size:11px;margin-top:3px}
-.empty{text-align:center;color:#30363d;padding:40px 16px;font-size:13px}
-.thinking{display:flex;align-items:center;gap:6px;padding:8px 14px;color:#d29922;font-size:13px;align-self:flex-start}
-.thinking span{width:6px;height:6px;border-radius:50%;background:#d29922;animation:bounce 1s infinite}
-.thinking span:nth-child(2){animation-delay:.2s}
-.thinking span:nth-child(3){animation-delay:.4s}
-@keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TALOS Cyber Forge</title>
+  <link rel="icon" href="/assets/talos-brand-mark.svg" type="image/svg+xml" />
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0a0e14;
+      --panel: #0d1117;
+      --surface: #111821;
+      --header: #161b22;
+      --border: #21262d;
+      --border-hover: #30363d;
+
+      --bronze: #d29922;
+      --bronze-hover: #e2a533;
+      --bronze-text: #b8860b;
+      --gold: #ffd700;
+      --amber: #ffbf00;
+
+      --text: #e6edf3;
+      --secondary: #c9d1d9;
+      --muted: #8b949e;
+      --dim: #484f58;
+
+      --success: #3fb950;
+      --warning: #d29922;
+      --error: #f85149;
+      --blocked: #db6d9e;
+      --info: #79c0ff;
+      --code: #7ee787;
+
+      --r-card: 8px;
+      --r-bubble: 12px;
+      --r-badge: 6px;
+
+      --shadow-1: 0 8px 28px rgba(0,0,0,0.22);
+      --shadow-2: 0 18px 70px rgba(0,0,0,0.36);
+      --glow-bronze: 0 0 8px rgba(210,153,34,0.4);
+      --glow-green: 0 0 6px rgba(63,185,80,0.4);
+
+      --side-width: 35%;
+      --topbar-h: 56px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body,
+    #app {
+      min-height: 100%;
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      animation: pageFade 0.5s ease both;
+    }
+
+    @keyframes pageFade {
+      from { background: #000; }
+      to { background: var(--bg); }
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    textarea:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 2px solid var(--bronze);
+      outline-offset: 2px;
+    }
+
+    ::selection {
+      background: rgba(210,153,34,0.25);
+    }
+
+    .app-shell {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 24% -10%, rgba(210,153,34,0.10), transparent 32%),
+        radial-gradient(circle at 92% 98%, rgba(63,185,80,0.045), transparent 28%),
+        linear-gradient(135deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 20px),
+        var(--bg);
+    }
+
+    .app-shell::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      opacity: 0.03;
+      background-image:
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.9'/%3E%3C/svg%3E");
+      mix-blend-mode: screen;
+    }
+
+    .app-shell::after {
+      content: "";
+      position: fixed;
+      inset: var(--topbar-h) 0 0 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.018;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,0.00) 0px,
+        rgba(255,255,255,0.00) 5px,
+        rgba(255,255,255,0.75) 6px
+      );
+    }
+
+    .embers {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .ember {
+      position: absolute;
+      left: var(--x);
+      bottom: -20px;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--bronze);
+      opacity: 0;
+      animation: emberRise var(--dur) linear infinite;
+      animation-delay: var(--delay);
+      box-shadow: 0 0 10px rgba(210,153,34,0.35);
+    }
+
+    @keyframes emberRise {
+      0% { transform: translate3d(0, 0, 0); opacity: 0; }
+      16% { opacity: 0.26; }
+      82% { opacity: 0.16; }
+      100% { transform: translate3d(var(--drift), -105vh, 0); opacity: 0; }
+    }
+
+    .topbar {
+      position: relative;
+      z-index: 5;
+      height: var(--topbar-h);
+      min-height: var(--topbar-h);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 0 24px;
+      background: linear-gradient(135deg, rgba(22,27,34,0.98), rgba(13,17,23,0.96));
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.02);
+      animation: headerDrop 0.3s ease both;
+    }
+
+    @keyframes headerDrop {
+      from { opacity: 0; transform: translateY(-48px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid rgba(210,153,34,0.28);
+      box-shadow: var(--glow-bronze);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .brand-icon img {
+      width: 28px;
+      height: 28px;
+      display: block;
+    }
+
+    .brand-title {
+      color: var(--bronze);
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 2px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .brand-subtitle {
+      margin-top: 3px;
+      color: var(--dim);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .session-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: var(--muted);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(13,17,23,0.72);
+      border: 1px solid var(--border);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(13,17,23,0.74);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .online-dot {
+      position: relative;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: var(--glow-green);
+    }
+
+    .online-dot::after {
+      content: "";
+      position: absolute;
+      inset: -7px;
+      border-radius: 50%;
+      border: 1px solid rgba(63,185,80,0.35);
+      animation: statusPulse 2s ease-out infinite;
+    }
+
+    .online-dot.offline {
+      background: var(--error);
+      box-shadow: 0 0 6px rgba(248,81,73,0.42);
+    }
+
+    .online-dot.offline::after {
+      border-color: rgba(248,81,73,0.28);
+    }
+
+    @keyframes statusPulse {
+      from { transform: scale(0.55); opacity: 0.75; }
+      to { transform: scale(1.7); opacity: 0; }
+    }
+
+    .node-counter {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: var(--r-badge);
+      border: 1px solid var(--border);
+      background: rgba(13,17,23,0.78);
+      color: var(--bronze);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 11px;
+      font-weight: 700;
+      transition: transform 220ms ease;
+    }
+
+    .node-counter.bump {
+      transform: scale(1.08);
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(13,17,23,0.74);
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 220ms ease, color 220ms ease, transform 220ms ease, background 220ms ease;
+    }
+
+    .icon-btn:hover {
+      border-color: var(--bronze);
+      color: var(--bronze);
+      background: rgba(210,153,34,0.08);
+      transform: translateY(-1px);
+    }
+
+    .settings-wrap {
+      position: relative;
+    }
+
+    .settings-popover {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 10px);
+      width: 330px;
+      padding: 16px;
+      border-radius: 12px;
+      background: rgba(22,27,34,0.98);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-2);
+      z-index: 9;
+      animation: pop 180ms ease both;
+    }
+
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .settings-title {
+      font-size: 12px;
+      color: var(--bronze);
+      letter-spacing: 1px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .setting-field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+
+    .setting-field label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .setting-field input,
+    .setting-field select {
+      height: 36px;
+      border: 1px solid var(--border-hover);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 0 10px;
+      outline: 0;
+    }
+
+    .workspace {
+      position: relative;
+      z-index: 1;
+      height: calc(100% - var(--topbar-h));
+      display: grid;
+      grid-template-columns: minmax(0, 65%) minmax(360px, var(--side-width));
+      min-height: 0;
+    }
+
+    .chat-column {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      background: rgba(10,14,20,0.76);
+      animation: panelIn 0.42s ease both;
+    }
+
+    .side-column {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      background: rgba(13,17,23,0.62);
+      animation: panelIn 0.52s ease both;
+    }
+
+    @keyframes panelIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .warning-banner {
+      margin: 16px 20px 0 20px;
+      padding: 12px 14px;
+      border: 1px solid rgba(210,153,34,0.18);
+      background: rgba(210,153,34,0.08);
+      color: var(--bronze);
+      border-radius: var(--r-card);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: var(--shadow-1);
+    }
+
+    .messages {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 28px 24px 22px 24px;
+      scroll-behavior: smooth;
+    }
+
+    .messages::-webkit-scrollbar,
+    .panel-body::-webkit-scrollbar,
+    .log-list::-webkit-scrollbar,
+    textarea::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .messages::-webkit-scrollbar-thumb,
+    .panel-body::-webkit-scrollbar-thumb,
+    .log-list::-webkit-scrollbar-thumb,
+    textarea::-webkit-scrollbar-thumb {
+      background: var(--border-hover);
+      border-radius: 999px;
+    }
+
+    .welcome {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 32px;
+    }
+
+    .welcome-inner {
+      max-width: 850px;
+    }
+
+    .welcome-hero {
+      width: 118px;
+      height: 118px;
+      margin: 0 auto 24px auto;
+      border-radius: 28px;
+      background: rgba(13,17,23,0.64);
+      border: 1px solid rgba(210,153,34,0.22);
+      box-shadow: var(--shadow-2), var(--glow-bronze);
+      display: grid;
+      place-items: center;
+      animation: slowPulse 3.6s ease-in-out infinite;
+    }
+
+    .welcome-hero img {
+      width: 96px;
+      height: 96px;
+      display: block;
+    }
+
+    @keyframes slowPulse {
+      0%, 100% { transform: scale(1); opacity: 0.94; }
+      50% { transform: scale(1.025); opacity: 1; }
+    }
+
+    .welcome h1 {
+      margin: 0;
+      color: var(--text);
+      font-size: clamp(26px, 4vw, 44px);
+      line-height: 1;
+      letter-spacing: 3px;
+      font-weight: 300;
+    }
+
+    .welcome p {
+      margin: 14px 0 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .examples {
+      margin-top: 30px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .example-card {
+      min-height: 160px;
+      padding: 18px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.025), rgba(255,255,255,0.00)),
+        rgba(13,17,23,0.82);
+      color: var(--secondary);
+      text-align: left;
+      cursor: pointer;
+      box-shadow: var(--shadow-1);
+      transition: transform 240ms ease, border-color 240ms ease, box-shadow 240ms ease, background 240ms ease;
+    }
+
+    .example-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(210,153,34,0.72);
+      box-shadow: var(--shadow-2), var(--glow-bronze);
+      background: rgba(22,27,34,0.9);
+    }
+
+    .example-card img {
+      width: 52px;
+      height: 52px;
+      display: block;
+      margin-bottom: 14px;
+    }
+
+    .example-card strong {
+      display: block;
+      color: var(--text);
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .example-card span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .message-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      animation: messageIn 250ms ease both;
+    }
+
+    .message-group.compact {
+      margin-top: -12px;
+      margin-bottom: 6px;
+    }
+
+    .message-group.user {
+      justify-content: flex-end;
+    }
+
+    .message-group.system {
+      justify-content: center;
+    }
+
+    @keyframes messageIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      margin-top: 21px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+    }
+
+    .avatar img {
+      width: 23px;
+      height: 23px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .avatar.user-avatar {
+      background: #1f2a37;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .message-stack {
+      max-width: min(780px, 84%);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .user .message-stack {
+      align-items: flex-end;
+    }
+
+    .system .message-stack {
+      align-items: center;
+      max-width: min(720px, 92%);
+    }
+
+    .message-meta {
+      color: var(--dim);
+      font-size: 10px;
+      letter-spacing: 0.45px;
+      margin-bottom: 7px;
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      text-transform: uppercase;
+    }
+
+    .meta-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--bronze);
+    }
+
+    .user .meta-dot {
+      background: var(--info);
+    }
+
+    .bubble {
+      position: relative;
+      max-height: 360px;
+      overflow-y: auto;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-bubble);
+      box-shadow: var(--shadow-1);
+      color: var(--secondary);
+      font-size: 14px;
+      line-height: 1.6;
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.026), transparent),
+        var(--header);
+    }
+
+    .assistant .bubble {
+      border-bottom-left-radius: 4px;
+    }
+
+    .user .bubble {
+      color: var(--text);
+      background:
+        linear-gradient(145deg, rgba(121,192,255,0.06), transparent),
+        #1f2a37;
+      border-color: var(--border-hover);
+      border-bottom-right-radius: 4px;
+    }
+
+    .compact.assistant .bubble {
+      border-top-left-radius: 6px;
+    }
+
+    .compact.user .bubble {
+      border-top-right-radius: 6px;
+    }
+
+    .system .bubble {
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      color: var(--dim);
+      font-size: 11px;
+      font-style: italic;
+      text-align: center;
+      padding: 4px 10px;
+      max-height: none;
+    }
+
+    .talos-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 10px;
+      color: var(--bronze);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+
+    .assistant-text :first-child {
+      margin-top: 0;
+    }
+
+    .assistant-text :last-child {
+      margin-bottom: 0;
+    }
+
+    .assistant-text p {
+      margin: 0 0 10px 0;
+    }
+
+    .assistant-text ul {
+      margin: 8px 0 8px 18px;
+      padding: 0;
+    }
+
+    .assistant-text li {
+      margin: 4px 0;
+    }
+
+    .assistant-text code:not(pre code) {
+      font-family: "JetBrains Mono", monospace;
+      color: var(--code);
+      background: rgba(10,14,20,0.72);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 5px;
+      font-size: 12px;
+    }
+
+    .typing {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .typing-dots {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bronze);
+      animation: bounceDot 1.1s ease-in-out infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 120ms; }
+    .typing-dots span:nth-child(3) { animation-delay: 240ms; }
+
+    @keyframes bounceDot {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.32; }
+      40% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    .code-block {
+      margin-top: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      overflow: hidden;
+      background: #070a0f;
+    }
+
+    .invalid-jmp {
+      border-color: rgba(248,81,73,0.42);
+      animation: shake 280ms ease both;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-4px); }
+      40% { transform: translateX(4px); }
+      60% { transform: translateX(-3px); }
+      80% { transform: translateX(3px); }
+    }
+
+    .code-head {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(22,27,34,0.9);
+    }
+
+    .code-meta {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--bronze);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.9px;
+      text-transform: uppercase;
+    }
+
+    .language-pill {
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+    }
+
+    .copy-btn {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(13,17,23,0.72);
+      color: var(--muted);
+      cursor: pointer;
+      height: 24px;
+      padding: 0 9px;
+      font-size: 10px;
+      font-weight: 800;
+      transition: color 220ms ease, border-color 220ms ease, background 220ms ease;
+    }
+
+    .copy-btn:hover {
+      color: var(--bronze);
+      border-color: var(--bronze);
+    }
+
+    .copy-btn.copied {
+      color: var(--success);
+      border-color: rgba(63,185,80,0.45);
+    }
+
+    pre {
+      margin: 0;
+      padding: 14px 16px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      color: var(--code);
+      font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.58;
+    }
+
+    .json-key { color: var(--info); }
+    .json-string { color: var(--code); }
+    .json-number { color: var(--bronze); }
+    .json-bool { color: var(--blocked); }
+    .json-null { color: var(--muted); }
+
+    .new-messages {
+      position: absolute;
+      left: 50%;
+      bottom: 92px;
+      transform: translateX(-50%);
+      z-index: 4;
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(210,153,34,0.42);
+      background: rgba(22,27,34,0.95);
+      color: var(--bronze);
+      box-shadow: var(--shadow-2);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      transition: transform 220ms ease;
+    }
+
+    .new-messages:hover {
+      transform: translateX(-50%) translateY(-1px);
+    }
+
+    .input-area {
+      position: relative;
+      z-index: 3;
+      padding: 16px 20px 20px 20px;
+      background: linear-gradient(180deg, rgba(10,14,20,0.55), rgba(22,27,34,0.98) 34%);
+      border-top: 1px solid var(--border);
+    }
+
+    .input-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 9px;
+      color: var(--dim);
+      font-size: 10px;
+      letter-spacing: 0.35px;
+    }
+
+    .key-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--success);
+      font-family: "JetBrains Mono", monospace;
+      font-weight: 700;
+    }
+
+    .key-state.no-key {
+      color: var(--error);
+    }
+
+    .send-hint {
+      opacity: 0;
+      transition: opacity 220ms ease;
+    }
+
+    .send-hint.visible {
+      opacity: 1;
+    }
+
+    .composer {
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      min-height: 58px;
+      padding: 9px 56px 9px 44px;
+      border: 1px solid var(--border-hover);
+      border-radius: 16px;
+      background: rgba(13,17,23,0.96);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.012), var(--shadow-1);
+      transition: border-color 220ms ease, box-shadow 220ms ease;
+    }
+
+    .composer:focus-within {
+      border-color: var(--bronze);
+      box-shadow: 0 0 0 2px rgba(210,153,34,0.15), var(--shadow-1);
+    }
+
+    .attach-btn {
+      position: absolute;
+      left: 13px;
+      bottom: 13px;
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      background: transparent;
+      color: var(--dim);
+      cursor: not-allowed;
+      opacity: 0.62;
+    }
+
+    .composer textarea {
+      width: 100%;
+      min-height: 38px;
+      max-height: 150px;
+      resize: none;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      padding: 8px 0;
+      line-height: 1.48;
+      font-size: 14px;
+      overflow-y: auto;
+      transition: height 180ms ease;
+    }
+
+    .composer textarea::placeholder {
+      color: var(--dim);
+    }
+
+    .send-btn {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 12px;
+      color: var(--bg);
+      background: var(--bronze);
+      cursor: pointer;
+      box-shadow: 0 0 0 rgba(210,153,34,0);
+      transition: transform 220ms ease, background 220ms ease, box-shadow 220ms ease, opacity 220ms ease;
+      overflow: hidden;
+    }
+
+    .send-btn::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.42);
+      transform: scale(0);
+      opacity: 0;
+    }
+
+    .send-btn.ripple::after {
+      animation: ripple 420ms ease-out;
+    }
+
+    @keyframes ripple {
+      from { transform: scale(0); opacity: 0.44; }
+      to { transform: scale(8); opacity: 0; }
+    }
+
+    .send-btn:hover:not(:disabled) {
+      background: var(--bronze-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--glow-bronze);
+    }
+
+    .send-btn:active:not(:disabled) {
+      transform: scale(0.94);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      border: 2px solid rgba(10,14,20,0.32);
+      border-top-color: var(--bg);
+      animation: spin 800ms linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .panel {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel:last-child {
+      border-bottom: 0;
+    }
+
+    .panel-head {
+      min-height: 58px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(22,27,34,0.96), rgba(13,17,23,0.9));
+    }
+
+    .panel-title {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: 1px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill-btn {
+      height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(13,17,23,0.8);
+      color: var(--muted);
+      padding: 0 10px;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: color 220ms ease, border-color 220ms ease, background 220ms ease;
+    }
+
+    .pill-btn:hover,
+    .pill-btn.active {
+      color: var(--bronze);
+      border-color: rgba(210,153,34,0.5);
+      background: rgba(210,153,34,0.08);
+    }
+
+    .panel-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 18px 18px 22px 24px;
+    }
+
+    .dag-empty {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .dag-empty img {
+      width: 116px;
+      height: 116px;
+      margin-bottom: 18px;
+      opacity: 0.86;
+      filter: drop-shadow(0 0 12px rgba(210,153,34,0.16));
+      animation: slowPulse 3.8s ease-in-out infinite;
+    }
+
+    .dag-empty h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .dag-empty p {
+      max-width: 280px;
+      margin: 8px auto 0;
+      color: var(--dim);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .timeline {
+      position: relative;
+      display: grid;
+      gap: 14px;
+      padding-left: 13px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 7px;
+      bottom: 7px;
+      width: 2px;
+      background: linear-gradient(var(--border-hover), rgba(33,38,45,0.18));
+      border-radius: 999px;
+    }
+
+    .node-card {
+      position: relative;
+      margin-left: 16px;
+      padding: 14px 14px 14px 16px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border-hover);
+      border-radius: var(--r-card);
+      background:
+        linear-gradient(145deg, rgba(255,255,255,0.025), transparent),
+        var(--panel);
+      box-shadow: var(--shadow-1);
+      transition: border-color 230ms ease, transform 230ms ease, box-shadow 230ms ease, background 230ms ease;
+    }
+
+    .node-card::before {
+      content: "";
+      position: absolute;
+      left: -32px;
+      top: 18px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--node-color);
+      border: 3px solid var(--bg);
+      box-shadow: 0 0 0 1px var(--border), 0 0 10px color-mix(in srgb, var(--node-color), transparent 55%);
+    }
+
+    .node-card:hover {
+      border-color: rgba(210,153,34,0.58);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-2);
+    }
+
+    .node-card.RUNNING {
+      animation: breathe 1.5s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.015); }
+    }
+
+    .node-card.SUCCESS {
+      background:
+        linear-gradient(145deg, rgba(63,185,80,0.075), transparent 52%),
+        var(--panel);
+    }
+
+    .node-card.FAILED {
+      background:
+        linear-gradient(145deg, rgba(248,81,73,0.075), transparent 52%),
+        var(--panel);
+    }
+
+    .node-card.RUNNING,
+    .node-card.PENDING {
+      background:
+        linear-gradient(145deg, rgba(210,153,34,0.06), transparent 55%),
+        var(--panel);
+    }
+
+    .node-top {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .node-icon {
+      width: 25px;
+      height: 25px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      background: rgba(10,14,20,0.72);
+      border: 1px solid var(--border);
+      color: var(--bronze);
+      flex: 0 0 auto;
+      font-size: 13px;
+    }
+
+    .node-id {
+      color: var(--text);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .node-type {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 145px;
+      color: var(--muted);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      border-radius: var(--r-badge);
+      background: rgba(33,38,45,0.82);
+      padding: 4px 7px;
+    }
+
+    .status-badge {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+    }
+
+    .status-PENDING { background:#1f2a37; color:var(--muted); }
+    .status-VALIDATED { background:#1b2d3a; color:var(--info); }
+    .status-RUNNING { background:#2a2610; color:var(--warning); }
+    .status-SUCCESS { background:#162b1d; color:var(--success); }
+    .status-FAILED { background:#2d1417; color:var(--error); }
+    .status-BLOCKED,
+    .status-BLOCKED_BY_DEPENDENCY { background:#2d1a23; color:var(--blocked); }
+
+    .deps {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .dep-tag {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(10,14,20,0.52);
+      color: var(--dim);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 10px;
+      padding: 3px 7px;
+    }
+
+    .result-toggle {
+      margin-top: 10px;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      padding: 0;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .result-body {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(10,14,20,0.62);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .log-panel {
+      min-height: 220px;
+      max-height: 360px;
+    }
+
+    .log-panel.collapsed {
+      max-height: 58px;
+      min-height: 58px;
+    }
+
+    .log-panel.collapsed .log-controls,
+    .log-panel.collapsed .log-list {
+      display: none;
+    }
+
+    .log-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,14,20,0.36);
+    }
+
+    .log-filters {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .auto-clear {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--dim);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .auto-clear input {
+      accent-color: var(--bronze);
+    }
+
+    .log-list {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 10px 14px 14px 14px;
+      background: rgba(10,14,20,0.44);
+    }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: 74px minmax(52px, 76px) 16px 28px minmax(0, 1fr);
+      align-items: center;
+      gap: 7px;
+      padding: 8px 0;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(33,38,45,0.62);
+      font-size: 11px;
+    }
+
+    .log-entry:last-child {
+      border-bottom: 0;
+    }
+
+    .log-time,
+    .log-node {
+      font-family: "JetBrains Mono", monospace;
+      color: var(--dim);
+    }
+
+    .log-node {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .log-icon {
+      text-align: center;
+    }
+
+    .log-msg {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mobile-tabs {
+      display: none;
+    }
+
+    .drawer-backdrop {
+      display: none;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      z-index: 20;
+      background: rgba(0,0,0,0.68);
+      backdrop-filter: blur(10px);
+    }
+
+    .modal-card {
+      width: min(520px, calc(100vw - 32px));
+      padding: 24px;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(210,153,34,0.12), transparent 42%),
+        var(--header);
+      border: 1px solid rgba(210,153,34,0.22);
+      box-shadow: var(--shadow-2);
+      animation: pop 200ms ease both;
+    }
+
+    .modal-icon {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+    }
+
+    .modal-title {
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+    }
+
+    .modal-sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .modal-field {
+      width: 100%;
+      height: 44px;
+      margin-top: 18px;
+      border: 1px solid var(--border-hover);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 0 13px;
+      outline: 0;
+    }
+
+    .modal-field:focus {
+      border-color: var(--bronze);
+      box-shadow: 0 0 0 2px rgba(210,153,34,0.15);
+    }
+
+    .modal-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .primary-btn,
+    .ghost-btn {
+      height: 38px;
+      border-radius: 10px;
+      padding: 0 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: 220ms ease;
+    }
+
+    .primary-btn {
+      background: var(--bronze);
+      color: var(--bg);
+      border: 0;
+    }
+
+    .primary-btn:hover {
+      background: var(--bronze-hover);
+      box-shadow: var(--glow-bronze);
+    }
+
+    .ghost-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .ghost-btn:hover {
+      color: var(--bronze);
+      border-color: var(--bronze);
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      top: 72px;
+      z-index: 30;
+      max-width: 440px;
+      padding: 13px 15px;
+      border-radius: 12px;
+      border: 1px solid rgba(248,81,73,0.34);
+      background: #2d1417;
+      color: var(--error);
+      box-shadow: var(--shadow-2);
+      font-size: 13px;
+      animation: messageIn 200ms ease both;
+    }
+
+    .floating-dag {
+      display: none;
+      position: fixed;
+      right: 18px;
+      bottom: 84px;
+      z-index: 11;
+      width: 48px;
+      height: 48px;
+      border-radius: 18px;
+      border: 1px solid rgba(210,153,34,0.36);
+      background: rgba(22,27,34,0.96);
+      color: var(--bronze);
+      box-shadow: var(--shadow-2);
+      cursor: pointer;
+    }
+
+    @media (max-width: 1366px) {
+      .workspace {
+        grid-template-columns: minmax(0, 65%) minmax(340px, 35%);
+      }
+
+      .examples {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 1024px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .chat-column {
+        border-right: 0;
+      }
+
+      .side-column {
+        position: fixed;
+        top: var(--topbar-h);
+        right: 0;
+        bottom: 0;
+        width: 360px;
+        max-width: 92vw;
+        transform: translateX(105%);
+        border-left: 1px solid var(--border);
+        box-shadow: var(--shadow-2);
+        transition: transform 250ms ease;
+        z-index: 12;
+      }
+
+      .side-column.open {
+        transform: translateX(0);
+      }
+
+      .drawer-backdrop {
+        display: block;
+        position: fixed;
+        inset: var(--topbar-h) 0 0 0;
+        background: rgba(0,0,0,0.48);
+        backdrop-filter: blur(5px);
+        z-index: 10;
+      }
+
+      .floating-dag {
+        display: grid;
+        place-items: center;
+      }
+
+      .session-pill {
+        display: none;
+      }
+    }
+
+    @media (max-width: 768px) {
+      :root { --topbar-h: 54px; }
+
+      .topbar {
+        padding: 0 14px;
+      }
+
+      .brand-icon {
+        width: 32px;
+        height: 32px;
+      }
+
+      .brand-title {
+        font-size: 12px;
+        letter-spacing: 1.1px;
+      }
+
+      .brand-subtitle,
+      .status-pill span,
+      .node-counter,
+      .top-actions .icon-btn:not(.settings-button) {
+        display: none;
+      }
+
+      .workspace {
+        height: calc(100% - var(--topbar-h) - 58px);
+      }
+
+      .side-column {
+        display: none;
+      }
+
+      .chat-column {
+        display: flex;
+      }
+
+      .chat-column.hide-mobile {
+        display: none;
+      }
+
+      .side-column.mobile-visible {
+        display: grid;
+        position: relative;
+        transform: none;
+        top: auto;
+        right: auto;
+        bottom: auto;
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        border-left: 0;
+      }
+
+      .side-column.mobile-visible.log-only {
+        grid-template-rows: 1fr;
+      }
+
+      .side-column.mobile-visible.log-only .panel:first-child {
+        display: none;
+      }
+
+      .side-column.mobile-visible.dag-only .log-panel {
+        display: none;
+      }
+
+      .messages {
+        padding: 18px 14px 16px;
+      }
+
+      .welcome {
+        padding: 22px 14px;
+      }
+
+      .welcome-hero {
+        width: 96px;
+        height: 96px;
+      }
+
+      .welcome-hero img {
+        width: 78px;
+        height: 78px;
+      }
+
+      .examples {
+        grid-template-columns: 1fr;
+        margin-top: 22px;
+      }
+
+      .example-card {
+        min-height: 118px;
+      }
+
+      .message-stack {
+        max-width: 90%;
+      }
+
+      .avatar {
+        width: 24px;
+        height: 24px;
+      }
+
+      .input-area {
+        padding: 12px 12px 14px;
+      }
+
+      .input-meta {
+        display: none;
+      }
+
+      .composer {
+        padding-left: 38px;
+        padding-right: 52px;
+      }
+
+      .floating-dag {
+        display: none;
+      }
+
+      .mobile-tabs {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 58px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        z-index: 15;
+        background: rgba(22,27,34,0.98);
+        border-top: 1px solid var(--border);
+      }
+
+      .mobile-tab {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        display: grid;
+        place-items: center;
+        gap: 2px;
+        font-size: 10px;
+        cursor: pointer;
+      }
+
+      .mobile-tab strong {
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .mobile-tab.active {
+        color: var(--bronze);
+      }
+
+      .settings-popover {
+        right: -6px;
+        width: min(330px, calc(100vw - 24px));
+      }
+    }
+  </style>
 </head>
+
 <body>
 <div id="app">
-  <div class="app">
-    <!-- Chat -->
-    <div class="chat">
-      <div class="chat-header">
-        <span class="dot"></span>
-        <h1>⚒ TALOS CYBER FORGE</h1>
+  <div class="app-shell">
+    <div class="embers" aria-hidden="true">
+      <span v-for="n in 6" :key="n" class="ember" :style="emberStyle(n)"></span>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">
+          <img src="/assets/talos-brand-mark.svg" alt="" @error="hideBrokenImage">
+        </div>
+        <div>
+          <div class="brand-title">TALOS CYBER FORGE</div>
+          <div class="brand-subtitle">Agent Orchestration Interface</div>
+        </div>
       </div>
-      <div class="chat-messages" ref="msgContainer">
-        <div class="msg system">⚡ Forge online. Describe your workflow.</div>
-        <div v-for="(m,i) in messages" :key="i" :class="'msg ' + m.role">
-          <div v-if="m.role === 'assistant' && m.jmp">
-            <div class="jmp-label">JMP MUTATIONS</div>
-            <pre>{{ JSON.stringify(m.jmp, null, 2) }}</pre>
+
+      <div class="session-pill" aria-label="Session context">
+        <span>Session: {{ sessionName }}</span>
+        <span>·</span>
+        <span>{{ sessionDuration }}</span>
+      </div>
+
+      <div class="top-actions">
+        <div class="status-pill" :aria-label="connected ? 'Forge online' : 'Forge offline'">
+          <span class="online-dot" :class="{ offline: !connected }"></span>
+          <span>{{ connected ? 'FORGE ONLINE' : 'FORGE OFFLINE' }}</span>
+        </div>
+
+        <span class="node-counter" :class="{ bump: counterBump }"># {{ nodes.length }} NODES</span>
+
+        <button class="icon-btn" aria-label="Clear chat" title="Clear chat" @click="clearChat">🗑</button>
+        <button class="icon-btn" aria-label="Export DAG" title="Export DAG" @click="exportDag">📥</button>
+
+        <div class="settings-wrap">
+          <button class="icon-btn settings-button" aria-label="Settings" title="Settings" @click="settingsOpen = !settingsOpen">⚙</button>
+          <div v-if="settingsOpen" class="settings-popover">
+            <div class="settings-title">Forge Settings</div>
+            <div class="setting-field">
+              <label for="settings-key">DeepSeek API key</label>
+              <input id="settings-key" type="password" v-model="apiKeyDraft" placeholder="sk-..." @keydown.enter.prevent="saveKey">
+            </div>
+            <div class="setting-field">
+              <label for="model-select">Model</label>
+              <select id="model-select" v-model="model">
+                <option value="deepseek-chat">deepseek-chat</option>
+                <option value="deepseek-reasoner">deepseek-reasoner</option>
+              </select>
+            </div>
+            <div class="setting-field">
+              <label>Temperature <span style="color:var(--dim)">(UI only)</span></label>
+              <input type="range" min="0" max="1" step="0.1" v-model="temperature" disabled>
+            </div>
+            <button class="primary-btn" @click="saveKey">SAVE KEY</button>
           </div>
-          <div v-else>{{ m.text }}</div>
-        </div>
-        <div v-if="loading" class="thinking">
-          <span></span><span></span><span></span> Forging...
         </div>
       </div>
-      <div class="chat-input">
-        <input v-model="input" @keyup.enter="send" placeholder="Describe your workflow..." :disabled="loading" ref="inputEl">
-        <button @click="send" :disabled="loading || !input.trim()">FORGE</button>
+    </header>
+
+    <div v-if="drawerOpen" class="drawer-backdrop" @click="drawerOpen = false"></div>
+
+    <main class="workspace">
+      <section class="chat-column" :class="{ 'hide-mobile': mobileTab !== 'chat' }">
+        <div v-if="!hasApiKey" class="warning-banner">
+          <span>⚡</span>
+          <span>API key not set — demo mode. Set a DeepSeek key to power the forge.</span>
+        </div>
+
+        <div class="messages" ref="messagesEl" @scroll="onChatScroll">
+          <section v-if="messages.length === 0" class="welcome">
+            <div class="welcome-inner">
+              <div class="welcome-hero">
+                <img src="/assets/welcome-shield-minimal.svg" alt="" @error="hideBrokenImage">
+              </div>
+              <h1>TALOS CYBER FORGE</h1>
+              <p>Describe your workflow. The forge will build it.</p>
+
+              <div class="examples">
+                <button class="example-card" @click="useExample('Check an API endpoint and validate the response status')">
+                  <img src="/assets/placeholder-api-endpoint.svg" alt="" @error="hideBrokenImage">
+                  <strong>Check an API endpoint</strong>
+                  <span>Forge a node that calls an API and validates the status.</span>
+                </button>
+                <button class="example-card" @click="useExample('Query a database and process the results through a validation node')">
+                  <img src="/assets/placeholder-database-query.svg" alt="" @error="hideBrokenImage">
+                  <strong>Query a database and process results</strong>
+                  <span>Build a workflow that reads, validates, and routes results.</span>
+                </button>
+                <button class="example-card" @click="useExample('Fetch data from multiple URLs in parallel and merge the output')">
+                  <img src="/assets/placeholder-parallel-fetch.svg" alt="" @error="hideBrokenImage">
+                  <strong>Fetch multiple URLs in parallel</strong>
+                  <span>Spawn parallel HTTP nodes and merge output downstream.</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <article
+            v-for="(message, index) in messages"
+            :key="message.id"
+            class="message-group"
+            :class="[message.role, { compact: isCompactMessage(index) }]"
+            tabindex="0"
+          >
+            <div v-if="message.role === 'assistant' && !isCompactMessage(index)" class="avatar">
+              <img src="/assets/talos-assistant-avatar.svg" alt="" @error="hideBrokenImage">
+            </div>
+
+            <div class="message-stack">
+              <div v-if="message.role !== 'system' && !isCompactMessage(index)" class="message-meta">
+                <span class="meta-dot"></span>
+                <span>{{ message.role === 'user' ? 'YOU' : 'TALOS' }}</span>
+                <span>·</span>
+                <span>{{ relativeTime(message.createdAt || Date.now()) }}</span>
+              </div>
+
+              <div class="bubble" :class="{ 'invalid-jmp': message.invalidJmp }">
+                <template v-if="message.loading">
+                  <div class="typing" aria-label="TALOS is forging a response">
+                    <span class="typing-dots"><span></span><span></span><span></span></span>
+                    <em>Forging...</em>
+                  </div>
+                </template>
+
+                <template v-else-if="message.role === 'assistant'">
+                  <div class="talos-label">⚒ TALOS</div>
+                  <div v-if="message.text" class="assistant-text" v-html="renderMarkdown(message.text)"></div>
+
+                  <div v-if="message.jmp" class="code-block" :class="{ 'invalid-jmp': message.invalidJmp }">
+                    <div class="code-head">
+                      <div class="code-meta">
+                        <span>{{ message.invalidJmp ? '⚠ INVALID JMP' : 'JMP MUTATIONS' }}</span>
+                        <span class="language-pill">JSON</span>
+                      </div>
+                      <button
+                        class="copy-btn"
+                        :class="{ copied: copiedId === message.id }"
+                        @click="copyText(message.rawCode, message.id)"
+                      >{{ copiedId === message.id ? 'COPIED!' : 'COPY' }}</button>
+                    </div>
+                    <pre v-html="highlightJson(message.rawCode)"></pre>
+                  </div>
+                </template>
+
+                <template v-else-if="message.role === 'system'">
+                  {{ message.text }}
+                </template>
+
+                <template v-else>
+                  {{ message.text }}
+                </template>
+              </div>
+            </div>
+
+            <div v-if="message.role === 'user' && !isCompactMessage(index)" class="avatar user-avatar">YOU</div>
+          </article>
+        </div>
+
+        <button v-if="showNewMessages" class="new-messages" @click="scrollMessages(true)">↓ New messages</button>
+
+        <footer class="input-area">
+          <div class="input-meta">
+            <span class="key-state" :class="{ 'no-key': !hasApiKey }">{{ hasApiKey ? '🔑 KEY SET' : '🔑 NO KEY' }}</span>
+            <span class="send-hint" :class="{ visible: input.trim() }">Enter ↵ Send · Shift+Enter newline</span>
+          </div>
+
+          <div class="composer">
+            <button class="attach-btn" aria-label="Attachments coming soon" disabled>📎</button>
+            <textarea
+              ref="composer"
+              v-model="input"
+              :placeholder="currentPlaceholder"
+              :disabled="loading || !hasApiKey"
+              rows="1"
+              aria-label="Describe your workflow"
+              @input="resizeComposer"
+              @keydown.enter="handleEnter"
+            ></textarea>
+
+            <button
+              class="send-btn"
+              :class="{ ripple: sendRipple }"
+              :disabled="loading || !input.trim() || !hasApiKey"
+              aria-label="Send message to TALOS"
+              @click="send"
+            >
+              <span v-if="loading" class="spinner"></span>
+              <span v-else-if="sendSuccess">✓</span>
+              <span v-else>➤</span>
+            </button>
+          </div>
+        </footer>
+      </section>
+
+      <aside
+        class="side-column"
+        :class="{
+          open: drawerOpen,
+          'mobile-visible': mobileTab === 'dag' || mobileTab === 'log',
+          'dag-only': mobileTab === 'dag',
+          'log-only': mobileTab === 'log'
+        }"
+      >
+        <section class="panel dag-panel">
+          <div class="panel-head">
+            <div class="panel-title">◈ DAG STATE</div>
+            <div class="panel-actions">
+              <span class="node-counter" :class="{ bump: counterBump }"># {{ nodes.length }}</span>
+            </div>
+          </div>
+
+          <div class="panel-body">
+            <div v-if="nodes.length === 0" class="dag-empty">
+              <div>
+                <img src="/assets/dag-empty-state.svg" alt="" @error="hideBrokenImage">
+                <h3>The forge awaits.</h3>
+                <p>Send your first message to begin crafting a workflow.</p>
+              </div>
+            </div>
+
+            <div v-else class="timeline">
+              <article
+                v-for="node in nodes"
+                :key="node.id"
+                class="node-card"
+                :class="normalizeStatus(node.status)"
+                :style="{ '--node-color': statusColor(node.status), borderLeftColor: statusColor(node.status) }"
+              >
+                <div class="node-top">
+                  <span class="node-icon">{{ nodeIcon(node.type) }}</span>
+                  <span class="node-id">{{ node.id }}</span>
+                  <span class="node-type">{{ node.type }}</span>
+                  <span class="status-badge" :class="'status-' + normalizeStatus(node.status)">
+                    {{ statusIcon(node.status) }} {{ normalizeStatus(node.status) }}
+                  </span>
+                </div>
+
+                <div v-if="node.dependencies && node.dependencies.length" class="deps">
+                  <span class="dep-tag" v-for="dep in node.dependencies" :key="dep">→ {{ dep }}</span>
+                </div>
+
+                <button v-if="node.result" class="result-toggle" @click="toggleResult(node.id)">
+                  {{ expandedResults[node.id] ? 'Hide result' : 'Show result' }}
+                </button>
+                <div v-if="node.result && expandedResults[node.id]" class="result-body">
+                  {{ node.result }}
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel log-panel" :class="{ collapsed: logCollapsed }">
+          <div class="panel-head">
+            <div class="panel-title">📜 Execution Log ({{ logs.length }} entries)</div>
+            <div class="panel-actions">
+              <button class="pill-btn" @click="logCollapsed = !logCollapsed">{{ logCollapsed ? 'Open' : 'Close' }}</button>
+              <button class="pill-btn" @click="logs = []">Clear</button>
+            </div>
+          </div>
+
+          <div class="log-controls">
+            <div class="log-filters">
+              <button
+                v-for="filter in logFilters"
+                :key="filter"
+                class="pill-btn"
+                :class="{ active: activeLogFilter === filter }"
+                @click="activeLogFilter = filter"
+              >{{ filter }}</button>
+            </div>
+            <label class="auto-clear">
+              <input type="checkbox" v-model="autoClearLog">
+              Auto-clear
+            </label>
+          </div>
+
+          <div class="log-list" ref="logEl">
+            <div v-if="filteredLogs.length === 0" class="log-entry">
+              <span class="log-time">{{ nowTime() }}</span>
+              <span class="log-node">forge</span>
+              <span>→</span>
+              <span class="log-icon">◦</span>
+              <span class="log-msg">No log entries for this filter</span>
+            </div>
+
+            <div v-for="log in filteredLogs" :key="log.id" class="log-entry">
+              <span class="log-time">{{ log.time }}</span>
+              <span class="log-node">{{ log.node }}</span>
+              <span>→</span>
+              <span class="log-icon">{{ logIcon(log.kind, log.status) }}</span>
+              <span class="log-msg">{{ truncate(log.message, 60) }}</span>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <button class="floating-dag" aria-label="Open DAG drawer" @click="drawerOpen = true">◈</button>
+
+    <nav class="mobile-tabs" aria-label="Mobile navigation">
+      <button class="mobile-tab" :class="{ active: mobileTab === 'chat' }" @click="mobileTab = 'chat'"><strong>⚒</strong><span>Chat</span></button>
+      <button class="mobile-tab" :class="{ active: mobileTab === 'dag' }" @click="mobileTab = 'dag'"><strong>◈</strong><span>DAG</span></button>
+      <button class="mobile-tab" :class="{ active: mobileTab === 'log' }" @click="mobileTab = 'log'"><strong>📜</strong><span>Log</span></button>
+    </nav>
+
+    <div v-if="showKeyModal" class="modal">
+      <div class="modal-card">
+        <img class="modal-icon" src="/assets/api-key.svg" alt="" @error="hideBrokenImage">
+        <div class="modal-title">Enter your DeepSeek API key</div>
+        <div class="modal-sub">
+          TALOS stores the key in localStorage and sends it only to the existing backend through <code>POST /chat</code>.
+        </div>
+
+        <input
+          class="modal-field"
+          type="password"
+          v-model="apiKeyDraft"
+          placeholder="sk-..."
+          aria-label="DeepSeek API key"
+          @keydown.enter.prevent="saveKey"
+        >
+
+        <div class="modal-actions">
+          <button class="primary-btn" @click="saveKey">SAVE KEY</button>
+          <button class="ghost-btn" @click="skipKey">Skip demo mode</button>
+        </div>
       </div>
     </div>
-    <!-- DAG -->
-    <div class="dag">
-      <div class="dag-header">
-        <span>⚙ DAG STATE</span>
-        <span>{{ nodes.length }} nodes</span>
-      </div>
-      <div class="dag-nodes">
-        <div v-if="nodes.length === 0" class="empty">No nodes yet.<br>Send a message to start building.</div>
-        <div v-for="n in nodes" :key="n.id" class="dag-node">
-          <span class="id">{{ n.id }}</span>
-          <span class="type">{{ n.type }}</span>
-          <span class="status" :class="'st-' + n.status">{{ n.status }}</span>
-          <div class="result" v-if="n.result">{{ n.result }}</div>
-        </div>
-      </div>
+
+    <div v-if="toast" class="toast" role="alert">
+      ⚡ {{ toast }}
     </div>
   </div>
 </div>
 
 <script>
-const { createApp, ref, nextTick } = Vue;
+  const { createApp, nextTick } = Vue;
 
-createApp({
-  setup() {
-    const messages = ref([]);
-    const input = ref('');
-    const loading = ref(false);
-    const nodes = ref([]);
-    const inputEl = ref(null);
-    const msgContainer = ref(null);
+  createApp({
+    data() {
+      return {
+        input: '',
+        loading: false,
+        nodes: [],
+        messages: [],
+        logs: [],
+        connected: false,
 
-    function scrollDown() {
-      nextTick(() => { if (msgContainer.value) msgContainer.value.scrollTop = msgContainer.value.scrollHeight; });
-    }
+        apiKey: localStorage.getItem('talos_api_key') || '',
+        apiKeyDraft: localStorage.getItem('talos_api_key') || '',
+        showKeyModal: !localStorage.getItem('talos_api_key') && !localStorage.getItem('talos_skip_key'),
 
-    function parseDag(dagText) {
-      if (!dagText) return [];
-      const parsed = [];
-      for (const line of dagText.split('\n')) {
-        const m = line.match(/Node:\s*(\S+)\s*\|\s*Type:\s*(\S+)\s*\|\s*Status:\s*(\S+)/);
-        if (m) {
-          const n = { id: m[1], type: m[2], status: m[3], result: '' };
-          const r = line.match(/Result:\s*(.+)/);
-          if (r) n.result = r[1].trim();
-          parsed.push(n);
+        ws: null,
+        reconnectTimer: null,
+        toast: '',
+        settingsOpen: false,
+        drawerOpen: false,
+        mobileTab: 'chat',
+
+        model: 'deepseek-chat',
+        temperature: 0.2,
+        copiedId: '',
+        sendRipple: false,
+        sendSuccess: false,
+        showNewMessages: false,
+        userNearBottom: true,
+
+        expandedResults: {},
+        logCollapsed: false,
+        activeLogFilter: 'All',
+        logFilters: ['All', 'Success', 'Failed', 'Pending'],
+        autoClearLog: false,
+
+        placeholderIndex: 0,
+        placeholders: [
+          'Describe your workflow...',
+          'What should TALOS build?',
+          'Ask me to query an API...',
+          'Design a multi-step automation...'
+        ],
+
+        sessionName: 'workflow_' + new Date().toISOString().slice(0, 10),
+        sessionStartedAt: Date.now(),
+        sessionDuration: '00:00',
+        durationTimer: null,
+        counterBump: false,
+        previousNodeCount: 0
+      };
+    },
+
+    computed: {
+      hasApiKey() {
+        return Boolean(this.apiKey);
+      },
+
+      currentPlaceholder() {
+        return this.placeholders[this.placeholderIndex % this.placeholders.length];
+      },
+
+      filteredLogs() {
+        if (this.activeLogFilter === 'All') return this.logs;
+        const map = {
+          Success: ['success'],
+          Failed: ['error'],
+          Pending: ['warning', 'pending']
+        };
+        return this.logs.filter(log => (map[this.activeLogFilter] || []).includes(log.kind));
+      }
+    },
+
+    watch: {
+      nodes: {
+        deep: true,
+        handler(value) {
+          if (value.length !== this.previousNodeCount) {
+            this.counterBump = true;
+            setTimeout(() => this.counterBump = false, 300);
+            this.previousNodeCount = value.length;
+          }
         }
       }
-      return parsed;
-    }
+    },
 
-    async function send() {
-      const msg = input.value.trim();
-      if (!msg || loading.value) return;
-      
-      messages.value.push({ role: 'user', text: msg });
-      input.value = '';
-      loading.value = true;
-      scrollDown();
+    mounted() {
+      this.fetchState();
+      this.connectWs();
 
-      try {
-        const res = await fetch('/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg, api_key: localStorage.getItem('talos_api_key') || '' }),
+      this.durationTimer = setInterval(() => {
+        const seconds = Math.floor((Date.now() - this.sessionStartedAt) / 1000);
+        const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const secs = String(seconds % 60).padStart(2, '0');
+        this.sessionDuration = mins + ':' + secs;
+      }, 1000);
+
+      setInterval(() => {
+        this.placeholderIndex = (this.placeholderIndex + 1) % this.placeholders.length;
+      }, 4200);
+
+      nextTick(this.resizeComposer);
+    },
+
+    beforeUnmount() {
+      if (this.ws) this.ws.close();
+      if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+      if (this.durationTimer) clearInterval(this.durationTimer);
+    },
+
+    methods: {
+      emberStyle(n) {
+        return {
+          '--x': ((n * 17 + 9) % 100) + '%',
+          '--drift': (((n * 11) % 34) - 17) + 'px',
+          '--dur': (13 + (n % 5)) + 's',
+          '--delay': (-1 * (n * 1.7)) + 's'
+        };
+      },
+
+      hideBrokenImage(event) {
+        event.target.style.display = 'none';
+      },
+
+      useExample(text) {
+        this.input = text;
+        if (!this.hasApiKey) this.showKeyModal = true;
+        nextTick(this.resizeComposer);
+      },
+
+      saveKey() {
+        const key = this.apiKeyDraft.trim();
+        if (!key) return;
+        this.apiKey = key;
+        localStorage.setItem('talos_api_key', key);
+        localStorage.removeItem('talos_skip_key');
+        this.showKeyModal = false;
+        this.settingsOpen = false;
+        this.addLog('forge', 'INFO', 'DeepSeek key stored locally', 'success');
+      },
+
+      skipKey() {
+        localStorage.setItem('talos_skip_key', '1');
+        this.showKeyModal = false;
+      },
+
+      handleEnter(event) {
+        if (event.shiftKey) return;
+        event.preventDefault();
+        this.send();
+      },
+
+      resizeComposer() {
+        const el = this.$refs.composer;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+      },
+
+      async send() {
+        const message = this.input.trim();
+        if (!message || this.loading) return;
+
+        if (!this.hasApiKey) {
+          this.showKeyModal = true;
+          return;
+        }
+
+        if (this.autoClearLog) this.logs = [];
+
+        this.sendRipple = false;
+        await nextTick();
+        this.sendRipple = true;
+        setTimeout(() => this.sendRipple = false, 460);
+
+        this.input = '';
+        this.loading = true;
+        nextTick(this.resizeComposer);
+
+        this.messages.push({
+          id: crypto.randomUUID(),
+          role: 'user',
+          text: message,
+          createdAt: Date.now()
         });
-        const data = await res.json();
 
-        if (data.error) {
-          messages.value.push({ role: 'system', text: '⚠ ' + data.error });
+        const thinkingId = crypto.randomUUID();
+        this.messages.push({
+          id: thinkingId,
+          role: 'assistant',
+          loading: true,
+          text: '',
+          createdAt: Date.now()
+        });
+
+        this.scrollMessages();
+
+        try {
+          const response = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, api_key: this.apiKey })
+          });
+
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+
+          const data = await response.json();
+          const idx = this.messages.findIndex(m => m.id === thinkingId);
+          if (idx !== -1) this.messages[idx] = this.buildAssistantMessage(data);
+
+          if (data.dag) this.nodes = this.parseDag(data.dag);
+
+          if (Array.isArray(data.mutations)) {
+            data.mutations.forEach(mutation => {
+              this.addLog(
+                mutation.node_id || 'dag',
+                mutation.action || 'MUTATION',
+                'JMP mutation accepted',
+                'info'
+              );
+            });
+          }
+
+          if (Array.isArray(data.errors) && data.errors.length) {
+            data.errors.forEach(error => this.addLog('forge', 'FAILED', String(error), 'error'));
+          }
+
+          this.sendSuccess = true;
+          setTimeout(() => this.sendSuccess = false, 850);
+          this.scrollMessages();
+        } catch (error) {
+          const idx = this.messages.findIndex(m => m.id === thinkingId);
+          if (idx !== -1) {
+            this.messages[idx] = {
+              id: thinkingId,
+              role: 'assistant',
+              text: 'Forge error: ' + error.message,
+              jmp: false,
+              createdAt: Date.now()
+            };
+          }
+          this.notify('Forge error: ' + error.message);
+          this.addLog('forge', 'FAILED', error.message, 'error');
+        } finally {
+          this.loading = false;
+        }
+      },
+
+      buildAssistantMessage(data) {
+        const reply = data.reply || '';
+        const mutations = data.mutations;
+        let jmp = false;
+        let rawCode = '';
+        let invalidJmp = false;
+
+        if (Array.isArray(mutations) && mutations.length) {
+          jmp = true;
+          rawCode = JSON.stringify(mutations, null, 2);
         } else {
-          if (data.mutations && data.mutations.length) {
-            messages.value.push({ role: 'assistant', text: '', jmp: data.mutations });
-          }
-          if (data.dag) {
-            nodes.value = parseDag(data.dag);
-          }
-          if (data.errors) {
-            messages.value.push({ role: 'system', text: '⚠ Validation fault: ' + data.errors.join('; ') });
+          const extracted = this.extractJsonArray(reply);
+          if (extracted) {
+            jmp = true;
+            rawCode = extracted.raw;
+            invalidJmp = !extracted.valid;
           }
         }
-      } catch (e) {
-        messages.value.push({ role: 'system', text: '⚠ Forge offline: ' + e.message });
+
+        return {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          text: jmp ? this.stripCode(reply) : reply,
+          jmp,
+          rawCode,
+          invalidJmp,
+          createdAt: Date.now()
+        };
+      },
+
+      extractJsonArray(text) {
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
+        if (start === -1 || end === -1 || end <= start) return null;
+        const raw = text.slice(start, end + 1);
+        try {
+          return { raw: JSON.stringify(JSON.parse(raw), null, 2), valid: true };
+        } catch {
+          return { raw, valid: false };
+        }
+      },
+
+      stripCode(text) {
+        return String(text)
+          .replace(/```json[\s\S]*?```/gi, '')
+          .replace(/```[\s\S]*?```/g, '')
+          .trim();
+      },
+
+      async fetchState() {
+        try {
+          const response = await fetch('/state');
+          if (!response.ok) return;
+          const data = await response.json();
+          if (data.dag) this.nodes = this.parseDag(data.dag);
+        } catch (error) {
+          this.connected = false;
+        }
+      },
+
+      connectWs() {
+        const url = `ws://${location.host}/ws`;
+
+        try {
+          this.ws = new WebSocket(url);
+
+          this.ws.onopen = () => {
+            this.connected = true;
+            this.addLog('forge', 'INFO', 'WebSocket connected', 'success');
+          };
+
+          this.ws.onmessage = event => {
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === 'dag-update' && data.dag) {
+                this.nodes = this.parseDag(data.dag);
+                this.addLog('dag', 'UPDATE', 'DAG state synchronized', 'info');
+              }
+            } catch {
+              this.addLog('ws', 'INFO', 'Non-JSON event received', 'info');
+            }
+          };
+
+          this.ws.onclose = () => {
+            this.connected = false;
+            this.addLog('ws', 'OFFLINE', 'WebSocket closed; reconnecting in 5s', 'warning');
+            this.reconnectTimer = setTimeout(this.connectWs, 5000);
+          };
+
+          this.ws.onerror = () => {
+            this.connected = false;
+          };
+        } catch {
+          this.connected = false;
+          this.reconnectTimer = setTimeout(this.connectWs, 5000);
+        }
+      },
+
+      parseDag(dagText) {
+        const lines = String(dagText || '').split(/\r?\n/);
+        const nodes = [];
+
+        for (const line of lines) {
+          if (!line.trim().startsWith('Node:')) continue;
+
+          const node = {
+            id: this.matchField(line, /Node:\s*([^|]+)/) || 'unknown',
+            type: this.matchField(line, /Type:\s*([^|]+)/) || 'UNKNOWN',
+            status: this.normalizeStatus(this.matchField(line, /Status:\s*([^|]+)/) || 'PENDING'),
+            result: this.matchField(line, /Result:\s*([^|]+)/) || '',
+            dependencies: []
+          };
+
+          const deps = this.matchField(line, /Dependencies:\s*\[([^\]]*)\]/);
+          if (deps) {
+            node.dependencies = deps.split(',').map(x => x.trim()).filter(Boolean);
+          }
+
+          nodes.push(node);
+        }
+
+        return nodes;
+      },
+
+      matchField(text, regex) {
+        const match = String(text).match(regex);
+        return match ? match[1].trim() : '';
+      },
+
+      normalizeStatus(status) {
+        return String(status || 'PENDING').trim().toUpperCase().replace(/\s+/g, '_');
+      },
+
+      statusColor(status) {
+        const map = {
+          PENDING: '#30363d',
+          VALIDATED: '#79c0ff',
+          RUNNING: '#d29922',
+          SUCCESS: '#3fb950',
+          FAILED: '#f85149',
+          BLOCKED_BY_DEPENDENCY: '#db6d9e',
+          BLOCKED: '#db6d9e'
+        };
+        return map[this.normalizeStatus(status)] || '#30363d';
+      },
+
+      statusIcon(status) {
+        const normalized = this.normalizeStatus(status);
+        if (normalized === 'SUCCESS') return '✅';
+        if (normalized === 'FAILED') return '❌';
+        if (normalized === 'RUNNING') return '⏳';
+        if (normalized === 'VALIDATED') return '◈';
+        if (normalized.includes('BLOCKED')) return '⛔';
+        return '○';
+      },
+
+      nodeIcon(type) {
+        const value = String(type || '').toUpperCase();
+        if (value.includes('HTTP')) return '🌐';
+        if (value.includes('SQL') || value.includes('DATABASE') || value.includes('QUERY')) return '▦';
+        if (value.includes('FILE')) return '▤';
+        if (value.includes('VALID')) return '✓';
+        return '◈';
+      },
+
+      toggleResult(id) {
+        this.expandedResults[id] = !this.expandedResults[id];
+      },
+
+      renderMarkdown(text) {
+        let escaped = this.escapeHtml(text || '');
+        escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        const lines = escaped.split(/\n/);
+        let html = '';
+        let inList = false;
+
+        for (const line of lines) {
+          if (/^\s*[-*]\s+/.test(line)) {
+            if (!inList) {
+              html += '<ul>';
+              inList = true;
+            }
+            html += '<li>' + line.replace(/^\s*[-*]\s+/, '') + '</li>';
+          } else {
+            if (inList) {
+              html += '</ul>';
+              inList = false;
+            }
+            if (line.trim()) html += '<p>' + line + '</p>';
+          }
+        }
+
+        if (inList) html += '</ul>';
+        return html || '';
+      },
+
+      highlightJson(json) {
+        const escaped = this.escapeHtml(json);
+        return escaped.replace(
+          /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"\s*:)|("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*")|\b(true|false)\b|\b(null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+          match => {
+            if (/":$/.test(match.replace(/\s/g, ''))) return '<span class="json-key">' + match + '</span>';
+            if (/^"/.test(match)) return '<span class="json-string">' + match + '</span>';
+            if (/true|false/.test(match)) return '<span class="json-bool">' + match + '</span>';
+            if (/null/.test(match)) return '<span class="json-null">' + match + '</span>';
+            return '<span class="json-number">' + match + '</span>';
+          }
+        );
+      },
+
+      escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      },
+
+      async copyText(text, id) {
+        try {
+          await navigator.clipboard.writeText(text);
+          this.copiedId = id;
+          this.addLog('ui', 'COPY', 'JMP mutations copied', 'success');
+          setTimeout(() => {
+            if (this.copiedId === id) this.copiedId = '';
+          }, 1500);
+        } catch {
+          this.notify('Copy failed');
+        }
+      },
+
+      isCompactMessage(index) {
+        if (index <= 0) return false;
+        const current = this.messages[index];
+        const previous = this.messages[index - 1];
+        if (!current || !previous) return false;
+        if (current.role === 'system' || previous.role === 'system') return false;
+        return current.role === previous.role;
+      },
+
+      relativeTime(timestamp) {
+        const diff = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+        if (diff < 20) return 'Just now';
+        if (diff < 60) return diff + 's ago';
+        const mins = Math.floor(diff / 60);
+        if (mins < 60) return mins + 'm ago';
+        const hours = Math.floor(mins / 60);
+        return hours + 'h ago';
+      },
+
+      addLog(node, status, message, kind = 'info') {
+        this.logs.push({
+          id: crypto.randomUUID(),
+          node,
+          status,
+          message,
+          kind,
+          time: this.nowTime()
+        });
+
+        if (this.logs.length > 50) {
+          this.logs.splice(0, this.logs.length - 50);
+        }
+
+        if (this.logs.length > 5) this.logCollapsed = true;
+
+        nextTick(() => {
+          if (this.$refs.logEl) {
+            this.$refs.logEl.scrollTop = this.$refs.logEl.scrollHeight;
+          }
+        });
+      },
+
+      logIcon(kind, status) {
+        const s = String(status || '').toUpperCase();
+        if (kind === 'success' || s.includes('SUCCESS') || s.includes('COPY')) return '✅';
+        if (kind === 'error' || s.includes('FAILED')) return '❌';
+        if (kind === 'warning' || s.includes('PENDING') || s.includes('OFFLINE')) return '⏳';
+        return '◦';
+      },
+
+      truncate(text, length) {
+        const value = String(text || '');
+        return value.length > length ? value.slice(0, length - 3) + '...' : value;
+      },
+
+      notify(message) {
+        this.toast = message;
+        setTimeout(() => {
+          if (this.toast === message) this.toast = '';
+        }, 4200);
+      },
+
+      nowTime() {
+        return new Date().toLocaleTimeString('it-IT', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+      },
+
+      clearChat() {
+        this.messages = [];
+        this.showNewMessages = false;
+        if (this.autoClearLog) this.logs = [];
+      },
+
+      exportDag() {
+        const payload = {
+          exported_at: new Date().toISOString(),
+          nodes: this.nodes
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'talos-dag-export.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        this.addLog('dag', 'EXPORT', 'DAG exported as JSON', 'success');
+      },
+
+      onChatScroll() {
+        const el = this.$refs.messagesEl;
+        if (!el) return;
+        this.userNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
+        if (this.userNearBottom) this.showNewMessages = false;
+      },
+
+      scrollMessages(force = false) {
+        nextTick(() => {
+          const el = this.$refs.messagesEl;
+          if (!el) return;
+          if (force || this.userNearBottom) {
+            el.scrollTop = el.scrollHeight;
+            this.showNewMessages = false;
+          } else {
+            this.showNewMessages = true;
+          }
+        });
       }
-
-      loading.value = false;
-      scrollDown();
-      nextTick(() => { inputEl.value?.focus(); });
     }
-
-    return { messages, input, loading, nodes, send, inputEl, msgContainer };
-  },
-  mounted() {
-    this.$refs.inputEl?.focus();
-    // Load API key from localStorage or prompt
-    if (!localStorage.getItem('talos_api_key')) {
-      const key = prompt('Enter DeepSeek API key (stored locally):');
-      if (key) localStorage.setItem('talos_api_key', key);
-    }
-  },
-}).mount('#app');
+  }).mount('#app');
 </script>
 </body>
 </html>
