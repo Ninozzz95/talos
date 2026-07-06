@@ -135,6 +135,16 @@ export function buildServer() {
     } catch { return []; }
   });
 
+  // Static theme engine CSS
+  server.get('/theme-engine.css', async (_request, reply) => {
+    reply.type('text/css');
+    try {
+      return readFileSync(join(process.cwd(), 'src', 'theme-engine.css'), 'utf-8');
+    } catch {
+      return '/* theme engine not found */';
+    }
+  });
+
   // WebSocket
   server.get('/ws', { websocket: true }, (socket, _req) => {
     wsClients.add(socket);
