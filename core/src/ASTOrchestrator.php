@@ -174,6 +174,54 @@ final class ASTOrchestrator
         }
     }
 
+    /**
+     * Serializes the DAG state into a text prompt for the LLM.
+     */
+    public function serializeDagState(): string
+    {
+        $lines = [];
+        $lines[] = "Current DAG State:";
+        $lines[] = "---";
+
+        foreach ($this->nodes as $nodeId => $node) {
+            $status = $node['status'];
+            $type = $node['type'];
+            $deps = \implode(', ', $this->dependencies[$nodeId] ?? []);
+
+            $line = "Node: {$nodeId} | Type: {$type} | Status: {$status}";
+            if ($deps !== '') {
+                $line .= " | Dependencies: [{$deps}]";
+            }
+
+            // Include execution results if present
+            if (isset($node['output_summary'])) {
+                $line .= " | Result: {$node['output_summary']}";
+            }
+
+            $lines[] = $line;
+        }
+
+        // List blocked nodes explicitly
+        $blocked = [];
+        $pending = [];
+        foreach ($this->nodes as $nodeId => $node) {
+            if ($node['status'] === NodeStatus::BLOCKED_BY_DEPENDENCY) {
+                $blocked[] = $nodeId;
+            } elseif ($node['status'] === NodeStatus::PENDING) {
+                $pending[] = $nodeId;
+            }
+        }
+
+        if ($blocked !== []) {
+            $lines[] = "Blocked nodes: " . \implode(', ', $blocked);
+        }
+        if ($pending !== []) {
+            $lines[] = "Pending nodes: " . \implode(', ', $pending);
+        }
+
+        return \implode("\n", $lines);
+    }
+
     private function setStatus(string $nodeId, string $status): void
     {
         $this->assertNodeExists($nodeId);
@@ -233,7 +281,7 @@ final class ASTOrchestrator
 
     private function isSchedulableState(string $status): bool
     {
-        return in_array($status, [NodeStatus::PENDING, NodeStatus::RETRYING], true);
+        return \in_array($status, [NodeStatus::PENDING, NodeStatus::VALIDATED, NodeStatus::RETRYING], true);
     }
 
     private function assertNodeExists(string $nodeId): void
