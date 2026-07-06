@@ -1,0 +1,135 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * KADMOS Engine — System Check & Status
+ * Functional terminal diagnostics, not decorative animation.
+ * Shows real-time system state: PHP, tests, config, endpoints.
+ */
+
+function cls(): void { echo "\033[2J\033[H"; }
+function ok(string $s): string { return "\033[32m  OK  \033[0m {$s}\n"; }
+function warn(string $s): string { return "\033[33m  WARN \033[0m {$s}\n"; }
+function fail(string $s): string { return "\033[31m  FAIL \033[0m {$s}\n"; }
+function info(string $s): string { return "\033[36m  INFO \033[0m {$s}\n"; }
+function gold(string $s): string { return "\033[38;5;220m{$s}\033[0m"; }
+function bold(string $s): string { return "\033[1m{$s}\033[0m"; }
+function dim(string $s): string { return "\033[2m{$s}\033[0m"; }
+
+$versionFile = __DIR__ . '/../VERSION';
+$version = file_exists($versionFile) ? trim(file_get_contents($versionFile)) : 'v1.0.0';
+
+cls();
+
+echo gold(<<<'LOGO'
+
+ ██╗  ██╗ █████╗ ██████╗ ███╗   ███╗ ██████╗ ███████╗
+ ██║ ██╔╝██╔══██╗██╔══██╗████╗ ████║██╔═══██╗██╔════╝
+ █████╔╝ ███████║██║  ██║██╔████╔██║██║   ██║███████╗
+ ██╔═██╗ ██╔══██║██║  ██║██║╚██╔╝██║██║   ██║╚════██║
+ ██║  ██╗██║  ██║██████╔╝██║ ╚═╝ ██║╚██████╔╝███████║
+ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚═╝     ╚═╝ ╚═════╝ ╚══════╝
+
+LOGO) . "\n";
+echo "  Engine {$version}  │  " . date('Y-m-d H:i:s') . "\n\n";
+
+// ═══════════════════════════════════════
+// 1. Environment
+// ═══════════════════════════════════════
+echo bold("  ENVIRONMENT") . "\n";
+echo info("PHP " . phpversion() . "  │  " . php_uname('s') . "  │  " . PHP_SAPI);
+echo info("Memory: " . round(memory_get_usage(true) / 1024 / 1024, 1) . "MB  │  Max: " . ini_get('memory_limit'));
+
+$extensions = ['curl', 'json', 'mbstring', 'fileinfo'];
+foreach ($extensions as $ext) {
+    echo extension_loaded($ext) ? ok($ext) : fail("{$ext} MISSING");
+}
+echo "\n";
+
+// ═══════════════════════════════════════
+// 2. Core Modules
+// ═══════════════════════════════════════
+echo bold("  CORE MODULES") . "\n";
+
+$srcDir = __DIR__ . '/src';
+$modules = [
+    'NodeStatus.php'            => 'State Constants',
+    'ASTOrchestrator.php'       => 'DAG Engine',
+    'MainLoopController.php'    => 'Event Loop',
+    'JmpValidatorClient.php'    => 'IPC Client',
+    'OpenAIClient.php'          => 'LLM Adapter',
+    'Workers/WorkerRegistry.php'=> 'Worker Registry',
+    'Workers/HttpRequestWorker.php' => 'HTTP Worker',
+];
+
+foreach ($modules as $file => $label) {
+    $path = $srcDir . '/' . $file;
+    echo file_exists($path) ? ok($label) : fail("{$label} MISSING");
+}
+echo "\n";
+
+// ═══════════════════════════════════════
+// 3. Test Suite
+// ═══════════════════════════════════════
+echo bold("  TEST SUITE") . "\n";
+
+$phpBin = __DIR__ . '/../.tools/php/php.exe';
+if (!file_exists($phpBin)) $phpBin = 'php';
+
+$testFiles = [
+    'ASTOrchestratorTest.php'       => 'DAG Engine Tests',
+    'WorkerTest.php'                => 'Worker Tests',
+    'JmpValidatorClientTest.php'    => 'IPC Client Tests',
+    'MainLoopControllerTest.php'    => 'Event Loop Tests',
+];
+
+$passed = 0;
+$failed = 0;
+foreach ($testFiles as $file => $label) {
+    $path = __DIR__ . '/tests/' . $file;
+    if (!file_exists($path)) {
+        echo fail("{$label} — file not found");
+        $failed++;
+        continue;
+    }
+    $output = [];
+    exec(escapeshellarg($phpBin) . ' ' . escapeshellarg($path) . ' 2>&1', $output, $code);
+    $last = end($output);
+    if ($code === 0 && str_contains($last, 'passed')) {
+        echo ok($label);
+        $passed++;
+    } else {
+        echo fail("{$label} — FAILED");
+        $failed++;
+    }
+}
+echo "  " . ($failed === 0 ? ok("{$passed}/{$passed} suites passed") : fail("{$passed} passed, {$failed} FAILED")) . "\n";
+
+// ═══════════════════════════════════════
+// 4. Configuration
+// ═══════════════════════════════════════
+echo bold("  CONFIGURATION") . "\n";
+
+$hasApiKey = (bool)(getenv('KADMOS_API_KEY') ?: getenv('DEEPSEEK_API_KEY'));
+echo $hasApiKey ? ok("API key configured") : warn("No API key set — use KADMOS_API_KEY or DEEPSEEK_API_KEY");
+
+$validatorUrl = 'http://127.0.0.1:3000/health';
+$ch = curl_init($validatorUrl);
+curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT_MS => 500, CURLOPT_SSL_VERIFYPEER => false]);
+$result = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+
+if ($result !== false && $httpCode === 200) {
+    $health = json_decode($result, true);
+    $service = $health['service'] ?? '?';
+    echo ok("Validator: {$service} @ {$validatorUrl}");
+} else {
+    echo warn("Validator not reachable @ {$validatorUrl} — start with: npx tsx validator/src/server.ts");
+}
+
+echo "\n" . gold("  ⚡ KADMOS ENGINE READY") . "\n";
+echo dim("  kadmos start [N] [--mock]  │  kadmos test  │  kadmos validate <file>") . "\n";
+echo dim("  kadmos dashboard  │  talos forge interface") . "\n";
