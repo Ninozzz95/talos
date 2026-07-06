@@ -176,12 +176,20 @@ final class ASTOrchestrator
 
     /**
      * Serializes the DAG state into a text prompt for the LLM.
+     * Includes context window saturation warning.
      */
     public function serializeDagState(): string
     {
         $lines = [];
         $lines[] = "Current DAG State:";
         $lines[] = "---";
+
+        $nodeCount = count($this->nodes);
+        $lines[] = "Total nodes: {$nodeCount}";
+        if ($nodeCount > 20) {
+            $lines[] = "WARNING: Large DAG ({$nodeCount} nodes). Consider pruning completed subtrees.";
+        }
+        $lines[] = "";
 
         foreach ($this->nodes as $nodeId => $node) {
             $status = $node['status'];
@@ -217,6 +225,12 @@ final class ASTOrchestrator
         }
         if ($pending !== []) {
             $lines[] = "Pending nodes: " . \implode(', ', $pending);
+        }
+
+        $serialized = \implode("\n", $lines);
+        $estimatedTokens = (int)(\strlen($serialized) / 3.5); // rough: ~3.5 chars per token
+        if ($estimatedTokens > 80000) {
+            $lines[] = "\n⚠ CONTEXT WARNING: DAG state ~{$estimatedTokens} tokens (limit: 128K). LLM may lose context.";
         }
 
         return \implode("\n", $lines);
