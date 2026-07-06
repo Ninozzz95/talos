@@ -11,6 +11,7 @@ final class MainLoopController
     private JmpValidatorClient $validator;
     private int $maxCycles;
     private int $cycleCount = 0;
+    private ?string $broadcastUrl;
 
     /** @var list<array{status: string, output_summary: string, raw_output: mixed}> */
     private array $executionLog = [];
@@ -20,11 +21,13 @@ final class MainLoopController
         LLMClientInterface $llm,
         JmpValidatorClient $validator,
         int $maxCycles = 100,
+        ?string $broadcastUrl = null,
     ) {
         $this->orchestrator = $orchestrator;
         $this->llm = $llm;
         $this->validator = $validator;
         $this->maxCycles = $maxCycles;
+        $this->broadcastUrl = $broadcastUrl;
     }
 
     /**
@@ -79,6 +82,9 @@ final class MainLoopController
 
             // 5. EXECUTE: Run all ready nodes
             $this->executeReadyNodes();
+
+            // 6. BROADCAST: Push DAG state to HMI via WebSocket
+            $this->broadcastDag();
         }
 
         return $this->executionLog;
@@ -145,5 +151,27 @@ final class MainLoopController
     public function getCycleCount(): int
     {
         return $this->cycleCount;
+    }
+
+    private function broadcastDag(): void
+    {
+        if ($this->broadcastUrl === null) {
+            return;
+        }
+
+        try {
+            $dag = $this->orchestrator->serializeDagState();
+            $ch = \curl_init($this->broadcastUrl);
+            \curl_setopt_array($ch, [
+                \CURLOPT_RETURNTRANSFER => true,
+                \CURLOPT_POST => true,
+                \CURLOPT_POSTFIELDS => \json_encode(['dag' => $dag]),
+                \CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+                \CURLOPT_TIMEOUT_MS => 1000,
+            ]);
+            \curl_exec($ch);
+        } catch (\Throwable) {
+            // Broadcast is best-effort — never crash the loop
+        }
     }
 }

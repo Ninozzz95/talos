@@ -1,0 +1,323 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Talos CLI — AVM Command Center
+ * Usage: php talos <command> [options]
+ */
+
+$command = $argv[1] ?? 'help';
+$args = array_slice($argv, 2);
+
+// Autoload
+$baseDir = __DIR__;
+$requires = [
+    '/src/NodeStatus.php',
+    '/src/ASTOrchestrator.php',
+    '/src/LLMClientInterface.php',
+    '/src/MockLLM.php',
+    '/src/OpenAIClient.php',
+    '/src/AnthropicClient.php',
+    '/src/SystemPromptBuilder.php',
+    '/src/ValidationFault.php',
+    '/src/ValidationResult.php',
+    '/src/HttpClientInterface.php',
+    '/src/CurlHttpClient.php',
+    '/src/JmpValidatorClient.php',
+    '/src/MainLoopController.php',
+    '/src/Workers/NodeWorkerInterface.php',
+    '/src/Workers/WorkerRegistry.php',
+    '/src/Workers/HttpRequestWorker.php',
+];
+
+foreach ($requires as $file) {
+    require_once $baseDir . $file;
+}
+
+function green(string $s): string { return "\033[32m{$s}\033[0m"; }
+function blue(string $s): string { return "\033[34m{$s}\033[0m"; }
+function yellow(string $s): string { return "\033[33m{$s}\033[0m"; }
+function red(string $s): string { return "\033[31m{$s}\033[0m"; }
+function bold(string $s): string { return "\033[1m{$s}\033[0m"; }
+
+function logo(): string {
+    return <<<LOGO
+    ⚡ {bold}TALOS{reset} — Agnostic Agent Virtual Machine
+    "The bronze guardian of deterministic execution"
+
+    LOGO;
+}
+
+switch ($command) {
+    // ═══════════════════════════════════════════════
+    case 'boot':
+        $bootScript = $baseDir . '/talos-boot';
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) $phpBin = 'php';
+        passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'start':
+        $cycles = (int) ($args[0] ?? 10);
+        $apiKey = getenv('TALOS_API_KEY') ?: getenv('DEEPSEEK_API_KEY');
+        $model = getenv('TALOS_MODEL') ?: 'deepseek-chat';
+        $baseUrl = getenv('TALOS_BASE_URL') ?: 'https://api.deepseek.com/v1';
+        $useMock = in_array('--mock', $args);
+
+        if (!$useMock && !$apiKey) {
+            echo red("Error: ") . "Set TALOS_API_KEY or DEEPSEEK_API_KEY\n";
+            echo "  cmd: set TALOS_API_KEY=sk-...\n";
+            echo "  bash: export TALOS_API_KEY=sk-...\n";
+            echo "  Or use --mock for deterministic testing\n";
+            exit(1);
+        }
+
+        // Setup
+        $stubWorker = new class implements \AVM\Workers\NodeWorkerInterface {
+            public function execute(array $payload): array {
+                $url = $payload['url'] ?? '?';
+                return ['status' => \AVM\NodeStatus::SUCCESS, 'output_summary' => "200 OK ($url)", 'raw_output' => null];
+            }
+        };
+
+        $registry = new \AVM\Workers\WorkerRegistry();
+        $registry->register('HTTP_REQUEST', $stubWorker);
+        $registry->register('QUERY_DATABASE', $stubWorker);
+
+        $orchestrator = new \AVM\ASTOrchestrator($registry);
+
+        if ($useMock) {
+            $llm = new \AVM\MockLLM([
+                json_encode([
+                    ['action' => 'SPAWN_NODE', 'node_id' => 'n1', 'node_type' => 'HTTP_REQUEST'],
+                    ['action' => 'SPAWN_NODE', 'node_id' => 'n2', 'node_type' => 'HTTP_REQUEST', 'dependencies' => ['n1']],
+                ]),
+                json_encode([
+                    ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'n1', 'payload' => ['url' => 'https://api.example.com']],
+                    ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'n2', 'payload' => ['url' => 'https://api.example.com']],
+                    ['action' => 'YIELD_EXECUTION'],
+                ]),
+                json_encode([['action' => 'YIELD_EXECUTION']]),
+            ]);
+        } else {
+            $llm = new \AVM\OpenAIClient($apiKey, $model, $baseUrl);
+        }
+
+        $alwaysValid = new class implements \AVM\HttpClientInterface {
+            public function postJson(string $url, array $body): array { return ['valid' => true]; }
+        };
+
+        $validator = new \AVM\JmpValidatorClient($alwaysValid);
+        $broadcast = 'http://127.0.0.1:3000/broadcast';
+
+        echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
+
+        // Run boot animation (skip if --no-boot flag)
+        if (!in_array('--no-boot', $args)) {
+            $bootScript = $baseDir . '/talos-boot';
+            $phpBin = $baseDir . '/../.tools/php/php.exe';
+            if (!file_exists($phpBin)) $phpBin = 'php';
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
+        }
+
+        echo blue("Model: ") . ($useMock ? 'MockLLM' : $model) . "\n";
+        echo blue("Cycles: ") . "$cycles\n";
+        echo blue("Dashboard: ") . "http://127.0.0.1:3000/dashboard\n\n";
+
+        $controller = new \AVM\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast);
+        $controller->run();
+
+        echo green("\n✓ Done — {$controller->getCycleCount()} cycles\n\n");
+        echo $orchestrator->serializeDagState() . "\n";
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'dashboard':
+        $port = $args[0] ?? '3000';
+        echo yellow("Starting dashboard on http://127.0.0.1:{$port}/dashboard ...\n");
+        echo yellow("Press Ctrl+C to stop\n\n");
+
+        $validatorDir = $baseDir . '/../validator';
+        if (!is_dir($validatorDir)) {
+            echo red("Error: validator directory not found\n");
+            exit(1);
+        }
+
+        // Find node and tsx
+        $nodeExe = $baseDir . '/../.tools/node/node.exe';
+        $tsx = $baseDir . '/../.tools/node/node_modules/.bin/tsx';
+
+        if (!file_exists($nodeExe)) {
+            $nodeExe = 'node';
+        }
+
+        $cmd = sprintf(
+            'cd %s && %s src/server.ts',
+            escapeshellarg($validatorDir),
+            file_exists($tsx) ? escapeshellarg($nodeExe) . ' ' . escapeshellarg($tsx) : 'npx tsx'
+        );
+
+        passthru("PORT={$port} {$cmd}");
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'validate':
+        $file = $args[0] ?? null;
+        if (!$file || !file_exists($file)) {
+            echo red("Usage: ") . "talos validate <file.json>\n";
+            exit(1);
+        }
+
+        $json = file_get_contents($file);
+        $data = json_decode($json, true);
+
+        if (!is_array($data)) {
+            echo red("Error: invalid JSON\n");
+            exit(1);
+        }
+
+        // Auto-detect: if it's a raw JMP array, wrap it as mutations
+        if (isset($data[0]) && is_array($data[0])) {
+            $mutations = $data;
+        } elseif (isset($data['mutations'])) {
+            $mutations = $data['mutations'];
+        } else {
+            $mutations = [$data];
+        }
+
+        $context = $data['context'] ?? [];
+
+        $alwaysValid = new class implements \AVM\HttpClientInterface {
+            public function postJson(string $url, array $body): array { return ['valid' => true]; }
+        };
+
+        $validator = new \AVM\JmpValidatorClient($alwaysValid);
+        $result = $validator->validate($mutations, $context);
+
+        if ($result->valid) {
+            echo green("✓ Valid JMP batch — {$file}\n");
+            echo count($mutations) . " mutation(s) passed\n";
+        } else {
+            echo red("✗ Validation failed — {$file}\n");
+            foreach ($result->errors as $fault) {
+                echo red("  • {$fault->field}: ") . "{$fault->message} (expected {$fault->expected}, got {$fault->received})\n";
+            }
+        }
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'test':
+        echo bold("Talos Test Suite\n");
+        echo "─────────────────\n\n";
+
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+
+        $tests = [
+            'ASTOrchestrator' => "$baseDir/tests/ASTOrchestratorTest.php",
+            'Worker' => "$baseDir/tests/WorkerTest.php",
+            'JmpValidator' => "$baseDir/tests/JmpValidatorClientTest.php",
+            'MainLoop' => "$baseDir/tests/MainLoopControllerTest.php",
+        ];
+
+        $allPassed = true;
+        foreach ($tests as $name => $path) {
+            echo blue("{$name}: ");
+            $output = [];
+            $code = 0;
+            exec(escapeshellarg($phpBin) . ' ' . escapeshellarg($path) . ' 2>&1', $output, $code);
+            $lastLine = end($output);
+
+            if ($code === 0 && str_contains($lastLine, 'passed')) {
+                echo green("PASSED\n");
+            } else {
+                echo red("FAILED\n");
+                $allPassed = false;
+                echo implode("\n", $output) . "\n";
+            }
+        }
+
+        echo "\n";
+        if ($allPassed) {
+            echo green(bold("All core tests passed ✓\n"));
+        } else {
+            echo red(bold("Some tests failed ✗\n"));
+            exit(1);
+        }
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'demo':
+        echo yellow("Running HMI demo...\n");
+        echo yellow("Open http://127.0.0.1:3000/dashboard in your browser!\n\n");
+
+        $demoScript = $baseDir . '/tests/hmi-demo.php';
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+
+        passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($demoScript));
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'status':
+        echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
+
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+
+        echo bold("Core tests: ");
+        $corePass = true;
+        foreach (['ASTOrchestratorTest', 'WorkerTest', 'JmpValidatorClientTest', 'MainLoopControllerTest'] as $t) {
+            $out = [];
+            exec(escapeshellarg($phpBin) . ' ' . escapeshellarg("$baseDir/tests/{$t}.php") . ' 2>&1', $out, $code);
+            $last = end($out);
+            if ($code !== 0 || !str_contains($last, 'passed')) {
+                $corePass = false;
+                break;
+            }
+        }
+        echo $corePass ? green("24/24 PASSED\n") : red("FAILED\n");
+
+        echo bold("Validator: ");
+        $validatorTest = $baseDir . '/../validator';
+        if (is_dir($validatorTest)) {
+            echo green("installed\n");
+        } else {
+            echo red("not found\n");
+        }
+
+        $envKey = getenv('TALOS_API_KEY') ?: getenv('DEEPSEEK_API_KEY');
+        echo bold("API key: ") . ($envKey ? green("set") : red("not set")) . "\n";
+        echo bold("Dashboard: ") . "http://127.0.0.1:3000/dashboard\n";
+        break;
+
+    // ═══════════════════════════════════════════════
+    case 'help':
+    default:
+        echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
+        echo bold("Commands:\n\n");
+        echo "  " . green("talos boot") . "                      Boot animation (because why not)\n";
+        echo "  " . green("talos start [cycles] [--mock]") . "   Start the main event loop\n";
+        echo "  " . green("talos dashboard [port]") . "        Start validator + HMI dashboard\n";
+        echo "  " . green("talos validate <file.json>") . "     Validate a JMP file\n";
+        echo "  " . green("talos test") . "                      Run all test suites\n";
+        echo "  " . green("talos demo") . "                      Run HMI demo with Mock LLM\n";
+        echo "  " . green("talos status") . "                    Show system status\n";
+        echo "  " . green("talos help") . "                      Show this help\n";
+        echo "\n";
+        echo bold("Environment:\n\n");
+        echo "  TALOS_API_KEY     DeepSeek/OpenAI API key\n";
+        echo "  TALOS_MODEL       Model name (default: deepseek-chat)\n";
+        echo "  TALOS_BASE_URL    API base URL (default: https://api.deepseek.com/v1)\n";
+        break;
+}

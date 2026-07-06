@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AVM Dashboard</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; }
+.header { background: #161b22; padding: 16px 24px; border-bottom: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 18px; color: #58a6ff; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+.status-dot.connected { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+.status-dot.disconnected { background: #f85149; }
+.container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+.nodes { display: flex; flex-direction: column; gap: 8px; }
+.node { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; transition: border-color .2s; }
+.node:hover { border-color: #58a6ff; }
+.node-id { font-weight: 700; font-size: 15px; min-width: 80px; color: #e6edf3; }
+.node-type { font-size: 12px; color: #8b949e; background: #21262d; padding: 3px 8px; border-radius: 4px; }
+.node-status { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; }
+.status-PENDING { background: #1f2a37; color: #8b949e; }
+.status-VALIDATED { background: #1b2d3a; color: #79c0ff; }
+.status-RUNNING { background: #2a2610; color: #d29922; animation: pulse 1s infinite; }
+.status-SUCCESS { background: #162b1d; color: #3fb950; }
+.status-FAILED { background: #2d1417; color: #f85149; }
+.status-BLOCKED_BY_DEPENDENCY { background: #2d1a23; color: #db6d9e; }
+.status-RETRYING { background: #2d1f10; color: #d29922; }
+@keyframes pulse { 50% { opacity: .5; } }
+.node-deps { font-size: 12px; color: #484f58; margin-left: auto; }
+.node-result { font-size: 12px; color: #7d8590; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { text-align: center; color: #484f58; padding: 60px 20px; font-size: 16px; }
+.info-bar { display: flex; gap: 24px; margin-bottom: 16px; font-size: 13px; color: #8b949e; }
+.info-bar span { background: #161b22; border: 1px solid #30363d; padding: 6px 12px; border-radius: 6px; }
+.btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.btn:hover { background: #30363d; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <h1>⚡ AVM Dashboard</h1>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span><span class="status-dot" :class="connected ? 'connected' : 'disconnected'"></span>{{ connected ? 'Connected' : 'Disconnected' }}</span>
+      <span style="color:#8b949e;font-size:13px;">{{ nodes.length }} nodes</span>
+      <button class="btn" @click="fetchState">🔄 Refresh</button>
+    </div>
+  </div>
+  <div class="container">
+    <div class="info-bar">
+      <span>Last update: {{ lastUpdate || '—' }}</span>
+      <span>WS clients: {{ clientCount }}</span>
+    </div>
+    <div v-if="nodes.length === 0" class="empty">
+      ⏳ Waiting for DAG state...<br>
+      <span style="font-size:13px;">Start the MainLoopController to see nodes appear here.</span>
+    </div>
+    <div v-else class="nodes">
+      <div v-for="node in nodes" :key="node.id" class="node">
+        <span class="node-id">{{ node.id }}</span>
+        <span class="node-type">{{ node.type }}</span>
+        <span class="node-status" :class="'status-' + node.status">{{ node.status }}</span>
+        <span class="node-result" v-if="node.result">{{ node.result }}</span>
+        <span class="node-deps" v-if="node.deps">→ {{ node.deps }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      connected: false,
+      nodes: [],
+      lastUpdate: null,
+      clientCount: 0,
+      ws: null,
+    };
+  },
+  mounted() {
+    this.connect();
+    this.fetchState();
+    setInterval(() => { if (!this.connected) this.connect(); }, 3000);
+  },
+  methods: {
+    connect() {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${location.host}/ws`;
+      this.ws = new WebSocket(wsUrl);
+      this.ws.onopen = () => { this.connected = true; };
+      this.ws.onclose = () => { this.connected = false; };
+      this.ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'dag-update') {
+          this.parseDag(msg.dag);
+          this.lastUpdate = new Date(msg.timestamp).toLocaleTimeString();
+          this.clientCount = msg.clients ?? this.clientCount;
+        }
+      };
+    },
+    async fetchState() {
+      try {
+        const res = await fetch('/state');
+        const data = await res.json();
+        if (data.dag) {
+          this.parseDag(data.dag);
+          this.lastUpdate = new Date().toLocaleTimeString();
+        }
+      } catch {}
+    },
+    parseDag(dag) {
+      if (typeof dag === 'string') {
+        // Text format: "Node: id | Type: t | Status: s | ..."
+        const lines = dag.split('\n');
+        const parsed = [];
+        for (const line of lines) {
+          const m = line.match(/Node:\s*(\S+)\s*\|\s*Type:\s*(\S+)\s*\|\s*Status:\s*(\S+)/);
+          if (m) {
+            const node = { id: m[1], type: m[2], status: m[3], deps: '', result: '' };
+            const depMatch = line.match(/Dependencies:\s*\[([^\]]*)\]/);
+            if (depMatch) node.deps = depMatch[1];
+            const resMatch = line.match(/Result:\s*(.+)/);
+            if (resMatch) node.result = resMatch[1].trim();
+            parsed.push(node);
+          }
+        }
+        this.nodes = parsed;
+      } else if (typeof dag === 'object') {
+        this.nodes = Object.entries(dag).map(([id, n]) => ({
+          id, type: n.type || '?', status: n.status || '?', deps: '', result: n.output_summary || '',
+        }));
+      }
+    },
+  },
+}).mount('#app');
+</script>
+</body>
+</html>

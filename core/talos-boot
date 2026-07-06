@@ -1,0 +1,146 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Talos Boot Animation — Greek Giant Startup Sequence
+
+function cls(): void { echo "\033[2J\033[H"; }
+function bold(string $s): string { return "\033[1m{$s}\033[0m"; }
+function dim(string $s): string { return "\033[2m{$s}\033[0m"; }
+function bronze(string $s): string { return "\033[38;5;136m{$s}\033[0m"; }
+function fire(string $s): string { return "\033[38;5;202m{$s}\033[0m"; }
+function gold(string $s): string { return "\033[38;5;220m{$s}\033[0m"; }
+function ice(string $s): string { return "\033[38;5;51m{$s}\033[0m"; }
+function red(string $s): string { return "\033[31m{$s}\033[0m"; }
+function green(string $s): string { return "\033[32m{$s}\033[0m"; }
+function yellow(string $s): string { return "\033[33m{$s}\033[0m"; }
+
+// ASCII Art frames of Talos awakening
+$frames = [
+    // Frame 0: Sleeping
+    <<<TALOS
+    
+    
+    
+    
+    
+    
+    
+                  ▄▄▄▄▄▄
+                 ████████
+                  ▀▀▀▀▀▀
+    
+    
+    
+    
+    TALOS,
+
+    // Frame 1: Eyes opening
+    <<<TALOS
+    
+    
+    
+    
+    
+    
+    
+           ▄▄▄▄▄▄▄▄▄▄▄▄▄
+          █              █
+          █   ▄█▄  ▄█▄   █
+          █   █▀█  █▀█   █
+          █              █
+           ▀▀▀▀▀▀▀▀▀▀▀▀▀
+    
+    
+    
+    TALOS,
+
+    // Frame 2: Rising (full body)
+    <<<TALOS
+                 ▄▀▀▄
+                █ ██ █
+                █    █
+              ▄▀▀▀▀▀▀▀▀▀▀▄
+             █  ▄█████▄  █
+             █  █▀▀▀▀▀█  █
+             █           █
+             █  ▄▄▄▄▄▄▄  █
+             █▄█████████▄█
+              █▀█▀▀▀▀▀█▀█
+              █▀█  █  █▀█
+              █▀█  █  █▀█
+              ▀▀▀  █  ▀▀▀
+                   █
+                   █
+                   ▀
+    TALOS,
+
+    // Frame 3: Full power (glowing)
+    <<<TALOS
+                 ▄▀▀▄
+                █ ██ █
+                █ ██ █
+              ▄▀▀▀▀▀▀▀▀▀▀▄
+             █  ▄█████▄  █
+             █  █▄▄▄▄▄█  █
+             █  ▌     ▐  █
+             █  ███████  █
+             █▄█████████▄█
+              █▀█   █▀█▀█
+              █▀█   █ █▀█
+              █▀█   █ █▀█
+              ▀▀▀   █ ▀▀▀
+                    █▄▄▄▄
+                   ██████
+                   ▀▀▀▀▀▀
+    TALOS,
+];
+
+$bootLines = [
+    ['[BOOT]', gold('⚡ ICHOR_CORE..............'), green(' ONLINE')],
+    ['[BOOT]', gold('◈ BRONZE_SHELL............'), green(' HARDENED')],
+    ['[BOOT]', gold('◈ SYNTHETIC_SINEws........'), green(' TENSED')],
+    ['[BOOT]', gold('◈ KADMEIAN_VEINS..........'), green(' FLOWING')],
+    ['[BOOT]', gold('◈ GUARDIAN_PROTOCOL.......'), green(' ACTIVE')],
+    ['[BOOT]', gold('◈ JMP_GATE................'), green(' SEALED')],
+    ['[BOOT]', gold('◈ DAG_FORGE...............'), green(' BURNING')],
+    ['[BOOT]', gold('◈ HEPHAESTUS_ANVIL........'), green(' READY')],
+    ['', '', ''],
+    ['', bold(bronze('  ⚡ TALOS IS ONLINE ⚡')), ''],
+    ['', dim('  Agnostic Agent Virtual Machine v1.0'), ''],
+    ['', dim('  "The bronze guardian never sleeps"'), ''],
+];
+
+// Run animation
+cls();
+
+$delay = 200000; // microseconds per frame
+
+foreach ($frames as $i => $frame) {
+    cls();
+    echo bronze($frame) . "\n\n";
+
+    // Show boot messages accumulated so far
+    $bootProgress = min(floor(($i + 1) / count($frames) * count($bootLines)), count($bootLines));
+    for ($j = 0; $j < $bootProgress; $j++) {
+        if ($j < 3 && $i < 2) continue; // Don't show boot lines in early frames
+        echo $bootLines[$j][1] . $bootLines[$j][2] . "\n";
+    }
+
+    usleep($delay);
+}
+
+// Final static screen
+cls();
+echo bronze($frames[3]) . "\n\n";
+
+foreach ($bootLines as $line) {
+    echo $line[1] . $line[2] . "\n";
+}
+
+echo "\n";
+echo bold(yellow("  PRESS ENTER TO CONTINUE")) . "\n";
+
+// Wait for enter
+fgets(STDIN);
