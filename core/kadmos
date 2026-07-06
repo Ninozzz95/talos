@@ -124,11 +124,12 @@ switch ($command) {
 
         $validator = new \AVM\JmpValidatorClient($alwaysValid);
         $broadcast = 'http://127.0.0.1:3000/broadcast';
+        $demoThrottle = in_array('--demo-throttle', $args);
 
         echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
 
         // Run boot animation (skip if --no-boot flag)
-        if (!in_array('--no-boot', $args)) {
+        if (!in_array('--no-boot', $args) && !$demoThrottle) {
             $bootScript = $baseDir . '/kadmos-boot';
             $phpBin = $baseDir . '/../.tools/php/php.exe';
             if (!file_exists($phpBin)) $phpBin = 'php';
@@ -139,7 +140,7 @@ switch ($command) {
         echo blue("Cycles: ") . "$cycles\n";
         echo blue("Dashboard: ") . "http://127.0.0.1:3000/dashboard\n\n";
 
-        $controller = new \AVM\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast);
+        $controller = new \AVM\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast, $demoThrottle);
         $controller->run();
 
         echo green("\n✓ Done — {$controller->getCycleCount()} cycles\n\n");
