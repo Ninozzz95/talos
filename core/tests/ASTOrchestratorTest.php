@@ -76,6 +76,10 @@ $tests = [
     'testFailureCascadesToLinearDescendants',
     'testFailureBlocksSharedChildUntilAllParentsSucceed',
     'testHmiRetryRestoresBlockedDescendants',
+    'testBuildContextReturnsTypeMapping',
+    'testBuildContextIgnoresNonMutateActions',
+    'testBuildContextIgnoresUnknownNodes',
+    'testBuildContextWithDefaultType',
 ];
 
 foreach ($tests as $test) {
@@ -84,3 +88,55 @@ foreach ($tests as $test) {
 }
 
 echo "All ASTOrchestrator tests passed" . PHP_EOL;
+
+// ===== buildContext tests =====
+
+function testBuildContextReturnsTypeMapping(): void
+{
+    $orchestrator = new ASTOrchestrator();
+    $orchestrator->addNode('A', [], 'HTTP_REQUEST');
+    $orchestrator->addNode('B', ['A'], 'QUERY_DATABASE');
+
+    $context = $orchestrator->buildContext([
+        ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'A', 'payload' => []],
+        ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'B', 'payload' => []],
+    ]);
+
+    assertSameValue(['A' => 'HTTP_REQUEST', 'B' => 'QUERY_DATABASE'], $context, 'buildContext should return correct type mapping.');
+}
+
+function testBuildContextIgnoresNonMutateActions(): void
+{
+    $orchestrator = new ASTOrchestrator();
+    $orchestrator->addNode('A', [], 'HTTP_REQUEST');
+
+    $context = $orchestrator->buildContext([
+        ['action' => 'SPAWN_NODE', 'node_id' => 'A'],
+        ['action' => 'YIELD_EXECUTION'],
+    ]);
+
+    assertSameValue([], $context, 'buildContext should ignore non-MUTATE_PAYLOAD actions.');
+}
+
+function testBuildContextIgnoresUnknownNodes(): void
+{
+    $orchestrator = new ASTOrchestrator();
+
+    $context = $orchestrator->buildContext([
+        ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'GHOST', 'payload' => []],
+    ]);
+
+    assertSameValue([], $context, 'buildContext should ignore nodes not in the AST.');
+}
+
+function testBuildContextWithDefaultType(): void
+{
+    $orchestrator = new ASTOrchestrator();
+    $orchestrator->addNode('A');
+
+    $context = $orchestrator->buildContext([
+        ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'A', 'payload' => []],
+    ]);
+
+    assertSameValue(['A' => 'UNKNOWN'], $context, 'buildContext should return UNKNOWN for nodes without explicit type.');
+}
