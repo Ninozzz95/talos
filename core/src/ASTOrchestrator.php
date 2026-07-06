@@ -236,6 +236,30 @@ final class ASTOrchestrator
         return \implode("\n", $lines);
     }
 
+    /**
+     * Exports the full DAG state as an array for serialization.
+     * @return array{nodes: array, dependencies: array, children: array}
+     */
+    public function exportState(): array
+    {
+        return [
+            'nodes' => $this->nodes,
+            'dependencies' => $this->dependencies,
+            'children' => $this->children,
+        ];
+    }
+
+    /**
+     * Imports DAG state from a previously exported array.
+     * @param array{nodes: array, dependencies: array, children: array} $data
+     */
+    public function importState(array $data): void
+    {
+        $this->nodes = $data['nodes'] ?? [];
+        $this->dependencies = $data['dependencies'] ?? [];
+        $this->children = $data['children'] ?? [];
+    }
+
     private function setStatus(string $nodeId, string $status): void
     {
         $this->assertNodeExists($nodeId);

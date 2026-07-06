@@ -79,7 +79,7 @@ export function buildServer() {
 
     // Use absolute path to PHP binary — env var override if set
     const phpBin = process.env.PHP_BIN || join(process.cwd(), '..', '.tools', 'php', 'php.exe');
-    const chatScript = join(process.cwd(), '..', 'core', 'talos-chat.php');
+    const chatScript = join(process.cwd(), '..', 'core', 'kadmos-chat.php');
 
     return new Promise((resolve) => {
       const php = spawn(phpBin, [chatScript], {
@@ -93,6 +93,28 @@ export function buildServer() {
         catch { resolve({ error: 'chat error', raw: output.slice(-200) }); }
       });
       php.stdin.write(JSON.stringify({ message, api_key }) + '\n');
+      php.stdin.end();
+    });
+  });
+
+  // Headless API: execute JMP batch directly
+  server.post('/execute', async (request) => {
+    const { mutations, api_key } = request.body as { mutations?: unknown[]; api_key?: string };
+    if (!mutations || !Array.isArray(mutations)) return { error: 'mutations array required' };
+
+    const phpBin = process.env.PHP_BIN || join(process.cwd(), '..', '.tools', 'php', 'php.exe');
+    const script = join(process.cwd(), '..', 'core', 'kadmos-execute.php');
+
+    return new Promise((resolve) => {
+      const php = spawn(phpBin, [script], { env: { ...process.env } });
+      let output = '';
+      php.stdout.on('data', (data: Buffer) => { output += data.toString(); });
+      php.stderr.on('data', () => {});
+      php.on('close', () => {
+        try { resolve(JSON.parse(output.trim() || '{}')); }
+        catch { resolve({ error: 'execute error' }); }
+      });
+      php.stdin.write(JSON.stringify({ mutations }) + '\n');
       php.stdin.end();
     });
   });
