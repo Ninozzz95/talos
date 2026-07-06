@@ -8,7 +8,7 @@ declare(strict_types=1);
  * Usage: php kadmos <command> [options]
  */
 
-$command = $argv[1] ?? 'help';
+$command = $argv[1] ?? '';
 $args = array_slice($argv, 2);
 
 // Autoload
@@ -52,6 +52,22 @@ function logo(): string {
 
 switch ($command) {
     // ═══════════════════════════════════════════════
+    case 'chat':
+        // Run boot animation first
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) $phpBin = 'php';
+        $bootScript = $baseDir . '/kadmos-boot-anim.php';
+        if (file_exists($bootScript)) {
+            // Export env to pass to boot script which will drop to shell
+            $chatScript = $baseDir . '/kadmos-chat-repl.php';
+            // Just run chat directly after boot
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($chatScript));
+        } else {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-chat-repl.php'));
+        }
+        break;
+
     case 'boot':
         $phpBin = $baseDir . '/../.tools/php/php.exe';
         if (!file_exists($phpBin)) $phpBin = 'php';
@@ -316,21 +332,29 @@ switch ($command) {
 
     // ═══════════════════════════════════════════════
     case 'help':
-    default:
         echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
         echo bold("Commands:\n\n");
-        echo "  " . green("kadmos boot") . "                      Boot animation (because why not)\n";
+        echo "  " . green("kadmos boot") . "                      Boot animation\n";
         echo "  " . green("kadmos start [cycles] [--mock]") . "   Start the main event loop\n";
-        echo "  " . green("kadmos dashboard [port]") . "        Start validator + HMI dashboard\n";
-        echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
         echo "  " . green("kadmos test") . "                      Run all test suites\n";
-        echo "  " . green("kadmos demo") . "                      Run HMI demo with Mock LLM\n";
+        echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
         echo "  " . green("kadmos status") . "                    Show system status\n";
         echo "  " . green("kadmos help") . "                      Show this help\n";
         echo "\n";
         echo bold("Environment:\n\n");
         echo "  KADMOS_API_KEY     DeepSeek/OpenAI API key\n";
         echo "  KADMOS_MODEL       Model name (default: deepseek-chat)\n";
-        echo "  KADMOS_BASE_URL    API base URL (default: https://api.deepseek.com/v1)\n";
+        break;
+
+    default:
+        // No command: run boot animation + interactive shell
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) $phpBin = 'php';
+        $bootScript = $baseDir . '/kadmos-boot-anim.php';
+        if (file_exists($bootScript)) {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
+        } else {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-boot'));
+        }
         break;
 }

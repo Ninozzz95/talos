@@ -283,7 +283,8 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
             <div class="dag-nodes">
               <div v-for="n in nodes" :key="n.id" class="dag-node" :class="n.status">
                 <span class="nid">{{ n.id }}</span><span class="ntype">{{ n.type }}</span>
-                <span class="nstatus">{{ n.status }}</span>
+                <img v-if="n.status==='SUCCESS'" src="/media/02_talos_mascot_shield.png" style="width:16px;height:16px;vertical-align:middle;margin-left:4px;border-radius:3px" title="Protected by Kadmos">
+                <span class="nstatus" :title="businessLabel(n.status)">{{ businessLabel(n.status) }}</span>
                 <div class="nresult" v-if="n.result">{{ n.result }}</div>
               </div>
             </div>
@@ -367,11 +368,22 @@ createApp({
       if (!jmp?.length) return '';
       const parts = [];
       for (const c of jmp) {
-        if (c.action === 'SPAWN_NODE') parts.push(`Created node \`${c.node_id}\` (${c.node_type})` + (c.dependencies?.length ? ` depending on ${c.dependencies.join(', ')}` : ''));
-        else if (c.action === 'MUTATE_PAYLOAD') parts.push(`Configured \`${c.node_id}\` with payload`);
+        if (c.action === 'SPAWN_NODE') parts.push(`Created \`${c.node_id}\` (${c.node_type})` + (c.dependencies?.length ? ` depending on ${c.dependencies.join(', ')}` : ''));
+        else if (c.action === 'MUTATE_PAYLOAD') parts.push(`Configured \`${c.node_id}\``);
         else if (c.action === 'YIELD_EXECUTION') parts.push('Executed all pending nodes');
       }
       return parts.join('. ') + '.';
+    }
+    function businessLabel(raw) {
+      const map = {
+        'VALIDATION_FAULT': 'Data corruption attempt blocked',
+        'BLOCKED_BY_DEPENDENCY': 'Fault isolated — dependent nodes frozen',
+        'FAILED': 'External connection failure — execution halted',
+        'SUCCESS': 'Workflow executed and validated',
+        'PENDING': 'Awaiting execution',
+        'RUNNING': 'Executing',
+      };
+      return map[raw] || raw;
     }
     function scroll() { nextTick(() => { if (msgEl.value) msgEl.value.scrollTop = msgEl.value.scrollHeight; }); }
 
@@ -400,7 +412,7 @@ createApp({
 
     const savedTheme = localStorage.getItem('talos_theme') || 'dark'; setTheme(savedTheme);
     load(); loadBenchScenarios();
-    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast };
+    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast, businessLabel };
   },
 }).mount('#app');
 </script>
