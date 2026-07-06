@@ -53,10 +53,22 @@ function logo(): string {
 switch ($command) {
     // ═══════════════════════════════════════════════
     case 'boot':
-        $bootScript = $baseDir . '/talos-boot';
         $phpBin = $baseDir . '/../.tools/php/php.exe';
         if (!file_exists($phpBin)) $phpBin = 'php';
-        passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
+
+        // Static mode
+        if (in_array('--static', $args)) {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/talos-boot'));
+            break;
+        }
+
+        // Animated mode (default)
+        $animScript = $baseDir . '/talos-boot-anim.php';
+        if (file_exists($animScript)) {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($animScript));
+        } else {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/talos-boot'));
+        }
         break;
 
     // ═══════════════════════════════════════════════
