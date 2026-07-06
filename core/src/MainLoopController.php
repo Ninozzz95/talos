@@ -11,6 +11,9 @@ final class MainLoopController
     private JmpValidatorClient $validator;
     private int $maxCycles;
     private int $cycleCount = 0;
+    private int $faultCount = 0;
+    private int $recoveryCycles = 0;
+    private bool $inFault = false;
     private ?string $broadcastUrl;
     private bool $demoThrottle;
     private int $throttleMs;
@@ -59,7 +62,9 @@ final class MainLoopController
             $batch = \json_decode($rawJmp, true);
 
             if (!\is_array($batch)) {
-                // Malformed LLM output — skip cycle, inject fault
+                // Malformed LLM output
+                if (!$this->inFault) { $this->faultCount++; $this->inFault = true; }
+                $this->recoveryCycles++;
                 $this->llm->injectFault([[
                     'field' => 'jmp_response',
                     'expected' => 'valid JSON array',
@@ -74,6 +79,8 @@ final class MainLoopController
             $validation = $this->validator->validate($batch, $context);
 
             if (!$validation->valid) {
+                if (!$this->inFault) { $this->faultCount++; $this->inFault = true; }
+                $this->recoveryCycles++;
                 $this->llm->injectFault(\array_map(
                     fn(ValidationFault $f) => [
                         'field' => $f->field,
@@ -85,6 +92,9 @@ final class MainLoopController
                 ));
                 continue;
             }
+
+            // Validation passed — reset fault tracking
+            $this->inFault = false;
 
             // 4. APPLY: Process validated mutations
             $this->applyMutations($batch);
@@ -163,6 +173,18 @@ final class MainLoopController
     public function getCycleCount(): int
     {
         return $this->cycleCount;
+    }
+
+    public function getCTR(): float
+    {
+        return $this->faultCount > 0
+            ? round($this->recoveryCycles / $this->faultCount, 2)
+            : 0;
+    }
+
+    public function getFaultCount(): int
+    {
+        return $this->faultCount;
     }
 
     private function broadcastDag(): void

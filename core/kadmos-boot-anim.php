@@ -333,6 +333,7 @@ function kadmos_shell(): void {
     $cyan = "\033[38;5;51m";
     $green = "\033[32m";
     $dim = "\033[2m";
+    $yellow = "\033[33m";
     $reset = "\033[0m";
 
     $baseDir = dirname(realpath($_SERVER['SCRIPT_FILENAME'] ?? __FILE__));
@@ -340,8 +341,17 @@ function kadmos_shell(): void {
     if (!file_exists($phpBin)) $phpBin = 'php';
     $kadmosCli = $baseDir . '/kadmos';
 
+    $hasKey = (bool)(getenv('KADMOS_API_KEY') ?: getenv('DEEPSEEK_API_KEY'));
+
+    // Welcome
+    echo "\n{$bold}{$gold}  ⚡ KADMOS ENGINE SHELL{$reset}\n";
+    echo $hasKey
+        ? "{$dim}  API key: {$green}configured{$dim} — ready for live execution{$reset}\n"
+        : "{$dim}  API key: {$yellow}not set{$dim} — mock mode only{$reset}\n";
+    echo "{$dim}  Type {$cyan}help{$dim} for commands, {$cyan}start{$dim} to run, {$cyan}exit{$dim} to quit{$reset}\n\n";
+
     while (true) {
-        echo "\n{$gold}kadmos{$reset} {$dim}»{$reset} ";
+        echo "{$gold}kadmos{$reset} {$dim}»{$reset} ";
         $line = trim(fgets(STDIN));
         if ($line === '' || $line === false) continue;
         if ($line === 'exit' || $line === 'quit') break;
@@ -352,6 +362,11 @@ function kadmos_shell(): void {
 
         switch ($cmd) {
             case 'start':
+                // Auto-add --mock if no API key
+                if (!$hasKey && !str_contains($rest, '--mock') && !str_contains($rest, '--demo-throttle')) {
+                    $rest = trim($rest . ' --mock');
+                    echo "{$dim}  No API key — using mock mode{$reset}\n";
+                }
                 passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($kadmosCli) . ' start ' . ($rest ?: '5 --mock'));
                 break;
             case 'test':
@@ -364,28 +379,67 @@ function kadmos_shell(): void {
                     echo "{$dim}  Usage: validate <file.json>{$reset}\n";
                 }
                 break;
+            case 'benchmark':
+                passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($kadmosCli) . ' benchmark 10');
+                break;
             case 'status':
                 passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($kadmosCli) . ' status');
                 break;
             case 'dashboard':
-                echo "{$dim}  Starting Talos dashboard... use 'talos dashboard' in another terminal{$reset}\n";
-                echo "{$dim}  http://127.0.0.1:3000/dashboard{$reset}\n";
+                echo "{$dim}  Dashboard: {$cyan}http://127.0.0.1:3000/dashboard{$reset}\n";
+                echo "{$dim}  Start with: cd validator && npx tsx src/server.ts{$reset}\n";
                 break;
-            case 'benchmark':
-                passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($kadmosCli) . ' benchmark');
+            case 'chat':
+                $validatorDir = $baseDir . '/../validator';
+                if (!is_dir($validatorDir)) {
+                    echo "{$dim}  Validator directory not found{$reset}\n";
+                    break;
+                }
+                echo "{$gold}  ⚡ Starting TALOS Chat...{$reset}\n";
+                echo "{$dim}  Opening {$cyan}http://127.0.0.1:3000/dashboard{$reset}\n";
+                echo "{$dim}  Press Ctrl+C to stop{$reset}\n\n";
+                $nodeBin = $baseDir . '/../.tools/node/node.exe';
+                if (!file_exists($nodeBin)) $nodeBin = 'node';
+                $tsxBin = $baseDir . '/../.tools/node/node_modules/.bin/tsx';
+                if (file_exists($tsxBin)) {
+                    $cmd = 'cd ' . escapeshellarg($validatorDir) . ' && ' . escapeshellarg($nodeBin) . ' ' . escapeshellarg($tsxBin) . ' src/server.ts';
+                } else {
+                    $cmd = 'cd ' . escapeshellarg($validatorDir) . ' && npx tsx src/server.ts';
+                }
+                // Try to open browser
+                if (PHP_OS_FAMILY === 'Windows') {
+                    exec('start http://127.0.0.1:3000/dashboard 2>NUL');
+                } elseif (PHP_OS_FAMILY === 'Darwin') {
+                    exec('open http://127.0.0.1:3000/dashboard 2>/dev/null');
+                } else {
+                    exec('xdg-open http://127.0.0.1:3000/dashboard 2>/dev/null');
+                }
+                passthru($cmd);
+                break;
+            case 'key':
+                echo "{$dim}  Set your API key:{$reset}\n";
+                echo "{$dim}    cmd:  set KADMOS_API_KEY=sk-...{$reset}\n";
+                echo "{$dim}    bash: export KADMOS_API_KEY=sk-...{$reset}\n";
                 break;
             case 'help':
-                echo "{$gold}  KADMOS ENGINE SHELL{$reset}\n\n";
-                echo "  {$cyan}start [N] [--mock]{$reset}  {$dim}Launch event loop{$reset}\n";
-                echo "  {$cyan}test{$reset}               {$dim}Run all test suites{$reset}\n";
-                echo "  {$cyan}validate <file>{$reset}     {$dim}Validate JMP batch{$reset}\n";
-                echo "  {$cyan}benchmark{$reset}          {$dim}Run benchmark suite{$reset}\n";
-                echo "  {$cyan}status{$reset}             {$dim}System diagnostics{$reset}\n";
-                echo "  {$cyan}dashboard{$reset}           {$dim}Talos UI info{$reset}\n";
-                echo "  {$cyan}exit{$reset}               {$dim}Shutdown engine{$reset}\n";
+                echo "\n{$bold}{$gold}  KADMOS SHELL — Commands{$reset}\n\n";
+                echo "  {$cyan}start [N] [--mock] [--demo-throttle]{$reset}\n";
+                echo "  {$dim}    Launch the main event loop. Add --demo-throttle for live DAG visualization.{$reset}\n";
+                echo "  {$cyan}test{$reset}          {$dim}Run all test suites (29 core + 46 validator){$reset}\n";
+                echo "  {$cyan}benchmark{$reset}     {$dim}Run all 7 benchmark scenarios{$reset}\n";
+                echo "  {$cyan}validate <file>{$reset} {$dim}Validate a JMP JSON batch{$reset}\n";
+                echo "  {$cyan}status{$reset}        {$dim}System diagnostics (PHP, tests, endpoints){$reset}\n";
+                echo "  {$cyan}dashboard{$reset}      {$dim}Talos UI info{$reset}\n";
+                echo "  {$cyan}chat{$reset}           {$dim}Launch Talos Chat + open browser{$reset}\n";
+                echo "  {$cyan}key{$reset}           {$dim}Show API key setup instructions{$reset}\n";
+                echo "  {$cyan}exit{$reset}          {$dim}Shutdown engine{$reset}\n";
+                echo "\n";
+                if (!$hasKey) {
+                    echo "{$yellow}  Quick start:{$reset} {$cyan}start{$reset} {$dim}(auto-uses --mock, no key needed){$reset}\n\n";
+                }
                 break;
             default:
-                echo "{$dim}  Unknown command: {$cmd} — type 'help'{$reset}\n";
+                echo "{$dim}  Unknown: {$cmd} — type {$cyan}help{$dim} for commands{$reset}\n";
         }
     }
 
