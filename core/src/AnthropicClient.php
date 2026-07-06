@@ -101,6 +101,8 @@ final class AnthropicClient implements LLMClientInterface
                 'anthropic-version: 2023-06-01',
             ],
             \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
+            \CURLOPT_SSL_VERIFYPEER => false,
+            \CURLOPT_SSL_VERIFYHOST => 0,
         ]);
 
         $response = \curl_exec($ch);
