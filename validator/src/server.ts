@@ -96,6 +96,44 @@ export function buildServer() {
     });
   });
 
+  // Benchmark Lab: run a single scenario live
+  server.post('/benchmark', async (request) => {
+    const { scenario, api_key, use_live } = request.body as { scenario?: string; api_key?: string; use_live?: boolean };
+    if (!scenario) return { error: 'scenario name required' };
+
+    const phpBin = process.env.PHP_BIN || join(__dirname, '..', '.tools', 'php', 'php.exe');
+    const benchScript = join(__dirname, '..', 'core', 'talos-bench-live.php');
+    const scenarioFile = join(__dirname, '..', 'core', 'tests', 'benchmarks', 'scenarios', scenario + '.json');
+
+    return new Promise((resolve) => {
+      const args = [benchScript, scenarioFile];
+      if (use_live && api_key) args.push(api_key);
+      const php = spawn(phpBin, args, {
+        env: { ...process.env, DEEPSEEK_API_KEY: api_key || '' },
+      });
+      let output = '';
+      php.stdout.on('data', (data: Buffer) => { output += data.toString(); });
+      php.stderr.on('data', () => {});
+      php.on('close', () => {
+        try { resolve(JSON.parse(output.trim() || '{}')); }
+        catch { resolve({ error: 'benchmark error', raw: output.slice(-200) }); }
+      });
+    });
+  });
+
+  // List available benchmark scenarios
+  server.get('/benchmarks', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const dir = join(__dirname, '..', 'core', 'tests', 'benchmarks', 'scenarios');
+    try {
+      const files = readdirSync(dir).filter(f => f.endsWith('.json'));
+      return files.map(f => {
+        const data = JSON.parse(readFileSync(join(dir, f), 'utf-8'));
+        return { file: f.replace('.json', ''), name: data.name, difficulty: data.difficulty, description: data.description };
+      });
+    } catch { return []; }
+  });
+
   // WebSocket
   server.get('/ws', { websocket: true }, (socket, _req) => {
     wsClients.add(socket);
@@ -105,6 +143,20 @@ export function buildServer() {
       }));
     }
     socket.on('close', () => { wsClients.delete(socket); });
+  });
+
+  // Static media files
+  server.get('/media/*', async (request, reply) => {
+    const file = (request.params as { '*': string })['*'];
+    const filePath = join(__dirname, '..', 'core', 'media', 'talos_png_media_suite', file);
+    try {
+      const data = readFileSync(filePath);
+      reply.type('image/png');
+      return data;
+    } catch {
+      reply.status(404);
+      return { error: 'not found' };
+    }
   });
 
   return server;

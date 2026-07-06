@@ -1,0 +1,19 @@
+{
+  "name": "two_step_chain",
+  "difficulty": 2,
+  "description": "Two dependent HTTP requests (A → B)",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "A", "node_type": "HTTP_REQUEST" },
+      { "action": "SPAWN_NODE", "node_id": "B", "node_type": "HTTP_REQUEST", "dependencies": ["A"] }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "A", "payload": { "url": "https://api.example.com/first", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "B", "payload": { "url": "https://api.example.com/second", "method": "GET" } },
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": null,
+  "expected_nodes": 2,
+  "expected_all_success": true
+}

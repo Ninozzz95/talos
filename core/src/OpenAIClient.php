@@ -18,6 +18,10 @@ final class OpenAIClient implements LLMClientInterface
     /** @var list<array{role: string, content: string}> */
     private array $conversation = [];
 
+    private int $lastTotalTokens = 0;
+    private int $lastPromptTokens = 0;
+    private int $lastCompletionTokens = 0;
+
     /** @var list<array{field: string, expected: string, received: string, message: string}> */
     private array $pendingFaults = [];
 
@@ -55,6 +59,13 @@ final class OpenAIClient implements LLMClientInterface
         $response = $this->callApi("{$this->baseUrl}/chat/completions", $body);
 
         $content = $response['choices'][0]['message']['content'] ?? '';
+
+        // Capture exact token usage
+        $usage = $response['usage'] ?? [];
+        $this->lastTotalTokens = $usage['total_tokens'] ?? 0;
+        $this->lastPromptTokens = $usage['prompt_tokens'] ?? 0;
+        $this->lastCompletionTokens = $usage['completion_tokens'] ?? 0;
+
         $this->conversation[] = ['role' => 'assistant', 'content' => $content];
 
         // Extract JSON from markdown code blocks if present
@@ -139,4 +150,8 @@ final class OpenAIClient implements LLMClientInterface
         // If no code block, return raw (should be pure JSON)
         return \trim($raw);
     }
+
+    public function getLastTotalTokens(): int { return $this->lastTotalTokens; }
+    public function getLastPromptTokens(): int { return $this->lastPromptTokens; }
+    public function getLastCompletionTokens(): int { return $this->lastCompletionTokens; }
 }
