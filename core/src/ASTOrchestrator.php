@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace AVM;
 
+use AVM\Workers\WorkerRegistry;
+use AVM\Workers\NodeWorkerInterface;
 use InvalidArgumentException;
 
 final class ASTOrchestrator
 {
-    /** @var array<string, array{id: string, status: string, type: string}> */
+    /** @var array<string, array{id: string, status: string, type: string, payload?: array<string, mixed>, output_summary?: string, raw_output?: mixed}> */
     private array $nodes = [];
 
     /** @var array<string, list<string>> */
@@ -16,6 +18,13 @@ final class ASTOrchestrator
 
     /** @var array<string, list<string>> */
     private array $children = [];
+
+    private WorkerRegistry $workerRegistry;
+
+    public function __construct(WorkerRegistry $workerRegistry)
+    {
+        $this->workerRegistry = $workerRegistry;
+    }
 
     /**
      * @param list<string> $dependencies
@@ -117,6 +126,52 @@ final class ASTOrchestrator
             }
         }
         return $context;
+    }
+
+    /**
+     * Sets the payload for a node and transitions it to VALIDATED.
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function setPayload(string $nodeId, array $payload): void
+    {
+        $this->assertNodeExists($nodeId);
+        $this->nodes[$nodeId]['payload'] = $payload;
+        $this->nodes[$nodeId]['status'] = NodeStatus::VALIDATED;
+    }
+
+    /**
+     * Executes a validated node using the appropriate worker.
+     */
+    public function executeNode(string $nodeId): void
+    {
+        $node = $this->nodes[$nodeId];
+
+        if ($node['status'] !== NodeStatus::VALIDATED && $node['status'] !== NodeStatus::RETRYING) {
+            throw new \RuntimeException("Node {$nodeId} is not in an executable state.");
+        }
+
+        $this->setStatus($nodeId, NodeStatus::RUNNING);
+
+        try {
+            $worker = $this->workerRegistry->getWorker($node['type']);
+            $delta = $worker->execute($node['payload'] ?? []);
+
+            $this->setStatus($nodeId, $delta['status']);
+            $this->nodes[$nodeId]['output_summary'] = $delta['output_summary'];
+            $this->nodes[$nodeId]['raw_output'] = $delta['raw_output'];
+
+            if ($delta['status'] === NodeStatus::FAILED) {
+                $this->blockPendingDescendants($nodeId);
+            } elseif ($delta['status'] === NodeStatus::SUCCESS) {
+                $this->restoreBlockedDescendants($nodeId);
+            }
+        } catch (\Exception $e) {
+            $this->setStatus($nodeId, NodeStatus::FAILED);
+            $this->nodes[$nodeId]['output_summary'] = "Worker Exception: " . $e->getMessage();
+            $this->nodes[$nodeId]['raw_output'] = null;
+            $this->blockPendingDescendants($nodeId);
+        }
     }
 
     private function setStatus(string $nodeId, string $status): void
