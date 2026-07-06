@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/NodeStatus.php';
 require_once __DIR__ . '/../src/ASTOrchestrator.php';
+require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
+require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 
 use AVM\ASTOrchestrator;
 use AVM\NodeStatus;
+use AVM\Workers\WorkerRegistry;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {
@@ -21,7 +24,7 @@ function assertSameValue(mixed $expected, mixed $actual, string $message): void
 
 function testFailureCascadesToLinearDescendants(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
     $orchestrator->addNode('A');
     $orchestrator->addNode('B', ['A']);
     $orchestrator->addNode('C', ['B']);
@@ -37,7 +40,7 @@ function testFailureCascadesToLinearDescendants(): void
 
 function testFailureBlocksSharedChildUntilAllParentsSucceed(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
     $orchestrator->addNode('A');
     $orchestrator->addNode('B');
     $orchestrator->addNode('C', ['A', 'B']);
@@ -55,7 +58,7 @@ function testFailureBlocksSharedChildUntilAllParentsSucceed(): void
 
 function testHmiRetryRestoresBlockedDescendants(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
     $orchestrator->addNode('A');
     $orchestrator->addNode('B', ['A']);
     $orchestrator->addNode('C', ['B']);
@@ -93,7 +96,7 @@ echo "All ASTOrchestrator tests passed" . PHP_EOL;
 
 function testBuildContextReturnsTypeMapping(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
     $orchestrator->addNode('A', [], 'HTTP_REQUEST');
     $orchestrator->addNode('B', ['A'], 'QUERY_DATABASE');
 
@@ -107,7 +110,7 @@ function testBuildContextReturnsTypeMapping(): void
 
 function testBuildContextIgnoresNonMutateActions(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
     $orchestrator->addNode('A', [], 'HTTP_REQUEST');
 
     $context = $orchestrator->buildContext([
@@ -120,7 +123,7 @@ function testBuildContextIgnoresNonMutateActions(): void
 
 function testBuildContextIgnoresUnknownNodes(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
 
     $context = $orchestrator->buildContext([
         ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'GHOST', 'payload' => []],
@@ -131,7 +134,7 @@ function testBuildContextIgnoresUnknownNodes(): void
 
 function testBuildContextWithDefaultType(): void
 {
-    $orchestrator = new ASTOrchestrator();
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
     $orchestrator->addNode('A');
 
     $context = $orchestrator->buildContext([
