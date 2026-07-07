@@ -1,0 +1,10 @@
+{
+    "results": [],
+    "summary": {
+        "total_tokens": 0,
+        "total_faults": 0,
+        "total_corrected": 0,
+        "total_passed": 0,
+        "total_scenarios": 7
+    }
+}

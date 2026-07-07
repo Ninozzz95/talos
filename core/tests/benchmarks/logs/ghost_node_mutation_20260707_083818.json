@@ -1,0 +1,17 @@
+{
+    "scenario": "ghost_node_mutation",
+    "model": "deepseek-chat",
+    "timestamp": "2026-07-07T08:38:18+00:00",
+    "ctr": 8,
+    "faults": 1,
+    "cycles": 8,
+    "tokens": 405,
+    "elapsed_ms": 17730,
+    "nodes_total": 1,
+    "nodes_success": 0,
+    "nodes_failed": 0,
+    "nodes_blocked": 0,
+    "completion": 0,
+    "verdict": "\u26a0 PARTIAL",
+    "dag": "Current DAG State:\n---\nTotal nodes: 0\n"
+}

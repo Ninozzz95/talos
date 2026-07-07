@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AVM\Workers;
+namespace Kadmos\Workers;
 
 interface NodeWorkerInterface
 {

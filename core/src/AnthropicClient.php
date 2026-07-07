@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AVM;
+namespace Kadmos;
 
 /**
  * LLM client for Anthropic's Claude API.

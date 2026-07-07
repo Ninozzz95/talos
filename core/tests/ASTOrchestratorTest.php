@@ -7,9 +7,9 @@ require_once __DIR__ . '/../src/ASTOrchestrator.php';
 require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 
-use AVM\ASTOrchestrator;
-use AVM\NodeStatus;
-use AVM\Workers\WorkerRegistry;
+use Kadmos\ASTOrchestrator;
+use Kadmos\NodeStatus;
+use Kadmos\Workers\WorkerRegistry;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {

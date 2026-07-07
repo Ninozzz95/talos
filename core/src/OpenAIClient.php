@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AVM;
+namespace Kadmos;
 
 /**
  * LLM client for OpenAI-compatible APIs (OpenAI, Groq, vLLM, etc.)
