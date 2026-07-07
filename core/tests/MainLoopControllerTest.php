@@ -2,17 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../src/NodeStatus.php';
-require_once __DIR__ . '/../src/ASTOrchestrator.php';
-require_once __DIR__ . '/../src/LLMClientInterface.php';
-require_once __DIR__ . '/../src/MockLLM.php';
-require_once __DIR__ . '/../src/ValidationFault.php';
-require_once __DIR__ . '/../src/ValidationResult.php';
-require_once __DIR__ . '/../src/HttpClientInterface.php';
-require_once __DIR__ . '/../src/JmpValidatorClient.php';
-require_once __DIR__ . '/../src/MainLoopController.php';
-require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
-require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Workers/HttpRequestWorker.php';
 
 use Kadmos\ASTOrchestrator;

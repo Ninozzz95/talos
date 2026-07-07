@@ -47,6 +47,22 @@ describe('HttpRequestPayloadSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects timeout above 60 seconds', () => {
+    const result = HttpRequestPayloadSchema.safeParse({
+      url: 'https://example.com',
+      timeout_ms: 60001,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extra fields', () => {
+    const result = HttpRequestPayloadSchema.safeParse({
+      url: 'https://example.com',
+      unexpected: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects invalid method', () => {
     const result = HttpRequestPayloadSchema.safeParse({
       url: 'https://example.com',
@@ -98,6 +114,21 @@ describe('QueryDatabasePayloadSchema', () => {
   it('rejects query shorter than 5 chars', () => {
     const result = QueryDatabasePayloadSchema.safeParse({
       query: 'X',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects destructive SQL without enterprise policy override', () => {
+    const result = QueryDatabasePayloadSchema.safeParse({
+      query: 'DROP TABLE users',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extra fields', () => {
+    const result = QueryDatabasePayloadSchema.safeParse({
+      query: 'SELECT 1',
+      unsafe: true,
     });
     expect(result.success).toBe(false);
   });

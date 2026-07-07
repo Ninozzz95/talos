@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Kadmos;
 
+use Kadmos\Validator\JmpValidatorInterface;
+
 final class MainLoopController
 {
     private ASTOrchestrator $orchestrator;
     private LLMClientInterface $llm;
-    private JmpValidatorClient $validator;
+    private JmpValidatorInterface $validator;
     private int $maxCycles;
     private int $cycleCount = 0;
     private int $faultCount = 0;
@@ -27,7 +29,7 @@ final class MainLoopController
     public function __construct(
         ASTOrchestrator $orchestrator,
         LLMClientInterface $llm,
-        JmpValidatorClient $validator,
+        JmpValidatorInterface $validator,
         int $maxCycles = 100,
         ?string $broadcastUrl = null,
         bool $demoThrottle = false,

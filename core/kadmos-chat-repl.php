@@ -9,24 +9,16 @@ declare(strict_types=1);
  * Usage: kadmos chat [--allow <path>]
  */
 
-require_once __DIR__ . '/src/NodeStatus.php';
-require_once __DIR__ . '/src/ASTOrchestrator.php';
-require_once __DIR__ . '/src/LLMClientInterface.php';
-require_once __DIR__ . '/src/OpenAIClient.php';
-require_once __DIR__ . '/src/AnthropicClient.php';
-require_once __DIR__ . '/src/SystemPromptBuilder.php';
-require_once __DIR__ . '/src/ValidationFault.php';
-require_once __DIR__ . '/src/ValidationResult.php';
-require_once __DIR__ . '/src/HttpClientInterface.php';
-require_once __DIR__ . '/src/JmpValidatorClient.php';
-require_once __DIR__ . '/src/Workers/NodeWorkerInterface.php';
-require_once __DIR__ . '/src/Workers/WorkerRegistry.php';
-
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "Run composer install in core/ first.\n");
+    exit(1);
+}
+require_once $autoload;
 use Kadmos\ASTOrchestrator;
 use Kadmos\NodeStatus;
 use Kadmos\OpenAIClient;
-use Kadmos\JmpValidatorClient;
-use Kadmos\HttpClientInterface;
+use Kadmos\Validator\ValidatorFactory;
 use Kadmos\Workers\WorkerRegistry;
 use Kadmos\Workers\NodeWorkerInterface;
 
@@ -194,10 +186,16 @@ $registry->register('HTTP_REQUEST', $worker);
 $registry->register('QUERY_DATABASE', $worker);
 $orchestrator = new ASTOrchestrator($registry);
 
-$alwaysValid = new class implements HttpClientInterface {
-    public function postJson(string $url, array $body): array { return ['valid' => true]; }
-};
-$validator = new JmpValidatorClient($alwaysValid);
+$mockValidator = getenv('KADMOS_MOCK_VALIDATOR') === '1';
+try {
+    $validator = ValidatorFactory::fromEnvironment()->create(mock: $mockValidator);
+    if ($mockValidator) {
+        echo "{$yellow}Mock validator mode: no external validator call will be made.{$reset}\n";
+    }
+} catch (\RuntimeException $e) {
+    fwrite(STDERR, $e->getMessage() . PHP_EOL);
+    exit(4);
+}
 
 // ═══════════════════════════════════════
 // Streaming LLM call

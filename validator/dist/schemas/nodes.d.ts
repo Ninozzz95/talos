@@ -11,14 +11,14 @@ export declare const NodeDefinitionSchema: z.ZodDiscriminatedUnion<[z.ZodObject<
             DELETE: "DELETE";
         }>>;
         headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
-        body: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodRecord<z.ZodString, z.ZodAny>]>>;
+        body: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodRecord<z.ZodString, z.ZodUnknown>]>>;
         timeout_ms: z.ZodDefault<z.ZodNumber>;
-    }, z.core.$strip>;
+    }, z.core.$strict>;
 }, z.core.$strip>, z.ZodObject<{
     node_type: z.ZodLiteral<"QUERY_DATABASE">;
     payload: z.ZodObject<{
         query: z.ZodString;
         params: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodNull]>>>;
-    }, z.core.$strip>;
+    }, z.core.$strict>;
 }, z.core.$strip>], "node_type">;
 //# sourceMappingURL=nodes.d.ts.map

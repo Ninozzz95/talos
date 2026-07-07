@@ -11,30 +11,13 @@ declare(strict_types=1);
 $command = $argv[1] ?? '';
 $args = array_slice($argv, 2);
 
-// Autoload
 $baseDir = __DIR__;
-$requires = [
-    '/src/NodeStatus.php',
-    '/src/ASTOrchestrator.php',
-    '/src/LLMClientInterface.php',
-    '/src/MockLLM.php',
-    '/src/OpenAIClient.php',
-    '/src/AnthropicClient.php',
-    '/src/SystemPromptBuilder.php',
-    '/src/ValidationFault.php',
-    '/src/ValidationResult.php',
-    '/src/HttpClientInterface.php',
-    '/src/CurlHttpClient.php',
-    '/src/JmpValidatorClient.php',
-    '/src/MainLoopController.php',
-    '/src/Workers/NodeWorkerInterface.php',
-    '/src/Workers/WorkerRegistry.php',
-    '/src/Workers/HttpRequestWorker.php',
-];
-
-foreach ($requires as $file) {
-    require_once $baseDir . $file;
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "Run composer install in core/ first.\n");
+    exit(1);
 }
+require_once $autoload;
 
 function green(string $s): string { return "\033[32m{$s}\033[0m"; }
 function blue(string $s): string { return "\033[34m{$s}\033[0m"; }
@@ -104,21 +87,21 @@ switch ($command) {
         }
 
         // Setup
-        $stubWorker = new class implements \AVM\Workers\NodeWorkerInterface {
+        $stubWorker = new class implements \Kadmos\Workers\NodeWorkerInterface {
             public function execute(array $payload): array {
                 $url = $payload['url'] ?? '?';
-                return ['status' => \AVM\NodeStatus::SUCCESS, 'output_summary' => "200 OK ($url)", 'raw_output' => null];
+                return ['status' => \Kadmos\NodeStatus::SUCCESS, 'output_summary' => "200 OK ($url)", 'raw_output' => null];
             }
         };
 
-        $registry = new \AVM\Workers\WorkerRegistry();
+        $registry = new \Kadmos\Workers\WorkerRegistry();
         $registry->register('HTTP_REQUEST', $stubWorker);
         $registry->register('QUERY_DATABASE', $stubWorker);
 
-        $orchestrator = new \AVM\ASTOrchestrator($registry);
+        $orchestrator = new \Kadmos\ASTOrchestrator($registry);
 
         if ($useMock) {
-            $llm = new \AVM\MockLLM([
+            $llm = new \Kadmos\MockLLM([
                 json_encode([
                     ['action' => 'SPAWN_NODE', 'node_id' => 'n1', 'node_type' => 'HTTP_REQUEST'],
                     ['action' => 'SPAWN_NODE', 'node_id' => 'n2', 'node_type' => 'HTTP_REQUEST', 'dependencies' => ['n1']],
@@ -130,15 +113,21 @@ switch ($command) {
                 ]),
                 json_encode([['action' => 'YIELD_EXECUTION']]),
             ]);
+            $validator = new \Kadmos\Validator\MockJmpValidator(true);
         } else {
-            $llm = new \AVM\OpenAIClient($apiKey, $model, $baseUrl);
+            $healthUrl = getenv('KADMOS_VALIDATOR_HEALTH_URL') ?: 'http://127.0.0.1:3000/health';
+            $validatorUrl = getenv('KADMOS_VALIDATOR_URL') ?: 'http://127.0.0.1:3000/validate';
+            $health = new \Kadmos\Validator\ValidatorHealthCheck($healthUrl);
+
+            if (!$health->isHealthy()) {
+                echo red("Validator unavailable. AVM ON fails closed. Start validator or use --mock.\n");
+                exit(4);
+            }
+
+            $llm = new \Kadmos\OpenAIClient($apiKey, $model, $baseUrl);
+            $validator = new \Kadmos\Validator\HttpJmpValidator(new \Kadmos\CurlHttpClient(), $validatorUrl);
         }
 
-        $alwaysValid = new class implements \AVM\HttpClientInterface {
-            public function postJson(string $url, array $body): array { return ['valid' => true]; }
-        };
-
-        $validator = new \AVM\JmpValidatorClient($alwaysValid);
         $broadcast = 'http://127.0.0.1:3000/broadcast';
         $demoThrottle = in_array('--demo-throttle', $args);
 
@@ -156,7 +145,7 @@ switch ($command) {
         echo blue("Cycles: ") . "$cycles\n";
         echo blue("Dashboard: ") . "http://127.0.0.1:3000/dashboard\n\n";
 
-        $controller = new \AVM\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast, $demoThrottle);
+        $controller = new \Kadmos\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast, $demoThrottle);
         $controller->run();
 
         echo green("\n✓ Done — {$controller->getCycleCount()} cycles\n\n");
@@ -194,9 +183,17 @@ switch ($command) {
 
     // ═══════════════════════════════════════════════
     case 'validate':
-        $file = $args[0] ?? null;
+        $useMockValidator = in_array('--mock', $args, true);
+        $file = null;
+        foreach ($args as $arg) {
+            if (!str_starts_with($arg, '--')) {
+                $file = $arg;
+                break;
+            }
+        }
+
         if (!$file || !file_exists($file)) {
-            echo red("Usage: ") . "kadmos validate <file.json>\n";
+            echo red("Usage: ") . "kadmos validate <file.json> [--mock]\n";
             exit(1);
         }
 
@@ -219,11 +216,22 @@ switch ($command) {
 
         $context = $data['context'] ?? [];
 
-        $alwaysValid = new class implements \AVM\HttpClientInterface {
-            public function postJson(string $url, array $body): array { return ['valid' => true]; }
-        };
+        if ($useMockValidator) {
+            echo yellow("Mock validator mode: no external validator call will be made.\n");
+            $validator = new \Kadmos\Validator\MockJmpValidator(true);
+        } else {
+            $healthUrl = getenv('KADMOS_VALIDATOR_HEALTH_URL') ?: 'http://127.0.0.1:3000/health';
+            $validatorUrl = getenv('KADMOS_VALIDATOR_URL') ?: 'http://127.0.0.1:3000/validate';
+            $health = new \Kadmos\Validator\ValidatorHealthCheck($healthUrl);
 
-        $validator = new \AVM\JmpValidatorClient($alwaysValid);
+            if (!$health->isHealthy()) {
+                echo red("Validator unavailable. AVM ON fails closed. Start validator or use --mock.\n");
+                exit(4);
+            }
+
+            $validator = new \Kadmos\Validator\HttpJmpValidator(new \Kadmos\CurlHttpClient(), $validatorUrl);
+        }
+
         $result = $validator->validate($mutations, $context);
 
         if ($result->valid) {
@@ -252,6 +260,18 @@ switch ($command) {
             'Worker' => "$baseDir/tests/WorkerTest.php",
             'JmpValidator' => "$baseDir/tests/JmpValidatorClientTest.php",
             'MainLoop' => "$baseDir/tests/MainLoopControllerTest.php",
+            'NamespaceContract' => "$baseDir/tests/NamespaceContractTest.php",
+            'AutoloadContract' => "$baseDir/tests/AutoloadContractTest.php",
+            'CliBenchmarkCommand' => "$baseDir/tests/CliBenchmarkCommandTest.php",
+            'BenchmarkNoDeprecation' => "$baseDir/tests/BenchmarkNoDeprecationTest.php",
+            'ValidatorImplementations' => "$baseDir/tests/ValidatorImplementationsTest.php",
+            'MainLoopValidatorInterface' => "$baseDir/tests/MainLoopValidatorInterfaceContractTest.php",
+            'ValidatorHealthCheck' => "$baseDir/tests/ValidatorHealthCheckTest.php",
+            'CliValidateFailClosed' => "$baseDir/tests/CliValidateFailClosedTest.php",
+            'CliStartFailClosed' => "$baseDir/tests/CliStartFailClosedTest.php",
+            'ValidatorFactory' => "$baseDir/tests/ValidatorFactoryTest.php",
+            'ValidatorBypassContract' => "$baseDir/tests/ValidatorBypassContractTest.php",
+            'CliTestSuiteContract' => "$baseDir/tests/CliTestSuiteContractTest.php",
         ];
 
         $allPassed = true;
@@ -281,6 +301,40 @@ switch ($command) {
         break;
 
     // ═══════════════════════════════════════════════
+    case 'benchmark':
+        $mode = $args[0] ?? 'mock';
+        if (is_numeric($mode)) {
+            array_unshift($args, 'mock');
+            $mode = 'mock';
+        }
+
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+
+        if ($mode === 'mock') {
+            $runs = '50';
+            foreach (array_slice($args, 1) as $arg) {
+                if (str_starts_with($arg, '--runs=')) {
+                    $runs = substr($arg, strlen('--runs='));
+                } elseif (is_numeric($arg)) {
+                    $runs = $arg;
+                }
+            }
+
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-benchmark.php') . ' ' . escapeshellarg((string) $runs), $code);
+            exit($code);
+        }
+
+        if ($mode === 'live') {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-bench-live-all.php'), $code);
+            exit($code);
+        }
+
+        echo red("Usage: ") . "kadmos benchmark [mock|live] [--runs=10]\n";
+        exit(1);
+
     case 'demo':
         echo yellow("Running HMI demo...\n");
         echo yellow("Open http://127.0.0.1:3000/dashboard in your browser!\n\n");
@@ -338,6 +392,7 @@ switch ($command) {
         echo "  " . green("kadmos start [cycles] [--mock]") . "   Start the main event loop\n";
         echo "  " . green("kadmos test") . "                      Run all test suites\n";
         echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
+        echo "  " . green("kadmos benchmark mock --runs=10") . " Run mock benchmark suite\n";
         echo "  " . green("kadmos status") . "                    Show system status\n";
         echo "  " . green("kadmos help") . "                      Show this help\n";
         echo "\n";

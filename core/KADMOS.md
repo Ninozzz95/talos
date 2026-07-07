@@ -56,7 +56,7 @@ AVM/
 │   ├── kadmos-chat.php            # Chat worker for Talos dashboard
 │   ├── kadmos-execute.php         # Headless JMP execution endpoint
 │   ├── kadmos-bench-live.php      # Single-scenario benchmark runner
-│   ├── talos-benchmark.php        # Full benchmark suite runner
+│   ├── kadmos-benchmark.php       # Full benchmark suite runner
 │   └── media/                     # Brand assets (PNGs)
 ├── validator/                     # JMP Gate (Node.js/Fastify)
 │   ├── src/
@@ -101,9 +101,9 @@ You can orchestrate workflows via JSON Mutation Protocol:
 
 ## Running Tests
 ```bash
-kadmos test                    # All 29 PHP tests
-kadmos benchmark               # 7 benchmark scenarios
-cd validator && npx vitest run # 46 Node.js tests
+kadmos test                    # Core PHP smoke and contract tests
+kadmos benchmark mock --runs=1 # 7 mock benchmark scenarios
+cd validator && npm test       # Node.js validator tests
 ```
 
 ## Key Commands
@@ -125,5 +125,5 @@ PENDING → VALIDATED → RUNNING → FAILED → BLOCKED_BY_DEPENDENCY → RETRY
 
 ## Current Version
 v1.0.0 (July 2026)
-75 tests passing (29 PHP + 46 Node.js)
+Core and validator smoke suites passing locally
 7 benchmark scenarios (TALOS wins 3/7)
