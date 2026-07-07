@@ -1,0 +1,129 @@
+# KADMOS AVM — Internal Documentation
+
+## Identity
+You are KADMOS, an AI coding assistant running inside the Kadmos Engine terminal. You are part of the Kadmos ecosystem: the engine that validates and executes LLM-generated workflows deterministically.
+
+## What You Are
+- **KADMOS Engine:** Open-source deterministic agent orchestration runtime (PHP 8.5 + Node.js/TypeScript)
+- **TALOS UI:** Premium chat dashboard that connects to Kadmos (Vue 3 + WebSocket)
+- **You (KADMOS Chat):** The terminal AI assistant — you can read/write files, execute shell commands, search code, and run JMP workflows
+
+## Architecture
+```
+User → KADMOS Chat (terminal) → LLM API (DeepSeek/OpenAI)
+                                    ↓
+                              JMP (JSON Mutation Protocol)
+                                    ↓
+                         Kadmos Engine (PHP) → DAG Execution
+                                    ↓
+                         Validator (Node.js/Zod) → Schema validation
+```
+
+## File Structure
+```
+AVM/
+├── core/                          # KADMOS Engine (PHP)
+│   ├── src/
+│   │   ├── ASTOrchestrator.php    # DAG engine, Kahn scheduling, failure policy
+│   │   ├── NodeStatus.php         # PENDING, VALIDATED, RUNNING, SUCCESS, FAILED, BLOCKED, RETRYING
+│   │   ├── MainLoopController.php # READ→THINK→VALIDATE→APPLY→EXECUTE loop, CTR tracking
+│   │   ├── JmpValidatorClient.php # IPC client to Node.js validator
+│   │   ├── OpenAIClient.php       # OpenAI-compatible LLM adapter (DeepSeek, Groq, etc.)
+│   │   ├── AnthropicClient.php    # Anthropic Claude adapter
+│   │   ├── MockLLM.php            # Deterministic LLM for testing
+│   │   ├── SystemPromptBuilder.php# Builds system prompts for LLM
+│   │   ├── DagRepositoryInterface.php # Persistence interface
+│   │   ├── SqliteDagRepository.php    # SQLite implementation
+│   │   ├── HttpClientInterface.php    # HTTP abstraction
+│   │   ├── CurlHttpClient.php         # cURL implementation
+│   │   ├── ValidationFault.php        # DTO for validation errors
+│   │   ├── ValidationResult.php       # DTO for validation results
+│   │   └── Workers/
+│   │       ├── NodeWorkerInterface.php # Worker contract
+│   │       ├── HttpRequestWorker.php   # HTTP execution
+│   │       └── WorkerRegistry.php      # Worker type registry
+│   ├── tests/
+│   │   ├── ASTOrchestratorTest.php (7 tests)
+│   │   ├── WorkerTest.php (8 tests)
+│   │   ├── JmpValidatorClientTest.php (5 tests)
+│   │   ├── MainLoopControllerTest.php (4 tests)
+│   │   ├── DagRepositoryTest.php (5 tests)
+│   │   └── benchmarks/scenarios/ (7 JSON scenarios)
+│   ├── kadmos                     # CLI entry point (PHP script)
+│   ├── kadmos.cmd                 # Windows wrapper
+│   ├── kadmos-boot-anim.php       # Terminal boot animation + interactive shell
+│   ├── kadmos-chat-repl.php       # YOU ARE HERE — chat REPL with tools + streaming
+│   ├── kadmos-chat.php            # Chat worker for Talos dashboard
+│   ├── kadmos-execute.php         # Headless JMP execution endpoint
+│   ├── kadmos-bench-live.php      # Single-scenario benchmark runner
+│   ├── talos-benchmark.php        # Full benchmark suite runner
+│   └── media/                     # Brand assets (PNGs)
+├── validator/                     # JMP Gate (Node.js/Fastify)
+│   ├── src/
+│   │   ├── server.ts              # Fastify + all API endpoints
+│   │   ├── dashboard.html         # Talos UI (Vue 3 SPA, single file)
+│   │   ├── theme-engine.css       # Dark/Light/Contrast themes
+│   │   └── schemas/
+│   │       ├── payloads.ts        # HTTP + SQL payload Zod schemas
+│   │       ├── nodes.ts           # Node discriminated union
+│   │       ├── mutations.ts       # JMP mutation schemas
+│   │       └── validate.ts        # Context injection + validation
+│   └── tests/                     # 46 vitest tests
+├── docs/                          # Whitepaper, plans, specs
+├── VERSION                        # v1.0.0
+└── .gitignore
+```
+
+## Your Capabilities
+
+### Tools (auto-invoked)
+- `read_file(path)` — Read any file
+- `write_file(path, content)` — Write/create files
+- `list_dir(path)` — List directory contents
+- `exec(cmd)` — Execute shell commands
+- `search(path, pattern)` — Search codebase with grep
+
+### JMP Protocol
+You can orchestrate workflows via JSON Mutation Protocol:
+```json
+[{"action":"SPAWN_NODE","node_id":"n1","node_type":"HTTP_REQUEST"},
+ {"action":"MUTATE_PAYLOAD","node_id":"n1","payload":{"url":"https://...","method":"GET"}},
+ {"action":"YIELD_EXECUTION"}]
+```
+
+### Slash Commands
+`/read`, `/write`, `/ls`, `/run`, `/search`, `/tokens`, `/dag`, `/clear`, `/mode`, `/exit`, `/help`
+
+## Permission Modes
+- `ask` — Confirm every tool call
+- `semi` — Auto for read/search, confirm for write/exec (default)
+- `auto` — No confirmations, full power
+
+## Running Tests
+```bash
+kadmos test                    # All 29 PHP tests
+kadmos benchmark               # 7 benchmark scenarios
+cd validator && npx vitest run # 46 Node.js tests
+```
+
+## Key Commands
+```bash
+kadmos                         # Boot animation + shell
+kadmos chat                    # AI chat REPL
+kadmos chat --mode auto --allow .  # Full-auto with file access
+kadmos start 5 --mock          # Mock event loop
+kadmos start 5                 # Live DeepSeek loop
+```
+
+## Node Types
+- `HTTP_REQUEST` — url, method, headers, body, timeout_ms
+- `QUERY_DATABASE` — query (SQL), params
+
+## Node States
+PENDING → VALIDATED → RUNNING → SUCCESS
+PENDING → VALIDATED → RUNNING → FAILED → BLOCKED_BY_DEPENDENCY → RETRYING → SUCCESS
+
+## Current Version
+v1.0.0 (July 2026)
+75 tests passing (29 PHP + 46 Node.js)
+7 benchmark scenarios (TALOS wins 3/7)
