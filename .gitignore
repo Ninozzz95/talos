@@ -16,3 +16,4 @@ control-plane/.env
 Thumbs.db
 docs/superpowers/
 final/
+.worktrees/
