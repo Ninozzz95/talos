@@ -11,8 +11,8 @@ if (!file_exists($autoload)) {
 require_once $autoload;
 
 use Kadmos\Benchmark\BenchmarkComparisonRunner;
-use Kadmos\Benchmark\BenchmarkMode;
 use Kadmos\Benchmark\BenchmarkScenario;
+use Kadmos\Cli\EvidenceRenderer;
 
 $args = array_slice($argv, 1);
 $scenarioArg = null;
@@ -73,22 +73,4 @@ file_put_contents($logPath, json_encode($payload, JSON_PRETTY_PRINT));
 
 echo "Kadmos benchmark compare\n";
 echo "Report: tests/benchmarks/logs/" . basename($logPath) . PHP_EOL . PHP_EOL;
-printf("%-28s %-18s %-8s %-8s %-8s %-8s %-8s\n", 'SCENARIO', 'MODE', 'COMP', 'SUCC', 'FAIL', 'BLOCK', 'MATCH');
-echo str_repeat('-', 92) . PHP_EOL;
-
-foreach ($reports as $report) {
-    foreach (BenchmarkMode::all() as $index => $mode) {
-        $result = $report['modes'][$mode];
-        printf(
-            "%-28s %-18s %-8s %-8s %-8s %-8s %-8s\n",
-            $index === 0 ? $report['scenario']['name'] : '',
-            $result['label'],
-            (string) round($result['completion_rate'] * 100) . '%',
-            (string) $result['success_nodes'],
-            (string) $result['failed_nodes'],
-            (string) $result['blocked_nodes'],
-            $result['state_match'] ? 'yes' : 'no',
-        );
-    }
-    echo PHP_EOL;
-}
+echo EvidenceRenderer::renderReport($payload);
