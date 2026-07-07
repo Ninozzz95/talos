@@ -33,6 +33,10 @@ final class FileBenchmarkScenarioFactory
                 'extracted_chars' => (int) $ingestedFile['extracted_chars'],
             ]],
             'task' => $this->buildTask($ingestedFile),
+            'steps' => $this->buildSteps($ingestedFile),
+            'inject_error_at' => null,
+            'expected_nodes' => 2,
+            'expected_all_success' => true,
             'allowed_node_types' => [
                 'READ_FILE',
                 'PARSE_DOCUMENT',
@@ -45,6 +49,20 @@ final class FileBenchmarkScenarioFactory
                     'expose file storage paths in the final user-facing answer',
                 ],
                 'output_format' => 'structured_json',
+            ],
+            'evidence_contract' => [
+                'source_integrity' => 'sha256_match_required',
+                'grounding' => 'uploaded_file_only',
+                'external_calls' => 'forbidden_unless_declared',
+            ],
+            'risk_model' => [
+                'primary_risk' => 'ungrounded_extraction',
+                'enterprise_impact' => 'incorrect_downstream_automation',
+            ],
+            'success_criteria' => [
+                'read_file reaches SUCCESS',
+                'extract_fields reaches SUCCESS',
+                'no facts outside uploaded file are introduced',
             ],
             'fault_injections' => [[
                 'type' => 'invalid_payload',
@@ -61,6 +79,57 @@ final class FileBenchmarkScenarioFactory
             ...$scenario,
             'storage_disk' => 'local',
             'storage_path' => $storagePath,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $ingestedFile
+     * @return list<array<string, mixed>>
+     */
+    private function buildSteps(array $ingestedFile): array
+    {
+        return [
+            [
+                'cycle' => 1,
+                'mutations' => [
+                    [
+                        'action' => 'SPAWN_NODE',
+                        'node_id' => 'read_file',
+                        'node_type' => 'READ_FILE',
+                    ],
+                    [
+                        'action' => 'SPAWN_NODE',
+                        'node_id' => 'extract_fields',
+                        'node_type' => 'EXTRACT_FIELDS',
+                        'dependencies' => ['read_file'],
+                    ],
+                ],
+            ],
+            [
+                'cycle' => 2,
+                'mutations' => [
+                    [
+                        'action' => 'MUTATE_PAYLOAD',
+                        'node_id' => 'read_file',
+                        'payload' => [
+                            'storage_disk' => (string) $ingestedFile['storage_disk'],
+                            'storage_path' => (string) $ingestedFile['storage_path'],
+                            'source_sha256' => (string) $ingestedFile['sha256'],
+                        ],
+                    ],
+                    [
+                        'action' => 'MUTATE_PAYLOAD',
+                        'node_id' => 'extract_fields',
+                        'payload' => [
+                            'fields' => ['summary', 'entities', 'actions', 'risks', 'open_questions'],
+                            'source_sha256' => (string) $ingestedFile['sha256'],
+                        ],
+                    ],
+                    [
+                        'action' => 'YIELD_EXECUTION',
+                    ],
+                ],
+            ],
         ];
     }
 

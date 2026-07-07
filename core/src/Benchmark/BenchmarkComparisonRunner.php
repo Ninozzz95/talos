@@ -93,8 +93,9 @@ final readonly class BenchmarkComparisonRunner
     {
         $registry = new WorkerRegistry();
         $worker = new BenchmarkNodeWorker($scenario);
-        $registry->register('HTTP_REQUEST', $worker);
-        $registry->register('QUERY_DATABASE', $worker);
+        foreach ($this->benchmarkNodeTypes($scenario) as $nodeType) {
+            $registry->register($nodeType, $worker);
+        }
 
         $orchestrator = new ASTOrchestrator($registry);
         $script = [];
@@ -118,6 +119,7 @@ final readonly class BenchmarkComparisonRunner
 
         return $this->resultPayload(
             mode: BenchmarkMode::AVM_ON,
+            scenario: $scenario,
             totalNodes: count($scenario->nodeIds()),
             statuses: $statuses,
             successNodes: $counts[NodeStatus::SUCCESS] ?? 0,
@@ -165,6 +167,7 @@ final readonly class BenchmarkComparisonRunner
 
         return $this->resultPayload(
             mode: BenchmarkMode::AVM_OFF_DIRECT,
+            scenario: $scenario,
             totalNodes: count($nodeIds),
             statuses: $statuses,
             successNodes: $counts[NodeStatus::SUCCESS] ?? 0,
@@ -202,6 +205,7 @@ final readonly class BenchmarkComparisonRunner
 
         return $this->resultPayload(
             mode: BenchmarkMode::TOOL_AGENT,
+            scenario: $scenario,
             totalNodes: count($nodeIds),
             statuses: $statuses,
             successNodes: $counts[NodeStatus::SUCCESS] ?? 0,
@@ -305,6 +309,7 @@ final readonly class BenchmarkComparisonRunner
      */
     private function resultPayload(
         string $mode,
+        BenchmarkScenario $scenario,
         int $totalNodes,
         array $statuses,
         int $successNodes,
@@ -317,6 +322,8 @@ final readonly class BenchmarkComparisonRunner
         int $elapsedMs,
         string $notes,
     ): array {
+        $contractViolations = $this->contractViolationCount($scenario, $statuses);
+
         return [
             'mode' => $mode,
             'label' => BenchmarkMode::label($mode),
@@ -326,6 +333,10 @@ final readonly class BenchmarkComparisonRunner
             'blocked_nodes' => $blockedNodes,
             'completion_rate' => $totalNodes > 0 ? round($successNodes / $totalNodes, 4) : 1.0,
             'state_match' => $stateMatch,
+            'contract_violation_count' => $contractViolations,
+            'recovery_score' => $totalNodes > 0 ? round(($successNodes + $blockedNodes) / $totalNodes, 4) : 1.0,
+            'determinism_score' => 1.0,
+            'enterprise_risk_score' => min(100, $contractViolations * 35 + $failedNodes * 20 + max(0, $totalNodes - $successNodes - $blockedNodes) * 10),
             'cycles' => $cycles,
             'validation_faults' => $validationFaults,
             'token_estimate' => $tokenEstimate,
@@ -333,6 +344,37 @@ final readonly class BenchmarkComparisonRunner
             'node_statuses' => $statuses,
             'notes' => $notes,
         ];
+    }
+
+    /**
+     * @param array<string, string> $statuses
+     */
+    private function contractViolationCount(BenchmarkScenario $scenario, array $statuses): int
+    {
+        $expectedState = $scenario->expectedState();
+        if ($expectedState !== []) {
+            $violations = 0;
+            foreach ($expectedState as $nodeId => $expectedStatus) {
+                if (($statuses[$nodeId] ?? null) !== $expectedStatus) {
+                    $violations++;
+                }
+            }
+
+            return $violations;
+        }
+
+        if ($scenario->expectsAllSuccess()) {
+            $violations = 0;
+            foreach ($scenario->nodeIds() as $nodeId) {
+                if (($statuses[$nodeId] ?? null) !== NodeStatus::SUCCESS) {
+                    $violations++;
+                }
+            }
+
+            return $violations;
+        }
+
+        return 0;
     }
 
     private function estimateAvmTokens(ASTOrchestrator $orchestrator, BenchmarkScenario $scenario): int
@@ -362,6 +404,31 @@ final readonly class BenchmarkComparisonRunner
     }
 
     /**
+     * @return list<string>
+     */
+    private function benchmarkNodeTypes(BenchmarkScenario $scenario): array
+    {
+        $types = ['HTTP_REQUEST', 'QUERY_DATABASE', 'READ_FILE', 'PARSE_DOCUMENT', 'EXTRACT_FIELDS'];
+        foreach ($scenario->steps() as $step) {
+            $mutations = $step['mutations'] ?? [];
+            if (!is_array($mutations)) {
+                continue;
+            }
+
+            foreach ($mutations as $mutation) {
+                if (is_array($mutation) && ($mutation['action'] ?? null) === 'SPAWN_NODE' && isset($mutation['node_type'])) {
+                    $type = (string) $mutation['node_type'];
+                    if (!in_array($type, $types, true)) {
+                        $types[] = $type;
+                    }
+                }
+            }
+        }
+
+        return $types;
+    }
+
+    /**
      * @param array<string, array<string, mixed>> $modes
      * @return array<string, mixed>
      */
@@ -376,6 +443,12 @@ final readonly class BenchmarkComparisonRunner
             'avm_vs_tool_completion_delta' => round(($avm['completion_rate'] ?? 0) - ($tool['completion_rate'] ?? 0), 4),
             'avm_blocked_nodes_delta_vs_direct' => (int) ($avm['blocked_nodes'] ?? 0) - (int) ($direct['blocked_nodes'] ?? 0),
             'avm_state_match' => (bool) ($avm['state_match'] ?? false),
+            'avm_risk_delta_vs_direct' => (int) ($avm['enterprise_risk_score'] ?? 100) - (int) ($direct['enterprise_risk_score'] ?? 100),
+            'avm_risk_delta_vs_tool' => (int) ($avm['enterprise_risk_score'] ?? 100) - (int) ($tool['enterprise_risk_score'] ?? 100),
+            'avm_contract_advantage' => (int) ($avm['contract_violation_count'] ?? 999) < min(
+                (int) ($direct['contract_violation_count'] ?? 999),
+                (int) ($tool['contract_violation_count'] ?? 999),
+            ),
         ];
     }
 }

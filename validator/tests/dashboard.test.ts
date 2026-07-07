@@ -15,4 +15,19 @@ describe('dashboard benchmark lab', () => {
     expect(html).toContain('AVM OFF Direct');
     expect(html).toContain('Tool Agent');
   });
+
+  it('integrates file ingestion in the existing benchmark dashboard', () => {
+    expect(html).toContain('Upload file');
+    expect(html).toContain('Run AVM comparison');
+    expect(html).toContain('/api/files/ingest');
+    expect(html).toContain('/api/benchmarks/compare');
+    expect(html).toContain('control_plane_url');
+  });
+
+  it('renders enterprise evidence metrics from benchmark reports', () => {
+    expect(html).toContain('Enterprise risk');
+    expect(html).toContain('Contract violations');
+    expect(html).toContain('Recovery score');
+    expect(html).toContain('Determinism');
+  });
 });
