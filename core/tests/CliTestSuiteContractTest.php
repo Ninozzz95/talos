@@ -25,6 +25,7 @@ function testMainCliRunsContractTests(): void
         'CliStartFailClosedTest.php',
         'ValidatorFactoryTest.php',
         'ValidatorBypassContractTest.php',
+        'CurlNoDeprecatedCloseTest.php',
     ] as $testFile) {
         assertTrue(str_contains($cli, $testFile), "kadmos test should include {$testFile}.");
     }

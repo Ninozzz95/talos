@@ -27,7 +27,6 @@ final class ValidatorHealthCheck
 
             $response = \curl_exec($ch);
             $statusCode = (int) \curl_getinfo($ch, \CURLINFO_RESPONSE_CODE);
-            \curl_close($ch);
 
             if ($response === false || $statusCode !== 200) {
                 return false;
@@ -41,4 +40,3 @@ final class ValidatorHealthCheck
         }
     }
 }
-

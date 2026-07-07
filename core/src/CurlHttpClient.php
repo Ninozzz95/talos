@@ -23,7 +23,6 @@ final class CurlHttpClient implements HttpClientInterface
 
         $response = \curl_exec($ch);
         $error = \curl_error($ch);
-        \curl_close($ch);
 
         if ($response === false) {
             throw new \RuntimeException("Validator unreachable: {$error}");

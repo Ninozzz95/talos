@@ -271,6 +271,7 @@ switch ($command) {
             'CliStartFailClosed' => "$baseDir/tests/CliStartFailClosedTest.php",
             'ValidatorFactory' => "$baseDir/tests/ValidatorFactoryTest.php",
             'ValidatorBypassContract' => "$baseDir/tests/ValidatorBypassContractTest.php",
+            'CurlNoDeprecatedClose' => "$baseDir/tests/CurlNoDeprecatedCloseTest.php",
             'CliTestSuiteContract' => "$baseDir/tests/CliTestSuiteContractTest.php",
         ];
 
