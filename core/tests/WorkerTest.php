@@ -7,9 +7,9 @@ require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/HttpRequestWorker.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 
-use AVM\NodeStatus;
-use AVM\Workers\HttpRequestWorker;
-use AVM\Workers\WorkerRegistry;
+use Kadmos\NodeStatus;
+use Kadmos\Workers\HttpRequestWorker;
+use Kadmos\Workers\WorkerRegistry;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {
@@ -126,7 +126,7 @@ function testExecuteNodeFailureBlocksDescendants(): void
     require_once __DIR__ . '/../src/ASTOrchestrator.php';
 
     // Use a stub worker that always fails
-    $failingWorker = new class implements \AVM\Workers\NodeWorkerInterface {
+    $failingWorker = new class implements \Kadmos\Workers\NodeWorkerInterface {
         public function execute(array $payload): array
         {
             return [
@@ -140,7 +140,7 @@ function testExecuteNodeFailureBlocksDescendants(): void
     $registry = new WorkerRegistry();
     $registry->register('HTTP_REQUEST', $failingWorker);
 
-    $orchestrator = new \AVM\ASTOrchestrator($registry);
+    $orchestrator = new \Kadmos\ASTOrchestrator($registry);
     $orchestrator->addNode('A', [], 'HTTP_REQUEST');
     $orchestrator->addNode('B', ['A'], 'HTTP_REQUEST');
     $orchestrator->addNode('C', ['B'], 'HTTP_REQUEST');

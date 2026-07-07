@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace AVM;
+namespace Kadmos;
 
-use AVM\Workers\WorkerRegistry;
-use AVM\Workers\NodeWorkerInterface;
+use Kadmos\Workers\WorkerRegistry;
+use Kadmos\Workers\NodeWorkerInterface;
 use InvalidArgumentException;
 
 final class ASTOrchestrator
@@ -31,12 +31,13 @@ final class ASTOrchestrator
      */
     public function addNode(string $nodeId, array $dependencies = [], string $type = 'UNKNOWN'): void
     {
+        $nodeId = (string) $nodeId;
         if (isset($this->nodes[$nodeId])) {
             throw new InvalidArgumentException("Node already exists: {$nodeId}");
         }
 
         foreach ($dependencies as $dependencyId) {
-            $this->assertNodeExists($dependencyId);
+            $this->assertNodeExists((string) $dependencyId);
         }
 
         $this->nodes[$nodeId] = [
@@ -44,7 +45,7 @@ final class ASTOrchestrator
             'status' => NodeStatus::PENDING,
             'type' => $type,
         ];
-        $this->dependencies[$nodeId] = array_values($dependencies);
+        $this->dependencies[$nodeId] = array_map('strval', array_values($dependencies));
         $this->children[$nodeId] ??= [];
 
         foreach ($dependencies as $dependencyId) {
@@ -135,6 +136,7 @@ final class ASTOrchestrator
      */
     public function setPayload(string $nodeId, array $payload): void
     {
+        $nodeId = (string) $nodeId;
         $this->assertNodeExists($nodeId);
         $this->nodes[$nodeId]['payload'] = $payload;
         $this->nodes[$nodeId]['status'] = NodeStatus::VALIDATED;
@@ -324,6 +326,7 @@ final class ASTOrchestrator
 
     private function assertNodeExists(string $nodeId): void
     {
+        $nodeId = (string) $nodeId;
         if (!isset($this->nodes[$nodeId])) {
             throw new InvalidArgumentException("Unknown node: {$nodeId}");
         }

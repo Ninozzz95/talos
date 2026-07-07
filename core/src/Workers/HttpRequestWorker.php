@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace AVM\Workers;
+namespace Kadmos\Workers;
 
-use AVM\NodeStatus;
+use Kadmos\NodeStatus;
 
 final class HttpRequestWorker implements NodeWorkerInterface
 {
@@ -79,7 +79,7 @@ final class HttpRequestWorker implements NodeWorkerInterface
     private function truncateOutput(string $output, int $maxLength = 2000): string
     {
         if (\strlen($output) > $maxLength) {
-            return \substr($output, 0, $maxLength) . "\n...[TRUNCATED BY AVM]";
+            return \substr($output, 0, $maxLength) . "\n...[TRUNCATED BY KADMOS]";
         }
         return $output;
     }

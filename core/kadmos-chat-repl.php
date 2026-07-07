@@ -22,13 +22,13 @@ require_once __DIR__ . '/src/JmpValidatorClient.php';
 require_once __DIR__ . '/src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/src/Workers/WorkerRegistry.php';
 
-use AVM\ASTOrchestrator;
-use AVM\NodeStatus;
-use AVM\OpenAIClient;
-use AVM\JmpValidatorClient;
-use AVM\HttpClientInterface;
-use AVM\Workers\WorkerRegistry;
-use AVM\Workers\NodeWorkerInterface;
+use Kadmos\ASTOrchestrator;
+use Kadmos\NodeStatus;
+use Kadmos\OpenAIClient;
+use Kadmos\JmpValidatorClient;
+use Kadmos\HttpClientInterface;
+use Kadmos\Workers\WorkerRegistry;
+use Kadmos\Workers\NodeWorkerInterface;
 
 // ═══════════════════════════════════════
 // Config

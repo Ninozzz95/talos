@@ -18,14 +18,14 @@ require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 require_once __DIR__ . '/../src/Workers/HttpRequestWorker.php';
 
-use AVM\ASTOrchestrator;
-use AVM\NodeStatus;
-use AVM\MockLLM;
-use AVM\JmpValidatorClient;
-use AVM\HttpClientInterface;
-use AVM\MainLoopController;
-use AVM\Workers\WorkerRegistry;
-use AVM\Workers\NodeWorkerInterface;
+use Kadmos\ASTOrchestrator;
+use Kadmos\NodeStatus;
+use Kadmos\MockLLM;
+use Kadmos\JmpValidatorClient;
+use Kadmos\HttpClientInterface;
+use Kadmos\MainLoopController;
+use Kadmos\Workers\WorkerRegistry;
+use Kadmos\Workers\NodeWorkerInterface;
 
 // Stub that always succeeds instantly
 $successWorker = new class implements NodeWorkerInterface {
@@ -74,7 +74,7 @@ $validator = new JmpValidatorClient($alwaysValid);
 
 $broadcastUrl = 'http://127.0.0.1:3000/broadcast';
 
-echo "=== AVM HMI Demo ===\n";
+echo "=== KADMOS HMI Demo ===\n";
 echo "Open http://127.0.0.1:3000/dashboard in your browser NOW\n";
 echo "Waiting 5 seconds...\n";
 sleep(5);

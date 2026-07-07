@@ -1,0 +1,17 @@
+{
+    "scenario": "parallel_branches",
+    "model": "deepseek-chat",
+    "timestamp": "2026-07-07T08:37:12+00:00",
+    "ctr": 7,
+    "faults": 1,
+    "cycles": 7,
+    "tokens": 398,
+    "elapsed_ms": 14889,
+    "nodes_total": 3,
+    "nodes_success": 0,
+    "nodes_failed": 0,
+    "nodes_blocked": 0,
+    "completion": 0,
+    "verdict": "\u26a0 PARTIAL",
+    "dag": "Current DAG State:\n---\nTotal nodes: 0\n"
+}

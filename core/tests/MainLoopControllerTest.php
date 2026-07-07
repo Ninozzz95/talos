@@ -15,14 +15,14 @@ require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 require_once __DIR__ . '/../src/Workers/HttpRequestWorker.php';
 
-use AVM\ASTOrchestrator;
-use AVM\NodeStatus;
-use AVM\MockLLM;
-use AVM\JmpValidatorClient;
-use AVM\HttpClientInterface;
-use AVM\MainLoopController;
-use AVM\Workers\WorkerRegistry;
-use AVM\Workers\NodeWorkerInterface;
+use Kadmos\ASTOrchestrator;
+use Kadmos\NodeStatus;
+use Kadmos\MockLLM;
+use Kadmos\JmpValidatorClient;
+use Kadmos\HttpClientInterface;
+use Kadmos\MainLoopController;
+use Kadmos\Workers\WorkerRegistry;
+use Kadmos\Workers\NodeWorkerInterface;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {

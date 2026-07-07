@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AVM;
+namespace Kadmos;
 
 /**
  * Mock LLM client that returns pre-compiled JMP scripts.

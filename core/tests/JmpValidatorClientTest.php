@@ -7,10 +7,10 @@ require_once __DIR__ . '/../src/ValidationResult.php';
 require_once __DIR__ . '/../src/HttpClientInterface.php';
 require_once __DIR__ . '/../src/JmpValidatorClient.php';
 
-use AVM\JmpValidatorClient;
-use AVM\HttpClientInterface;
-use AVM\ValidationResult;
-use AVM\ValidationFault;
+use Kadmos\JmpValidatorClient;
+use Kadmos\HttpClientInterface;
+use Kadmos\ValidationResult;
+use Kadmos\ValidationFault;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {

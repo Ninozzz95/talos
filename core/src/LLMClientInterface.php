@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AVM;
+namespace Kadmos;
 
 interface LLMClientInterface
 {

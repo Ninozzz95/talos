@@ -9,10 +9,10 @@ require_once __DIR__ . '/../src/SqliteDagRepository.php';
 require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 
-use AVM\ASTOrchestrator;
-use AVM\NodeStatus;
-use AVM\SqliteDagRepository;
-use AVM\Workers\WorkerRegistry;
+use Kadmos\ASTOrchestrator;
+use Kadmos\NodeStatus;
+use Kadmos\SqliteDagRepository;
+use Kadmos\Workers\WorkerRegistry;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
 {
@@ -96,12 +96,12 @@ function testFullWorkflowPersistsAndRestores(): void
     // Build DAG, execute, save, reload, verify
 
     $registry = new WorkerRegistry();
-    $registry->register('HTTP_REQUEST', new class implements \AVM\Workers\NodeWorkerInterface {
+    $registry->register('HTTP_REQUEST', new class implements \Kadmos\Workers\NodeWorkerInterface {
         public function execute(array $payload): array {
             return ['status' => NodeStatus::SUCCESS, 'output_summary' => 'OK', 'raw_output' => null];
         }
     });
-    $registry->register('QUERY_DATABASE', new class implements \AVM\Workers\NodeWorkerInterface {
+    $registry->register('QUERY_DATABASE', new class implements \Kadmos\Workers\NodeWorkerInterface {
         public function execute(array $payload): array {
             return ['status' => NodeStatus::SUCCESS, 'output_summary' => 'OK', 'raw_output' => null];
         }

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// AVM Main Loop with DeepSeek — real LLM driving the DAG
+// KADMOS Main Loop with DeepSeek — real LLM driving the DAG
 // Usage: DEEPSEEK_API_KEY=sk-... php tests/run-deepseek.php
 
 require_once __DIR__ . '/../src/NodeStatus.php';
@@ -20,14 +20,14 @@ require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 require_once __DIR__ . '/../src/Workers/HttpRequestWorker.php';
 
-use AVM\ASTOrchestrator;
-use AVM\NodeStatus;
-use AVM\OpenAIClient;
-use AVM\JmpValidatorClient;
-use AVM\HttpClientInterface;
-use AVM\MainLoopController;
-use AVM\Workers\WorkerRegistry;
-use AVM\Workers\NodeWorkerInterface;
+use Kadmos\ASTOrchestrator;
+use Kadmos\NodeStatus;
+use Kadmos\OpenAIClient;
+use Kadmos\JmpValidatorClient;
+use Kadmos\HttpClientInterface;
+use Kadmos\MainLoopController;
+use Kadmos\Workers\WorkerRegistry;
+use Kadmos\Workers\NodeWorkerInterface;
 
 $apiKey = getenv('DEEPSEEK_API_KEY');
 if (!$apiKey) {
@@ -73,7 +73,7 @@ $validator = new JmpValidatorClient($alwaysValid);
 $broadcastUrl = 'http://127.0.0.1:3000/broadcast';
 
 echo "╔══════════════════════════════════════╗\n";
-echo "║   AVM Main Loop — DeepSeek          ║\n";
+echo "║   KADMOS Main Loop — DeepSeek          ║\n";
 echo "╠══════════════════════════════════════╣\n";
 echo "║ Dashboard: http://127.0.0.1:3000/dashboard\n";
 echo "║ Model: deepseek-chat\n";
