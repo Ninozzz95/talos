@@ -400,19 +400,21 @@ function kadmos_shell(): void {
                 break;
             case 'help':
                 echo "\n{$bold}{$gold}  KADMOS SHELL — Commands{$reset}\n\n";
-                echo "  {$cyan}start [N] [--mock] [--demo-throttle]{$reset}\n";
-                echo "  {$dim}    Launch the main event loop. Add --demo-throttle for live DAG visualization.{$reset}\n";
-                echo "  {$cyan}test{$reset}          {$dim}Run all test suites (29 core + 46 validator){$reset}\n";
-                echo "  {$cyan}benchmark{$reset}     {$dim}Run all 7 benchmark scenarios{$reset}\n";
-                echo "  {$cyan}validate <file>{$reset} {$dim}Validate a JMP JSON batch{$reset}\n";
-                echo "  {$cyan}status{$reset}        {$dim}System diagnostics (PHP, tests, endpoints){$reset}\n";
-                echo "  {$cyan}dashboard{$reset}      {$dim}Talos UI info{$reset}\n";
-                echo "  {$cyan}chat{$reset}           {$dim}Launch Talos Chat + open browser{$reset}\n";
-                echo "  {$cyan}key{$reset}           {$dim}Show API key setup instructions{$reset}\n";
-                echo "  {$cyan}exit{$reset}          {$dim}Shutdown engine{$reset}\n";
+                echo "  {$cyan}chat{$reset}               {$dim}Terminal AI chat (tools, streaming, JMP){$reset}\n";
+                echo "  {$cyan}chat --mode auto{$reset}    {$dim}Full-auto mode (no confirmations){$reset}\n";
+                echo "  {$cyan}chat --allow .{$reset}      {$dim}Grant file access to current dir{$reset}\n";
+                echo "  {$cyan}start [N] [--mock]{$reset}  {$dim}Launch main event loop{$reset}\n";
+                echo "  {$cyan}start --demo-throttle{$reset}{$dim}  Slow-mo execution for dashboard{$reset}\n";
+                echo "  {$cyan}test{$reset}                {$dim}All tests (29 core + 46 validator){$reset}\n";
+                echo "  {$cyan}benchmark{$reset}           {$dim}7 benchmark scenarios{$reset}\n";
+                echo "  {$cyan}validate <file>{$reset}      {$dim}Validate JMP JSON batch{$reset}\n";
+                echo "  {$cyan}status{$reset}              {$dim}System diagnostics{$reset}\n";
+                echo "  {$cyan}boot{$reset}                {$dim}Boot animation{$reset}\n";
+                echo "  {$cyan}exit{$reset}                {$dim}Shutdown engine{$reset}\n";
                 echo "\n";
                 if (!$hasKey) {
-                    echo "{$yellow}  Quick start:{$reset} {$cyan}start{$reset} {$dim}(auto-uses --mock, no key needed){$reset}\n\n";
+                    echo "{$yellow}  Quick start:{$reset} {$cyan}chat{$reset} {$dim}(setup wizard on first run){$reset}\n";
+                    echo "{$yellow}  Testing:{$reset} {$cyan}start{$reset} {$dim}(auto-uses --mock, no key needed){$reset}\n\n";
                 }
                 break;
             default:
