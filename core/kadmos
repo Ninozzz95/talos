@@ -34,6 +34,35 @@ function logo(): string {
 }
 
 switch ($command) {
+    case '':
+        echo \Kadmos\Cli\GuidedShell::welcome();
+        break;
+
+    case '--expert':
+    case 'expert':
+        echo \Kadmos\Cli\GuidedShell::expertHelp();
+        break;
+
+    case '--tutorial':
+    case 'tutorial':
+        echo \Kadmos\Cli\GuidedShell::tutorial();
+        break;
+
+    case 'compare':
+    case 'evidence':
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+
+        passthru(
+            escapeshellarg($phpBin) . ' '
+            . escapeshellarg($baseDir . '/kadmos-benchmark-compare.php') . ' '
+            . implode(' ', array_map('escapeshellarg', $args)),
+            $code
+        );
+        exit($code);
+
     // ═══════════════════════════════════════════════
     case 'chat':
         // Run boot animation first
@@ -266,6 +295,8 @@ switch ($command) {
             'BenchmarkScenario' => "$baseDir/tests/BenchmarkScenarioTest.php",
             'BenchmarkComparisonRunner' => "$baseDir/tests/BenchmarkComparisonRunnerTest.php",
             'CliBenchmarkCompareCommand' => "$baseDir/tests/CliBenchmarkCompareCommandTest.php",
+            'CliGuidedShell' => "$baseDir/tests/CliGuidedShellTest.php",
+            'CliEvidenceRenderer' => "$baseDir/tests/CliEvidenceRendererTest.php",
             'BenchmarkNoDeprecation' => "$baseDir/tests/BenchmarkNoDeprecationTest.php",
             'ValidatorImplementations' => "$baseDir/tests/ValidatorImplementationsTest.php",
             'MainLoopValidatorInterface' => "$baseDir/tests/MainLoopValidatorInterfaceContractTest.php",
@@ -402,10 +433,15 @@ switch ($command) {
     case 'help':
         echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
         echo bold("Commands:\n\n");
+        echo "  " . green("kadmos") . "                           Guided shell welcome\n";
+        echo "  " . green("kadmos --tutorial") . "                First-run guided tutorial\n";
+        echo "  " . green("kadmos --expert") . "                  Expert slash-command reference\n";
         echo "  " . green("kadmos boot") . "                      Boot animation\n";
         echo "  " . green("kadmos start [cycles] [--mock]") . "   Start the main event loop\n";
         echo "  " . green("kadmos test") . "                      Run all test suites\n";
         echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
+        echo "  " . green("kadmos compare --json") . "            Compare AVM ON/OFF/tool-agent baselines\n";
+        echo "  " . green("kadmos evidence --json") . "           Render benchmark evidence report\n";
         echo "  " . green("kadmos benchmark mock --runs=10") . " Run mock benchmark suite\n";
         echo "  " . green("kadmos benchmark compare --json") . " Compare AVM ON/OFF/tool-agent baselines\n";
         echo "  " . green("kadmos status") . "                    Show system status\n";
@@ -417,14 +453,7 @@ switch ($command) {
         break;
 
     default:
-        // No command: run boot animation + interactive shell
-        $phpBin = $baseDir . '/../.tools/php/php.exe';
-        if (!file_exists($phpBin)) $phpBin = 'php';
-        $bootScript = $baseDir . '/kadmos-boot-anim.php';
-        if (file_exists($bootScript)) {
-            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
-        } else {
-            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-boot'));
-        }
-        break;
+        echo red("Unknown command: ") . "{$command}\n\n";
+        echo \Kadmos\Cli\GuidedShell::welcome();
+        exit(1);
 }

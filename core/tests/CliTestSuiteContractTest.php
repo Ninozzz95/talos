@@ -18,6 +18,8 @@ function testMainCliRunsContractTests(): void
         'AutoloadContractTest.php',
         'CliBenchmarkCommandTest.php',
         'BenchmarkNoDeprecationTest.php',
+        'CliGuidedShellTest.php',
+        'CliEvidenceRendererTest.php',
         'ValidatorImplementationsTest.php',
         'MainLoopValidatorInterfaceContractTest.php',
         'ValidatorHealthCheckTest.php',
