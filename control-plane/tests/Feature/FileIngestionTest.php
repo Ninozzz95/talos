@@ -44,7 +44,18 @@ final class FileIngestionTest extends TestCase
             ->assertJsonPath('data.benchmark_scenario.input_files.0.name', 'workflow.md')
             ->assertJsonPath('data.benchmark_scenario.input_files.0.sha256', $expectedHash)
             ->assertJsonPath('data.benchmark_scenario.allowed_node_types.0', 'READ_FILE')
-            ->assertJsonPath('data.benchmark_scenario.expected.must_not.0', 'invent facts not present in the uploaded file');
+            ->assertJsonPath('data.benchmark_scenario.steps.0.mutations.0.node_type', 'READ_FILE')
+            ->assertJsonPath('data.benchmark_scenario.steps.0.mutations.1.node_type', 'EXTRACT_FIELDS')
+            ->assertJsonPath('data.benchmark_scenario.expected_all_success', true)
+            ->assertJsonPath('data.benchmark_scenario.expected.must_not.0', 'invent facts not present in the uploaded file')
+            ->assertJsonPath('data.benchmark_scenario.evidence_contract.source_integrity', 'sha256_match_required')
+            ->assertJsonPath('data.benchmark_scenario.evidence_contract.grounding', 'uploaded_file_only')
+            ->assertJsonPath('data.benchmark_scenario.evidence_contract.external_calls', 'forbidden_unless_declared')
+            ->assertJsonPath('data.benchmark_scenario.risk_model.primary_risk', 'ungrounded_extraction')
+            ->assertJsonPath('data.benchmark_scenario.risk_model.enterprise_impact', 'incorrect_downstream_automation')
+            ->assertJsonPath('data.benchmark_scenario.success_criteria.0', 'read_file reaches SUCCESS')
+            ->assertJsonPath('data.benchmark_scenario.success_criteria.1', 'extract_fields reaches SUCCESS')
+            ->assertJsonPath('data.benchmark_scenario.success_criteria.2', 'no facts outside uploaded file are introduced');
 
         $scenarioPath = $response->json('data.benchmark_scenario.storage_path');
         $this->assertIsString($scenarioPath);
@@ -53,6 +64,8 @@ final class FileIngestionTest extends TestCase
         $storedScenario = json_decode(Storage::disk('local')->get($scenarioPath), true);
         $this->assertSame('file_ingestion', $storedScenario['category']);
         $this->assertStringContainsString('workflow.md', $storedScenario['task']);
+        $this->assertSame('YIELD_EXECUTION', $storedScenario['steps'][1]['mutations'][2]['action']);
+        $this->assertSame('uploaded_file_only', $storedScenario['evidence_contract']['grounding']);
     }
 
     public function test_unsupported_file_type_is_rejected(): void

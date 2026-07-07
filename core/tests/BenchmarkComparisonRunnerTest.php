@@ -23,6 +23,13 @@ function assertSame(mixed $expected, mixed $actual, string $message): void
     }
 }
 
+function assertArrayHasKey(string $key, array $array, string $message): void
+{
+    if (!array_key_exists($key, $array)) {
+        throw new RuntimeException($message . ' Missing key: ' . $key);
+    }
+}
+
 function testComparisonRunnerReportsAllModesForSimpleScenario(): void
 {
     $scenario = BenchmarkScenario::fromFile(__DIR__ . '/benchmarks/scenarios/01_simple_http.json');
@@ -56,9 +63,32 @@ function testAvmOnPreservesFailureCascadeOnDeepChainScenario(): void
     assertSame(NodeStatus::BLOCKED_BY_DEPENDENCY, $avmOn['node_statuses']['n5'], 'The deepest descendant should be blocked.');
 }
 
+function testComparisonRunnerReportsEvidenceMetrics(): void
+{
+    $scenario = BenchmarkScenario::fromFile(__DIR__ . '/benchmarks/scenarios/05_deep_chain_failure.json');
+    $runner = new BenchmarkComparisonRunner(runs: 1);
+
+    $report = $runner->compareScenario($scenario);
+    $avmOn = $report['modes'][BenchmarkMode::AVM_ON];
+
+    foreach (['contract_violation_count', 'recovery_score', 'determinism_score', 'enterprise_risk_score'] as $metric) {
+        assertArrayHasKey($metric, $avmOn, "AVM ON should expose {$metric}.");
+    }
+
+    assertSame(0, $avmOn['contract_violation_count'], 'AVM ON should have no contract violations for the expected failure cascade.');
+    assertSame(0.8, $avmOn['recovery_score'], 'AVM ON should count successful and safely blocked nodes as recovered state.');
+    assertSame(1.0, $avmOn['determinism_score'], 'Single deterministic benchmark run should report a stable determinism score.');
+    assertSame(30, $avmOn['enterprise_risk_score'], 'AVM ON risk should be deterministic for the deep-chain cascade.');
+
+    assertArrayHasKey('avm_risk_delta_vs_direct', $report['comparison'], 'Comparison should expose AVM risk delta versus direct mode.');
+    assertArrayHasKey('avm_risk_delta_vs_tool', $report['comparison'], 'Comparison should expose AVM risk delta versus tool-agent mode.');
+    assertArrayHasKey('avm_contract_advantage', $report['comparison'], 'Comparison should expose contract advantage.');
+}
+
 $tests = [
     'testComparisonRunnerReportsAllModesForSimpleScenario',
     'testAvmOnPreservesFailureCascadeOnDeepChainScenario',
+    'testComparisonRunnerReportsEvidenceMetrics',
 ];
 
 foreach ($tests as $test) {

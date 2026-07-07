@@ -142,6 +142,16 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
 .bench-delta{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;display:grid;gap:10px}
 .delta-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--text-secondary)}
 .delta-row strong{color:var(--text);font-size:14px}
+.bench-ingest{display:grid;grid-template-columns:minmax(260px,.85fr) 1fr;gap:14px;margin:0 0 24px}
+.ingest-card,.ingest-status{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;min-width:0}
+.ingest-card h3,.ingest-status h3{font-size:13px;margin:0 0 8px;color:var(--text)}
+.ingest-card p,.ingest-status p{font-size:12px;line-height:1.5;color:var(--text-secondary);margin:0 0 12px}
+.ingest-card input[type=file]{display:block;width:100%;margin-bottom:12px;color:var(--text-secondary);font-size:12px}
+.ingest-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ingest-meta{display:grid;gap:7px;margin-top:2px}
+.ingest-meta .row{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);padding-top:7px;font-size:11px;color:var(--text-tertiary)}
+.ingest-meta strong{color:var(--text-secondary);font-weight:600;text-align:right;overflow-wrap:anywhere}
+.bench-source{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;font-weight:700;letter-spacing:.04em;margin:0 0 8px}
 .results-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .result-card{padding:16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);min-width:0}
 .result-card.avm_on{border-color:rgba(63,185,80,.55);box-shadow:inset 0 1px 0 rgba(63,185,80,.12)}
@@ -191,7 +201,7 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
 .toast .close-btn:hover{opacity:1}
 
 /* Responsive */
-@media(max-width:900px){.results-grid,.bench-summary{grid-template-columns:1fr}}
+@media(max-width:900px){.results-grid,.bench-summary,.bench-ingest{grid-template-columns:1fr}}
 @media(max-width:768px){.sidebar{display:none}.dag-panel{width:100%;position:fixed;bottom:0;left:0;right:0;max-height:40vh;z-index:50}}
 </style>
 </head>
@@ -306,6 +316,28 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
         <div class="panel benchmark-panel" v-if="view==='bench'">
           <h2>Benchmark Lab</h2>
           <div class="desc">Run the same workflow through AVM ON, AVM OFF Direct, and a tool-agent baseline. The important signal is not only completion rate: it is whether the final state still matches the contract.</div>
+          <div class="bench-ingest">
+            <div class="ingest-card">
+              <h3>Upload file</h3>
+              <p>Generate a private scenario from TXT, Markdown, JSON, or CSV, then run the same AVM comparison pipeline.</p>
+              <input type="file" accept=".txt,.md,.json,.csv" @change="onBenchFileChange">
+              <div class="ingest-actions">
+                <button class="btn btn-sm" @click="uploadBenchmarkFile" :disabled="benchUploadRunning || !benchUploadFile">{{ benchUploadRunning ? 'Uploading...' : 'Upload file' }}</button>
+                <button class="btn btn-sm" @click="runUploadedBenchmark" :disabled="benchRunning || !benchUploadResult">{{ benchRunning ? 'Running...' : 'Run AVM comparison' }}</button>
+              </div>
+            </div>
+            <div class="ingest-status">
+              <h3>File scenario</h3>
+              <p v-if="!benchUploadResult">No uploaded scenario selected. Use the built-in scenarios below or ingest a file to test your own material.</p>
+              <div class="ingest-meta" v-if="benchUploadResult">
+                <div class="row"><span>File</span><strong>{{ benchUploadResult.original_name }}</strong></div>
+                <div class="row"><span>Extracted</span><strong>{{ benchUploadResult.extracted_chars }} chars</strong></div>
+                <div class="row"><span>SHA-256</span><strong>{{ benchUploadResult.sha256 }}</strong></div>
+                <div class="row"><span>Scenario</span><strong>{{ benchUploadResult.benchmark_scenario.storage_path }}</strong></div>
+              </div>
+            </div>
+          </div>
+          <div class="bench-source">Built-in scenarios</div>
           <div class="controls">
             <select v-model="benchScenario"><option v-for="s in benchScenarios" :value="s.file">{{ s.name }}</option></select>
             <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px">Runs <input type="number" v-model.number="benchRuns" min="1" max="50" style="width:72px"></label>
@@ -334,6 +366,10 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
                 <div class="stat"><span>Blocked</span><strong>{{ mode.data.blocked_nodes }}</strong></div>
                 <div class="stat"><span>Tokens</span><strong>{{ mode.data.token_estimate }}</strong></div>
                 <div class="stat"><span>Cycles</span><strong>{{ mode.data.cycles }}</strong></div>
+                <div class="stat"><span>Enterprise risk</span><strong>{{ mode.data.enterprise_risk_score ?? 0 }}</strong></div>
+                <div class="stat"><span>Contract violations</span><strong>{{ mode.data.contract_violation_count ?? 0 }}</strong></div>
+                <div class="stat"><span>Recovery score</span><strong>{{ pct(mode.data.recovery_score ?? 0) }}</strong></div>
+                <div class="stat"><span>Determinism</span><strong>{{ pct(mode.data.determinism_score ?? 0) }}</strong></div>
               </div>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
@@ -357,6 +393,7 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
           <div class="field"><label>Provider</label><select v-model="settings.provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option></select></div>
           <div class="field"><label>Model</label><select v-model="settings.model"><option value="deepseek-chat">deepseek-chat</option><option value="deepseek-reasoner">deepseek-reasoner</option></select></div>
           <div class="field"><label>API Key</label><input type="password" v-model="settings.api_key" placeholder="sk-..."></div>
+          <div class="field"><label>Control Plane URL</label><input v-model="settings.control_plane_url" placeholder="http://127.0.0.1:8001"></div>
           <button class="btn" @click="saveSettings">Save</button><span style="color:var(--green);font-size:12px;margin-left:10px" v-if="settingsSaved">✓ Saved</span>
         </div>
       </div>
@@ -380,10 +417,11 @@ createApp({
     const view = ref('chat');
     const messages = ref([]); const input = ref(''); const loading = ref(false); const nodes = ref([]);
     const inputEl = ref(null); const msgEl = ref(null);
-    const settings = ref({ provider: 'deepseek', model: 'deepseek-chat', api_key: '' });
+    const settings = ref({ provider: 'deepseek', model: 'deepseek-chat', api_key: '', control_plane_url: 'http://127.0.0.1:8001' });
     const settingsSaved = ref(false);
     const benchScenarios = ref([]); const benchScenario = ref('01_simple_http');
     const benchRuns = ref(1); const benchRunning = ref(false); const benchResult = ref(null);
+    const benchUploadFile = ref(null); const benchUploadRunning = ref(false); const benchUploadResult = ref(null);
     const theme = ref('dark');
     const showTrace = ref(false);
     const toasts = ref([]);
@@ -396,7 +434,7 @@ createApp({
     }
     function dismissToast(id) { toasts.value = toasts.value.filter(t => t.id !== id); }
 
-    function load() { const s = localStorage.getItem('talos_settings'); if (s) settings.value = JSON.parse(s); }
+    function load() { const s = localStorage.getItem('talos_settings'); if (s) settings.value = { ...settings.value, ...JSON.parse(s) }; }
     function saveSettings() { localStorage.setItem('talos_settings', JSON.stringify(settings.value)); settingsSaved.value = true; setTimeout(() => settingsSaved.value = false, 2000); }
     function setTheme(t) { theme.value = t; document.documentElement.setAttribute('data-theme', t); localStorage.setItem('talos_theme', t); }
     function mediaUrl(i) { return `/media/${F[i-1]}.png`; } function mediaName(i) { return N[i-1]; }
@@ -465,6 +503,47 @@ createApp({
       }
     }
     async function loadBenchScenarios() { try { benchScenarios.value = await (await fetch('/benchmarks')).json(); if (benchScenarios.value.length) benchScenario.value = benchScenarios.value[0].file; } catch {} }
+    function controlPlaneUrl(path) {
+      const base = (settings.value.control_plane_url || 'http://127.0.0.1:8001').replace(/\/+$/, '');
+      return `${base}${path}`;
+    }
+    function onBenchFileChange(event) {
+      benchUploadFile.value = event.target.files?.[0] || null;
+      benchUploadResult.value = null;
+    }
+    async function uploadBenchmarkFile() {
+      if (!benchUploadFile.value) return;
+      benchUploadRunning.value = true;
+      try {
+        const form = new FormData();
+        form.append('file', benchUploadFile.value);
+        const response = await fetch(controlPlaneUrl('/api/files/ingest'), { method: 'POST', body: form });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || 'Upload failed');
+        benchUploadResult.value = payload.data;
+        addToast('success', 'File scenario generated');
+      } catch (error) {
+        addToast('error', error.message || 'Upload failed', '✕');
+      }
+      benchUploadRunning.value = false;
+    }
+    async function runUploadedBenchmark() {
+      if (!benchUploadResult.value) return;
+      benchRunning.value = true; benchResult.value = null;
+      try {
+        const response = await fetch(controlPlaneUrl('/api/benchmarks/compare'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario_path: benchUploadResult.value.benchmark_scenario.storage_path, runs: benchRuns.value }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.message || 'Comparison failed');
+        benchResult.value = payload;
+      } catch (error) {
+        benchResult.value = { error: error.message || 'Failed to run uploaded benchmark comparison' };
+      }
+      benchRunning.value = false;
+    }
     async function runBenchmark() {
       benchRunning.value = true; benchResult.value = null;
       try {
@@ -482,7 +561,7 @@ createApp({
 
     const savedTheme = localStorage.getItem('talos_theme') || 'dark'; setTheme(savedTheme);
     load(); loadBenchScenarios();
-    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchRuns, benchRunning, benchResult, runBenchmark, benchmarkModes, pct, signedPct, copyBenchmarkJson, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast, businessLabel };
+    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchRuns, benchRunning, benchResult, benchUploadFile, benchUploadRunning, benchUploadResult, onBenchFileChange, uploadBenchmarkFile, runUploadedBenchmark, runBenchmark, benchmarkModes, pct, signedPct, copyBenchmarkJson, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast, businessLabel };
   },
 }).mount('#app');
 </script>
