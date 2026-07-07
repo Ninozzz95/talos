@@ -133,15 +133,27 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
 .panel select:focus,.panel input:focus{border-color:var(--accent);outline:none}
 .panel .field{margin-bottom:18px}
 .panel label{display:block;font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:5px}
-.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:500px}
-.result-card{padding:20px;border-radius:12px;text-align:center;border:2px solid}
-.result-card.talos{border-color:var(--green);background:rgba(63,185,80,.03)}
-.result-card.baseline{border-color:var(--red);background:rgba(248,81,73,.03)}
-.result-card h3{font-size:13px;font-weight:600;margin:0 0 12px}
-.result-card.talos h3{color:var(--green)}.result-card.baseline h3{color:var(--red)}
-.result-card .big{font-size:36px;font-weight:700;margin:6px 0}
-.result-card.talos .big{color:var(--green)}.result-card.baseline .big{color:var(--red)}
-.result-card .stat{font-size:11px;color:var(--text-tertiary);margin:3px 0}
+.benchmark-panel{max-width:980px}
+.bench-summary{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-bottom:16px}
+.bench-hero{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px}
+.bench-hero .kicker{font-size:10px;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px}
+.bench-hero h3{font-size:16px;margin:0 0 6px;color:var(--text)}
+.bench-hero p{color:var(--text-secondary);font-size:12px;line-height:1.55}
+.bench-delta{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:16px;display:grid;gap:10px}
+.delta-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--text-secondary)}
+.delta-row strong{color:var(--text);font-size:14px}
+.results-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.result-card{padding:16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);min-width:0}
+.result-card.avm_on{border-color:rgba(63,185,80,.55);box-shadow:inset 0 1px 0 rgba(63,185,80,.12)}
+.result-card.avm_off_direct{border-color:rgba(248,81,73,.45)}
+.result-card.tool_agent{border-color:rgba(210,153,34,.45)}
+.result-card h3{font-size:12px;font-weight:700;margin:0 0 10px;color:var(--text);display:flex;justify-content:space-between;gap:8px}
+.result-card .big{font-size:34px;font-weight:700;margin:4px 0 10px;color:var(--text)}
+.result-card .stat{font-size:11px;color:var(--text-tertiary);margin:4px 0;display:flex;justify-content:space-between;gap:8px}
+.mode-badge{font-size:9px;border-radius:999px;padding:2px 7px;background:var(--bg);color:var(--text-secondary);white-space:nowrap}
+.mode-badge.match{color:var(--green);background:rgba(63,185,80,.1)}
+.mode-badge.mismatch{color:var(--red);background:rgba(248,81,73,.1)}
+.bench-json{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px;max-height:260px;overflow:auto;color:var(--code-text);font-size:11px;line-height:1.45}
 .btn{background:var(--text);color:var(--bg);border:none;border-radius:8px;padding:8px 20px;font-weight:500;font-size:13px;cursor:pointer;font-family:inherit}
 .btn:hover:not(:disabled){background:var(--accent)}.btn:disabled{opacity:.35}
 .btn-sm{padding:6px 14px;font-size:12px}
@@ -179,6 +191,7 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
 .toast .close-btn:hover{opacity:1}
 
 /* Responsive */
+@media(max-width:900px){.results-grid,.bench-summary{grid-template-columns:1fr}}
 @media(max-width:768px){.sidebar{display:none}.dag-panel{width:100%;position:fixed;bottom:0;left:0;right:0;max-height:40vh;z-index:50}}
 </style>
 </head>
@@ -290,17 +303,44 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
         </template>
 
         <!-- Benchmark -->
-        <div class="panel" v-if="view==='bench'">
+        <div class="panel benchmark-panel" v-if="view==='bench'">
           <h2>Benchmark Lab</h2>
-          <div class="desc">Compare TALOS vs raw LLM on deterministic scenarios. Use Live Mode to test with your API key.</div>
+          <div class="desc">Run the same workflow through AVM ON, AVM OFF Direct, and a tool-agent baseline. The important signal is not only completion rate: it is whether the final state still matches the contract.</div>
           <div class="controls">
             <select v-model="benchScenario"><option v-for="s in benchScenarios" :value="s.file">{{ s.name }}</option></select>
-            <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" v-model="benchLive" style="accent-color:var(--accent)"> Live mode</label>
+            <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px">Runs <input type="number" v-model.number="benchRuns" min="1" max="50" style="width:72px"></label>
             <button class="btn" @click="runBenchmark" :disabled="benchRunning">{{ benchRunning ? 'Running...' : 'Run' }}</button>
           </div>
-          <div class="results-grid" v-if="benchResult">
-            <div class="result-card talos"><h3>TALOS ON</h3><div class="big">{{ benchResult.talos.completion_rate }}%</div><div class="stat">{{ benchResult.talos.success_nodes }}/{{ benchResult.talos.total_nodes }} SUCCESS</div><div class="stat" v-if="benchResult.talos.blocked_nodes">{{ benchResult.talos.blocked_nodes }} BLOCKED</div><div class="stat">{{ benchResult.talos.tokens }} tokens · {{ benchResult.talos.elapsed_ms }}ms</div></div>
-            <div class="result-card baseline"><h3>TALOS OFF</h3><div class="big">{{ benchResult.baseline.completion_rate }}%</div><div class="stat">{{ benchResult.baseline.success_nodes }}/{{ benchResult.baseline.total_nodes }} SUCCESS</div><div class="stat">{{ benchResult.baseline.failed_nodes }} FAILED</div><div class="stat">{{ benchResult.baseline.tokens }} tokens · {{ benchResult.baseline.elapsed_ms }}ms</div></div>
+          <div v-if="benchResult && benchResult.error" class="toast error" style="position:static;max-width:none;margin-bottom:14px">{{ benchResult.error }}</div>
+          <div v-if="benchResult && !benchResult.error">
+            <div class="bench-summary">
+              <div class="bench-hero">
+                <div class="kicker">Scenario {{ benchResult.scenario.difficulty }}</div>
+                <h3>{{ benchResult.scenario.name }}</h3>
+                <p>{{ benchResult.scenario.description }}</p>
+              </div>
+              <div class="bench-delta">
+                <div class="delta-row"><span>AVM contract</span><strong>{{ benchResult.comparison.avm_state_match ? 'match' : 'mismatch' }}</strong></div>
+                <div class="delta-row"><span>Blocked vs direct</span><strong>{{ benchResult.comparison.avm_blocked_nodes_delta_vs_direct }}</strong></div>
+                <div class="delta-row"><span>Completion vs tool-agent</span><strong>{{ signedPct(benchResult.comparison.avm_vs_tool_completion_delta) }}</strong></div>
+              </div>
+            </div>
+            <div class="results-grid">
+              <div v-for="mode in benchmarkModes()" :key="mode.key" class="result-card" :class="mode.key">
+                <h3>{{ mode.label }} <span class="mode-badge" :class="mode.data.state_match ? 'match' : 'mismatch'">{{ mode.data.state_match ? 'contract' : 'drift' }}</span></h3>
+                <div class="big">{{ pct(mode.data.completion_rate) }}</div>
+                <div class="stat"><span>Success</span><strong>{{ mode.data.success_nodes }}/{{ mode.data.total_nodes }}</strong></div>
+                <div class="stat"><span>Failed</span><strong>{{ mode.data.failed_nodes }}</strong></div>
+                <div class="stat"><span>Blocked</span><strong>{{ mode.data.blocked_nodes }}</strong></div>
+                <div class="stat"><span>Tokens</span><strong>{{ mode.data.token_estimate }}</strong></div>
+                <div class="stat"><span>Cycles</span><strong>{{ mode.data.cycles }}</strong></div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+              <h3 style="font-size:13px;color:var(--text-secondary);margin:0">Machine-readable report</h3>
+              <button class="btn btn-sm" @click="copyBenchmarkJson">Copy JSON</button>
+            </div>
+            <pre class="bench-json">{{ JSON.stringify(benchResult,null,2) }}</pre>
           </div>
         </div>
 
@@ -343,7 +383,7 @@ createApp({
     const settings = ref({ provider: 'deepseek', model: 'deepseek-chat', api_key: '' });
     const settingsSaved = ref(false);
     const benchScenarios = ref([]); const benchScenario = ref('01_simple_http');
-    const benchLive = ref(false); const benchRunning = ref(false); const benchResult = ref(null);
+    const benchRuns = ref(1); const benchRunning = ref(false); const benchResult = ref(null);
     const theme = ref('dark');
     const showTrace = ref(false);
     const toasts = ref([]);
@@ -405,12 +445,44 @@ createApp({
       loading.value = false; scroll(); nextTick(() => inputEl.value?.focus());
     }
 
+    function pct(value) { return Math.round((Number(value) || 0) * 100) + '%'; }
+    function signedPct(value) { const n = Number(value) || 0; return (n > 0 ? '+' : '') + Math.round(n * 100) + '%'; }
+    function benchmarkModes() {
+      if (!benchResult.value?.modes) return [];
+      return [
+        { key: 'avm_on', label: 'AVM ON', data: benchResult.value.modes.avm_on },
+        { key: 'avm_off_direct', label: 'AVM OFF Direct', data: benchResult.value.modes.avm_off_direct },
+        { key: 'tool_agent', label: 'Tool Agent', data: benchResult.value.modes.tool_agent },
+      ].filter(m => m.data);
+    }
+    async function copyBenchmarkJson() {
+      if (!benchResult.value) return;
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(benchResult.value, null, 2));
+        addToast('success', 'Benchmark JSON copied');
+      } catch {
+        addToast('warning', 'Clipboard unavailable');
+      }
+    }
     async function loadBenchScenarios() { try { benchScenarios.value = await (await fetch('/benchmarks')).json(); if (benchScenarios.value.length) benchScenario.value = benchScenarios.value[0].file; } catch {} }
-    async function runBenchmark() { benchRunning.value = true; benchResult.value = null; try { benchResult.value = await (await fetch('/benchmark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario: benchScenario.value, api_key: settings.value.api_key, use_live: benchLive.value }) })).json(); } catch { benchResult.value = { error: 'Failed' }; } benchRunning.value = false; }
+    async function runBenchmark() {
+      benchRunning.value = true; benchResult.value = null;
+      try {
+        const r = await fetch('/benchmark/compare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: benchScenario.value, runs: benchRuns.value }),
+        });
+        benchResult.value = await r.json();
+      } catch {
+        benchResult.value = { error: 'Failed to run benchmark comparison' };
+      }
+      benchRunning.value = false;
+    }
 
     const savedTheme = localStorage.getItem('talos_theme') || 'dark'; setTheme(savedTheme);
     load(); loadBenchScenarios();
-    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchLive, benchRunning, benchResult, runBenchmark, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast, businessLabel };
+    return { view, messages, input, loading, nodes, send, inputEl, msgEl, settings, settingsSaved, saveSettings, benchScenarios, benchScenario, benchRuns, benchRunning, benchResult, runBenchmark, benchmarkModes, pct, signedPct, copyBenchmarkJson, theme, setTheme, mediaUrl, mediaName, newChat, showTrace, summarizeJmp, formatTime, toasts, addToast, dismissToast, businessLabel };
   },
 }).mount('#app');
 </script>

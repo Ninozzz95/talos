@@ -50,11 +50,11 @@ function createSuccessWorker(): NodeWorkerInterface {
     };
 }
 
-function createFailingWorkerFor(string $nodeId, string $failNodeId): NodeWorkerInterface {
-    return new class($nodeId, $failNodeId) implements NodeWorkerInterface {
-        public function __construct(private string $myId, private string $failId) {}
+function createFailingWorkerFor(string $failNodeId): NodeWorkerInterface {
+    return new class($failNodeId) implements NodeWorkerInterface {
+        public function __construct(private string $failId) {}
         public function execute(array $payload): array {
-            if ($this->myId === $this->failId) {
+            if (($payload['__benchmark_node_id'] ?? null) === $this->failId) {
                 return ['status' => NodeStatus::FAILED, 'output_summary' => 'SIMULATED FAILURE', 'raw_output' => null];
             }
             return ['status' => NodeStatus::SUCCESS, 'output_summary' => 'OK', 'raw_output' => null];
@@ -116,7 +116,7 @@ function runWithTalos(array $scenario): array {
     if ($error && ($error['type'] ?? '') === 'EXECUTION_FAILURE') {
         $failNode = $error['node'];
         foreach (['HTTP_REQUEST', 'QUERY_DATABASE'] as $type) {
-            $registry->register($type, createFailingWorkerFor('any', $failNode));
+            $registry->register($type, createFailingWorkerFor($failNode));
         }
     } else {
         $registry->register('HTTP_REQUEST', createSuccessWorker());
@@ -128,7 +128,18 @@ function runWithTalos(array $scenario): array {
     // Build MockLLM script from scenario steps
     $script = [];
     foreach ($scenario['steps'] as $step) {
-        $script[] = json_encode($step['mutations']);
+        $mutations = $step['mutations'];
+        foreach ($mutations as &$mutation) {
+            if (($mutation['action'] ?? '') === 'MUTATE_PAYLOAD' && isset($mutation['node_id'])) {
+                $payload = isset($mutation['payload']) && is_array($mutation['payload'])
+                    ? $mutation['payload']
+                    : [];
+                $payload['__benchmark_node_id'] = (string) $mutation['node_id'];
+                $mutation['payload'] = $payload;
+            }
+        }
+        unset($mutation);
+        $script[] = json_encode($mutations);
     }
     $llm = new MockLLM($script);
 
