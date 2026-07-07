@@ -75,7 +75,7 @@ $broadcastUrl = 'http://127.0.0.1:3000/broadcast';
 echo "╔══════════════════════════════════════╗\n";
 echo "║   KADMOS Main Loop — DeepSeek          ║\n";
 echo "╠══════════════════════════════════════╣\n";
-echo "║ Dashboard: http://127.0.0.1:3000/dashboard\n";
+echo "║ Chat: http://127.0.0.1:8001/chat\n";
 echo "║ Model: deepseek-chat\n";
 echo "║ Max cycles: 10\n";
 echo "╚══════════════════════════════════════╝\n\n";

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { buildServer } from '../src/server.js';
 
-describe('dashboard benchmark lab', () => {
+describe('legacy dashboard artifact', () => {
   const html = readFileSync(resolve(__dirname, '../src/dashboard.html'), 'utf8');
 
   it('uses the deterministic comparison endpoint instead of the legacy two-mode benchmark endpoint', () => {
@@ -29,5 +30,20 @@ describe('dashboard benchmark lab', () => {
     expect(html).toContain('Contract violations');
     expect(html).toContain('Recovery score');
     expect(html).toContain('Determinism');
+  });
+});
+
+describe('dashboard route canonicalization', () => {
+  it('redirects the validator dashboard route to the dedicated Talos chat route', async () => {
+    const server = buildServer();
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/dashboard',
+    });
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe('http://127.0.0.1:8001/chat');
+    expect(response.body).not.toContain('AVM BENCHMARK LAB');
   });
 });

@@ -64,6 +64,29 @@ function testCliRoutesGuidedFlags(): void
     assertTrue(str_contains($tutorialText, 'Step 1'), 'kadmos --tutorial should render the guided tutorial.');
 }
 
+function testDefaultCliRoutesToBootAnimationShell(): void
+{
+    $cli = (string) file_get_contents(__DIR__ . '/../kadmos');
+    $defaultStart = strpos($cli, "case '':");
+    $nextCase = strpos($cli, "case '--expert':");
+    $defaultBlock = substr($cli, $defaultStart, $nextCase - $defaultStart);
+
+    assertTrue($defaultStart !== false && $nextCase !== false, 'Main CLI should handle the empty command before explicit flags.');
+    assertTrue(str_contains($defaultBlock, "kadmos-boot-anim.php"), 'Default Kadmos startup should route through the boot animation shell.');
+    assertTrue(!str_contains($defaultBlock, "--no-shell"), 'Default Kadmos startup should keep the shell after boot animation.');
+    assertTrue(str_contains($cli, "GuidedShell::welcome()") && str_contains($cli, "case '--tutorial':"), 'Guided text should remain available through explicit tutorial/expert paths.');
+}
+
+function testDashboardCommandTargetsTalosControlPlaneByDefault(): void
+{
+    $cli = (string) file_get_contents(__DIR__ . '/../kadmos');
+
+    assertTrue(str_contains($cli, "../control-plane"), 'Dashboard command should target the Laravel control-plane by default.');
+    assertTrue(str_contains($cli, 'http://127.0.0.1:8001/chat'), 'Dashboard command should advertise the dedicated Talos chat URL.');
+    assertTrue(str_contains($cli, "--validator"), 'Dashboard command should keep the legacy validator dashboard behind an explicit flag.');
+    assertTrue(str_contains($cli, 'Validator telemetry') && str_contains($cli, 'legacy'), 'Validator dashboard should be described as legacy telemetry, not primary Talos.');
+}
+
 function testCompareAndEvidenceAliasesEmitJsonReports(): void
 {
     $phpBin = getenv('KADMOS_TEST_PHP') ?: PHP_BINARY;
@@ -94,6 +117,8 @@ $tests = [
     'testExpertHelpDocumentsSlashCommands',
     'testTutorialExplainsFirstUsefulRun',
     'testCliRoutesGuidedFlags',
+    'testDefaultCliRoutesToBootAnimationShell',
+    'testDashboardCommandTargetsTalosControlPlaneByDefault',
     'testCompareAndEvidenceAliasesEmitJsonReports',
 ];
 

@@ -213,8 +213,13 @@ function streamGenerate(string $apiKey, string $model, string $baseUrl, string $
         'stream' => true,
     ]);
 
+    $insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
+    if ($insecureSsl) {
+        fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
+    }
+
     $ch = curl_init("$baseUrl/chat/completions");
-    curl_setopt_array($ch, [
+    $options = [
         CURLOPT_RETURNTRANSFER => false,
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => $body,
@@ -223,8 +228,6 @@ function streamGenerate(string $apiKey, string $model, string $baseUrl, string $
             "Authorization: Bearer $apiKey",
         ],
         CURLOPT_TIMEOUT_MS => 60000,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => 0,
         CURLOPT_WRITEFUNCTION => function($ch, $data) use (&$tokens, &$fullResponse) {
             $lines = explode("\n", $data);
             foreach ($lines as $line) {
@@ -245,7 +248,17 @@ function streamGenerate(string $apiKey, string $model, string $baseUrl, string $
             }
             return strlen($data);
         },
-    ]);
+    ];
+
+    if ($insecureSsl) {
+        $options[CURLOPT_SSL_VERIFYPEER] = false;
+        $options[CURLOPT_SSL_VERIFYHOST] = 0;
+    } else {
+        $options[CURLOPT_SSL_VERIFYPEER] = true;
+        $options[CURLOPT_SSL_VERIFYHOST] = 2;
+    }
+
+    curl_setopt_array($ch, $options);
 
     $fullResponse = '';
     curl_exec($ch);

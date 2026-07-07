@@ -17,9 +17,12 @@ function testMainCliRunsContractTests(): void
         'NamespaceContractTest.php',
         'AutoloadContractTest.php',
         'CliBenchmarkCommandTest.php',
+        'BenchmarkThresholdTest.php',
         'BenchmarkNoDeprecationTest.php',
         'CliGuidedShellTest.php',
         'CliEvidenceRendererTest.php',
+        'CliConsoleTest.php',
+        'CliDoctorCommandTest.php',
         'ValidatorImplementationsTest.php',
         'MainLoopValidatorInterfaceContractTest.php',
         'ValidatorHealthCheckTest.php',
@@ -28,6 +31,9 @@ function testMainCliRunsContractTests(): void
         'ValidatorFactoryTest.php',
         'ValidatorBypassContractTest.php',
         'CurlNoDeprecatedCloseTest.php',
+        'Security/SslVerificationTest.php',
+        'Security/ExecutionPolicyTest.php',
+        'AgentOperatingModelContractTest.php',
     ] as $testFile) {
         assertTrue(str_contains($cli, $testFile), "kadmos test should include {$testFile}.");
     }

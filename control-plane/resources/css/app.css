@@ -7,3 +7,85 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
+
+html {
+    background: #080b11;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    background: #080b11;
+    color: #e8edf5;
+}
+
+button {
+    font: inherit;
+}
+
+.talos-shell {
+    --talos-accent: #c98b32;
+    --talos-accent-border: #a87224;
+    --talos-accent-hover: #d99f49;
+    --talos-accent-soft: #2f2415;
+    --talos-accent-text: #171006;
+    --talos-active: #17202b;
+    --talos-border: #27313e;
+    --talos-border-strong: #354252;
+    --talos-danger: #ef8589;
+    --talos-danger-border: #6f3035;
+    --talos-danger-soft: #2b1418;
+    --talos-header: #0b1017;
+    --talos-muted: #98a5b6;
+    --talos-panel: #10161f;
+    --talos-panel-soft: #0c121a;
+    --talos-sidebar: #080d14;
+    --talos-shadow: rgba(0, 0, 0, 0.22);
+    --talos-success: #72d39a;
+    --talos-success-border: #275d40;
+    --talos-success-soft: #10271b;
+    --talos-text: #edf2f7;
+    --talos-track: #202a36;
+    --talos-user: #dfe8f2;
+    --talos-user-text: #111827;
+    --talos-warning: #e3b85c;
+    --talos-warning-border: #6c5124;
+    --talos-warning-soft: #2b2112;
+    background:
+        linear-gradient(180deg, rgba(201, 139, 50, 0.08), transparent 260px),
+        var(--talos-sidebar);
+    font-family: Inter, Geist, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.talos-light {
+    --talos-accent: #a96617;
+    --talos-accent-border: #8d5513;
+    --talos-accent-hover: #bd7828;
+    --talos-accent-soft: #f6ead8;
+    --talos-accent-text: #fffaf2;
+    --talos-active: #e8edf3;
+    --talos-border: #d7dee8;
+    --talos-border-strong: #bdc8d6;
+    --talos-danger: #b43f46;
+    --talos-danger-border: #ebb4b8;
+    --talos-danger-soft: #fff1f2;
+    --talos-header: #f9fbfd;
+    --talos-muted: #607086;
+    --talos-panel: #ffffff;
+    --talos-panel-soft: #f3f6fa;
+    --talos-sidebar: #eef3f8;
+    --talos-shadow: rgba(21, 31, 44, 0.08);
+    --talos-success: #187243;
+    --talos-success-border: #addfc3;
+    --talos-success-soft: #edf9f1;
+    --talos-text: #152032;
+    --talos-track: #dbe3ec;
+    --talos-user: #142033;
+    --talos-user-text: #f8fbff;
+    --talos-warning: #9a6615;
+    --talos-warning-border: #ecd2a0;
+    --talos-warning-soft: #fff7e8;
+    background:
+        linear-gradient(180deg, rgba(169, 102, 23, 0.10), transparent 240px),
+        var(--talos-sidebar);
+}

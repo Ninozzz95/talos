@@ -35,6 +35,17 @@ function logo(): string {
 
 switch ($command) {
     case '':
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
+
+        $bootScript = $baseDir . '/kadmos-boot-anim.php';
+        if (file_exists($bootScript)) {
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript), $code);
+            exit($code);
+        }
+
         echo \Kadmos\Cli\GuidedShell::welcome();
         break;
 
@@ -63,6 +74,9 @@ switch ($command) {
         );
         exit($code);
 
+    case 'doctor':
+        exit(\Kadmos\Cli\DoctorCommand::run($args, $baseDir));
+
     // ═══════════════════════════════════════════════
     case 'chat':
         // Run boot animation first
@@ -73,7 +87,7 @@ switch ($command) {
             // Export env to pass to boot script which will drop to shell
             $chatScript = $baseDir . '/kadmos-chat-repl.php';
             // Just run chat directly after boot
-            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript));
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($bootScript) . ' --no-shell');
             passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($chatScript));
         } else {
             passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-chat-repl.php'));
@@ -93,7 +107,7 @@ switch ($command) {
         // Animated mode (default)
         $animScript = $baseDir . '/kadmos-boot-anim.php';
         if (file_exists($animScript)) {
-            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($animScript));
+            passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($animScript) . ' --no-shell');
         } else {
             passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($baseDir . '/kadmos-boot'));
         }
@@ -172,7 +186,8 @@ switch ($command) {
 
         echo blue("Model: ") . ($useMock ? 'MockLLM' : $model) . "\n";
         echo blue("Cycles: ") . "$cycles\n";
-        echo blue("Dashboard: ") . "http://127.0.0.1:3000/dashboard\n\n";
+        echo blue("Talos: ") . "http://127.0.0.1:8001/chat (run: kadmos dashboard)\n";
+        echo blue("Validator telemetry: ") . "http://127.0.0.1:3000/validator-dashboard (legacy)\n\n";
 
         $controller = new \Kadmos\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast, $demoThrottle);
         $controller->run();
@@ -183,31 +198,88 @@ switch ($command) {
 
     // ═══════════════════════════════════════════════
     case 'dashboard':
-        $port = $args[0] ?? '3000';
-        echo yellow("Starting dashboard on http://127.0.0.1:{$port}/dashboard ...\n");
-        echo yellow("Press Ctrl+C to stop\n\n");
+        $useValidatorDashboard = in_array('--validator', $args, true) || in_array('validator', $args, true);
 
-        $validatorDir = $baseDir . '/../validator';
-        if (!is_dir($validatorDir)) {
-            echo red("Error: validator directory not found\n");
+        if ($useValidatorDashboard) {
+            $port = '3000';
+            foreach ($args as $arg) {
+                if (is_numeric($arg)) {
+                    $port = $arg;
+                }
+            }
+
+            echo yellow("Starting legacy validator telemetry on http://127.0.0.1:{$port}/validator-dashboard ...\n");
+            echo yellow("Press Ctrl+C to stop\n\n");
+
+            $validatorDir = $baseDir . '/../validator';
+            if (!is_dir($validatorDir)) {
+                echo red("Error: validator directory not found\n");
+                exit(1);
+            }
+
+            $nodeExe = $baseDir . '/../.tools/node/node.exe';
+            $tsx = $baseDir . '/../.tools/node/node_modules/.bin/tsx';
+
+            if (!file_exists($nodeExe)) {
+                $nodeExe = 'node';
+            }
+
+            $cmd = sprintf(
+                'cd %s && %s src/server.ts',
+                escapeshellarg($validatorDir),
+                file_exists($tsx) ? escapeshellarg($nodeExe) . ' ' . escapeshellarg($tsx) : 'npx tsx'
+            );
+
+            passthru("PORT={$port} {$cmd}");
+            break;
+        }
+
+        $port = '8001';
+        foreach ($args as $arg) {
+            if (is_numeric($arg)) {
+                $port = $arg;
+            }
+        }
+
+        $controlPlaneDir = $baseDir . '/../control-plane';
+        if (!is_dir($controlPlaneDir)) {
+            echo red("Error: control-plane directory not found\n");
             exit(1);
         }
 
-        // Find node and tsx
-        $nodeExe = $baseDir . '/../.tools/node/node.exe';
-        $tsx = $baseDir . '/../.tools/node/node_modules/.bin/tsx';
+        echo yellow("Starting Talos chat on http://127.0.0.1:{$port}/chat ...\n");
+        echo yellow("Legacy validator dashboard: kadmos dashboard --validator\n");
+        echo yellow("Press Ctrl+C to stop\n\n");
 
-        if (!file_exists($nodeExe)) {
-            $nodeExe = 'node';
+        $manifest = $controlPlaneDir . '/public/build/manifest.json';
+        if (!file_exists($manifest)) {
+            $npmBin = $baseDir . '/../.tools/bin/npm.cmd';
+            if (!file_exists($npmBin)) {
+                $npmBin = 'npm';
+            }
+
+            echo yellow("Building Talos assets...\n");
+            $previousDir = getcwd();
+            chdir($controlPlaneDir);
+            passthru(escapeshellarg($npmBin) . ' run build', $buildCode);
+            chdir($previousDir);
+            if ($buildCode !== 0) {
+                exit($buildCode);
+            }
         }
 
-        $cmd = sprintf(
-            'cd %s && %s src/server.ts',
-            escapeshellarg($validatorDir),
-            file_exists($tsx) ? escapeshellarg($nodeExe) . ' ' . escapeshellarg($tsx) : 'npx tsx'
-        );
+        $phpBin = $baseDir . '/../.tools/php/php.exe';
+        if (!file_exists($phpBin)) {
+            $phpBin = 'php';
+        }
 
-        passthru("PORT={$port} {$cmd}");
+        passthru(
+            escapeshellarg($phpBin) . ' '
+            . escapeshellarg($controlPlaneDir . '/artisan')
+            . ' serve --host=127.0.0.1 --port=' . escapeshellarg((string) $port),
+            $code
+        );
+        exit($code);
         break;
 
     // ═══════════════════════════════════════════════
@@ -294,10 +366,15 @@ switch ($command) {
             'CliBenchmarkCommand' => "$baseDir/tests/CliBenchmarkCommandTest.php",
             'BenchmarkScenario' => "$baseDir/tests/BenchmarkScenarioTest.php",
             'BenchmarkComparisonRunner' => "$baseDir/tests/BenchmarkComparisonRunnerTest.php",
+            'BenchmarkThreshold' => "$baseDir/tests/BenchmarkThresholdTest.php",
             'CliBenchmarkCompareCommand' => "$baseDir/tests/CliBenchmarkCompareCommandTest.php",
             'CliGuidedShell' => "$baseDir/tests/CliGuidedShellTest.php",
             'CliEvidenceRenderer' => "$baseDir/tests/CliEvidenceRendererTest.php",
+            'CliConsole' => "$baseDir/tests/CliConsoleTest.php",
+            'CliDoctorCommand' => "$baseDir/tests/CliDoctorCommandTest.php",
             'BenchmarkNoDeprecation' => "$baseDir/tests/BenchmarkNoDeprecationTest.php",
+            'SslVerification' => "$baseDir/tests/Security/SslVerificationTest.php",
+            'ExecutionPolicy' => "$baseDir/tests/Security/ExecutionPolicyTest.php",
             'ValidatorImplementations' => "$baseDir/tests/ValidatorImplementationsTest.php",
             'MainLoopValidatorInterface' => "$baseDir/tests/MainLoopValidatorInterfaceContractTest.php",
             'ValidatorHealthCheck' => "$baseDir/tests/ValidatorHealthCheckTest.php",
@@ -306,6 +383,7 @@ switch ($command) {
             'ValidatorFactory' => "$baseDir/tests/ValidatorFactoryTest.php",
             'ValidatorBypassContract' => "$baseDir/tests/ValidatorBypassContractTest.php",
             'CurlNoDeprecatedClose' => "$baseDir/tests/CurlNoDeprecatedCloseTest.php",
+            'AgentOperatingModelContract' => "$baseDir/tests/AgentOperatingModelContractTest.php",
             'CliTestSuiteContract' => "$baseDir/tests/CliTestSuiteContractTest.php",
         ];
 
@@ -382,7 +460,8 @@ switch ($command) {
 
     case 'demo':
         echo yellow("Running HMI demo...\n");
-        echo yellow("Open http://127.0.0.1:3000/dashboard in your browser!\n\n");
+        echo yellow("Open Talos at http://127.0.0.1:8001/chat (run: kadmos dashboard)\n");
+        echo yellow("Legacy validator telemetry remains at http://127.0.0.1:3000/validator-dashboard\n\n");
 
         $demoScript = $baseDir . '/tests/hmi-demo.php';
         $phpBin = $baseDir . '/../.tools/php/php.exe';
@@ -426,7 +505,7 @@ switch ($command) {
 
         $envKey = getenv('KADMOS_API_KEY') ?: getenv('DEEPSEEK_API_KEY');
         echo bold("API key: ") . ($envKey ? green("set") : red("not set")) . "\n";
-        echo bold("Dashboard: ") . "http://127.0.0.1:3000/dashboard\n";
+        echo bold("Chat: ") . "http://127.0.0.1:8001/chat\n";
         break;
 
     // ═══════════════════════════════════════════════
@@ -436,7 +515,10 @@ switch ($command) {
         echo "  " . green("kadmos") . "                           Guided shell welcome\n";
         echo "  " . green("kadmos --tutorial") . "                First-run guided tutorial\n";
         echo "  " . green("kadmos --expert") . "                  Expert slash-command reference\n";
+        echo "  " . green("kadmos doctor [--json]") . "           Diagnose local Kadmos environment\n";
         echo "  " . green("kadmos boot") . "                      Boot animation\n";
+        echo "  " . green("kadmos dashboard") . "                 Start Talos control-plane UI\n";
+        echo "  " . green("kadmos dashboard --validator") . "     Start legacy validator dashboard\n";
         echo "  " . green("kadmos start [cycles] [--mock]") . "   Start the main event loop\n";
         echo "  " . green("kadmos test") . "                      Run all test suites\n";
         echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
