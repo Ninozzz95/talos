@@ -390,31 +390,8 @@ function kadmos_shell(): void {
                 echo "{$dim}  Start with: cd validator && npx tsx src/server.ts{$reset}\n";
                 break;
             case 'chat':
-                $validatorDir = $baseDir . '/../validator';
-                if (!is_dir($validatorDir)) {
-                    echo "{$dim}  Validator directory not found{$reset}\n";
-                    break;
-                }
-                echo "{$gold}  ⚡ Starting TALOS Chat...{$reset}\n";
-                echo "{$dim}  Opening {$cyan}http://127.0.0.1:3000/dashboard{$reset}\n";
-                echo "{$dim}  Press Ctrl+C to stop{$reset}\n\n";
-                $nodeBin = $baseDir . '/../.tools/node/node.exe';
-                if (!file_exists($nodeBin)) $nodeBin = 'node';
-                $tsxBin = $baseDir . '/../.tools/node/node_modules/.bin/tsx';
-                if (file_exists($tsxBin)) {
-                    $cmd = 'cd ' . escapeshellarg($validatorDir) . ' && ' . escapeshellarg($nodeBin) . ' ' . escapeshellarg($tsxBin) . ' src/server.ts';
-                } else {
-                    $cmd = 'cd ' . escapeshellarg($validatorDir) . ' && npx tsx src/server.ts';
-                }
-                // Try to open browser
-                if (PHP_OS_FAMILY === 'Windows') {
-                    exec('start http://127.0.0.1:3000/dashboard 2>NUL');
-                } elseif (PHP_OS_FAMILY === 'Darwin') {
-                    exec('open http://127.0.0.1:3000/dashboard 2>/dev/null');
-                } else {
-                    exec('xdg-open http://127.0.0.1:3000/dashboard 2>/dev/null');
-                }
-                passthru($cmd);
+                $chatScript = $baseDir . '/kadmos-chat-repl.php';
+                passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($chatScript));
                 break;
             case 'key':
                 echo "{$dim}  Set your API key:{$reset}\n";
