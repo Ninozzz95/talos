@@ -17,6 +17,7 @@ function testRuntimeScriptsUseComposerAutoload(): void
         'kadmos-chat.php',
         'kadmos-execute.php',
         'kadmos-benchmark.php',
+        'kadmos-benchmark-compare.php',
         'kadmos-bench-live.php',
         'kadmos-bench-live-all.php',
     ];

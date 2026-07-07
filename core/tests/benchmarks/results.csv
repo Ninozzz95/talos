@@ -7,7 +7,7 @@ parallel_branches,3,TALOS,3,1,3,0,0,yes,5,7
 parallel_branches,3,BASELINE,3,1,3,0,0,yes,2,7
 error_recovery_hallucination,4,TALOS,2,1,2,0,0,yes,6,6
 error_recovery_hallucination,4,BASELINE,2,0,0,2,0,no,3,6
-deep_chain_failure,5,TALOS,5,1,5,0,0,no,5,11
+deep_chain_failure,5,TALOS,5,0.2,1,1,3,yes,5,11
 deep_chain_failure,5,BASELINE,5,0.2,1,4,0,no,2,11
 latency_parallelism,4,TALOS,3,1,3,0,0,yes,5,7
 latency_parallelism,4,BASELINE,3,1,3,0,0,yes,2,7

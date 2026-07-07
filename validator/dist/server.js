@@ -20,6 +20,9 @@ function broadcast(message) {
         }
     }
 }
+function isSafeScenarioName(value) {
+    return /^[a-zA-Z0-9_-]+$/.test(value);
+}
 export function buildServer() {
     const server = Fastify({ logger: false });
     server.register(fastifyWebsocket);
@@ -138,6 +141,44 @@ export function buildServer() {
                 }
                 catch {
                     resolve({ error: 'benchmark error', raw: output.slice(-200) });
+                }
+            });
+        });
+    });
+    // Benchmark Lab 2.0: deterministic AVM ON/OFF/tool-agent comparison
+    server.post('/benchmark/compare', async (request, reply) => {
+        const { scenario, runs } = request.body;
+        if (!scenario || !isSafeScenarioName(scenario)) {
+            reply.status(400);
+            return { error: 'scenario must be a safe benchmark scenario name' };
+        }
+        const runCount = Number.isFinite(runs) ? Math.max(1, Math.min(50, Number(runs))) : 1;
+        const phpBin = process.env.PHP_BIN || join(process.cwd(), '..', '.tools', 'php', 'php.exe');
+        const kadmosCli = join(process.cwd(), '..', 'core', 'kadmos');
+        const scenarioFile = join(process.cwd(), '..', 'core', 'tests', 'benchmarks', 'scenarios', scenario + '.json');
+        return new Promise((resolve) => {
+            const php = spawn(phpBin, [
+                kadmosCli,
+                'benchmark',
+                'compare',
+                '--scenario=' + scenarioFile,
+                '--runs=' + String(runCount),
+                '--json',
+            ], { env: { ...process.env } });
+            let output = '';
+            let errorOutput = '';
+            php.stdout.on('data', (data) => { output += data.toString(); });
+            php.stderr.on('data', (data) => { errorOutput += data.toString(); });
+            php.on('close', (code) => {
+                if (code !== 0) {
+                    resolve({ error: 'benchmark compare failed', code, details: errorOutput.slice(-500) || output.slice(-500) });
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(output.trim() || '{}'));
+                }
+                catch {
+                    resolve({ error: 'benchmark compare returned invalid JSON', raw: output.slice(-500) });
                 }
             });
         });

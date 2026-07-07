@@ -263,6 +263,9 @@ switch ($command) {
             'NamespaceContract' => "$baseDir/tests/NamespaceContractTest.php",
             'AutoloadContract' => "$baseDir/tests/AutoloadContractTest.php",
             'CliBenchmarkCommand' => "$baseDir/tests/CliBenchmarkCommandTest.php",
+            'BenchmarkScenario' => "$baseDir/tests/BenchmarkScenarioTest.php",
+            'BenchmarkComparisonRunner' => "$baseDir/tests/BenchmarkComparisonRunnerTest.php",
+            'CliBenchmarkCompareCommand' => "$baseDir/tests/CliBenchmarkCompareCommandTest.php",
             'BenchmarkNoDeprecation' => "$baseDir/tests/BenchmarkNoDeprecationTest.php",
             'ValidatorImplementations' => "$baseDir/tests/ValidatorImplementationsTest.php",
             'MainLoopValidatorInterface' => "$baseDir/tests/MainLoopValidatorInterfaceContractTest.php",
@@ -333,7 +336,17 @@ switch ($command) {
             exit($code);
         }
 
-        echo red("Usage: ") . "kadmos benchmark [mock|live] [--runs=10]\n";
+        if ($mode === 'compare') {
+            passthru(
+                escapeshellarg($phpBin) . ' '
+                . escapeshellarg($baseDir . '/kadmos-benchmark-compare.php') . ' '
+                . implode(' ', array_map('escapeshellarg', array_slice($args, 1))),
+                $code
+            );
+            exit($code);
+        }
+
+        echo red("Usage: ") . "kadmos benchmark [mock|live|compare] [--runs=10] [--scenario=file] [--json]\n";
         exit(1);
 
     case 'demo':
@@ -394,6 +407,7 @@ switch ($command) {
         echo "  " . green("kadmos test") . "                      Run all test suites\n";
         echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
         echo "  " . green("kadmos benchmark mock --runs=10") . " Run mock benchmark suite\n";
+        echo "  " . green("kadmos benchmark compare --json") . " Compare AVM ON/OFF/tool-agent baselines\n";
         echo "  " . green("kadmos status") . "                    Show system status\n";
         echo "  " . green("kadmos help") . "                      Show this help\n";
         echo "\n";

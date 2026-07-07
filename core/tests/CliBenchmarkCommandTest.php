@@ -15,6 +15,7 @@ function testMainCliDeclaresBenchmarkCommand(): void
 
     assertTrue(str_contains($cli, "case 'benchmark':"), 'Main CLI should implement a benchmark command.');
     assertTrue(str_contains($cli, 'kadmos benchmark'), 'Main CLI help should document the benchmark command.');
+    assertTrue(str_contains($cli, "mode === 'compare'"), 'Main CLI should expose benchmark compare mode.');
 }
 
 $tests = [
@@ -27,4 +28,3 @@ foreach ($tests as $test) {
 }
 
 echo "All CLI benchmark command tests passed" . PHP_EOL;
-

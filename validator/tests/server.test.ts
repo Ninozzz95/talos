@@ -76,3 +76,43 @@ describe('POST /validate', () => {
     expect(body.valid).toBe(false);
   });
 });
+
+describe('POST /benchmark/compare', () => {
+  const server = buildServer();
+
+  afterAll(async () => {
+    await server.close();
+  });
+
+  it('returns an AVM ON/OFF/tool-agent comparison report for a known scenario', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark/compare',
+      payload: {
+        scenario: '05_deep_chain_failure',
+        runs: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.scenario.name).toBe('deep_chain_failure');
+    expect(body.modes.avm_on.state_match).toBe(true);
+    expect(body.modes.avm_on.blocked_nodes).toBe(3);
+    expect(body.modes.avm_off_direct.state_match).toBe(false);
+    expect(body.modes.tool_agent.state_match).toBe(false);
+  });
+
+  it('rejects unsafe scenario names before spawning PHP', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark/compare',
+      payload: {
+        scenario: '../05_deep_chain_failure',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain('scenario');
+  });
+});
