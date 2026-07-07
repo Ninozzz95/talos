@@ -117,10 +117,15 @@ echo $hasApiKey ? ok("API key configured") : warn("No API key set — use KADMOS
 
 $validatorUrl = 'http://127.0.0.1:3000/health';
 $ch = curl_init($validatorUrl);
-curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT_MS => 500, CURLOPT_SSL_VERIFYPEER => false]);
+$insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT_MS => 500,
+    CURLOPT_SSL_VERIFYPEER => $insecureSsl ? false : true,
+    CURLOPT_SSL_VERIFYHOST => $insecureSsl ? 0 : 2,
+]);
 $result = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
 
 if ($result !== false && $httpCode === 200) {
     $health = json_decode($result, true);

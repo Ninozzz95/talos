@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Kadmos\Workers;
 
 use Kadmos\NodeStatus;
+use Kadmos\Security\ExecutionPolicy;
 
 final class HttpRequestWorker implements NodeWorkerInterface
 {
+    public function __construct(private ?ExecutionPolicy $policy = null)
+    {
+    }
+
     public function execute(array $payload): array
     {
         $url = $payload['url'] ?? '';
@@ -15,12 +20,22 @@ final class HttpRequestWorker implements NodeWorkerInterface
         $headers = $payload['headers'] ?? [];
         $body = $payload['body'] ?? null;
         $timeoutMs = (int) ($payload['timeout_ms'] ?? 5000);
+        $policy = $this->policy ?? new ExecutionPolicy();
+        $decision = $policy->inspectUrl((string) $url, $timeoutMs);
+
+        if (!$decision->allowed) {
+            return [
+                'status' => NodeStatus::FAILED,
+                'output_summary' => "Blocked by execution policy: {$decision->reason}",
+                'raw_output' => null,
+            ];
+        }
 
         $ch = \curl_init($url);
         $curlOptions = [
             \CURLOPT_RETURNTRANSFER => true,
             \CURLOPT_CUSTOMREQUEST => $method,
-            \CURLOPT_TIMEOUT_MS => $timeoutMs,
+            \CURLOPT_TIMEOUT_MS => $decision->timeoutMs,
             \CURLOPT_HEADER => true,
         ];
 

@@ -1,0 +1,50 @@
+name: Kadmos CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, mbstring, sqlite3, zip
+      - run: cd core && composer install --no-interaction --prefer-dist
+      - run: php core/kadmos test
+
+  validator:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: validator/package-lock.json
+      - run: cd validator && npm ci
+      - run: cd validator && npm test
+      - run: cd validator && npm run build
+
+  control-plane:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, mbstring, sqlite3, zip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: control-plane/package-lock.json
+      - run: cd control-plane && composer install --no-interaction --prefer-dist
+      - run: cd control-plane && copy .env.example .env
+      - run: cd control-plane && php artisan key:generate
+      - run: cd control-plane && npm ci
+      - run: cd control-plane && npm run build
+      - run: cd control-plane && php artisan test

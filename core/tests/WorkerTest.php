@@ -2,10 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../src/NodeStatus.php';
-require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
-require_once __DIR__ . '/../src/Workers/HttpRequestWorker.php';
-require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use Kadmos\NodeStatus;
 use Kadmos\Workers\HttpRequestWorker;

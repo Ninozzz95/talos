@@ -324,7 +324,9 @@ function kadmos_boot_animation_supreme(float $duration = 5.2, int $fps = 10): vo
 
 if (PHP_SAPI === 'cli' && realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === __FILE__) {
     kadmos_boot_animation_supreme();
-    kadmos_shell();
+    if (!in_array('--no-shell', $_SERVER['argv'] ?? [], true)) {
+        kadmos_shell();
+    }
 }
 
 function kadmos_shell(): void {
@@ -386,8 +388,7 @@ function kadmos_shell(): void {
                 passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($kadmosCli) . ' status');
                 break;
             case 'dashboard':
-                echo "{$dim}  Dashboard: {$cyan}http://127.0.0.1:3000/dashboard{$reset}\n";
-                echo "{$dim}  Start with: cd validator && npx tsx src/server.ts{$reset}\n";
+                passthru(escapeshellarg($phpBin) . ' ' . escapeshellarg($kadmosCli) . ' dashboard');
                 break;
             case 'chat':
                 $chatScript = $baseDir . '/kadmos-chat-repl.php';
@@ -407,6 +408,7 @@ function kadmos_shell(): void {
                 echo "  {$cyan}start --demo-throttle{$reset}{$dim}  Slow-mo execution for dashboard{$reset}\n";
                 echo "  {$cyan}test{$reset}                {$dim}All tests (29 core + 46 validator){$reset}\n";
                 echo "  {$cyan}benchmark{$reset}           {$dim}7 benchmark scenarios{$reset}\n";
+                echo "  {$cyan}dashboard{$reset}           {$dim}Talos control-plane UI{$reset}\n";
                 echo "  {$cyan}validate <file>{$reset}      {$dim}Validate JMP JSON batch{$reset}\n";
                 echo "  {$cyan}status{$reset}              {$dim}System diagnostics{$reset}\n";
                 echo "  {$cyan}boot{$reset}                {$dim}Boot animation{$reset}\n";

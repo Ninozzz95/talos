@@ -108,8 +108,13 @@ final class OpenAIClient implements LLMClientInterface
      */
     private function callApi(string $url, string $body): array
     {
+        $insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
+        if ($insecureSsl) {
+            fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
+        }
+
         $ch = \curl_init($url);
-        \curl_setopt_array($ch, [
+        $options = [
             \CURLOPT_RETURNTRANSFER => true,
             \CURLOPT_POST => true,
             \CURLOPT_POSTFIELDS => $body,
@@ -118,9 +123,17 @@ final class OpenAIClient implements LLMClientInterface
                 "Authorization: Bearer {$this->apiKey}",
             ],
             \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
-            \CURLOPT_SSL_VERIFYPEER => false,
-            \CURLOPT_SSL_VERIFYHOST => 0,
-        ]);
+        ];
+
+        if ($insecureSsl) {
+            $options[\CURLOPT_SSL_VERIFYPEER] = false;
+            $options[\CURLOPT_SSL_VERIFYHOST] = 0;
+        } else {
+            $options[\CURLOPT_SSL_VERIFYPEER] = true;
+            $options[\CURLOPT_SSL_VERIFYHOST] = 2;
+        }
+
+        \curl_setopt_array($ch, $options);
 
         $response = \curl_exec($ch);
         $error = \curl_error($ch);

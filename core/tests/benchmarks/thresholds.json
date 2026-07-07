@@ -1,0 +1,7 @@
+{
+  "mock_suite": {
+    "avm_on_min_success_rate": 0.95,
+    "avm_on_max_invalid_executed": 0,
+    "trace_replay_required": true
+  }
+}

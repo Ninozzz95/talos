@@ -75,7 +75,7 @@ $validator = new JmpValidatorClient($alwaysValid);
 $broadcastUrl = 'http://127.0.0.1:3000/broadcast';
 
 echo "=== KADMOS HMI Demo ===\n";
-echo "Open http://127.0.0.1:3000/dashboard in your browser NOW\n";
+echo "Open http://127.0.0.1:8001/chat in your browser NOW\n";
 echo "Waiting 5 seconds...\n";
 sleep(5);
 
