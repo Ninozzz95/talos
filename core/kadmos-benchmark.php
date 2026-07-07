@@ -9,17 +9,12 @@ declare(strict_types=1);
  * Usage: php talos-benchmark.php [--runs=N]
  */
 
-require_once __DIR__ . '/src/NodeStatus.php';
-require_once __DIR__ . '/src/ASTOrchestrator.php';
-require_once __DIR__ . '/src/LLMClientInterface.php';
-require_once __DIR__ . '/src/MockLLM.php';
-require_once __DIR__ . '/src/ValidationFault.php';
-require_once __DIR__ . '/src/ValidationResult.php';
-require_once __DIR__ . '/src/HttpClientInterface.php';
-require_once __DIR__ . '/src/JmpValidatorClient.php';
-require_once __DIR__ . '/src/MainLoopController.php';
-require_once __DIR__ . '/src/Workers/NodeWorkerInterface.php';
-require_once __DIR__ . '/src/Workers/WorkerRegistry.php';
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "Run composer install in core/ first.\n");
+    exit(1);
+}
+require_once $autoload;
 
 use Kadmos\ASTOrchestrator;
 use Kadmos\NodeStatus;
@@ -303,7 +298,7 @@ fputcsv($csv, [
     'scenario', 'difficulty', 'mode', 'total_nodes',
     'completion_rate', 'success_nodes', 'failed_nodes', 'blocked_nodes',
     'state_match', 'cycles', 'mutations',
-]);
+], ',', '"', '\\', "\n");
 
 echo str_pad('SCENARIO', 28) . str_pad('MODE', 10) . str_pad('COMPL%', 10) . str_pad('SUCC', 8) . str_pad('FAIL', 8) . str_pad('BLOCK', 8) . "STATE\n";
 echo str_repeat('─', 90) . "\n";
@@ -338,7 +333,7 @@ foreach ($scenarioFiles as $scenarioFile) {
         round($talosSum['completion_rate'], 3), round($talosSum['success_nodes']),
         round($talosSum['failed_nodes']), round($talosSum['blocked_nodes']),
         $talosSum['state_match'] > 0.5 ? 'yes' : 'no', round($talosSum['cycles_run']),
-        round($talosSum['mutations_processed'])]);
+        round($talosSum['mutations_processed'])], ',', '"', '\\', "\n");
 
     // Print BASELINE row
     printf("%-28s %-10s %-10s %-8s %-8s %-8s %s\n",
@@ -353,7 +348,7 @@ foreach ($scenarioFiles as $scenarioFile) {
         round($baseline['completion_rate'], 3), $baseline['success_nodes'],
         $baseline['failed_nodes'], $baseline['blocked_nodes'],
         $baseline['state_match'] ? 'yes' : 'no', $baseline['cycles_run'],
-        $baseline['mutations_processed']]);
+        $baseline['mutations_processed']], ',', '"', '\\', "\n");
 
     echo "\n";
 }

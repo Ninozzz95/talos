@@ -9,11 +9,11 @@ export declare const HttpRequestPayloadSchema: z.ZodObject<{
         DELETE: "DELETE";
     }>>;
     headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
-    body: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodRecord<z.ZodString, z.ZodAny>]>>;
+    body: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodRecord<z.ZodString, z.ZodUnknown>]>>;
     timeout_ms: z.ZodDefault<z.ZodNumber>;
-}, z.core.$strip>;
+}, z.core.$strict>;
 export declare const QueryDatabasePayloadSchema: z.ZodObject<{
     query: z.ZodString;
     params: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodNull]>>>;
-}, z.core.$strip>;
+}, z.core.$strict>;
 //# sourceMappingURL=payloads.d.ts.map

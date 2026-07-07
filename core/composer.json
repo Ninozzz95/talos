@@ -1,5 +1,5 @@
 {
-    "name": "avm/core",
+    "name": "kadmos/core",
     "description": "AVM Pure PHP Engine",
     "type": "library",
     "license": "proprietary",
@@ -11,12 +11,12 @@
     },
     "autoload": {
         "psr-4": {
-            "AVM\\": "src/"
+            "Kadmos\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "AVM\\Tests\\": "tests/"
+            "Kadmos\\Tests\\": "tests/"
         }
     },
     "scripts": {

@@ -48,6 +48,26 @@ describe('JmpMutationSchema', () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it('rejects SPAWN_NODE with invalid dependency id characters', () => {
+      const result = JmpMutationSchema.safeParse({
+        action: 'SPAWN_NODE',
+        node_id: 'n_001',
+        node_type: 'HTTP_REQUEST',
+        dependencies: ['bad dependency id'],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects SPAWN_NODE with extra fields', () => {
+      const result = JmpMutationSchema.safeParse({
+        action: 'SPAWN_NODE',
+        node_id: 'n_001',
+        node_type: 'HTTP_REQUEST',
+        extra: true,
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('MUTATE_PAYLOAD', () => {
@@ -73,6 +93,15 @@ describe('JmpMutationSchema', () => {
       const result = JmpMutationSchema.safeParse({
         action: 'MUTATE_PAYLOAD',
         payload: { url: 'https://example.com' },
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects MUTATE_PAYLOAD with invalid node_id characters', () => {
+      const result = JmpMutationSchema.safeParse({
+        action: 'MUTATE_PAYLOAD',
+        node_id: 'bad node id',
+        payload: {},
       });
       expect(result.success).toBe(false);
     });

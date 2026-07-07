@@ -2,10 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../src/ValidationFault.php';
-require_once __DIR__ . '/../src/ValidationResult.php';
-require_once __DIR__ . '/../src/HttpClientInterface.php';
-require_once __DIR__ . '/../src/JmpValidatorClient.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use Kadmos\JmpValidatorClient;
 use Kadmos\HttpClientInterface;

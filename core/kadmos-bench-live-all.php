@@ -9,25 +9,17 @@ declare(strict_types=1);
  * Usage: KADMOS_API_KEY=sk-... php kadmos-bench-live-all.php
  */
 
-require_once __DIR__ . '/src/NodeStatus.php';
-require_once __DIR__ . '/src/ASTOrchestrator.php';
-require_once __DIR__ . '/src/LLMClientInterface.php';
-require_once __DIR__ . '/src/MockLLM.php';
-require_once __DIR__ . '/src/OpenAIClient.php';
-require_once __DIR__ . '/src/SystemPromptBuilder.php';
-require_once __DIR__ . '/src/ValidationFault.php';
-require_once __DIR__ . '/src/ValidationResult.php';
-require_once __DIR__ . '/src/HttpClientInterface.php';
-require_once __DIR__ . '/src/JmpValidatorClient.php';
-require_once __DIR__ . '/src/MainLoopController.php';
-require_once __DIR__ . '/src/Workers/NodeWorkerInterface.php';
-require_once __DIR__ . '/src/Workers/WorkerRegistry.php';
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "Run composer install in core/ first.\n");
+    exit(1);
+}
+require_once $autoload;
 
 use Kadmos\ASTOrchestrator;
 use Kadmos\NodeStatus;
 use Kadmos\OpenAIClient;
-use Kadmos\JmpValidatorClient;
-use Kadmos\HttpClientInterface;
+use Kadmos\Validator\ValidatorFactory;
 use Kadmos\MainLoopController;
 use Kadmos\Workers\WorkerRegistry;
 use Kadmos\Workers\NodeWorkerInterface;
@@ -101,10 +93,12 @@ PROMPT;
         $scenarioPrompts[] = "Cycle {$i}: The DAG needs these mutations: {$mutationsDesc}";
     }
 
-    $alwaysValid = new class implements HttpClientInterface {
-        public function postJson(string $url, array $body): array { return ['valid' => true]; }
-    };
-    $validator = new JmpValidatorClient($alwaysValid);
+    try {
+        $validator = ValidatorFactory::fromEnvironment()->create();
+    } catch (\RuntimeException $e) {
+        fwrite(STDERR, $e->getMessage() . PHP_EOL);
+        exit(4);
+    }
 
     $cycles = count($scenario['steps']) + 5;
     $controller = new MainLoopController($orchestrator, $llm, $validator, $cycles);

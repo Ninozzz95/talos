@@ -9,21 +9,16 @@ declare(strict_types=1);
  * Executes JMP deterministically, returns DAG state
  */
 
-require_once __DIR__ . '/src/NodeStatus.php';
-require_once __DIR__ . '/src/ASTOrchestrator.php';
-require_once __DIR__ . '/src/LLMClientInterface.php';
-require_once __DIR__ . '/src/MockLLM.php';
-require_once __DIR__ . '/src/ValidationFault.php';
-require_once __DIR__ . '/src/ValidationResult.php';
-require_once __DIR__ . '/src/HttpClientInterface.php';
-require_once __DIR__ . '/src/JmpValidatorClient.php';
-require_once __DIR__ . '/src/Workers/NodeWorkerInterface.php';
-require_once __DIR__ . '/src/Workers/WorkerRegistry.php';
+$autoload = __DIR__ . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "Run composer install in core/ first.\n");
+    exit(1);
+}
+require_once $autoload;
 
 use Kadmos\ASTOrchestrator;
 use Kadmos\NodeStatus;
-use Kadmos\JmpValidatorClient;
-use Kadmos\HttpClientInterface;
+use Kadmos\Validator\ValidatorFactory;
 use Kadmos\Workers\WorkerRegistry;
 use Kadmos\Workers\NodeWorkerInterface;
 
@@ -52,10 +47,12 @@ $registry->register('QUERY_DATABASE', $worker);
 
 $orchestrator = new ASTOrchestrator($registry);
 
-$alwaysValid = new class implements HttpClientInterface {
-    public function postJson(string $url, array $body): array { return ['valid' => true]; }
-};
-$validator = new JmpValidatorClient($alwaysValid);
+try {
+    $validator = ValidatorFactory::fromEnvironment()->create();
+} catch (\RuntimeException $e) {
+    echo json_encode(['error' => $e->getMessage()]) . "\n";
+    exit(4);
+}
 
 // Validate
 $context = $orchestrator->buildContext($batch);

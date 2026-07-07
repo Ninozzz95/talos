@@ -4,9 +4,9 @@
   "description": "AVM stateless JMP validator",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "node ./node_modules/typescript/bin/tsc --pretty false",
     "start": "node dist/server.js",
-    "test": "vitest run",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
     "test:watch": "vitest"
   },
   "keywords": [],
