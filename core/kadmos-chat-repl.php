@@ -272,12 +272,16 @@ echo "  {$dim}/help{$reset}\n\n";
 $messages = [];
 
 while (true) {
-    // Token bar below prompt
+    // Save cursor, move to bottom, print status bar, restore
     $modeLabel = match($mode) { 'auto' => "{$red}AUTO{$reset}", 'semi' => "{$yellow}SEMI{$reset}", default => "{$cyan}ASK{$reset}" };
     $tokShort = $sessionTokens > 1000 ? round($sessionTokens/1000,1).'k' : $sessionTokens;
-    if ($sessionTokens > 0) {
-        echo "{$dim}  [{$tokShort} tok | {$turnCount} turns | {$model} | {$modeLabel}]{$reset}\n";
-    }
+    $statusText = $sessionTokens > 0
+        ? "{$dim}[{$tokShort} tok | {$turnCount} turns | {$model} | {$modeLabel}{$dim}] /help{$reset}"
+        : "{$dim}[/help]{$reset}";
+    // Clear bottom line, print status
+    echo "\0337\033[999B\033[K{$statusText}\0338";
+
+    // Prompt
     echo "{$cyan}›{$reset} ";
     $line = trim(fgets(STDIN));
     if ($line === false || $line === '') continue;
