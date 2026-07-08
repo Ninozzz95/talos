@@ -117,4 +117,16 @@ describe('validateMutations', () => {
     const result = validateMutations([], {});
     expect(result.valid).toBe(true);
   });
+
+  it('rejects SPAWN_NODE node types outside the allowed registry list', () => {
+    const result = validateMutations(
+      [{ action: 'SPAWN_NODE', node_id: 'n_sql', node_type: 'QUERY_DATABASE' }],
+      {},
+      ['HTTP_REQUEST']
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors?.[0].field).toContain('node_type');
+    expect(result.errors?.[0].message).toContain('not available');
+  });
 });

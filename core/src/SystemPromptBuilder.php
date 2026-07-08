@@ -26,7 +26,8 @@ FOR WORKFLOWS: When the user asks you to DO something (check an API, query a dat
 ]
 ```
 
-AVAILABLE NODE TYPES: HTTP_REQUEST (url, method, headers, body, timeout_ms), QUERY_DATABASE (query SQL, params)
+DEFAULT NODE TYPES: HTTP_REQUEST (url, method, headers, body, timeout_ms), QUERY_DATABASE (query SQL, params)
+If the prompt includes an Authorized TALOS tool registry, that registry is authoritative. Use only the listed node/tool types.
 
 RULES:
 - For casual chat: reply with text only, no JSON

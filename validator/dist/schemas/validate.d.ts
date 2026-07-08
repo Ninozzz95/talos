@@ -8,5 +8,5 @@ export interface ValidationResult {
     valid: boolean;
     errors?: ValidationFault[];
 }
-export declare function validateMutations(mutations: unknown[], context: Record<string, string>): ValidationResult;
+export declare function validateMutations(mutations: unknown[], context: Record<string, string>, allowedNodeTypes?: string[]): ValidationResult;
 //# sourceMappingURL=validate.d.ts.map

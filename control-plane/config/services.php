@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'talos' => [
+        'registry_write_token' => env('TALOS_REGISTRY_WRITE_TOKEN'),
+        'validator_health_url' => env('TALOS_VALIDATOR_HEALTH_URL'),
+        'model_provider_allowed_hosts' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('TALOS_MODEL_PROVIDER_ALLOWED_HOSTS', 'api.openai.com,api.deepseek.com')),
+        ))),
+    ],
+
 ];

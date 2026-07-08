@@ -34,7 +34,7 @@ $bold = "\033[1m";
 function statusBar(int $tokens, int $turns, string $mode, string $model): string {
     global $dim, $green, $yellow, $red, $reset, $cyan;
     $tokDisplay = $tokens > 1000 ? round($tokens / 1000, 1) . 'k' : $tokens;
-    $modeColor = match($mode) { 'auto' => $red, 'semi' => $yellow, default => $cyan };
+    $modeColor = match($mode) { 'auto' => $red, 'lab', 'semi' => $yellow, default => $cyan };
     $modeLabel = strtoupper($mode);
     return "{$dim}⏺{$tokDisplay} tok · {$turns} turns · {$model} · {$modeColor}{$modeLabel}{$reset}{$dim} · /help{$reset}";
 }
@@ -44,7 +44,7 @@ $model = getenv('KADMOS_MODEL') ?: 'deepseek-chat';
 $baseUrl = getenv('KADMOS_BASE_URL') ?: 'https://api.deepseek.com/v1';
 $allowedPath = null;
 $sessionTokens = 0; $turnCount = 0;
-$mode = 'semi'; // ask | semi | auto
+$mode = 'semi'; // ask | semi | auto | lab | enterprise
 
 // Parse flags
 $args = $GLOBALS['argv'] ?? [];
@@ -53,7 +53,7 @@ foreach ($args as $i => $arg) {
         $allowedPath = realpath($args[$i + 1]) ?: $args[$i + 1];
     }
     if ($arg === '--mode' && isset($args[$i + 1])) {
-        $mode = in_array($args[$i + 1], ['ask', 'semi', 'auto']) ? $args[$i + 1] : 'semi';
+        $mode = in_array($args[$i + 1], ['ask', 'semi', 'auto', 'lab', 'enterprise']) ? $args[$i + 1] : 'semi';
     }
 }
 
@@ -87,9 +87,9 @@ function checkPermission(string $tool, array $params, string $mode): bool {
     $safe = ['read_file', 'list_dir', 'search'];
 
     if ($mode === 'auto') return true;
-    if ($mode === 'semi' && in_array($tool, $safe)) return true;
+    if (in_array($mode, ['semi', 'lab', 'enterprise']) && in_array($tool, $safe)) return true;
 
-    // Ask mode or semi with dangerous tool
+    // Ask mode, or guarded modes with dangerous tools.
     global $yellow, $cyan, $dim, $reset;
     $desc = match($tool) {
         'exec' => "Shell: {$params[0]}",
@@ -275,7 +275,13 @@ function streamGenerate(string $apiKey, string $model, string $baseUrl, string $
 // Chat REPL
 // ═══════════════════════════════════════
 
-$modeLabel = match($mode) { 'auto' => "{$red}FULL AUTO{$reset}", 'semi' => "{$yellow}SEMI{$reset}", default => "{$cyan}ASK{$reset}" };
+$modeLabel = match($mode) {
+    'auto' => "{$red}FULL AUTO{$reset}",
+    'lab' => "{$yellow}LAB{$reset}",
+    'enterprise' => "{$cyan}ENTERPRISE{$reset}",
+    'semi' => "{$yellow}SEMI{$reset}",
+    default => "{$cyan}ASK{$reset}",
+};
 echo "{$gold}⚡ KADMOS CHAT{$reset} {$dim}[{$modeLabel}{$dim}]{$reset}";
 if ($allowedPath) echo " {$dim}[{$allowedPath}]{$reset}";
 echo "  {$dim}/help{$reset}\n\n";
@@ -284,7 +290,13 @@ $messages = [];
 
 while (true) {
     // Save cursor, move to bottom, print status bar, restore
-    $modeLabel = match($mode) { 'auto' => "{$red}AUTO{$reset}", 'semi' => "{$yellow}SEMI{$reset}", default => "{$cyan}ASK{$reset}" };
+    $modeLabel = match($mode) {
+        'auto' => "{$red}AUTO{$reset}",
+        'lab' => "{$yellow}LAB{$reset}",
+        'enterprise' => "{$cyan}ENTERPRISE{$reset}",
+        'semi' => "{$yellow}SEMI{$reset}",
+        default => "{$cyan}ASK{$reset}",
+    };
     $tokShort = $sessionTokens > 1000 ? round($sessionTokens/1000,1).'k' : $sessionTokens;
     $statusText = $sessionTokens > 0
         ? "{$dim}[{$tokShort} tok | {$turnCount} turns | {$model} | {$modeLabel}{$dim}] /help{$reset}"
@@ -316,11 +328,11 @@ while (true) {
                 echo "  {$cyan}/search <path> <q>{$reset} {$dim}Search codebase{$reset}\n";
                 echo "  {$cyan}/tokens{$reset}            {$dim}Token usage this session{$reset}\n";
                 echo "  {$cyan}/dag{$reset}               {$dim}Current DAG state{$reset}\n";
-                echo "  {$cyan}/mode <ask|semi|auto>{$reset}{$dim}Change permission mode{$reset}\n";
+                echo "  {$cyan}/mode <ask|semi|auto|lab|enterprise>{$reset}{$dim}Change permission mode{$reset}\n";
                 echo "  {$cyan}/clear{$reset}             {$dim}Clear conversation{$reset}\n";
                 echo "  {$cyan}/exit{$reset}              {$dim}Quit{$reset}\n";
                 echo "\n{$dim}  AI also auto-invokes tools — just ask naturally.{$reset}\n";
-                echo "{$dim}  Start with --mode auto --allow . for full power.{$reset}\n";
+                echo "{$dim}  Start with --mode enterprise --allow . for guarded workspace automation.{$reset}\n";
                 continue 2;
             case '/read':
                 $f = $rest[0] ?? null;
@@ -342,12 +354,18 @@ while (true) {
                 continue 2;
             case '/mode':
                 $newMode = $rest[0] ?? '';
-                if (in_array($newMode, ['ask', 'semi', 'auto'])) {
+                if (in_array($newMode, ['ask', 'semi', 'auto', 'lab', 'enterprise'])) {
                     $mode = $newMode;
-                    $ml = match($mode) { 'auto' => "{$red}AUTO{$reset}", 'semi' => "{$yellow}SEMI{$reset}", default => "{$cyan}ASK{$reset}" };
+                    $ml = match($mode) {
+                        'auto' => "{$red}AUTO{$reset}",
+                        'lab' => "{$yellow}LAB{$reset}",
+                        'enterprise' => "{$cyan}ENTERPRISE{$reset}",
+                        'semi' => "{$yellow}SEMI{$reset}",
+                        default => "{$cyan}ASK{$reset}",
+                    };
                     echo "{$dim}Mode: {$ml}{$reset}\n";
                 } else {
-                    echo "{$dim}Usage: /mode ask|semi|auto{$reset}\n";
+                    echo "{$dim}Usage: /mode ask|semi|auto|lab|enterprise{$reset}\n";
                 }
                 continue 2;
             case '/tokens':

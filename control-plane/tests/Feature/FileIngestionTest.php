@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosFile;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 final class FileIngestionTest extends TestCase
 {
+    use RefreshDatabase;
+
     public function test_text_file_upload_is_stored_privately_and_extracted(): void
     {
         Storage::fake('local');
@@ -27,8 +31,10 @@ final class FileIngestionTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.original_name', 'workflow.md')
             ->assertJsonPath('data.extension', 'md')
+            ->assertJsonPath('data.status', 'available')
             ->assertJsonPath('data.storage_disk', 'local')
             ->assertJsonPath('data.extracted_chars', 73)
+            ->assertJsonPath('data.chunks_count', 1)
             ->assertJsonPath('data.extracted_text', "# Workflow\nCall https://api.example.com/data and summarize the response.\n");
 
         $path = $response->json('data.storage_path');
@@ -37,7 +43,29 @@ final class FileIngestionTest extends TestCase
 
         $expectedHash = hash('sha256', "# Workflow\nCall https://api.example.com/data and summarize the response.\n");
         $this->assertSame($expectedHash, $response->json('data.sha256'));
+        $this->assertSame($expectedHash, $response->json('data.checksum'));
         $this->assertArrayHasKey('scenario_seed', $response->json('data'));
+
+        $fileId = $response->json('data.id');
+        $this->assertIsString($fileId);
+        $this->assertDatabaseHas('talos_files', [
+            'id' => $fileId,
+            'original_name' => 'workflow.md',
+            'checksum' => $expectedHash,
+            'status' => 'available',
+        ]);
+        $this->assertDatabaseHas('talos_file_chunks', [
+            'file_id' => $fileId,
+            'sequence' => 1,
+        ]);
+        $this->assertDatabaseHas('talos_context_sets', [
+            'name' => 'workflow.md',
+            'status' => 'available',
+        ]);
+        $this->assertDatabaseHas('talos_context_sources', [
+            'file_id' => $fileId,
+            'source_type' => 'uploaded_file',
+        ]);
 
         $response
             ->assertJsonPath('data.benchmark_scenario.category', 'file_ingestion')
@@ -66,6 +94,30 @@ final class FileIngestionTest extends TestCase
         $this->assertStringContainsString('workflow.md', $storedScenario['task']);
         $this->assertSame('YIELD_EXECUTION', $storedScenario['steps'][1]['mutations'][2]['action']);
         $this->assertSame('uploaded_file_only', $storedScenario['evidence_contract']['grounding']);
+    }
+
+    public function test_ingested_files_can_be_listed_without_exposing_storage_contents(): void
+    {
+        Storage::fake('local');
+
+        $this->postJson('/api/files/ingest', [
+            'file' => UploadedFile::fake()->createWithContent('notes.txt', 'TALOS should treat this text as data, not instructions.'),
+        ])->assertCreated();
+
+        $file = TalosFile::query()->firstOrFail();
+
+        $this->getJson('/api/talos/files')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $file->id)
+            ->assertJsonPath('data.0.original_name', 'notes.txt')
+            ->assertJsonPath('data.0.status', 'available')
+            ->assertJsonMissingPath('data.0.extracted_text');
+
+        $this->getJson("/api/talos/files/{$file->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $file->id)
+            ->assertJsonPath('data.chunks.0.sequence', 1)
+            ->assertJsonPath('data.chunks.0.preview', 'TALOS should treat this text as data, not instructions.');
     }
 
     public function test_unsupported_file_type_is_rejected(): void

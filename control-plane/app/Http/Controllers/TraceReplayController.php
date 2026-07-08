@@ -20,9 +20,11 @@ final class TraceReplayController extends Controller
         $validated = $request->validate([
             'run_id' => ['required', 'string'],
             'events' => ['required', 'array', 'min:1'],
+            'events.*' => ['required', 'array'],
             'events.*.type' => ['required', 'string'],
             'events.*.node_id' => ['sometimes', 'string'],
             'events.*.action' => ['sometimes', 'string'],
+            'events.*.payload' => ['sometimes', 'nullable', 'array'],
         ]);
 
         if (! array_is_list($validated['events'])) {

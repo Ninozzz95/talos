@@ -19,7 +19,9 @@
 /public/hot
 /public/storage
 /storage/*.key
+/storage/playwright-report
 /storage/pail
+/test-results
 /vendor
 _ide_helper.php
 Homestead.json

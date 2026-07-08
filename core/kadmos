@@ -77,6 +77,28 @@ switch ($command) {
     case 'doctor':
         exit(\Kadmos\Cli\DoctorCommand::run($args, $baseDir));
 
+    case 'commands':
+        echo \Kadmos\Cli\CommandRegistry::json();
+        break;
+
+    case 'run':
+        exit(\Kadmos\Cli\CommandRunner::runScenario($args));
+
+    case 'trace':
+        exit(\Kadmos\Cli\CommandRunner::trace($args));
+
+    case 'fault':
+        exit(\Kadmos\Cli\CommandRunner::fault($args));
+
+    case 'recover':
+        exit(\Kadmos\Cli\CommandRunner::recover($args));
+
+    case 'files':
+        exit(\Kadmos\Cli\CommandRunner::files($args));
+
+    case 'export':
+        exit(\Kadmos\Cli\CommandRunner::export($args));
+
     // ═══════════════════════════════════════════════
     case 'chat':
         // Run boot animation first
@@ -372,9 +394,13 @@ switch ($command) {
             'CliEvidenceRenderer' => "$baseDir/tests/CliEvidenceRendererTest.php",
             'CliConsole' => "$baseDir/tests/CliConsoleTest.php",
             'CliDoctorCommand' => "$baseDir/tests/CliDoctorCommandTest.php",
+            'CliCommandRegistry' => "$baseDir/tests/CliCommandRegistryTest.php",
+            'CliCommandRouting' => "$baseDir/tests/CliCommandRoutingTest.php",
             'BenchmarkNoDeprecation' => "$baseDir/tests/BenchmarkNoDeprecationTest.php",
             'SslVerification' => "$baseDir/tests/Security/SslVerificationTest.php",
             'ExecutionPolicy' => "$baseDir/tests/Security/ExecutionPolicyTest.php",
+            'OpenAIClientPolicy' => "$baseDir/tests/Security/OpenAIClientPolicyTest.php",
+            'ToolContextPolicy' => "$baseDir/tests/Security/ToolContextPolicyTest.php",
             'ValidatorImplementations' => "$baseDir/tests/ValidatorImplementationsTest.php",
             'MainLoopValidatorInterface' => "$baseDir/tests/MainLoopValidatorInterfaceContractTest.php",
             'ValidatorHealthCheck' => "$baseDir/tests/ValidatorHealthCheckTest.php",
@@ -511,27 +537,7 @@ switch ($command) {
     // ═══════════════════════════════════════════════
     case 'help':
         echo str_replace('{bold}', "\033[1m", str_replace('{reset}', "\033[0m", logo()));
-        echo bold("Commands:\n\n");
-        echo "  " . green("kadmos") . "                           Guided shell welcome\n";
-        echo "  " . green("kadmos --tutorial") . "                First-run guided tutorial\n";
-        echo "  " . green("kadmos --expert") . "                  Expert slash-command reference\n";
-        echo "  " . green("kadmos doctor [--json]") . "           Diagnose local Kadmos environment\n";
-        echo "  " . green("kadmos boot") . "                      Boot animation\n";
-        echo "  " . green("kadmos dashboard") . "                 Start Talos control-plane UI\n";
-        echo "  " . green("kadmos dashboard --validator") . "     Start legacy validator dashboard\n";
-        echo "  " . green("kadmos start [cycles] [--mock]") . "   Start the main event loop\n";
-        echo "  " . green("kadmos test") . "                      Run all test suites\n";
-        echo "  " . green("kadmos validate <file.json>") . "     Validate a JMP file\n";
-        echo "  " . green("kadmos compare --json") . "            Compare AVM ON/OFF/tool-agent baselines\n";
-        echo "  " . green("kadmos evidence --json") . "           Render benchmark evidence report\n";
-        echo "  " . green("kadmos benchmark mock --runs=10") . " Run mock benchmark suite\n";
-        echo "  " . green("kadmos benchmark compare --json") . " Compare AVM ON/OFF/tool-agent baselines\n";
-        echo "  " . green("kadmos status") . "                    Show system status\n";
-        echo "  " . green("kadmos help") . "                      Show this help\n";
-        echo "\n";
-        echo bold("Environment:\n\n");
-        echo "  KADMOS_API_KEY     DeepSeek/OpenAI API key\n";
-        echo "  KADMOS_MODEL       Model name (default: deepseek-chat)\n";
+        echo \Kadmos\Cli\CommandRegistry::renderHelp();
         break;
 
     default:

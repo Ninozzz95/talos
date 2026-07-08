@@ -117,6 +117,110 @@ new session -> ingest files -> ask -> plan -> execute graph -> inspect nodes
 
 Every imported Odysseus-inspired feature must plug into that loop.
 
+## Implementation Update: 2026-07-07 Phase 1
+
+The first production hardening pass converted the Odysseus gap findings into enforceable local constraints:
+
+- Route contracts now prove `/chat`, `/dashboard`, and the existing compatibility API endpoints are registered.
+- The Vue foundation now has a central API client, shared TALOS types, status copy/tone maps, and a command registry.
+- Commands without real handlers are represented as disabled commands with explicit `disabledReason`, not as fake clickable UI.
+- The cockpit dashboard no longer presents hardcoded benchmark wins, fake indexed files, fake session history, fake execution timeline, unhandled action buttons, or hardcoded validator-online status.
+- Browser-stored provider key flow remains available only as dev-era functionality and is visibly marked `Provider key dev-only` until server-side provider profiles are implemented.
+
+This reinforces the main gap-audit conclusion: TALOS should not imitate Odysseus' surface breadth with static panels. Every visible capability must be backed by Laravel/control-plane APIs, AVM evidence, or a controlled unavailable state.
+
+## Implementation Update: 2026-07-07 Phase 2
+
+The chat workspace gap is now reduced from "basic proxy with local UI state" to "persistent chat surface backed by Laravel":
+
+- `talos_sessions` and `talos_messages` persist chat state.
+- `/api/talos/sessions` and `/api/talos/sessions/{session}/messages` provide real session/message APIs.
+- `/chat` loads real sessions, selects real sessions, persists user prompts, calls `/api/talos/chat`, and persists assistant or system results.
+- Chat remains low-noise: no benchmark panels, no file dropzone, no failure-policy cockpit.
+- Provider key handling is still explicitly dev-only when no server-side profile is selected.
+
+## Implementation Update: 2026-07-07 Phase 3
+
+The provider/model gap is now reduced from "browser-local key" to "server-side provider profile with a visible management surface":
+
+- `talos_model_profiles` persists provider, model, base URL, status, capabilities, probe result, and encrypted secret.
+- `/api/talos/model-profiles` provides real CRUD and probe endpoints.
+- API responses expose `has_secret` and never return `secret` or `encrypted_secret`.
+- `/api/talos/chat` accepts `model_profile_id`, decrypts the secret server-side, and forwards provider/model/base URL to the validator.
+- `validator/src/server.ts` and `core/kadmos-chat.php` now pass the selected provider profile through to `OpenAIClient`.
+- `/chat` can select a server-side model profile; raw browser API key is only a dev-only fallback.
+- `/dashboard` now mounts a real Model Center that can create, update, probe, and delete profiles.
+
+Remaining gap:
+
+- Model capability classification is still basic. The next hardening pass should probe structured JSON, JMP generation, tool-use fit, latency, and cost profile before a model is marked enterprise-ready.
+
+## Implementation Update: 2026-07-07 Phase 4
+
+The file-ingestion gap is now reduced from "upload endpoint plus generated benchmark scenario" to "persistent Context Vault used by chat":
+
+- `talos_files`, `talos_file_chunks`, `talos_context_sets`, and `talos_context_sources` persist uploaded source state.
+- `/api/files/ingest` still stores the file privately and generates a benchmark scenario, but now also creates file/chunk/context records.
+- `/api/talos/files` lists real uploaded files without returning full extracted text.
+- `/api/talos/files/{file}` returns chunk previews for inspection and selection.
+- `/api/talos/context-sets` creates and lists real context sets.
+- `/dashboard` mounts a Context Vault with upload, status list, source drawer, and context-set creation.
+- `/chat` can select a Context Vault set; the controller injects bounded context server-side as explicitly untrusted grounding data.
+
+Remaining gap:
+
+- Embeddings and semantic retrieval are intentionally not claimed yet. Context selection is file/chunk based until an embedding service and evaluator are implemented.
+
+## Implementation Update: 2026-07-07 Phase 5
+
+The execution-visibility gap is now reduced from "timeline unavailable" to "persisted run/event surface":
+
+- `talos_runs`, `talos_run_events`, and `talos_run_artifacts` persist execution metadata.
+- `/api/talos/runs` creates and lists runs.
+- `/api/talos/runs/{run}/events` appends and reads ordered event streams.
+- `/api/talos/runs/{run}/artifacts` stores evidence/report artifact metadata.
+- `/api/talos/chat` creates a persisted run when called with `session_id`, records request/response/failure events, and returns the run object.
+- `/dashboard` now mounts `TalosRunTimeline`, `TalosNodeGraph`, and `TalosNodeInspector` backed by real APIs.
+
+Remaining gap:
+
+- Core worker execution still needs richer structured event emission. Current chat events prove the persistence and UI pipeline; later phases should attach detailed validation, worker, policy, and artifact events from the AVM core.
+
+## Implementation Update: 2026-07-07 Phase 6
+
+The recovery/replay gap is now reduced from "policy concept" to "operable HMI workflow":
+
+- Core recovery scenarios are covered, including linear failure cascades, shared-parent blocking, HMI retry restoration, and the guard that prevents unblocking a child while another parent remains failed.
+- `/api/talos/runs/{run}/recover` accepts controlled HMI actions: `retry_node`, `retry_branch`, `edit_payload_and_retry`, `skip_node`, and `mark_resolved`.
+- Recovery writes append-only audit events and node status events into `talos_run_events`.
+- High-risk recovery actions require explicit `talos.recovery.high_risk` capability confirmation.
+- `/api/talos/runs/{run}/replay` reconstructs replay steps and node statuses from persisted events without mutating the actual run.
+- `/dashboard` now mounts `TalosTraceReplay` and `TalosRecoveryPanel` inside the existing run timeline, while `/chat` remains a low-noise chat surface.
+
+Remaining gap:
+
+- Recovery currently records HMI intent and status events in the control plane. A later phase should drive a live AVM worker resume path from those events and expose matching KADMOS CLI recovery/replay commands.
+
+## Implementation Update: 2026-07-07 Phase 7
+
+The benchmark-evidence gap is now reduced from "comparison endpoint plus unavailable UI" to "persisted benchmark workbench":
+
+- `talos_benchmark_groups` and `talos_benchmark_results` persist benchmark provenance, fairness hashes, evaluator version, metrics, and raw per-lane reports.
+- `/api/benchmarks/compare` still returns the transient evidence report, and now also returns the persisted `benchmark_group` and `benchmark_results`.
+- `/api/talos/benchmark-groups` and `/api/talos/benchmark-groups/{benchmarkGroup}` list/show persisted benchmark evidence.
+- Scenario hashes are computed from the exact stored scenario JSON bytes.
+- Prompt/context hashes are stored only when real task/context material exists; missing data stays `null` rather than being invented from labels or descriptions.
+- Trace replayability is false unless a replay event stream exists. Final `node_statuses` alone are not presented as replay proof.
+- `/dashboard` now mounts `TalosBenchmarkWorkbench`, `TalosBenchmarkLane`, `TalosMetricCard`, and `TalosDiffViewer` backed by real APIs.
+- The third `tool_agent` lane appears only when persisted data includes that result.
+- `POST /api/talos/runs/{run}/benchmark` creates a private scenario from a persisted run prompt and runs the same comparison pipeline.
+- `/chat` exposes a compact `Benchmark run` action only on assistant messages that already have a real `run_id`; it does not mount the benchmark cockpit.
+- `GET /api/talos/benchmark-groups/{benchmarkGroup}/export` now returns an audited JSON report only when the persisted AVM ON/OFF evidence is complete and fairness hashes match.
+
+Remaining gap:
+
+- Benchmark artifact packaging, PDF/HTML rendering, and citation-format exports remain future work on top of the audited JSON export contract.
+
 ## Target TALOS Information Architecture
 
 TALOS should become one unified route, not scattered dashboards:
@@ -352,6 +456,27 @@ TALOS better version:
 - File/network/email/calendar/model actions are separate capabilities.
 - Prompt-injected tool requests must pass a policy boundary and show provenance.
 
+Implemented TALOS slice:
+
+- `talos_connectors` and `talos_tools` persist connector/tool capability state in Laravel.
+- `GET /api/talos/tools/planning-context` is the server-side boundary for LLM planning context.
+- The planning context excludes disabled tools, disabled connectors, and connectors that are not `healthy`.
+- `/api/talos/chat` sends the filtered registry to the validator; validator `/chat` forwards it to the PHP core; `kadmos-chat.php` appends only that authorized registry to the prompt.
+- Dashboard Tool Registry renders real connector health, tool risk, capability, planning inclusion, and server-provided `input_schema`.
+- No dashboard probe/toggle/run-tool controls are active until the backend has explicit policy/capability gates for those actions.
+- `ExecutionPolicy` now blocks localhost/private/metadata targets after DNS resolution, fails closed on invalid resolver output, caps timeout, and returns structured audit metadata.
+- Registry write routes require `TALOS_REGISTRY_WRITE_TOKEN`, preventing unauthenticated planning-context poisoning in the local control plane.
+- Validator `/validate` and PHP core chat enforce the active registry allowlist for `SPAWN_NODE` node types.
+- HTTP worker execution pins vetted DNS results and checks the connected primary IP to reduce DNS rebinding risk.
+- Model profile base URLs are policy-checked before storage, probe, chat forwarding, and direct core client use.
+
+Remaining TALOS gaps:
+
+- Validator node schemas still need registry-aware payload schemas for arbitrary future tools.
+- Worker registry wiring from persisted tool records is still pending beyond `HTTP_REQUEST`.
+- Policy decisions need to be persisted as run events during real worker execution, not only returned from the core value object.
+- Connector probes and enable/disable UI controls need real policy gates before they become visible controls.
+
 Required workers:
 
 - `HttpRequestWorker`
@@ -376,7 +501,7 @@ Tests:
 
 - Prompt-injected instruction inside uploaded file cannot invoke admin tool.
 - Non-admin cannot run privileged worker.
-- Private network/localhost SSRF is blocked after DNS resolution.
+- Private network/localhost SSRF is blocked after DNS resolution. **Implemented in core ExecutionPolicy tests.**
 - Every failed policy decision appears in trace replay.
 
 ### 4. File Uploads, Documents, RAG, And Context Vault
@@ -473,6 +598,23 @@ TALOS better version:
   - review status
 - Skills must pass AVM validation and a small eval before promotion.
 
+Implemented TALOS slice:
+
+- `talos_memories` stores scoped memories as untrusted context with active/disabled/quarantined/rejected lifecycle.
+- Memory retrieval returns global plus matching project/session scope and excludes disabled, rejected, and quarantined entries.
+- `/api/talos/chat` does not inject memory unless `memory_scope_type` is explicitly provided, and it returns `used_memories` disclosure when memory is used.
+- `talos_skills` stores skill trigger/content/schemas/allowed tools/risk/review/eval state.
+- Skill planning context includes only enabled, approved, eval-passed skills.
+- Skill write and evaluation routes require the registry token; imported skills cannot set policy/capabilities.
+- Dashboard Memory & Skills panel renders persisted memories, used-memory disclosure, skill planning eligibility, allowed tools, risk, review, and eval state.
+
+Remaining TALOS gaps:
+
+- Used memory needs run-event persistence for replay and benchmark fairness.
+- Skill evaluation should consume benchmark result evidence rather than operator pass/fail only.
+- Skill-selected chat should intersect skill allowed tools with active tool planning context.
+- Memory ranking/search beyond deterministic scoped retrieval is not implemented yet.
+
 Required UI:
 
 - Memory manager.
@@ -533,6 +675,21 @@ Tests:
 - Failed fetch blocks only dependent branch.
 - Replay reconstructs source sequence.
 - AVM ON/OFF report shows claim drift.
+
+Implemented Phase 10 slice:
+
+- `talos_research_reports`, `talos_research_sources`, `talos_research_claims`, and claim-source linkage persist sourced reports.
+- `/api/talos/research-reports` creates a `verified_execution` run, research pipeline events, source fetch events, and a `research_report` run artifact.
+- Verified claims require fetched source refs; failed source refs convert only dependent claims to `blocked_by_source`.
+- `/api/talos/documents` and `/api/talos/documents/{document}/export` persist run-linked documents and return export metadata with run/artifact provenance.
+- `/api/talos/artifacts` and `/api/talos/artifacts/{artifact}/preview` expose run artifacts; unsupported previews fall back to download without URI dereferencing.
+- Dashboard now mounts `TalosResearchWorkbench`, `TalosSourceTable`, `TalosClaimVerifier`, `TalosDocuments`, `TalosArtifactGallery`, and `TalosArtifactPreview`; `/chat` does not mount research or document cockpit panels.
+
+Remaining gaps:
+
+- Live search/fetch provider orchestration is still absent; source payloads are supplied to the control plane for MVP.
+- Claim drift and AVM ON/OFF research comparison are not connected to benchmark groups yet.
+- Citation-style export formats and downloadable packaged reports are not implemented yet.
 
 ### 7. Model Compare
 
@@ -671,6 +828,21 @@ Tests:
 - IMAP failure appears as degraded connector, not broken dashboard.
 - Draft generation logs referenced message IDs.
 
+Implemented Phase 11 slice:
+
+- `talos_email_messages` stores imported/read-only email messages.
+- `talos_email_drafts` stores draft-only replies with referenced message IDs and `send_enabled=false`.
+- `/api/talos/email/connector-status` defaults to degraded/read-only/send-disabled when no external connector is configured.
+- `/api/talos/email/messages/context` wraps email bodies as untrusted data and exposes read/draft only.
+- `/api/talos/email/drafts/{draft}/send` returns `403 EMAIL_SEND_DISABLED`.
+- Dashboard mounts `TalosEmailTriage` and `TalosEmailDraftReview`; `/chat` does not mount email panels.
+
+Remaining gaps:
+
+- Real IMAP/SMTP/provider connector configuration is not implemented.
+- Send confirmation requires Phase 12 audit/capability work before enabling.
+- Email draft-source linkage is stored as referenced IDs for MVP; normalized sync/account tables remain later work.
+
 ### 10. Notes, Tasks, Calendar, Reminders
 
 Odysseus capability:
@@ -709,6 +881,20 @@ Tests:
 - Calendar write requires permission.
 - Scheduled task logs an AVM trace.
 - Failed scheduled action is visible in dashboard.
+
+Implemented Phase 11 slice:
+
+- `talos_notes`, `talos_tasks`, and `talos_calendar_drafts` persist productivity state.
+- Notes retrieval context is `trust_level=untrusted` and cannot override system/developer/security/tool/capability policy.
+- Tasks preserve `run_id` for run-generated follow-ups.
+- Calendar actions are draft-only and require confirmation; direct approved/published creates are validation errors.
+- Dashboard mounts `TalosNotes`, `TalosTasks`, and `TalosCalendar`; `/chat` does not mount productivity panels.
+
+Remaining gaps:
+
+- External calendar writes are not implemented.
+- Reminders and scheduled agent tasks are not implemented.
+- Notes/tasks do not yet feed a semantic retrieval/ranking layer.
 
 ### 11. Gallery And Image Editor
 

@@ -58,6 +58,24 @@ function testExecutionPolicyBlocksHostnameResolvingToMetadataIp(): void
     assertTrue(str_contains($decision->reason, 'metadata IP'), 'Decision should explain resolved metadata IP block.');
 }
 
+function testExecutionPolicyBlocksHostnameResolvingToPrivateIp(): void
+{
+    $policy = new ExecutionPolicy(hostResolver: static fn(string $host): array => ['10.10.2.5']);
+    $decision = $policy->inspectUrl('https://internal-alias.example/report', 5000);
+
+    assertTrue(!$decision->allowed, 'Hostnames resolving to private IP ranges should be blocked.');
+    assertTrue(str_contains($decision->reason, 'private network'), 'Decision should explain private network block.');
+}
+
+function testExecutionPolicyFailsClosedOnAmbiguousDnsResolution(): void
+{
+    $policy = new ExecutionPolicy(hostResolver: static fn(string $host): array => ['not-an-ip-address']);
+    $decision = $policy->inspectUrl('https://ambiguous.example/report', 5000);
+
+    assertTrue(!$decision->allowed, 'Invalid DNS resolver output should fail closed.');
+    assertTrue(str_contains($decision->reason, 'invalid DNS resolution'), 'Decision should explain ambiguous DNS resolution.');
+}
+
 function testExecutionPolicyCapsTimeout(): void
 {
     $policy = new ExecutionPolicy(maxTimeoutMs: 10000, hostResolver: static fn(string $host): array => ['93.184.216.34']);
@@ -65,6 +83,19 @@ function testExecutionPolicyCapsTimeout(): void
 
     assertTrue($decision->allowed, 'Public HTTPS URL should be allowed.');
     assertSameValue(10000, $decision->timeoutMs, 'Timeout should be capped by policy.');
+}
+
+function testExecutionPolicyIncludesAuditRecord(): void
+{
+    $policy = new ExecutionPolicy(maxTimeoutMs: 3000, hostResolver: static fn(string $host): array => ['93.184.216.34']);
+    $decision = $policy->inspectUrl('https://api.example.com/v1/search', 8000);
+
+    assertSameValue('api.example.com', $decision->audit['host'] ?? null, 'Audit record should include normalized host.');
+    assertSameValue('https', $decision->audit['scheme'] ?? null, 'Audit record should include scheme.');
+    assertSameValue(['93.184.216.34'], $decision->audit['resolved_ips'] ?? null, 'Audit record should include resolved IPs.');
+    assertSameValue(8000, $decision->audit['requested_timeout_ms'] ?? null, 'Audit record should include requested timeout.');
+    assertSameValue(3000, $decision->audit['effective_timeout_ms'] ?? null, 'Audit record should include effective timeout.');
+    assertSameValue(true, $decision->audit['allowed'] ?? null, 'Audit record should include final allow decision.');
 }
 
 function testHttpWorkerReturnsPolicyFailureWithoutNetworkCall(): void
@@ -76,13 +107,59 @@ function testHttpWorkerReturnsPolicyFailureWithoutNetworkCall(): void
     assertTrue(str_contains($result['output_summary'], 'Blocked by execution policy'), 'Output should identify policy block.');
 }
 
+function testHttpWorkerPinsVettedResolvedAddress(): void
+{
+    $policy = new ExecutionPolicy(hostResolver: static fn(string $host): array => ['93.184.216.34']);
+    $seenResolve = null;
+
+    $worker = new HttpRequestWorker($policy, static function (string $url, array $options) use (&$seenResolve): array {
+        $seenResolve = $options[\CURLOPT_RESOLVE] ?? null;
+
+        return [
+            'raw_response' => "HTTP/1.1 200 OK\r\n\r\nok",
+            'curl_error' => '',
+            'http_code' => 200,
+            'header_size' => 19,
+            'primary_ip' => '93.184.216.34',
+        ];
+    });
+
+    $result = $worker->execute(['url' => 'https://api.example.com/search']);
+
+    assertSameValue(NodeStatus::SUCCESS, $result['status'], 'Pinned public request should succeed through fake transport.');
+    assertSameValue(['api.example.com:443:93.184.216.34'], $seenResolve, 'Worker should pin vetted DNS address with CURLOPT_RESOLVE.');
+}
+
+function testHttpWorkerRejectsPrimaryIpMismatchAfterConnect(): void
+{
+    $policy = new ExecutionPolicy(hostResolver: static fn(string $host): array => ['93.184.216.34']);
+
+    $worker = new HttpRequestWorker($policy, static fn(string $url, array $options): array => [
+        'raw_response' => "HTTP/1.1 200 OK\r\n\r\nok",
+        'curl_error' => '',
+        'http_code' => 200,
+        'header_size' => 19,
+        'primary_ip' => '10.0.0.10',
+    ]);
+
+    $result = $worker->execute(['url' => 'https://api.example.com/search']);
+
+    assertSameValue(NodeStatus::FAILED, $result['status'], 'Primary IP mismatch should fail closed.');
+    assertTrue(str_contains($result['output_summary'], 'DNS rebinding'), 'Failure should identify DNS rebinding guard.');
+}
+
 $tests = [
     'testExecutionPolicyBlocksMetadataIp',
     'testExecutionPolicyBlocksLocalhostByDefault',
     'testExecutionPolicyNormalizesTrailingDotLocalhost',
     'testExecutionPolicyBlocksHostnameResolvingToMetadataIp',
+    'testExecutionPolicyBlocksHostnameResolvingToPrivateIp',
+    'testExecutionPolicyFailsClosedOnAmbiguousDnsResolution',
     'testExecutionPolicyCapsTimeout',
+    'testExecutionPolicyIncludesAuditRecord',
     'testHttpWorkerReturnsPolicyFailureWithoutNetworkCall',
+    'testHttpWorkerPinsVettedResolvedAddress',
+    'testHttpWorkerRejectsPrimaryIpMismatchAfterConnect',
 ];
 
 foreach ($tests as $test) {
