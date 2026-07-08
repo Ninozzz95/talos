@@ -20,7 +20,7 @@ export type UpdateTalosSettingsPayload = {
     preferences?: Record<string, unknown>
 }
 
-const SECRET_KEY_PATTERN = /(api_key|secret|password|token)/i
+const SECRET_KEY_PATTERN = /(api_key|secret|password|(^|[_-])token$|token$)/i
 
 function sanitizePreferences(preferences: Record<string, unknown>) {
     return Object.fromEntries(Object.entries(preferences).flatMap(([key, value]) => {

@@ -75,6 +75,8 @@ final class TalosWorkspaceSetting extends Model
         return str_contains($normalized, 'api_key')
             || str_contains($normalized, 'secret')
             || str_contains($normalized, 'password')
-            || str_contains($normalized, 'token');
+            || str_ends_with($normalized, 'token')
+            || str_ends_with($normalized, '_token')
+            || str_ends_with($normalized, '-token');
     }
 }

@@ -60,6 +60,10 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - Use compact enterprise UI patterns; avoid toy dashboards and decorative-only visuals.
 - Prefer shadcn-vue style primitives with owned Vue components.
 - A visual must clarify state, evidence, execution, or user action.
+- Theme presets are product behavior, not decorative skins. Keep preset IDs centralized in `resources/js/lib/talosThemes.ts`, normalize legacy `dark/light`, persist through `/api/talos/settings`, and make presets change palette, typography, radius, density, and motion tokens.
+- Settings Center must map Odysseus-like categories to TALOS-owned behavior: model profiles, context sets, connectors/tools, email/tasks, reminders, appearance, account, agent tools, doctor/backup/audit. If a category has no endpoint, store only safe non-secret preferences or open a real module; do not show active controls for missing backend actions.
+- TALOS settings preferences must never store provider secrets, registry/admin tokens, passwords, OAuth material, or API keys. Keys that look secret-like must be stripped on both client and server, but legitimate budget fields such as `max_tokens` are not secrets.
+- Floating tool windows must stay reachable above the fixed composer on mobile and desktop. Large panels must scroll internally rather than extending behind the composer.
 - Dashboard sidebars must not contain fake session history, fake benchmark scores, fake validator-online badges, or fake file indexing status.
 - A command palette entry is acceptable before a backend exists only when it is disabled and names the missing dependency.
 
@@ -82,6 +86,7 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - E2E mocks must be strict: unhandled TALOS API routes should fail the test instead of returning silent empty data.
 - E2E must never require live provider keys, live external model calls, or private network access.
 - Start Laravel E2E with the repo-local `.tools` PHP binary; global PHP may be incompatible with Composer platform requirements.
+- Playwright must wait for both Laravel and Vite. Use the real Vite app entry (`resources/js/app.js`) as the Vite readiness URL so tests do not start before TALOS modules are transformed.
 - Browser tests should prove user-visible flows: `/chat`, `/dashboard`, command palette, persisted-turn UI, file-context source provenance, replay fault filtering, benchmark compare/export, degraded readiness, responsive overflow, and screenshot evidence.
 - Generated Playwright reports and `test-results` are artifacts, not source.
 

@@ -43,7 +43,35 @@ final class TalosSettingsApiTest extends TestCase
                 'api_key' => 'client-secret',
                 'nested' => [
                     'secret' => 'nested-secret',
-                    'theme' => 'dark',
+                    'theme' => 'forge',
+                ],
+                'theme' => 'terminal',
+                'ai_defaults' => [
+                    'utility_model_mode' => 'same_as_chat',
+                    'vision_enabled' => true,
+                    'research_model_mode' => 'same_as_chat',
+                ],
+                'search' => [
+                    'provider' => 'searxng',
+                    'results_per_query' => 7,
+                    'url' => 'http://localhost:8080',
+                    'fallbacks' => ['duckduckgo'],
+                    'deep_research' => [
+                        'max_tokens' => 16384,
+                        'extract_timeout' => 90,
+                        'extract_parallel' => 3,
+                        'timeout' => 1800,
+                    ],
+                ],
+                'agent_tools' => [
+                    'tool_call_limit' => 12,
+                    'max_steps_per_message' => 24,
+                    'enabled_groups' => ['code', 'search', 'documents'],
+                ],
+                'reminders' => [
+                    'channel' => 'browser',
+                    'ai_synthesis' => false,
+                    'public_app_url' => 'https://talos.example.test',
                 ],
                 'providers' => [
                     [
@@ -59,7 +87,14 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.default_model_profile_id', $profile->id)
             ->assertJsonPath('data.default_context_set_id', $contextSet->id)
             ->assertJsonPath('data.preferences.density', 'compact')
-            ->assertJsonPath('data.preferences.nested.theme', 'dark');
+            ->assertJsonPath('data.preferences.nested.theme', 'forge')
+            ->assertJsonPath('data.preferences.theme', 'terminal')
+            ->assertJsonPath('data.preferences.search.provider', 'searxng')
+            ->assertJsonPath('data.preferences.search.results_per_query', 7)
+            ->assertJsonPath('data.preferences.search.deep_research.max_tokens', 16384)
+            ->assertJsonPath('data.preferences.ai_defaults.vision_enabled', true)
+            ->assertJsonPath('data.preferences.agent_tools.max_steps_per_message', 24)
+            ->assertJsonPath('data.preferences.reminders.channel', 'browser');
 
         $data = $response->json('data');
         $this->assertArrayNotHasKey('api_key', $data['preferences']);
@@ -77,6 +112,8 @@ final class TalosSettingsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.default_model_profile_id', $profile->id)
             ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.theme', 'terminal')
+            ->assertJsonPath('data.preferences.search.provider', 'searxng')
             ->assertJsonMissing(['api_key' => 'client-secret'])
             ->assertJsonMissing(['secret' => 'nested-secret'])
             ->assertJsonMissing(['encrypted_secret' => 'provider-secret']);
@@ -91,5 +128,39 @@ final class TalosSettingsApiTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['default_model_profile_id', 'default_context_set_id']);
+    }
+
+    public function test_settings_persist_each_theme_preset_via_settings_api(): void
+    {
+        $themes = [
+            'forge',
+            'paper',
+            'terminal',
+            'aurora',
+            'glacier',
+            'ember',
+            'atlas',
+            'noir',
+            'signal',
+            'violet',
+        ];
+
+        foreach ($themes as $theme) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => [
+                    'theme' => $theme,
+                ],
+            ])
+                ->assertOk()
+                ->assertJsonPath('data.preferences.theme', $theme);
+
+            $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+            $this->assertIsString($storedPreferences);
+            $this->assertStringContainsString($theme, $storedPreferences);
+
+            $this->getJson('/api/talos/settings')
+                ->assertOk()
+                ->assertJsonPath('data.preferences.theme', $theme);
+        }
     }
 }

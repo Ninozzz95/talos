@@ -17,6 +17,30 @@ function emptyData(route: Route) {
     return json(route, { data: [] })
 }
 
+function hasSecretPreferenceKey(value: unknown): boolean {
+    if (!value || typeof value !== 'object') {
+        return false
+    }
+
+    if (Array.isArray(value)) {
+        return value.some((item) => hasSecretPreferenceKey(item))
+    }
+
+    return Object.entries(value).some(([key, nestedValue]) => {
+        const normalized = key.toLowerCase()
+        if (normalized.includes('api_key')
+            || normalized.includes('secret')
+            || normalized.includes('password')
+            || normalized.endsWith('token')
+            || normalized.endsWith('_token')
+            || normalized.endsWith('-token')) {
+            return true
+        }
+
+        return hasSecretPreferenceKey(nestedValue)
+    })
+}
+
 function sessionPayload(title = 'E2E verified workflow', persistenceMode: PersistenceMode = 'persistent', id = 'session-e2e') {
     return {
         id,
@@ -293,13 +317,46 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         session.id,
     ))
     let activeSessionPersistenceMode: PersistenceMode = 'persistent'
-    let workspaceSettings = {
+    let workspaceSettings: {
+        id: string
+        default_model_profile_id: string | null
+        default_context_set_id: string | null
+        preferences: Record<string, unknown>
+        created_at: string
+        updated_at: string
+    } = {
         id: 'default',
         default_model_profile_id: 'profile-e2e',
         default_context_set_id: null as string | null,
         preferences: {
-            theme: 'dark',
+            theme: 'forge',
             reduced_motion: true,
+            ai_defaults: {
+                utility_model_mode: 'same_as_chat',
+                vision_enabled: true,
+                research_model_mode: 'same_as_chat',
+            },
+            search: {
+                provider: 'searxng',
+                results_per_query: 5,
+                url: '',
+                fallback: 'duckduckgo',
+                deep_research: {
+                    max_tokens: 16384,
+                    extract_timeout: 90,
+                    extract_parallel: 3,
+                    timeout: 1800,
+                },
+            },
+            agent_tools: {
+                tool_call_limit: 0,
+                max_steps_per_message: 20,
+            },
+            reminders: {
+                channel: 'browser',
+                ai_synthesis: false,
+                public_app_url: '',
+            },
         },
         created_at: now,
         updated_at: now,
@@ -337,7 +394,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         if (path === '/api/talos/settings' && method === 'PATCH') {
             const body = request.postDataJSON() as Record<string, unknown>
-            if ('api_key' in body || 'secret' in body || 'encrypted_secret' in body) {
+            if ('api_key' in body || 'secret' in body || 'encrypted_secret' in body || hasSecretPreferenceKey(body.preferences)) {
                 return json(route, { error: 'SECRET_FIELDS_REJECTED' }, 422)
             }
 

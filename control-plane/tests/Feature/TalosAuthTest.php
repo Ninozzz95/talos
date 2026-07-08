@@ -21,7 +21,8 @@ final class TalosAuthTest extends TestCase
             ->assertOk()
             ->assertSee('TALOS Access')
             ->assertSee('talos-login-form')
-            ->assertSee('email');
+            ->assertSee('email')
+            ->assertDontSee('Back to TALOS');
     }
 
     public function test_guest_with_no_users_is_redirected_to_first_run_setup(): void
