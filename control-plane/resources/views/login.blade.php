@@ -169,7 +169,6 @@
                     <input id="remember" name="remember" type="checkbox" value="1">
                     Remember me
                 </label>
-                <a href="{{ url('/') }}">Back to TALOS</a>
             </div>
 
             <button type="submit">Sign in</button>

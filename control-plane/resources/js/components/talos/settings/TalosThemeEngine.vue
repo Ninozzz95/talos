@@ -2,13 +2,18 @@
 import { computed, onMounted } from 'vue'
 import Card from '../../ui/Card.vue'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
+import {
+    TALOS_THEME_PRESETS,
+    normalizeTalosTheme,
+    type TalosThemeId,
+} from '../../../lib/talosThemes'
 
 const props = defineProps<{
-    theme: 'dark' | 'light'
+    theme: TalosThemeId
 }>()
 
 const emit = defineEmits<{
-    changeTheme: [theme: 'dark' | 'light']
+    changeTheme: [theme: TalosThemeId, persist?: boolean]
 }>()
 
 const {
@@ -21,11 +26,11 @@ const {
 
 const activeTheme = computed(() => {
     const storedTheme = settings.value?.preferences?.theme
-    return storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : props.theme
+    return normalizeTalosTheme(storedTheme ?? props.theme)
 })
 
-async function chooseTheme(theme: 'dark' | 'light') {
-    emit('changeTheme', theme)
+async function chooseTheme(theme: TalosThemeId) {
+    emit('changeTheme', theme, false)
     await updateSettings({
         preferences: {
             ...(settings.value?.preferences ?? {}),
@@ -37,8 +42,8 @@ async function chooseTheme(theme: 'dark' | 'light') {
 onMounted(async () => {
     const loaded = await loadSettings().catch(() => null)
     const theme = loaded?.preferences?.theme
-    if (theme === 'light' || theme === 'dark') {
-        emit('changeTheme', theme)
+    if (theme) {
+        emit('changeTheme', normalizeTalosTheme(theme), false)
     }
 })
 </script>
@@ -47,7 +52,7 @@ onMounted(async () => {
     <Card>
         <h3 class="text-base font-semibold text-[var(--talos-text)]">Theme Engine</h3>
         <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
-            Appearance is persisted through the TALOS settings API.
+            Presets change palette, typography, density, radius and workspace motion through the TALOS settings API.
         </p>
 
         <div v-if="settingsError" class="mt-3 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
@@ -57,28 +62,36 @@ onMounted(async () => {
             {{ settingsSavedMessage }}
         </div>
 
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <button
+                v-for="preset in TALOS_THEME_PRESETS"
+                :key="preset.id"
                 type="button"
+                data-testid="talos-theme-preset"
                 class="rounded-md border px-3 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :class="activeTheme === 'dark' ? 'border-[var(--talos-accent-border)]' : 'border-[var(--talos-border)]'"
-                aria-label="AVM Dark"
-                @click="chooseTheme('dark')"
+                :class="activeTheme === preset.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel-soft)] hover:border-[var(--talos-accent-border)]'"
+                :aria-label="preset.label"
+                @click="chooseTheme(preset.id)"
             >
-                <span class="mb-3 block h-12 rounded-md border border-[#27313e] bg-[#080b11]"></span>
-                <span class="font-semibold text-[var(--talos-text)]">AVM Dark</span>
-                <span class="mt-1 block text-xs text-[var(--talos-muted)]">Graphite workspace with execution accents.</span>
-            </button>
-            <button
-                type="button"
-                class="rounded-md border px-3 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :class="activeTheme === 'light' ? 'border-[var(--talos-accent-border)]' : 'border-[var(--talos-border)]'"
-                aria-label="Paper"
-                @click="chooseTheme('light')"
-            >
-                <span class="mb-3 block h-12 rounded-md border border-[#d7dee8] bg-[#f8fafc]"></span>
-                <span class="font-semibold text-[var(--talos-text)]">Paper</span>
-                <span class="mt-1 block text-xs text-[var(--talos-muted)]">Bright control surface for review-heavy work.</span>
+                <span
+                    class="mb-3 grid h-14 grid-cols-[1fr_1fr] overflow-hidden rounded-md border"
+                    :style="{ borderColor: preset.preview.line, background: preset.preview.background }"
+                    aria-hidden="true"
+                >
+                    <span class="m-2 rounded-sm" :style="{ background: preset.preview.accent }"></span>
+                    <span class="m-2 rounded-sm" :style="{ background: preset.preview.secondary }"></span>
+                    <span class="col-span-2 border-t" :style="{ borderColor: preset.preview.line }"></span>
+                </span>
+                <span class="flex items-center justify-between gap-2">
+                    <span class="font-semibold text-[var(--talos-text)]">{{ preset.label }}</span>
+                    <span v-if="activeTheme === preset.id" class="rounded-sm bg-[var(--talos-accent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--talos-accent-text)]">Active</span>
+                </span>
+                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ preset.description }}</span>
+                <span class="mt-3 grid gap-1 text-[11px] text-[var(--talos-muted)]">
+                    <span>Font: {{ preset.fontUi }}</span>
+                    <span>Feel: {{ preset.mood }}</span>
+                    <span>Motion: {{ preset.motion }}</span>
+                </span>
             </button>
         </div>
     </Card>

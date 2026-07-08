@@ -217,6 +217,7 @@ test('guest users see the auth gate before the TALOS workspace', async ({ browse
         await page.goto('/', { waitUntil: 'domcontentloaded' })
         await expect(page.locator('#talos-workspace-root')).toHaveCount(0)
         await expect(page.getByText(/TALOS Access|TALOS Setup/)).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Back to TALOS' })).toHaveCount(0)
     } finally {
         await context.close()
     }
@@ -290,15 +291,55 @@ test('settings window loads safe preferences and persists theme through the sett
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
-    await expect(page.getByText('Workspace preferences from /api/talos/settings.')).toBeVisible()
+    await expect(page.getByText('Workspace defaults, model behavior and operator preferences from /api/talos/settings.')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'AI Defaults' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Search' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Appearance' })).toBeVisible()
     await expect(page.getByText('api_key')).toBeHidden()
     await expect(page.getByText('encrypted_secret')).toBeHidden()
 
+    await page.getByRole('tab', { name: 'Search' }).click()
+    await page.getByLabel('Search provider').selectOption('searxng')
+    await page.getByLabel('Results per query').fill('7')
+    await page.getByLabel('Search endpoint URL').fill('http://localhost:8080')
+    const searchPatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const search = preferences?.search as Record<string, unknown> | undefined
+
+        return search?.provider === 'searxng'
+            && Number(search?.results_per_query) === 7
+            && search?.url === 'http://localhost:8080'
+    })
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await searchPatchRequest
+    await expect(page.getByText('Settings saved through /api/talos/settings.')).toBeVisible()
+
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Paper' }).click()
-    await expect(page.locator('.talos-shell')).toHaveClass(/talos-light/)
+    await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(10)
+    const themePatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme === 'terminal'
+    })
+    await page.getByRole('button', { name: 'Terminal Operator' }).click()
+    await themePatchRequest
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
     await expect(page.getByText('Theme saved through /api/talos/settings.')).toBeVisible()
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
+    await expectNoHorizontalOverflow(page)
 
     await testInfo.attach(`settings-theme-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true }),

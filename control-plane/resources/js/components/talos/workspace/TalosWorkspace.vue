@@ -41,9 +41,15 @@ import { useTalosSettings } from '../../../composables/useTalosSettings'
 import { useTalosWindows, type TalosWindowId, type TalosWindowPosition } from '../../../composables/useTalosWindows'
 import { talosFetch } from '../../../lib/api'
 import { talosCommands } from '../../../lib/commandRegistry'
+import {
+    TALOS_DEFAULT_THEME,
+    normalizeTalosTheme,
+    talosThemeClass,
+    talosThemeIsLight,
+    type TalosThemeId,
+} from '../../../lib/talosThemes'
 import type { TalosCommand, TalosMessage, TalosSession } from '../../../lib/talosTypes'
 
-type Theme = 'dark' | 'light'
 type InitialSurface = 'workspace' | 'chat' | 'dashboard'
 type MessageSource = {
     context_set_id?: string
@@ -105,7 +111,7 @@ const windowCopy: Record<TalosWindowId, { title: string; description: string }> 
     tools: { title: 'Tools', description: 'Connectors and tool registry.' },
 }
 
-const theme = ref<Theme>('dark')
+const theme = ref<TalosThemeId>(TALOS_DEFAULT_THEME)
 const prompt = ref('')
 const sending = ref(false)
 const creatingSession = ref(false)
@@ -153,7 +159,9 @@ const {
     loadContextSets,
 } = useTalosContextVault()
 const {
+    settings: workspaceSettings,
     loadSettings: loadWorkspaceSettings,
+    updateSettings: updateWorkspaceSettings,
 } = useTalosSettings()
 const {
     loading: enhancingPrompt,
@@ -178,7 +186,10 @@ const {
     setWindowPosition,
 } = useTalosWindows(props.initialSurface === 'dashboard' ? ['runtime'] : [])
 
-const shellClass = computed(() => theme.value === 'light' ? 'talos-light' : 'talos-dark')
+const shellClass = computed(() => [
+    talosThemeClass(theme.value),
+    talosThemeIsLight(theme.value) ? 'talos-light' : 'talos-dark',
+])
 const currentRailWidth = computed(() => railCollapsed.value ? 64 : railWidth.value)
 const workspaceStyle = computed(() => ({
     '--talos-rail-width': `${currentRailWidth.value}px`,
@@ -380,8 +391,8 @@ function startRailResize(event: PointerEvent) {
 
 function loadWorkspacePreferences() {
     const savedTheme = localStorage.getItem('talos_theme')
-    if (savedTheme === 'light' || savedTheme === 'dark') {
-        theme.value = savedTheme
+    if (savedTheme) {
+        theme.value = normalizeTalosTheme(savedTheme)
     }
 
     const savedPreferences = localStorage.getItem('talos_workspace_preferences')
@@ -405,9 +416,24 @@ function saveWorkspacePreferences() {
     }))
 }
 
-function toggleTheme(nextTheme?: Theme) {
-    theme.value = nextTheme ?? (theme.value === 'light' ? 'dark' : 'light')
+function persistThemePreference(nextTheme: TalosThemeId) {
+    updateWorkspaceSettings({
+        preferences: {
+            ...(workspaceSettings.value?.preferences ?? {}),
+            theme: nextTheme,
+        },
+    }).catch((error) => {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not persist the selected theme.'
+    })
+}
+
+function toggleTheme(nextTheme?: TalosThemeId, persist = true) {
+    theme.value = nextTheme ? normalizeTalosTheme(nextTheme) : (talosThemeIsLight(theme.value) ? 'forge' : 'paper')
     localStorage.setItem('talos_theme', theme.value)
+
+    if (persist) {
+        persistThemePreference(theme.value)
+    }
 }
 
 function formatTime(value: string) {
@@ -763,9 +789,10 @@ async function loadPersistedWorkspaceSettings() {
     }
 
     const storedTheme = settings.preferences?.theme
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-        theme.value = storedTheme
-        localStorage.setItem('talos_theme', storedTheme)
+    if (storedTheme) {
+        const nextTheme = normalizeTalosTheme(storedTheme)
+        theme.value = nextTheme
+        localStorage.setItem('talos_theme', nextTheme)
     }
 }
 
@@ -1062,8 +1089,14 @@ onBeforeUnmount(() => {
                             :context-sets="contextSets"
                             :selected-model-profile-id="selectedModelProfileId"
                             :selected-context-set-id="selectedContextSetId"
+                            :authenticated="authenticated"
+                            :auth-user-name="authUserName"
+                            :logout-url="logoutUrl"
+                            :csrf-token="csrfToken"
                             @select-model="selectModelProfile"
                             @select-context="selectContextSet"
+                            @change-theme="toggleTheme"
+                            @open-module="openModule"
                             @saved="saveWorkspacePreferences"
                         />
                     </template>

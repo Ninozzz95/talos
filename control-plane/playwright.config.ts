@@ -22,12 +22,20 @@ export default defineConfig({
     },
     webServer: process.env.TALOS_E2E_BASE_URL
         ? undefined
-        : {
-            command: 'npx concurrently -k -s first -n laravel,vite "..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014" "npm run dev -- --host 127.0.0.1 --port 5173"',
-            url: baseURL,
-            reuseExistingServer,
-            timeout: 120_000,
-        },
+        : [
+            {
+                command: '..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014',
+                url: baseURL,
+                reuseExistingServer,
+                timeout: 120_000,
+            },
+            {
+                command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+                url: 'http://127.0.0.1:5173/resources/js/app.js',
+                reuseExistingServer,
+                timeout: 120_000,
+            },
+        ],
     projects: [
         {
             name: 'chromium',

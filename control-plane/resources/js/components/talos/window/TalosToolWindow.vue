@@ -62,7 +62,7 @@ const windowClass = computed(() => {
                 </Button>
             </div>
         </header>
-        <div class="max-h-[calc(100vh-18rem)] min-h-0 overflow-auto p-3">
+        <div class="talos-tool-window-body min-h-0 overflow-auto p-3">
             <slot />
         </div>
     </section>

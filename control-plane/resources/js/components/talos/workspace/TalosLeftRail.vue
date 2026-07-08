@@ -24,6 +24,7 @@ import {
     Wrench,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
 
 type RailItem = {
     id: string
@@ -65,7 +66,7 @@ const systemItems: RailItem[] = [
 
 const props = defineProps<{
     activeIds: string[]
-    theme: 'dark' | 'light'
+    theme: TalosThemeId
     creatingSession?: boolean
     collapsed?: boolean
     width: number
@@ -74,6 +75,7 @@ const props = defineProps<{
 const railStyle = computed(() => ({
     width: `${props.collapsed ? 64 : props.width}px`,
 }))
+const lightThemeActive = computed(() => talosThemeIsLight(props.theme))
 </script>
 
 <template>
@@ -166,7 +168,7 @@ const railStyle = computed(() => ({
                 @click="emit('toggleTheme')"
             >
                 <span v-if="!collapsed">Theme</span>
-                <Moon v-if="theme === 'light'" class="h-4 w-4" />
+                <Moon v-if="lightThemeActive" class="h-4 w-4" />
                 <Sun v-else class="h-4 w-4" />
             </button>
         </div>
