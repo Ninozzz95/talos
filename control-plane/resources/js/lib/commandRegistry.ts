@@ -8,7 +8,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'chat',
         risk: 'low',
         capability: 'talos.chat.session.create',
-        disabledReason: 'Command palette is not wired to the chat session handler yet.',
     },
     {
         id: 'send_message',
@@ -17,7 +16,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'chat',
         risk: 'low',
         capability: 'talos.chat.message.create',
-        disabledReason: 'Command palette is not wired to the chat composer handler yet.',
     },
     {
         id: 'attach_file',
@@ -26,7 +24,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'context',
         risk: 'medium',
         capability: 'talos.files.upload',
-        disabledReason: 'Command palette file picker is not wired yet; use the dashboard Context Vault upload panel.',
     },
     {
         id: 'open_context_vault',
@@ -35,7 +32,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'context',
         risk: 'low',
         capability: 'talos.context.read',
-        disabledReason: 'Command palette navigation is not wired yet; use the dashboard Context Vault panel.',
     },
     {
         id: 'run_avm_compare',
@@ -44,7 +40,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'benchmark',
         risk: 'medium',
         capability: 'talos.benchmarks.create',
-        disabledReason: 'Open the dashboard workbench and select a benchmark scenario path.',
     },
     {
         id: 'open_trace_replay',
@@ -53,7 +48,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'run',
         risk: 'low',
         capability: 'talos.runs.replay',
-        disabledReason: 'Select a run in the dashboard timeline.',
     },
     {
         id: 'recover_failed_node',
@@ -71,7 +65,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'benchmark',
         risk: 'low',
         capability: 'talos.benchmarks.read',
-        disabledReason: 'Benchmark workbench is available in the dashboard.',
     },
     {
         id: 'open_model_center',
@@ -80,7 +73,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'model',
         risk: 'medium',
         capability: 'talos.models.read',
-        disabledReason: 'Command palette navigation is not wired yet; use the dashboard Model Center panel.',
     },
     {
         id: 'open_doctor',
@@ -89,7 +81,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'system',
         risk: 'low',
         capability: 'talos.doctor.read',
-        disabledReason: 'Command palette navigation is not wired yet; use the dashboard Doctor panel.',
     },
     {
         id: 'open_audit_log',
@@ -98,7 +89,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'system',
         risk: 'low',
         capability: 'talos.audit.read',
-        disabledReason: 'Command palette navigation is not wired yet; use the dashboard Audit Log panel.',
     },
     {
         id: 'open_policy_panel',
@@ -107,7 +97,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'system',
         risk: 'low',
         capability: 'talos.policy.read',
-        disabledReason: 'Command palette navigation is not wired yet; use the dashboard Policy panel.',
     },
     {
         id: 'open_backup_panel',
@@ -116,7 +105,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'system',
         risk: 'medium',
         capability: 'talos.backup.read',
-        disabledReason: 'Command palette navigation is not wired yet; use the dashboard Backup panel.',
     },
     {
         id: 'validate_backup_restore',
@@ -143,7 +131,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'productivity',
         risk: 'low',
         capability: 'talos.notes.read',
-        disabledReason: 'Notes are available in the dashboard productivity panel.',
     },
     {
         id: 'open_tasks',
@@ -152,7 +139,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'productivity',
         risk: 'low',
         capability: 'talos.tasks.read',
-        disabledReason: 'Tasks are available in the dashboard productivity panel.',
     },
     {
         id: 'open_calendar_drafts',
@@ -161,7 +147,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'productivity',
         risk: 'medium',
         capability: 'talos.calendar.read',
-        disabledReason: 'Calendar drafts are available in the dashboard productivity panel.',
     },
     {
         id: 'open_email_triage',
@@ -170,7 +155,6 @@ export const talosCommands: TalosCommand[] = [
         category: 'email',
         risk: 'medium',
         capability: 'talos.email.read',
-        disabledReason: 'Email triage is available in the dashboard email panel.',
     },
     {
         id: 'create_email_draft',

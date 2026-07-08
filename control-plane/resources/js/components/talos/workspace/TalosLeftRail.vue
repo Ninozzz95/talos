@@ -45,13 +45,13 @@ const emit = defineEmits<{
 
 const primaryItems: RailItem[] = [
     { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', icon: Activity },
-    { id: 'search', label: 'Search', description: 'Open persisted files and reports.', icon: Search },
+    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
     { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
     { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', icon: CalendarDays },
     { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
     { id: 'model_lab', label: 'Model Lab', description: 'Provider profiles and probes.', icon: FlaskConical },
     { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', icon: BookOpen },
-    { id: 'gallery', label: 'Gallery', description: 'Run artifacts and previews.', icon: Image },
+    { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', icon: Image },
     { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },
     { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
     { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },

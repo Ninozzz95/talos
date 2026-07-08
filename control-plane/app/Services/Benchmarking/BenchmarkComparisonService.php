@@ -308,6 +308,7 @@ final class BenchmarkComparisonService
                     'file_id' => $file['file_id'] ?? null,
                     'chunk_id' => $file['chunk_id'] ?? null,
                     'sha256' => $file['sha256'] ?? null,
+                    'content_hash' => $file['content_hash'] ?? null,
                 ],
                 $inputFiles,
             ),
@@ -379,16 +380,6 @@ final class BenchmarkComparisonService
             $file = $source->file;
             $chunk = $source->fileChunk;
 
-            if ($file instanceof TalosFile) {
-                $files[$file->id] = [
-                    'file_id' => $file->id,
-                    'name' => $file->original_name,
-                    'type' => $file->mime_type,
-                    'sha256' => $file->checksum,
-                ];
-                continue;
-            }
-
             if ($chunk instanceof TalosFileChunk && $chunk->file instanceof TalosFile) {
                 $files[$chunk->id] = [
                     'file_id' => $chunk->file->id,
@@ -397,6 +388,16 @@ final class BenchmarkComparisonService
                     'type' => $chunk->file->mime_type,
                     'sha256' => $chunk->file->checksum,
                     'content_hash' => $chunk->content_hash,
+                ];
+                continue;
+            }
+
+            if ($file instanceof TalosFile) {
+                $files[$file->id] = [
+                    'file_id' => $file->id,
+                    'name' => $file->original_name,
+                    'type' => $file->mime_type,
+                    'sha256' => $file->checksum,
                 ];
             }
         }

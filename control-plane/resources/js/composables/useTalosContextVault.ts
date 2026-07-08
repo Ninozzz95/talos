@@ -17,6 +17,13 @@ export type CreateTalosContextSetPayload = {
     metadata: Record<string, unknown>
 }
 
+export type TalosFileIngestionResponse = TalosFile & {
+    benchmark_scenario?: {
+        storage_path?: string | null
+        [key: string]: unknown
+    } | null
+}
+
 export function useTalosContextVault() {
     const files = ref<TalosFile[]>([])
     const contextSets = ref<TalosContextSet[]>([])
@@ -95,7 +102,7 @@ export function useTalosContextVault() {
         body.append('file', file)
 
         try {
-            const response = await talosFetch<ApiEnvelope<TalosFile>>('/api/files/ingest', {
+            const response = await talosFetch<ApiEnvelope<TalosFileIngestionResponse>>('/api/files/ingest', {
                 method: 'POST',
                 body,
                 validationMessage: 'TALOS rejected this file for ingestion.',

@@ -27,7 +27,13 @@ final class TalosMessageController extends Controller
             'role' => ['required', 'string', Rule::in(['user', 'assistant', 'system', 'tool'])],
             'content' => ['required', 'string', 'min:1', 'max:20000'],
             'model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'run_id' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'run_id' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:255',
+                Rule::exists('talos_runs', 'id')->where('session_id', $session->id),
+            ],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);
 

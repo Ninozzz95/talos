@@ -105,11 +105,12 @@ async function chooseContextSet(page: Page, contextSetId = 'context-set-e2e') {
 
 async function expectUnifiedWorkspaceChrome(page: Page) {
     await expect(page.getByRole('heading', { name: 'TALOS', exact: true })).toBeVisible()
+    await expect(page.getByText('Ready for verified workflows', { exact: true })).toBeVisible()
     await expect(page.locator('[data-testid="talos-workspace"], .talos-workspace').first()).toBeVisible()
     await expect(page.locator('[aria-label="TALOS workspace rail"]').filter({ visible: true }).first()).toBeVisible()
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
 
-    for (const name of ['New Chat', 'Brain', 'Compare', 'Notes', 'Settings', 'Doctor']) {
+    for (const name of ['New Chat', 'Knowledge', 'Brain', 'Compare', 'Artifacts', 'Notes', 'Settings', 'Doctor']) {
         await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
     }
 
@@ -242,16 +243,54 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
     await expect(page.getByRole('heading', { name: 'What workflow should TALOS handle?' })).toBeVisible()
     await expect(page.getByTestId('talos-empty-brand')).toContainText('TALOS')
     await expect(page.getByTestId('talos-empty-brand').locator('svg')).toBeVisible()
+    await expect(page.getByText('Mission Path', { exact: true })).toBeVisible()
+    await expect(page.getByText('Model linked', { exact: true })).toBeVisible()
+    await expect(page.getByText('Context optional', { exact: true })).toBeVisible()
+    await expect(page.getByText('Session staged', { exact: true })).toBeVisible()
+    await expect(page.getByText('Evidence pending', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Choose model profile' })).toContainText('E2E server-side profile')
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveAttribute('title', 'Type a workflow in the composer before sending.')
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('send message')
+    await expect(page.getByRole('option', { name: /Send message/ })).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByText('Type a workflow in the composer before sending.')).toBeVisible()
+    await page.keyboard.press('Escape')
 
     await page.getByLabel('Message TALOS').fill('Create a replayable file audit workflow.')
-    await page.getByRole('button', { name: 'Send' }).click()
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('send message')
+    await expect(page.getByRole('option', { name: /Send message/ })).toHaveAttribute('aria-disabled', 'false')
+    await page.getByRole('option', { name: /Send message/ }).click()
 
     await expect(page.locator('p').filter({ hasText: 'Create a replayable file audit workflow.' })).toBeVisible()
     await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
     await expect(page.getByText('1 JMP')).toBeVisible()
     await expect(page.getByText('Persisted', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Evidence', exact: true }).click()
+    await expect(page.getByText('Run evidence', { exact: true })).toBeVisible()
+    await expect(page.getByText('Run run-e2e', { exact: true })).toBeVisible()
+    await expect(page.getByText('Model openai / gpt-e2e', { exact: true })).toBeVisible()
+    await expect(page.getByText('Status succeeded', { exact: true })).toBeVisible()
+    await expect(page.getByText('1 mutation', { exact: true })).toBeVisible()
+    await expect(page.getByText('Sources 0', { exact: true })).toBeVisible()
+    await expect(page.getByText('Only safe provenance is shown here. Local storage paths and raw extracted content stay out of chat.')).toBeVisible()
+    const benchmarkFromRun = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/runs/run-e2e/benchmark') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+
+        return body.runs === 1
+    })
+    await page.getByRole('button', { name: 'Compare AVM ON/OFF', exact: true }).click()
+    await benchmarkFromRun
+    await expect(page.getByText('Benchmark run created for run-e2e. Group: benchmark-group-from-run-e2e. Open Compare to inspect persisted AVM ON/OFF lanes.')).toBeVisible()
+    await expect(page.getByText('E2E benchmark from chat run')).toBeVisible()
+    await expect(page.getByText('AVM ON from chat run')).toBeVisible()
+    await expect(page.getByText('Chat run benchmark preserved replayable AVM evidence.')).toBeVisible()
 
     await page.keyboard.press('Tab')
     await expect(page.locator(':focus')).toBeVisible()
@@ -275,9 +314,74 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
-    await page.getByLabel('Search TALOS commands').fill('doctor')
-    await expect(page.getByRole('option', { name: /Open doctor/ })).toBeVisible()
-    await expect(page.getByText('Command palette navigation is not wired yet; use the dashboard Doctor panel.')).toBeVisible()
+    await page.getByLabel('Search TALOS commands').fill('send message')
+    await expect(page.getByRole('option', { name: /Send message/ })).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
+    await expect(page.getByText('Type a workflow in the composer before sending.')).toBeVisible()
+
+    await page.getByLabel('Search TALOS commands').fill('new session')
+    await expect(page.getByRole('option', { name: /New session/ })).toHaveAttribute('aria-disabled', 'false')
+    const commandSessionRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/sessions')
+        && request.method() === 'POST'
+        && request.postDataJSON().title === 'New chat'
+    ))
+    await page.getByRole('option', { name: /New session/ }).click()
+    await commandSessionRequest
+    await expect(page.getByText('New session opened.')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('model center')
+    await page.getByRole('option', { name: /Open model center/ }).click()
+    await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeHidden()
+    await expect(page.getByText('Model Center', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('attach file')
+    await expect(page.getByRole('option', { name: /Attach file/ })).toHaveAttribute('aria-disabled', 'false')
+    await page.getByRole('option', { name: /Attach file/ }).click()
+    await expect(page.getByText('Context Vault', { exact: true })).toBeVisible()
+    await expect(page.locator('input[type="file"]')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('trace replay')
+    await expect(page.getByRole('option', { name: /Open trace replay/ })).toHaveAttribute('aria-disabled', 'false')
+    await page.getByRole('option', { name: /Open trace replay/ }).click()
+    await expect(page.getByText('Run timeline', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('audit log')
+    await expect(page.getByRole('option', { name: /Open audit log/ })).toHaveAttribute('aria-disabled', 'false')
+    await page.getByRole('option', { name: /Open audit log/ }).click()
+    await expect(page.getByTestId('talos-admin-section-audit')).toBeVisible()
+    await expect(page.getByTestId('talos-admin-section-audit')).toContainText('Redacted security events')
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('policy panel')
+    await page.getByRole('option', { name: /Open policy panel/ }).click()
+    await expect(page.getByTestId('talos-admin-section-policy')).toBeVisible()
+    await expect(page.getByTestId('talos-admin-section-policy')).toContainText('Capability boundary')
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('backup panel')
+    await page.getByRole('option', { name: /Open backup panel/ }).click()
+    await expect(page.getByTestId('talos-admin-section-backup')).toBeVisible()
+    await expect(page.getByTestId('talos-admin-section-backup')).toContainText('Dry-run restore policy')
+    await expect(page.getByTestId('talos-admin-section-backup').getByRole('button', { name: 'Validate restore dry-run' })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('email triage')
+    await page.getByRole('option', { name: /Open email triage/ }).click()
+    await expect(page.getByTestId('talos-productivity-section-email-triage')).toBeVisible()
+    await expect(page.getByTestId('talos-productivity-section-email-triage')).toContainText('Read-only and draft-only')
+    await expect(page.getByTestId('talos-productivity-section-email-triage')).toContainText('send_enabled false')
+    await expect(page.getByTestId('talos-productivity-section-email-triage').getByRole('button', { name: 'Create draft' })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('send email draft')
+    await expect(page.getByRole('option', { name: /Send email draft/ })).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByText('Email send is disabled until HMI confirmation and audit exist.')).toBeVisible()
 
     await page.keyboard.press('Escape')
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeHidden()
@@ -500,6 +604,10 @@ test('dashboard exports a persisted benchmark report through a real endpoint', a
 
     await expect(page.getByText('E2E benchmark export')).toBeVisible()
     await expect(page.getByText('Fairness contract')).toBeVisible()
+    await expect(page.getByText('Proof Builder', { exact: true })).toBeVisible()
+    await expect(page.getByText('Persisted benchmark group', { exact: true })).toBeVisible()
+    await expect(page.getByText('2 persisted lanes', { exact: true })).toBeVisible()
+    await expect(page.getByText('Export ready', { exact: true })).toBeVisible()
 
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export report' }).click()
@@ -534,7 +642,44 @@ test('dashboard ingests a user file and creates a grounded context set', async (
     await page.getByRole('button', { name: 'Create context set' }).click()
 
     await expect(page.getByText('Context set "E2E grounded context" created with 1 sources.')).toBeVisible()
-    await expect(page.getByText('E2E grounded context', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Choose grounding context' })).toContainText('E2E grounded context')
+})
+
+test('dashboard opens a real file benchmark scenario from a fresh upload', async ({ page }) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Knowledge')
+
+    await page.locator('input[type="file"]').setInputFiles({
+        name: 'workflow.md',
+        mimeType: 'text/markdown',
+        buffer: Buffer.from('Approve deployment only after replay evidence is attached.'),
+    })
+
+    await expect(page.getByText('workflow.md uploaded through /api/files/ingest.')).toBeVisible()
+    await page.getByRole('button', { name: 'Benchmark this file' }).click()
+
+    await expect(page.getByText('AVM ON/OFF evidence')).toBeVisible()
+    await expect(page.getByText('Proof Builder', { exact: true })).toBeVisible()
+    await expect(page.getByText('File handoff', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Benchmark scenario path')).toHaveValue('benchmark-scenarios/e2e/workflow-file.json')
+
+    const fileBenchmarkRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/benchmarks/compare') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+
+        return body.scenario_path === 'benchmark-scenarios/e2e/workflow-file.json'
+            && body.runs === 1
+    })
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('run avm compare')
+    await expect(page.getByRole('option', { name: /Run AVM compare/ })).toHaveAttribute('aria-disabled', 'false')
+    await page.getByRole('option', { name: /Run AVM compare/ }).click()
+    await fileBenchmarkRequest
+    await expect(page.getByText('Benchmark comparison completed.')).toBeVisible()
+    await expect(page.getByText('E2E generated compare')).toBeVisible()
 })
 
 test('file context grounds a chat turn and exposes source provenance', async ({ page }) => {
@@ -550,20 +695,16 @@ test('file context grounds a chat turn and exposes source provenance', async ({ 
     await page.getByPlaceholder('Incident response context').fill('E2E grounded context')
     await page.getByRole('button', { name: 'Create context set' }).click()
     await expect(page.getByText('Context set "E2E grounded context" created with 1 sources.')).toBeVisible()
-
-    await page.reload({ waitUntil: 'domcontentloaded' })
-    await waitForWorkspaceReady(page)
-    await chooseModelProfile(page)
-    await chooseContextSet(page)
     await expect(page.getByRole('button', { name: 'Choose grounding context' })).toContainText('E2E grounded context')
 
     await page.getByLabel('Message TALOS').fill('Use the uploaded file and cite the source.')
     await page.getByRole('button', { name: 'Send' }).click()
 
     await expect(page.getByText('E2E response from AVM with replayable evidence and grounded file context.')).toBeVisible()
-    await expect(page.getByText('Source provenance')).toBeVisible()
-    await expect(page.getByText('workflow.md')).toBeVisible()
-    await expect(page.getByText('Workflow file says approve the deployment checklist.')).toBeVisible()
+    const chatThread = page.getByLabel('TALOS chat thread')
+    await expect(chatThread.getByText('Source provenance')).toBeVisible()
+    await expect(chatThread.getByText('workflow.md').first()).toBeVisible()
+    await expect(chatThread.getByText('Workflow file says approve the deployment checklist.')).toBeVisible()
 })
 
 test('dashboard replays a persisted failed run and exposes fault evidence', async ({ page }) => {

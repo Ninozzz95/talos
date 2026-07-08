@@ -6,9 +6,11 @@ import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
+import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import TalosToolWindow from '../window/TalosToolWindow.vue'
+import TalosGuidedStart from './TalosGuidedStart.vue'
 import TalosLeftRail from './TalosLeftRail.vue'
 import TalosBenchmarkWorkbench from '../benchmarks/TalosBenchmarkWorkbench.vue'
 import TalosModelCenter from '../models/TalosModelCenter.vue'
@@ -48,7 +50,7 @@ import {
     talosThemeIsLight,
     type TalosThemeId,
 } from '../../../lib/talosThemes'
-import type { TalosCommand, TalosMessage, TalosSession } from '../../../lib/talosTypes'
+import type { TalosCommand, TalosContextSet, TalosMessage, TalosSession } from '../../../lib/talosTypes'
 
 type InitialSurface = 'workspace' | 'chat' | 'dashboard'
 type MessageSource = {
@@ -95,13 +97,13 @@ const windowIds: TalosWindowId[] = [
 
 const windowCopy: Record<TalosWindowId, { title: string; description: string }> = {
     runtime: { title: 'Runtime', description: 'Runs, replay and recovery evidence.' },
-    search: { title: 'Search', description: 'Persisted knowledge surfaces.' },
+    search: { title: 'Knowledge', description: 'Persisted files, context sets and generated documents.' },
     brain: { title: 'Brain', description: 'Memory, skills and planning context.' },
     calendar: { title: 'Calendar', description: 'Calendar drafts, no external write without confirmation.' },
     compare: { title: 'Compare', description: 'AVM ON/OFF benchmark workbench.' },
     model_lab: { title: 'Model Lab', description: 'Server-side model profiles and probes.' },
     research: { title: 'Deep Research', description: 'Research reports, sources and claims.' },
-    gallery: { title: 'Gallery', description: 'Run artifacts and previews with provenance.' },
+    gallery: { title: 'Artifacts', description: 'Run artifacts and previews with provenance.' },
     library: { title: 'Library', description: 'Files, context sets and generated documents.' },
     notes: { title: 'Notes', description: 'Untrusted notes, never silently injected.' },
     tasks: { title: 'Tasks', description: 'Persisted tasks and workflow follow-up.' },
@@ -109,6 +111,27 @@ const windowCopy: Record<TalosWindowId, { title: string; description: string }> 
     theme: { title: 'Theme', description: 'Appearance controls for this workspace.' },
     doctor: { title: 'Doctor', description: 'Readiness, policy, audit and backup controls.' },
     tools: { title: 'Tools', description: 'Connectors and tool registry.' },
+}
+
+type CommandRoute = {
+    windowId: TalosWindowId
+    sectionTestId?: string
+}
+
+const commandWindowTargets: Partial<Record<TalosCommand['id'], CommandRoute>> = {
+    attach_file: { windowId: 'library' },
+    open_context_vault: { windowId: 'library' },
+    open_trace_replay: { windowId: 'runtime' },
+    open_benchmark_workbench: { windowId: 'compare' },
+    open_model_center: { windowId: 'model_lab' },
+    open_doctor: { windowId: 'doctor' },
+    open_audit_log: { windowId: 'doctor', sectionTestId: 'talos-admin-section-audit' },
+    open_policy_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-policy' },
+    open_backup_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-backup' },
+    open_notes: { windowId: 'notes' },
+    open_tasks: { windowId: 'tasks' },
+    open_calendar_drafts: { windowId: 'calendar' },
+    open_email_triage: { windowId: 'tasks', sectionTestId: 'talos-productivity-section-email-triage' },
 }
 
 const theme = ref<TalosThemeId>(TALOS_DEFAULT_THEME)
@@ -121,6 +144,9 @@ const uiError = ref<string | null>(null)
 const commandPaletteOpen = ref(false)
 const commandFeedback = ref('')
 const adminToken = ref('')
+const expandedEvidenceMessageIds = ref<string[]>([])
+const selectedBenchmarkGroupId = ref<string | null>(null)
+const selectedBenchmarkScenarioPath = ref<string | null>(null)
 const modelPopoverOpen = ref(false)
 const contextPopoverOpen = ref(false)
 const selectedModelProfileId = ref('')
@@ -200,8 +226,53 @@ const hasDockedWindows = computed(() => dockedVisibleWindowIds.value.length > 0)
 const selectedModelProfile = computed(() => findModelProfile(selectedModelProfileId.value))
 const selectedContextSet = computed(() => contextSets.value.find((contextSet) => contextSet.id === selectedContextSetId.value) ?? null)
 const selectedModelProfileIsUsable = computed(() => Boolean(selectedModelProfile.value && selectedModelProfile.value.status !== 'disabled' && selectedModelProfile.value.has_secret))
+const messageEvidenceReady = computed(() => messages.value.some((message) => message.role === 'assistant' && Boolean(message.run_id)))
 const activeSessionIsTemporary = computed(() => activeSession.value?.persistence_mode === 'temporary')
 const canSend = computed(() => prompt.value.trim().length > 0 && !sending.value && selectedModelProfileIsUsable.value)
+const selectedBenchmarkScenarioIsRunnable = computed(() => {
+    const path = selectedBenchmarkScenarioPath.value?.trim() ?? ''
+
+    return path.startsWith('benchmark-scenarios/') && path.endsWith('.json')
+})
+const sendMessageCommandDisabledReason = computed(() => {
+    if (sending.value) {
+        return 'TALOS is already processing a message.'
+    }
+
+    if (!prompt.value.trim()) {
+        return 'Type a workflow in the composer before sending.'
+    }
+
+    if (!selectedModelProfileIsUsable.value) {
+        return 'Choose a usable server-side model profile before sending.'
+    }
+
+    return ''
+})
+const runAvmCompareCommandDisabledReason = computed(() => {
+    if (selectedBenchmarkScenarioIsRunnable.value) {
+        return ''
+    }
+
+    return 'Select a private benchmark scenario from Context Vault before running AVM compare.'
+})
+const workspaceCommands = computed<TalosCommand[]>(() => talosCommands.map((command) => {
+    if (command.id === 'send_message') {
+        return {
+            ...command,
+            disabledReason: sendMessageCommandDisabledReason.value || undefined,
+        }
+    }
+
+    if (command.id === 'run_avm_compare') {
+        return {
+            ...command,
+            disabledReason: runAvmCompareCommandDisabledReason.value || undefined,
+        }
+    }
+
+    return command
+}))
 const modelLabel = computed(() => {
     if (selectedModelProfile.value) {
         return selectedModelProfile.value.display_name
@@ -256,15 +327,19 @@ const assistantEnhancerDisabledReason = computed(() => {
     return ''
 })
 const workspaceSubtitle = computed(() => {
-    if (props.initialSurface === 'dashboard') {
-        return 'Control cockpit'
+    if (selectedModelProfileIsUsable.value) {
+        return 'Ready for verified workflows'
     }
 
-    if (props.initialSurface === 'chat') {
-        return 'Chat focus'
+    if (loadingModelProfiles.value) {
+        return 'Checking model readiness'
     }
 
-    return 'Unified workspace'
+    if (modelProfiles.value.length > 0) {
+        return 'Model secret required'
+    }
+
+    return 'Model setup required'
 })
 const authLabel = computed(() => props.authUserName.trim() || 'Operator')
 let stopWindowDragListeners: (() => void) | null = null
@@ -491,6 +566,21 @@ function messageSources(message: TalosMessage): MessageSource[] {
     })
 }
 
+function messageHasEvidence(message: TalosMessage) {
+    return message.role === 'assistant'
+        && (Boolean(message.run_id) || messageMutations(message).length > 0 || messageSources(message).length > 0)
+}
+
+function messageEvidenceOpen(message: TalosMessage) {
+    return expandedEvidenceMessageIds.value.includes(message.id)
+}
+
+function toggleMessageEvidence(message: TalosMessage) {
+    expandedEvidenceMessageIds.value = messageEvidenceOpen(message)
+        ? expandedEvidenceMessageIds.value.filter((id) => id !== message.id)
+        : [...expandedEvidenceMessageIds.value, message.id]
+}
+
 function sourceLabel(source: MessageSource, index: number) {
     return source.file_name || source.chunk_id || source.file_id || `Source ${index + 1}`
 }
@@ -669,6 +759,7 @@ async function benchmarkMessageRun(message: TalosMessage) {
         })
 
         const groupId = response.benchmark_group?.id ?? 'unknown'
+        selectedBenchmarkGroupId.value = response.benchmark_group?.id ?? null
         await createMessage(activeSession.value.id, {
             role: 'system',
             content: `Benchmark run created for ${message.run_id}. Group: ${groupId}. Open Compare to inspect persisted AVM ON/OFF lanes.`,
@@ -685,6 +776,38 @@ async function benchmarkMessageRun(message: TalosMessage) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not benchmark this run.'
     } finally {
         benchmarkingRunId.value = null
+    }
+}
+
+async function runSelectedBenchmarkScenario() {
+    const path = selectedBenchmarkScenarioPath.value?.trim() ?? ''
+
+    if (!selectedBenchmarkScenarioIsRunnable.value) {
+        uiError.value = runAvmCompareCommandDisabledReason.value
+        openWindow('compare')
+        return
+    }
+
+    uiError.value = null
+    commandFeedback.value = ''
+
+    try {
+        const response = await talosFetch<{
+            benchmark_group?: { id?: string; name?: string }
+        }>('/api/benchmarks/compare', {
+            method: 'POST',
+            body: JSON.stringify({
+                scenario_path: path,
+                runs: 1,
+            }),
+            validationMessage: 'TALOS rejected the benchmark comparison request.',
+        })
+
+        selectedBenchmarkGroupId.value = response.benchmark_group?.id ?? null
+        openWindow('compare')
+        commandFeedback.value = 'Benchmark comparison completed.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not run the benchmark comparison.'
     }
 }
 
@@ -711,6 +834,22 @@ function selectContextSet(contextSetId: string) {
     saveWorkspacePreferences()
 }
 
+async function handleContextSetCreated(contextSet: TalosContextSet) {
+    selectedContextSetId.value = contextSet.id
+    saveWorkspacePreferences()
+
+    try {
+        await loadContextSets()
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not refresh context sets.'
+    }
+}
+
+function handleBenchmarkScenarioSelected(scenarioPath: string) {
+    selectedBenchmarkScenarioPath.value = scenarioPath
+    openWindow('compare')
+}
+
 function openCommandPalette() {
     commandPaletteOpen.value = true
 }
@@ -719,35 +858,64 @@ function closeCommandPalette() {
     commandPaletteOpen.value = false
 }
 
-function selectCommand(commandId: TalosCommand['id']) {
-    const map: Partial<Record<TalosCommand['id'], TalosWindowId>> = {
-        open_context_vault: 'library',
-        run_avm_compare: 'compare',
-        open_trace_replay: 'runtime',
-        recover_failed_node: 'runtime',
-        open_benchmark_workbench: 'compare',
-        open_model_center: 'model_lab',
-        open_doctor: 'doctor',
-        open_audit_log: 'doctor',
-        open_policy_panel: 'doctor',
-        open_backup_panel: 'doctor',
-        open_notes: 'notes',
-        open_tasks: 'tasks',
-        open_calendar_drafts: 'calendar',
-        open_email_triage: 'tasks',
+async function focusCommandRoute(route: CommandRoute) {
+    openWindow(route.windowId)
+
+    if (dockedWindowIds.value.includes(route.windowId)) {
+        toggleDock(route.windowId)
     }
 
-    const command = talosCommands.find((item) => item.id === commandId)
-    const target = map[commandId]
+    if (!route.sectionTestId || typeof document === 'undefined') {
+        return true
+    }
 
-    if (target) {
-        openWindow(target)
-        commandFeedback.value = `${command?.label ?? 'Command'} opened.`
+    await nextTick()
+
+    const section = document.querySelector<HTMLElement>(`[data-testid="${route.sectionTestId}"]`)
+    if (!section) {
+        return false
+    }
+
+    section.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' })
+    section.focus({ preventScroll: true })
+
+    return true
+}
+
+async function selectCommand(commandId: TalosCommand['id']) {
+    const command = workspaceCommands.value.find((item) => item.id === commandId)
+    const route = commandWindowTargets[commandId]
+
+    if (commandId === 'new_session') {
+        closeCommandPalette()
+        await startNewChat()
+        commandFeedback.value = 'New session opened.'
+        return
+    }
+
+    if (commandId === 'send_message') {
+        closeCommandPalette()
+        await sendChat()
+        commandFeedback.value = uiError.value ? '' : 'Message sent through TALOS chat.'
+        return
+    }
+
+    if (commandId === 'run_avm_compare') {
+        closeCommandPalette()
+        await runSelectedBenchmarkScenario()
+        return
+    }
+
+    if (route) {
+        closeCommandPalette()
+        const focused = await focusCommandRoute(route)
+        commandFeedback.value = focused
+            ? `${command?.label ?? 'Command'} opened.`
+            : `${command?.label ?? 'Command'} opened, but TALOS could not focus the requested section.`
     } else {
         commandFeedback.value = command?.disabledReason || command?.description || 'Command selected.'
+        closeCommandPalette()
     }
-
-    closeCommandPalette()
 }
 
 function handleKeyboard(event: KeyboardEvent) {
@@ -907,10 +1075,12 @@ onBeforeUnmount(() => {
             <div class="relative z-10 flex gap-2 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/82 px-3 py-2 lg:hidden" aria-label="TALOS workspace rail">
                 <Button size="sm" :disabled="creatingSession" @click="startNewChat">New Chat</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('runtime')">Runtime</Button>
+                <Button size="sm" variant="ghost" @click="openWindow('search')">Knowledge</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('brain')">Brain</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('compare')">Compare</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('model_lab')">Model Lab</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('library')">Library</Button>
+                <Button size="sm" variant="ghost" @click="openWindow('gallery')">Artifacts</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('notes')">Notes</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('settings')">Settings</Button>
                 <Button size="sm" variant="ghost" @click="openWindow('theme')">Theme</Button>
@@ -948,6 +1118,16 @@ onBeforeUnmount(() => {
                         <p class="mt-3 max-w-[560px] text-sm leading-6 text-[var(--talos-muted)]">
                             Type a task, attach a context set when needed, and TALOS will route it through the AVM control plane with replayable evidence.
                         </p>
+                        <TalosGuidedStart
+                            class="mt-5"
+                            :model-ready="selectedModelProfileIsUsable"
+                            :context-selected="Boolean(selectedContextSet)"
+                            :context-available="contextSets.length > 0"
+                            :session-ready="Boolean(activeSession)"
+                            :evidence-ready="messageEvidenceReady"
+                            @open-model="openWindow('model_lab')"
+                            @open-context="openWindow('library')"
+                        />
                         <div class="mt-5 flex flex-wrap justify-center gap-2">
                             <button type="button" class="rounded-md border border-[var(--talos-border)] px-3 py-2 text-sm text-[var(--talos-muted)] transition hover:border-[var(--talos-accent)] hover:text-[var(--talos-accent)]" @click="prompt = 'Create a verified workflow for checking an external API.'">
                                 Verify API
@@ -986,6 +1166,17 @@ onBeforeUnmount(() => {
                                     <Badge v-if="messageMutations(message).length" tone="success">{{ messageMutations(message).length }} JMP</Badge>
                                     <Badge tone="neutral">Persisted</Badge>
                                     <Button
+                                        v-if="messageHasEvidence(message)"
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        :aria-expanded="messageEvidenceOpen(message)"
+                                        @click="toggleMessageEvidence(message)"
+                                    >
+                                        <ShieldCheck class="h-4 w-4" />
+                                        Evidence
+                                    </Button>
+                                    <Button
                                         v-if="message.run_id"
                                         type="button"
                                         variant="ghost"
@@ -995,9 +1186,13 @@ onBeforeUnmount(() => {
                                     >
                                         <Loader2 v-if="benchmarkingRunId === message.run_id" class="h-4 w-4 animate-spin" />
                                         <BarChart3 v-else class="h-4 w-4" />
-                                        Benchmark run
+                                        Compare AVM ON/OFF
                                     </Button>
                                 </div>
+                                <TalosEvidenceDrawer
+                                    v-if="message.role === 'assistant' && messageEvidenceOpen(message)"
+                                    :message="message"
+                                />
                                 <div v-if="message.role === 'assistant' && messageSources(message).length" class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                                     <div class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Source provenance</div>
                                     <div class="mt-2 space-y-2">
@@ -1044,7 +1239,10 @@ onBeforeUnmount(() => {
                         <TalosRunTimeline />
                     </template>
                     <template v-else-if="id === 'search'">
-                        <TalosContextVault />
+                        <TalosContextVault
+                            @context-set-created="handleContextSetCreated"
+                            @benchmark-scenario-selected="handleBenchmarkScenarioSelected"
+                        />
                         <TalosDocuments class="mt-3" />
                     </template>
                     <template v-else-if="id === 'brain'">
@@ -1061,6 +1259,8 @@ onBeforeUnmount(() => {
                             groups-endpoint="/api/talos/benchmark-groups"
                             export-endpoint="/api/talos/benchmark-groups/{id}/export"
                             :default-runs="1"
+                            :initial-benchmark-group-id="selectedBenchmarkGroupId"
+                            :initial-scenario-path="selectedBenchmarkScenarioPath"
                         />
                     </template>
                     <template v-else-if="id === 'model_lab'">
@@ -1073,7 +1273,10 @@ onBeforeUnmount(() => {
                         <TalosArtifactGallery />
                     </template>
                     <template v-else-if="id === 'library'">
-                        <TalosContextVault />
+                        <TalosContextVault
+                            @context-set-created="handleContextSetCreated"
+                            @benchmark-scenario-selected="handleBenchmarkScenarioSelected"
+                        />
                         <TalosDocuments class="mt-3" />
                     </template>
                     <template v-else-if="id === 'notes'">
@@ -1081,7 +1284,9 @@ onBeforeUnmount(() => {
                     </template>
                     <template v-else-if="id === 'tasks'">
                         <TalosTasks />
-                        <TalosEmailTriage class="mt-3" />
+                        <section data-testid="talos-productivity-section-email-triage" tabindex="-1" class="mt-3 outline-none">
+                            <TalosEmailTriage />
+                        </section>
                     </template>
                     <template v-else-if="id === 'tools'">
                         <TalosToolRegistry />
@@ -1117,10 +1322,18 @@ onBeforeUnmount(() => {
                                 aria-label="TALOS admin API token"
                             />
                         </Card>
-                        <TalosDoctorPanel :token="adminToken" class="mt-3" />
-                        <TalosPolicyPanel :token="adminToken" class="mt-3" />
-                        <TalosBackupPanel :token="adminToken" class="mt-3" />
-                        <TalosAuditLog :token="adminToken" class="mt-3" />
+                        <section data-testid="talos-admin-section-doctor" tabindex="-1" class="mt-3 outline-none">
+                            <TalosDoctorPanel :token="adminToken" />
+                        </section>
+                        <section data-testid="talos-admin-section-policy" tabindex="-1" class="mt-3 outline-none">
+                            <TalosPolicyPanel :token="adminToken" />
+                        </section>
+                        <section data-testid="talos-admin-section-backup" tabindex="-1" class="mt-3 outline-none">
+                            <TalosBackupPanel :token="adminToken" />
+                        </section>
+                        <section data-testid="talos-admin-section-audit" tabindex="-1" class="mt-3 outline-none">
+                            <TalosAuditLog :token="adminToken" />
+                        </section>
                     </template>
                 </TalosToolWindow>
             </div>
@@ -1249,6 +1462,7 @@ onBeforeUnmount(() => {
                         :model-label="modelLabel"
                         :context-label="contextLabel"
                         :temporary-mode="sessionPersistenceMode === 'temporary'"
+                        :send-disabled-reason="sendMessageCommandDisabledReason"
                         :enhancer-disabled-reason="assistantEnhancerDisabledReason"
                         @send="sendChat"
                         @open-model="() => { modelPopoverOpen = !modelPopoverOpen; contextPopoverOpen = false; clearPromptEnhancement() }"
@@ -1269,7 +1483,7 @@ onBeforeUnmount(() => {
                 @click.self="closeCommandPalette"
             >
                 <div class="mx-auto w-full max-w-2xl">
-                    <TalosCommandPalette :commands="talosCommands" @selected="selectCommand" />
+                    <TalosCommandPalette :commands="workspaceCommands" @selected="selectCommand" />
                 </div>
             </div>
 

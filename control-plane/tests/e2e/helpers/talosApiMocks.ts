@@ -186,6 +186,64 @@ function comparisonBenchmarkGroupPayload(includeResults = false) {
     }
 }
 
+function runBenchmarkGroupPayload(includeResults = false) {
+    const group = {
+        id: 'benchmark-group-from-run-e2e',
+        name: 'E2E benchmark from chat run',
+        source_run_id: 'run-e2e',
+        scenario_path: 'benchmark-scenarios/e2e/from-run.json',
+        scenario_hash: 'scenariohash-from-run-e2e',
+        prompt_hash: 'runprompthash-e2e',
+        context_hash: 'contexthash-from-run-e2e',
+        model: 'gpt-e2e',
+        evaluator_version: 'kadmos-core-benchmark-v1',
+        metadata: { surface: 'e2e', source: 'chat_run' },
+        results_count: 2,
+        created_at: now,
+        updated_at: now,
+    }
+
+    if (!includeResults) {
+        return group
+    }
+
+    return {
+        ...group,
+        results: [
+            {
+                id: 'benchmark-result-from-run-avm-on',
+                benchmark_group_id: 'benchmark-group-from-run-e2e',
+                mode: 'avm_on',
+                label: 'AVM ON from chat run',
+                status: 'success',
+                prompt_hash: 'runprompthash-e2e',
+                context_hash: 'contexthash-from-run-e2e',
+                evaluator_version: 'kadmos-core-benchmark-v1',
+                metrics: { trace_replayability: 100, enterprise_risk_score: 0 },
+                raw_report: { notes: 'Chat run benchmark preserved replayable AVM evidence.' },
+                trace_replayable: true,
+                created_at: now,
+                updated_at: now,
+            },
+            {
+                id: 'benchmark-result-from-run-avm-off',
+                benchmark_group_id: 'benchmark-group-from-run-e2e',
+                mode: 'avm_off_direct',
+                label: 'AVM OFF from chat run',
+                status: 'completed_with_risk',
+                prompt_hash: 'runprompthash-e2e',
+                context_hash: 'contexthash-from-run-e2e',
+                evaluator_version: 'kadmos-core-benchmark-v1',
+                metrics: { trace_replayability: 0, enterprise_risk_score: 51 },
+                raw_report: { notes: 'Direct chat-run lane completed without replayable node evidence.' },
+                trace_replayable: false,
+                created_at: now,
+                updated_at: now,
+            },
+        ],
+    }
+}
+
 function filePayload() {
     return {
         id: 'file-e2e',
@@ -517,7 +575,15 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         if (path === '/api/files/ingest' && method === 'POST') {
             fileUploaded = true
-            return json(route, { data: filePayload() }, 201)
+            return json(route, {
+                data: {
+                    ...filePayload(),
+                    benchmark_scenario: {
+                        category: 'file_ingestion',
+                        storage_path: 'benchmark-scenarios/e2e/workflow-file.json',
+                    },
+                },
+            }, 201)
         }
 
         if (path === '/api/talos/files' && method === 'GET') {
@@ -566,6 +632,15 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             })
         }
 
+        if (path === '/api/talos/runs/run-e2e/benchmark' && method === 'POST') {
+            return json(route, {
+                report_type: 'benchmark_evidence',
+                benchmark_group: runBenchmarkGroupPayload(false),
+                benchmark_results: runBenchmarkGroupPayload(true).results,
+                evidence_summary: { source: 'run-e2e' },
+            })
+        }
+
         if (path === '/api/talos/benchmark-groups' && method === 'GET') {
             return json(route, {
                 data: comparisonCreated
@@ -580,6 +655,10 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         if (path === '/api/talos/benchmark-groups/benchmark-group-compare-e2e' && method === 'GET') {
             return json(route, { data: comparisonBenchmarkGroupPayload(true) })
+        }
+
+        if (path === '/api/talos/benchmark-groups/benchmark-group-from-run-e2e' && method === 'GET') {
+            return json(route, { data: runBenchmarkGroupPayload(true) })
         }
 
         if (path === '/api/talos/benchmark-groups/benchmark-group-e2e/export' && method === 'GET') {
