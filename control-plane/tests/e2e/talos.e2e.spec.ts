@@ -228,6 +228,10 @@ test('root is the canonical TALOS workspace and legacy routes redirect to it', a
     await openWorkspace(page)
     await attachWorkspaceScreenshot(page, testInfo, 'root')
     await expectUnifiedWorkspaceChrome(page)
+    await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
+    await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'dag-flow')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
     await expectNoHorizontalOverflow(page)
 
     for (const routePath of ['/chat', '/dashboard'] as const) {
@@ -436,15 +440,14 @@ test('settings window loads safe preferences and persists theme through the sett
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Presets' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Customize' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Video backgrounds' })).toHaveCount(0)
+    await expect(page.getByTestId('talos-theme-preview-video')).toHaveCount(0)
     await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(10)
+    await expect(page.locator('[data-testid="talos-theme-preview-swatch"]')).toHaveCount(10)
     const terminalThemePreset = page.getByRole('button', { name: 'Terminal Operator' })
-    await expect(terminalThemePreset).toContainText('Animated background')
-    const terminalPreviewVideo = terminalThemePreset.getByTestId('talos-theme-preview-video')
-    await expect(terminalPreviewVideo).toHaveAttribute('poster', /\/talos\/backgrounds\/terminal-poster\.webp$/)
-    await expect(terminalPreviewVideo.locator('source[type="video/webm"]')).toHaveAttribute('src', /\/talos\/backgrounds\/terminal-background\.webm$/)
-    await expect(terminalPreviewVideo).toHaveAttribute('autoplay')
-    await expect.poll(async () => terminalPreviewVideo.evaluate((video) => (video as HTMLVideoElement).paused)).toBe(false)
-    await expect(page.getByRole('button', { name: 'Violet Lab' })).toContainText('Static fallback')
+    await expect(terminalThemePreset).toContainText('Procedural effect')
     const themePatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -458,17 +461,59 @@ test('settings window loads safe preferences and persists theme through the sett
     await terminalThemePreset.click()
     await themePatchRequest
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
-    const themeBackgroundVideo = page.getByTestId('talos-theme-background-video')
-    await expect(themeBackgroundVideo).toHaveAttribute('poster', /\/talos\/backgrounds\/terminal-poster\.webp$/)
-    await expect(themeBackgroundVideo).toHaveAttribute('data-motion', 'animated')
-    await expect(themeBackgroundVideo).toHaveAttribute('autoplay')
-    await expect(themeBackgroundVideo.locator('source[type="video/webm"]')).toHaveAttribute('src', /\/talos\/backgrounds\/terminal-background\.webm$/)
-    await expect(themeBackgroundVideo.locator('source[type="video/mp4"]')).toHaveAttribute('src', /\/talos\/backgrounds\/terminal-background\.mp4$/)
-    await expect.poll(async () => themeBackgroundVideo.evaluate((video) => (video as HTMLVideoElement).paused)).toBe(false)
+    await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
+    await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
     await expect(page.getByText('Theme saved through /api/talos/settings.')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Customize' }).click()
+    await expect(page.getByText('Workspace customization', { exact: true })).toBeVisible()
+    await page.getByLabel('Accent color').fill('#31d6c8')
+    await page.getByLabel('Background color').fill('#02080c')
+    await page.getByLabel('Panel color').fill('#08121a')
+    await page.getByLabel('Text color').fill('#e8fbff')
+    await page.getByLabel('Background effect').selectOption('trace-rain')
+    await page.getByLabel('Density').selectOption('compact')
+    await page.getByLabel('Corner radius').selectOption('sharp')
+    await page.getByLabel('Effect intensity').fill('82')
+    const customizationPatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const customization = preferences?.theme_customization as Record<string, unknown> | undefined
+
+        return customization?.accent === '#31d6c8'
+            && customization?.background === '#02080c'
+            && customization?.panel === '#08121a'
+            && customization?.text === '#e8fbff'
+            && customization?.effect === 'trace-rain'
+            && customization?.density === 'compact'
+            && customization?.radius === 'sharp'
+            && Number(customization?.effect_intensity) === 82
+    })
+    await page.getByRole('button', { name: 'Save customization' }).click()
+    await customizationPatchRequest
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-density-compact/)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-radius-sharp/)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-accent:\s*#31d6c8/)
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
+    await expect(page.getByText('Theme customization saved through /api/talos/settings.')).toBeVisible()
+
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-density-compact/)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-radius-sharp/)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-accent:\s*#31d6c8/)
+    await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
+    await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
     await expectNoHorizontalOverflow(page)
 
     await testInfo.attach(`settings-theme-${testInfo.project.name}.png`, {

@@ -46,7 +46,10 @@ import { talosCommands } from '../../../lib/commandRegistry'
 import {
     TALOS_DEFAULT_THEME,
     normalizeTalosTheme,
+    sanitizeTalosThemeCustomization,
+    talosBackgroundEffectFromCustomization,
     talosThemeClass,
+    talosThemeCustomizationStyle,
     talosThemePreset,
     talosThemeIsLight,
     type TalosThemeId,
@@ -216,14 +219,22 @@ const {
 const shellClass = computed(() => [
     talosThemeClass(theme.value),
     talosThemeIsLight(theme.value) ? 'talos-light' : 'talos-dark',
+    `talos-density-${workspaceThemeCustomization.value.density ?? 'comfortable'}`,
+    `talos-radius-${workspaceThemeCustomization.value.radius ?? 'balanced'}`,
+    `talos-effect-${workspaceBackgroundEffect.value}`,
 ])
 const currentThemePreset = computed(() => talosThemePreset(theme.value))
-const currentThemeBackground = computed(() => currentThemePreset.value.background ?? null)
 const workspaceReducedMotion = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
-const backgroundMotionState = computed(() => workspaceReducedMotion.value ? 'poster' : 'animated')
+const workspaceThemeCustomization = computed(() => sanitizeTalosThemeCustomization(workspaceSettings.value?.preferences?.theme_customization))
+const workspaceBackgroundEffect = computed(() => talosBackgroundEffectFromCustomization(
+    workspaceThemeCustomization.value,
+    currentThemePreset.value,
+    workspaceReducedMotion.value,
+))
 const currentRailWidth = computed(() => railCollapsed.value ? 64 : railWidth.value)
 const workspaceStyle = computed(() => ({
     '--talos-rail-width': `${currentRailWidth.value}px`,
+    ...talosThemeCustomizationStyle(workspaceThemeCustomization.value),
 }))
 const floatingWindowIds = computed(() => visibleWindowIds.value.filter((item) => !dockedWindowIds.value.includes(item)))
 const dockedVisibleWindowIds = computed(() => visibleWindowIds.value.filter((item) => dockedWindowIds.value.includes(item)))
@@ -513,6 +524,14 @@ function toggleTheme(nextTheme?: TalosThemeId, persist = true) {
 
     if (persist) {
         persistThemePreference(theme.value)
+    }
+}
+
+async function refreshWorkspaceSettingsAfterThemeUpdate() {
+    try {
+        await loadPersistedWorkspaceSettings()
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not refresh workspace appearance settings.'
     }
 }
 
@@ -986,16 +1005,6 @@ function applyQueryModules() {
     }
 }
 
-function playWorkspaceBackground(event: Event) {
-    if (workspaceReducedMotion.value || !(event.target instanceof HTMLVideoElement)) {
-        return
-    }
-
-    event.target.play().catch(() => {
-        // Browser autoplay policy can still reject media; poster remains the fallback.
-    })
-}
-
 onMounted(async () => {
     loadWorkspacePreferences()
     window.addEventListener('keydown', handleKeyboard)
@@ -1028,7 +1037,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <main :class="['talos-shell talos-workspace talos-chat-layout flex min-h-screen overflow-hidden', shellClass]" :style="workspaceStyle" data-testid="talos-workspace">
+    <main
+        :class="['talos-shell talos-workspace talos-chat-layout flex min-h-screen overflow-hidden', shellClass]"
+        :style="workspaceStyle"
+        :data-background-effect="workspaceBackgroundEffect"
+        data-testid="talos-workspace"
+    >
         <TalosLeftRail
             :active-ids="openWindowIds"
             :theme="theme"
@@ -1045,30 +1059,19 @@ onBeforeUnmount(() => {
 
         <section class="relative flex min-w-0 flex-1 flex-col">
             <div
-                class="pointer-events-none absolute inset-0 overflow-hidden opacity-80"
-                :class="{ 'talos-background-has-video': currentThemeBackground }"
+                data-testid="talos-background-effect"
+                class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden opacity-80"
+                :class="`talos-effect-${workspaceBackgroundEffect}`"
+                :data-effect="workspaceBackgroundEffect"
                 aria-hidden="true"
             >
-                <video
-                    v-if="currentThemeBackground"
-                    :key="theme"
-                    data-testid="talos-theme-background-video"
-                    class="talos-theme-background-video absolute inset-0 h-full w-full object-cover"
-                    :poster="currentThemeBackground.poster"
-                    :autoplay="!workspaceReducedMotion"
-                    :data-motion="backgroundMotionState"
-                    muted
-                    loop
-                    playsinline
-                    preload="metadata"
-                    @canplay="playWorkspaceBackground"
-                    @loadedmetadata="playWorkspaceBackground"
-                >
-                    <source :src="currentThemeBackground.webm" type="video/webm">
-                    <source :src="currentThemeBackground.mp4" type="video/mp4">
-                </video>
                 <div class="talos-theme-background-scrim absolute inset-0"></div>
                 <div class="talos-dag-grid absolute inset-0"></div>
+                <div class="talos-effect-layer talos-effect-layer-a"></div>
+                <div class="talos-effect-layer talos-effect-layer-b"></div>
+                <div class="talos-trace-stream talos-trace-stream-a"></div>
+                <div class="talos-trace-stream talos-trace-stream-b"></div>
+                <div class="talos-trace-stream talos-trace-stream-c"></div>
                 <div class="talos-dag-line talos-dag-line-a"></div>
                 <div class="talos-dag-line talos-dag-line-b"></div>
                 <div class="talos-dag-node talos-dag-node-a"></div>
@@ -1347,7 +1350,11 @@ onBeforeUnmount(() => {
                         />
                     </template>
                     <template v-else-if="id === 'theme'">
-                        <TalosThemeEngine :theme="theme" @change-theme="toggleTheme" />
+                        <TalosThemeEngine
+                            :theme="theme"
+                            @change-theme="toggleTheme"
+                            @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate"
+                        />
                     </template>
                     <template v-else-if="id === 'doctor'">
                         <Card>
