@@ -39,6 +39,7 @@ export function buildServer() {
     const { mutations, context } = request.body as {
       mutations?: unknown[];
       context?: Record<string, string>;
+      allowed_node_types?: unknown;
     };
 
     if (!Array.isArray(mutations) || !context || typeof context !== 'object') {
@@ -49,7 +50,11 @@ export function buildServer() {
         message: 'Request body must contain mutations array and context object',
       }]};
     }
-    return validateMutations(mutations, context);
+    const allowedNodeTypes = Array.isArray((request.body as { allowed_node_types?: unknown }).allowed_node_types)
+      ? (request.body as { allowed_node_types: unknown[] }).allowed_node_types.filter((value): value is string => typeof value === 'string')
+      : undefined;
+
+    return validateMutations(mutations, context, allowedNodeTypes);
   });
 
   // Get DAG state (polling fallback)
@@ -84,16 +89,29 @@ export function buildServer() {
 
   // Chat relay to PHP
   server.post('/chat', async (request) => {
-    const { message, api_key } = request.body as { message?: string; api_key?: string };
+    const { message, api_key, provider, model, base_url, tool_context } = request.body as {
+      message?: string;
+      api_key?: string;
+      provider?: string;
+      model?: string;
+      base_url?: string | null;
+      tool_context?: unknown;
+    };
     if (!message) return { error: 'message required' };
 
     // Use absolute path to PHP binary — env var override if set
     const phpBin = process.env.PHP_BIN || join(process.cwd(), '..', '.tools', 'php', 'php.exe');
-    const chatScript = join(process.cwd(), '..', 'core', 'kadmos-chat.php');
+    const chatScript = process.env.KADMOS_CHAT_SCRIPT || join(process.cwd(), '..', 'core', 'kadmos-chat.php');
 
     return new Promise((resolve) => {
       const php = spawn(phpBin, [chatScript], {
-        env: { ...process.env, DEEPSEEK_API_KEY: api_key || process.env.DEEPSEEK_API_KEY || '' },
+        env: {
+          ...process.env,
+          DEEPSEEK_API_KEY: api_key || process.env.DEEPSEEK_API_KEY || '',
+          KADMOS_PROVIDER: provider || process.env.KADMOS_PROVIDER || '',
+          KADMOS_MODEL: model || process.env.KADMOS_MODEL || '',
+          KADMOS_BASE_URL: base_url || process.env.KADMOS_BASE_URL || '',
+        },
       });
       let output = '';
       php.stdout.on('data', (data: Buffer) => { output += data.toString(); });
@@ -102,7 +120,7 @@ export function buildServer() {
         try { resolve(JSON.parse(output.trim().split('\n').pop() || '{}')); }
         catch { resolve({ error: 'chat error', raw: output.slice(-200) }); }
       });
-      php.stdin.write(JSON.stringify({ message, api_key }) + '\n');
+      php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context }) + '\n');
       php.stdin.end();
     });
   });

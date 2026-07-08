@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Kadmos;
 
+use Kadmos\Security\ExecutionPolicy;
+
 /**
  * LLM client for OpenAI-compatible APIs (OpenAI, Groq, vLLM, etc.)
  */
@@ -35,6 +37,7 @@ final class OpenAIClient implements LLMClientInterface
         $this->model = $model;
         $this->baseUrl = $baseUrl;
         $this->timeoutMs = $timeoutMs;
+        $this->assertProviderBaseUrlAllowed($baseUrl, $timeoutMs);
         $this->systemPrompt = SystemPromptBuilder::build();
     }
 
@@ -148,6 +151,20 @@ final class OpenAIClient implements LLMClientInterface
         }
 
         return \json_decode($response, true, flags: \JSON_THROW_ON_ERROR);
+    }
+
+    private function assertProviderBaseUrlAllowed(string $baseUrl, int $timeoutMs): void
+    {
+        $allowedHosts = \array_values(\array_filter(\array_map(
+            'trim',
+            \explode(',', \getenv('KADMOS_ALLOWED_PROVIDER_HOSTS') ?: 'api.openai.com,api.deepseek.com'),
+        )));
+        $policy = new ExecutionPolicy(allowedHosts: $allowedHosts);
+        $decision = $policy->inspectUrl(\rtrim($baseUrl, '/') . '/chat/completions', $timeoutMs);
+
+        if (!$decision->allowed) {
+            throw new \RuntimeException("Provider base URL blocked by execution policy: {$decision->reason}");
+        }
     }
 
     /**

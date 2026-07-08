@@ -27,9 +27,11 @@ function testExpertHelpDocumentsSlashCommands(): void
 {
     $output = GuidedShell::expertHelp();
 
-    foreach (['/help', '/tutorial', '/ingest', '/compare', '/evidence', '/report', '/json', '/expert', '/exit'] as $command) {
+    foreach (['/help', '/tutorial', '/read', '/search', '/validate', '/execute', '/compare', '/trace', '/fault', '/recover', '/doctor', '/export', '/json', '/expert', '/exit'] as $command) {
         assertTrue(str_contains($output, $command), "Expert help should document {$command}.");
     }
+
+    assertTrue(str_contains($output, '/mode ask|semi|auto|lab|enterprise'), 'Expert help should document all execution modes.');
 }
 
 function testTutorialExplainsFirstUsefulRun(): void
@@ -40,6 +42,15 @@ function testTutorialExplainsFirstUsefulRun(): void
     assertTrue(str_contains($output, 'upload'), 'Tutorial should explain file ingestion in plain terms.');
     assertTrue(str_contains($output, 'AVM ON'), 'Tutorial should explain the AVM comparison path.');
     assertTrue(str_contains($output, 'replay'), 'Tutorial should point to trace replay as proof.');
+    assertTrue(str_contains($output, 'enterprise'), 'Tutorial should explain enterprise-safe mode.');
+}
+
+function testChatReplDocumentsAllExecutionModes(): void
+{
+    $repl = (string) file_get_contents(__DIR__ . '/../kadmos-chat-repl.php');
+
+    assertTrue(str_contains($repl, "['ask', 'semi', 'auto', 'lab', 'enterprise']"), 'Chat REPL should accept all Phase 13 modes.');
+    assertTrue(str_contains($repl, '/mode <ask|semi|auto|lab|enterprise>'), 'Chat REPL help should document all modes.');
 }
 
 function testCliRoutesGuidedFlags(): void
@@ -116,6 +127,7 @@ $tests = [
     'testGuidedWelcomeGivesBeginnerMenu',
     'testExpertHelpDocumentsSlashCommands',
     'testTutorialExplainsFirstUsefulRun',
+    'testChatReplDocumentsAllExecutionModes',
     'testCliRoutesGuidedFlags',
     'testDefaultCliRoutesToBootAnimationShell',
     'testDashboardCommandTargetsTalosControlPlaneByDefault',

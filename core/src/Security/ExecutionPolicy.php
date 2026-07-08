@@ -24,40 +24,66 @@ final readonly class ExecutionPolicy
         $host = $this->normalizeHost((string) parse_url($url, PHP_URL_HOST));
         $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
         $timeoutMs = min(max(1, $requestedTimeoutMs), $this->maxTimeoutMs);
+        $audit = [
+            'scheme' => $scheme,
+            'host' => $host,
+            'requested_timeout_ms' => $requestedTimeoutMs,
+            'effective_timeout_ms' => $timeoutMs,
+            'resolved_ips' => [],
+        ];
 
         if ($host === '' || !in_array($scheme, ['http', 'https'], true)) {
-            return new PolicyDecision(false, 'invalid or unsupported URL', $timeoutMs);
+            return $this->decision(false, 'invalid or unsupported URL', $timeoutMs, $audit);
         }
 
-        if ($this->allowedHosts !== [] && !in_array($host, array_map($this->normalizeHost(...), $this->allowedHosts), true)) {
-            return new PolicyDecision(false, 'host is not allowlisted', $timeoutMs);
+        $allowedHosts = array_map($this->normalizeHost(...), $this->allowedHosts);
+        $blockedHosts = array_map($this->normalizeHost(...), $this->blockedHosts);
+
+        if ($allowedHosts !== [] && !in_array($host, $allowedHosts, true)) {
+            return $this->decision(false, 'host is not allowlisted', $timeoutMs, $audit);
         }
 
-        if (in_array($host, array_map($this->normalizeHost(...), $this->blockedHosts), true)) {
-            return new PolicyDecision(false, 'blocked ' . $this->hostReason($host), $timeoutMs);
+        if (in_array($host, $blockedHosts, true)) {
+            return $this->decision(false, 'blocked ' . $this->hostReason($host), $timeoutMs, $audit);
         }
 
         if (!$this->allowPrivateNetworks && $this->isPrivateHost($host)) {
-            return new PolicyDecision(false, 'private network host blocked', $timeoutMs);
+            return $this->decision(false, 'private network host blocked', $timeoutMs, $audit);
         }
 
         $resolvedIps = $this->resolveHostIps($host);
+        $audit['resolved_ips'] = $resolvedIps;
         if ($resolvedIps === []) {
-            return new PolicyDecision(false, 'host did not resolve', $timeoutMs);
+            return $this->decision(false, 'host did not resolve', $timeoutMs, $audit);
         }
 
         foreach ($resolvedIps as $ip) {
             $normalizedIp = $this->normalizeHost($ip);
-            if (in_array($normalizedIp, array_map($this->normalizeHost(...), $this->blockedHosts), true)) {
-                return new PolicyDecision(false, 'blocked ' . $this->hostReason($normalizedIp), $timeoutMs);
+            if (filter_var($normalizedIp, FILTER_VALIDATE_IP) === false) {
+                return $this->decision(false, 'invalid DNS resolution', $timeoutMs, $audit);
+            }
+
+            if (in_array($normalizedIp, $blockedHosts, true)) {
+                return $this->decision(false, 'blocked ' . $this->hostReason($normalizedIp), $timeoutMs, $audit);
             }
 
             if (!$this->allowPrivateNetworks && $this->isPrivateHost($normalizedIp)) {
-                return new PolicyDecision(false, 'private network host blocked', $timeoutMs);
+                return $this->decision(false, 'private network host blocked', $timeoutMs, $audit);
             }
         }
 
-        return new PolicyDecision(true, 'allowed', $timeoutMs);
+        return $this->decision(true, 'allowed', $timeoutMs, $audit);
+    }
+
+    /**
+     * @param array<string, mixed> $audit
+     */
+    private function decision(bool $allowed, string $reason, int $timeoutMs, array $audit): PolicyDecision
+    {
+        return new PolicyDecision($allowed, $reason, $timeoutMs, $audit + [
+            'allowed' => $allowed,
+            'reason' => $reason,
+        ]);
     }
 
     private function normalizeHost(string $host): string

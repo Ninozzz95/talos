@@ -1,5 +1,23 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import { buildServer } from '../src/server';
+import { resolve } from 'node:path';
+
+const originalPhpBin = process.env.PHP_BIN;
+const originalKadmosChatScript = process.env.KADMOS_CHAT_SCRIPT;
+
+afterEach(() => {
+  if (originalPhpBin === undefined) {
+    delete process.env.PHP_BIN;
+  } else {
+    process.env.PHP_BIN = originalPhpBin;
+  }
+
+  if (originalKadmosChatScript === undefined) {
+    delete process.env.KADMOS_CHAT_SCRIPT;
+  } else {
+    process.env.KADMOS_CHAT_SCRIPT = originalKadmosChatScript;
+  }
+});
 
 describe('POST /validate', () => {
   const server = buildServer();
@@ -74,6 +92,56 @@ describe('POST /validate', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.valid).toBe(false);
+  });
+
+  it('applies allowed_node_types as a registry allowlist', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      payload: {
+        mutations: [
+          { action: 'SPAWN_NODE', node_id: 'n_sql', node_type: 'QUERY_DATABASE' },
+        ],
+        context: {},
+        allowed_node_types: ['HTTP_REQUEST'],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.valid).toBe(false);
+    expect(body.errors[0].message).toContain('not available');
+  });
+});
+
+describe('POST /chat', () => {
+  const server = buildServer();
+
+  afterAll(async () => {
+    await server.close();
+  });
+
+  it('forwards TALOS tool_context to the core chat process', async () => {
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_CHAT_SCRIPT = resolve(__dirname, 'fixtures/chat-echo.mjs');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat',
+      payload: {
+        message: 'Use available tools only.',
+        api_key: 'sk-test',
+        tool_context: {
+          source: 'talos_tool_registry',
+          tools: [
+            { name: 'HTTP_REQUEST', risk_level: 'medium' },
+          ],
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().received_tool_context.tools[0].name).toBe('HTTP_REQUEST');
   });
 });
 

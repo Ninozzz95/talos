@@ -75,10 +75,33 @@ function testHmiRetryRestoresBlockedDescendants(): void
     assertSameValue(['B'], $orchestrator->getExecutionQueue(), 'B should be the first schedulable restored node.');
 }
 
+function testHmiRetryDoesNotRestoreChildWhileAnotherParentFailed(): void
+{
+    $orchestrator = new ASTOrchestrator(new WorkerRegistry());
+    $orchestrator->addNode('A');
+    $orchestrator->addNode('B');
+    $orchestrator->addNode('C', ['A', 'B']);
+
+    $orchestrator->markRunning('A');
+    $orchestrator->markFailed('A');
+    $orchestrator->markRunning('B');
+    $orchestrator->markFailed('B');
+
+    $orchestrator->forceRetry('A');
+    $orchestrator->markRunning('A');
+    $orchestrator->markSuccess('A');
+
+    assertSameValue(NodeStatus::SUCCESS, $orchestrator->getNodeStatus('A'), 'A should recover to success.');
+    assertSameValue(NodeStatus::FAILED, $orchestrator->getNodeStatus('B'), 'B should remain failed.');
+    assertSameValue(NodeStatus::BLOCKED_BY_DEPENDENCY, $orchestrator->getNodeStatus('C'), 'C should stay blocked while B is failed.');
+    assertSameValue([], $orchestrator->getExecutionQueue(), 'No child should be schedulable while one parent remains failed.');
+}
+
 $tests = [
     'testFailureCascadesToLinearDescendants',
     'testFailureBlocksSharedChildUntilAllParentsSucceed',
     'testHmiRetryRestoresBlockedDescendants',
+    'testHmiRetryDoesNotRestoreChildWhileAnotherParentFailed',
     'testBuildContextReturnsTypeMapping',
     'testBuildContextIgnoresNonMutateActions',
     'testBuildContextIgnoresUnknownNodes',

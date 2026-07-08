@@ -29,9 +29,11 @@ function makeFault(field: string, expected: string, received: string, message: s
 
 export function validateMutations(
     mutations: unknown[],
-    context: Record<string, string>
+    context: Record<string, string>,
+    allowedNodeTypes?: string[]
 ): ValidationResult {
     const allFaults: ValidationFault[] = [];
+    const allowedNodeTypeSet = Array.isArray(allowedNodeTypes) ? new Set(allowedNodeTypes) : null;
 
     for (let i = 0; i < mutations.length; i++) {
         const mutation = mutations[i];
@@ -43,6 +45,22 @@ export function validateMutations(
                 field: `mutations[${i}].${f.field}`,
             }));
             allFaults.push(...faults);
+            continue;
+        }
+
+        if (
+            parsed.data.action === 'SPAWN_NODE'
+            && allowedNodeTypeSet
+            && !allowedNodeTypeSet.has(parsed.data.node_type)
+        ) {
+            allFaults.push(
+                makeFault(
+                    `mutations[${i}].node_type`,
+                    `one of: ${Array.from(allowedNodeTypeSet).join(', ') || 'none'}`,
+                    parsed.data.node_type,
+                    `Tool "${parsed.data.node_type}" is not available in the TALOS registry planning context.`
+                )
+            );
             continue;
         }
 

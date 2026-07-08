@@ -24,6 +24,42 @@
 - Dangerous actions fail closed unless an explicit capability and policy decision allows them.
 - Every phase ends with relevant focused tests plus `git diff --check`.
 
+## Implementation Status
+
+Last updated: 2026-07-07.
+
+- [x] Phase 0 baseline verified with local `.tools\env.ps1`.
+- [x] Phase 1 UI/API contract foundation started and verified:
+  - `control-plane/resources/js/lib/api.ts`
+  - `control-plane/resources/js/lib/talosTypes.ts`
+  - `control-plane/resources/js/lib/statusCopy.ts`
+  - `control-plane/resources/js/lib/statusTone.ts`
+  - `control-plane/resources/js/lib/commandRegistry.ts`
+  - `control-plane/resources/js/components/talos/shell/TalosCommandPalette.vue`
+  - `control-plane/tests/Feature/TalosRouteContractTest.php`
+- [x] Dashboard no-fake cleanup started: removed static benchmark scores, fake indexed files, fake session list, fake execution timeline, unhandled action buttons, hardcoded validator-online badge, and evidence/replay claims not backed by run events.
+- [x] Phase 2 persistent chat sessions/messages verified:
+  - `talos_sessions`
+  - `talos_messages`
+  - session/message Eloquent models
+  - session/message API controllers
+  - `/chat` session sidebar and persisted message flow
+  - user prompt persisted before `/api/talos/chat`
+  - assistant/system result persisted after proxy response or controlled failure
+- [x] Phase 3 provider profiles implemented: server-side encrypted secrets, Model Center, and `/chat` profile selection.
+
+Verified Phase 1 and Phase 2 gates:
+
+```powershell
+cd control-plane
+. ..\.tools\env.ps1
+php artisan test --filter=Talos
+php artisan test
+npm run build
+cd ..
+git diff --check
+```
+
 ---
 
 ## 1. Definition Of 100 Percent Functional
@@ -583,7 +619,7 @@ GET    /api/talos/runs/{run}/artifacts
 GET    /api/talos/benchmark-scenarios
 POST   /api/talos/benchmarks
 GET    /api/talos/benchmarks/{benchmarkGroup}
-POST   /api/talos/benchmarks/{benchmarkGroup}/export
+GET    /api/talos/benchmark-groups/{benchmarkGroup}/export
 POST   /api/benchmarks/compare
 ```
 
@@ -1118,11 +1154,11 @@ show_worker_only
 
 **Backend work:**
 
-- Add connector/tool migrations.
-- Add `ConnectorRegistry`.
-- Add `ToolRegistry`.
+- Add connector/tool migrations. **Implemented first slice:** `talos_connectors` and `talos_tools`.
+- Add `ConnectorRegistry`. **Implemented first slice:** Eloquent-backed connector API for management reads/writes.
+- Add `ToolRegistry`. **Implemented first slice:** Eloquent-backed tool API plus sanitized planning context.
 - Add capabilities and risk levels.
-- Map enabled tools into system prompt/tool planning context.
+- Map enabled tools into system prompt/tool planning context. **Implemented first slice:** Laravel passes only enabled tools whose connector is enabled and `healthy`; validator forwards `tool_context`; core chat injects the authorized list into the prompt.
 
 **Initial tool classes:**
 
@@ -1151,10 +1187,35 @@ WEBHOOK_CALL
 
 **Acceptance:**
 
-- UI shows real connector health.
-- Tool can be enabled/disabled.
-- Worker execution logs policy decisions.
-- LLM cannot call a tool not in registry.
+- UI shows real connector health. **Implemented:** `TalosToolRegistry`, `TalosConnectorHealth`, and `TalosToolSchemaViewer` render API-returned state only.
+- Tool can be enabled/disabled. **Backend supported:** `PATCH /api/talos/tools/{tool}` can change `is_enabled` and `planning_enabled`; no dashboard toggle is shown until product policy confirms that action.
+- Worker execution logs policy decisions. **Partial:** core `PolicyDecision` now carries a structured audit record; persisted worker trace emission remains a later AVM execution integration item.
+- LLM cannot call a tool not in registry. **Implemented first slice:** planning prompt is registry-filtered, validator `/validate` supports `allowed_node_types`, and PHP core chat rejects unlisted `SPAWN_NODE` types before execution.
+
+**Implemented Phase 8 slice on 2026-07-07:**
+
+- `GET/POST/PATCH/DELETE /api/talos/connectors`.
+- `GET/POST/PATCH/DELETE /api/talos/tools`.
+- `GET /api/talos/tools/planning-context`.
+- Connector and tool models use UUID string IDs and API-safe serialization.
+- Planning context excludes disabled tools, disabled connectors, and non-healthy connectors.
+- `/api/talos/chat` attaches the planning context sent to the validator.
+- Validator `/chat` forwards `tool_context` to the core chat process.
+- Core chat appends the authorized tool registry to the prompt instead of relying on browser-side state.
+- Core chat rejects `SPAWN_NODE` types that are not in the active registry allowlist before validation or execution.
+- Validator `/validate` accepts `allowed_node_types` and rejects unlisted `SPAWN_NODE` types.
+- Registry write routes require `TALOS_REGISTRY_WRITE_TOKEN`; read routes remain dashboard-safe.
+- `ExecutionPolicy` resolves hostnames, blocks localhost/private/metadata IPs by default, caps timeout, fails closed on empty or invalid DNS resolution, and returns an audit record.
+- `HttpRequestWorker` pins vetted DNS results with `CURLOPT_RESOLVE` and fails closed if the connected primary IP differs from the vetted address list.
+- Model profile `base_url` is checked by policy during create/update, probe, chat use, and direct core `OpenAIClient` construction.
+
+**Phase 8 residuals:**
+
+- Registry-aware validator payload schemas for arbitrary future tools.
+- Worker registry instantiation from persisted tools beyond the current real `HTTP_REQUEST` worker.
+- Persisted run events for worker policy decisions from real AVM execution.
+- Capability checks before exposing UI enable/disable controls.
+- Connector probe endpoints only after each connector has a real probe contract.
 
 ### Module 9: Model Center And Provider Profiles
 
@@ -1214,10 +1275,10 @@ latency_sample
 
 **Backend work:**
 
-- Add memory/skill migrations.
-- Add retrieval service with scope controls.
-- Add skill evaluation hook.
-- Add "used memory" disclosure per run.
+- Add memory/skill migrations. **Implemented first slice:** `talos_memories` and `talos_skills`.
+- Add retrieval service with scope controls. **Implemented:** disabled/rejected/quarantined memories are excluded; retrieval includes global plus matching scope only.
+- Add skill evaluation hook. **Implemented first slice:** skill evaluation endpoint records pass/fail and promotion requires passed eval.
+- Add "used memory" disclosure per run. **Implemented first slice:** chat only injects memory when an explicit memory scope is provided and returns `used_memories`.
 
 **Tests:**
 
@@ -1228,10 +1289,31 @@ latency_sample
 
 **Acceptance:**
 
-- User can see, disable, edit, and delete memories.
-- Assistant message shows memory used when relevant.
-- Skill registry shows risk and allowed tools.
-- Bad skill can be quarantined.
+- User can see, disable, edit, and delete memories. **Implemented first slice:** dashboard can create memory and disable retrieved memory; APIs support update/delete.
+- Assistant message shows memory used when relevant. **Implemented first slice:** `/api/talos/chat` returns `used_memories` only when explicit memory scope is used.
+- Skill registry shows risk and allowed tools. **Implemented:** `TalosSkillRegistry` and `TalosSkillAudit`.
+- Bad skill can be quarantined. **Backend supported:** `review_status=quarantined`; UI shows status but does not expose fake quarantine controls yet.
+
+**Implemented Phase 9 slice on 2026-07-07:**
+
+- `GET/POST/PATCH/DELETE /api/talos/memories`.
+- `GET /api/talos/memories/retrieval-context`.
+- `GET/POST/PATCH/DELETE /api/talos/skills`.
+- `GET /api/talos/skills/planning-context`.
+- `POST /api/talos/skills/{skill}/evaluation`.
+- `TalosMemoryRetrievalService` returns untrusted context and excludes disabled/rejected/quarantined rows.
+- Chat memory injection is opt-in through `memory_scope_type`/`memory_scope_id`; no silent prompt stuffing.
+- Skill planning context includes only enabled, approved, eval-passed skills.
+- Skill write/evaluation routes require `TALOS_REGISTRY_WRITE_TOKEN`.
+- Imported skills cannot set policy or capabilities metadata.
+- Dashboard mounts `TalosMemoryManager`, `TalosSkillRegistry`, and `TalosSkillAudit` backed by real APIs.
+
+**Phase 9 residuals:**
+
+- Persist used-memory IDs into run events/metadata for replay fairness.
+- Skill evaluation should read persisted benchmark groups and enforce thresholds, not just accept a pass/fail operator result.
+- Skill-selected chat mode should intersect skill `allowed_tools` with the tool registry.
+- Memory search/ranking remains deterministic list retrieval; embeddings are a later indexed-memory phase.
 
 ### Module 11: Deep Research
 
@@ -1278,6 +1360,24 @@ export_report
 - Conflicting sources are visible.
 - AVM ON/OFF can compare claim drift.
 
+**Implemented Phase 10 slice on 2026-07-07:**
+
+- Added `talos_research_reports`, `talos_research_sources`, `talos_research_claims`, claim-source linkage, and `talos_documents`.
+- Added `/api/talos/research-reports` list/create/show.
+- Research create produces a `verified_execution` run, ordered research pipeline events, source fetch events, claim-source mapping, and a `research_report` run artifact.
+- Verified claims are rejected without sources; failed source fetches block only dependent claims through `blocked_by_source`.
+- Added `/api/talos/documents`, `/api/talos/documents/{document}/export`, `/api/talos/artifacts`, and `/api/talos/artifacts/{artifact}/preview`.
+- Document export includes content, metadata, run id, artifact id, prompt hash, provider, and model provenance.
+- Artifact preview renders persisted research reports and falls back to download for unsupported artifact types without dereferencing arbitrary URIs.
+- Dashboard mounts `TalosResearchWorkbench`, `TalosSourceTable`, `TalosClaimVerifier`, `TalosDocuments`, `TalosArtifactGallery`, and `TalosArtifactPreview`; `/chat` remains low-noise.
+
+**Phase 10 residuals:**
+
+- Live web search/fetch providers are not enabled yet; MVP accepts explicit source payloads and degrades through failed source status.
+- Claim drift comparison against AVM OFF benchmark groups is not wired yet.
+- Report export is JSON/API-backed; downloadable files and citation-format renderers are later artifact/export work.
+- Notes, tasks, calendar, and email remain Phase 11 modules.
+
 ### Module 12: Documents, Notes, Tasks, Calendar
 
 **User value:** TALOS becomes a workspace, not only a demo.
@@ -1311,6 +1411,15 @@ export_report
 - User can attach notes as context with visible provenance.
 - Calendar actions are drafts until approved.
 
+**Implemented Phase 11 productivity slice on 2026-07-07:**
+
+- Added `talos_notes`, `talos_tasks`, and `talos_calendar_drafts`.
+- Added `/api/talos/notes`, `/api/talos/notes/retrieval-context`, `/api/talos/tasks`, and `/api/talos/calendar-drafts`.
+- Notes retrieval returns bounded full content as `trust_level=untrusted` and explicitly cannot override policy/tools.
+- Tasks preserve `run_id` when generated from TALOS run conclusions.
+- Calendar actions are draft-only; create cannot approve/publish directly and confirmation is local/HMI-only in MVP.
+- Dashboard mounts `TalosNotes`, `TalosTasks`, and `TalosCalendar` in `/dashboard`; `/chat` remains low-noise.
+
 ### Module 13: Email Assistant
 
 **User value:** TALOS can triage and draft email while staying safe.
@@ -1342,6 +1451,23 @@ export_report
 - TALOS can summarize selected messages.
 - TALOS can draft reply.
 - Send button is manual and audited.
+
+**Implemented Phase 11 email slice on 2026-07-07:**
+
+- Added `talos_email_messages` and `talos_email_drafts`.
+- Added `/api/talos/email/connector-status`, `/api/talos/email/messages`, `/api/talos/email/messages/context`, `/api/talos/email/drafts`, and `/api/talos/email/drafts/{draft}/send`.
+- Connector status defaults to degraded/read-only/send-disabled until a real external connector exists.
+- Email message context is `trust_level=untrusted`, allows only read/draft, and cannot change tool or send policy.
+- Email drafts record referenced message IDs and always return `send_enabled=false`.
+- Send route returns `403 EMAIL_SEND_DISABLED` in MVP.
+- Dashboard mounts `TalosEmailTriage` and nested `TalosEmailDraftReview`; `/chat` does not mount email cockpit panels.
+
+**Phase 11 residuals:**
+
+- External IMAP/SMTP or provider connectors are not implemented yet.
+- Email draft-message linkage uses stored referenced message IDs; a normalized pivot can be added when multi-account email sync lands.
+- Calendar confirmation is local state only; no external calendar write occurs.
+- Audit events and capability-gated send/write flows are Phase 12 work.
 
 ### Module 14: Artifact Gallery And Media
 
@@ -1389,12 +1515,23 @@ export_report
 
 **Backend work:**
 
-- Add capabilities and roles.
-- Add scoped API tokens.
-- Add audit events.
-- Add doctor endpoint.
-- Add backup manifest/export.
-- Add restore validation.
+- [x] Add capabilities and roles.
+- [x] Add scoped API tokens.
+- [x] Add audit events.
+- [x] Add doctor endpoint.
+- [x] Add backup manifest.
+- [x] Add restore validation.
+- [ ] Add backup/export execution after the export artifact contract exists.
+
+**Implemented Phase 12 admin slice on 2026-07-07:**
+
+- Added scoped `talos_api_tokens` with hashed token storage, role assignment, expiry, disabled state, and `talos.admin.all`.
+- Added `talos_audit_events` with recursive redaction for secret, token, password, and API key payload keys.
+- Added admin APIs for Doctor, policy/capabilities, audit events, backup manifest, and dry-run restore validation.
+- Added `TalosDoctorPanel.vue`, `TalosAuditLog.vue`, `TalosPolicyPanel.vue`, `TalosBackupPanel.vue`, and `useTalosAdmin.ts` under `/dashboard` only.
+- Added audit rows for provider profile create/update, file upload, HMI recovery, registry/tool write denial, calendar confirmation, and email send denial.
+- Added `TALOS_VALIDATOR_HEALTH_URL` config and degraded Doctor behavior when validator health is not configured.
+- Backup restore validation is dry-run only, rejects incompatible schema, and rejects incomplete domain manifests.
 
 **Doctor checks:**
 
@@ -1417,18 +1554,22 @@ execution_policy
 
 **Tests:**
 
-- Non-admin cannot access admin endpoints.
-- Token without scope cannot run worker.
-- Doctor shows degraded validator.
-- Backup manifest includes sessions, runs, files, artifacts, policies.
-- Restore rejects incompatible schema version.
+- [x] Non-admin cannot access admin endpoints.
+- [x] Token without scope cannot access scoped admin endpoints.
+- [x] Expired token is rejected.
+- [x] Doctor shows degraded validator.
+- [x] Backup manifest includes sessions, runs, files, artifacts, policies.
+- [x] Restore rejects incompatible schema version.
+- [x] Restore rejects incomplete domain manifest.
+- [x] Audit API filters by event type and redacts sensitive payloads.
 
 **Acceptance:**
 
-- Admin can inspect health.
-- Audit log shows policy denials and HMI overrides.
-- Backup can be generated and validated.
-- Security panel shows real policy state.
+- [x] Admin can inspect health with a scoped token.
+- [x] Audit log shows policy denials and HMI overrides for implemented flows.
+- [x] Backup manifest can be generated and validated in dry-run mode.
+- [x] Security panel shows real default-deny policy state.
+- [x] Benchmark export audit writes `benchmark_report.exported` for complete persisted benchmark groups.
 
 ### Module 16: KADMOS CLI Parity
 
@@ -1455,6 +1596,7 @@ kadmos trace replay <run-id>
 kadmos fault explain <run-id> --node=<node-id>
 kadmos recover <run-id> --node=<node-id>
 kadmos files ingest <path>
+kadmos export benchmark <benchmark-group-id>
 kadmos dashboard
 ```
 
@@ -1489,6 +1631,8 @@ kadmos dashboard
 - Expert can run commands directly.
 - Every command has stable exit code.
 - No live mode silently uses mock validation.
+
+**Status 2026-07-07:** implemented for command registry, stable JSON command routing, local trace fixture replay, fail-closed control-plane trace/fault/recover/export commands, file-ingest dry-run hashing, non-dry-run file-ingest contract validation, `export benchmark`, and guided shell modes `ask`, `semi`, `auto`, `lab`, `enterprise`. `doctor --json` is operational and reports degraded readiness when provider credentials are absent, as expected.
 
 ---
 
@@ -1571,17 +1715,19 @@ npm run build
 
 **Work:**
 
-- [ ] Store encrypted provider profile secrets server-side.
-- [ ] Add provider profile CRUD.
-- [ ] Add model probe.
-- [ ] Update chat to send `model_profile_id`.
-- [ ] Keep local API key fallback explicitly marked as dev-only.
+- [x] Store encrypted provider profile secrets server-side.
+- [x] Add provider profile CRUD.
+- [x] Add model probe.
+- [x] Update chat to send `model_profile_id`.
+- [x] Keep local API key fallback explicitly marked as dev-only.
 
 **Verification:**
 
 ```powershell
 cd control-plane
 php artisan test --filter=TalosModelProfile
+php artisan test --filter=TalosModelCenter
+php artisan test --filter=TalosChat
 npm run build
 ```
 
@@ -1599,17 +1745,20 @@ npm run build
 
 **Work:**
 
-- [ ] Add file metadata persistence.
-- [ ] Add staged ingestion states.
-- [ ] Add context set selection.
-- [ ] Add composer file chips.
-- [ ] Add source provenance drawer.
+- [x] Add file metadata persistence.
+- [x] Add staged ingestion states.
+- [x] Add context set selection.
+- [x] Add composer file/context chips.
+- [x] Add source provenance drawer.
 
 **Verification:**
 
 ```powershell
 cd control-plane
 php artisan test --filter=FileIngestion
+php artisan test --filter=TalosContextSet
+php artisan test --filter=TalosContextVault
+php artisan test --filter=TalosChat
 npm run build
 ```
 
@@ -1627,23 +1776,27 @@ npm run build
 
 **Work:**
 
-- [ ] Persist run shells from chat.
-- [ ] Normalize core/benchmark events.
-- [ ] Add run events endpoint.
-- [ ] Render run timeline.
-- [ ] Render node inspector.
+- [x] Persist run shells from chat.
+- [x] Normalize core/benchmark events.
+- [x] Add run events endpoint.
+- [x] Render run timeline.
+- [x] Render node inspector.
 
 **Verification:**
 
 ```powershell
 cd control-plane
 php artisan test --filter=TalosRun
+php artisan test --filter=TalosChatRunBridge
+php artisan test --filter=TalosRunTimeline
 npm run build
 ```
 
 ### Phase 5: Recovery And Replay
 
 **Purpose:** Turn faults into controlled HMI workflows.
+
+**Implementation status 2026-07-07:** implemented in the operational roadmap as Phase 6.
 
 **Files:**
 
@@ -1655,11 +1808,11 @@ npm run build
 
 **Work:**
 
-- [ ] Replay persisted events.
-- [ ] Add recovery request validation.
-- [ ] Map recovery to core status transitions.
-- [ ] Audit recovery actions.
-- [ ] Show replay and recovery controls in UI.
+- [x] Replay persisted events.
+- [x] Add recovery request validation.
+- [x] Map recovery to core status transitions and persisted run status events.
+- [x] Audit recovery actions.
+- [x] Show replay and recovery controls in UI.
 
 **Verification:**
 
@@ -1675,6 +1828,8 @@ php kadmos test
 
 **Purpose:** Make AVM ON/OFF evidence the center of the product.
 
+**Implementation status 2026-07-07:** persisted benchmark groups/results, dashboard workbench, benchmark-from-run action, and audited JSON export for complete persisted AVM ON/OFF evidence are implemented.
+
 **Files:**
 
 - Create benchmark migrations.
@@ -1686,11 +1841,11 @@ php kadmos test
 
 **Work:**
 
-- [ ] Persist benchmark groups and results.
-- [ ] Store prompt/context hash for fairness.
-- [ ] Render two or three lanes depending on real availability.
-- [ ] Add report export.
-- [ ] Add run-from-chat action.
+- [x] Persist benchmark groups and results.
+- [x] Store prompt/context hash for fairness when real task/context exists; keep unknown/null when not present.
+- [x] Render two or three lanes depending on real availability.
+- [x] Add report export.
+- [x] Add run-from-chat action.
 
 **Verification:**
 
@@ -1825,11 +1980,12 @@ npm run build
 
 **Work:**
 
-- [ ] Add capability checks.
-- [ ] Add scoped API tokens.
-- [ ] Add audit log.
-- [ ] Add system doctor endpoint.
-- [ ] Add backup manifest and restore validation.
+- [x] Add capability checks.
+- [x] Add scoped API tokens.
+- [x] Add audit log.
+- [x] Add system doctor endpoint.
+- [x] Add backup manifest and restore validation.
+- [ ] Add destructive restore/export execution only after a separate capability, audit, and artifact contract exists.
 
 **Verification:**
 
@@ -1841,6 +1997,8 @@ php artisan test --filter=Doctor
 php artisan test --filter=Backup
 npm run build
 ```
+
+**Status 2026-07-07:** verified for scoped admin APIs, Doctor, audit, policy, backup manifest, and dry-run restore validation. Benchmark export is now enabled only for complete persisted benchmark groups and writes an audit event.
 
 ### Phase 12: KADMOS CLI Alignment
 
@@ -1855,12 +2013,12 @@ npm run build
 
 **Work:**
 
-- [ ] Add command registry parity with UI.
-- [ ] Add guided shell tutorial.
-- [ ] Add trace replay command.
-- [ ] Add recovery command.
-- [ ] Add benchmark compare command.
-- [ ] Add stable JSON output.
+- [x] Add command registry parity with UI.
+- [x] Add guided shell tutorial.
+- [x] Add trace replay command.
+- [x] Add recovery command.
+- [x] Add benchmark compare command.
+- [x] Add stable JSON output.
 
 **Verification:**
 
@@ -1870,6 +2028,8 @@ php kadmos test
 php kadmos doctor --json
 php kadmos benchmark compare --help
 ```
+
+**Status 2026-07-07:** verified with `php kadmos test`, `php tests\CliCommandRegistryTest.php`, `php tests\CliCommandRoutingTest.php`, `php tests\CliGuidedShellTest.php`, and `php kadmos doctor --json`. The doctor command emitted valid JSON with degraded readiness because no provider key is configured in the local environment.
 
 ### Phase 13: Browser E2E And Performance Hardening
 
@@ -1883,18 +2043,24 @@ php kadmos benchmark compare --help
 
 **Work:**
 
-- [ ] Add first-run E2E: provider -> chat -> run -> replay.
-- [ ] Add file E2E: upload -> context -> chat -> citation.
-- [ ] Add benchmark E2E: run compare -> export.
-- [ ] Add accessibility pass.
-- [ ] Add responsive viewport checks.
+- [x] Add first-run E2E: provider -> chat -> run evidence chip.
+- [x] Add replay E2E: persisted run -> replay -> fault evidence.
+- [x] Add explicit replay fault-filter traversal.
+- [x] Add file E2E: upload -> context-set creation.
+- [x] Add file E2E: context -> chat -> citation.
+- [x] Add benchmark E2E: persisted lanes -> audited export.
+- [x] Add benchmark E2E: run compare -> inspect newly created lanes.
+- [x] Add accessibility smoke pass for labels, keyboard reachability, reduced motion, and text-based disabled states.
+- [x] Add responsive viewport checks.
+
+**Status 2026-07-07:** implemented Playwright with strict deterministic test-only API mocks, Laravel/Vite webServer wiring through the local `.tools` PHP binary, `/chat` persisted-turn smoke, `/dashboard` command-palette smoke, file upload/context-set creation, file-context-to-chat source provenance, persisted run replay fault evidence, explicit replay fault filtering, benchmark run-compare lane inspection, audited benchmark export download validation, desktop/mobile overflow checks, and screenshot attachments in the Playwright report. Remaining browser depth is full keyboard traversal across every dashboard rail/inspector after the final UI refactor.
 
 **Verification:**
 
 ```powershell
 cd control-plane
 npm run build
-npm run e2e
+npm run test:e2e
 php artisan test
 ```
 
@@ -2176,9 +2342,9 @@ These are the next practical slices after this plan.
 
 TALOS is ready for serious evaluation when all of these are true:
 
-- [ ] `/chat` is clean, persistent, and production-backed.
-- [ ] `/dashboard` is a real cockpit, not a fixture dashboard.
-- [ ] Users can upload their own files and use them in a run.
+- [x] `/chat` is clean, persistent, and production-backed.
+- [x] `/dashboard` is a real cockpit, not a fixture dashboard.
+- [x] Users can upload their own files and use them in a run.
 - [ ] Every run has events, status, artifacts, and replay state.
 - [ ] Failure policy and HMI recovery are visible and tested.
 - [ ] AVM ON/OFF benchmark uses same prompt, model, context, evaluator, and logs.
@@ -2190,13 +2356,13 @@ TALOS is ready for serious evaluation when all of these are true:
 - [ ] Artifacts have provenance.
 - [ ] Doctor reports true system readiness.
 - [ ] Backup and restore validation exist.
-- [ ] KADMOS CLI can validate, run, compare, replay, recover, and export.
-- [ ] Core tests pass.
-- [ ] Validator tests pass.
-- [ ] Laravel tests pass.
-- [ ] Frontend build passes.
-- [ ] Browser E2E covers first-run, file, replay, and benchmark flows.
-- [ ] `git diff --check` passes.
+- [x] KADMOS CLI can validate, run, compare, replay, recover, and export.
+- [x] Core tests pass.
+- [x] Validator tests pass.
+- [x] Laravel tests pass.
+- [x] Frontend build passes.
+- [x] Browser E2E covers first-run, file upload/context-set creation, replay fault evidence, and benchmark export flows.
+- [x] `git diff --check` passes.
 
 ---
 
