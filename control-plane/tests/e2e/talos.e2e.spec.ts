@@ -40,6 +40,35 @@ async function expectNoHorizontalOverflow(page: Page) {
     expect(result.overflow, JSON.stringify(result.offenders, null, 2)).toBeLessThanOrEqual(1)
 }
 
+async function expectProceduralCanvasAboveScrim(page: Page) {
+    const layering = await page.getByTestId('talos-background-effect').evaluate((root) => {
+        const canvas = root.querySelector('.talos-procedural-canvas') as HTMLElement | null
+        const scrim = root.querySelector('.talos-theme-background-scrim') as HTMLElement | null
+
+        if (!canvas || !scrim) {
+            return {
+                hasCanvas: Boolean(canvas),
+                hasScrim: Boolean(scrim),
+                canvasZ: -1,
+                scrimZ: -1,
+            }
+        }
+
+        const toNumber = (value: string) => value === 'auto' ? 0 : Number(value)
+
+        return {
+            hasCanvas: true,
+            hasScrim: true,
+            canvasZ: toNumber(window.getComputedStyle(canvas).zIndex),
+            scrimZ: toNumber(window.getComputedStyle(scrim).zIndex),
+        }
+    })
+
+    expect(layering.hasCanvas).toBe(true)
+    expect(layering.hasScrim).toBe(true)
+    expect(layering.canvasZ).toBeGreaterThan(layering.scrimZ)
+}
+
 async function expectNoComposerOverlap(page: Page) {
     const result = await page.evaluate(() => {
         const composer = document.querySelector('.talos-chat-composer-shell')?.getBoundingClientRect()
@@ -206,7 +235,7 @@ async function ensureTalosAuthenticated(page: Page) {
 
 test.beforeEach(async ({ page }) => {
     await installTalosApiMocks(page)
-    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
     await ensureTalosAuthenticated(page)
 })
 
@@ -699,6 +728,7 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
         return false
     })
     expect(canvasHasPixels).toBe(true)
+    await expectProceduralCanvasAboveScrim(page)
     const cinematicOpacity = await page.locator('.talos-shell').evaluate((element) => (
         Number(window.getComputedStyle(element).getPropertyValue('--talos-effect-opacity').trim())
     ))
@@ -726,6 +756,53 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
         body: await page.screenshot({ fullPage: true }),
         contentType: 'image/png',
     })
+})
+
+test('system motion follows browser reduced motion while explicit motion can animate', async ({ page }) => {
+    await openWorkspace(page)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.evaluate(async () => {
+        await fetch('/api/talos/settings', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                preferences: {
+                    theme: 'forge',
+                    reduced_motion: false,
+                    theme_motion: 'system',
+                    theme_customization: {
+                        effect: 'dag-flow',
+                    },
+                },
+            }),
+        })
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    const motionCinematicRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_motion === 'cinematic'
+    })
+    await page.getByLabel('Theme motion', { exact: true }).selectOption('cinematic')
+    await motionCinematicRequest
+
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasAboveScrim(page)
 })
 
 test('theme engine shows workspace policy lock as read only', async ({ page }) => {
