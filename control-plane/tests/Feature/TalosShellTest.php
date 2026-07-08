@@ -49,6 +49,13 @@ final class TalosShellTest extends TestCase
         $this->assertIsString($shell);
         $this->assertStringContainsString('Open persistent chat', $shell);
         $this->assertStringContainsString('href="/chat"', $shell);
+        $this->assertStringContainsString('dashboardTabGroups', $shell);
+        $this->assertStringContainsString("id: 'runtime'", $shell);
+        $this->assertStringContainsString("id: 'benchmarks'", $shell);
+        $this->assertStringContainsString("id: 'knowledge'", $shell);
+        $this->assertStringContainsString("id: 'agents'", $shell);
+        $this->assertStringContainsString("id: 'productivity'", $shell);
+        $this->assertStringContainsString("id: 'admin'", $shell);
         $this->assertStringNotContainsString('talos-chat-thread', $shell);
         $this->assertStringNotContainsString('Chat conversation', $shell);
         $this->assertStringNotContainsString('Ask Talos', $shell);

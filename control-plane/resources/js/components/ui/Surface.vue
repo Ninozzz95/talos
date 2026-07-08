@@ -1,5 +1,5 @@
 <template>
-    <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] shadow-[0_18px_80px_var(--talos-shadow)]">
+    <section class="rounded-lg border border-[var(--talos-border)] bg-[var(--talos-card)] text-[var(--talos-text)] shadow-sm">
         <slot />
     </section>
 </template>
