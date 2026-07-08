@@ -240,6 +240,8 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
     await openWorkspace(page)
 
     await expect(page.getByRole('heading', { name: 'What workflow should TALOS handle?' })).toBeVisible()
+    await expect(page.getByTestId('talos-empty-brand')).toContainText('TALOS')
+    await expect(page.getByTestId('talos-empty-brand').locator('svg')).toBeVisible()
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Choose model profile' })).toContainText('E2E server-side profile')
 

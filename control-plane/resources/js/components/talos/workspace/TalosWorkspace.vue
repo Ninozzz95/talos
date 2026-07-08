@@ -938,10 +938,13 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div v-else-if="!messages.length" class="flex flex-1 flex-col items-center justify-center text-center">
-                        <div class="inline-flex h-14 w-14 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-accent)]">
-                            <ShieldCheck class="h-7 w-7" />
+                        <div data-testid="talos-empty-brand" class="mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
+                            <span class="talos-short-logo" aria-hidden="true">
+                                <ShieldCheck class="h-5 w-5" />
+                            </span>
+                            <span class="talos-orbitron-brand text-3xl font-semibold text-[var(--talos-text)] sm:text-4xl">TALOS</span>
                         </div>
-                        <h2 class="mt-5 text-2xl font-semibold text-[var(--talos-text)]">What workflow should TALOS handle?</h2>
+                        <h2 class="text-2xl font-semibold text-[var(--talos-text)]">What workflow should TALOS handle?</h2>
                         <p class="mt-3 max-w-[560px] text-sm leading-6 text-[var(--talos-muted)]">
                             Type a task, attach a context set when needed, and TALOS will route it through the AVM control plane with replayable evidence.
                         </p>
