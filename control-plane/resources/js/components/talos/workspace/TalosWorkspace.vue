@@ -71,6 +71,8 @@ type MessageSource = {
     preview?: string
 }
 
+const talosShortLogoUrl = '/talos/brand/logo-short.png'
+
 const props = withDefaults(defineProps<{
     initialSurface?: InitialSurface
     authenticated?: boolean
@@ -552,6 +554,11 @@ async function refreshWorkspaceSettingsAfterThemeUpdate() {
     } catch (error) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not refresh workspace appearance settings.'
     }
+}
+
+async function handleWorkspaceSettingsSaved() {
+    saveWorkspacePreferences()
+    await refreshWorkspaceSettingsAfterThemeUpdate()
 }
 
 function handleThemeDraftChanged(customization: TalosThemeCustomization | null) {
@@ -1110,11 +1117,15 @@ onBeforeUnmount(() => {
 
             <header class="relative z-20 flex min-h-14 items-center justify-between gap-3 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-4 backdrop-blur md:px-5">
                 <div class="min-w-0">
-                    <div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-muted)]">
-                        <ShieldCheck class="h-3.5 w-3.5 text-[var(--talos-accent)]" />
+                    <div data-testid="talos-header-brand" class="flex min-w-0 items-center gap-2">
+                        <span class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
+                            <img :src="talosShortLogoUrl" alt="TALOS short logo" class="h-full w-full object-cover">
+                        </span>
+                        <h1 class="talos-orbitron-brand truncate text-base font-semibold text-[var(--talos-text)]">TALOS</h1>
+                    </div>
+                    <div class="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-muted)]">
                         {{ workspaceSubtitle }}
                     </div>
-                    <h1 class="truncate text-base font-semibold text-[var(--talos-text)]">TALOS</h1>
                 </div>
                 <div class="flex min-w-0 items-center gap-2">
                     <div class="hidden max-w-[360px] truncate rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-1.5 text-xs text-[var(--talos-muted)] md:block">
@@ -1180,7 +1191,7 @@ onBeforeUnmount(() => {
                     <div v-else-if="!messages.length" class="flex flex-1 flex-col items-center justify-center text-center">
                         <div data-testid="talos-empty-brand" class="mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
                             <span class="talos-short-logo" aria-hidden="true">
-                                <ShieldCheck class="h-5 w-5" />
+                                <img :src="talosShortLogoUrl" alt="" class="h-full w-full object-cover">
                             </span>
                             <span class="talos-orbitron-brand text-3xl font-semibold text-[var(--talos-text)] sm:text-4xl">TALOS</span>
                         </div>
@@ -1375,7 +1386,7 @@ onBeforeUnmount(() => {
                             @select-context="selectContextSet"
                             @change-theme="toggleTheme"
                             @open-module="openModule"
-                            @saved="saveWorkspacePreferences"
+                            @saved="handleWorkspaceSettingsSaved"
                         />
                     </template>
                     <template v-else-if="id === 'theme'">

@@ -110,6 +110,13 @@ button {
     background: var(--talos-panel);
     color: var(--talos-accent);
     box-shadow: 0 14px 38px var(--talos-shadow);
+    overflow: hidden;
+}
+
+.talos-short-logo-compact {
+    width: 2rem;
+    height: 2rem;
+    box-shadow: 0 10px 26px var(--talos-shadow);
 }
 
 .talos-light {
@@ -455,7 +462,10 @@ button {
 }
 
 .talos-chat-thread {
-    background: var(--talos-chat-bg);
+    background:
+        linear-gradient(180deg,
+            color-mix(in srgb, var(--talos-chat-bg) 82%, transparent),
+            color-mix(in srgb, var(--talos-chat-bg) 58%, transparent));
 }
 
 .talos-chat-composer-shell {
@@ -534,6 +544,15 @@ button {
 
 .talos-procedural-canvas {
     z-index: 1;
+    filter: saturate(1.25) contrast(1.12);
+}
+
+.talos-dark .talos-procedural-canvas,
+.talos-dark .talos-effect-layer,
+.talos-dark .talos-trace-stream,
+.talos-dark .talos-dag-line,
+.talos-dark .talos-dag-node {
+    mix-blend-mode: screen;
 }
 
 .talos-theme-background-scrim {
@@ -565,7 +584,7 @@ button {
     height: 42rem;
     border-radius: 999px;
     opacity: 0;
-    filter: blur(2px);
+    filter: blur(1px) saturate(1.16);
 }
 
 .talos-effect-layer-a {
@@ -583,10 +602,13 @@ button {
 .talos-trace-stream {
     top: -12%;
     bottom: -12%;
-    width: 1px;
+    width: 2px;
     opacity: 0;
-    background: linear-gradient(180deg, transparent, var(--talos-line-a), var(--talos-line-b), transparent);
-    box-shadow: 0 0 22px var(--talos-line-a);
+    background: linear-gradient(180deg, transparent, var(--talos-accent), var(--talos-node), var(--talos-accent), transparent);
+    box-shadow:
+        0 0 18px var(--talos-accent),
+        0 0 34px var(--talos-line-a),
+        0 0 52px var(--talos-line-b);
 }
 
 .talos-trace-stream-a {
@@ -610,26 +632,26 @@ button {
 }
 
 .talos-effect-kahn-grid .talos-dag-grid {
-    opacity: 0.82;
+    opacity: 0.9;
     background-size: 48px 30px;
     mask-image: linear-gradient(90deg, transparent 2%, black 18%, black 82%, transparent 98%);
 }
 
 .talos-effect-kahn-grid .talos-dag-line {
-    opacity: 0.46;
+    opacity: 0.62;
 }
 
 .talos-effect-kahn-grid .talos-dag-node {
-    opacity: 0.52;
+    opacity: 0.68;
 }
 
 .talos-effect-dag-flow .talos-dag-grid {
-    opacity: 0.58;
+    opacity: 0.68;
 }
 
 .talos-effect-dag-flow .talos-dag-line {
     height: 2px;
-    opacity: 0.72;
+    opacity: 0.86;
 }
 
 .talos-effect-dag-flow .talos-dag-node {
@@ -639,33 +661,33 @@ button {
 }
 
 .talos-effect-dag-flow .talos-effect-layer {
-    opacity: 0.14;
+    opacity: 0.2;
 }
 
 .talos-effect-trace-rain .talos-dag-grid {
-    opacity: 0.34;
+    opacity: 0.46;
 }
 
 .talos-effect-trace-rain .talos-trace-stream {
-    width: 2px;
-    opacity: 0.58;
+    width: 4px;
+    opacity: 0.9;
 }
 
 .talos-effect-trace-rain .talos-dag-line,
 .talos-effect-trace-rain .talos-dag-node {
-    opacity: 0.5;
+    opacity: 0.68;
 }
 
 .talos-effect-signal-mesh .talos-dag-grid {
-    opacity: 0.36;
+    opacity: 0.48;
 }
 
 .talos-effect-signal-mesh .talos-effect-layer {
-    opacity: 0.24;
+    opacity: 0.34;
 }
 
 .talos-effect-signal-mesh .talos-dag-line {
-    opacity: 0.7;
+    opacity: 0.84;
 }
 
 .talos-effect-signal-mesh .talos-dag-node {
