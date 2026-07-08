@@ -35,6 +35,18 @@ async function expectNoHorizontalOverflow(page: Page) {
     expect(result.overflow, JSON.stringify(result.offenders, null, 2)).toBeLessThanOrEqual(1)
 }
 
+async function selectDashboardTab(page: Page, name: string) {
+    const matcher = new RegExp(name)
+    const tab = page.getByRole('tab', { name: matcher }).first()
+
+    if (await tab.isVisible().catch(() => false)) {
+        await tab.click()
+        return
+    }
+
+    await page.getByRole('button', { name: matcher }).first().click()
+}
+
 test.beforeEach(async ({ page }) => {
     await installTalosApiMocks(page)
     await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -69,8 +81,12 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
 
     await expect(page.getByRole('heading', { name: 'TALOS control cockpit' })).toBeVisible()
-    await expect(page.getByText('Model Center')).toBeVisible()
-    await expect(page.getByText('Context Vault')).toBeVisible()
+
+    await selectDashboardTab(page, 'Agents')
+    await expect(page.getByText('Model Center', { exact: true })).toBeVisible()
+
+    await selectDashboardTab(page, 'Knowledge')
+    await expect(page.getByText('Context Vault', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
@@ -89,6 +105,7 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
 
 test('dashboard exports a persisted benchmark report through a real endpoint', async ({ page }) => {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await selectDashboardTab(page, 'Benchmarks')
 
     await expect(page.getByText('E2E benchmark export')).toBeVisible()
     await expect(page.getByText('Fairness contract')).toBeVisible()
@@ -110,6 +127,7 @@ test('dashboard exports a persisted benchmark report through a real endpoint', a
 
 test('dashboard ingests a user file and creates a grounded context set', async ({ page }) => {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await selectDashboardTab(page, 'Knowledge')
 
     await page.locator('input[type="file"]').setInputFiles({
         name: 'workflow.md',
@@ -130,6 +148,7 @@ test('dashboard ingests a user file and creates a grounded context set', async (
 
 test('file context grounds a chat turn and exposes source provenance', async ({ page }) => {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await selectDashboardTab(page, 'Knowledge')
 
     await page.locator('input[type="file"]').setInputFiles({
         name: 'workflow.md',
@@ -185,6 +204,7 @@ test('dashboard replay filters to fault steps through a real control', async ({ 
 
 test('dashboard runs a fresh benchmark comparison and inspects created lanes', async ({ page }) => {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
+    await selectDashboardTab(page, 'Benchmarks')
 
     await page.getByLabel('Benchmark scenario path').fill('benchmark-scenarios/e2e/generated.json')
     await page.getByLabel('Benchmark runs').fill('1')

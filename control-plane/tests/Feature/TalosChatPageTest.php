@@ -60,6 +60,9 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringContainsString('selectedContextSetId', $component);
         $this->assertStringContainsString('Server-side model profile', $component);
         $this->assertStringContainsString('Grounding context set', $component);
+        $this->assertStringContainsString('talos-chat-layout', $component);
+        $this->assertStringContainsString('talos-chat-composer-shell', $component);
+        $this->assertStringContainsString('talos-chat-thread', $component);
         $this->assertStringContainsString('talos_settings', $component);
         $this->assertStringContainsString('sendChat', $component);
         $this->assertStringContainsString('dev-only', $component);

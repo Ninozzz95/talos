@@ -3,6 +3,12 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { AlertCircle, BarChart3, KeyRound, Loader2, MessageSquarePlus, Moon, RefreshCw, Send, ShieldCheck, Sun } from '@lucide/vue'
 import Button from './ui/Button.vue'
 import Badge from './ui/Badge.vue'
+import Card from './ui/Card.vue'
+import Input from './ui/Input.vue'
+import ScrollArea from './ui/ScrollArea.vue'
+import Select from './ui/Select.vue'
+import Separator from './ui/Separator.vue'
+import Textarea from './ui/Textarea.vue'
 import { useTalosChat } from '../composables/useTalosChat'
 import { useTalosContextVault } from '../composables/useTalosContextVault'
 import { useTalosModelProfiles } from '../composables/useTalosModelProfiles'
@@ -388,8 +394,8 @@ onMounted(async () => {
 </script>
 
 <template>
-    <main :class="['talos-shell flex min-h-screen flex-col', shellClass]">
-        <header class="flex h-14 shrink-0 items-center justify-between border-b border-[var(--talos-border)] bg-[var(--talos-header)] px-4 md:px-6">
+    <main :class="['talos-shell talos-chat-layout flex min-h-screen flex-col', shellClass]">
+        <header class="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-[var(--talos-border)] bg-[var(--talos-header)]/95 px-4 backdrop-blur md:px-6">
             <div class="flex items-center gap-3">
                 <div class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-accent)]">
                     <ShieldCheck class="h-4 w-4" />
@@ -406,25 +412,26 @@ onMounted(async () => {
                     <MessageSquarePlus v-else class="h-4 w-4" />
                     New
                 </Button>
-                <button
+                <Button
                     type="button"
-                    class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)] transition hover:text-[var(--talos-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--talos-accent)]"
+                    variant="ghost"
+                    size="icon"
                     aria-label="Toggle theme"
                     @click="toggleTheme"
                 >
                     <component :is="themeIcon" class="h-4 w-4" />
-                </button>
+                </Button>
             </div>
         </header>
 
-        <div class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
-            <aside class="min-h-0 border-b border-[var(--talos-border)] bg-[var(--talos-header)] md:border-b-0 md:border-r">
+        <div class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[248px_minmax(0,1fr)]">
+            <aside class="min-h-0 border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)] md:border-b-0 md:border-r">
                 <div class="flex h-full min-h-0 flex-col">
                     <div class="flex h-11 shrink-0 items-center justify-between border-b border-[var(--talos-border)] px-3">
                         <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Sessions</span>
                         <Badge tone="neutral">{{ sessions.length }}</Badge>
                     </div>
-                    <div class="min-h-0 flex-1 overflow-y-auto p-2">
+                    <ScrollArea class="flex-1 p-2">
                         <div v-if="loadingSessions" class="flex items-center gap-2 px-2 py-3 text-xs text-[var(--talos-muted)]">
                             <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                             Loading sessions
@@ -446,12 +453,12 @@ onMounted(async () => {
                             <span class="block truncate text-sm font-medium">{{ session.title }}</span>
                             <span class="mt-1 block text-[11px]">{{ new Date(session.updated_at).toLocaleDateString() }}</span>
                         </button>
-                    </div>
+                    </ScrollArea>
                 </div>
             </aside>
 
-            <section ref="chatThreadEl" class="min-h-0 overflow-y-auto px-4 py-6 md:px-6">
-                <div class="mx-auto flex min-h-full w-full max-w-[820px] flex-col">
+            <section ref="chatThreadEl" class="talos-chat-thread min-h-0 overflow-y-auto px-4 pb-64 pt-8 md:px-6">
+                <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col">
                     <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                         <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                         <span>{{ uiError || sessionError || messageError }}</span>
@@ -555,14 +562,13 @@ onMounted(async () => {
             </section>
         </div>
 
-        <footer class="shrink-0 border-t border-[var(--talos-border)] bg-[var(--talos-header)] px-4 py-4 md:px-6">
-            <div class="mx-auto w-full max-w-[820px]">
-                <div class="mb-3 grid gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2 md:grid-cols-[minmax(0,1fr)_96px]">
+        <footer class="pointer-events-none fixed inset-x-0 bottom-8 z-40 px-4 md:bottom-12 md:left-[248px] md:px-6">
+            <Card class="talos-chat-composer-shell pointer-events-auto mx-auto w-full max-w-3xl border-[var(--talos-border-strong)] bg-[var(--talos-card)]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur" :padded="false">
+                <div class="grid gap-2 p-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
                     <label class="sr-only" for="talos-model-profile">Server-side model profile</label>
-                    <select
+                    <Select
                         id="talos-model-profile"
                         v-model="selectedModelProfileId"
-                        class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                         :disabled="loadingModelProfiles || !modelProfiles.length"
                         aria-label="Server-side model profile"
                     >
@@ -577,25 +583,12 @@ onMounted(async () => {
                         >
                             {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
                         </option>
-                    </select>
-                    <Button variant="secondary" size="sm" :disabled="loadingModelProfiles" @click="loadModelProfiles">
-                        <Loader2 v-if="loadingModelProfiles" class="h-4 w-4 animate-spin" />
-                        <RefreshCw v-else class="h-4 w-4" />
-                        Sync
-                    </Button>
-                    <div class="text-xs text-[var(--talos-muted)] md:col-span-2">
-                        <span v-if="selectedModelProfileIsUsable">Secret stored server-side. Browser never receives the provider key.</span>
-                        <span v-else-if="selectedModelProfile">This model profile cannot be used until it has a secret and is enabled.</span>
-                        <span v-else>Server-side model profile is the default path; dev-only browser key remains available for local testing.</span>
-                    </div>
-                </div>
+                    </Select>
 
-                <div class="mb-3 grid gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2 md:grid-cols-[minmax(0,1fr)_96px]">
                     <label class="sr-only" for="talos-context-set">Grounding context set</label>
-                    <select
+                    <Select
                         id="talos-context-set"
                         v-model="selectedContextSetId"
-                        class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                         :disabled="loadingContextSets || !contextSets.length"
                         aria-label="Grounding context set"
                     >
@@ -610,46 +603,47 @@ onMounted(async () => {
                         >
                             {{ contextSet.name }} - {{ contextSet.status }} - {{ contextSet.sources_count ?? contextSet.sources?.length ?? 0 }} sources
                         </option>
-                    </select>
-                    <Button variant="secondary" size="sm" :disabled="loadingContextSets" @click="loadContextSets">
-                        <Loader2 v-if="loadingContextSets" class="h-4 w-4 animate-spin" />
+                    </Select>
+
+                    <Button variant="secondary" size="icon" :disabled="loadingModelProfiles || loadingContextSets" aria-label="Sync model profiles and context sets" @click="() => { loadModelProfiles(); loadContextSets() }">
+                        <Loader2 v-if="loadingModelProfiles || loadingContextSets" class="h-4 w-4 animate-spin" />
                         <RefreshCw v-else class="h-4 w-4" />
-                        Sync
                     </Button>
-                    <div class="text-xs text-[var(--talos-muted)] md:col-span-2">
-                        <span v-if="selectedContextSet">Grounding context set: {{ selectedContextSet.name }}. Uploaded content is injected server-side as untrusted data.</span>
-                        <span v-else>Select a Context Vault set to ground the next chat turn in uploaded files.</span>
-                    </div>
+
+                    <Button
+                        v-if="!selectedModelProfileIsUsable && !settings.api_key"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Provider API key dev-only"
+                        @click="saveSettings"
+                    >
+                        <KeyRound class="h-4 w-4" />
+                    </Button>
                 </div>
 
-                <div v-if="!selectedModelProfileIsUsable && !settings.api_key" class="mb-3 grid gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2 md:grid-cols-[28px_minmax(0,1fr)_110px]">
-                    <div class="hidden h-9 items-center justify-center text-[var(--talos-muted)] md:flex">
-                        <KeyRound class="h-4 w-4" />
-                    </div>
-                    <input
+                <div v-if="!selectedModelProfileIsUsable && !settings.api_key" class="px-2 pb-2">
+                    <Input
                         v-model="settings.api_key"
                         type="password"
-                        class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                         placeholder="Provider API key - dev-only"
                         aria-label="Provider API key dev-only"
-                    >
-                    <Button variant="secondary" size="sm" @click="saveSettings">
-                        {{ settingsSaved ? 'Saved' : 'Save' }}
-                    </Button>
+                    />
                 </div>
 
-                <div class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-2 shadow-lg shadow-[var(--talos-shadow)] focus-within:border-[var(--talos-accent)]">
-                    <textarea
+                <Separator />
+
+                <div class="p-2">
+                    <Textarea
                         v-model="prompt"
                         rows="1"
-                        class="max-h-40 min-h-12 w-full resize-none border-0 bg-transparent px-3 py-3 text-sm leading-6 text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)]"
+                        class="max-h-36 min-h-12 border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
                         placeholder="Message TALOS..."
                         aria-label="Message TALOS"
                         :disabled="sending"
                         @keydown.enter.exact.prevent="sendChat"
                     />
-                    <div class="flex items-center justify-between gap-3 px-2 pb-1">
-                        <div class="text-xs text-[var(--talos-muted)]">
+                    <div class="flex items-center justify-between gap-3 px-1 pt-2">
+                        <div class="min-w-0 truncate text-xs text-[var(--talos-muted)]">
                             {{ statusText }}
                         </div>
                         <Button size="sm" :disabled="!canSend" @click="sendChat">
@@ -657,8 +651,11 @@ onMounted(async () => {
                             Send
                         </Button>
                     </div>
+                    <div v-if="selectedContextSet" class="px-1 pt-1 text-xs text-[var(--talos-muted)]">
+                        Grounding context set: {{ selectedContextSet.name }}. Uploaded content is injected server-side as untrusted data.
+                    </div>
                 </div>
-            </div>
+            </Card>
         </footer>
     </main>
 </template>
