@@ -1,3 +1,4 @@
+import '@fontsource/orbitron/600.css'
 import { createApp } from 'vue'
 import TalosWorkspace from './components/talos/workspace/TalosWorkspace.vue'
 import './lib/api'

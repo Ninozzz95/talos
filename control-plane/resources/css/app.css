@@ -75,6 +75,26 @@ button {
     font-family: var(--talos-font-ui);
 }
 
+.talos-orbitron-brand {
+    font-family: Orbitron, var(--talos-font-display), var(--talos-font-ui), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0;
+    line-height: 1;
+}
+
+.talos-short-logo {
+    display: inline-flex;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--talos-border-strong);
+    border-radius: var(--talos-radius-control);
+    background: var(--talos-panel);
+    color: var(--talos-accent);
+    box-shadow: 0 14px 38px var(--talos-shadow);
+}
+
 .talos-light {
     --talos-accent: #a96617;
     --talos-accent-border: #8d5513;
