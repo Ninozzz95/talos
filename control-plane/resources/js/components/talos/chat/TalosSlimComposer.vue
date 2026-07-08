@@ -14,6 +14,7 @@ const props = defineProps<{
     modelLabel: string
     contextLabel: string
     temporaryMode: boolean
+    sendDisabledReason?: string
     enhancerDisabledReason?: string
 }>()
 
@@ -27,6 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve prompt')
+const sendTitle = computed(() => props.sendDisabledReason || 'Send message')
 
 function handleEnter() {
     if (props.canSend) {
@@ -104,7 +106,7 @@ function handleEnter() {
                 <span v-if="temporaryMode" class="mr-2 font-semibold text-[var(--talos-warning)]">Temporary mode</span>
                 <span>{{ statusText }}</span>
             </div>
-            <Button size="sm" :disabled="!canSend" @click="emit('send')">
+            <Button size="sm" :disabled="!canSend" :title="sendTitle" @click="emit('send')">
                 <Loader2 v-if="sending" class="h-4 w-4 animate-spin" />
                 <Send v-else class="h-4 w-4" />
                 Send

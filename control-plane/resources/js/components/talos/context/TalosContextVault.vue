@@ -12,6 +12,11 @@ import type { TalosContextSet, TalosFile, TalosFileChunk } from '../../../lib/ta
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
+const emit = defineEmits<{
+    contextSetCreated: [contextSet: TalosContextSet]
+    benchmarkScenarioSelected: [scenarioPath: string]
+}>()
+
 const {
     files,
     availableFiles,
@@ -41,6 +46,8 @@ const drawerFileId = ref<string | null>(null)
 const loadingContextSetId = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
+const latestBenchmarkScenarioPath = ref<string | null>(null)
+const latestBenchmarkFileName = ref<string | null>(null)
 
 const selectedFiles = computed(() => {
     const ids = new Set(selectedFileIds.value)
@@ -89,6 +96,17 @@ function formatDate(value: string) {
         hour: '2-digit',
         minute: '2-digit',
     })
+}
+
+function benchmarkScenarioPath(file: TalosFile) {
+    const scenario = (file as TalosFile & {
+        benchmark_scenario?: { storage_path?: unknown } | null
+    }).benchmark_scenario
+    const path = scenario?.storage_path
+
+    return typeof path === 'string' && path.trim().startsWith('benchmark-scenarios/')
+        ? path.trim()
+        : null
 }
 
 function toggleFile(file: TalosFile) {
@@ -154,6 +172,8 @@ async function refreshContextSets() {
 async function handleUpload(file: File) {
     actionError.value = null
     actionMessage.value = null
+    latestBenchmarkScenarioPath.value = null
+    latestBenchmarkFileName.value = null
 
     try {
         const uploaded = await uploadFile(file)
@@ -163,11 +183,21 @@ async function handleUpload(file: File) {
             return
         }
 
+        latestBenchmarkScenarioPath.value = benchmarkScenarioPath(uploaded)
+        latestBenchmarkFileName.value = uploaded.original_name
         actionMessage.value = `${uploaded.original_name} uploaded through /api/files/ingest.`
         await loadFiles()
     } catch (error) {
         setActionError(error, 'TALOS could not ingest this file.')
     }
+}
+
+function openLatestBenchmarkScenario() {
+    if (!latestBenchmarkScenarioPath.value) {
+        return
+    }
+
+    emit('benchmarkScenarioSelected', latestBenchmarkScenarioPath.value)
 }
 
 async function inspectFile(file: TalosFile) {
@@ -211,6 +241,7 @@ async function submitContextSet() {
 
         contextSetName.value = ''
         actionMessage.value = `Context set "${contextSet.name}" created with ${contextSet.sources?.length ?? selectedSourceCount.value} sources.`
+        emit('contextSetCreated', contextSet)
     } catch (error) {
         setActionError(error, 'TALOS could not create this context set.')
     }
@@ -271,6 +302,21 @@ onMounted(() => {
             <div v-if="actionMessage" class="flex items-start gap-2 rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
                 <CheckCircle2 class="mt-1 h-4 w-4 shrink-0 text-[var(--talos-success)]" />
                 <span>{{ actionMessage }}</span>
+            </div>
+            <div v-if="latestBenchmarkScenarioPath" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold text-[var(--talos-text)]">File benchmark scenario ready</div>
+                        <div class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ latestBenchmarkScenarioPath }}</div>
+                    </div>
+                    <Button type="button" size="sm" @click="openLatestBenchmarkScenario">
+                        <ShieldCheck class="h-4 w-4" />
+                        Benchmark this file
+                    </Button>
+                </div>
+                <p v-if="latestBenchmarkFileName" class="mt-2 text-xs leading-5 text-[var(--talos-muted)]">
+                    Opens Compare with the scenario generated from {{ latestBenchmarkFileName }}.
+                </p>
             </div>
 
             <TalosFileDropzone

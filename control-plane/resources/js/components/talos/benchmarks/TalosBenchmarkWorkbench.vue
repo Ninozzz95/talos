@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { AlertCircle, BarChart3, Download, Loader2, Play, RefreshCw, Scale } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
@@ -17,6 +17,7 @@ const props = withDefaults(defineProps<{
     exportEndpoint?: string | null
     defaultRuns?: number
     initialBenchmarkGroupId?: string | null
+    initialScenarioPath?: string | null
 }>(), {
     compact: false,
     compareEndpoint: '/api/benchmarks/compare',
@@ -24,6 +25,7 @@ const props = withDefaults(defineProps<{
     exportEndpoint: null,
     defaultRuns: 1,
     initialBenchmarkGroupId: null,
+    initialScenarioPath: null,
 })
 
 const {
@@ -38,7 +40,7 @@ const {
     benchmarkGroupById,
 } = useTalosBenchmarks()
 
-const scenarioPath = ref('')
+const scenarioPath = ref(props.initialScenarioPath ?? '')
 const runs = ref(props.defaultRuns)
 const selectedGroupId = ref<string | null>(props.initialBenchmarkGroupId)
 const actionError = ref<string | null>(null)
@@ -65,6 +67,49 @@ const visibleResults = computed(() => {
 
         return result ? [result] : []
     })
+})
+const proofSourceLabel = computed(() => {
+    const path = scenarioPath.value.trim()
+
+    if (props.initialScenarioPath && path === props.initialScenarioPath) {
+        return 'File handoff'
+    }
+
+    if (selectedGroup.value) {
+        return 'Persisted benchmark group'
+    }
+
+    if (path) {
+        return 'Private scenario path'
+    }
+
+    return 'No scenario selected'
+})
+const proofSourceDetail = computed(() => {
+    const path = scenarioPath.value.trim()
+
+    if (path) {
+        return path
+    }
+
+    if (selectedGroup.value?.source_run_id) {
+        return `Run ${selectedGroup.value.source_run_id}`
+    }
+
+    return selectedGroup.value ? 'Selected persisted results.' : 'Choose a scenario or persisted group.'
+})
+const proofLaneCount = computed(() => selectedResults.value.length)
+const proofLaneLabel = computed(() => {
+    const count = proofLaneCount.value
+    return count === 1 ? '1 persisted lane' : `${count} persisted lanes`
+})
+const proofExportLabel = computed(() => canExport.value ? 'Export ready' : 'Export gated')
+const proofExportDetail = computed(() => {
+    if (canExport.value) {
+        return 'Selected group can use the benchmark export endpoint.'
+    }
+
+    return 'Select a persisted benchmark group before exporting.'
 })
 
 const fairness = computed(() => {
@@ -98,9 +143,7 @@ async function refreshGroups() {
 
     try {
         const groups = await loadBenchmarkGroups()
-        const nextGroupId = selectedGroupId.value && groups.some((group) => group.id === selectedGroupId.value)
-            ? selectedGroupId.value
-            : groups[0]?.id ?? null
+        const nextGroupId = selectedGroupId.value ?? groups[0]?.id ?? null
         selectedGroupId.value = nextGroupId
 
         if (nextGroupId) {
@@ -108,6 +151,21 @@ async function refreshGroups() {
         }
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not refresh benchmark groups.'
+    }
+}
+
+async function loadInitialBenchmarkGroup(groupId: string | null | undefined) {
+    if (!groupId) {
+        return
+    }
+
+    selectedGroupId.value = groupId
+    actionError.value = null
+
+    try {
+        await loadBenchmarkGroup(groupId)
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not load selected benchmark group.'
     }
 }
 
@@ -182,6 +240,17 @@ async function downloadBenchmarkReport() {
 onMounted(() => {
     void refreshGroups()
 })
+
+watch(() => props.initialBenchmarkGroupId, (groupId) => {
+    void loadInitialBenchmarkGroup(groupId)
+})
+
+watch(() => props.initialScenarioPath, (path) => {
+    if (path) {
+        scenarioPath.value = path
+        actionMessage.value = 'File benchmark scenario loaded.'
+    }
+})
 </script>
 
 <template>
@@ -217,6 +286,32 @@ onMounted(() => {
             <div v-if="actionMessage" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-muted)]">
                 {{ actionMessage }}
             </div>
+
+            <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
+                <div class="border-b border-[var(--talos-border)] px-3 py-2">
+                    <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Proof Builder</div>
+                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                        Pick the exact evidence source, run the same scenario with AVM ON/OFF, then export only persisted lanes.
+                    </p>
+                </div>
+                <div class="grid gap-2 p-3 md:grid-cols-3">
+                    <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+                        <div class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Source</div>
+                        <div class="mt-1 text-sm font-semibold text-[var(--talos-text)]">{{ proofSourceLabel }}</div>
+                        <div class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ proofSourceDetail }}</div>
+                    </div>
+                    <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+                        <div class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Lanes</div>
+                        <div class="mt-1 text-sm font-semibold text-[var(--talos-text)]">{{ proofLaneLabel }}</div>
+                        <div class="mt-1 text-[11px] leading-5 text-[var(--talos-muted)]">Visible lanes come from persisted benchmark results.</div>
+                    </div>
+                    <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+                        <div class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Export gate</div>
+                        <div class="mt-1 text-sm font-semibold text-[var(--talos-text)]">{{ proofExportLabel }}</div>
+                        <div class="mt-1 text-[11px] leading-5 text-[var(--talos-muted)]">{{ proofExportDetail }}</div>
+                    </div>
+                </div>
+            </section>
 
             <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_86px_104px]">
                 <input
