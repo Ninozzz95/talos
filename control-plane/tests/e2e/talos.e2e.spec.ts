@@ -80,6 +80,17 @@ async function expectProceduralCanvasFrameChanges(page: Page) {
     expect(secondFrame).not.toBe(firstFrame)
 }
 
+async function expectProceduralCanvasFrameStaysStill(page: Page) {
+    const canvas = page.getByTestId('talos-procedural-canvas')
+    await expect(canvas).toHaveCount(1)
+
+    const firstFrame = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())
+    await page.waitForTimeout(360)
+    const secondFrame = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())
+
+    expect(secondFrame).toBe(firstFrame)
+}
+
 async function expectProceduralCanvasHasVisibleSignal(page: Page) {
     const canvas = page.getByTestId('talos-procedural-canvas')
     await expect(canvas).toHaveCount(1)
@@ -788,7 +799,10 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
     })
     await page.getByLabel('Theme motion', { exact: true }).selectOption('off')
     await motionOffRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'signal-mesh')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameStaysStill(page)
 
     const motionCinematicRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
@@ -877,8 +891,10 @@ test('system motion follows browser reduced motion while explicit motion can ani
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
 
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(0)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameStaysStill(page)
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
@@ -896,8 +912,113 @@ test('system motion follows browser reduced motion while explicit motion can ani
     await motionCinematicRequest
 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'false')
     await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
     await expectProceduralCanvasAboveScrim(page)
+    await expectProceduralCanvasFrameChanges(page)
+})
+
+test('theme switches disable motion separately from the procedural background', async ({ page }) => {
+    await openWorkspace(page)
+    await page.evaluate(async () => {
+        await fetch('/api/talos/settings', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                preferences: {
+                    theme: 'terminal',
+                    reduced_motion: false,
+                    theme_motion: 'cinematic',
+                    theme_motion_disabled: false,
+                    theme_background_disabled: false,
+                    theme_customization: {
+                        effect: 'trace-rain',
+                    },
+                },
+            }),
+        })
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameChanges(page)
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    await expect(page.getByRole('switch', { name: 'Disable motion' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Disable procedural background' })).toBeVisible()
+
+    const motionDisabledRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_motion_disabled === true
+            && preferences?.theme_background_disabled === false
+    })
+    await page.getByRole('switch', { name: 'Disable motion' }).click()
+    await motionDisabledRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameStaysStill(page)
+
+    const backgroundDisabledRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_background_disabled === true
+    })
+    await page.getByRole('switch', { name: 'Disable procedural background' }).click()
+    await backgroundDisabledRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'none')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(0)
+
+    const backgroundEnabledRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_background_disabled === false
+            && preferences?.theme_motion_disabled === true
+    })
+    await page.getByRole('switch', { name: 'Disable procedural background' }).click()
+    await backgroundEnabledRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameStaysStill(page)
+
+    const motionEnabledRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_motion_disabled === false
+            && preferences?.theme_background_disabled === false
+    })
+    await page.getByRole('switch', { name: 'Disable motion' }).click()
+    await motionEnabledRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameChanges(page)
 })
 
 test('settings preset changes refresh procedural background immediately', async ({ page }) => {

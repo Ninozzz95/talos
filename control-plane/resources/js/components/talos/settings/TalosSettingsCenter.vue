@@ -47,6 +47,8 @@ type SettingsTab =
 type SettingsPreferences = {
     theme: TalosThemeId
     theme_motion: TalosThemeMotionMode
+    theme_motion_disabled: boolean
+    theme_background_disabled: boolean
     ai_defaults: {
         utility_model_mode: string
         vision_enabled: boolean
@@ -149,6 +151,8 @@ const activeTab = ref<SettingsTab>('models')
 const preferences = reactive<SettingsPreferences>({
     theme: 'forge',
     theme_motion: 'system',
+    theme_motion_disabled: false,
+    theme_background_disabled: false,
     ai_defaults: {
         utility_model_mode: 'same_as_chat',
         vision_enabled: true,
@@ -233,6 +237,8 @@ function booleanValue(value: unknown, fallback: boolean) {
 function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme = normalizeTalosTheme(nextPreferences.theme)
     preferences.theme_motion = resolveTalosMotionMode(nextPreferences.theme_motion)
+    preferences.theme_motion_disabled = booleanValue(nextPreferences.theme_motion_disabled, false)
+    preferences.theme_background_disabled = booleanValue(nextPreferences.theme_background_disabled, false)
 
     const aiDefaults = record(nextPreferences.ai_defaults)
     preferences.ai_defaults.utility_model_mode = stringValue(aiDefaults.utility_model_mode, preferences.ai_defaults.utility_model_mode)
@@ -284,6 +290,8 @@ function preferencesPayload() {
         workspace_default_theme: preferences.theme,
         ...(themeChanged ? { theme_customization: {} } : {}),
         theme_motion: preferences.theme_motion,
+        theme_motion_disabled: preferences.theme_motion_disabled,
+        theme_background_disabled: preferences.theme_background_disabled,
         ai_defaults: {
             ...preferences.ai_defaults,
         },
@@ -606,6 +614,22 @@ onMounted(async () => {
                             <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
                                 Motion mode controls procedural effects only; TALOS does not load theme videos.
                             </div>
+                        </div>
+                        <div class="grid gap-2 md:grid-cols-2">
+                            <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                                <span>
+                                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
+                                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Freeze the selected procedural background without removing it.</span>
+                                </span>
+                                <input v-model="preferences.theme_motion_disabled" type="checkbox" role="switch" class="mt-1 h-4 w-4 accent-[var(--talos-accent)]" aria-label="Settings disable motion">
+                            </label>
+                            <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                                <span>
+                                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable procedural background</span>
+                                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Remove the animated and static procedural background layers.</span>
+                                </span>
+                                <input v-model="preferences.theme_background_disabled" type="checkbox" role="switch" class="mt-1 h-4 w-4 accent-[var(--talos-accent)]" aria-label="Settings disable procedural background">
+                            </label>
                         </div>
                         <div class="grid gap-2 md:grid-cols-2">
                             <label v-for="item in appearanceOptions" :key="item.key" class="flex items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">

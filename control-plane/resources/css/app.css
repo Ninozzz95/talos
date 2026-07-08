@@ -631,6 +631,19 @@ button {
     opacity: 0;
 }
 
+.talos-motion-disabled .talos-dag-grid,
+.talos-motion-disabled .talos-dag-line,
+.talos-motion-disabled .talos-dag-node,
+.talos-motion-disabled .talos-effect-layer,
+.talos-motion-disabled .talos-trace-stream {
+    animation: none !important;
+}
+
+.talos-motion-disabled .talos-trace-stream,
+.talos-motion-disabled .talos-dag-node {
+    transform: none !important;
+}
+
 .talos-effect-kahn-grid .talos-dag-grid {
     opacity: 0.9;
     background-size: 48px 30px;

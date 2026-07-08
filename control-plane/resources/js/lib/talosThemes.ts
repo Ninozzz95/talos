@@ -514,10 +514,9 @@ export function buildTalosThemeExport(theme: TalosNamedTheme): TalosThemeExportV
 export function talosBackgroundEffectFromCustomization(
     customization: TalosThemeCustomization,
     preset: TalosThemePreset,
-    reducedMotion: boolean,
-    motionMode: TalosThemeMotionMode = 'system',
+    backgroundDisabled = false,
 ): TalosBackgroundEffect {
-    if (motionMode === 'off' || reducedMotion || (motionMode === 'system' && reducedMotion)) {
+    if (backgroundDisabled) {
         return 'none'
     }
 
@@ -527,7 +526,7 @@ export function talosBackgroundEffectFromCustomization(
 export function talosThemeMotionStyle(motionMode: TalosThemeMotionMode): Record<string, string> {
     if (motionMode === 'off') {
         return {
-            '--talos-effect-opacity': '0',
+            '--talos-effect-opacity': '0.64',
             '--talos-trace-duration-a': '1s',
             '--talos-trace-duration-b': '1s',
             '--talos-trace-duration-c': '1s',
