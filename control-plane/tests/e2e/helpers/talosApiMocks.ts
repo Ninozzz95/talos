@@ -389,6 +389,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         preferences: {
             theme: 'forge',
             reduced_motion: false,
+            theme_customization: {},
             ai_defaults: {
                 utility_model_mode: 'same_as_chat',
                 vision_enabled: true,
