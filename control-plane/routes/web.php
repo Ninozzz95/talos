@@ -1,15 +1,23 @@
 <?php
 
+use App\Http\Controllers\TalosAuthController;
+use App\Http\Controllers\TalosSetupController;
+use App\Http\Controllers\TalosWorkspaceController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return redirect('/chat');
+Route::get('/', TalosWorkspaceController::class);
+
+Route::get('/setup', [TalosSetupController::class, 'show'])->name('setup');
+Route::post('/setup', [TalosSetupController::class, 'store']);
+
+Route::middleware('guest')->group(function (): void {
+    Route::get('/login', [TalosAuthController::class, 'show'])->name('login');
+    Route::post('/login', [TalosAuthController::class, 'store']);
 });
 
-Route::get('/chat', function () {
-    return view('chat');
-});
+Route::post('/logout', [TalosAuthController::class, 'destroy'])
+    ->middleware('auth')
+    ->name('logout');
 
-Route::get('/dashboard', function () {
-    return view('welcome');
-});
+Route::redirect('/chat', '/');
+Route::redirect('/dashboard', '/');

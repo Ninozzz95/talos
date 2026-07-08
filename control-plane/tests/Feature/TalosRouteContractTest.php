@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\Route;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -12,32 +14,55 @@ use Tests\TestCase;
 
 final class TalosRouteContractTest extends TestCase
 {
-    public function test_root_redirects_to_the_chat_surface(): void
+    use RefreshDatabase;
+
+    public function test_root_renders_the_unified_workspace_surface(): void
     {
-        $this->get('/')
-            ->assertRedirect('/chat');
+        $this->withoutVite();
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('Talos Workspace')
+            ->assertSee('talos-workspace-root')
+            ->assertSee('data-talos-surface="workspace"', false);
     }
 
-    public function test_chat_route_renders_the_chat_mount_page(): void
+    public function test_root_removes_stale_local_vite_hot_file_before_rendering(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+
+        file_put_contents(public_path('hot'), 'http://127.0.0.1:1');
+
+        try {
+            $this->actingAs($user)
+                ->get('/')
+                ->assertOk();
+
+            $this->assertFileDoesNotExist(public_path('hot'));
+        } finally {
+            if (file_exists(public_path('hot'))) {
+                unlink(public_path('hot'));
+            }
+        }
+    }
+
+    public function test_chat_route_renders_the_unified_workspace_with_chat_focus(): void
     {
         $this->withoutVite();
 
         $this->get('/chat')
-            ->assertOk()
-            ->assertSee('Talos Chat')
-            ->assertSee('talos-chat-root')
-            ->assertDontSee('talos-root');
+            ->assertRedirect('/');
     }
 
-    public function test_dashboard_route_renders_the_cockpit_mount_page(): void
+    public function test_dashboard_route_renders_the_unified_workspace_with_dashboard_focus(): void
     {
         $this->withoutVite();
 
         $this->get('/dashboard')
-            ->assertOk()
-            ->assertSee('Talos | Kadmos Control Plane')
-            ->assertSee('talos-root')
-            ->assertSee('talos-product-contract');
+            ->assertRedirect('/');
     }
 
     #[DataProvider('apiCompatibilityEndpoints')]

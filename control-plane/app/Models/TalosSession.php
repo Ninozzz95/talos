@@ -20,6 +20,7 @@ final class TalosSession extends Model
         'user_id',
         'title',
         'mode',
+        'persistence_mode',
         'active_model_profile_id',
         'metadata',
     ];

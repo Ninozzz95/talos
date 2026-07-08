@@ -15,6 +15,7 @@ final class TalosToolRegistryApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->authenticateTalosUser();
 
         config(['services.talos.registry_write_token' => 'registry-test-token']);
     }

@@ -34,6 +34,7 @@ export class TalosApiError extends Error {
 export type TalosFetchOptions = RequestInit & {
     validationMessage?: string
     networkMessage?: string
+    redirectOnAuthFailure?: boolean
 }
 
 function isJsonResponse(response: Response) {
@@ -89,8 +90,53 @@ function messageFromPayload(payload: unknown, fallback: string) {
     return fallback
 }
 
+function csrfToken() {
+    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content
+        ?? document.getElementById('talos-workspace-root')?.dataset.csrfToken
+        ?? ''
+}
+
+function isSameOriginUrl(input: RequestInfo | URL) {
+    if (typeof window === 'undefined') {
+        return true
+    }
+
+    const rawUrl = input instanceof Request
+        ? input.url
+        : input instanceof URL
+            ? input.href
+            : String(input)
+
+    try {
+        return new URL(rawUrl, window.location.href).origin === window.location.origin
+    } catch {
+        return true
+    }
+}
+
+function shouldAttachCsrf(method: string, input: RequestInfo | URL) {
+    return isSameOriginUrl(input) && !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())
+}
+
+function redirectToLogin() {
+    if (typeof window === 'undefined') {
+        return
+    }
+
+    const loginUrl = document.getElementById('talos-workspace-root')?.dataset.loginUrl ?? '/login'
+    const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const nextUrl = new URL(loginUrl, window.location.origin)
+
+    if (redirect && redirect !== '/login') {
+        nextUrl.searchParams.set('redirect', redirect)
+    }
+
+    window.location.assign(nextUrl.toString())
+}
+
 export async function talosFetch<T>(input: RequestInfo | URL, options: TalosFetchOptions = {}): Promise<T> {
     const headers = new Headers(options.headers)
+    const method = options.method ?? (input instanceof Request ? input.method : 'GET')
 
     if (!headers.has('Accept')) {
         headers.set('Accept', 'application/json')
@@ -100,12 +146,21 @@ export async function talosFetch<T>(input: RequestInfo | URL, options: TalosFetc
         headers.set('Content-Type', 'application/json')
     }
 
+    if (shouldAttachCsrf(method, input) && !headers.has('X-CSRF-TOKEN')) {
+        const token = csrfToken()
+
+        if (token) {
+            headers.set('X-CSRF-TOKEN', token)
+        }
+    }
+
     let response: Response
 
     try {
         response = await fetch(input, {
             ...options,
             headers,
+            credentials: options.credentials ?? 'same-origin',
         })
     } catch (error) {
         throw new TalosApiError(
@@ -135,6 +190,10 @@ export async function talosFetch<T>(input: RequestInfo | URL, options: TalosFetc
                 responseText: text,
             },
         )
+    }
+
+    if ((response.status === 401 || response.status === 419) && options.redirectOnAuthFailure !== false) {
+        redirectToLogin()
     }
 
     throw new TalosApiError(

@@ -101,3 +101,101 @@ button {
         linear-gradient(180deg, rgba(169, 102, 23, 0.10), transparent 240px),
         var(--talos-sidebar);
 }
+
+.talos-workspace {
+    background:
+        radial-gradient(circle at 50% 42%, rgba(74, 222, 222, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(201, 139, 50, 0.06), transparent 280px),
+        var(--talos-background);
+}
+
+.talos-dag-grid {
+    background-image:
+        linear-gradient(rgba(143, 157, 176, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(143, 157, 176, 0.07) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: radial-gradient(circle at center, black 0%, transparent 75%);
+}
+
+.talos-dag-line {
+    position: absolute;
+    height: 1px;
+    transform-origin: left center;
+    background: linear-gradient(90deg, transparent, rgba(106, 212, 212, 0.32), rgba(201, 139, 50, 0.42), transparent);
+}
+
+.talos-dag-line-a {
+    left: 18%;
+    top: 28%;
+    width: 52%;
+    transform: rotate(15deg);
+}
+
+.talos-dag-line-b {
+    left: 30%;
+    top: 62%;
+    width: 46%;
+    transform: rotate(-18deg);
+}
+
+.talos-dag-node {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(106, 212, 212, 0.62);
+    background: rgba(8, 11, 17, 0.9);
+    box-shadow: 0 0 18px rgba(106, 212, 212, 0.26);
+}
+
+.talos-dag-node-a {
+    left: 18%;
+    top: 27.5%;
+}
+
+.talos-dag-node-b {
+    left: 56%;
+    top: 38%;
+}
+
+.talos-dag-node-c {
+    left: 75%;
+    top: 49%;
+}
+
+.talos-tool-window {
+    color: var(--talos-text);
+}
+
+.talos-tool-window-docked {
+    width: 100%;
+}
+
+.talos-floating-window {
+    position: static;
+}
+
+@media (min-width: 1024px) {
+    .talos-floating-window {
+        position: absolute;
+        width: min(760px, calc(100vw - var(--talos-rail-width) - 48px));
+        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0);
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .talos-dag-line {
+        animation: talos-dag-pulse 6s ease-in-out infinite;
+    }
+}
+
+@keyframes talos-dag-pulse {
+    0%,
+    100% {
+        opacity: 0.28;
+    }
+
+    50% {
+        opacity: 0.72;
+    }
+}

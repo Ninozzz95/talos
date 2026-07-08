@@ -1,6 +1,7 @@
 import type { Page, Route } from '@playwright/test'
 
 type Json = Record<string, unknown> | unknown[]
+type PersistenceMode = 'persistent' | 'temporary'
 
 const now = '2026-07-07T10:00:00.000000Z'
 
@@ -16,11 +17,12 @@ function emptyData(route: Route) {
     return json(route, { data: [] })
 }
 
-function sessionPayload(title = 'E2E verified workflow') {
+function sessionPayload(title = 'E2E verified workflow', persistenceMode: PersistenceMode = 'persistent', id = 'session-e2e') {
     return {
-        id: 'session-e2e',
+        id,
         title,
         mode: 'verified_execution',
+        persistence_mode: persistenceMode,
         active_model_profile_id: null,
         metadata: { surface: 'chat' },
         created_at: now,
@@ -28,10 +30,10 @@ function sessionPayload(title = 'E2E verified workflow') {
     }
 }
 
-function messagePayload(body: Record<string, unknown>, sequence: number) {
+function messagePayload(body: Record<string, unknown>, sequence: number, sessionId = 'session-e2e') {
     return {
         id: `message-e2e-${sequence}`,
-        session_id: 'session-e2e',
+        session_id: sessionId,
         role: body.role ?? 'assistant',
         content: body.content ?? 'E2E response from AVM.',
         model_profile_id: body.model_profile_id ?? null,
@@ -272,11 +274,36 @@ function runEventsPayload() {
     ]
 }
 
-export async function installTalosApiMocks(page: Page) {
+export type InstallTalosApiMocksOptions = {
+    initialSessions?: Array<{
+        id: string
+        title: string
+        persistence_mode?: PersistenceMode
+    }>
+}
+
+export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}) {
     let messageSequence = 0
     let fileUploaded = false
     let contextSetCreated = false
     let comparisonCreated = false
+    let sessions = (options.initialSessions ?? []).map((session) => sessionPayload(
+        session.title,
+        session.persistence_mode ?? 'persistent',
+        session.id,
+    ))
+    let activeSessionPersistenceMode: PersistenceMode = 'persistent'
+    let workspaceSettings = {
+        id: 'default',
+        default_model_profile_id: 'profile-e2e',
+        default_context_set_id: null as string | null,
+        preferences: {
+            theme: 'dark',
+            reduced_motion: true,
+        },
+        created_at: now,
+        updated_at: now,
+    }
 
     await page.route('**/api/**', async (route) => {
         const request = route.request()
@@ -302,32 +329,72 @@ export async function installTalosApiMocks(page: Page) {
             })
         }
 
+        if (path === '/api/talos/settings' && method === 'GET') {
+            return json(route, {
+                data: workspaceSettings,
+            })
+        }
+
+        if (path === '/api/talos/settings' && method === 'PATCH') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            if ('api_key' in body || 'secret' in body || 'encrypted_secret' in body) {
+                return json(route, { error: 'SECRET_FIELDS_REJECTED' }, 422)
+            }
+
+            workspaceSettings = {
+                ...workspaceSettings,
+                default_model_profile_id: typeof body.default_model_profile_id === 'string' ? body.default_model_profile_id : workspaceSettings.default_model_profile_id,
+                default_context_set_id: typeof body.default_context_set_id === 'string' || body.default_context_set_id === null
+                    ? body.default_context_set_id as string | null
+                    : workspaceSettings.default_context_set_id,
+                preferences: {
+                    ...workspaceSettings.preferences,
+                    ...(body.preferences && typeof body.preferences === 'object' && !Array.isArray(body.preferences) ? body.preferences : {}),
+                },
+                updated_at: now,
+            }
+
+            return json(route, {
+                data: workspaceSettings,
+            })
+        }
+
         if (path === '/api/talos/context-sets' && method === 'GET') {
             return json(route, { data: contextSetCreated ? [contextSetPayload()] : [] })
         }
 
         if (path === '/api/talos/sessions' && method === 'GET') {
-            return json(route, { data: [] })
+            return json(route, { data: sessions })
         }
 
         if (path === '/api/talos/sessions' && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
-            return json(route, { data: sessionPayload(String(body.title ?? 'E2E verified workflow')) }, 201)
+            activeSessionPersistenceMode = body.persistence_mode === 'temporary' ? 'temporary' : 'persistent'
+            const session = sessionPayload(String(body.title ?? 'E2E verified workflow'), activeSessionPersistenceMode, 'session-e2e')
+            sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
+            return json(route, { data: session }, 201)
         }
 
-        if (path === '/api/talos/sessions/session-e2e' && method === 'PATCH') {
+        const sessionPatchMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)$/)
+        if (sessionPatchMatch && method === 'PATCH') {
             const body = request.postDataJSON() as Record<string, unknown>
-            return json(route, { data: sessionPayload(String(body.title ?? 'E2E verified workflow')) })
+            const sessionId = sessionPatchMatch[1]
+            const existing = sessions.find((item) => item.id === sessionId)
+            const persistenceMode = existing?.persistence_mode === 'temporary' ? 'temporary' : activeSessionPersistenceMode
+            const session = sessionPayload(String(body.title ?? existing?.title ?? 'E2E verified workflow'), persistenceMode, sessionId)
+            sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
+            return json(route, { data: session })
         }
 
-        if (path === '/api/talos/sessions/session-e2e/messages' && method === 'GET') {
+        const sessionMessagesMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/messages$/)
+        if (sessionMessagesMatch && method === 'GET') {
             return json(route, { data: [] })
         }
 
-        if (path === '/api/talos/sessions/session-e2e/messages' && method === 'POST') {
+        if (sessionMessagesMatch && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             messageSequence += 1
-            return json(route, { data: messagePayload(body, messageSequence) }, 201)
+            return json(route, { data: messagePayload(body, messageSequence, sessionMessagesMatch[1]) }, 201)
         }
 
         if (path === '/api/talos/chat' && method === 'POST') {
@@ -360,6 +427,23 @@ export async function installTalosApiMocks(page: Page) {
                     model: 'gpt-e2e',
                     created_at: now,
                     updated_at: now,
+                },
+            })
+        }
+
+        if (path === '/api/talos/prompts/enhance' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            if ('api_key' in body || 'secret' in body || 'encrypted_secret' in body) {
+                return json(route, { error: 'SECRET_FIELDS_REJECTED' }, 422)
+            }
+
+            const prompt = String(body.prompt ?? '').trim()
+            return json(route, {
+                data: {
+                    model_profile_id: body.model_profile_id ?? 'profile-e2e',
+                    enhancement_mode: 'deterministic_template',
+                    original_prompt: prompt,
+                    enhanced_prompt: `Objective:\n\n${prompt}\n\nClarify output, constraints, context, and acceptance checks before execution.`,
                 },
             })
         }

@@ -15,5 +15,9 @@ control-plane/.env
 .DS_Store
 Thumbs.db
 docs/superpowers/
+docs/architecture/progress/
+docs/architecture/*checklist*.md
+docs/architecture/*plan*.md
+docs/architecture/*roadmap*.md
 final/
 .worktrees/

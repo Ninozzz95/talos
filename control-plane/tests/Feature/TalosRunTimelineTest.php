@@ -10,7 +10,7 @@ final class TalosRunTimelineTest extends TestCase
 {
     public function test_dashboard_mounts_real_run_timeline_components(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $composablePath = base_path('resources/js/composables/useTalosRuns.ts');
         $timelinePath = base_path('resources/js/components/talos/runs/TalosRunTimeline.vue');
         $graphPath = base_path('resources/js/components/talos/runs/TalosNodeGraph.vue');

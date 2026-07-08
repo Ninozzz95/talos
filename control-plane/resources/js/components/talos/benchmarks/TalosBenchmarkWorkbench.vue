@@ -7,6 +7,7 @@ import Surface from '../../ui/Surface.vue'
 import TalosBenchmarkLane from './TalosBenchmarkLane.vue'
 import TalosDiffViewer from './TalosDiffViewer.vue'
 import { useTalosBenchmarks } from '../../../composables/useTalosBenchmarks'
+import { talosFetch } from '../../../lib/api'
 import type { TalosBenchmarkGroup, TalosBenchmarkResult } from '../../../lib/talosTypes'
 
 const props = withDefaults(defineProps<{
@@ -160,15 +161,7 @@ async function downloadBenchmarkReport() {
     actionMessage.value = ''
 
     try {
-        const response = await fetch(endpoint, {
-            headers: { Accept: 'application/json' },
-        })
-
-        if (!response.ok) {
-            throw new Error(`TALOS export failed with HTTP ${response.status}.`)
-        }
-
-        const payload = await response.json()
+        const payload = await talosFetch<unknown>(endpoint)
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
         const objectUrl = URL.createObjectURL(blob)
         const link = document.createElement('a')

@@ -12,6 +12,12 @@ final class TalosMessageApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_messages_can_be_created_and_listed_for_a_session(): void
     {
         $session = TalosSession::query()->create([

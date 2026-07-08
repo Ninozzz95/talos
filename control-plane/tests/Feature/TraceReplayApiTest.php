@@ -12,6 +12,12 @@ final class TraceReplayApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_trace_events_are_normalized_for_replay(): void
     {
         $response = $this->postJson('/api/traces/replay', [

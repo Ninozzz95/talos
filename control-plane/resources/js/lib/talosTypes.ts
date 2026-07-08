@@ -40,6 +40,7 @@ export type TalosSession = {
     user_id?: number | null
     title: string
     mode: 'answer_only' | 'verified_execution'
+    persistence_mode?: 'persistent' | 'temporary'
     active_model_profile_id?: string | null
     metadata?: Record<string, unknown> | null
     created_at: string

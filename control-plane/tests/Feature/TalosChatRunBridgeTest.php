@@ -15,6 +15,12 @@ final class TalosChatRunBridgeTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_profile_backed_chat_creates_persisted_run_and_events_when_session_is_supplied(): void
     {
         config(['services.avm_validator.url' => 'http://validator.test']);

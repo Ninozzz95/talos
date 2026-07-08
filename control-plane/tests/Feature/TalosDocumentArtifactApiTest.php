@@ -13,6 +13,12 @@ final class TalosDocumentArtifactApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_document_can_be_saved_from_run_artifact_and_export_includes_metadata(): void
     {
         $run = TalosRun::query()->create([

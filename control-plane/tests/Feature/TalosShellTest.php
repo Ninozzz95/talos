@@ -4,10 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 final class TalosShellTest extends TestCase
 {
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_control_plane_serves_talos_shell_mount(): void
     {
         $this->withoutVite();
@@ -15,17 +24,19 @@ final class TalosShellTest extends TestCase
         $response = $this->get('/dashboard');
 
         $response
-            ->assertOk()
-            ->assertSee('Talos | Kadmos Control Plane')
-            ->assertSee('talos-root');
+            ->assertRedirect('/');
     }
 
-    public function test_root_routes_to_the_dedicated_chat_page(): void
+    public function test_root_serves_the_unified_workspace(): void
     {
+        $this->withoutVite();
+
         $response = $this->get('/');
 
         $response
-            ->assertRedirect('/chat');
+            ->assertOk()
+            ->assertSee('talos-workspace-root')
+            ->assertSee('data-talos-surface="workspace"', false);
     }
 
     public function test_dashboard_shell_exposes_glass_box_product_contract(): void
@@ -35,30 +46,17 @@ final class TalosShellTest extends TestCase
         $response = $this->get('/dashboard');
 
         $response
-            ->assertOk()
-            ->assertSee('Glass Box')
-            ->assertSee('/api/files/ingest')
-            ->assertSee('/api/benchmarks/compare')
-            ->assertSee('/api/traces/replay');
+            ->assertRedirect('/');
     }
 
-    public function test_talos_vue_shell_links_to_dedicated_persistent_chat_without_local_chat_controls(): void
+    public function test_talos_vue_shell_is_a_dashboard_focus_wrapper_for_the_unified_workspace(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
 
         $this->assertIsString($shell);
-        $this->assertStringContainsString('Open persistent chat', $shell);
-        $this->assertStringContainsString('href="/chat"', $shell);
-        $this->assertStringContainsString('dashboardTabGroups', $shell);
-        $this->assertStringContainsString("id: 'runtime'", $shell);
-        $this->assertStringContainsString("id: 'benchmarks'", $shell);
-        $this->assertStringContainsString("id: 'knowledge'", $shell);
-        $this->assertStringContainsString("id: 'agents'", $shell);
-        $this->assertStringContainsString("id: 'productivity'", $shell);
-        $this->assertStringContainsString("id: 'admin'", $shell);
-        $this->assertStringNotContainsString('talos-chat-thread', $shell);
-        $this->assertStringNotContainsString('Chat conversation', $shell);
-        $this->assertStringNotContainsString('Ask Talos', $shell);
+        $this->assertStringContainsString('TalosWorkspace', $shell);
+        $this->assertStringContainsString('initial-surface="dashboard"', $shell);
+        $this->assertStringNotContainsString('dashboardTabGroups', $shell);
         $this->assertStringNotContainsString('/api/talos/chat', $shell);
         $this->assertStringNotContainsString('talos_settings', $shell);
         $this->assertStringNotContainsString('sendChat', $shell);
@@ -80,9 +78,12 @@ final class TalosShellTest extends TestCase
         $this->assertStringNotContainsString('Resistenza errori</span>', $shell);
         $this->assertStringNotContainsString('Provider key dev-only', $shell);
         $this->assertStringNotContainsString('DAG from chat', $shell);
-        $this->assertStringContainsString('TalosRunTimeline', $shell);
-        $this->assertStringContainsString('TalosBenchmarkWorkbench', $shell);
-        $this->assertStringContainsString('TalosToolRegistry', $shell);
+        $workspace = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+
+        $this->assertIsString($workspace);
+        $this->assertStringContainsString('TalosRunTimeline', $workspace);
+        $this->assertStringContainsString('TalosBenchmarkWorkbench', $workspace);
+        $this->assertStringContainsString('TalosToolRegistry', $workspace);
         $this->assertStringNotContainsString('Run events unavailable', $shell);
         $this->assertStringNotContainsString('Benchmark data unavailable', $shell);
     }

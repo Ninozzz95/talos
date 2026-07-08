@@ -14,6 +14,8 @@ export type CreateTalosMessagePayload = {
     metadata?: Record<string, unknown>
 }
 
+export type TalosSessionPersistenceMode = 'persistent' | 'temporary'
+
 function sessionMessagesEndpoint(sessionId: string) {
     return `/api/talos/sessions/${sessionId}/messages`
 }
@@ -55,7 +57,7 @@ export function useTalosSessions() {
         }
     }
 
-    async function createSession(title = 'New chat') {
+    async function createSession(title = 'New chat', persistenceMode: TalosSessionPersistenceMode = 'persistent') {
         sessionError.value = null
 
         try {
@@ -64,6 +66,7 @@ export function useTalosSessions() {
                 body: JSON.stringify({
                     title,
                     mode: 'verified_execution',
+                    persistence_mode: persistenceMode,
                     metadata: {
                         surface: 'chat',
                     },

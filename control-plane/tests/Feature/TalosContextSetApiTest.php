@@ -15,6 +15,12 @@ final class TalosContextSetApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_context_set_can_attach_file_and_chunks(): void
     {
         $file = TalosFile::query()->create([

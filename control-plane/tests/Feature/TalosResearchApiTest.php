@@ -12,6 +12,12 @@ final class TalosResearchApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_claim_cannot_be_verified_without_source(): void
     {
         $this->postJson('/api/talos/research-reports', [
