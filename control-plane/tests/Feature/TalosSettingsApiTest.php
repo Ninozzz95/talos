@@ -219,6 +219,8 @@ final class TalosSettingsApiTest extends TestCase
                 'theme' => 'violet',
                 'workspace_default_theme' => 'violet',
                 'theme_motion' => 'cinematic',
+                'theme_motion_disabled' => true,
+                'theme_background_disabled' => false,
                 'theme_area_tokens' => [
                     'chat' => [
                         'background' => '#02080c',
@@ -251,6 +253,8 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme', 'violet')
             ->assertJsonPath('data.preferences.workspace_default_theme', 'violet')
             ->assertJsonPath('data.preferences.theme_motion', 'cinematic')
+            ->assertJsonPath('data.preferences.theme_motion_disabled', true)
+            ->assertJsonPath('data.preferences.theme_background_disabled', false)
             ->assertJsonPath('data.preferences.theme_area_tokens.chat.background', '#02080c')
             ->assertJsonPath('data.preferences.theme_area_tokens.dashboard.text', '#e8fbff');
 
@@ -311,6 +315,15 @@ final class TalosSettingsApiTest extends TestCase
                 'theme_customization' => [
                     'accent' => '#31d6c8',
                 ],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Theme changes are locked by workspace policy.');
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_motion_disabled' => true,
+                'theme_background_disabled' => true,
             ],
         ])
             ->assertUnprocessable()

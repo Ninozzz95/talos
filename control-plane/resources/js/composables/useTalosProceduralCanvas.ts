@@ -226,7 +226,7 @@ export function useTalosProceduralCanvas(
     canvas: Ref<HTMLCanvasElement | null>,
     effect: Ref<TalosBackgroundEffect>,
     motion: Ref<TalosThemeMotionMode>,
-    reducedMotion: Ref<boolean>,
+    motionDisabled: Ref<boolean>,
 ) {
     let frame = 0
 
@@ -237,9 +237,13 @@ export function useTalosProceduralCanvas(
         }
     }
 
+    function staticMode() {
+        return motionDisabled.value || motion.value === 'off'
+    }
+
     function draw(time = 0) {
         const element = canvas.value
-        if (!element || effect.value === 'none' || motion.value === 'off' || reducedMotion.value) {
+        if (!element || effect.value === 'none') {
             stop()
             return
         }
@@ -251,7 +255,9 @@ export function useTalosProceduralCanvas(
         }
 
         const { width, height } = resizeCanvas(element)
-        const scale = motionScale(motion.value)
+        const frozen = staticMode()
+        const renderTime = frozen ? 0 : time
+        const scale = frozen ? 1 : motionScale(motion.value)
         const accent = cssVariable(element, '--talos-accent', '#c98b32')
         const secondary = cssVariable(element, '--talos-node', '#6ad4d4')
 
@@ -262,16 +268,21 @@ export function useTalosProceduralCanvas(
         context.fillRect(0, 0, width, height)
         context.restore()
 
-        drawGrid(context, width, height, accent, scale, time)
+        drawGrid(context, width, height, accent, scale, renderTime)
 
         if (effect.value === 'trace-rain') {
-            drawTraceRain(context, width, height, accent, secondary, scale, time)
+            drawTraceRain(context, width, height, accent, secondary, scale, renderTime)
         } else if (effect.value === 'dag-flow') {
-            drawDagFlow(context, width, height, accent, secondary, scale, time)
+            drawDagFlow(context, width, height, accent, secondary, scale, renderTime)
         } else if (effect.value === 'kahn-grid') {
-            drawKahnGrid(context, width, height, accent, scale, time)
+            drawKahnGrid(context, width, height, accent, scale, renderTime)
         } else if (effect.value === 'signal-mesh') {
-            drawSignalMesh(context, width, height, accent, secondary, scale, time)
+            drawSignalMesh(context, width, height, accent, secondary, scale, renderTime)
+        }
+
+        if (frozen) {
+            frame = 0
+            return
         }
 
         frame = window.requestAnimationFrame(draw)
@@ -279,6 +290,11 @@ export function useTalosProceduralCanvas(
 
     function restart() {
         stop()
+        if (staticMode()) {
+            draw(0)
+            return
+        }
+
         frame = window.requestAnimationFrame(draw)
     }
 
@@ -292,7 +308,7 @@ export function useTalosProceduralCanvas(
         window.removeEventListener('resize', restart)
     })
 
-    watch([effect, motion, reducedMotion], restart)
+    watch([effect, motion, motionDisabled], restart)
 
     return {
         restart,

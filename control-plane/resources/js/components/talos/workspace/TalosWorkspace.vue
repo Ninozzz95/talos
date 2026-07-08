@@ -233,13 +233,22 @@ const shellClass = computed(() => [
     `talos-density-${workspaceEffectiveThemeCustomization.value.density ?? 'comfortable'}`,
     `talos-radius-${workspaceEffectiveThemeCustomization.value.radius ?? 'balanced'}`,
     `talos-effect-${workspaceBackgroundEffect.value}`,
+    workspaceMotionDisabled.value ? 'talos-motion-disabled' : '',
+    workspaceBackgroundDisabled.value ? 'talos-background-disabled' : '',
 ])
 const currentThemePreset = computed(() => talosThemePreset(theme.value))
 const workspaceMotionMode = computed(() => resolveTalosMotionMode(workspaceSettings.value?.preferences?.theme_motion))
+const workspaceMotionDisabledPreference = computed(() => workspaceSettings.value?.preferences?.theme_motion_disabled === true)
+const workspaceBackgroundDisabled = computed(() => workspaceSettings.value?.preferences?.theme_background_disabled === true)
 const workspaceReducedMotionPreference = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
 const workspaceReducedMotion = computed(() => (
     workspaceReducedMotionPreference.value
     || (workspaceMotionMode.value === 'system' && browserReducedMotion.value)
+))
+const workspaceMotionDisabled = computed(() => (
+    workspaceMotionDisabledPreference.value
+    || workspaceReducedMotion.value
+    || workspaceMotionMode.value === 'off'
 ))
 const workspaceThemeCustomization = computed(() => sanitizeTalosThemeCustomization(workspaceSettings.value?.preferences?.theme_customization))
 const workspaceEffectiveThemeCustomization = computed(() => themeDraftCustomization.value ?? workspaceThemeCustomization.value)
@@ -247,8 +256,7 @@ const workspaceAreaTokens = computed(() => sanitizeTalosThemeAreaTokens(workspac
 const workspaceBackgroundEffect = computed(() => talosBackgroundEffectFromCustomization(
     workspaceEffectiveThemeCustomization.value,
     currentThemePreset.value,
-    workspaceReducedMotion.value,
-    workspaceMotionMode.value,
+    workspaceBackgroundDisabled.value,
 ))
 const currentRailWidth = computed(() => railCollapsed.value ? 64 : railWidth.value)
 const workspaceStyle = computed(() => ({
@@ -1112,7 +1120,7 @@ onBeforeUnmount(() => {
             <TalosProceduralBackground
                 :effect="workspaceBackgroundEffect"
                 :motion="workspaceMotionMode"
-                :reduced-motion="workspaceReducedMotion"
+                :motion-disabled="workspaceMotionDisabled"
             />
 
             <header class="relative z-20 flex min-h-14 items-center justify-between gap-3 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-4 backdrop-blur md:px-5">

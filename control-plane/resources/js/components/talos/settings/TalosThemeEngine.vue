@@ -86,6 +86,8 @@ const exportJson = ref('')
 const importJson = ref('')
 const localThemeError = ref('')
 const motionMode = ref<TalosThemeMotionMode>('system')
+const motionDisabled = ref(false)
+const backgroundDisabled = ref(false)
 const areaTokens = ref<TalosThemeAreaTokens>({})
 const selectedArea = ref<TalosThemeAreaId>('composer')
 const areaTokenForm = ref<AreaTokenForm>(emptyAreaTokenForm())
@@ -188,6 +190,8 @@ function syncThemeState() {
     themeLibrary.value = sanitizeTalosThemeLibrary(preferences.theme_library)
     activeCustomThemeId.value = typeof preferences.active_custom_theme_id === 'string' ? preferences.active_custom_theme_id : null
     motionMode.value = resolveTalosMotionMode(preferences.theme_motion)
+    motionDisabled.value = preferences.theme_motion_disabled === true
+    backgroundDisabled.value = preferences.theme_background_disabled === true
     areaTokens.value = sanitizeTalosThemeAreaTokens(preferences.theme_area_tokens)
     syncAreaForm()
 }
@@ -489,6 +493,38 @@ async function persistMotionMode() {
             theme_motion: mode,
         },
     }, 'Theme motion saved.')
+    syncThemeState()
+    emit('themeCustomizationChanged')
+}
+
+async function persistMotionDisabled() {
+    if (!canWriteTheme()) {
+        motionDisabled.value = preferencesRecord().theme_motion_disabled === true
+        return
+    }
+
+    await updateSettings({
+        preferences: {
+            ...preferencesRecord(),
+            theme_motion_disabled: motionDisabled.value,
+        },
+    }, motionDisabled.value ? 'Theme motion disabled.' : 'Theme motion enabled.')
+    syncThemeState()
+    emit('themeCustomizationChanged')
+}
+
+async function persistBackgroundDisabled() {
+    if (!canWriteTheme()) {
+        backgroundDisabled.value = preferencesRecord().theme_background_disabled === true
+        return
+    }
+
+    await updateSettings({
+        preferences: {
+            ...preferencesRecord(),
+            theme_background_disabled: backgroundDisabled.value,
+        },
+    }, backgroundDisabled.value ? 'Procedural background disabled.' : 'Procedural background enabled.')
     syncThemeState()
     emit('themeCustomizationChanged')
 }
@@ -844,6 +880,38 @@ onMounted(async () => {
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                         Motion mode controls procedural intensity without loading video backgrounds.
                     </p>
+                </div>
+                <div class="grid gap-3 md:grid-cols-2">
+                    <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                        <span>
+                            <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
+                            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep the selected background visible, but freeze canvas and DOM animation.</span>
+                        </span>
+                        <input
+                            v-model="motionDisabled"
+                            type="checkbox"
+                            role="switch"
+                            class="mt-1 h-4 w-4 accent-[var(--talos-accent)]"
+                            aria-label="Disable motion"
+                            :disabled="savingSettings || themePolicyLocked"
+                            @change="persistMotionDisabled"
+                        >
+                    </label>
+                    <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                        <span>
+                            <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable procedural background</span>
+                            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Remove canvas, grids, trace streams and procedural layers from the workspace.</span>
+                        </span>
+                        <input
+                            v-model="backgroundDisabled"
+                            type="checkbox"
+                            role="switch"
+                            class="mt-1 h-4 w-4 accent-[var(--talos-accent)]"
+                            aria-label="Disable procedural background"
+                            :disabled="savingSettings || themePolicyLocked"
+                            @change="persistBackgroundDisabled"
+                        >
+                    </label>
                 </div>
                 <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                     <span>Theme motion</span>

@@ -6,17 +6,17 @@ import type { TalosBackgroundEffect, TalosThemeMotionMode } from '../../../lib/t
 const props = defineProps<{
     effect: TalosBackgroundEffect
     motion: TalosThemeMotionMode
-    reducedMotion: boolean
+    motionDisabled: boolean
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
-const canvasEnabled = computed(() => props.effect !== 'none' && props.motion !== 'off' && !props.reducedMotion)
+const canvasEnabled = computed(() => props.effect !== 'none')
 
 useTalosProceduralCanvas(
     canvas,
     toRef(props, 'effect'),
     toRef(props, 'motion'),
-    toRef(props, 'reducedMotion'),
+    toRef(props, 'motionDisabled'),
 )
 </script>
 
@@ -24,8 +24,9 @@ useTalosProceduralCanvas(
     <div
         data-testid="talos-background-effect"
         class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden opacity-80"
-        :class="`talos-effect-${effect}`"
+        :class="[`talos-effect-${effect}`, { 'talos-motion-disabled': motionDisabled }]"
         :data-effect="effect"
+        :data-motion-disabled="motionDisabled ? 'true' : 'false'"
         aria-hidden="true"
     >
         <canvas
