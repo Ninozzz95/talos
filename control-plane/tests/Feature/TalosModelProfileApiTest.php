@@ -17,6 +17,7 @@ final class TalosModelProfileApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->authenticateTalosUser();
 
         config([
             'services.talos.model_provider_allowed_hosts' => [

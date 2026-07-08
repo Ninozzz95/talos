@@ -1,21 +1,19 @@
 import { createApp } from 'vue'
-import TalosShell from './components/TalosShell.vue'
-import TalosChatPage from './components/TalosChatPage.vue'
-import TalosCommandPalette from './components/talos/shell/TalosCommandPalette.vue'
+import TalosWorkspace from './components/talos/workspace/TalosWorkspace.vue'
 import './lib/api'
 import './lib/commandRegistry'
 import './lib/statusCopy'
 import './lib/statusTone'
 
-void TalosCommandPalette
+const workspaceRoot = document.getElementById('talos-workspace-root')
 
-const shellRoot = document.getElementById('talos-root')
-const chatRoot = document.getElementById('talos-chat-root')
-
-if (shellRoot) {
-    createApp(TalosShell).mount(shellRoot)
-}
-
-if (chatRoot) {
-    createApp(TalosChatPage).mount(chatRoot)
+if (workspaceRoot) {
+    createApp(TalosWorkspace, {
+        initialSurface: workspaceRoot.dataset.talosSurface ?? 'workspace',
+        authenticated: workspaceRoot.dataset.authenticated === 'true',
+        authUserName: workspaceRoot.dataset.authUserName ?? '',
+        loginUrl: workspaceRoot.dataset.loginUrl ?? '/login',
+        logoutUrl: workspaceRoot.dataset.logoutUrl ?? '/logout',
+        csrfToken: workspaceRoot.dataset.csrfToken ?? '',
+    }).mount(workspaceRoot)
 }

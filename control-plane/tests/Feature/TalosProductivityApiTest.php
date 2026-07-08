@@ -12,6 +12,12 @@ final class TalosProductivityApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_task_created_from_run_stores_source_run_id(): void
     {
         $run = TalosRun::query()->create([

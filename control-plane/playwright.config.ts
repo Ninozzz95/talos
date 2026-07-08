@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const baseURL = process.env.TALOS_E2E_BASE_URL ?? 'http://127.0.0.1:8014'
+const reuseExistingServer = process.env.TALOS_E2E_REUSE_SERVER === '1'
 
 export default defineConfig({
     testDir: './tests/e2e',
@@ -22,9 +23,9 @@ export default defineConfig({
     webServer: process.env.TALOS_E2E_BASE_URL
         ? undefined
         : {
-            command: 'npx concurrently -k -s first -n laravel,vite "..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014" "npm run dev -- --host 127.0.0.1 --port 5173"',
+            command: 'npx concurrently -k -s first -n laravel,vite "..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014" "npm run dev -- --host 127.0.0.1 --port 5173"',
             url: baseURL,
-            reuseExistingServer: !process.env.CI,
+            reuseExistingServer,
             timeout: 120_000,
         },
     projects: [

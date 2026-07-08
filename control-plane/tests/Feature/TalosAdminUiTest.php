@@ -10,7 +10,7 @@ final class TalosAdminUiTest extends TestCase
 {
     public function test_dashboard_mounts_admin_doctor_audit_policy_and_backup_panels(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosAdmin.ts');
         $doctorPath = base_path('resources/js/components/talos/admin/TalosDoctorPanel.vue');

@@ -12,6 +12,12 @@ final class TalosRecoveryApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_invalid_recovery_action_is_rejected(): void
     {
         $run = $this->createBlockedRun();

@@ -16,6 +16,12 @@ final class BenchmarkComparisonApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_private_benchmark_scenario_can_be_compared(): void
     {
         Storage::fake('local');

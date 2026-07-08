@@ -12,6 +12,12 @@ final class TalosDoctorBackupApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_doctor_reports_degraded_validator_when_health_url_is_missing(): void
     {
         config(['services.talos.validator_health_url' => null]);

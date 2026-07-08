@@ -14,6 +14,12 @@ final class FileIngestionTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_text_file_upload_is_stored_privately_and_extracted(): void
     {
         Storage::fake('local');

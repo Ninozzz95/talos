@@ -10,7 +10,7 @@ final class TalosDocumentsArtifactUiTest extends TestCase
 {
     public function test_dashboard_mounts_document_and_artifact_surfaces_with_real_endpoints(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosDocuments.ts');
         $documentsPath = base_path('resources/js/components/talos/documents/TalosDocuments.vue');

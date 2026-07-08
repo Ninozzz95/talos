@@ -11,6 +11,12 @@ final class TalosSessionApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_session_can_be_created_listed_shown_updated_and_deleted(): void
     {
         $createResponse = $this->postJson('/api/talos/sessions', [

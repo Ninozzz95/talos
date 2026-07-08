@@ -10,7 +10,7 @@ final class TalosToolRegistryTest extends TestCase
 {
     public function test_dashboard_mounts_real_tool_registry_backed_by_connector_and_tool_apis(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $composablePath = base_path('resources/js/composables/useTalosTools.ts');
         $registryPath = base_path('resources/js/components/talos/tools/TalosToolRegistry.vue');
         $healthPath = base_path('resources/js/components/talos/tools/TalosConnectorHealth.vue');

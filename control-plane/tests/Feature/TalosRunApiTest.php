@@ -12,6 +12,12 @@ final class TalosRunApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_run_can_be_created_and_events_are_appended_in_order(): void
     {
         $response = $this->postJson('/api/talos/runs', [

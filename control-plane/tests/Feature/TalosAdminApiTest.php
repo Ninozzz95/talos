@@ -12,6 +12,12 @@ final class TalosAdminApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_admin_endpoint_rejects_missing_token(): void
     {
         $this->getJson('/api/talos/admin/doctor')

@@ -10,7 +10,7 @@ final class TalosResearchWorkbenchTest extends TestCase
 {
     public function test_dashboard_mounts_real_research_workbench_only_in_dashboard(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosResearch.ts');
         $workbenchPath = base_path('resources/js/components/talos/research/TalosResearchWorkbench.vue');

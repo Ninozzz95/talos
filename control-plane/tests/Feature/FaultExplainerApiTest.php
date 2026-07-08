@@ -4,10 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 final class FaultExplainerApiTest extends TestCase
 {
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_validation_fault_gets_plain_language_consequence(): void
     {
         $response = $this->postJson('/api/faults/explain', [

@@ -10,7 +10,7 @@ final class TalosProductivityUiTest extends TestCase
 {
     public function test_dashboard_mounts_productivity_and_email_panels_without_active_send_controls(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $productivityComposablePath = base_path('resources/js/composables/useTalosProductivity.ts');
         $emailComposablePath = base_path('resources/js/composables/useTalosEmail.ts');

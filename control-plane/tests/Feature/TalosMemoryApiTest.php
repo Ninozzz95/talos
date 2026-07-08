@@ -12,6 +12,12 @@ final class TalosMemoryApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_memory_can_be_created_and_returned_without_trusting_content(): void
     {
         $this->postJson('/api/talos/memories', [

@@ -27,6 +27,7 @@ final class TalosSessionController extends Controller
             'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'title' => ['required', 'string', 'min:1', 'max:255'],
             'mode' => ['sometimes', 'string', Rule::in(['answer_only', 'verified_execution'])],
+            'persistence_mode' => ['sometimes', 'string', Rule::in(['persistent', 'temporary'])],
             'active_model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);
@@ -34,6 +35,7 @@ final class TalosSessionController extends Controller
         $session = TalosSession::query()->create([
             ...$validated,
             'mode' => $validated['mode'] ?? 'verified_execution',
+            'persistence_mode' => $validated['persistence_mode'] ?? 'persistent',
         ]);
 
         return response()->json(['data' => $session], 201);
@@ -50,6 +52,7 @@ final class TalosSessionController extends Controller
             'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'title' => ['sometimes', 'string', 'min:1', 'max:255'],
             'mode' => ['sometimes', 'string', Rule::in(['answer_only', 'verified_execution'])],
+            'persistence_mode' => ['sometimes', 'string', Rule::in(['persistent', 'temporary'])],
             'active_model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);

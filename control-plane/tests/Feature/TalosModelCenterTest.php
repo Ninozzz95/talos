@@ -10,7 +10,7 @@ final class TalosModelCenterTest extends TestCase
 {
     public function test_dashboard_mounts_a_real_model_center_backed_by_profile_apis(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $componentPath = base_path('resources/js/components/talos/models/TalosModelCenter.vue');
         $composable = file_get_contents(base_path('resources/js/composables/useTalosModelProfiles.ts'));
 

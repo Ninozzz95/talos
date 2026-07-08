@@ -10,7 +10,7 @@ final class TalosContextVaultTest extends TestCase
 {
     public function test_dashboard_mounts_real_context_vault_backed_by_file_and_context_apis(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $composablePath = base_path('resources/js/composables/useTalosContextVault.ts');
         $vaultPath = base_path('resources/js/components/talos/context/TalosContextVault.vue');
         $dropzonePath = base_path('resources/js/components/talos/context/TalosFileDropzone.vue');

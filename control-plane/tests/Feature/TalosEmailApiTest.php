@@ -11,6 +11,12 @@ final class TalosEmailApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->authenticateTalosUser();
+    }
+
     public function test_email_connector_reports_degraded_read_only_state_without_configuration(): void
     {
         $this->getJson('/api/talos/email/connector-status')

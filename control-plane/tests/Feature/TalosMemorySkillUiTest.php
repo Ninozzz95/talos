@@ -10,7 +10,7 @@ final class TalosMemorySkillUiTest extends TestCase
 {
     public function test_dashboard_mounts_real_memory_and_skill_surfaces(): void
     {
-        $shell = file_get_contents(base_path('resources/js/components/TalosShell.vue'));
+        $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $types = file_get_contents(base_path('resources/js/lib/talosTypes.ts'));
         $composablePath = base_path('resources/js/composables/useTalosMemorySkills.ts');
         $memoryPath = base_path('resources/js/components/talos/memory/TalosMemoryManager.vue');
