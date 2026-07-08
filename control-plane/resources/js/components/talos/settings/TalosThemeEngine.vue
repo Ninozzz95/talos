@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import Badge from '../../ui/Badge.vue'
 import Card from '../../ui/Card.vue'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
@@ -28,6 +29,7 @@ const activeTheme = computed(() => {
     const storedTheme = settings.value?.preferences?.theme
     return normalizeTalosTheme(storedTheme ?? props.theme)
 })
+const previewReducedMotion = computed(() => settings.value?.preferences?.reduced_motion === true)
 
 async function chooseTheme(theme: TalosThemeId) {
     emit('changeTheme', theme, false)
@@ -37,6 +39,16 @@ async function chooseTheme(theme: TalosThemeId) {
             theme,
         },
     }, 'Theme saved through /api/talos/settings.')
+}
+
+function playPreviewVideo(event: Event) {
+    if (previewReducedMotion.value || !(event.target instanceof HTMLVideoElement)) {
+        return
+    }
+
+    event.target.play().catch(() => {
+        // Browser autoplay policy can still reject media; poster remains the fallback.
+    })
 }
 
 onMounted(async () => {
@@ -74,13 +86,34 @@ onMounted(async () => {
                 @click="chooseTheme(preset.id)"
             >
                 <span
-                    class="mb-3 grid h-14 grid-cols-[1fr_1fr] overflow-hidden rounded-md border"
-                    :style="{ borderColor: preset.preview.line, background: preset.preview.background }"
+                    class="mb-3 block h-20 overflow-hidden rounded-md border bg-[var(--talos-background)]"
+                    :style="{
+                        borderColor: preset.preview.line,
+                        background: preset.preview.background,
+                    }"
                     aria-hidden="true"
                 >
-                    <span class="m-2 rounded-sm" :style="{ background: preset.preview.accent }"></span>
-                    <span class="m-2 rounded-sm" :style="{ background: preset.preview.secondary }"></span>
-                    <span class="col-span-2 border-t" :style="{ borderColor: preset.preview.line }"></span>
+                    <video
+                        v-if="preset.background"
+                        data-testid="talos-theme-preview-video"
+                        class="h-full w-full object-cover"
+                        :poster="preset.background.poster"
+                        :autoplay="!previewReducedMotion"
+                        muted
+                        loop
+                        playsinline
+                        preload="metadata"
+                        @canplay="playPreviewVideo"
+                        @loadedmetadata="playPreviewVideo"
+                    >
+                        <source :src="preset.background.webm" type="video/webm">
+                        <source :src="preset.background.mp4" type="video/mp4">
+                    </video>
+                    <span v-else class="grid h-full grid-cols-[1fr_1fr]">
+                        <span class="m-2 rounded-sm" :style="{ background: preset.preview.accent }"></span>
+                        <span class="m-2 rounded-sm" :style="{ background: preset.preview.secondary }"></span>
+                        <span class="col-span-2 border-t" :style="{ borderColor: preset.preview.line }"></span>
+                    </span>
                 </span>
                 <span class="flex items-center justify-between gap-2">
                     <span class="font-semibold text-[var(--talos-text)]">{{ preset.label }}</span>
@@ -91,6 +124,11 @@ onMounted(async () => {
                     <span>Font: {{ preset.fontUi }}</span>
                     <span>Feel: {{ preset.mood }}</span>
                     <span>Motion: {{ preset.motion }}</span>
+                </span>
+                <span class="mt-3 flex flex-wrap gap-2">
+                    <Badge :tone="preset.background ? 'success' : 'neutral'">
+                        {{ preset.background ? 'Animated background' : 'Static fallback' }}
+                    </Badge>
                 </span>
             </button>
         </div>

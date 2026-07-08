@@ -12,6 +12,21 @@ import {
 import type { TalosModelProfile } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
+type CapabilityKey = 'json' | 'tools' | 'vision' | 'embeddings' | 'local' | 'remote'
+
+type CapabilityChip = {
+    key: CapabilityKey
+    label: string
+    available: boolean
+    detail: string
+    tone: BadgeTone
+}
+
+type AvmCompatibility = {
+    grade: 'A' | 'B' | 'C' | 'Blocked'
+    tone: BadgeTone
+    reason: string
+}
 
 const providerOptions: Array<{ value: TalosModelProfile['provider']; label: string }> = [
     { value: 'openai', label: 'OpenAI' },
@@ -24,6 +39,19 @@ const statusOptions: TalosModelProfile['status'][] = [
     'degraded',
     'failed',
     'disabled',
+]
+
+const capabilityDefinitions: Array<{
+    key: CapabilityKey
+    label: string
+    aliases: string[]
+}> = [
+    { key: 'json', label: 'JSON', aliases: ['json', 'json_mode', 'supports_json', 'response_format_json'] },
+    { key: 'tools', label: 'Tools', aliases: ['tools', 'tool_calls', 'function_calling', 'supports_tools'] },
+    { key: 'vision', label: 'Vision', aliases: ['vision', 'image_input', 'multimodal', 'supports_vision'] },
+    { key: 'embeddings', label: 'Embeddings', aliases: ['embeddings', 'embedding', 'supports_embeddings'] },
+    { key: 'local', label: 'Local', aliases: ['local', 'local_runtime', 'runs_local'] },
+    { key: 'remote', label: 'Remote', aliases: ['remote', 'remote_provider', 'hosted'] },
 ]
 
 const {
@@ -134,6 +162,155 @@ function secretTone(profile: TalosModelProfile): BadgeTone {
     return profile.has_secret ? 'success' : 'warning'
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {}
+}
+
+function booleanFromRecord(record: Record<string, unknown>, aliases: string[]): boolean | null {
+    for (const alias of aliases) {
+        const value = record[alias]
+
+        if (typeof value === 'boolean') {
+            return value
+        }
+
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase()
+
+            if (['true', 'yes', 'supported', 'enabled', 'available'].includes(normalized)) {
+                return true
+            }
+
+            if (['false', 'no', 'unsupported', 'disabled', 'unavailable'].includes(normalized)) {
+                return false
+            }
+        }
+    }
+
+    return null
+}
+
+function baseUrlIsLocal(profile: TalosModelProfile): boolean {
+    const baseUrl = profile.base_url
+
+    if (!baseUrl) {
+        return false
+    }
+
+    try {
+        const host = new URL(baseUrl).hostname.toLowerCase()
+
+        return host === 'localhost'
+            || host === '127.0.0.1'
+            || host === '::1'
+            || host.endsWith('.local')
+    } catch {
+        return false
+    }
+}
+
+function capabilityAvailable(profile: TalosModelProfile, definition: typeof capabilityDefinitions[number]): boolean {
+    const capabilities = asRecord(profile.capabilities)
+    const probeResult = asRecord(profile.probe_result)
+    const probedPolicy = asRecord(probeResult.policy)
+    const directValue = booleanFromRecord(capabilities, definition.aliases)
+    const probeValue = booleanFromRecord(probeResult, definition.aliases)
+
+    if (directValue !== null) {
+        return directValue
+    }
+
+    if (probeValue !== null) {
+        return probeValue
+    }
+
+    if (definition.key === 'local') {
+        return baseUrlIsLocal(profile)
+    }
+
+    if (definition.key === 'remote') {
+        const publicPolicy = booleanFromRecord(probedPolicy, ['public_url', 'public_network'])
+
+        if (publicPolicy !== null) {
+            return publicPolicy
+        }
+
+        return !baseUrlIsLocal(profile)
+    }
+
+    return false
+}
+
+function capabilityChips(profile: TalosModelProfile): CapabilityChip[] {
+    return capabilityDefinitions.map((definition) => {
+        const available = capabilityAvailable(profile, definition)
+
+        return {
+            key: definition.key,
+            label: definition.label,
+            available,
+            detail: available ? 'available' : 'unavailable',
+            tone: available ? 'success' : 'neutral',
+        }
+    })
+}
+
+function avmCompatibility(profile: TalosModelProfile): AvmCompatibility {
+    const chips = capabilityChips(profile)
+    const hasCapability = (key: CapabilityKey) => chips.some((chip) => chip.key === key && chip.available)
+    const hasJson = hasCapability('json')
+    const hasTools = hasCapability('tools')
+    const hasRemoteOrLocalRuntime = hasCapability('remote') || hasCapability('local')
+
+    if (!profile.has_secret) {
+        return {
+            grade: 'Blocked',
+            tone: 'warning',
+            reason: 'Provider secret is missing.',
+        }
+    }
+
+    if (profile.status === 'disabled') {
+        return {
+            grade: 'Blocked',
+            tone: 'neutral',
+            reason: 'Profile is disabled.',
+        }
+    }
+
+    if (profile.status === 'failed') {
+        return {
+            grade: 'C',
+            tone: 'danger',
+            reason: 'Last provider probe failed.',
+        }
+    }
+
+    if (profile.status === 'healthy' && hasJson && hasTools && hasRemoteOrLocalRuntime) {
+        return {
+            grade: 'A',
+            tone: 'success',
+            reason: 'Ready for typed AVM planning, tool calls, and controlled execution.',
+        }
+    }
+
+    if ((profile.status === 'healthy' || profile.status === 'degraded') && hasJson && hasRemoteOrLocalRuntime) {
+        return {
+            grade: 'B',
+            tone: profile.status === 'healthy' ? 'success' : 'warning',
+            reason: 'Usable for AVM runs, but one advanced capability is missing.',
+        }
+    }
+
+    return {
+        grade: 'C',
+        tone: 'warning',
+        reason: 'Needs a successful probe and typed-output capability evidence.',
+    }
+}
+
 function formatDate(value: string) {
     return new Date(value).toLocaleString([], {
         month: 'short',
@@ -152,9 +329,11 @@ function probeSummary(profile: TalosModelProfile) {
 
     const ok = result.ok
     const httpStatus = result.http_status
+    const latency = result.latency_ms
+    const latencyText = typeof latency === 'number' ? ` - ${latency} ms` : ''
 
     if (typeof ok === 'boolean' && typeof httpStatus === 'number') {
-        return `${ok ? 'Probe ok' : 'Probe failed'} - HTTP ${httpStatus}`
+        return `${ok ? 'Probe ok' : 'Probe failed'} - HTTP ${httpStatus}${latencyText}`
     }
 
     if (typeof ok === 'boolean') {
@@ -409,9 +588,9 @@ onMounted(() => {
             </form>
 
             <div class="overflow-hidden rounded-md border border-[var(--talos-border)]">
-                <div class="grid grid-cols-[minmax(0,1fr)_88px] bg-[var(--talos-active)] px-3 py-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
+                <div class="grid gap-3 bg-[var(--talos-active)] px-3 py-2 text-xs font-semibold uppercase text-[var(--talos-muted)] sm:grid-cols-[minmax(0,1fr)_168px]">
                     <span>Profile</span>
-                    <span>State</span>
+                    <span class="sm:text-right">Readiness</span>
                 </div>
 
                 <div v-if="loadingModelProfiles && !modelProfiles.length" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
@@ -431,7 +610,7 @@ onMounted(() => {
                 >
                     <button
                         type="button"
-                        class="grid w-full grid-cols-[minmax(0,1fr)_88px] gap-3 px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--talos-accent)]"
+                        class="grid w-full gap-3 px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--talos-accent)] sm:grid-cols-[minmax(0,1fr)_168px]"
                         :class="selectedProfileId === profile.id ? 'bg-[var(--talos-panel)]' : 'bg-[var(--talos-panel-soft)] hover:bg-[var(--talos-active)]'"
                         :disabled="deletingProfileId === profile.id"
                         @click="selectProfile(profile)"
@@ -440,15 +619,29 @@ onMounted(() => {
                             <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ profile.display_name }}</span>
                             <span class="mt-1 block truncate font-mono text-xs text-[var(--talos-muted)]">{{ profile.provider }}/{{ profile.model }}</span>
                             <span class="mt-2 block text-[11px] text-[var(--talos-muted)]">updated {{ formatDate(profile.updated_at) }}</span>
+                            <span class="mt-3 flex flex-wrap gap-1.5">
+                                <Badge
+                                    v-for="chip in capabilityChips(profile)"
+                                    :key="chip.key"
+                                    :tone="chip.tone"
+                                    :title="`${chip.label} ${chip.detail}`"
+                                >
+                                    {{ chip.available ? chip.label : `${chip.label} ${chip.detail}` }}
+                                </Badge>
+                            </span>
                         </span>
-                        <span class="flex min-w-0 flex-col items-end gap-2">
+                        <span class="flex min-w-0 flex-col items-start gap-2 sm:items-end">
+                            <Badge :tone="avmCompatibility(profile).tone">AVM compatibility {{ avmCompatibility(profile).grade }}</Badge>
                             <Badge :tone="statusTone(profile.status)">{{ profile.status }}</Badge>
                             <Badge :tone="secretTone(profile)">has_secret={{ profile.has_secret ? 'true' : 'false' }}</Badge>
                         </span>
                     </button>
 
                     <div class="grid gap-2 border-t border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs text-[var(--talos-muted)] md:grid-cols-[minmax(0,1fr)_auto_auto]">
-                        <span class="min-w-0 truncate">{{ probeSummary(profile) }}</span>
+                        <span class="min-w-0">
+                            <span class="block truncate">{{ probeSummary(profile) }}</span>
+                            <span class="mt-1 block leading-5">{{ avmCompatibility(profile).reason }}</span>
+                        </span>
                         <Button variant="secondary" size="sm" :disabled="profileIsBusy(profile.id) || !profile.has_secret || profile.status === 'disabled'" @click="runProbe(profile)">
                             <Loader2 v-if="probingProfileId === profile.id" class="h-4 w-4 animate-spin" />
                             <PlugZap v-else class="h-4 w-4" />

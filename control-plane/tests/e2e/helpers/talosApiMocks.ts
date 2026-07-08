@@ -388,7 +388,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         default_context_set_id: null as string | null,
         preferences: {
             theme: 'forge',
-            reduced_motion: true,
+            reduced_motion: false,
             ai_defaults: {
                 utility_model_mode: 'same_as_chat',
                 vision_enabled: true,
@@ -435,7 +435,23 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                         provider: 'openai',
                         model: 'gpt-e2e',
                         base_url: null,
-                        status: 'active',
+                        status: 'healthy',
+                        capabilities: {
+                            json: true,
+                            tools: true,
+                            vision: false,
+                            embeddings: true,
+                            local: false,
+                            remote: true,
+                        },
+                        probe_result: {
+                            ok: true,
+                            http_status: 200,
+                            latency_ms: 118,
+                            policy: {
+                                public_url: true,
+                            },
+                        },
                         has_secret: true,
                         created_at: now,
                         updated_at: now,

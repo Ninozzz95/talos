@@ -308,6 +308,15 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
 
     await selectDashboardTab(page, 'Agents')
     await expect(page.getByText('Model Center', { exact: true })).toBeVisible()
+    const modelProfile = page.getByRole('button', { name: /E2E server-side profile/ })
+    await expect(modelProfile).toContainText('AVM compatibility A')
+    await expect(modelProfile).toContainText('JSON')
+    await expect(modelProfile).toContainText('Tools')
+    await expect(modelProfile).toContainText('Embeddings')
+    await expect(modelProfile).toContainText('Remote')
+    await expect(modelProfile).toContainText('Vision unavailable')
+    await expect(page.getByText('sk-')).toBeHidden()
+    await expect(page.getByText('encrypted_secret')).toBeHidden()
 
     await selectDashboardTab(page, 'Knowledge')
     await expect(page.getByText('Context Vault', { exact: true })).toBeVisible()
@@ -428,6 +437,14 @@ test('settings window loads safe preferences and persists theme through the sett
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
     await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(10)
+    const terminalThemePreset = page.getByRole('button', { name: 'Terminal Operator' })
+    await expect(terminalThemePreset).toContainText('Animated background')
+    const terminalPreviewVideo = terminalThemePreset.getByTestId('talos-theme-preview-video')
+    await expect(terminalPreviewVideo).toHaveAttribute('poster', /\/talos\/backgrounds\/terminal-poster\.webp$/)
+    await expect(terminalPreviewVideo.locator('source[type="video/webm"]')).toHaveAttribute('src', /\/talos\/backgrounds\/terminal-background\.webm$/)
+    await expect(terminalPreviewVideo).toHaveAttribute('autoplay')
+    await expect.poll(async () => terminalPreviewVideo.evaluate((video) => (video as HTMLVideoElement).paused)).toBe(false)
+    await expect(page.getByRole('button', { name: 'Violet Lab' })).toContainText('Static fallback')
     const themePatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -438,9 +455,16 @@ test('settings window loads safe preferences and persists theme through the sett
 
         return preferences?.theme === 'terminal'
     })
-    await page.getByRole('button', { name: 'Terminal Operator' }).click()
+    await terminalThemePreset.click()
     await themePatchRequest
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
+    const themeBackgroundVideo = page.getByTestId('talos-theme-background-video')
+    await expect(themeBackgroundVideo).toHaveAttribute('poster', /\/talos\/backgrounds\/terminal-poster\.webp$/)
+    await expect(themeBackgroundVideo).toHaveAttribute('data-motion', 'animated')
+    await expect(themeBackgroundVideo).toHaveAttribute('autoplay')
+    await expect(themeBackgroundVideo.locator('source[type="video/webm"]')).toHaveAttribute('src', /\/talos\/backgrounds\/terminal-background\.webm$/)
+    await expect(themeBackgroundVideo.locator('source[type="video/mp4"]')).toHaveAttribute('src', /\/talos\/backgrounds\/terminal-background\.mp4$/)
+    await expect.poll(async () => themeBackgroundVideo.evaluate((video) => (video as HTMLVideoElement).paused)).toBe(false)
     await expect(page.getByText('Theme saved through /api/talos/settings.')).toBeVisible()
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)

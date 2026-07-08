@@ -47,6 +47,7 @@ import {
     TALOS_DEFAULT_THEME,
     normalizeTalosTheme,
     talosThemeClass,
+    talosThemePreset,
     talosThemeIsLight,
     type TalosThemeId,
 } from '../../../lib/talosThemes'
@@ -216,6 +217,10 @@ const shellClass = computed(() => [
     talosThemeClass(theme.value),
     talosThemeIsLight(theme.value) ? 'talos-light' : 'talos-dark',
 ])
+const currentThemePreset = computed(() => talosThemePreset(theme.value))
+const currentThemeBackground = computed(() => currentThemePreset.value.background ?? null)
+const workspaceReducedMotion = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
+const backgroundMotionState = computed(() => workspaceReducedMotion.value ? 'poster' : 'animated')
 const currentRailWidth = computed(() => railCollapsed.value ? 64 : railWidth.value)
 const workspaceStyle = computed(() => ({
     '--talos-rail-width': `${currentRailWidth.value}px`,
@@ -981,6 +986,16 @@ function applyQueryModules() {
     }
 }
 
+function playWorkspaceBackground(event: Event) {
+    if (workspaceReducedMotion.value || !(event.target instanceof HTMLVideoElement)) {
+        return
+    }
+
+    event.target.play().catch(() => {
+        // Browser autoplay policy can still reject media; poster remains the fallback.
+    })
+}
+
 onMounted(async () => {
     loadWorkspacePreferences()
     window.addEventListener('keydown', handleKeyboard)
@@ -1029,7 +1044,30 @@ onBeforeUnmount(() => {
         />
 
         <section class="relative flex min-w-0 flex-1 flex-col">
-            <div class="pointer-events-none absolute inset-0 overflow-hidden opacity-80" aria-hidden="true">
+            <div
+                class="pointer-events-none absolute inset-0 overflow-hidden opacity-80"
+                :class="{ 'talos-background-has-video': currentThemeBackground }"
+                aria-hidden="true"
+            >
+                <video
+                    v-if="currentThemeBackground"
+                    :key="theme"
+                    data-testid="talos-theme-background-video"
+                    class="talos-theme-background-video absolute inset-0 h-full w-full object-cover"
+                    :poster="currentThemeBackground.poster"
+                    :autoplay="!workspaceReducedMotion"
+                    :data-motion="backgroundMotionState"
+                    muted
+                    loop
+                    playsinline
+                    preload="metadata"
+                    @canplay="playWorkspaceBackground"
+                    @loadedmetadata="playWorkspaceBackground"
+                >
+                    <source :src="currentThemeBackground.webm" type="video/webm">
+                    <source :src="currentThemeBackground.mp4" type="video/mp4">
+                </video>
+                <div class="talos-theme-background-scrim absolute inset-0"></div>
                 <div class="talos-dag-grid absolute inset-0"></div>
                 <div class="talos-dag-line talos-dag-line-a"></div>
                 <div class="talos-dag-line talos-dag-line-b"></div>
