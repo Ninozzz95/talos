@@ -444,6 +444,17 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByRole('tab', { name: 'Customize' })).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Video backgrounds' })).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-preview-video')).toHaveCount(0)
+    await expect(page.getByTestId('talos-theme-preview-poster')).toHaveCount(10)
+    await expect.poll(async () => page.getByTestId('talos-theme-preview-poster').evaluateAll((images) => images.every((image) => {
+        const poster = image as HTMLImageElement
+
+        return poster.complete && poster.naturalWidth > 0
+    }))).toBe(true)
+    const posterSources = await page.getByTestId('talos-theme-preview-poster').evaluateAll((images) => (
+        images.map((image) => (image as HTMLImageElement).getAttribute('src'))
+    ))
+    expect(new Set(posterSources).size).toBe(10)
+    expect(posterSources).toContain('/talos/backgrounds/violet-poster.webp')
     await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(10)
     await expect(page.locator('[data-testid="talos-theme-preview-swatch"]')).toHaveCount(10)
     const terminalThemePreset = page.getByRole('button', { name: 'Terminal Operator' })
@@ -464,6 +475,13 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    const terminalMotion = await page.getByTestId('talos-background-effect').evaluate((element) => {
+        const stream = element.querySelector('.talos-trace-stream-a')
+
+        return stream ? window.getComputedStyle(stream).animationName : ''
+    })
+    expect(terminalMotion).toContain('talos-trace-rain')
     await expect(page.getByText('Theme saved through /api/talos/settings.')).toBeVisible()
 
     await page.getByRole('tab', { name: 'Customize' }).click()
@@ -516,10 +534,221 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
     await expectNoHorizontalOverflow(page)
 
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    const auroraPreset = page.getByRole('button', { name: 'Aurora Research' })
+    const presetResetPatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const customization = preferences?.theme_customization as Record<string, unknown> | undefined
+
+        return preferences?.theme === 'aurora'
+            && customization !== undefined
+            && Object.keys(customization).length === 0
+    })
+    await auroraPreset.click()
+    await presetResetPatchRequest
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-aurora/)
+    await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /--talos-accent/)
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'signal-mesh')
+    const auroraAccent = await page.locator('.talos-shell').evaluate((element) => (
+        window.getComputedStyle(element).getPropertyValue('--talos-accent').trim()
+    ))
+    expect(auroraAccent).toBe('#42e7c7')
+
     await testInfo.attach(`settings-theme-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true }),
         contentType: 'image/png',
     })
+})
+
+test('theme engine v2 manages custom themes, live preview, motion, area tokens and import export', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Customize' }).click()
+    await page.getByLabel('Accent color').fill('#7c3aed')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-accent:\s*#7c3aed/)
+
+    await page.getByRole('button', { name: 'Discard changes' }).click()
+    await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /#7c3aed/)
+
+    await page.getByLabel('Accent color').fill('#31d6c8')
+    await page.getByLabel('Background effect').selectOption('trace-rain')
+    const saveNamedThemeRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
+        const customization = preferences?.theme_customization as Record<string, unknown> | undefined
+
+        return Array.isArray(library)
+            && library.some((theme) => theme.name === 'Ninox Dark' && (theme.tokens as Record<string, unknown> | undefined)?.accent === '#31d6c8')
+            && typeof preferences?.active_custom_theme_id === 'string'
+            && customization?.accent === '#31d6c8'
+    })
+    await page.getByRole('button', { name: 'Save as theme' }).click()
+    await page.getByLabel('Theme name').fill('Ninox Dark')
+    await page.getByRole('button', { name: 'Create theme' }).click()
+    await saveNamedThemeRequest
+    await expect(page.getByText('Ninox Dark', { exact: true })).toBeVisible()
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Library' }).click()
+    await expect(page.getByText('Ninox Dark', { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Export active theme' }).click()
+    const exportedTheme = await page.getByTestId('talos-theme-export-json').inputValue()
+    expect(JSON.parse(exportedTheme)).toMatchObject({
+        schema: 'talos_theme_export_v1',
+        theme: {
+            name: 'Ninox Dark',
+        },
+    })
+
+    await page.getByLabel('Import theme JSON').fill('{bad json')
+    await page.getByRole('button', { name: 'Import theme' }).click()
+    await expect(page.getByText('TALOS rejected this theme import.')).toBeVisible()
+
+    await page.getByLabel('Import theme JSON').fill('{"schema":"wrong","theme":{"name":"Bad"}}')
+    await page.getByRole('button', { name: 'Import theme' }).click()
+    await expect(page.getByText('TALOS rejected this theme import.')).toBeVisible()
+
+    await page.getByLabel('Import theme JSON').fill(JSON.stringify({
+        schema: 'talos_theme_export_v1',
+        exported_at: '2026-07-08T12:00:00.000Z',
+        theme: {
+            id: 'imported-e2e',
+            name: 'Imported Mint',
+            base_theme: 'aurora',
+            tokens: {
+                accent: '#6ee7b7',
+                effect: 'signal-mesh',
+            },
+            motion: 'subtle',
+        },
+    }))
+    const importThemeRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
+
+        return Array.isArray(library) && library.some((theme) => theme.name === 'Imported Mint')
+    })
+    await page.getByRole('button', { name: 'Import theme' }).click()
+    await importThemeRequest
+    await expect(page.getByText('Imported Mint', { exact: true })).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    const motionOffRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_motion === 'off'
+    })
+    await page.getByLabel('Theme motion', { exact: true }).selectOption('off')
+    await motionOffRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
+
+    const motionCinematicRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_motion === 'cinematic'
+    })
+    await page.getByLabel('Theme motion', { exact: true }).selectOption('cinematic')
+    await motionCinematicRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'signal-mesh')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    const canvasHasPixels = await page.getByTestId('talos-procedural-canvas').evaluate((canvas) => {
+        const element = canvas as HTMLCanvasElement
+        const context = element.getContext('2d')
+        if (!context || element.width === 0 || element.height === 0) {
+            return false
+        }
+
+        const sample = context.getImageData(0, 0, Math.min(80, element.width), Math.min(80, element.height)).data
+        for (let index = 3; index < sample.length; index += 4) {
+            if (sample[index] > 0) {
+                return true
+            }
+        }
+
+        return false
+    })
+    expect(canvasHasPixels).toBe(true)
+    const cinematicOpacity = await page.locator('.talos-shell').evaluate((element) => (
+        Number(window.getComputedStyle(element).getPropertyValue('--talos-effect-opacity').trim())
+    ))
+    expect(cinematicOpacity).toBeGreaterThan(0.8)
+
+    await page.getByRole('tab', { name: 'Advanced' }).click()
+    await page.getByLabel('Area', { exact: true }).selectOption('composer')
+    await page.getByLabel('Area background').fill('#111827')
+    const areaTokenRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const areaTokens = preferences?.theme_area_tokens as Record<string, Record<string, unknown>> | undefined
+
+        return areaTokens?.composer?.background === '#111827'
+    })
+    await page.getByRole('button', { name: 'Save area tokens' }).click()
+    await areaTokenRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-composer-bg:\s*#111827/)
+
+    await testInfo.attach(`theme-engine-v2-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true }),
+        contentType: 'image/png',
+    })
+})
+
+test('theme engine shows workspace policy lock as read only', async ({ page }) => {
+    await openWorkspace(page)
+    await page.evaluate(async () => {
+        await fetch('/api/talos/settings', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                preferences: {
+                    theme_policy_locked: true,
+                },
+            }),
+        })
+    })
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await expect(page.getByText('Theme changes are locked by workspace policy.')).toBeVisible()
+    await page.getByRole('tab', { name: 'Customize' }).click()
+    await expect(page.getByRole('button', { name: 'Save customization' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save as theme' })).toBeDisabled()
 })
 
 test('desktop sidebar collapses, expands, and resizes without overflow', async ({ page, isMobile }, testInfo) => {

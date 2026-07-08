@@ -12,6 +12,7 @@ import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import TalosToolWindow from '../window/TalosToolWindow.vue'
 import TalosGuidedStart from './TalosGuidedStart.vue'
 import TalosLeftRail from './TalosLeftRail.vue'
+import TalosProceduralBackground from './TalosProceduralBackground.vue'
 import TalosBenchmarkWorkbench from '../benchmarks/TalosBenchmarkWorkbench.vue'
 import TalosModelCenter from '../models/TalosModelCenter.vue'
 import TalosContextVault from '../context/TalosContextVault.vue'
@@ -46,12 +47,17 @@ import { talosCommands } from '../../../lib/commandRegistry'
 import {
     TALOS_DEFAULT_THEME,
     normalizeTalosTheme,
+    resolveTalosMotionMode,
+    sanitizeTalosThemeAreaTokens,
     sanitizeTalosThemeCustomization,
     talosBackgroundEffectFromCustomization,
+    talosThemeAreaTokenStyle,
     talosThemeClass,
     talosThemeCustomizationStyle,
+    talosThemeMotionStyle,
     talosThemePreset,
     talosThemeIsLight,
+    type TalosThemeCustomization,
     type TalosThemeId,
 } from '../../../lib/talosThemes'
 import type { TalosCommand, TalosContextSet, TalosMessage, TalosSession } from '../../../lib/talosTypes'
@@ -158,6 +164,7 @@ const selectedContextSetId = ref('')
 const sessionPersistenceMode = ref<TalosSessionPersistenceMode>('persistent')
 const railCollapsed = ref(false)
 const railWidth = ref(236)
+const themeDraftCustomization = ref<TalosThemeCustomization | null>(null)
 
 const {
     sessions,
@@ -219,22 +226,28 @@ const {
 const shellClass = computed(() => [
     talosThemeClass(theme.value),
     talosThemeIsLight(theme.value) ? 'talos-light' : 'talos-dark',
-    `talos-density-${workspaceThemeCustomization.value.density ?? 'comfortable'}`,
-    `talos-radius-${workspaceThemeCustomization.value.radius ?? 'balanced'}`,
+    `talos-density-${workspaceEffectiveThemeCustomization.value.density ?? 'comfortable'}`,
+    `talos-radius-${workspaceEffectiveThemeCustomization.value.radius ?? 'balanced'}`,
     `talos-effect-${workspaceBackgroundEffect.value}`,
 ])
 const currentThemePreset = computed(() => talosThemePreset(theme.value))
 const workspaceReducedMotion = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
 const workspaceThemeCustomization = computed(() => sanitizeTalosThemeCustomization(workspaceSettings.value?.preferences?.theme_customization))
+const workspaceEffectiveThemeCustomization = computed(() => themeDraftCustomization.value ?? workspaceThemeCustomization.value)
+const workspaceMotionMode = computed(() => resolveTalosMotionMode(workspaceSettings.value?.preferences?.theme_motion))
+const workspaceAreaTokens = computed(() => sanitizeTalosThemeAreaTokens(workspaceSettings.value?.preferences?.theme_area_tokens))
 const workspaceBackgroundEffect = computed(() => talosBackgroundEffectFromCustomization(
-    workspaceThemeCustomization.value,
+    workspaceEffectiveThemeCustomization.value,
     currentThemePreset.value,
     workspaceReducedMotion.value,
+    workspaceMotionMode.value,
 ))
 const currentRailWidth = computed(() => railCollapsed.value ? 64 : railWidth.value)
 const workspaceStyle = computed(() => ({
     '--talos-rail-width': `${currentRailWidth.value}px`,
-    ...talosThemeCustomizationStyle(workspaceThemeCustomization.value),
+    ...talosThemeMotionStyle(workspaceMotionMode.value),
+    ...talosThemeCustomizationStyle(workspaceEffectiveThemeCustomization.value),
+    ...talosThemeAreaTokenStyle(workspaceAreaTokens.value),
 }))
 const floatingWindowIds = computed(() => visibleWindowIds.value.filter((item) => !dockedWindowIds.value.includes(item)))
 const dockedVisibleWindowIds = computed(() => visibleWindowIds.value.filter((item) => dockedWindowIds.value.includes(item)))
@@ -533,6 +546,10 @@ async function refreshWorkspaceSettingsAfterThemeUpdate() {
     } catch (error) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not refresh workspace appearance settings.'
     }
+}
+
+function handleThemeDraftChanged(customization: TalosThemeCustomization | null) {
+    themeDraftCustomization.value = customization
 }
 
 function formatTime(value: string) {
@@ -1058,26 +1075,11 @@ onBeforeUnmount(() => {
         />
 
         <section class="relative flex min-w-0 flex-1 flex-col">
-            <div
-                data-testid="talos-background-effect"
-                class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden opacity-80"
-                :class="`talos-effect-${workspaceBackgroundEffect}`"
-                :data-effect="workspaceBackgroundEffect"
-                aria-hidden="true"
-            >
-                <div class="talos-theme-background-scrim absolute inset-0"></div>
-                <div class="talos-dag-grid absolute inset-0"></div>
-                <div class="talos-effect-layer talos-effect-layer-a"></div>
-                <div class="talos-effect-layer talos-effect-layer-b"></div>
-                <div class="talos-trace-stream talos-trace-stream-a"></div>
-                <div class="talos-trace-stream talos-trace-stream-b"></div>
-                <div class="talos-trace-stream talos-trace-stream-c"></div>
-                <div class="talos-dag-line talos-dag-line-a"></div>
-                <div class="talos-dag-line talos-dag-line-b"></div>
-                <div class="talos-dag-node talos-dag-node-a"></div>
-                <div class="talos-dag-node talos-dag-node-b"></div>
-                <div class="talos-dag-node talos-dag-node-c"></div>
-            </div>
+            <TalosProceduralBackground
+                :effect="workspaceBackgroundEffect"
+                :motion="workspaceMotionMode"
+                :reduced-motion="workspaceReducedMotion"
+            />
 
             <header class="relative z-20 flex min-h-14 items-center justify-between gap-3 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-4 backdrop-blur md:px-5">
                 <div class="min-w-0">
@@ -1354,6 +1356,7 @@ onBeforeUnmount(() => {
                             :theme="theme"
                             @change-theme="toggleTheme"
                             @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate"
+                            @theme-draft-changed="handleThemeDraftChanged"
                         />
                     </template>
                     <template v-else-if="id === 'doctor'">

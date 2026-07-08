@@ -36,6 +36,15 @@ final class TalosSettingsController extends Controller
         }
 
         if (array_key_exists('preferences', $validated)) {
+            if ($this->themePolicyLocked($settings) && $this->containsThemeWrite($validated['preferences'] ?? [])) {
+                return response()->json([
+                    'message' => 'Theme changes are locked by workspace policy.',
+                    'errors' => [
+                        'preferences.theme' => ['Theme changes are locked by workspace policy.'],
+                    ],
+                ], 422);
+            }
+
             $settings->preferences = TalosWorkspaceSetting::sanitizePreferences($validated['preferences'] ?? []);
         }
 
@@ -51,5 +60,44 @@ final class TalosSettingsController extends Controller
         ], [
             'preferences' => [],
         ]);
+    }
+
+    private function themePolicyLocked(TalosWorkspaceSetting $settings): bool
+    {
+        $preferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
+
+        return ($preferences['theme_policy_locked'] ?? false) === true;
+    }
+
+    /**
+     * @param mixed $preferences
+     */
+    private function containsThemeWrite(mixed $preferences): bool
+    {
+        if (! is_array($preferences)) {
+            return false;
+        }
+
+        $themeKeys = [
+            'theme' => true,
+            'theme_customization' => true,
+            'theme_library' => true,
+            'active_custom_theme_id' => true,
+            'theme_motion' => true,
+            'theme_area_tokens' => true,
+            'workspace_default_theme' => true,
+        ];
+
+        foreach ($preferences as $key => $value) {
+            if (is_string($key) && isset($themeKeys[$key])) {
+                return true;
+            }
+
+            if (is_array($value) && $this->containsThemeWrite($value)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
