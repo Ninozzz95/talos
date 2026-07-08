@@ -455,12 +455,36 @@ button {
         var(--talos-background);
 }
 
+.talos-theme-background-video {
+    opacity: 0.44;
+    filter: saturate(1.12) contrast(1.06);
+}
+
+.talos-light .talos-theme-background-video {
+    opacity: 0.26;
+}
+
+.talos-theme-background-scrim {
+    background:
+        radial-gradient(circle at 28% 16%, var(--talos-workspace-glow-a), transparent 28rem),
+        linear-gradient(180deg, color-mix(in srgb, var(--talos-background) 18%, transparent), var(--talos-background) 96%);
+}
+
 .talos-dag-grid {
     background-image:
         linear-gradient(var(--talos-grid-color) 1px, transparent 1px),
         linear-gradient(90deg, var(--talos-grid-color) 1px, transparent 1px);
     background-size: 36px 36px;
     mask-image: radial-gradient(circle at center, black 0%, transparent 75%);
+}
+
+.talos-background-has-video .talos-dag-grid {
+    opacity: 0.48;
+}
+
+.talos-background-has-video .talos-dag-line,
+.talos-background-has-video .talos-dag-node {
+    opacity: 0.56;
 }
 
 .talos-dag-line {

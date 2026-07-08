@@ -29,9 +29,22 @@ export type TalosThemePreset = {
         secondary: string
         line: string
     }
+    background?: {
+        webm: string
+        mp4: string
+        poster: string
+    }
 }
 
 export const TALOS_DEFAULT_THEME: TalosThemeId = 'forge'
+
+function themeBackground(id: Exclude<TalosThemeId, 'violet'>): TalosThemePreset['background'] {
+    return {
+        webm: `/talos/backgrounds/${id}-background.webm`,
+        mp4: `/talos/backgrounds/${id}-background.mp4`,
+        poster: `/talos/backgrounds/${id}-poster.webp`,
+    }
+}
 
 export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
     {
@@ -45,6 +58,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Inter',
         fontMono: 'JetBrains Mono',
         preview: { background: '#080b11', accent: '#c98b32', secondary: '#6ad4d4', line: '#27313e' },
+        background: themeBackground('forge'),
     },
     {
         id: 'paper',
@@ -57,6 +71,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Inter',
         fontMono: 'IBM Plex Mono',
         preview: { background: '#f8fafc', accent: '#a96617', secondary: '#2f6f7d', line: '#d7dee8' },
+        background: themeBackground('paper'),
     },
     {
         id: 'terminal',
@@ -69,6 +84,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'IBM Plex Mono',
         fontMono: 'IBM Plex Mono',
         preview: { background: '#020403', accent: '#63f08e', secondary: '#d6ff72', line: '#163821' },
+        background: themeBackground('terminal'),
     },
     {
         id: 'aurora',
@@ -81,6 +97,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Manrope',
         fontMono: 'JetBrains Mono',
         preview: { background: '#071113', accent: '#42e7c7', secondary: '#ff6bb5', line: '#233742' },
+        background: themeBackground('aurora'),
     },
     {
         id: 'glacier',
@@ -93,6 +110,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'DM Sans',
         fontMono: 'JetBrains Mono',
         preview: { background: '#f4f9fb', accent: '#2367d1', secondary: '#ef7d30', line: '#c9d7e3' },
+        background: themeBackground('glacier'),
     },
     {
         id: 'ember',
@@ -105,6 +123,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Source Sans 3',
         fontMono: 'IBM Plex Mono',
         preview: { background: '#10090a', accent: '#ff5c62', secondary: '#ffbd5c', line: '#3b2224' },
+        background: themeBackground('ember'),
     },
     {
         id: 'atlas',
@@ -117,6 +136,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Aptos',
         fontMono: 'Cascadia Mono',
         preview: { background: '#07101f', accent: '#d49a52', secondary: '#57d49c', line: '#243146' },
+        background: themeBackground('atlas'),
     },
     {
         id: 'noir',
@@ -129,6 +149,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Arial',
         fontMono: 'Cascadia Mono',
         preview: { background: '#050505', accent: '#f2f2f2', secondary: '#ff405a', line: '#333333' },
+        background: themeBackground('noir'),
     },
     {
         id: 'signal',
@@ -141,6 +162,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Geist',
         fontMono: 'JetBrains Mono',
         preview: { background: '#091011', accent: '#ff6f61', secondary: '#b4f06f', line: '#213236' },
+        background: themeBackground('signal'),
     },
     {
         id: 'violet',
