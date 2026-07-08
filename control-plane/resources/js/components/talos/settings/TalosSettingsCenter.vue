@@ -23,9 +23,12 @@ import Select from '../../ui/Select.vue'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
+    TALOS_THEME_MOTION_OPTIONS,
     TALOS_THEME_PRESETS,
     normalizeTalosTheme,
+    resolveTalosMotionMode,
     type TalosThemeId,
+    type TalosThemeMotionMode,
 } from '../../../lib/talosThemes'
 
 type SettingsTab =
@@ -43,6 +46,7 @@ type SettingsTab =
 
 type SettingsPreferences = {
     theme: TalosThemeId
+    theme_motion: TalosThemeMotionMode
     ai_defaults: {
         utility_model_mode: string
         vision_enabled: boolean
@@ -144,6 +148,7 @@ const activeTab = ref<SettingsTab>('models')
 
 const preferences = reactive<SettingsPreferences>({
     theme: 'forge',
+    theme_motion: 'system',
     ai_defaults: {
         utility_model_mode: 'same_as_chat',
         vision_enabled: true,
@@ -227,6 +232,7 @@ function booleanValue(value: unknown, fallback: boolean) {
 
 function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme = normalizeTalosTheme(nextPreferences.theme)
+    preferences.theme_motion = resolveTalosMotionMode(nextPreferences.theme_motion)
 
     const aiDefaults = record(nextPreferences.ai_defaults)
     preferences.ai_defaults.utility_model_mode = stringValue(aiDefaults.utility_model_mode, preferences.ai_defaults.utility_model_mode)
@@ -269,9 +275,15 @@ function applyPreferences(nextPreferences: Record<string, unknown>) {
 }
 
 function preferencesPayload() {
+    const storedTheme = normalizeTalosTheme(settings.value?.preferences?.theme)
+    const themeChanged = preferences.theme !== storedTheme
+
     return {
         ...(settings.value?.preferences ?? {}),
         theme: preferences.theme,
+        workspace_default_theme: preferences.theme,
+        ...(themeChanged ? { theme_customization: {} } : {}),
+        theme_motion: preferences.theme_motion,
         ai_defaults: {
             ...preferences.ai_defaults,
         },
@@ -582,6 +594,17 @@ onMounted(async () => {
                             </label>
                             <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
                                 Theme selection updates the same preference used by Theme Engine.
+                            </div>
+                            <label class="block">
+                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Motion mode</span>
+                                <Select v-model="preferences.theme_motion" class="mt-2" aria-label="Settings theme motion">
+                                    <option v-for="mode in TALOS_THEME_MOTION_OPTIONS" :key="mode.value" :value="mode.value">
+                                        {{ mode.label }}
+                                    </option>
+                                </Select>
+                            </label>
+                            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
+                                Motion mode controls procedural effects only; TALOS does not load theme videos.
                             </div>
                         </div>
                         <div class="grid gap-2 md:grid-cols-2">

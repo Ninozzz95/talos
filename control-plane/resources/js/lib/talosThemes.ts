@@ -29,6 +29,7 @@ export type TalosThemePreset = {
         secondary: string
         line: string
     }
+    poster: string
     defaultEffect: TalosBackgroundEffect
 }
 
@@ -36,6 +37,9 @@ export type TalosBackgroundEffect = 'dag-flow' | 'kahn-grid' | 'trace-rain' | 's
 export type TalosThemeFont = 'inter' | 'mono' | 'system' | 'display'
 export type TalosThemeDensity = 'compact' | 'comfortable' | 'spacious'
 export type TalosThemeRadius = 'sharp' | 'balanced' | 'soft'
+export type TalosThemeMotionMode = 'system' | 'off' | 'subtle' | 'normal' | 'cinematic'
+export type TalosThemeAreaId = 'sidebar' | 'chat' | 'composer' | 'window' | 'header' | 'button' | 'card' | 'code'
+export type TalosThemeAreaTokenKey = 'background' | 'surface' | 'text' | 'muted' | 'border' | 'accent'
 
 export type TalosThemeCustomization = {
     background?: string
@@ -51,6 +55,25 @@ export type TalosThemeCustomization = {
     effect_intensity?: number
 }
 
+export type TalosThemeAreaTokens = Partial<Record<TalosThemeAreaId, Partial<Record<TalosThemeAreaTokenKey, string>>>>
+
+export type TalosNamedTheme = {
+    id: string
+    name: string
+    base_theme: TalosThemeId
+    tokens: TalosThemeCustomization
+    area_tokens?: TalosThemeAreaTokens
+    motion?: TalosThemeMotionMode
+    created_at?: string
+    updated_at?: string
+}
+
+export type TalosThemeExportV1 = {
+    schema: 'talos_theme_export_v1'
+    exported_at: string
+    theme: TalosNamedTheme
+}
+
 export const TALOS_DEFAULT_THEME: TalosThemeId = 'forge'
 
 export const TALOS_BACKGROUND_EFFECTS: Array<{ value: TalosBackgroundEffect; label: string; description: string }> = [
@@ -59,6 +82,34 @@ export const TALOS_BACKGROUND_EFFECTS: Array<{ value: TalosBackgroundEffect; lab
     { value: 'trace-rain', label: 'Trace Rain', description: 'Vertical trace streams for replay and telemetry.' },
     { value: 'signal-mesh', label: 'Signal Mesh', description: 'Low-noise node mesh for command-center mode.' },
     { value: 'none', label: 'Solid', description: 'Static background with no procedural motion.' },
+]
+
+export const TALOS_THEME_MOTION_OPTIONS: Array<{ value: TalosThemeMotionMode; label: string; description: string }> = [
+    { value: 'system', label: 'System', description: 'Follow browser and workspace reduced-motion settings.' },
+    { value: 'off', label: 'Off', description: 'Disable procedural background motion.' },
+    { value: 'subtle', label: 'Subtle', description: 'Low-intensity motion for long sessions.' },
+    { value: 'normal', label: 'Normal', description: 'Default TALOS motion intensity.' },
+    { value: 'cinematic', label: 'Cinematic', description: 'High-contrast motion for demos and review rooms.' },
+]
+
+export const TALOS_THEME_AREA_OPTIONS: Array<{ value: TalosThemeAreaId; label: string }> = [
+    { value: 'sidebar', label: 'Sidebar' },
+    { value: 'chat', label: 'Chat' },
+    { value: 'composer', label: 'Composer' },
+    { value: 'window', label: 'Floating windows' },
+    { value: 'header', label: 'Header' },
+    { value: 'button', label: 'Buttons' },
+    { value: 'card', label: 'Cards and panels' },
+    { value: 'code', label: 'Code blocks' },
+]
+
+export const TALOS_THEME_AREA_TOKEN_OPTIONS: Array<{ value: TalosThemeAreaTokenKey; label: string }> = [
+    { value: 'background', label: 'Background' },
+    { value: 'surface', label: 'Surface' },
+    { value: 'text', label: 'Text' },
+    { value: 'muted', label: 'Muted text' },
+    { value: 'border', label: 'Border' },
+    { value: 'accent', label: 'Accent' },
 ]
 
 export const TALOS_THEME_FONT_OPTIONS: Array<{ value: TalosThemeFont; label: string }> = [
@@ -80,6 +131,10 @@ export const TALOS_THEME_RADIUS_OPTIONS: Array<{ value: TalosThemeRadius; label:
     { value: 'soft', label: 'Soft' },
 ]
 
+function themePoster(theme: TalosThemeId) {
+    return `/talos/backgrounds/${theme}-poster.webp`
+}
+
 export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
     {
         id: 'forge',
@@ -92,6 +147,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Inter',
         fontMono: 'JetBrains Mono',
         preview: { background: '#080b11', accent: '#c98b32', secondary: '#6ad4d4', line: '#27313e' },
+        poster: themePoster('forge'),
         defaultEffect: 'dag-flow',
     },
     {
@@ -105,6 +161,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Inter',
         fontMono: 'IBM Plex Mono',
         preview: { background: '#f8fafc', accent: '#a96617', secondary: '#2f6f7d', line: '#d7dee8' },
+        poster: themePoster('paper'),
         defaultEffect: 'kahn-grid',
     },
     {
@@ -118,6 +175,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'IBM Plex Mono',
         fontMono: 'IBM Plex Mono',
         preview: { background: '#020403', accent: '#63f08e', secondary: '#d6ff72', line: '#163821' },
+        poster: themePoster('terminal'),
         defaultEffect: 'trace-rain',
     },
     {
@@ -131,6 +189,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Manrope',
         fontMono: 'JetBrains Mono',
         preview: { background: '#071113', accent: '#42e7c7', secondary: '#ff6bb5', line: '#233742' },
+        poster: themePoster('aurora'),
         defaultEffect: 'signal-mesh',
     },
     {
@@ -144,6 +203,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'DM Sans',
         fontMono: 'JetBrains Mono',
         preview: { background: '#f4f9fb', accent: '#2367d1', secondary: '#ef7d30', line: '#c9d7e3' },
+        poster: themePoster('glacier'),
         defaultEffect: 'kahn-grid',
     },
     {
@@ -157,6 +217,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Source Sans 3',
         fontMono: 'IBM Plex Mono',
         preview: { background: '#10090a', accent: '#ff5c62', secondary: '#ffbd5c', line: '#3b2224' },
+        poster: themePoster('ember'),
         defaultEffect: 'trace-rain',
     },
     {
@@ -170,6 +231,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Aptos',
         fontMono: 'Cascadia Mono',
         preview: { background: '#07101f', accent: '#d49a52', secondary: '#57d49c', line: '#243146' },
+        poster: themePoster('atlas'),
         defaultEffect: 'signal-mesh',
     },
     {
@@ -183,6 +245,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Arial',
         fontMono: 'Cascadia Mono',
         preview: { background: '#050505', accent: '#f2f2f2', secondary: '#ff405a', line: '#333333' },
+        poster: themePoster('noir'),
         defaultEffect: 'trace-rain',
     },
     {
@@ -196,6 +259,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Geist',
         fontMono: 'JetBrains Mono',
         preview: { background: '#091011', accent: '#ff6f61', secondary: '#b4f06f', line: '#213236' },
+        poster: themePoster('signal'),
         defaultEffect: 'signal-mesh',
     },
     {
@@ -209,6 +273,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         fontUi: 'Sora',
         fontMono: 'JetBrains Mono',
         preview: { background: '#0d0a19', accent: '#b794f6', secondary: '#6ee7b7', line: '#2f2848' },
+        poster: themePoster('violet'),
         defaultEffect: 'dag-flow',
     },
 ]
@@ -248,6 +313,9 @@ const BACKGROUND_EFFECTS = new Set(TALOS_BACKGROUND_EFFECTS.map((effect) => effe
 const FONT_VALUES = new Set(TALOS_THEME_FONT_OPTIONS.map((font) => font.value))
 const DENSITY_VALUES = new Set(TALOS_THEME_DENSITY_OPTIONS.map((density) => density.value))
 const RADIUS_VALUES = new Set(TALOS_THEME_RADIUS_OPTIONS.map((radius) => radius.value))
+const MOTION_VALUES = new Set(TALOS_THEME_MOTION_OPTIONS.map((motion) => motion.value))
+const AREA_VALUES = new Set(TALOS_THEME_AREA_OPTIONS.map((area) => area.value))
+const AREA_TOKEN_VALUES = new Set(TALOS_THEME_AREA_TOKEN_OPTIONS.map((token) => token.value))
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -275,6 +343,16 @@ function clampIntensity(value: unknown): number | undefined {
     }
 
     return Math.min(100, Math.max(0, Math.round(numeric)))
+}
+
+function cleanThemeId(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+        return undefined
+    }
+
+    const cleaned = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80)
+
+    return cleaned || undefined
 }
 
 export function sanitizeTalosThemeCustomization(value: unknown): TalosThemeCustomization {
@@ -320,16 +398,265 @@ export function sanitizeTalosThemeCustomization(value: unknown): TalosThemeCusto
     return customization
 }
 
+export function sanitizeTalosThemeAreaTokens(value: unknown): TalosThemeAreaTokens {
+    if (!isRecord(value)) {
+        return {}
+    }
+
+    const areaTokens: TalosThemeAreaTokens = {}
+
+    for (const [area, tokens] of Object.entries(value)) {
+        if (!AREA_VALUES.has(area as TalosThemeAreaId) || !isRecord(tokens)) {
+            continue
+        }
+
+        const safeTokens: Partial<Record<TalosThemeAreaTokenKey, string>> = {}
+        for (const [key, tokenValue] of Object.entries(tokens)) {
+            if (!AREA_TOKEN_VALUES.has(key as TalosThemeAreaTokenKey)) {
+                continue
+            }
+
+            const color = normalizeHex(tokenValue)
+            if (color) {
+                safeTokens[key as TalosThemeAreaTokenKey] = color
+            }
+        }
+
+        if (Object.keys(safeTokens).length > 0) {
+            areaTokens[area as TalosThemeAreaId] = safeTokens
+        }
+    }
+
+    return areaTokens
+}
+
+export function resolveTalosMotionMode(value: unknown): TalosThemeMotionMode {
+    return enumValue(value, MOTION_VALUES) ?? 'system'
+}
+
+export function sanitizeTalosNamedTheme(value: unknown): TalosNamedTheme | null {
+    if (!isRecord(value)) {
+        return null
+    }
+
+    const id = cleanThemeId(value.id)
+    const name = typeof value.name === 'string' ? value.name.trim().slice(0, 80) : ''
+
+    if (!id || !name) {
+        return null
+    }
+
+    const theme: TalosNamedTheme = {
+        id,
+        name,
+        base_theme: normalizeTalosTheme(value.base_theme),
+        tokens: sanitizeTalosThemeCustomization(value.tokens),
+    }
+
+    const areaTokens = sanitizeTalosThemeAreaTokens(value.area_tokens)
+    if (Object.keys(areaTokens).length > 0) {
+        theme.area_tokens = areaTokens
+    }
+
+    const motion = enumValue(value.motion, MOTION_VALUES)
+    if (motion) {
+        theme.motion = motion
+    }
+
+    if (typeof value.created_at === 'string') {
+        theme.created_at = value.created_at
+    }
+
+    if (typeof value.updated_at === 'string') {
+        theme.updated_at = value.updated_at
+    }
+
+    return theme
+}
+
+export function sanitizeTalosThemeLibrary(value: unknown): TalosNamedTheme[] {
+    if (!Array.isArray(value)) {
+        return []
+    }
+
+    const seen = new Set<string>()
+    const library: TalosNamedTheme[] = []
+
+    for (const item of value) {
+        const theme = sanitizeTalosNamedTheme(item)
+        if (!theme || seen.has(theme.id)) {
+            continue
+        }
+
+        seen.add(theme.id)
+        library.push(theme)
+    }
+
+    return library
+}
+
+export function parseTalosThemeExport(value: unknown): TalosNamedTheme | null {
+    if (!isRecord(value) || value.schema !== 'talos_theme_export_v1') {
+        return null
+    }
+
+    return sanitizeTalosNamedTheme(value.theme)
+}
+
+export function buildTalosThemeExport(theme: TalosNamedTheme): TalosThemeExportV1 {
+    return {
+        schema: 'talos_theme_export_v1',
+        exported_at: new Date().toISOString(),
+        theme,
+    }
+}
+
 export function talosBackgroundEffectFromCustomization(
     customization: TalosThemeCustomization,
     preset: TalosThemePreset,
     reducedMotion: boolean,
+    motionMode: TalosThemeMotionMode = 'system',
 ): TalosBackgroundEffect {
-    if (reducedMotion) {
+    if (motionMode === 'off' || reducedMotion || (motionMode === 'system' && reducedMotion)) {
         return 'none'
     }
 
     return customization.effect ?? preset.defaultEffect
+}
+
+export function talosThemeMotionStyle(motionMode: TalosThemeMotionMode): Record<string, string> {
+    if (motionMode === 'off') {
+        return {
+            '--talos-effect-opacity': '0',
+            '--talos-trace-duration-a': '1s',
+            '--talos-trace-duration-b': '1s',
+            '--talos-trace-duration-c': '1s',
+            '--talos-grid-duration': '1s',
+            '--talos-node-duration-a': '1s',
+            '--talos-node-duration-b': '1s',
+        }
+    }
+
+    if (motionMode === 'subtle') {
+        return {
+            '--talos-effect-opacity': '0.42',
+            '--talos-trace-duration-a': '9.8s',
+            '--talos-trace-duration-b': '12s',
+            '--talos-trace-duration-c': '11s',
+            '--talos-grid-duration': '20s',
+            '--talos-node-duration-a': '9s',
+            '--talos-node-duration-b': '10s',
+        }
+    }
+
+    if (motionMode === 'cinematic') {
+        return {
+            '--talos-effect-opacity': '0.94',
+            '--talos-trace-duration-a': '3.8s',
+            '--talos-trace-duration-b': '4.6s',
+            '--talos-trace-duration-c': '4.2s',
+            '--talos-grid-duration': '8s',
+            '--talos-node-duration-a': '3.9s',
+            '--talos-node-duration-b': '4.4s',
+        }
+    }
+
+    return {
+        '--talos-effect-opacity': '0.72',
+        '--talos-trace-duration-a': '5.8s',
+        '--talos-trace-duration-b': '7.4s',
+        '--talos-trace-duration-c': '6.6s',
+        '--talos-grid-duration': '12s',
+        '--talos-node-duration-a': '5.8s',
+        '--talos-node-duration-b': '6.4s',
+    }
+}
+
+const AREA_STYLE_MAP: Record<TalosThemeAreaId, Partial<Record<TalosThemeAreaTokenKey, string[]>>> = {
+    sidebar: {
+        background: ['--talos-sidebar'],
+        surface: ['--talos-panel-soft'],
+        text: ['--talos-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-border'],
+        accent: ['--talos-accent'],
+    },
+    chat: {
+        background: ['--talos-chat-bg'],
+        surface: ['--talos-panel'],
+        text: ['--talos-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-border'],
+        accent: ['--talos-accent'],
+    },
+    composer: {
+        background: ['--talos-composer-bg'],
+        surface: ['--talos-composer-surface'],
+        text: ['--talos-composer-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-composer-border'],
+        accent: ['--talos-accent'],
+    },
+    window: {
+        background: ['--talos-window-bg'],
+        surface: ['--talos-card'],
+        text: ['--talos-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-border'],
+        accent: ['--talos-accent'],
+    },
+    header: {
+        background: ['--talos-header'],
+        surface: ['--talos-panel'],
+        text: ['--talos-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-border'],
+        accent: ['--talos-accent'],
+    },
+    button: {
+        background: ['--talos-secondary'],
+        surface: ['--talos-active'],
+        text: ['--talos-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-border'],
+        accent: ['--talos-accent'],
+    },
+    card: {
+        background: ['--talos-card'],
+        surface: ['--talos-panel'],
+        text: ['--talos-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-border'],
+        accent: ['--talos-accent'],
+    },
+    code: {
+        background: ['--talos-code-bg'],
+        surface: ['--talos-code-surface'],
+        text: ['--talos-code-text'],
+        muted: ['--talos-muted'],
+        border: ['--talos-code-border'],
+        accent: ['--talos-code-accent'],
+    },
+}
+
+export function talosThemeAreaTokenStyle(areaTokens: TalosThemeAreaTokens): Record<string, string> {
+    const style: Record<string, string> = {}
+
+    for (const [area, tokens] of Object.entries(areaTokens) as Array<[TalosThemeAreaId, Partial<Record<TalosThemeAreaTokenKey, string>>]>) {
+        const mapping = AREA_STYLE_MAP[area]
+        if (!mapping) {
+            continue
+        }
+
+        for (const [key, value] of Object.entries(tokens) as Array<[TalosThemeAreaTokenKey, string]>) {
+            const variables = mapping[key] ?? []
+            for (const variable of variables) {
+                style[variable] = value
+            }
+        }
+    }
+
+    return style
 }
 
 export function talosThemeCustomizationStyle(customization: TalosThemeCustomization): Record<string, string> {
