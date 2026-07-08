@@ -165,6 +165,8 @@ const sessionPersistenceMode = ref<TalosSessionPersistenceMode>('persistent')
 const railCollapsed = ref(false)
 const railWidth = ref(236)
 const themeDraftCustomization = ref<TalosThemeCustomization | null>(null)
+const browserReducedMotion = ref(false)
+let reducedMotionQuery: MediaQueryList | null = null
 
 const {
     sessions,
@@ -231,10 +233,14 @@ const shellClass = computed(() => [
     `talos-effect-${workspaceBackgroundEffect.value}`,
 ])
 const currentThemePreset = computed(() => talosThemePreset(theme.value))
-const workspaceReducedMotion = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
+const workspaceMotionMode = computed(() => resolveTalosMotionMode(workspaceSettings.value?.preferences?.theme_motion))
+const workspaceReducedMotionPreference = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
+const workspaceReducedMotion = computed(() => (
+    workspaceReducedMotionPreference.value
+    || (workspaceMotionMode.value === 'system' && browserReducedMotion.value)
+))
 const workspaceThemeCustomization = computed(() => sanitizeTalosThemeCustomization(workspaceSettings.value?.preferences?.theme_customization))
 const workspaceEffectiveThemeCustomization = computed(() => themeDraftCustomization.value ?? workspaceThemeCustomization.value)
-const workspaceMotionMode = computed(() => resolveTalosMotionMode(workspaceSettings.value?.preferences?.theme_motion))
 const workspaceAreaTokens = computed(() => sanitizeTalosThemeAreaTokens(workspaceSettings.value?.preferences?.theme_area_tokens))
 const workspaceBackgroundEffect = computed(() => talosBackgroundEffectFromCustomization(
     workspaceEffectiveThemeCustomization.value,
@@ -1022,8 +1028,28 @@ function applyQueryModules() {
     }
 }
 
+function handleReducedMotionChange(event: MediaQueryListEvent) {
+    browserReducedMotion.value = event.matches
+}
+
+function startReducedMotionWatcher() {
+    if (!window.matchMedia) {
+        return
+    }
+
+    reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    browserReducedMotion.value = reducedMotionQuery.matches
+    reducedMotionQuery.addEventListener('change', handleReducedMotionChange)
+}
+
+function stopReducedMotionWatcher() {
+    reducedMotionQuery?.removeEventListener('change', handleReducedMotionChange)
+    reducedMotionQuery = null
+}
+
 onMounted(async () => {
     loadWorkspacePreferences()
+    startReducedMotionWatcher()
     window.addEventListener('keydown', handleKeyboard)
     applyQueryModules()
 
@@ -1048,6 +1074,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', handleKeyboard)
+    stopReducedMotionWatcher()
     stopWindowDrag()
     stopRailResize()
 })

@@ -532,13 +532,19 @@ button {
     opacity: var(--talos-effect-opacity, 0.72);
 }
 
+.talos-procedural-canvas {
+    z-index: 1;
+}
+
 .talos-theme-background-scrim {
+    z-index: 0;
     background:
         radial-gradient(circle at 28% 16%, var(--talos-workspace-glow-a), transparent 28rem),
         linear-gradient(180deg, color-mix(in srgb, var(--talos-background) 18%, transparent), var(--talos-background) 96%);
 }
 
 .talos-dag-grid {
+    z-index: 2;
     background-image:
         linear-gradient(var(--talos-grid-color) 1px, transparent 1px),
         linear-gradient(90deg, var(--talos-grid-color) 1px, transparent 1px);
@@ -549,6 +555,7 @@ button {
 .talos-effect-layer,
 .talos-trace-stream {
     position: absolute;
+    z-index: 3;
     pointer-events: none;
 }
 
@@ -667,6 +674,7 @@ button {
 
 .talos-dag-line {
     position: absolute;
+    z-index: 4;
     height: 1px;
     transform-origin: left center;
     background: linear-gradient(90deg, transparent, var(--talos-line-a), var(--talos-line-b), transparent);
@@ -688,6 +696,7 @@ button {
 
 .talos-dag-node {
     position: absolute;
+    z-index: 5;
     width: 7px;
     height: 7px;
     border-radius: 999px;
