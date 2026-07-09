@@ -120,6 +120,86 @@ final class TalosMessageApiTest extends TestCase
             ->assertJsonValidationErrors(['run_id']);
     }
 
+    public function test_message_action_metadata_references_must_stay_inside_the_session_and_reject_secret_fields(): void
+    {
+        $session = TalosSession::query()->create([
+            'title' => 'Action metadata session',
+            'mode' => 'verified_execution',
+        ]);
+        $otherSession = TalosSession::query()->create([
+            'title' => 'Other action metadata session',
+            'mode' => 'verified_execution',
+        ]);
+
+        $originalMessageId = $this->postJson('/api/talos/sessions/' . $session->id . '/messages', [
+            'role' => 'user',
+            'content' => 'Original prompt.',
+        ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $otherMessage = $otherSession->messages()->create([
+            'role' => 'user',
+            'content' => 'Foreign prompt.',
+        ]);
+
+        $this->postJson('/api/talos/sessions/' . $session->id . '/messages', [
+            'role' => 'user',
+            'content' => 'Retry prompt.',
+            'metadata' => [
+                'source' => 'talos_chat_page',
+                'command_id' => 'retry_assistant_response',
+                'retry_of_message_id' => $originalMessageId,
+                'resend_of_message_id' => $originalMessageId,
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.metadata.command_id', 'retry_assistant_response')
+            ->assertJsonPath('data.metadata.retry_of_message_id', $originalMessageId)
+            ->assertJsonPath('data.metadata.resend_of_message_id', $originalMessageId);
+
+        $this->postJson('/api/talos/sessions/' . $session->id . '/messages', [
+            'role' => 'user',
+            'content' => 'Cross-session retry prompt.',
+            'metadata' => [
+                'retry_of_message_id' => $otherMessage->id,
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['metadata.retry_of_message_id']);
+
+        $this->postJson('/api/talos/sessions/' . $session->id . '/messages', [
+            'role' => 'system',
+            'content' => 'Leaky metadata.',
+            'metadata' => [
+                'nested' => [
+                    'access_tokens' => 'should-not-persist',
+                    'access_token_value' => 'should-not-persist',
+                    'api_tokens' => 'should-not-persist',
+                    'token_hash_value' => 'should-not-persist',
+                ],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['metadata']);
+
+        $this->postJson('/api/talos/sessions/' . $session->id . '/messages', [
+            'role' => 'assistant',
+            'content' => 'Usage metadata.',
+            'metadata' => [
+                'usage' => [
+                    'input_tokens' => 120,
+                    'output_tokens' => 40,
+                    'total_tokens' => 160,
+                    'token_estimate' => 170,
+                ],
+            ],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.metadata.usage.input_tokens', 120)
+            ->assertJsonPath('data.metadata.usage.total_tokens', 160);
+    }
+
     public function test_deleting_a_session_deletes_its_messages(): void
     {
         $session = TalosSession::query()->create([

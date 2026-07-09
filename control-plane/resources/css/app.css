@@ -758,12 +758,13 @@ button {
 .talos-tool-window {
     color: var(--talos-text);
     display: flex;
-    max-height: calc(100vh - 20rem);
+    max-height: calc(100dvh - 18rem);
     flex-direction: column;
 }
 
 .talos-tool-window-body {
     flex: 1 1 auto;
+    scroll-padding-bottom: 9rem;
 }
 
 .talos-tool-window-docked {
@@ -778,7 +779,7 @@ button {
     .talos-floating-window {
         position: absolute;
         width: min(760px, calc(100vw - var(--talos-rail-width) - 48px));
-        max-height: calc(100vh - 16rem);
+        max-height: calc(100vh - 7rem);
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0);
     }
 }

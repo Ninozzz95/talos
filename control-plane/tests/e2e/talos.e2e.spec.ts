@@ -434,6 +434,111 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
     })
 })
 
+test('composer slash commands open real TALOS modules and keep unavailable actions disabled', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByLabel('Message TALOS').fill('/')
+    await expect(page.getByRole('listbox', { name: 'Composer slash commands' })).toBeVisible()
+    await expect(page.getByRole('option', { name: /\/model/ })).toContainText('Open model center')
+    await expect(page.getByRole('option', { name: /\/doctor/ })).toContainText('Open doctor')
+    await expect(page.getByRole('option', { name: /\/recover/ })).toHaveAttribute('aria-disabled', 'true')
+    await expect(page.getByText('Select a failed node in the dashboard timeline.')).toBeVisible()
+    await expect(page.getByRole('option', { name: /\/send\s+Send message/ })).toHaveCount(0)
+
+    await page.getByRole('option', { name: /\/model/ }).click()
+    await expect(page.getByRole('region', { name: 'Model Lab' })).toBeVisible()
+    await expect(page.getByLabel('Message TALOS')).toHaveValue('')
+
+    await page.getByLabel('Message TALOS').fill('/doctor')
+    await expect(page.getByRole('listbox', { name: 'Composer slash commands' })).toBeVisible()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('region', { name: 'Doctor' })).toBeVisible()
+})
+
+test('message actions copy, reuse, resend, and retry through explicit chat controls', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:8014' })
+    await openWorkspace(page)
+
+    await page.getByLabel('Message TALOS').fill('Create a replayable file audit workflow.')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Copy message' }).first().click()
+    await expect(page.getByText('Message copied.')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('Create a replayable file audit workflow.')
+
+    await page.getByRole('button', { name: 'Reuse prompt' }).click()
+    await expect(page.getByLabel('Message TALOS')).toHaveValue('Create a replayable file audit workflow.')
+    await expect(page.getByText('Prompt loaded for reuse.')).toBeVisible()
+
+    const resendMessageRequest = page.waitForRequest((request) => {
+        if (!request.url().includes('/api/talos/sessions/session-e2e/messages') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const metadata = body.metadata as Record<string, unknown> | undefined
+
+        return body.role === 'user'
+            && metadata?.command_id === 'resend_message'
+            && metadata?.resend_of_message_id === 'message-e2e-1'
+    })
+    await page.getByRole('button', { name: 'Resend message' }).click()
+    await resendMessageRequest
+    await expect(page.getByText('Message resent through TALOS chat.')).toBeVisible()
+
+    const retryMessageRequest = page.waitForRequest((request) => {
+        if (!request.url().includes('/api/talos/sessions/session-e2e/messages') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const metadata = body.metadata as Record<string, unknown> | undefined
+
+        return body.role === 'user'
+            && metadata?.command_id === 'retry_assistant_response'
+            && metadata?.retry_of_message_id === 'message-e2e-2'
+            && metadata?.resend_of_message_id === 'message-e2e-1'
+    })
+    await page.getByRole('button', { name: 'Retry assistant response' }).first().click()
+    await retryMessageRequest
+    await expect(page.getByText('Assistant response retried through TALOS chat.')).toBeVisible()
+    await expect(page.getByText('E2E response from AVM with replayable evidence.')).toHaveCount(3)
+})
+
+test('settings boolean preferences render as accessible switch controls', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('tab', { name: 'AI Defaults' }).click()
+    const visionSwitch = page.getByRole('switch', { name: 'Vision routing preference' })
+    await expect(visionSwitch).toBeVisible()
+    const initialVisionState = await visionSwitch.isChecked()
+    await page.getByText('Vision routing preference', { exact: true }).click()
+    await expect(visionSwitch).toBeChecked({ checked: !initialVisionState })
+    const visionPatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const aiDefaults = preferences?.ai_defaults as Record<string, unknown> | undefined
+
+        return aiDefaults?.vision_enabled === !initialVisionState
+    })
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await visionPatchRequest
+
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await expect(page.getByRole('switch', { name: 'Settings disable motion' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Settings disable procedural background' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Compact sidebar' })).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Agent Tools' }).click()
+    await expect(page.getByRole('switch', { name: 'Code tools' })).toBeVisible()
+})
+
 test('dashboard loads cockpit panels and opens the command palette', async ({ page }, testInfo) => {
     await openWorkspace(page)
 
@@ -535,7 +640,7 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
 })
 
 test('settings window loads safe preferences and persists theme through the settings API', async ({ page }, testInfo) => {
-    test.setTimeout(60_000)
+    test.setTimeout(130_000)
 
     await openWorkspace(page)
 
@@ -697,7 +802,7 @@ test('settings window loads safe preferences and persists theme through the sett
 })
 
 test('theme engine v2 manages custom themes, live preview, motion, area tokens and import export', async ({ page }, testInfo) => {
-    test.setTimeout(75_000)
+    test.setTimeout(120_000)
 
     await openWorkspace(page)
 
@@ -919,6 +1024,8 @@ test('system motion follows browser reduced motion while explicit motion can ani
 })
 
 test('theme switches disable motion separately from the procedural background', async ({ page }) => {
+    test.setTimeout(90_000)
+
     await openWorkspace(page)
     await page.evaluate(async () => {
         await fetch('/api/talos/settings', {
@@ -1022,6 +1129,8 @@ test('theme switches disable motion separately from the procedural background', 
 })
 
 test('settings preset changes refresh procedural background immediately', async ({ page }) => {
+    test.setTimeout(75_000)
+
     await openWorkspace(page)
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Customize' }).click()

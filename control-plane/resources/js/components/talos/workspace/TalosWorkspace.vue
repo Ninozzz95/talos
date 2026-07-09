@@ -7,6 +7,7 @@ import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
+import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import TalosToolWindow from '../window/TalosToolWindow.vue'
@@ -556,7 +557,22 @@ function toggleTheme(nextTheme?: TalosThemeId, persist = true) {
     }
 }
 
-async function refreshWorkspaceSettingsAfterThemeUpdate() {
+async function refreshWorkspaceSettingsAfterThemeUpdate(nextSettings?: { preferences?: Record<string, unknown> }) {
+    if (nextSettings && nextSettings.preferences) {
+        workspaceSettings.value = {
+            ...(workspaceSettings.value ?? {
+                id: 'default',
+                created_at: null,
+                updated_at: null,
+                default_model_profile_id: null,
+                default_context_set_id: null,
+            }),
+            ...nextSettings,
+            preferences: nextSettings.preferences,
+        }
+        return
+    }
+
     try {
         await loadPersistedWorkspaceSettings()
     } catch (error) {
@@ -641,6 +657,73 @@ function toggleMessageEvidence(message: TalosMessage) {
     expandedEvidenceMessageIds.value = messageEvidenceOpen(message)
         ? expandedEvidenceMessageIds.value.filter((id) => id !== message.id)
         : [...expandedEvidenceMessageIds.value, message.id]
+}
+
+function previousUserMessageFor(message: TalosMessage) {
+    const index = messages.value.findIndex((item) => item.id === message.id)
+
+    if (index <= 0) {
+        return null
+    }
+
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+        const candidate = messages.value[cursor]
+        if (candidate.role === 'user') {
+            return candidate
+        }
+    }
+
+    return null
+}
+
+function canRetryAssistantMessage(message: TalosMessage) {
+    return message.role === 'assistant' && Boolean(previousUserMessageFor(message))
+}
+
+function fallbackCopyText(value: string) {
+    const textarea = document.createElement('textarea')
+    textarea.value = value
+    textarea.setAttribute('readonly', 'true')
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+
+    try {
+        return document.execCommand('copy')
+    } finally {
+        document.body.removeChild(textarea)
+    }
+}
+
+async function copyMessage(message: TalosMessage) {
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(message.content)
+        } else if (!fallbackCopyText(message.content)) {
+            throw new Error('Clipboard API unavailable.')
+        }
+    } catch (error) {
+        if (!fallbackCopyText(message.content)) {
+            uiError.value = 'TALOS could not access the clipboard. Use your browser copy shortcut.'
+            return
+        }
+    }
+
+    commandFeedback.value = 'Message copied.'
+}
+
+function editMessage(message: TalosMessage) {
+    if (message.role !== 'user') {
+        return
+    }
+
+    prompt.value = message.content
+    commandFeedback.value = 'Prompt loaded for reuse.'
+
+    nextTick(() => {
+        document.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')?.focus()
+    })
 }
 
 function sourceLabel(source: MessageSource, index: number) {
@@ -765,41 +848,88 @@ function insertEnhancedPromptBelow() {
     clearPromptEnhancement()
 }
 
-async function sendChat() {
-    const message = prompt.value.trim()
-    if (!message || sending.value) {
-        return
+async function sendChatText(message: string, userMessageMetadata: Record<string, unknown> = {}, clearComposer = false) {
+    const normalizedMessage = message.trim()
+    if (!normalizedMessage || sending.value) {
+        return false
     }
 
     if (!selectedModelProfileIsUsable.value) {
         uiError.value = 'Choose a usable server-side model profile before sending.'
         openWindow('settings')
         modelPopoverOpen.value = true
-        return
+        return false
     }
 
     sending.value = true
     uiError.value = null
-    prompt.value = ''
+
+    if (clearComposer) {
+        prompt.value = ''
+    }
 
     try {
-        const session = await ensureSessionForPrompt(message)
+        const session = await ensureSessionForPrompt(normalizedMessage)
         await sendPersistentChat({
             sessionId: session.id,
-            prompt: message,
+            prompt: normalizedMessage,
             modelProfileId: selectedModelProfileId.value,
             contextSetId: selectedContextSetId.value || null,
             chatEndpoint: '/api/talos/chat',
+            userMessageMetadata,
             persistMessage: createMessage,
         })
         await nextTick()
         scrollChat()
+        return true
     } catch (error) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not complete this chat turn.'
+        return false
     } finally {
         sending.value = false
         await nextTick()
         scrollChat()
+    }
+}
+
+async function sendChat() {
+    await sendChatText(prompt.value, {}, true)
+}
+
+async function resendMessage(message: TalosMessage) {
+    if (message.role !== 'user') {
+        return
+    }
+
+    const sent = await sendChatText(message.content, {
+        command_id: 'resend_message',
+        resend_of_message_id: message.id,
+    })
+
+    if (sent) {
+        commandFeedback.value = 'Message resent through TALOS chat.'
+    }
+}
+
+async function retryAssistantMessage(message: TalosMessage) {
+    if (message.role !== 'assistant') {
+        return
+    }
+
+    const previousUserMessage = previousUserMessageFor(message)
+    if (!previousUserMessage) {
+        uiError.value = 'TALOS could not find the prompt that produced this answer.'
+        return
+    }
+
+    const sent = await sendChatText(previousUserMessage.content, {
+        command_id: 'retry_assistant_response',
+        retry_of_message_id: message.id,
+        resend_of_message_id: previousUserMessage.id,
+    })
+
+    if (sent) {
+        commandFeedback.value = 'Assistant response retried through TALOS chat.'
     }
 }
 
@@ -1251,6 +1381,16 @@ onBeforeUnmount(() => {
                                     <span>{{ formatTime(message.created_at) }}</span>
                                 </div>
                                 <p class="whitespace-pre-wrap text-sm leading-6">{{ message.content }}</p>
+                                <TalosMessageActions
+                                    class="mt-3"
+                                    :message="message"
+                                    :busy="sending"
+                                    :can-retry="canRetryAssistantMessage(message)"
+                                    @copy="copyMessage"
+                                    @edit="editMessage"
+                                    @resend="resendMessage"
+                                    @retry="retryAssistantMessage"
+                                />
                                 <div v-if="message.role === 'assistant'" class="mt-3 flex flex-wrap gap-2">
                                     <Badge v-if="messageMutations(message).length" tone="success">{{ messageMutations(message).length }} JMP</Badge>
                                     <Badge tone="neutral">Persisted</Badge>
@@ -1550,6 +1690,7 @@ onBeforeUnmount(() => {
 
                     <TalosSlimComposer
                         v-model:prompt="prompt"
+                        :commands="workspaceCommands"
                         :can-send="canSend"
                         :sending="sending"
                         :status-text="statusText"
@@ -1564,6 +1705,7 @@ onBeforeUnmount(() => {
                         @open-settings="openWindow('settings')"
                         @toggle-temporary="toggleTemporaryMode"
                         @enhance="enhanceCurrentPrompt"
+                        @slash-command="selectCommand"
                     />
                 </div>
             </div>

@@ -21,6 +21,7 @@ type SendPersistentChatOptions = {
     modelProfileId?: string | null
     contextSetId?: string | null
     chatEndpoint?: string
+    userMessageMetadata?: Record<string, unknown>
     persistMessage: PersistMessage
 }
 
@@ -47,11 +48,17 @@ function normalizeUsedContext(value: unknown) {
 }
 
 export function useTalosChat() {
-    async function persistUserMessage(sessionId: string, content: string, persistMessage: PersistMessage) {
+    async function persistUserMessage(
+        sessionId: string,
+        content: string,
+        persistMessage: PersistMessage,
+        metadata: Record<string, unknown> = {},
+    ) {
         return persistMessage(sessionId, {
             role: 'user',
             content,
             metadata: {
+                ...metadata,
                 source: 'talos_chat_page',
             },
         })
@@ -96,7 +103,12 @@ export function useTalosChat() {
     }
 
     async function sendPersistentChat(options: SendPersistentChatOptions) {
-        const userMessage = await persistUserMessage(options.sessionId, options.prompt, options.persistMessage)
+        const userMessage = await persistUserMessage(
+            options.sessionId,
+            options.prompt,
+            options.persistMessage,
+            options.userMessageMetadata ?? {},
+        )
 
         try {
             const payload: Record<string, string> = {

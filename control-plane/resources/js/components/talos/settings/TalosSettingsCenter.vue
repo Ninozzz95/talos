@@ -20,6 +20,7 @@ import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
+import Switch from '../../ui/Switch.vue'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
@@ -410,11 +411,13 @@ onMounted(async () => {
                     </Button>
                 </div>
 
-                <div v-if="settingsError" class="mt-3 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                    {{ settingsError }}
-                </div>
-                <div v-if="settingsSavedMessage" class="mt-3 rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                    {{ settingsSavedMessage }}
+                <div v-if="settingsError || settingsSavedMessage" class="sticky top-0 z-20 mt-3 grid gap-2 bg-[var(--talos-card)]/95 py-1 backdrop-blur">
+                    <div v-if="settingsError" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                        {{ settingsError }}
+                    </div>
+                    <div v-if="settingsSavedMessage" class="rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                        {{ settingsSavedMessage }}
+                    </div>
                 </div>
                 <div v-if="loadingSettings" class="mt-3 inline-flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
@@ -500,12 +503,12 @@ onMounted(async () => {
                                 </Select>
                             </label>
                         </div>
-                        <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                        <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                             <span>
                                 <span class="block text-sm font-semibold text-[var(--talos-text)]">Vision routing preference</span>
                                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Stored as a safe routing preference until model capability routing consumes it.</span>
                             </span>
-                            <input v-model="preferences.ai_defaults.vision_enabled" type="checkbox" class="mt-1 h-4 w-4 accent-[var(--talos-accent)]" aria-label="Vision routing preference">
+                            <Switch v-model="preferences.ai_defaults.vision_enabled" class="mt-1" aria-label="Vision routing preference" />
                         </label>
                     </template>
 
@@ -581,12 +584,12 @@ onMounted(async () => {
                                 <Input v-model="preferences.reminders.public_app_url" class="mt-2" placeholder="https://talos.example.test" aria-label="Public app URL" />
                             </label>
                         </div>
-                        <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                        <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                             <span>
                                 <span class="block text-sm font-semibold text-[var(--talos-text)]">AI synthesis for reminder text</span>
                                 <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Saved as preference; generated text still comes through model/profile policy.</span>
                             </span>
-                            <input v-model="preferences.reminders.ai_synthesis" type="checkbox" class="mt-1 h-4 w-4 accent-[var(--talos-accent)]" aria-label="AI synthesis for reminder text">
+                            <Switch v-model="preferences.reminders.ai_synthesis" class="mt-1" aria-label="AI synthesis for reminder text" />
                         </label>
                     </template>
 
@@ -616,25 +619,25 @@ onMounted(async () => {
                             </div>
                         </div>
                         <div class="grid gap-2 md:grid-cols-2">
-                            <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                                 <span>
                                     <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
                                     <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Freeze the selected procedural background without removing it.</span>
                                 </span>
-                                <input v-model="preferences.theme_motion_disabled" type="checkbox" role="switch" class="mt-1 h-4 w-4 accent-[var(--talos-accent)]" aria-label="Settings disable motion">
+                                <Switch v-model="preferences.theme_motion_disabled" class="mt-1" aria-label="Settings disable motion" />
                             </label>
-                            <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                                 <span>
                                     <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable procedural background</span>
                                     <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Remove the animated and static procedural background layers.</span>
                                 </span>
-                                <input v-model="preferences.theme_background_disabled" type="checkbox" role="switch" class="mt-1 h-4 w-4 accent-[var(--talos-accent)]" aria-label="Settings disable procedural background">
+                                <Switch v-model="preferences.theme_background_disabled" class="mt-1" aria-label="Settings disable procedural background" />
                             </label>
                         </div>
                         <div class="grid gap-2 md:grid-cols-2">
-                            <label v-for="item in appearanceOptions" :key="item.key" class="flex items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                            <label v-for="item in appearanceOptions" :key="item.key" class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                                 <span>{{ item.label }}</span>
-                                <input v-model="preferences.appearance[item.key]" type="checkbox" class="h-4 w-4 accent-[var(--talos-accent)]" :aria-label="item.label">
+                                <Switch v-model="preferences.appearance[item.key]" :aria-label="item.label" />
                             </label>
                         </div>
                     </template>
@@ -672,9 +675,9 @@ onMounted(async () => {
                             </label>
                         </div>
                         <div class="grid gap-2 md:grid-cols-2">
-                            <label v-for="item in agentToolOptions" :key="item.key" class="flex items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                            <label v-for="item in agentToolOptions" :key="item.key" class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                                 <span>{{ item.label }}</span>
-                                <input v-model="preferences.agent_tools[item.key]" type="checkbox" class="h-4 w-4 accent-[var(--talos-accent)]" :aria-label="item.label">
+                                <Switch v-model="preferences.agent_tools[item.key]" :aria-label="item.label" />
                             </label>
                         </div>
                         <Button size="sm" variant="secondary" @click="openModule('tools')">Open Tool Registry</Button>

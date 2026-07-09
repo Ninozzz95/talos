@@ -3,8 +3,10 @@ import { computed, onMounted, ref, watch } from 'vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
+import InfoPopover from '../../ui/InfoPopover.vue'
 import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
+import Switch from '../../ui/Switch.vue'
 import Textarea from '../../ui/Textarea.vue'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
@@ -44,7 +46,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     changeTheme: [theme: TalosThemeId, persist?: boolean]
-    themeCustomizationChanged: []
+    themeCustomizationChanged: [settings?: { preferences?: Record<string, unknown> }]
     themeDraftChanged: [customization: TalosThemeCustomization | null]
 }>()
 
@@ -215,7 +217,7 @@ async function chooseTheme(theme: TalosThemeId) {
 
     emit('themeDraftChanged', null)
     emit('changeTheme', theme, false)
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme,
@@ -226,7 +228,7 @@ async function chooseTheme(theme: TalosThemeId) {
     }, 'Theme saved through /api/talos/settings.')
     syncThemeState()
     syncCustomizationForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 function sanitizedForm(): TalosThemeCustomization {
@@ -251,7 +253,7 @@ async function saveCustomization() {
     }
 
     const themeCustomization = sanitizedForm()
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_customization: themeCustomization,
@@ -261,7 +263,7 @@ async function saveCustomization() {
     emit('themeDraftChanged', null)
     syncThemeState()
     syncCustomizationForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 function discardChanges() {
@@ -274,7 +276,7 @@ async function resetCustomization() {
         return
     }
 
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_customization: {},
@@ -284,7 +286,7 @@ async function resetCustomization() {
     emit('themeDraftChanged', null)
     syncThemeState()
     syncCustomizationForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 function generateThemeId(name: string) {
@@ -321,7 +323,7 @@ async function saveAsNamedTheme() {
     const theme = currentNamedTheme(name)
     const nextLibrary = [...themeLibrary.value, theme]
 
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme: theme.base_theme,
@@ -338,7 +340,7 @@ async function saveAsNamedTheme() {
     emit('themeDraftChanged', null)
     syncThemeState()
     syncCustomizationForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 async function applyNamedTheme(theme: TalosNamedTheme) {
@@ -348,7 +350,7 @@ async function applyNamedTheme(theme: TalosNamedTheme) {
 
     emit('themeDraftChanged', null)
     emit('changeTheme', theme.base_theme, false)
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme: theme.base_theme,
@@ -361,7 +363,7 @@ async function applyNamedTheme(theme: TalosNamedTheme) {
     }, 'Custom theme applied.')
     syncThemeState()
     syncCustomizationForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 function startRename(theme: TalosNamedTheme) {
@@ -459,7 +461,7 @@ async function importTheme() {
     }
 
     const nextLibrary = [...themeLibrary.value.filter((item) => item.id !== theme.id), theme]
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme: theme.base_theme,
@@ -477,7 +479,7 @@ async function importTheme() {
     emit('themeDraftChanged', null)
     syncThemeState()
     syncCustomizationForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 async function persistMotionMode() {
@@ -487,14 +489,14 @@ async function persistMotionMode() {
 
     const mode = resolveTalosMotionMode(motionMode.value)
     motionMode.value = mode
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_motion: mode,
         },
     }, 'Theme motion saved.')
     syncThemeState()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 async function persistMotionDisabled() {
@@ -503,14 +505,14 @@ async function persistMotionDisabled() {
         return
     }
 
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_motion_disabled: motionDisabled.value,
         },
     }, motionDisabled.value ? 'Theme motion disabled.' : 'Theme motion enabled.')
     syncThemeState()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 async function persistBackgroundDisabled() {
@@ -519,14 +521,14 @@ async function persistBackgroundDisabled() {
         return
     }
 
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_background_disabled: backgroundDisabled.value,
         },
     }, backgroundDisabled.value ? 'Procedural background disabled.' : 'Procedural background enabled.')
     syncThemeState()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 function syncAreaForm() {
@@ -563,7 +565,7 @@ async function saveAreaTokens() {
         delete nextTokens[selectedArea.value]
     }
 
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_area_tokens: nextTokens,
@@ -571,7 +573,7 @@ async function saveAreaTokens() {
     }, 'Area tokens saved.')
     areaTokens.value = nextTokens
     syncAreaForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 async function resetAreaTokens() {
@@ -581,7 +583,7 @@ async function resetAreaTokens() {
 
     const nextTokens = { ...sanitizeTalosThemeAreaTokens(areaTokens.value) }
     delete nextTokens[selectedArea.value]
-    await updateSettings({
+    const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_area_tokens: nextTokens,
@@ -589,7 +591,7 @@ async function resetAreaTokens() {
     }, 'Area tokens reset.')
     areaTokens.value = nextTokens
     syncAreaForm()
-    emit('themeCustomizationChanged')
+    emit('themeCustomizationChanged', nextSettings)
 }
 
 watch(customizationForm, () => {
@@ -625,17 +627,19 @@ onMounted(async () => {
                 </p>
             </div>
 
-            <div v-if="settingsError" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                {{ settingsError }}
-            </div>
-            <div v-if="localThemeError" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                {{ localThemeError }}
-            </div>
-            <div v-if="settingsSavedMessage" class="rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                {{ settingsSavedMessage }}
-            </div>
-            <div v-if="themePolicyLocked" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                Theme changes are locked by workspace policy.
+            <div v-if="settingsError || localThemeError || settingsSavedMessage || themePolicyLocked" class="sticky top-0 z-20 grid gap-2 bg-[var(--talos-card)]/95 py-1 backdrop-blur">
+                <div v-if="settingsError" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                    {{ settingsError }}
+                </div>
+                <div v-if="localThemeError" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                    {{ localThemeError }}
+                </div>
+                <div v-if="settingsSavedMessage" class="rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                    {{ settingsSavedMessage }}
+                </div>
+                <div v-if="themePolicyLocked" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+                    Theme changes are locked by workspace policy.
+                </div>
             </div>
 
             <div role="tablist" aria-label="Theme controls" class="grid grid-cols-5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-1 text-xs">
@@ -877,40 +881,41 @@ onMounted(async () => {
             <section v-else-if="activeTab === 'motion'" aria-label="Motion controls" class="space-y-4">
                 <div>
                     <h4 class="text-sm font-semibold text-[var(--talos-text)]">Motion controls</h4>
-                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                        Motion mode controls procedural intensity without loading video backgrounds.
-                    </p>
+                    <div class="mt-1 flex items-start gap-2 text-xs leading-5 text-[var(--talos-muted)]">
+                        <p>
+                            Motion mode controls procedural intensity without loading video backgrounds.
+                        </p>
+                        <InfoPopover label="Motion and background policy">
+                            Disable motion freezes the selected procedural scene. Disable procedural background removes the scene entirely.
+                        </InfoPopover>
+                    </div>
                 </div>
                 <div class="grid gap-3 md:grid-cols-2">
-                    <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                    <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                         <span>
                             <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
                             <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep the selected background visible, but freeze canvas and DOM animation.</span>
                         </span>
-                        <input
+                        <Switch
                             v-model="motionDisabled"
-                            type="checkbox"
-                            role="switch"
-                            class="mt-1 h-4 w-4 accent-[var(--talos-accent)]"
+                            class="mt-1"
                             aria-label="Disable motion"
                             :disabled="savingSettings || themePolicyLocked"
                             @change="persistMotionDisabled"
-                        >
+                        />
                     </label>
-                    <label class="flex items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                    <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                         <span>
                             <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable procedural background</span>
                             <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Remove canvas, grids, trace streams and procedural layers from the workspace.</span>
                         </span>
-                        <input
+                        <Switch
                             v-model="backgroundDisabled"
-                            type="checkbox"
-                            role="switch"
-                            class="mt-1 h-4 w-4 accent-[var(--talos-accent)]"
+                            class="mt-1"
                             aria-label="Disable procedural background"
                             :disabled="savingSettings || themePolicyLocked"
                             @change="persistBackgroundDisabled"
-                        >
+                        />
                     </label>
                 </div>
                 <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
