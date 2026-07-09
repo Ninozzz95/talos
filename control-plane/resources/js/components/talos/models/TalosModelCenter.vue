@@ -4,12 +4,14 @@ import { AlertCircle, CheckCircle2, KeyRound, Loader2, PlugZap, RefreshCw, Save,
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosModelQuickAdd from './TalosModelQuickAdd.vue'
+import TalosProviderIcon from './TalosProviderIcon.vue'
 import {
     useTalosModelProfiles,
-    type CreateTalosModelProfilePayload,
     type UpdateTalosModelProfilePayload,
 } from '../../../composables/useTalosModelProfiles'
 import type { TalosModelProfile } from '../../../lib/talosTypes'
+import { talosProviderById, talosProviderCatalog } from '../../../lib/talosProviders'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 type CapabilityKey = 'json' | 'tools' | 'vision' | 'embeddings' | 'local' | 'remote'
@@ -28,10 +30,10 @@ type AvmCompatibility = {
     reason: string
 }
 
-const providerOptions: Array<{ value: TalosModelProfile['provider']; label: string }> = [
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'deepseek', label: 'DeepSeek' },
-]
+const providerOptions: Array<{ value: TalosModelProfile['provider']; label: string }> = talosProviderCatalog.map((provider) => ({
+    value: provider.id,
+    label: provider.label,
+}))
 
 const statusOptions: TalosModelProfile['status'][] = [
     'untested',
@@ -59,31 +61,22 @@ const {
     loadingModelProfiles,
     modelProfileError,
     loadModelProfiles,
-    createModelProfile,
     updateModelProfile,
     deleteModelProfile,
     probeModelProfile,
 } = useTalosModelProfiles()
-
-const createForm = reactive({
-    provider: 'openai' as TalosModelProfile['provider'],
-    display_name: '',
-    model: '',
-    base_url: '',
-    secret: '',
-})
 
 const editForm = reactive({
     provider: 'openai' as TalosModelProfile['provider'],
     display_name: '',
     model: '',
     base_url: '',
+    timeout_seconds: 60,
     status: 'untested' as TalosModelProfile['status'],
     secret: '',
 })
 
 const selectedProfileId = ref<string | null>(null)
-const creatingProfile = ref(false)
 const savingProfileId = ref<string | null>(null)
 const probingProfileId = ref<string | null>(null)
 const deletingProfileId = ref<string | null>(null)
@@ -93,16 +86,9 @@ const actionMessage = ref<string | null>(null)
 const selectedProfile = computed(() => {
     return modelProfiles.value.find((profile) => profile.id === selectedProfileId.value) ?? null
 })
+const selectedProviderDefinition = computed(() => talosProviderById(editForm.provider))
 const selectedProfileIsBusy = computed(() => {
     return selectedProfile.value ? profileIsBusy(selectedProfile.value.id) : false
-})
-const canCreateProfile = computed(() => {
-    return Boolean(
-        createForm.display_name.trim()
-        && createForm.model.trim()
-        && createForm.secret.trim()
-        && !creatingProfile.value,
-    )
 })
 const canUpdateProfile = computed(() => {
     return Boolean(
@@ -111,6 +97,7 @@ const canUpdateProfile = computed(() => {
         && editForm.model.trim()
         && !selectedProfileIsBusy.value,
     )
+        && (selectedProviderDefinition.value.requiresSecret || !editForm.secret.trim())
 })
 
 function profileIsBusy(profileId: string) {
@@ -124,20 +111,13 @@ function normalizeOptionalUrl(value: string) {
     return trimmed.length > 0 ? trimmed : null
 }
 
-function resetCreateForm() {
-    createForm.provider = 'openai'
-    createForm.display_name = ''
-    createForm.model = ''
-    createForm.base_url = ''
-    createForm.secret = ''
-}
-
 function populateEditForm(profile: TalosModelProfile) {
     selectedProfileId.value = profile.id
     editForm.provider = profile.provider
     editForm.display_name = profile.display_name
     editForm.model = profile.model
     editForm.base_url = profile.base_url ?? ''
+    editForm.timeout_seconds = profile.timeout_seconds
     editForm.status = profile.status
     editForm.secret = ''
 }
@@ -264,7 +244,7 @@ function avmCompatibility(profile: TalosModelProfile): AvmCompatibility {
     const hasTools = hasCapability('tools')
     const hasRemoteOrLocalRuntime = hasCapability('remote') || hasCapability('local')
 
-    if (!profile.has_secret) {
+    if (talosProviderById(profile.provider).requiresSecret && !profile.has_secret) {
         return {
             grade: 'Blocked',
             tone: 'warning',
@@ -348,6 +328,16 @@ function selectProfile(profile: TalosModelProfile) {
     actionError.value = null
 }
 
+function handleQuickAdded(profile: TalosModelProfile) {
+    modelProfiles.value = [
+        profile,
+        ...modelProfiles.value.filter((existing) => existing.id !== profile.id),
+    ]
+    populateEditForm(profile)
+    actionError.value = null
+    actionMessage.value = null
+}
+
 async function refreshProfiles(selectFirst = false) {
     actionError.value = null
 
@@ -363,36 +353,6 @@ async function refreshProfiles(selectFirst = false) {
         }
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not load model profiles.'
-    }
-}
-
-async function submitCreate() {
-    if (!canCreateProfile.value) {
-        return
-    }
-
-    creatingProfile.value = true
-    actionError.value = null
-    actionMessage.value = null
-
-    const payload: CreateTalosModelProfilePayload = {
-        provider: createForm.provider,
-        display_name: createForm.display_name.trim(),
-        model: createForm.model.trim(),
-        secret: createForm.secret.trim(),
-        base_url: normalizeOptionalUrl(createForm.base_url),
-        status: 'untested',
-    }
-
-    try {
-        const profile = await createModelProfile(payload)
-        resetCreateForm()
-        populateEditForm(profile)
-        actionMessage.value = 'Model profile created. Secret stored server-side.'
-    } catch (error) {
-        actionError.value = error instanceof Error ? error.message : 'TALOS could not create this model profile.'
-    } finally {
-        creatingProfile.value = false
     }
 }
 
@@ -412,10 +372,11 @@ async function submitUpdate() {
         display_name: editForm.display_name.trim(),
         model: editForm.model.trim(),
         base_url: normalizeOptionalUrl(editForm.base_url),
+        timeout_seconds: Math.min(300, Math.max(5, Number(editForm.timeout_seconds) || 60)),
         status: editForm.status,
     }
 
-    if (editForm.secret.trim()) {
+    if (selectedProviderDefinition.value.requiresSecret && editForm.secret.trim()) {
         payload.secret = editForm.secret.trim()
     }
 
@@ -520,72 +481,7 @@ onMounted(() => {
                 <span>{{ actionMessage }}</span>
             </div>
 
-            <form class="space-y-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3" @submit.prevent="submitCreate">
-                <div class="flex items-center justify-between gap-3">
-                    <h4 class="text-sm font-semibold text-[var(--talos-text)]">Create profile</h4>
-                    <Badge tone="neutral">secret required</Badge>
-                </div>
-
-                <div class="grid gap-2 md:grid-cols-2">
-                    <label class="space-y-1">
-                        <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider</span>
-                        <select
-                            v-model="createForm.provider"
-                            class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                        >
-                            <option v-for="provider in providerOptions" :key="provider.value" :value="provider.value">
-                                {{ provider.label }}
-                            </option>
-                        </select>
-                    </label>
-                    <label class="space-y-1">
-                        <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Display name</span>
-                        <input
-                            v-model="createForm.display_name"
-                            type="text"
-                            class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                            placeholder="Production OpenAI"
-                        >
-                    </label>
-                </div>
-
-                <label class="block space-y-1">
-                    <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Model</span>
-                    <input
-                        v-model="createForm.model"
-                        type="text"
-                        class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                        placeholder="gpt-4.1-mini"
-                    >
-                </label>
-
-                <label class="block space-y-1">
-                    <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Base URL</span>
-                    <input
-                        v-model="createForm.base_url"
-                        type="url"
-                        class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                        placeholder="https://api.openai.com/v1"
-                    >
-                </label>
-
-                <label class="block space-y-1">
-                    <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider secret</span>
-                    <input
-                        v-model="createForm.secret"
-                        type="password"
-                        autocomplete="new-password"
-                        class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                        placeholder="Stored by Laravel, never returned"
-                    >
-                </label>
-
-                <Button type="submit" size="sm" class="w-full" :disabled="!canCreateProfile">
-                    <Loader2 v-if="creatingProfile" class="h-4 w-4 animate-spin" />
-                    <KeyRound v-else class="h-4 w-4" />
-                    Create profile
-                </Button>
-            </form>
+            <TalosModelQuickAdd @created="handleQuickAdded" />
 
             <div class="overflow-hidden rounded-md border border-[var(--talos-border)]">
                 <div class="grid gap-3 bg-[var(--talos-active)] px-3 py-2 text-xs font-semibold uppercase text-[var(--talos-muted)] sm:grid-cols-[minmax(0,1fr)_168px]">
@@ -615,19 +511,22 @@ onMounted(() => {
                         :disabled="deletingProfileId === profile.id"
                         @click="selectProfile(profile)"
                     >
-                        <span class="min-w-0">
-                            <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ profile.display_name }}</span>
-                            <span class="mt-1 block truncate font-mono text-xs text-[var(--talos-muted)]">{{ profile.provider }}/{{ profile.model }}</span>
-                            <span class="mt-2 block text-[11px] text-[var(--talos-muted)]">updated {{ formatDate(profile.updated_at) }}</span>
-                            <span class="mt-3 flex flex-wrap gap-1.5">
-                                <Badge
-                                    v-for="chip in capabilityChips(profile)"
-                                    :key="chip.key"
-                                    :tone="chip.tone"
-                                    :title="`${chip.label} ${chip.detail}`"
-                                >
-                                    {{ chip.available ? chip.label : `${chip.label} ${chip.detail}` }}
-                                </Badge>
+                        <span class="flex min-w-0 items-start gap-3">
+                            <TalosProviderIcon :provider="profile.provider" />
+                            <span class="min-w-0">
+                                <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ profile.display_name }}</span>
+                                <span class="mt-1 block truncate font-mono text-xs text-[var(--talos-muted)]">{{ talosProviderById(profile.provider).label }} / {{ profile.model }}</span>
+                                <span class="mt-2 block text-[11px] text-[var(--talos-muted)]">updated {{ formatDate(profile.updated_at) }}</span>
+                                <span class="mt-3 flex flex-wrap gap-1.5">
+                                    <Badge
+                                        v-for="chip in capabilityChips(profile)"
+                                        :key="chip.key"
+                                        :tone="chip.tone"
+                                        :title="`${chip.label} ${chip.detail}`"
+                                    >
+                                        {{ chip.available ? chip.label : `${chip.label} ${chip.detail}` }}
+                                    </Badge>
+                                </span>
                             </span>
                         </span>
                         <span class="flex min-w-0 flex-col items-start gap-2 sm:items-end">
@@ -642,7 +541,7 @@ onMounted(() => {
                             <span class="block truncate">{{ probeSummary(profile) }}</span>
                             <span class="mt-1 block leading-5">{{ avmCompatibility(profile).reason }}</span>
                         </span>
-                        <Button variant="secondary" size="sm" :disabled="profileIsBusy(profile.id) || !profile.has_secret || profile.status === 'disabled'" @click="runProbe(profile)">
+                        <Button variant="secondary" size="sm" :disabled="profileIsBusy(profile.id) || (!profile.has_secret && talosProviderById(profile.provider).requiresSecret) || profile.status === 'disabled'" @click="runProbe(profile)">
                             <Loader2 v-if="probingProfileId === profile.id" class="h-4 w-4 animate-spin" />
                             <PlugZap v-else class="h-4 w-4" />
                             Probe
@@ -721,6 +620,19 @@ onMounted(() => {
                 </label>
 
                 <label class="block space-y-1">
+                    <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Timeout seconds</span>
+                    <input
+                        v-model.number="editForm.timeout_seconds"
+                        type="number"
+                        min="5"
+                        max="300"
+                        step="1"
+                        class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                        :disabled="selectedProfileIsBusy"
+                    >
+                </label>
+
+                <label v-if="selectedProviderDefinition.requiresSecret" class="block space-y-1">
                     <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Rotate secret</span>
                     <input
                         v-model="editForm.secret"
@@ -731,6 +643,9 @@ onMounted(() => {
                         :disabled="selectedProfileIsBusy"
                     >
                 </label>
+                <p v-else class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs leading-5 text-[var(--talos-muted)]">
+                    Local providers are allowed only without bearer tokens. TALOS will clear any stored secret for this profile.
+                </p>
 
                 <Button type="submit" size="sm" class="w-full" :disabled="!canUpdateProfile">
                     <Loader2 v-if="savingProfileId === selectedProfile.id" class="h-4 w-4 animate-spin" />

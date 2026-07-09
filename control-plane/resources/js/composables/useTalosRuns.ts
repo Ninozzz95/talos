@@ -4,6 +4,7 @@ import type {
     TalosRecoveryRequest,
     TalosRecoveryResponse,
     TalosRun,
+    TalosRunArtifact,
     TalosRunEvent,
     TalosRunReplay,
 } from '../lib/talosTypes'
@@ -16,14 +17,17 @@ export function useTalosRuns() {
     const runs = ref<TalosRun[]>([])
     const runEvents = ref<Record<string, TalosRunEvent[]>>({})
     const runReplays = ref<Record<string, TalosRunReplay>>({})
+    const runArtifacts = ref<Record<string, TalosRunArtifact[]>>({})
     const loadingRuns = ref(false)
     const loadingRunId = ref<string | null>(null)
     const loadingEventsRunId = ref<string | null>(null)
     const loadingReplayRunId = ref<string | null>(null)
+    const loadingArtifactsRunId = ref<string | null>(null)
     const recoveringRunId = ref<string | null>(null)
     const runError = ref<string | null>(null)
     const eventError = ref<string | null>(null)
     const replayError = ref<string | null>(null)
+    const artifactError = ref<string | null>(null)
     const recoveryError = ref<string | null>(null)
 
     const latestRun = computed(() => runs.value[0] ?? null)
@@ -108,6 +112,26 @@ export function useTalosRuns() {
         }
     }
 
+    async function loadRunArtifacts(runId: string) {
+        loadingArtifactsRunId.value = runId
+        artifactError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosRunArtifact[]>>(`/api/talos/runs/${runId}/artifacts`)
+            runArtifacts.value = {
+                ...runArtifacts.value,
+                [runId]: response.data,
+            }
+
+            return response.data
+        } catch (error) {
+            artifactError.value = error instanceof Error ? error.message : 'TALOS could not load run artifacts.'
+            throw error
+        } finally {
+            loadingArtifactsRunId.value = null
+        }
+    }
+
     async function recoverRunNode(runId: string, request: TalosRecoveryRequest) {
         recoveringRunId.value = runId
         recoveryError.value = null
@@ -144,26 +168,35 @@ export function useTalosRuns() {
         return runId ? runReplays.value[runId] ?? null : null
     }
 
+    function artifactsForRun(runId: string | null | undefined) {
+        return runId ? runArtifacts.value[runId] ?? [] : []
+    }
+
     return {
         runs,
         latestRun,
         runEvents,
         runReplays,
+        runArtifacts,
         loadingRuns,
         loadingRunId,
         loadingEventsRunId,
         loadingReplayRunId,
+        loadingArtifactsRunId,
         recoveringRunId,
         runError,
         eventError,
         replayError,
+        artifactError,
         recoveryError,
         loadRuns,
         loadRun,
         loadRunEvents,
         loadRunReplay,
+        loadRunArtifacts,
         recoverRunNode,
         eventsForRun,
         replayForRun,
+        artifactsForRun,
     }
 }

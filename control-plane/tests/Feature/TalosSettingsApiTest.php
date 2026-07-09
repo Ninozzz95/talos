@@ -299,6 +299,111 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertSame([], json_decode((string) DB::table('talos_workspace_settings')->value('preferences'), true));
     }
 
+    public function test_settings_sanitize_ui_animation_preferences(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'ui_animation_profile' => 'custom',
+                'ui_animation_customization' => [
+                    'open_close' => 'terminal-snap',
+                    'surface_transition' => 'axis-shift',
+                    'feedback' => 'trace',
+                    'hover' => 'node-glow',
+                    'duration_scale' => 180,
+                    'intensity' => -20,
+                    'easing' => 'cinematic',
+                    'stagger' => 600,
+                    'script' => 'alert(1)',
+                    'style' => 'body { display: none; }',
+                    'url' => 'javascript:alert(1)',
+                    'api_key' => 'animation-secret',
+                    'nested' => [
+                        'open_close' => 'depth',
+                    ],
+                ],
+                'theme_library' => [
+                    [
+                        'id' => 'motion-theme',
+                        'name' => 'Motion Theme',
+                        'base_theme' => 'signal',
+                        'tokens' => [
+                            'accent' => '#31d6c8',
+                        ],
+                        'ui_animation_profile' => 'custom',
+                        'ui_animation_customization' => [
+                            'open_close' => 'depth',
+                            'surface_transition' => 'scale-fade',
+                            'feedback' => 'pulse',
+                            'hover' => 'edge-glow',
+                            'duration_scale' => 75,
+                            'intensity' => 88,
+                            'easing' => 'soft',
+                            'stagger' => 22,
+                            'script' => 'alert(1)',
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.preferences.ui_animation_profile', 'custom')
+            ->assertJsonPath('data.preferences.ui_animation_customization.open_close', 'terminal-snap')
+            ->assertJsonPath('data.preferences.ui_animation_customization.surface_transition', 'axis-shift')
+            ->assertJsonPath('data.preferences.ui_animation_customization.feedback', 'trace')
+            ->assertJsonPath('data.preferences.ui_animation_customization.hover', 'node-glow')
+            ->assertJsonPath('data.preferences.ui_animation_customization.duration_scale', 150)
+            ->assertJsonPath('data.preferences.ui_animation_customization.intensity', 0)
+            ->assertJsonPath('data.preferences.ui_animation_customization.easing', 'cinematic')
+            ->assertJsonPath('data.preferences.ui_animation_customization.stagger', 120)
+            ->assertJsonPath('data.preferences.theme_library.0.ui_animation_profile', 'custom')
+            ->assertJsonPath('data.preferences.theme_library.0.ui_animation_customization.open_close', 'depth')
+            ->assertJsonPath('data.preferences.theme_library.0.ui_animation_customization.duration_scale', 75)
+            ->assertJsonPath('data.preferences.theme_library.0.ui_animation_customization.intensity', 88)
+            ->assertJsonPath('data.preferences.theme_library.0.ui_animation_customization.stagger', 22);
+
+        $preferences = $response->json('data.preferences');
+        $this->assertArrayNotHasKey('script', $preferences['ui_animation_customization']);
+        $this->assertArrayNotHasKey('style', $preferences['ui_animation_customization']);
+        $this->assertArrayNotHasKey('url', $preferences['ui_animation_customization']);
+        $this->assertArrayNotHasKey('api_key', $preferences['ui_animation_customization']);
+        $this->assertArrayNotHasKey('nested', $preferences['ui_animation_customization']);
+        $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]['ui_animation_customization']);
+
+        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $this->assertIsString($storedPreferences);
+        $this->assertStringContainsString('terminal-snap', $storedPreferences);
+        $this->assertStringNotContainsString('animation-secret', $storedPreferences);
+        $this->assertStringNotContainsString('javascript:alert', $storedPreferences);
+        $this->assertStringNotContainsString('alert(1)', $storedPreferences);
+    }
+
+    public function test_settings_reject_unsafe_ui_animation_values(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'ui_animation_profile' => 'hyperdrive',
+                'ui_animation_customization' => [
+                    'open_close' => 'spring-loaded',
+                    'surface_transition' => 'spin',
+                    'feedback' => 'shake-forever',
+                    'hover' => 'grow-layout',
+                    'duration_scale' => 'not-a-number',
+                    'intensity' => 'huge',
+                    'easing' => 'random',
+                    'stagger' => [],
+                ],
+            ],
+        ]);
+
+        $response->assertOk();
+
+        $preferences = $response->json('data.preferences');
+        $this->assertArrayNotHasKey('ui_animation_profile', $preferences);
+        $this->assertArrayNotHasKey('ui_animation_customization', $preferences);
+    }
+
     public function test_theme_policy_lock_blocks_theme_writes(): void
     {
         TalosWorkspaceSetting::query()->create([
@@ -324,6 +429,7 @@ final class TalosSettingsApiTest extends TestCase
             'preferences' => [
                 'theme_motion_disabled' => true,
                 'theme_background_disabled' => true,
+                'ui_animation_profile' => 'custom',
             ],
         ])
             ->assertUnprocessable()

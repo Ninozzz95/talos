@@ -12,7 +12,7 @@ const props = defineProps<{
 const canvas = ref<HTMLCanvasElement | null>(null)
 const canvasEnabled = computed(() => props.effect !== 'none')
 
-useTalosProceduralCanvas(
+const { performanceState } = useTalosProceduralCanvas(
     canvas,
     toRef(props, 'effect'),
     toRef(props, 'motion'),
@@ -27,6 +27,13 @@ useTalosProceduralCanvas(
         :class="[`talos-effect-${effect}`, { 'talos-motion-disabled': motionDisabled }]"
         :data-effect="effect"
         :data-motion-disabled="motionDisabled ? 'true' : 'false'"
+        :data-performance-mode="performanceState.mode"
+        :data-performance-fps-cap="String(performanceState.fpsCap)"
+        :data-performance-dpr-cap="String(performanceState.dprCap)"
+        :data-performance-raf-active="performanceState.rafActive ? 'true' : 'false'"
+        :data-performance-frame-count="String(performanceState.frameCount)"
+        :data-performance-resize-count="String(performanceState.resizeCount)"
+        :data-performance-visibility-paused="performanceState.visibilityPaused ? 'true' : 'false'"
         aria-hidden="true"
     >
         <canvas

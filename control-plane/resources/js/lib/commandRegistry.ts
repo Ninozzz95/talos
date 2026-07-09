@@ -118,11 +118,10 @@ export const talosCommands: TalosCommand[] = [
     {
         id: 'export_report',
         label: 'Export report',
-        description: 'Export a replayable evidence or benchmark report.',
+        description: 'Export the active session as a redacted evidence pack, transcript, context manifest, or benchmark scenario.',
         category: 'report',
         risk: 'medium',
         capability: 'talos.reports.export',
-        disabledReason: 'Report export requires a dedicated export API endpoint.',
     },
     {
         id: 'open_notes',

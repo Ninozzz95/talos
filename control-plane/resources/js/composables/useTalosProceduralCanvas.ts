@@ -1,5 +1,21 @@
-import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import type { TalosBackgroundEffect, TalosThemeMotionMode } from '../lib/talosThemes'
+
+export type TalosBackgroundPerformanceMode = 'off' | 'static' | 'motion'
+
+export type TalosBackgroundPerformanceProfile = {
+    mode: TalosBackgroundPerformanceMode
+    fpsCap: number
+    dprCap: number
+    viewportScale: number
+    visibilityPaused: boolean
+}
+
+export type TalosBackgroundPerformanceState = TalosBackgroundPerformanceProfile & {
+    rafActive: boolean
+    frameCount: number
+    resizeCount: number
+}
 
 function cssVariable(element: HTMLElement, name: string, fallback: string) {
     return window.getComputedStyle(element).getPropertyValue(name).trim() || fallback
@@ -21,9 +37,9 @@ function boundedAlpha(value: number) {
     return Math.min(0.92, Math.max(0.04, value))
 }
 
-function resizeCanvas(canvas: HTMLCanvasElement) {
+function resizeCanvas(canvas: HTMLCanvasElement, dprCap: number) {
     const rect = canvas.getBoundingClientRect()
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const dpr = Math.min(window.devicePixelRatio || 1, dprCap, 2)
     const width = Math.max(1, Math.floor(rect.width * dpr))
     const height = Math.max(1, Math.floor(rect.height * dpr))
 
@@ -33,6 +49,53 @@ function resizeCanvas(canvas: HTMLCanvasElement) {
     }
 
     return { width, height, dpr }
+}
+
+export function talosBackgroundPerformanceProfile(options: {
+    effect: TalosBackgroundEffect
+    motion: TalosThemeMotionMode
+    motionDisabled: boolean
+    hidden?: boolean
+    viewportWidth?: number
+    viewportHeight?: number
+    devicePixelRatio?: number
+}): TalosBackgroundPerformanceProfile {
+    const viewportWidth = Math.max(1, options.viewportWidth ?? window.innerWidth)
+    const viewportHeight = Math.max(1, options.viewportHeight ?? window.innerHeight)
+    const viewportArea = viewportWidth * viewportHeight
+    const viewportScale = viewportWidth >= 1024
+        ? 1
+        : Math.min(1, Math.max(0.72, viewportArea / (1024 * 768)))
+    const dprCap = 1.5
+    const visibilityPaused = options.hidden === true
+
+    if (options.effect === 'none') {
+        return {
+            mode: 'off',
+            fpsCap: 0,
+            dprCap,
+            viewportScale,
+            visibilityPaused,
+        }
+    }
+
+    if (visibilityPaused || options.motionDisabled || options.motion === 'off') {
+        return {
+            mode: 'static',
+            fpsCap: 0,
+            dprCap,
+            viewportScale,
+            visibilityPaused,
+        }
+    }
+
+    return {
+        mode: 'motion',
+        fpsCap: options.motion === 'cinematic' ? 45 : 30,
+        dprCap,
+        viewportScale,
+        visibilityPaused,
+    }
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, accent: string, scale: number, time: number) {
@@ -229,22 +292,81 @@ export function useTalosProceduralCanvas(
     motionDisabled: Ref<boolean>,
 ) {
     let frame = 0
+    let frameTimer = 0
+    let resizeTimer = 0
+    let renderedFrameCount = 0
+    const performanceState = ref<TalosBackgroundPerformanceState>({
+        mode: 'static',
+        fpsCap: 0,
+        dprCap: 1.5,
+        viewportScale: 1,
+        visibilityPaused: false,
+        rafActive: false,
+        frameCount: 0,
+        resizeCount: 0,
+    })
 
     function stop() {
+        if (frameTimer) {
+            window.clearTimeout(frameTimer)
+            frameTimer = 0
+        }
+
         if (frame) {
             window.cancelAnimationFrame(frame)
             frame = 0
         }
+
+        performanceState.value = {
+            ...performanceState.value,
+            rafActive: false,
+        }
     }
 
-    function staticMode() {
-        return motionDisabled.value || motion.value === 'off'
+    function currentProfile(): TalosBackgroundPerformanceProfile {
+        return talosBackgroundPerformanceProfile({
+            effect: effect.value,
+            motion: motion.value,
+            motionDisabled: motionDisabled.value,
+            hidden: document.hidden,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+            devicePixelRatio: window.devicePixelRatio || 1,
+        })
+    }
+
+    function publishFrameTelemetry(profile: TalosBackgroundPerformanceProfile, rafActive: boolean, force = false) {
+        if (!force && renderedFrameCount > 1 && renderedFrameCount % 4 !== 0) {
+            return
+        }
+
+        performance.clearMarks?.('talos-background-frame')
+        performance.mark?.('talos-background-frame')
+        performanceState.value = {
+            ...performanceState.value,
+            ...profile,
+            rafActive,
+            frameCount: renderedFrameCount,
+        }
     }
 
     function draw(time = 0) {
         const element = canvas.value
+        const profile = currentProfile()
+
         if (!element || effect.value === 'none') {
             stop()
+            return
+        }
+
+        const bounds = element.getBoundingClientRect()
+        if (bounds.width <= 0 || bounds.height <= 0) {
+            stop()
+            performanceState.value = {
+                ...performanceState.value,
+                mode: 'static',
+                rafActive: false,
+            }
             return
         }
 
@@ -254,10 +376,10 @@ export function useTalosProceduralCanvas(
             return
         }
 
-        const { width, height } = resizeCanvas(element)
-        const frozen = staticMode()
+        const { width, height } = resizeCanvas(element, profile.dprCap)
+        const frozen = profile.mode !== 'motion'
         const renderTime = frozen ? 0 : time
-        const scale = frozen ? 1 : motionScale(motion.value)
+        const scale = frozen ? 1 : motionScale(motion.value) * profile.viewportScale
         const accent = cssVariable(element, '--talos-accent', '#c98b32')
         const secondary = cssVariable(element, '--talos-node', '#6ad4d4')
 
@@ -280,37 +402,88 @@ export function useTalosProceduralCanvas(
             drawSignalMesh(context, width, height, accent, secondary, scale, renderTime)
         }
 
+        renderedFrameCount += 1
+
         if (frozen) {
             frame = 0
+            publishFrameTelemetry(profile, false, true)
             return
         }
 
-        frame = window.requestAnimationFrame(draw)
+        publishFrameTelemetry(profile, true)
+
+        frame = 0
+        frameTimer = window.setTimeout(() => {
+            frame = window.requestAnimationFrame(draw)
+        }, Math.max(16, Math.round(1000 / Math.max(1, profile.fpsCap))))
     }
 
     function restart() {
         stop()
-        if (staticMode()) {
-            draw(0)
+        const profile = currentProfile()
+        renderedFrameCount = 0
+        performanceState.value = {
+            ...performanceState.value,
+            ...profile,
+            frameCount: 0,
+            rafActive: false,
+        }
+        draw(0)
+    }
+
+    function onResize() {
+        if (resizeTimer) {
+            window.clearTimeout(resizeTimer)
+        }
+
+        resizeTimer = window.setTimeout(() => {
+            performanceState.value = {
+                ...performanceState.value,
+                resizeCount: performanceState.value.resizeCount + 1,
+            }
+            restart()
+        }, 120)
+    }
+
+    function onVisibilityChange() {
+        if (document.hidden) {
+            stop()
+            performanceState.value = {
+                ...performanceState.value,
+                ...currentProfile(),
+                rafActive: false,
+            }
             return
         }
 
-        frame = window.requestAnimationFrame(draw)
+        restart()
     }
 
     onMounted(() => {
         restart()
-        window.addEventListener('resize', restart)
+        window.addEventListener('resize', onResize)
+        document.addEventListener('visibilitychange', onVisibilityChange)
     })
 
     onBeforeUnmount(() => {
         stop()
-        window.removeEventListener('resize', restart)
+        if (resizeTimer) {
+            window.clearTimeout(resizeTimer)
+            resizeTimer = 0
+        }
+        window.removeEventListener('resize', onResize)
+        document.removeEventListener('visibilitychange', onVisibilityChange)
     })
 
-    watch([effect, motion, motionDisabled], restart)
+    watch([effect, motion, motionDisabled], restart, { flush: 'post' })
+    watch(canvas, (element) => {
+        if (element) {
+            restart()
+        }
+    }, { flush: 'post' })
 
     return {
+        performanceState,
         restart,
         stop,
     }

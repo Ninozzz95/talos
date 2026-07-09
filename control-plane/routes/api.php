@@ -28,6 +28,7 @@ use App\Http\Controllers\TalosResearchReportController;
 use App\Http\Controllers\TalosRunBenchmarkController;
 use App\Http\Controllers\TalosRunController;
 use App\Http\Controllers\TalosSessionController;
+use App\Http\Controllers\TalosSessionExportController;
 use App\Http\Controllers\TalosSettingsController;
 use App\Http\Controllers\TalosSkillController;
 use App\Http\Controllers\TalosTaskController;
@@ -41,6 +42,7 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
     Route::prefix('/talos')->group(function (): void {
         Route::get('/model-profiles', [TalosModelProfileController::class, 'index']);
         Route::post('/model-profiles', [TalosModelProfileController::class, 'store']);
+        Route::post('/model-profiles/probe-draft', [TalosModelProfileController::class, 'probeDraft']);
         Route::get('/model-profiles/{profile}', [TalosModelProfileController::class, 'show']);
         Route::patch('/model-profiles/{profile}', [TalosModelProfileController::class, 'update']);
         Route::delete('/model-profiles/{profile}', [TalosModelProfileController::class, 'destroy']);
@@ -51,6 +53,7 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::get('/sessions', [TalosSessionController::class, 'index']);
         Route::post('/sessions', [TalosSessionController::class, 'store']);
         Route::get('/sessions/{session}', [TalosSessionController::class, 'show']);
+        Route::get('/sessions/{session}/export', TalosSessionExportController::class);
         Route::patch('/sessions/{session}', [TalosSessionController::class, 'update']);
         Route::delete('/sessions/{session}', [TalosSessionController::class, 'destroy']);
         Route::get('/sessions/{session}/messages', [TalosMessageController::class, 'index']);

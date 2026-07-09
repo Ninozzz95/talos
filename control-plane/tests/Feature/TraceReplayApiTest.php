@@ -40,7 +40,10 @@ final class TraceReplayApiTest extends TestCase
             ->assertJsonPath('steps.0.label', 'LLM proposed SPAWN_NODE n1')
             ->assertJsonPath('steps.3.kind', 'fault')
             ->assertJsonPath('steps.3.label', 'Validator rejected ghost_node_88')
-            ->assertJsonPath('filters.0', 'faults')
+            ->assertJsonPath('filters.0', 'all')
+            ->assertJsonPath('filters.1', 'fault')
+            ->assertJsonPath('filters.2', 'worker_execution')
+            ->assertJsonPath('filters.3', 'recovery')
             ->assertJsonCount(5, 'steps');
     }
 

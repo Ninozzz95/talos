@@ -81,7 +81,7 @@ const firstSourceLabel = computed(() => {
 </script>
 
 <template>
-    <section class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3" aria-label="TALOS evidence drawer">
+    <section class="talos-evidence-drawer mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3" aria-label="TALOS evidence drawer">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
                 <div class="text-xs font-semibold text-[var(--talos-text)]">Run evidence</div>

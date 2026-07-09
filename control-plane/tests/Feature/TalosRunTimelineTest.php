@@ -29,27 +29,38 @@ final class TalosRunTimelineTest extends TestCase
 
         $composable = file_get_contents($composablePath);
         $timeline = file_get_contents($timelinePath);
+        $recovery = file_get_contents($recoveryPath);
         $commandRegistry = file_get_contents($commandRegistryPath);
 
         $this->assertIsString($composable);
         $this->assertIsString($timeline);
+        $this->assertIsString($recovery);
         $this->assertIsString($commandRegistry);
         $this->assertStringContainsString('/api/talos/runs', $composable);
         $this->assertStringContainsString('/api/talos/runs/${runId}/events', $composable);
         $this->assertStringContainsString('/api/talos/runs/${runId}/recover', $composable);
         $this->assertStringContainsString('/api/talos/runs/${runId}/replay', $composable);
+        $this->assertStringContainsString('/api/talos/runs/${runId}/artifacts', $composable);
         $this->assertStringContainsString('loadRuns', $composable);
         $this->assertStringContainsString('loadRunEvents', $composable);
         $this->assertStringContainsString('recoverRunNode', $composable);
         $this->assertStringContainsString('loadRunReplay', $composable);
+        $this->assertStringContainsString('loadRunArtifacts', $composable);
         $this->assertStringContainsString('TalosRunTimeline', $shell);
         $this->assertStringContainsString('<TalosRunTimeline', $shell);
+        $this->assertStringContainsString('@open-audit-log="openAuditLogFromRuntime"', $shell);
         $this->assertStringContainsString('TalosTraceReplay', $timeline);
         $this->assertStringContainsString('TalosRecoveryPanel', $timeline);
         $this->assertStringContainsString('<TalosTraceReplay', $timeline);
         $this->assertStringContainsString('<TalosRecoveryPanel', $timeline);
+        $this->assertStringContainsString('Runtime cockpit', $timeline);
+        $this->assertStringContainsString('role="tablist"', $timeline);
+        $this->assertStringContainsString('Run summary', $timeline);
+        $this->assertStringContainsString('Artifacts', $timeline);
+        $this->assertStringContainsString('Open audit log', $timeline);
         $this->assertStringContainsString('Run timeline', $timeline);
-        $this->assertStringContainsString('Select a run in the dashboard timeline.', $commandRegistry);
+        $this->assertStringContainsString('This run succeeded; recovery is not available.', $recovery);
+        $this->assertStringContainsString('Select a failed node in the dashboard timeline.', $commandRegistry);
         $this->assertStringNotContainsString('mock', strtolower($timeline));
         $this->assertStringNotContainsString('fake', strtolower($timeline));
     }

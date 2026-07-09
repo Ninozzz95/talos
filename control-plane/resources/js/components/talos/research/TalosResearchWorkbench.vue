@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { AlertCircle, FileSearch, Loader2, Plus, RefreshCw } from '@lucide/vue'
+import { AlertCircle, BookOpen, ChevronDown, FileSearch, Loader2, Play, Plus, RefreshCw } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
 import TalosSourceTable from './TalosSourceTable.vue'
 import TalosClaimVerifier from './TalosClaimVerifier.vue'
+import TalosResearchQueue from './TalosResearchQueue.vue'
+import TalosResearchSettingsPanel, { type TalosResearchSettings } from './TalosResearchSettingsPanel.vue'
+import TalosClaimSourceGraph from './TalosClaimSourceGraph.vue'
 import { useTalosResearch } from '../../../composables/useTalosResearch'
+import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
 import type { TalosResearchReport } from '../../../lib/talosTypes'
+
+type SubmitMode = 'queued' | 'started'
+
+const emit = defineEmits<{
+    'open-library': []
+}>()
 
 const {
     researchReports,
@@ -21,13 +31,28 @@ const {
     researchReportById,
 } = useTalosResearch()
 
+const {
+    usableModelProfiles,
+    loadModelProfiles,
+} = useTalosModelProfiles()
+
 const selectedReportId = ref<string | null>(null)
 const title = ref('')
 const query = ref('')
 const sourceUrl = ref('')
 const sourceTitle = ref('')
 const claimText = ref('')
+const settingsOpen = ref(false)
 const actionError = ref<string | null>(null)
+const submitMode = ref<SubmitMode | null>(null)
+const historyRef = ref<HTMLElement | null>(null)
+const settings = ref<TalosResearchSettings>({
+    rounds: 1,
+    format: 'briefing',
+    search_engine: 'searxng',
+    endpoint: 'local',
+    model_profile_id: null,
+})
 
 const selectedReport = computed(() => researchReportById(selectedReportId.value))
 const visibleError = computed(() => actionError.value || researchError.value)
@@ -37,6 +62,21 @@ const canCreate = computed(() => {
         && sourceUrl.value.trim().startsWith('https://')
         && claimText.value.trim().length > 0
         && !creatingResearchReport.value
+})
+const selectedArtifact = computed(() => selectedReport.value?.artifact ?? null)
+const chatWithReportDisabledReason = computed(() => {
+    if (!selectedReport.value) {
+        return 'Select a report before opening report chat.'
+    }
+
+    return 'Report chat context export is not available yet.'
+})
+const benchmarkDisabledReason = computed(() => {
+    if (!selectedReport.value) {
+        return 'Select a report before creating a benchmark scenario.'
+    }
+
+    return 'Benchmark scenario requires complete prompt, context, and evaluator evidence.'
 })
 
 async function refreshReports() {
@@ -68,12 +108,13 @@ async function selectReport(report: TalosResearchReport) {
     }
 }
 
-async function submitResearchReport() {
+async function submitResearchReport(mode: SubmitMode) {
     if (!canCreate.value) {
         return
     }
 
     actionError.value = null
+    submitMode.value = mode
 
     try {
         const report = await createResearchReport({
@@ -92,10 +133,19 @@ async function submitResearchReport() {
                     text: claimText.value.trim(),
                     status: 'pending',
                     source_refs: ['src-1'],
+                    metadata: {
+                        source_refs: ['src-1'],
+                    },
                 },
             ],
             metadata: {
                 source: 'talos_research_workbench',
+                queue_status: mode,
+                rounds: settings.value.rounds,
+                format: settings.value.format,
+                search_engine: settings.value.search_engine,
+                endpoint: settings.value.endpoint,
+                model_profile_id: settings.value.model_profile_id,
             },
         })
 
@@ -107,6 +157,8 @@ async function submitResearchReport() {
         claimText.value = ''
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not create this research report.'
+    } finally {
+        submitMode.value = null
     }
 }
 
@@ -118,8 +170,16 @@ function shortHash(value: string | null | undefined) {
     return value.length > 12 ? value.slice(0, 12) : value
 }
 
+function scrollToHistory() {
+    historyRef.value?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+    historyRef.value?.focus({ preventScroll: true })
+}
+
 onMounted(() => {
-    void refreshReports()
+    void Promise.allSettled([
+        refreshReports(),
+        loadModelProfiles(),
+    ])
 })
 </script>
 
@@ -132,9 +192,9 @@ onMounted(() => {
                         <FileSearch class="h-4 w-4 text-[var(--talos-accent)]" />
                         Deep research
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Source-backed reports</h3>
+                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Deep Research V3</h3>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
-                        Reports are persisted through `/api/talos/research-reports` and every verified claim must map to a fetched source.
+                        Queue source-backed draft reports without pretending that manual sources were fetched or claims were verified.
                     </p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -154,75 +214,159 @@ onMounted(() => {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div class="grid gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                <div class="grid gap-2 md:grid-cols-2">
-                    <input
-                        v-model="title"
-                        class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                        placeholder="Report title"
-                        :disabled="creatingResearchReport"
-                    >
-                    <input
-                        v-model="sourceUrl"
-                        class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                        placeholder="https://source.example/report"
-                        :disabled="creatingResearchReport"
-                    >
+            <section class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(220px,320px)]">
+                    <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Report title</span>
+                        <input
+                            v-model="title"
+                            class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                            aria-label="Report title"
+                            placeholder="AVM evidence review"
+                            :disabled="creatingResearchReport"
+                        >
+                    </label>
+
+                    <div class="flex items-end gap-2">
+                        <Button type="button" variant="secondary" size="sm" class="flex-1" @click="settingsOpen = !settingsOpen">
+                            <ChevronDown class="h-4 w-4" :class="settingsOpen ? 'rotate-180' : ''" />
+                            Research settings
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" @click="emit('open-library')">
+                            <BookOpen class="h-4 w-4" />
+                            Library
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" @click="scrollToHistory">
+                            History
+                        </Button>
+                    </div>
                 </div>
-                <input
-                    v-model="sourceTitle"
-                    class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                    placeholder="Source title"
+
+                <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Research query</span>
+                    <textarea
+                        v-model="query"
+                        class="min-h-[148px] resize-y rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-3 text-sm leading-6 text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                        aria-label="Research query"
+                        placeholder="Ask for evidence, constraints, and the claims that must remain pending until source fetch exists."
+                        :disabled="creatingResearchReport"
+                    />
+                </label>
+
+                <div class="grid gap-2 md:grid-cols-2">
+                    <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Primary source URL</span>
+                        <input
+                            v-model="sourceUrl"
+                            class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                            aria-label="Primary source URL"
+                            placeholder="https://source.example/report"
+                            :disabled="creatingResearchReport"
+                        >
+                    </label>
+                    <label class="grid gap-1">
+                        <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Source title</span>
+                        <input
+                            v-model="sourceTitle"
+                            class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                            aria-label="Source title"
+                            placeholder="Source title"
+                            :disabled="creatingResearchReport"
+                        >
+                    </label>
+                </div>
+
+                <label class="grid gap-1">
+                    <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Initial claim</span>
+                    <textarea
+                        v-model="claimText"
+                        class="min-h-[84px] resize-none rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                        aria-label="Initial claim"
+                        placeholder="Claim mapped to src-1 and kept pending until fetched evidence exists."
+                        :disabled="creatingResearchReport"
+                    />
+                </label>
+
+                <TalosResearchSettingsPanel
+                    v-if="settingsOpen"
+                    :settings="settings"
+                    :model-profiles="usableModelProfiles"
                     :disabled="creatingResearchReport"
-                >
-                <textarea
-                    v-model="query"
-                    class="min-h-[72px] resize-none rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                    placeholder="Research query"
-                    :disabled="creatingResearchReport"
+                    @update="settings = $event"
                 />
-                <textarea
-                    v-model="claimText"
-                    class="min-h-[72px] resize-none rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                    placeholder="Claim verified by src-1"
-                    :disabled="creatingResearchReport"
-                />
-                <Button type="button" size="sm" class="w-full" :disabled="!canCreate" @click="submitResearchReport">
-                    <Loader2 v-if="creatingResearchReport" class="h-4 w-4 animate-spin" />
-                    <Plus v-else class="h-4 w-4" />
-                    Create report
-                </Button>
-            </div>
 
-            <div v-if="!researchReports.length && !loadingResearchReports" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
-                No research reports returned by `/api/talos/research-reports`.
-            </div>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <Button type="button" variant="secondary" size="sm" :disabled="!canCreate" @click="submitResearchReport('queued')">
+                        <Loader2 v-if="creatingResearchReport && submitMode === 'queued'" class="h-4 w-4 animate-spin" />
+                        <Plus v-else class="h-4 w-4" />
+                        Queue report
+                    </Button>
+                    <Button type="button" size="sm" :disabled="!canCreate" @click="submitResearchReport('started')">
+                        <Loader2 v-if="creatingResearchReport && submitMode === 'started'" class="h-4 w-4 animate-spin" />
+                        <Play v-else class="h-4 w-4" />
+                        Start research
+                    </Button>
+                </div>
+            </section>
 
-            <div v-else class="max-h-[180px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
-                <button
-                    v-for="report in researchReports"
-                    :key="report.id"
-                    type="button"
-                    class="grid w-full grid-cols-[minmax(0,1fr)_82px] gap-3 px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--talos-accent)]"
-                    :class="selectedReportId === report.id ? 'bg-[var(--talos-panel)]' : 'hover:bg-[var(--talos-active)]'"
-                    :disabled="loadingResearchReportId === report.id"
-                    @click="selectReport(report)"
-                >
-                    <span class="min-w-0">
-                        <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ report.title }}</span>
-                        <span class="mt-1 block truncate font-mono text-[11px] text-[var(--talos-muted)]">
-                            run {{ shortHash(report.run_id) }} - {{ report.sources_count ?? report.sources?.length ?? 0 }} sources
-                        </span>
-                    </span>
-                    <span class="flex justify-end">
-                        <Badge :tone="report.status === 'succeeded' ? 'success' : report.status === 'blocked' ? 'warning' : 'neutral'">{{ report.status }}</Badge>
-                    </span>
-                </button>
-            </div>
+            <div class="grid gap-4 xl:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]">
+                <div ref="historyRef" tabindex="-1" class="outline-none">
+                    <TalosResearchQueue
+                        :reports="researchReports"
+                        :selected-report-id="selectedReportId"
+                        @select="selectReport"
+                    />
+                </div>
 
-            <div v-if="selectedReport" class="space-y-4">
-                <TalosSourceTable :sources="selectedReport.sources ?? []" />
-                <TalosClaimVerifier :claims="selectedReport.claims ?? []" />
+                <section class="space-y-4">
+                    <div v-if="loadingResearchReportId && !selectedReport" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                        <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                        Loading research report
+                    </div>
+
+                    <div v-else-if="!selectedReport" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                        Queue or select a report to inspect source status, claims, graph evidence, and artifacts.
+                    </div>
+
+                    <div v-else class="space-y-4">
+                        <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h4 class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ selectedReport.title }}</h4>
+                                        <Badge :tone="selectedReport.status === 'succeeded' ? 'success' : selectedReport.status === 'blocked' ? 'warning' : 'neutral'">{{ selectedReport.status }}</Badge>
+                                        <Badge tone="neutral">run {{ shortHash(selectedReport.run_id) }}</Badge>
+                                    </div>
+                                    <p class="mt-2 text-sm leading-6 text-[var(--talos-muted)]">{{ selectedReport.summary || selectedReport.query }}</p>
+                                    <p v-if="selectedArtifact" class="mt-2 truncate font-mono text-[11px] text-[var(--talos-accent)]">{{ selectedArtifact.uri }}</p>
+                                </div>
+                                <div class="flex flex-wrap gap-2">
+                                    <Button type="button" size="sm" disabled>
+                                        Chat with report
+                                    </Button>
+                                    <Button type="button" variant="secondary" size="sm" disabled>
+                                        Benchmark report
+                                    </Button>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid gap-2 text-xs leading-5 text-[var(--talos-muted)] md:grid-cols-2">
+                                <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2">
+                                    {{ chatWithReportDisabledReason }}
+                                </div>
+                                <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2">
+                                    {{ benchmarkDisabledReason }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <TalosClaimSourceGraph
+                            :claims="selectedReport.claims ?? []"
+                            :sources="selectedReport.sources ?? []"
+                        />
+                        <TalosSourceTable :sources="selectedReport.sources ?? []" />
+                        <TalosClaimVerifier :claims="selectedReport.claims ?? []" />
+                    </div>
+                </section>
             </div>
         </div>
     </Surface>

@@ -26,7 +26,7 @@ final class TraceReplayService
             'run_id' => $runId,
             'controls' => ['play', 'pause', 'step_forward', 'step_backward'],
             'speeds' => ['0.5x', '1x', '2x'],
-            'filters' => ['faults', 'worker_execution'],
+            'filters' => ['all', 'fault', 'worker_execution', 'recovery'],
             'steps' => $steps,
             'final_node_statuses' => $nodeStatuses,
         ];

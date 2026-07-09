@@ -40,7 +40,7 @@ return [
         'validator_health_url' => env('TALOS_VALIDATOR_HEALTH_URL'),
         'model_provider_allowed_hosts' => array_values(array_filter(array_map(
             'trim',
-            explode(',', env('TALOS_MODEL_PROVIDER_ALLOWED_HOSTS', 'api.openai.com,api.deepseek.com')),
+            explode(',', env('TALOS_MODEL_PROVIDER_ALLOWED_HOSTS', 'api.openai.com,api.deepseek.com,api.anthropic.com,generativelanguage.googleapis.com,openrouter.ai')),
         ))),
     ],
 

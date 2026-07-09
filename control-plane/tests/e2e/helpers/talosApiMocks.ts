@@ -68,6 +68,161 @@ function messagePayload(body: Record<string, unknown>, sequence: number, session
     }
 }
 
+function sessionExportPayload(sessionId: string, format = 'json') {
+    const base = {
+        schema_version: 1,
+        export_status: 'complete',
+        session_id: sessionId,
+        exported_at: now,
+    }
+
+    if (format === 'markdown') {
+        return {
+            ...base,
+            report_type: 'talos_session_markdown_export',
+            content_type: 'text/markdown',
+            content: [
+                '# TALOS Session Export',
+                '',
+                '## Messages',
+                '',
+                '### USER',
+                'Create a replayable export pack.',
+                '',
+                '### ASSISTANT',
+                'E2E response from AVM with replayable evidence.',
+            ].join('\n'),
+        }
+    }
+
+    if (format === 'context_manifest') {
+        return {
+            ...base,
+            report_type: 'talos_context_manifest_export',
+            context_manifest: {
+                context_set_ids: ['context-set-e2e'],
+                context_sets: [
+                    {
+                        id: 'context-set-e2e',
+                        name: 'E2E grounded context',
+                        status: 'available',
+                        sources: [
+                            {
+                                id: 'context-source-e2e',
+                                source_type: 'file_chunk',
+                                file: {
+                                    id: 'file-e2e',
+                                    original_name: 'workflow.md',
+                                    status: 'available',
+                                },
+                                chunk: {
+                                    id: 'chunk-e2e',
+                                    preview: 'Workflow file says approve the deployment checklist.',
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        }
+    }
+
+    if (format === 'benchmark_scenario') {
+        return {
+            ...base,
+            report_type: 'talos_benchmark_scenario_export',
+            scenario: {
+                schema_version: 1,
+                scenario_type: 'talos_session_benchmark_scenario',
+                session_id: sessionId,
+                source_run_id: 'run-e2e',
+                prompt: 'Create a replayable export pack.',
+                prompt_hash: 'prompthash-e2e',
+                context_hash: 'contexthash-e2e',
+                model: 'gpt-e2e',
+                provider: 'openai',
+                evaluator_version: 'kadmos-core-benchmark-v1',
+            },
+        }
+    }
+
+    return {
+        schema_version: 1,
+        report_type: 'talos_session_export',
+        export_status: 'complete',
+        exported_at: now,
+        available_formats: ['json', 'markdown', 'context_manifest', 'benchmark_scenario'],
+        session: sessionPayload('E2E verified workflow', 'persistent', sessionId),
+        messages: [
+            {
+                id: 'message-e2e-1',
+                role: 'user',
+                content: 'Create a replayable export pack.',
+                model_profile_id: null,
+                run_id: null,
+                used_context: [],
+                used_memories: [],
+                metadata: {},
+                created_at: now,
+                updated_at: now,
+            },
+            {
+                id: 'message-e2e-2',
+                role: 'assistant',
+                content: 'E2E response from AVM with replayable evidence.',
+                model_profile_id: 'profile-e2e',
+                model_profile: {
+                    id: 'profile-e2e',
+                    display_name: 'E2E server-side profile',
+                    provider: 'openai',
+                    model: 'gpt-e2e',
+                    status: 'healthy',
+                    has_secret: true,
+                },
+                run_id: 'run-e2e',
+                used_context: [
+                    {
+                        context_set_id: 'context-set-e2e',
+                        file_id: 'file-e2e',
+                        chunk_id: 'chunk-e2e',
+                        file_name: 'workflow.md',
+                        preview: 'Workflow file says approve the deployment checklist.',
+                    },
+                ],
+                used_memories: [],
+                metadata: {
+                    source: 'talos_chat_proxy',
+                },
+                created_at: now,
+                updated_at: now,
+            },
+        ],
+        runs: [
+            {
+                id: 'run-e2e',
+                status: 'succeeded',
+                prompt_hash: 'prompthash-e2e',
+                context_hash: 'contexthash-e2e',
+                replayability_state: {
+                    replayable: true,
+                    events_count: 3,
+                    artifacts_count: 1,
+                },
+            },
+        ],
+        context_manifest: sessionExportPayload(sessionId, 'context_manifest').context_manifest,
+        benchmark_readiness: {
+            ready: true,
+            missing: [],
+            scenario: {
+                prompt_hash: 'prompthash-e2e',
+                context_hash: 'contexthash-e2e',
+            },
+        },
+        markdown_transcript: '# TALOS Session Export\n',
+    }
+}
+
 function benchmarkGroupPayload(includeResults = false) {
     const group = {
         id: 'benchmark-group-e2e',
@@ -333,7 +488,14 @@ function runEventsPayload() {
             node_type: 'HTTP_REQUEST',
             status_before: 'PENDING',
             status_after: 'RUNNING',
-            payload: { url: 'https://api.example.test/health' },
+            payload: {
+                node_type: 'HTTP_REQUEST',
+                url: 'https://api.example.test/health',
+                policy_decision: {
+                    allowed: true,
+                    capability: 'net.http.request',
+                },
+            },
             occurred_at: now,
             created_at: now,
             updated_at: now,
@@ -348,12 +510,210 @@ function runEventsPayload() {
             node_type: 'HTTP_REQUEST',
             status_before: 'RUNNING',
             status_after: 'FAILED',
-            payload: { reason: 'HTTP 503' },
+            payload: {
+                node_type: 'HTTP_REQUEST',
+                reason: 'HTTP 503',
+                validation_faults: [
+                    { code: 'UPSTREAM_UNAVAILABLE', field: 'url' },
+                ],
+                worker_output: {
+                    http_status: 503,
+                    retryable: true,
+                },
+            },
+            occurred_at: now,
+            created_at: now,
+            updated_at: now,
+        },
+        {
+            id: 'event-e2e-3',
+            run_id: 'run-e2e',
+            sequence: 3,
+            event_type: 'node_blocked',
+            severity: 'warning',
+            node_id: 'node-child-e2e',
+            node_type: 'SUMMARIZE',
+            status_before: 'PENDING',
+            status_after: 'BLOCKED_BY_DEPENDENCY',
+            payload: {
+                node_type: 'SUMMARIZE',
+                reason: 'Parent node node-e2e failed before this branch could run.',
+                dependency_node_id: 'node-e2e',
+                blocked_by: ['node-e2e'],
+            },
             occurred_at: now,
             created_at: now,
             updated_at: now,
         },
     ]
+}
+
+function runArtifactsPayload() {
+    return [
+        {
+            id: 'artifact-run-e2e',
+            run_id: 'run-e2e',
+            artifact_type: 'evidence_report',
+            uri: 'local://reports/run-e2e.json',
+            mime_type: 'application/json',
+            metadata: {
+                sha256: 'artifacthash-e2e',
+                label: 'Run evidence report',
+            },
+            created_at: now,
+            updated_at: now,
+        },
+    ]
+}
+
+function researchReportPayload(overrides: Record<string, unknown> = {}) {
+    const reportId = String(overrides.id ?? 'research-report-e2e')
+    const status = String(overrides.status ?? 'draft')
+
+    return {
+        id: reportId,
+        run_id: overrides.run_id ?? 'research-run-e2e',
+        context_set_id: overrides.context_set_id ?? null,
+        benchmark_group_id: overrides.benchmark_group_id ?? null,
+        title: overrides.title ?? 'E2E AVM research report',
+        query: overrides.query ?? 'Map AVM evidence to claims.',
+        status,
+        summary: overrides.summary ?? 'Draft research plan stored as TALOS evidence.',
+        report_markdown: overrides.report_markdown ?? '# E2E AVM research report\n\nQueued research draft.',
+        metadata: overrides.metadata ?? {
+            queue_status: 'queued',
+            rounds: 2,
+            format: 'briefing',
+            search_engine: 'searxng',
+            endpoint: 'local',
+            model_profile_id: 'profile-e2e',
+        },
+        sources_count: 1,
+        claims_count: 1,
+        sources: [
+            {
+                id: 'research-source-e2e',
+                research_report_id: reportId,
+                client_id: 'src-1',
+                sequence: 1,
+                source_type: 'web',
+                url: 'https://example.com/avm-evidence',
+                title: 'AVM evidence source',
+                status: 'planned',
+                excerpt: null,
+                content_hash: null,
+                file_id: null,
+                file_chunk_id: null,
+                failure_reason: null,
+                metadata: { source: 'e2e' },
+                created_at: now,
+                updated_at: now,
+            },
+        ],
+        claims: [
+            {
+                id: 'research-claim-e2e',
+                research_report_id: reportId,
+                sequence: 1,
+                text: 'AVM research claims stay pending until fetched evidence exists.',
+                status: 'pending',
+                confidence: null,
+                metadata: { source_refs: ['src-1'] },
+                sources: [
+                    {
+                        id: 'research-source-e2e',
+                        research_report_id: reportId,
+                        client_id: 'src-1',
+                        sequence: 1,
+                        source_type: 'web',
+                        url: 'https://example.com/avm-evidence',
+                        title: 'AVM evidence source',
+                        status: 'planned',
+                        excerpt: null,
+                        content_hash: null,
+                        file_id: null,
+                        file_chunk_id: null,
+                        failure_reason: null,
+                        metadata: { source: 'e2e' },
+                        created_at: now,
+                        updated_at: now,
+                    },
+                ],
+                created_at: now,
+                updated_at: now,
+            },
+        ],
+        artifact: {
+            id: 'research-artifact-e2e',
+            run_id: 'research-run-e2e',
+            artifact_type: 'research_report',
+            uri: `talos://research-reports/${reportId}`,
+            mime_type: 'application/json',
+            metadata: {
+                research_report_id: reportId,
+                source_count: 1,
+                claim_count: 1,
+                sha256: 'researchhash-e2e',
+            },
+            created_at: now,
+            updated_at: now,
+        },
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function calendarDraftPayload(overrides: Record<string, unknown> = {}) {
+    return {
+        id: overrides.id ?? 'calendar-draft-e2e',
+        run_id: overrides.run_id ?? null,
+        source_run_id: overrides.source_run_id ?? overrides.run_id ?? null,
+        title: overrides.title ?? 'Crew muster',
+        description: overrides.description ?? null,
+        starts_at: overrides.starts_at ?? '2026-07-09T10:00:00.000000Z',
+        ends_at: overrides.ends_at ?? '2026-07-09T10:30:00.000000Z',
+        timezone: overrides.timezone ?? 'Europe/Rome',
+        attendees: overrides.attendees ?? [],
+        status: overrides.status ?? 'draft',
+        confirmation_required: overrides.confirmation_required ?? true,
+        confirmed_at: overrides.confirmed_at ?? null,
+        external_provider: overrides.external_provider ?? null,
+        external_event_id: overrides.external_event_id ?? null,
+        metadata: overrides.metadata ?? { quick_add_raw: 'crew muster 10am daily' },
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function modelProfilePayload(overrides: Record<string, unknown> = {}) {
+    return {
+        id: overrides.id ?? 'profile-e2e',
+        display_name: overrides.display_name ?? 'E2E server-side profile',
+        provider: overrides.provider ?? 'openai',
+        model: overrides.model ?? 'gpt-e2e',
+        base_url: overrides.base_url ?? null,
+        timeout_seconds: overrides.timeout_seconds ?? 60,
+        status: overrides.status ?? 'healthy',
+        capabilities: overrides.capabilities ?? {
+            json: true,
+            tools: true,
+            vision: false,
+            embeddings: true,
+            local: false,
+            remote: true,
+        },
+        probe_result: overrides.probe_result ?? {
+            ok: true,
+            http_status: 200,
+            latency_ms: 118,
+            policy: {
+                public_url: true,
+            },
+        },
+        has_secret: overrides.has_secret ?? true,
+        created_at: now,
+        updated_at: now,
+    }
 }
 
 export type InstallTalosApiMocksOptions = {
@@ -369,6 +729,11 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let fileUploaded = false
     let contextSetCreated = false
     let comparisonCreated = false
+    let researchReports: Record<string, unknown>[] = []
+    let calendarDrafts: Record<string, unknown>[] = []
+    let modelProfiles = [
+        modelProfilePayload(),
+    ]
     let sessions = (options.initialSessions ?? []).map((session) => sessionPayload(
         session.title,
         session.persistence_mode ?? 'persistent',
@@ -429,36 +794,76 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         if (path === '/api/talos/model-profiles' && method === 'GET') {
             return json(route, {
-                data: [
-                    {
-                        id: 'profile-e2e',
-                        display_name: 'E2E server-side profile',
-                        provider: 'openai',
-                        model: 'gpt-e2e',
-                        base_url: null,
-                        status: 'healthy',
-                        capabilities: {
-                            json: true,
-                            tools: true,
-                            vision: false,
-                            embeddings: true,
-                            local: false,
-                            remote: true,
-                        },
-                        probe_result: {
-                            ok: true,
-                            http_status: 200,
-                            latency_ms: 118,
-                            policy: {
-                                public_url: true,
-                            },
-                        },
-                        has_secret: true,
-                        created_at: now,
-                        updated_at: now,
-                    },
-                ],
+                data: modelProfiles,
             })
+        }
+
+        if (path === '/api/talos/model-profiles/probe-draft' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+
+            return json(route, {
+                data: {
+                    status: 'healthy',
+                    result: {
+                        ok: true,
+                        provider: body.provider,
+                        http_status: 200,
+                        latency_ms: 96,
+                        json: true,
+                    },
+                },
+            })
+        }
+
+        if (path === '/api/talos/model-profiles' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            const provider = String(body.provider ?? 'openai')
+            const defaults: Record<string, { display_name: string, model: string, base_url: string | null }> = {
+                openai: { display_name: 'OpenAI', model: 'gpt-4.1-mini', base_url: 'https://api.openai.com/v1' },
+                deepseek: { display_name: 'DeepSeek', model: 'deepseek-chat', base_url: 'https://api.deepseek.com/v1' },
+                anthropic: { display_name: 'Anthropic', model: 'claude-sonnet', base_url: 'https://api.anthropic.com/v1' },
+                gemini: { display_name: 'Google Gemini', model: 'gemini-2.5-flash', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+                openrouter: { display_name: 'OpenRouter', model: 'openai/gpt-4.1-mini', base_url: 'https://openrouter.ai/api/v1' },
+                ollama: { display_name: 'Ollama Local', model: 'llama3.1', base_url: 'http://127.0.0.1:11434/v1' },
+            }
+            const preset = defaults[provider] ?? defaults.openai
+            const profile = modelProfilePayload({
+                id: `profile-${provider}-quick-add`,
+                provider,
+                display_name: body.display_name || `${preset.display_name} quick profile`,
+                model: body.model || preset.model,
+                base_url: body.base_url ?? preset.base_url,
+                timeout_seconds: body.timeout_seconds ?? 60,
+                status: 'healthy',
+                has_secret: provider !== 'ollama',
+                probe_result: {
+                    ok: true,
+                    http_status: 200,
+                    latency_ms: 96,
+                    provider,
+                },
+            })
+            modelProfiles = [profile, ...modelProfiles]
+
+            return json(route, { data: profile }, 201)
+        }
+
+        if (path.match(/^\/api\/talos\/model-profiles\/[^/]+\/probe$/) && method === 'POST') {
+            const profileId = path.split('/').at(-2)
+            modelProfiles = modelProfiles.map((profile) => profile.id === profileId
+                ? {
+                    ...profile,
+                    status: 'healthy',
+                    probe_result: {
+                        ok: true,
+                        http_status: 200,
+                        latency_ms: 92,
+                    },
+                }
+                : profile)
+            const profile = modelProfiles.find((candidate) => candidate.id === profileId)
+
+            return json(route, { data: profile ?? modelProfilePayload({ id: profileId }) })
         }
 
         if (path === '/api/talos/settings' && method === 'GET') {
@@ -516,6 +921,12 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             const session = sessionPayload(String(body.title ?? existing?.title ?? 'E2E verified workflow'), persistenceMode, sessionId)
             sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
             return json(route, { data: session })
+        }
+
+        const sessionExportMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/export$/)
+        if (sessionExportMatch && method === 'GET') {
+            const format = url.searchParams.get('format') ?? 'json'
+            return json(route, sessionExportPayload(sessionExportMatch[1], format))
         }
 
         const sessionMessagesMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/messages$/)
@@ -642,11 +1053,74 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 steps: [
                     { sequence: 1, type: 'node_started', label: 'Node started', kind: 'state', node_id: 'node-e2e', status_after: 'RUNNING' },
                     { sequence: 2, type: 'node_failed', label: 'HTTP 503 failure', kind: 'fault', node_id: 'node-e2e', status_after: 'FAILED' },
+                    { sequence: 3, type: 'node_blocked', label: 'Blocked by node-e2e', kind: 'fault', node_id: 'node-child-e2e', status_after: 'BLOCKED_BY_DEPENDENCY' },
                 ],
                 final_node_statuses: {
                     'node-e2e': 'FAILED',
+                    'node-child-e2e': 'BLOCKED_BY_DEPENDENCY',
                 },
             })
+        }
+
+        if (path === '/api/talos/runs/run-e2e/artifacts' && method === 'GET') {
+            return json(route, { data: runArtifactsPayload() })
+        }
+
+        if (path === '/api/talos/runs/run-e2e/recover' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+
+            return json(route, {
+                data: {
+                    run: {
+                        ...runPayload(),
+                        status: 'queued',
+                        metadata: {
+                            source: 'e2e',
+                            last_recovery: {
+                                action: body.action,
+                                node_id: body.node_id,
+                                target_status: 'RETRYING',
+                                requested_at: now,
+                            },
+                        },
+                    },
+                    events: [
+                        {
+                            id: 'event-e2e-recovery-1',
+                            run_id: 'run-e2e',
+                            sequence: 4,
+                            event_type: 'recovery.requested',
+                            severity: 'info',
+                            node_id: body.node_id,
+                            payload: {
+                                action: body.action,
+                                reason: body.reason,
+                                target_status: 'RETRYING',
+                                scope: 'node',
+                            },
+                            occurred_at: now,
+                            created_at: now,
+                            updated_at: now,
+                        },
+                        {
+                            id: 'event-e2e-recovery-2',
+                            run_id: 'run-e2e',
+                            sequence: 5,
+                            event_type: 'node.status_changed',
+                            severity: 'info',
+                            node_id: body.node_id,
+                            payload: {
+                                status: 'RETRYING',
+                                source: 'hmi_recovery',
+                                action: body.action,
+                            },
+                            occurred_at: now,
+                            created_at: now,
+                            updated_at: now,
+                        },
+                    ],
+                },
+            }, 201)
         }
 
         if (path === '/api/talos/runs/run-e2e/benchmark' && method === 'POST') {
@@ -656,6 +1130,74 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 benchmark_results: runBenchmarkGroupPayload(true).results,
                 evidence_summary: { source: 'run-e2e' },
             })
+        }
+
+        if (path === '/api/talos/research-reports' && method === 'GET') {
+            return json(route, { data: researchReports })
+        }
+
+        if (path === '/api/talos/research-reports' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            const metadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+                ? body.metadata as Record<string, unknown>
+                : {}
+            const report = researchReportPayload({
+                id: `research-report-e2e-${researchReports.length + 1}`,
+                title: body.title,
+                query: body.query,
+                metadata: {
+                    ...metadata,
+                    queue_status: metadata.queue_status ?? 'queued',
+                },
+            })
+            researchReports = [report, ...researchReports]
+
+            return json(route, { data: report }, 201)
+        }
+
+        if (path === '/api/talos/calendar-drafts' && method === 'GET') {
+            return json(route, { data: calendarDrafts })
+        }
+
+        if (path === '/api/talos/calendar-drafts' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            const draft = calendarDraftPayload({
+                id: `calendar-draft-e2e-${calendarDrafts.length + 1}`,
+                title: body.title,
+                description: body.description ?? null,
+                starts_at: body.starts_at,
+                ends_at: body.ends_at,
+                timezone: body.timezone,
+                attendees: body.attendees ?? [],
+                metadata: body.metadata ?? {},
+            })
+            calendarDrafts = [draft, ...calendarDrafts]
+
+            return json(route, { data: draft }, 201)
+        }
+
+        const calendarConfirmMatch = path.match(/^\/api\/talos\/calendar-drafts\/([^/]+)\/confirm$/)
+        if (calendarConfirmMatch && method === 'POST') {
+            calendarDrafts = calendarDrafts.map((draft) => draft.id === calendarConfirmMatch[1]
+                ? {
+                    ...draft,
+                    status: 'confirmed',
+                    confirmation_required: false,
+                    confirmed_at: now,
+                }
+                : draft)
+
+            return json(route, {
+                data: calendarDrafts.find((draft) => draft.id === calendarConfirmMatch[1])
+                    ?? calendarDraftPayload({ id: calendarConfirmMatch[1], status: 'confirmed', confirmation_required: false, confirmed_at: now }),
+            })
+        }
+
+        const researchReportMatch = path.match(/^\/api\/talos\/research-reports\/([^/]+)$/)
+        if (researchReportMatch && method === 'GET') {
+            const report = researchReports.find((item) => item.id === researchReportMatch[1])
+
+            return json(route, { data: report ?? researchReportPayload({ id: researchReportMatch[1] }) })
         }
 
         if (path === '/api/talos/benchmark-groups' && method === 'GET') {
@@ -694,7 +1236,6 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         }
 
         if ([
-            '/api/talos/research-reports',
             '/api/talos/email/messages',
             '/api/talos/email/drafts',
             '/api/talos/connectors',
@@ -704,7 +1245,6 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             '/api/talos/skills',
             '/api/talos/notes',
             '/api/talos/tasks',
-            '/api/talos/calendar-drafts',
             '/api/talos/documents',
             '/api/talos/artifacts',
         ].includes(path) && method === 'GET') {

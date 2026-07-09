@@ -22,6 +22,7 @@ final class TalosModelProfile extends Model
         'display_name',
         'encrypted_secret',
         'base_url',
+        'timeout_seconds',
         'status',
         'capabilities',
         'probe_result',
@@ -37,6 +38,7 @@ final class TalosModelProfile extends Model
     protected function casts(): array
     {
         return [
+            'timeout_seconds' => 'integer',
             'capabilities' => 'array',
             'probe_result' => 'array',
         ];
@@ -54,6 +56,7 @@ final class TalosModelProfile extends Model
             'model' => $this->model,
             'display_name' => $this->display_name,
             'base_url' => $this->base_url,
+            'timeout_seconds' => $this->timeout_seconds,
             'status' => $this->status,
             'capabilities' => $this->capabilities,
             'probe_result' => $this->probe_result,

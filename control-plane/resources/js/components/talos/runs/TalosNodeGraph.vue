@@ -38,6 +38,36 @@ function nodeTitle(node: TalosRunNodeSummary) {
 
     return node.id
 }
+
+function payloadString(node: TalosRunNodeSummary, key: string) {
+    const value = node.payload[key]
+
+    return typeof value === 'string' && value.trim() ? value : null
+}
+
+function blockedReason(node: TalosRunNodeSummary) {
+    if (node.status !== 'BLOCKED_BY_DEPENDENCY') {
+        return null
+    }
+
+    return payloadString(node, 'reason')
+        ?? payloadString(node, 'blocked_reason')
+        ?? 'One or more parent dependencies failed before this node could run.'
+}
+
+function blockedDependency(node: TalosRunNodeSummary) {
+    const dependencyNodeId = payloadString(node, 'dependency_node_id')
+
+    if (dependencyNodeId) {
+        return dependencyNodeId
+    }
+
+    const blockedBy = node.payload.blocked_by
+
+    return Array.isArray(blockedBy)
+        ? blockedBy.filter((item): item is string => typeof item === 'string').join(', ')
+        : null
+}
 </script>
 
 <template>
@@ -73,6 +103,14 @@ function nodeTitle(node: TalosRunNodeSummary) {
                     <span class="mt-1 block truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ node.id }}</span>
                     <span class="mt-1 block truncate text-xs text-[var(--talos-muted)]">
                         {{ node.type || 'node' }} - {{ node.event_count }} events - #{{ node.last_sequence }}
+                    </span>
+                    <span
+                        v-if="blockedReason(node)"
+                        class="mt-2 block rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-2 py-1 text-xs leading-5 text-[var(--talos-text)]"
+                    >
+                        <span class="font-semibold text-[var(--talos-warning)]">Blocked by dependency</span>
+                        <span v-if="blockedDependency(node)"> {{ blockedDependency(node) }}.</span>
+                        <span class="block">{{ blockedReason(node) }}</span>
                     </span>
                 </span>
                 <span class="flex min-w-0 flex-col items-end gap-2">

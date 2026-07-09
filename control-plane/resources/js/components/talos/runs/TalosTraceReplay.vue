@@ -35,7 +35,7 @@ let timer: ReturnType<typeof window.setInterval> | null = null
 
 const steps = computed(() => props.replay?.steps ?? [])
 const stepFilters = computed(() => {
-    const fromReplay = props.replay?.filters ?? []
+    const fromReplay = (props.replay?.filters ?? []).map(normalizeFilter)
     const fromSteps = steps.value.map((step) => step.kind).filter(Boolean)
     const unique = Array.from(new Set(['all', ...fromReplay, ...fromSteps]))
 
@@ -79,6 +79,14 @@ function kindTone(kind: string): BadgeTone {
     }
 
     return 'neutral'
+}
+
+function normalizeFilter(filter: string) {
+    if (filter === 'faults') {
+        return 'fault'
+    }
+
+    return filter
 }
 
 function stopPlayback() {
