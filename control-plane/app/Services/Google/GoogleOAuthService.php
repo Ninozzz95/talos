@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Google;
 
 use App\Models\TalosExternalAccount;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Crypt;
@@ -65,7 +66,7 @@ final class GoogleOAuthService
         return hash_equals($expected, $actual);
     }
 
-    public function connectFromCallback(Request $request): TalosExternalAccount
+    public function connectFromCallback(Request $request, User $user): TalosExternalAccount
     {
         $code = $request->query('code');
         if (! is_string($code) || trim($code) === '') {
@@ -110,6 +111,7 @@ final class GoogleOAuthService
         }
 
         $account = TalosExternalAccount::query()
+            ->where('user_id', $user->id)
             ->where('provider', 'google')
             ->where('provider_account_id', $providerAccountId)
             ->first();
@@ -118,6 +120,7 @@ final class GoogleOAuthService
         $expiresIn = $tokenPayload['expires_in'] ?? null;
 
         $payload = [
+            'user_id' => $user->id,
             'provider' => 'google',
             'provider_account_id' => $providerAccountId,
             'email' => is_string($email) ? $email : null,
@@ -140,6 +143,7 @@ final class GoogleOAuthService
         }
 
         $account = TalosExternalAccount::query()->updateOrCreate([
+            'user_id' => $user->id,
             'provider' => 'google',
             'provider_account_id' => $providerAccountId,
         ], $payload);

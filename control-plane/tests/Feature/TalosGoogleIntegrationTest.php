@@ -7,10 +7,12 @@ namespace Tests\Feature;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosCalendarDraft;
 use App\Models\TalosExternalAccount;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -18,15 +20,22 @@ final class TalosGoogleIntegrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
+    }
+
+    public function test_google_external_accounts_are_user_owned_at_the_schema_boundary(): void
+    {
+        $this->assertTrue(Schema::hasColumn('talos_external_accounts', 'user_id'));
     }
 
     public function test_google_account_api_never_exposes_tokens(): void
     {
-        TalosExternalAccount::query()->create([
+        $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -52,9 +61,37 @@ final class TalosGoogleIntegrationTest extends TestCase
         $this->assertStringNotContainsString('encrypted_refresh_token', $json);
     }
 
+    public function test_google_accounts_are_visible_only_to_the_authenticated_owner(): void
+    {
+        $otherUser = User::factory()->create();
+        $ownedAccount = $this->googleAccount([
+            'provider_account_id' => 'owned-google-user',
+            'email' => 'owned@example.test',
+        ]);
+        $foreignAccount = $this->googleAccount([
+            'user_id' => $otherUser->id,
+            'provider_account_id' => 'foreign-google-user',
+            'email' => 'foreign@example.test',
+        ]);
+
+        $this->getJson('/api/talos/google/accounts')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $ownedAccount->id)
+            ->assertJsonMissing(['id' => $foreignAccount->id])
+            ->assertJsonMissing(['email' => 'foreign@example.test']);
+
+        $this->actingAs($otherUser);
+
+        $this->getJson('/api/talos/google/accounts')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $foreignAccount->id)
+            ->assertJsonMissing(['id' => $ownedAccount->id])
+            ->assertJsonMissing(['email' => 'owned@example.test']);
+    }
+
     public function test_google_disconnect_marks_account_revoked_and_audits_without_token_leak(): void
     {
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -79,6 +116,29 @@ final class TalosGoogleIntegrationTest extends TestCase
         $this->assertStringNotContainsString('refresh-token-secret', $auditPayloads);
     }
 
+    public function test_google_disconnect_cannot_revoke_a_foreign_account(): void
+    {
+        $foreignUser = User::factory()->create();
+        $foreignAccount = $this->googleAccount([
+            'user_id' => $foreignUser->id,
+            'provider_account_id' => 'foreign-google-user',
+            'email' => 'foreign@example.test',
+            'encrypted_refresh_token' => Crypt::encryptString('foreign-refresh-token-secret'),
+        ]);
+
+        $this->postJson('/api/talos/google/disconnect', ['account_id' => $foreignAccount->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        $foreignAccount->refresh();
+        $this->assertSame('connected', $foreignAccount->status);
+        $this->assertNotNull($foreignAccount->encrypted_refresh_token);
+        $this->assertSame(0, TalosAuditEvent::query()
+            ->where('event_type', 'google.account.disconnected')
+            ->where('subject_id', $foreignAccount->id)
+            ->count());
+    }
+
     public function test_google_drive_import_requires_connected_account_and_download_permission(): void
     {
         $this->postJson('/api/talos/google/drive/import', [
@@ -96,7 +156,7 @@ final class TalosGoogleIntegrationTest extends TestCase
         ]);
         Storage::purge('local');
 
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -138,6 +198,33 @@ final class TalosGoogleIntegrationTest extends TestCase
             ->assertJsonPath('data.metadata.trust_level', 'untrusted');
     }
 
+    public function test_google_drive_endpoints_reject_foreign_accounts_without_contacting_google(): void
+    {
+        Http::fake();
+        $foreignUser = User::factory()->create();
+        $foreignAccount = $this->googleAccount([
+            'user_id' => $foreignUser->id,
+            'provider_account_id' => 'foreign-google-user',
+            'email' => 'foreign@example.test',
+            'encrypted_access_token' => Crypt::encryptString('foreign-access-token-secret'),
+            'encrypted_refresh_token' => Crypt::encryptString('foreign-refresh-token-secret'),
+            'scopes' => ['https://www.googleapis.com/auth/drive.file'],
+        ]);
+
+        $this->getJson("/api/talos/google/drive/files?account_id={$foreignAccount->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        $this->postJson('/api/talos/google/drive/import', [
+            'account_id' => $foreignAccount->id,
+            'file_id' => 'drive-file-1',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        Http::assertNothingSent();
+    }
+
     public function test_google_calendar_calendars_lists_readable_calendars_without_token_leak(): void
     {
         Http::fake([
@@ -151,7 +238,7 @@ final class TalosGoogleIntegrationTest extends TestCase
             ]),
         ]);
 
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -172,9 +259,32 @@ final class TalosGoogleIntegrationTest extends TestCase
         $this->assertStringNotContainsString('access-token-secret', $json);
     }
 
+    public function test_google_calendar_endpoints_reject_foreign_accounts_without_contacting_google(): void
+    {
+        Http::fake();
+        $foreignUser = User::factory()->create();
+        $foreignAccount = $this->googleAccount([
+            'user_id' => $foreignUser->id,
+            'provider_account_id' => 'foreign-google-user',
+            'email' => 'foreign@example.test',
+            'encrypted_access_token' => Crypt::encryptString('foreign-access-token-secret'),
+            'scopes' => ['https://www.googleapis.com/auth/calendar.events.readonly'],
+        ]);
+
+        $this->getJson("/api/talos/google/calendar/calendars?account_id={$foreignAccount->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        $this->postJson('/api/talos/google/calendar/sync', ['account_id' => $foreignAccount->id])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['account_id']);
+
+        Http::assertNothingSent();
+    }
+
     public function test_google_calendar_sync_requires_read_scope(): void
     {
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -215,7 +325,7 @@ final class TalosGoogleIntegrationTest extends TestCase
             ]),
         ]);
 
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -239,6 +349,7 @@ final class TalosGoogleIntegrationTest extends TestCase
         $this->assertStringNotContainsString('access-token-secret', $json);
 
         $draft = TalosCalendarDraft::query()->where('title', 'AVM sync review')->firstOrFail();
+        $this->assertSame($this->user->id, (int) $draft->user_id);
         $this->assertSame('google_calendar', $draft->metadata['external_provider']);
         $this->assertSame($account->id, $draft->metadata['external_account_id']);
         $this->assertSame('google-event-1', $draft->metadata['external_event_id']);
@@ -255,7 +366,7 @@ final class TalosGoogleIntegrationTest extends TestCase
 
     public function test_google_calendar_publish_requires_write_scope_and_draft_confirmation(): void
     {
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -266,6 +377,7 @@ final class TalosGoogleIntegrationTest extends TestCase
         ]);
 
         $draft = TalosCalendarDraft::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'AVM review',
             'starts_at' => now()->addDay(),
             'ends_at' => now()->addDay()->addHour(),
@@ -287,7 +399,7 @@ final class TalosGoogleIntegrationTest extends TestCase
     {
         Http::fake();
 
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -299,6 +411,7 @@ final class TalosGoogleIntegrationTest extends TestCase
         ]);
 
         $draft = TalosCalendarDraft::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'AVM review',
             'starts_at' => now()->addDay(),
             'ends_at' => now()->addDay()->addHour(),
@@ -331,7 +444,7 @@ final class TalosGoogleIntegrationTest extends TestCase
             ]),
         ]);
 
-        $account = TalosExternalAccount::query()->create([
+        $account = $this->googleAccount([
             'provider' => 'google',
             'provider_account_id' => 'google-user-1',
             'email' => 'operator@example.test',
@@ -343,6 +456,7 @@ final class TalosGoogleIntegrationTest extends TestCase
         ]);
 
         $draft = TalosCalendarDraft::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'AVM review',
             'description' => 'Publish after HMI confirmation.',
             'starts_at' => now()->addDay(),
@@ -375,6 +489,43 @@ final class TalosGoogleIntegrationTest extends TestCase
             'subject_type' => 'calendar_draft',
             'subject_id' => $draft->id,
         ]);
+    }
+
+    public function test_google_calendar_publish_cannot_publish_a_foreign_draft(): void
+    {
+        Http::fake();
+        $foreignUser = User::factory()->create();
+        $account = $this->googleAccount([
+            'provider_account_id' => 'owned-google-user',
+            'email' => 'owned@example.test',
+            'encrypted_access_token' => Crypt::encryptString('access-token-secret'),
+            'scopes' => ['https://www.googleapis.com/auth/calendar.events'],
+        ]);
+        $foreignDraft = TalosCalendarDraft::query()->create([
+            'user_id' => $foreignUser->id,
+            'title' => 'Foreign AVM review',
+            'starts_at' => now()->addDay(),
+            'ends_at' => now()->addDay()->addHour(),
+            'timezone' => 'Europe/Rome',
+            'attendees' => ['ops@example.test'],
+            'status' => 'draft',
+            'confirmation_required' => true,
+        ]);
+
+        $this->postJson("/api/talos/google/calendar/drafts/{$foreignDraft->id}/publish", [
+            'account_id' => $account->id,
+            'confirmed' => true,
+        ])
+            ->assertNotFound();
+
+        Http::assertNothingSent();
+        $foreignDraft->refresh();
+        $this->assertSame('draft', $foreignDraft->status);
+        $this->assertNull($foreignDraft->metadata);
+        $this->assertSame(0, TalosAuditEvent::query()
+            ->where('event_type', 'google.calendar.event_published')
+            ->where('subject_id', $foreignDraft->id)
+            ->count());
     }
 
     public function test_google_oauth_callback_rejects_invalid_state(): void
@@ -428,5 +579,30 @@ final class TalosGoogleIntegrationTest extends TestCase
         $this->assertSame($state, $query['state']);
         $this->assertStringContainsString('https://www.googleapis.com/auth/drive.file', (string) $query['scope']);
         $this->assertStringContainsString('https://www.googleapis.com/auth/calendar.events.readonly', (string) $query['scope']);
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    private function googleAccount(array $overrides = []): TalosExternalAccount
+    {
+        $account = TalosExternalAccount::query()->create([
+            'user_id' => $overrides['user_id'] ?? $this->user->id,
+            'provider' => 'google',
+            'provider_account_id' => 'google-user-1',
+            'email' => 'operator@example.test',
+            'display_name' => 'Operator',
+            'encrypted_access_token' => $overrides['encrypted_access_token'] ?? null,
+            'encrypted_refresh_token' => $overrides['encrypted_refresh_token'] ?? null,
+            'scopes' => $overrides['scopes'] ?? [],
+            'status' => 'connected',
+            'token_expires_at' => $overrides['token_expires_at'] ?? now()->addHour(),
+            'connected_at' => now(),
+            ...$overrides,
+        ]);
+
+        assert($account instanceof TalosExternalAccount);
+
+        return $account;
     }
 }

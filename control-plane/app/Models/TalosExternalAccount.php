@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class TalosExternalAccount extends Model
@@ -17,6 +18,7 @@ final class TalosExternalAccount extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'provider',
         'provider_account_id',
         'email',
@@ -38,6 +40,14 @@ final class TalosExternalAccount extends Model
     ];
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
      * @return HasMany<TalosExternalSyncState>
      */
     public function syncStates(): HasMany
@@ -51,6 +61,7 @@ final class TalosExternalAccount extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'scopes' => 'array',
             'token_expires_at' => 'datetime',
             'connected_at' => 'datetime',
@@ -66,6 +77,7 @@ final class TalosExternalAccount extends Model
     {
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'provider' => $this->provider,
             'provider_account_id' => $this->provider_account_id,
             'email' => $this->email,

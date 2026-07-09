@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\TalosModelProfile;
 use App\Models\TalosSession;
+use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
@@ -115,5 +116,47 @@ final class TalosPromptEnhancementTest extends TestCase
             ->assertStatus(409)
             ->assertJsonPath('error.code', 'PROMPT_ENHANCER_UNAVAILABLE')
             ->assertJsonMissing(['foreign-secret']);
+    }
+
+    public function test_prompt_enhancement_uses_only_the_current_users_default_profile(): void
+    {
+        $otherUser = User::factory()->create();
+        $foreignProfile = TalosModelProfile::query()->create([
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-foreign',
+            'display_name' => 'Foreign default profile',
+            'encrypted_secret' => Crypt::encryptString('foreign-default-secret'),
+            'status' => 'healthy',
+        ]);
+        $ownedProfile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-owned',
+            'display_name' => 'Owned default profile',
+            'encrypted_secret' => Crypt::encryptString('owned-default-secret'),
+            'status' => 'healthy',
+        ]);
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $otherUser->id),
+            'user_id' => $otherUser->id,
+            'default_model_profile_id' => $foreignProfile->id,
+            'preferences' => ['theme' => 'paper'],
+        ]);
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'default_model_profile_id' => $ownedProfile->id,
+            'preferences' => ['theme' => 'terminal'],
+        ]);
+
+        $this->postJson('/api/talos/prompts/enhance', [
+            'prompt' => 'Improve this',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.model_profile_id', $ownedProfile->id)
+            ->assertJsonMissing(['model_profile_id' => $foreignProfile->id])
+            ->assertJsonMissing(['foreign-default-secret']);
     }
 }

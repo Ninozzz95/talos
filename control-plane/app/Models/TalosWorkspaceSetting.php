@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 final class TalosWorkspaceSetting extends Model
 {
@@ -212,10 +213,24 @@ final class TalosWorkspaceSetting extends Model
 
     protected $fillable = [
         'id',
+        'user_id',
         'default_model_profile_id',
         'default_context_set_id',
         'preferences',
     ];
+
+    public static function idForUser(int $userId): string
+    {
+        return 'user-'.$userId;
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     /**
      * @return array<string, mixed>
@@ -224,6 +239,7 @@ final class TalosWorkspaceSetting extends Model
     {
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'default_model_profile_id' => $this->default_model_profile_id,
             'default_context_set_id' => $this->default_context_set_id,
             'preferences' => self::sanitizePreferences($this->preferences ?? []),
@@ -346,6 +362,7 @@ final class TalosWorkspaceSetting extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'preferences' => 'array',
         ];
     }

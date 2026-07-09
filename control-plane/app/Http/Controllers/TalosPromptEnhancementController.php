@@ -52,7 +52,7 @@ final class TalosPromptEnhancementController extends Controller
     {
         if (! filled($profileId)) {
             $profileId = TalosWorkspaceSetting::query()
-                ->whereKey(TalosWorkspaceSetting::DEFAULT_ID)
+                ->where('user_id', $user->id)
                 ->value('default_model_profile_id');
         }
 

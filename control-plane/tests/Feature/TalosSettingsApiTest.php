@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 final class TalosSettingsApiTest extends TestCase
@@ -23,6 +24,11 @@ final class TalosSettingsApiTest extends TestCase
     {
         parent::setUp();
         $this->user = $this->authenticateTalosUser();
+    }
+
+    public function test_workspace_settings_are_user_owned_at_the_schema_boundary(): void
+    {
+        $this->assertTrue(Schema::hasColumn('talos_workspace_settings', 'user_id'));
     }
 
     public function test_settings_can_store_and_return_only_safe_preferences(): void
@@ -119,7 +125,7 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('credential', $data['preferences']['nested']);
         $this->assertArrayNotHasKey('encrypted_secret', $data['preferences']['providers'][0]);
 
-        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringContainsString('compact', $storedPreferences);
         $this->assertStringNotContainsString('client-secret', $storedPreferences);
@@ -187,6 +193,61 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonMissing(['Foreign context']);
     }
 
+    public function test_settings_are_isolated_per_authenticated_user(): void
+    {
+        $otherUser = User::factory()->create();
+        $ownedProfile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-owned',
+            'display_name' => 'Owned profile',
+            'encrypted_secret' => Crypt::encryptString('owned-secret'),
+            'status' => 'healthy',
+        ]);
+        $otherProfile = TalosModelProfile::query()->create([
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-other',
+            'display_name' => 'Other profile',
+            'encrypted_secret' => Crypt::encryptString('other-secret'),
+            'status' => 'healthy',
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'default_model_profile_id' => $ownedProfile->id,
+            'preferences' => [
+                'theme' => 'terminal',
+                'density' => 'compact',
+            ],
+        ])->assertOk();
+
+        $this->actingAs($otherUser);
+        $this->patchJson('/api/talos/settings', [
+            'default_model_profile_id' => $otherProfile->id,
+            'preferences' => [
+                'theme' => 'paper',
+                'density' => 'comfortable',
+            ],
+        ])->assertOk();
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.default_model_profile_id', $otherProfile->id)
+            ->assertJsonPath('data.preferences.theme', 'paper')
+            ->assertJsonPath('data.preferences.density', 'comfortable')
+            ->assertJsonMissing(['default_model_profile_id' => $ownedProfile->id])
+            ->assertJsonMissing(['theme' => 'terminal']);
+
+        $this->actingAs($this->user);
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.default_model_profile_id', $ownedProfile->id)
+            ->assertJsonPath('data.preferences.theme', 'terminal')
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonMissing(['default_model_profile_id' => $otherProfile->id])
+            ->assertJsonMissing(['theme' => 'paper']);
+    }
+
     public function test_settings_persist_each_theme_preset_via_settings_api(): void
     {
         $themes = [
@@ -213,7 +274,7 @@ final class TalosSettingsApiTest extends TestCase
                 ->assertOk()
                 ->assertJsonPath('data.preferences.theme', $theme);
 
-            $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+            $storedPreferences = $this->storedPreferencesForCurrentUser();
             $this->assertIsString($storedPreferences);
             $this->assertStringContainsString($theme, $storedPreferences);
 
@@ -236,7 +297,7 @@ final class TalosSettingsApiTest extends TestCase
                 ->assertJsonPath('data.preferences.theme', 'terminal')
                 ->assertJsonPath('data.preferences.theme_mode', $mode);
 
-            $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+            $storedPreferences = $this->storedPreferencesForCurrentUser();
             $this->assertIsString($storedPreferences);
             $this->assertStringContainsString('"theme":"terminal"', $storedPreferences);
             $this->assertStringContainsString("\"theme_mode\":\"{$mode}\"", $storedPreferences);
@@ -375,7 +436,7 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('url', $preferences['theme_area_tokens']['chat']);
         $this->assertArrayNotHasKey('admin', $preferences['theme_area_tokens']);
 
-        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringContainsString('operator', $storedPreferences);
         $this->assertStringNotContainsString('theme-secret', $storedPreferences);
@@ -435,7 +496,7 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('script', $preferences['appearance_visibility']['sidebar']);
         $this->assertArrayNotHasKey('unknown_group', $preferences['appearance_visibility']);
 
-        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringNotContainsString('appearance-secret', $storedPreferences);
         $this->assertStringNotContainsString('display:none', $storedPreferences);
@@ -480,7 +541,7 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('open_theme', $preferences['keyboard_shortcuts']);
         $this->assertArrayNotHasKey('api_key', $preferences['keyboard_shortcuts']);
 
-        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringNotContainsString('shortcut-secret', $storedPreferences);
         $this->assertStringNotContainsString('<script>', $storedPreferences);
@@ -497,7 +558,7 @@ final class TalosSettingsApiTest extends TestCase
         $response->assertOk();
 
         $this->assertArrayNotHasKey('theme_motion', $response->json('data.preferences'));
-        $this->assertSame([], json_decode((string) DB::table('talos_workspace_settings')->value('preferences'), true));
+        $this->assertSame([], json_decode((string) $this->storedPreferencesForCurrentUser(), true));
     }
 
     public function test_settings_sanitize_ui_animation_preferences(): void
@@ -572,7 +633,7 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('nested', $preferences['ui_animation_customization']);
         $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]['ui_animation_customization']);
 
-        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringContainsString('terminal-snap', $storedPreferences);
         $this->assertStringNotContainsString('animation-secret', $storedPreferences);
@@ -608,7 +669,8 @@ final class TalosSettingsApiTest extends TestCase
     public function test_theme_policy_lock_blocks_theme_writes(): void
     {
         TalosWorkspaceSetting::query()->create([
-            'id' => TalosWorkspaceSetting::DEFAULT_ID,
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
             'preferences' => [
                 'theme' => 'forge',
                 'theme_policy_locked' => true,
@@ -640,5 +702,12 @@ final class TalosSettingsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.preferences.theme', 'forge')
             ->assertJsonPath('data.preferences.theme_policy_locked', true);
+    }
+
+    private function storedPreferencesForCurrentUser(): ?string
+    {
+        return DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->value('preferences');
     }
 }

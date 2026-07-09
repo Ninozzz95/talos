@@ -188,6 +188,14 @@ final class GoogleCalendarService
             );
         }
 
+        if ((int) $draft->user_id !== (int) $account->user_id) {
+            throw new GoogleCalendarException(
+                'GOOGLE_CALENDAR_DRAFT_NOT_FOUND',
+                'Calendar draft not found for this Google account.',
+                404,
+            );
+        }
+
         $response = Http::withToken($this->accessToken($account))
             ->acceptJson()
             ->asJson()
@@ -438,9 +446,11 @@ final class GoogleCalendarService
             ->where('metadata->external_provider', 'google_calendar')
             ->where('metadata->external_account_id', $account->id)
             ->where('metadata->external_event_id', $eventId)
+            ->where('user_id', $account->user_id)
             ->first();
 
         $attributes = [
+            'user_id' => $account->user_id,
             'title' => $this->eventTitle($event),
             'description' => is_string($event['description'] ?? null) ? $event['description'] : null,
             'starts_at' => $start['at'],

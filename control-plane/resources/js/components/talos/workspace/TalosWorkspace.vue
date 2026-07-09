@@ -14,44 +14,27 @@ import { useTalosContextVault } from '../../../composables/useTalosContextVault'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
 import { useTalosModelRoutingProfiles } from '../../../composables/useTalosModelRoutingProfiles'
 import { useTalosPromptEnhancement } from '../../../composables/useTalosPromptEnhancement'
+import { useTalosRailResize } from '../../../composables/useTalosRailResize'
 import { sessionChatState, useTalosSessions, type TalosSessionPersistenceMode } from '../../../composables/useTalosSessions'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import { useTalosShortcuts } from '../../../composables/useTalosShortcuts'
+import { useTalosWindowLaunchOrigins } from '../../../composables/useTalosWindowLaunchOrigins'
+import { useTalosWorkspaceLocalPreferences } from '../../../composables/useTalosWorkspaceLocalPreferences'
 import { useTalosWindows, type TalosWindowId } from '../../../composables/useTalosWindows'
 import { talosFetch } from '../../../lib/api'
 import { talosCommands } from '../../../lib/commandRegistry'
 import {
-    TALOS_DEFAULT_THEME,
-    effectiveTalosThemeMode,
-    normalizeTalosTheme,
-    resolveTalosMotionMode,
-    resolveTalosThemeMode,
-    resolveTalosUiAnimationProfile,
-    sanitizeTalosThemeAreaTokens,
-    sanitizeTalosThemeCustomization,
-    sanitizeTalosUiAnimationCustomization,
-    talosBackgroundEffectFromCustomization,
-    talosThemeAreaTokenStyle,
-    talosThemeClass,
-    talosThemeCustomizationStyle,
-    talosThemeModeVariantStyle,
-    talosThemeMotionStyle,
-    talosUiAnimationStyle,
-    talosThemePreset,
-    talosThemeIsLight,
-    type TalosThemeCustomization,
-    type TalosThemeId,
+    TALOS_DEFAULT_THEME, effectiveTalosThemeMode, normalizeTalosTheme, resolveTalosMotionMode, resolveTalosThemeMode,
+    resolveTalosUiAnimationProfile, sanitizeTalosThemeAreaTokens, sanitizeTalosThemeCustomization, sanitizeTalosUiAnimationCustomization,
+    talosBackgroundEffectFromCustomization, talosThemeAreaTokenStyle, talosThemeClass, talosThemeCustomizationStyle, talosThemeIsLight,
+    talosThemeModeVariantStyle, talosThemeMotionStyle, talosThemePreset, talosUiAnimationStyle, type TalosThemeCustomization, type TalosThemeId,
 } from '../../../lib/talosThemes'
 import { resolveTalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
 import { resolveTalosShortcuts } from '../../../lib/talosShortcuts'
+import { TALOS_WORKSPACE_COMMAND_TARGETS, TALOS_WORKSPACE_WINDOW_IDS, type TalosWorkspaceCommandRoute } from '../../../lib/talosWorkspaceCommandRoutes'
 import type { TalosCommand, TalosContextSet, TalosMessage, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload } from '../../../lib/talosTypes'
 type InitialSurface = 'workspace' | 'chat' | 'dashboard'
 const talosShortLogoUrl = '/talos/brand/logo-short.svg'
-type TalosWindowLaunchOrigin = {
-    x: number
-    y: number
-    source: 'sidebar' | 'command' | 'dock' | 'default'
-}
 const props = withDefaults(defineProps<{
     initialSurface?: InitialSurface
     authenticated?: boolean
@@ -67,24 +50,6 @@ const props = withDefaults(defineProps<{
     logoutUrl: '/logout',
     csrfToken: '',
 })
-const windowIds: TalosWindowId[] = ['runtime', 'search', 'brain', 'calendar', 'compare', 'model_lab', 'research', 'gallery', 'library', 'notes', 'tasks', 'settings', 'theme', 'doctor', 'tools']
-type CommandRoute = { windowId: TalosWindowId; sectionTestId?: string; windowSection?: string; runtimeTab?: 'timeline' | 'dag' | 'replay' | 'recovery' | 'artifacts' }
-const commandWindowTargets: Partial<Record<TalosCommand['id'], CommandRoute>> = {
-    attach_file: { windowId: 'library', windowSection: 'context' },
-    open_context_vault: { windowId: 'library', windowSection: 'context' },
-    open_trace_replay: { windowId: 'runtime', runtimeTab: 'replay' },
-    open_benchmark_workbench: { windowId: 'compare' },
-    open_model_center: { windowId: 'model_lab', windowSection: 'models' },
-    open_doctor: { windowId: 'doctor', windowSection: 'doctor' },
-    open_audit_log: { windowId: 'doctor', windowSection: 'audit', sectionTestId: 'talos-admin-section-audit' },
-    open_policy_panel: { windowId: 'doctor', windowSection: 'policy', sectionTestId: 'talos-admin-section-policy' },
-    open_shell_policy_panel: { windowId: 'doctor', windowSection: 'shell', sectionTestId: 'talos-admin-section-shell' },
-    open_backup_panel: { windowId: 'doctor', windowSection: 'backup', sectionTestId: 'talos-admin-section-backup' },
-    open_notes: { windowId: 'notes' },
-    open_tasks: { windowId: 'tasks', windowSection: 'tasks' },
-    open_calendar_drafts: { windowId: 'calendar' },
-    open_email_triage: { windowId: 'tasks', windowSection: 'email', sectionTestId: 'talos-productivity-section-email-triage' },
-}
 const theme = ref<TalosThemeId>(TALOS_DEFAULT_THEME)
 const prompt = ref('')
 const sending = ref(false)
@@ -113,11 +78,19 @@ const selectedContextSetId = ref('')
 const sessionPersistenceMode = ref<TalosSessionPersistenceMode>('persistent')
 const railCollapsed = ref(false)
 const railWidth = ref(236)
+const { startRailResize } = useTalosRailResize(railCollapsed, railWidth)
 const themeDraftCustomization = ref<TalosThemeCustomization | null>(null)
 const browserReducedMotion = ref(false)
 const browserPrefersDark = ref<boolean | null>(null)
-const windowLaunchOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
-const windowLaunchRevisions = ref<Partial<Record<TalosWindowId, number>>>({})
+const {
+    loadWorkspacePreferences,
+    saveWorkspacePreferences,
+} = useTalosWorkspaceLocalPreferences({
+    theme,
+    selectedModelProfileId,
+    selectedModelRoutingProfileId,
+    selectedContextSetId,
+})
 let reducedMotionQuery: MediaQueryList | null = null
 let colorSchemeQuery: MediaQueryList | null = null
 const {
@@ -244,6 +217,11 @@ const workspaceBackgroundEffect = computed(() => talosBackgroundEffectFromCustom
     workspaceBackgroundDisabled.value,
 ))
 const currentRailWidth = computed(() => railCollapsed.value ? 64 : railWidth.value)
+const {
+    windowLaunchOrigins,
+    windowLaunchRevisions,
+    openWindowFromSource,
+} = useTalosWindowLaunchOrigins(currentRailWidth, openWindow)
 const workspaceStyle = computed(() => ({
     '--talos-rail-width': `${currentRailWidth.value}px`,
     ...talosThemeMotionStyle(workspaceMotionMode.value),
@@ -394,93 +372,8 @@ const workspaceSubtitle = computed(() => {
     return 'Model setup required'
 })
 const authLabel = computed(() => props.authUserName.trim() || 'Operator')
-let stopRailResizeListeners: (() => void) | null = null
 function isWindowId(value: string): value is TalosWindowId {
-    return windowIds.includes(value as TalosWindowId)
-}
-function launchOriginFromEvent(event?: MouseEvent | PointerEvent, source: TalosWindowLaunchOrigin['source'] = 'default'): TalosWindowLaunchOrigin {
-    const target = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
-    const rect = target?.getBoundingClientRect()
-    if (rect) {
-        return {
-            x: Math.round(rect.left + (rect.width / 2) - currentRailWidth.value),
-            y: Math.round(rect.top + (rect.height / 2)),
-            source,
-        }
-    }
-    return {
-        x: -Math.round(Math.max(72, currentRailWidth.value * 0.45)),
-        y: typeof window === 'undefined' ? 120 : Math.round(window.innerHeight * 0.42),
-        source,
-    }
-}
-function setWindowLaunchOrigin(id: TalosWindowId, origin: TalosWindowLaunchOrigin) {
-    windowLaunchOrigins.value = {
-        ...windowLaunchOrigins.value,
-        [id]: origin,
-    }
-    windowLaunchRevisions.value = {
-        ...windowLaunchRevisions.value,
-        [id]: (windowLaunchRevisions.value[id] ?? 0) + 1,
-    }
-}
-function openWindowFromSource(id: TalosWindowId, event?: MouseEvent | PointerEvent, source: TalosWindowLaunchOrigin['source'] = 'default') {
-    setWindowLaunchOrigin(id, launchOriginFromEvent(event, source))
-    openWindow(id)
-}
-function stopRailResize() {
-    if (stopRailResizeListeners) {
-        stopRailResizeListeners()
-        stopRailResizeListeners = null
-    }
-}
-function startRailResize(event: PointerEvent) {
-    if (railCollapsed.value || event.button !== 0) {
-        return
-    }
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = railWidth.value
-    stopRailResize()
-    document.body.style.userSelect = 'none'
-    const handleMove = (moveEvent: PointerEvent) => {
-        railWidth.value = Math.min(304, Math.max(204, startWidth + (moveEvent.clientX - startX)))
-    }
-    const stop = () => {
-        window.removeEventListener('pointermove', handleMove)
-        window.removeEventListener('pointerup', stop)
-        window.removeEventListener('pointercancel', stop)
-        document.body.style.userSelect = ''
-    }
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
-    stopRailResizeListeners = stop
-}
-function loadWorkspacePreferences() {
-    const savedTheme = localStorage.getItem('talos_theme')
-    if (savedTheme) {
-        theme.value = normalizeTalosTheme(savedTheme)
-    }
-    const savedPreferences = localStorage.getItem('talos_workspace_preferences')
-    if (!savedPreferences) {
-        return
-    }
-    try {
-        const parsed = JSON.parse(savedPreferences) as { model_profile_id?: string; model_routing_profile_id?: string; context_set_id?: string }
-        selectedModelProfileId.value = typeof parsed.model_profile_id === 'string' ? parsed.model_profile_id : ''
-        selectedModelRoutingProfileId.value = typeof parsed.model_routing_profile_id === 'string' ? parsed.model_routing_profile_id : ''
-        selectedContextSetId.value = typeof parsed.context_set_id === 'string' ? parsed.context_set_id : ''
-    } catch {
-        localStorage.removeItem('talos_workspace_preferences')
-    }
-}
-function saveWorkspacePreferences() {
-    localStorage.setItem('talos_workspace_preferences', JSON.stringify({
-        model_profile_id: selectedModelProfileId.value,
-        model_routing_profile_id: selectedModelRoutingProfileId.value,
-        context_set_id: selectedContextSetId.value,
-    }))
+    return TALOS_WORKSPACE_WINDOW_IDS.includes(value as TalosWindowId)
 }
 function persistThemePreference(nextTheme: TalosThemeId) {
     updateWorkspaceSettings({
@@ -916,7 +809,7 @@ function closeCommandPalette() {
 function focusChatInput() {
     document.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')?.focus()
 }
-async function focusCommandRoute(route: CommandRoute) {
+async function focusCommandRoute(route: TalosWorkspaceCommandRoute) {
     if (route.windowId === 'runtime' && route.runtimeTab) {
         runtimeRequestedTab.value = route.runtimeTab
         runtimeRequestedTabRevision.value += 1
@@ -971,7 +864,7 @@ async function runSessionExport(format: TalosSessionExportFormat) {
 }
 async function selectCommand(commandId: TalosCommand['id']) {
     const command = workspaceCommands.value.find((item) => item.id === commandId)
-    const route = commandWindowTargets[commandId]
+    const route = TALOS_WORKSPACE_COMMAND_TARGETS[commandId]
     if (commandId === 'new_session') {
         closeCommandPalette()
         await startNewChat()
@@ -1005,7 +898,7 @@ async function selectCommand(commandId: TalosCommand['id']) {
     }
 }
 async function openAuditLogFromRuntime() {
-    const route = commandWindowTargets.open_audit_log
+    const route = TALOS_WORKSPACE_COMMAND_TARGETS.open_audit_log
     if (!route) {
         commandFeedback.value = 'Audit log route is not available.'
         return
@@ -1148,7 +1041,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     stopReducedMotionWatcher()
     stopColorSchemeWatcher()
-    stopRailResize()
 })
 </script>
 <template>
