@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import TalosToolWindow from '../window/TalosToolWindow.vue'
+import TalosWindowSectionTabs from '../window/TalosWindowSectionTabs.vue'
 import TalosBenchmarkWorkbench from '../benchmarks/TalosBenchmarkWorkbench.vue'
 import TalosCookbook from '../cookbook/TalosCookbook.vue'
 import TalosModelCenter from '../models/TalosModelCenter.vue'
@@ -33,11 +34,17 @@ import {
     type TalosWindowPosition,
     type TalosWindowSize,
 } from '../../../composables/useTalosWindows'
+import { useTalosMemorySkills } from '../../../composables/useTalosMemorySkills'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 import type { TalosThemeCustomization, TalosThemeId } from '../../../lib/talosThemes'
 
 type WindowResizeEdge = 'top' | 'right' | 'bottom' | 'left' | 'top-right' | 'bottom-right' | 'bottom-left' | 'top-left'
 type TalosWindowTransitionState = 'idle' | 'opening' | 'restoring' | 'minimizing' | 'expanding'
+type TalosWindowSectionTab = {
+    id: string
+    label: string
+    description?: string
+}
 type TalosWindowLaunchOrigin = {
     x: number
     y: number
@@ -72,6 +79,8 @@ const props = defineProps<{
     csrfToken: string
     theme: TalosThemeId
     uiMotionDisabled: boolean
+    requestedWindowSections?: Partial<Record<TalosWindowId, string>>
+    requestedWindowSectionRevision?: number
 }>()
 
 const emit = defineEmits<{
@@ -116,10 +125,46 @@ const windowCopy: Record<TalosWindowId, { title: string; description: string }> 
     tools: { title: 'Tools', description: 'Connectors and tool registry.' },
 }
 
+const windowSectionTabs: Partial<Record<TalosWindowId, TalosWindowSectionTab[]>> = {
+    search: [
+        { id: 'context', label: 'Context Vault', description: 'Files and bounded context sets.' },
+        { id: 'documents', label: 'Documents', description: 'Generated documents and exports.' },
+    ],
+    brain: [
+        { id: 'memory', label: 'Memory', description: 'Approved and scoped memories.' },
+        { id: 'skills', label: 'Skills', description: 'Approved skills available to planning.' },
+        { id: 'skill_audit', label: 'Skill Audit', description: 'Skill selection evidence.' },
+    ],
+    model_lab: [
+        { id: 'cookbook', label: 'Cookbook', description: 'Local model cookbook and dependency readiness.' },
+        { id: 'models', label: 'Models', description: 'Server-side provider profiles and probes.' },
+    ],
+    library: [
+        { id: 'context', label: 'Context Vault', description: 'Files and bounded context sets.' },
+        { id: 'documents', label: 'Documents', description: 'Generated documents and exports.' },
+    ],
+    tasks: [
+        { id: 'tasks', label: 'Tasks', description: 'Persisted tasks and workflow follow-up.' },
+        { id: 'email', label: 'Email', description: 'Read-only triage and draft review.' },
+    ],
+    doctor: [
+        { id: 'doctor', label: 'Doctor', description: 'Readiness diagnostics.' },
+        { id: 'policy', label: 'Policy', description: 'Capability boundary and enterprise gates.' },
+        { id: 'shell', label: 'Shell', description: 'Shell execution policy.' },
+        { id: 'backup', label: 'Backup', description: 'Manifest and dry-run restore checks.' },
+        { id: 'audit', label: 'Audit', description: 'Redacted security and policy events.' },
+    ],
+}
+
+const defaultWindowSections: Partial<Record<TalosWindowId, string>> = {
+    model_lab: 'models',
+}
+
 const adminToken = ref('')
 const interactingWindowId = ref<TalosWindowId | null>(null)
 const windowTransitionStates = ref<Partial<Record<TalosWindowId, TalosWindowTransitionState>>>({})
 const windowTransitionOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
+const activeWindowSections = ref<Partial<Record<TalosWindowId, string>>>({})
 let stopWindowDragListeners: (() => void) | null = null
 let stopWindowResizeListeners: (() => void) | null = null
 const transitionTimers = new Map<TalosWindowId, number>()
@@ -127,6 +172,14 @@ const pendingRestoreWindowIds = ref<TalosWindowId[]>([])
 const pendingRestoreOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
 const WINDOW_TRANSITION_MS = 260
 const WINDOW_MINIMIZE_TRANSITION_MS = 500
+const {
+    skills: brainSkills,
+    skillPlanningContext: brainSkillPlanningContext,
+    loadSkills: loadBrainSkills,
+    loadSkillPlanningContext: loadBrainSkillPlanningContext,
+} = useTalosMemorySkills()
+const activeBrainSkill = computed(() => brainSkills.value[0] ?? null)
+let brainSkillsRequested = false
 
 const floatingWindowIds = computed(() => props.visibleWindowIds.filter((item) => !props.dockedWindowIds.includes(item)))
 const dockedVisibleWindowIds = computed(() => props.visibleWindowIds.filter((item) => props.dockedWindowIds.includes(item)))
@@ -134,6 +187,47 @@ const hasDockedWindows = computed(() => dockedVisibleWindowIds.value.length > 0)
 
 function isWindowId(value: string): value is TalosWindowId {
     return Object.prototype.hasOwnProperty.call(TALOS_WINDOW_DEFAULT_SIZES, value)
+}
+
+function sectionTabsFor(id: TalosWindowId) {
+    return windowSectionTabs[id] ?? []
+}
+
+function isWindowSectionId(id: TalosWindowId, sectionId: string) {
+    return sectionTabsFor(id).some((tab) => tab.id === sectionId)
+}
+
+function activeSectionFor(id: TalosWindowId) {
+    const tabs = sectionTabsFor(id)
+    const activeSection = activeWindowSections.value[id]
+        ?? defaultWindowSections[id]
+        ?? tabs[0]?.id
+        ?? ''
+
+    return isWindowSectionId(id, activeSection) ? activeSection : (tabs[0]?.id ?? '')
+}
+
+function setActiveWindowSection(id: TalosWindowId, sectionId: string) {
+    if (!isWindowSectionId(id, sectionId)) {
+        return
+    }
+
+    activeWindowSections.value = {
+        ...activeWindowSections.value,
+        [id]: sectionId,
+    }
+}
+
+function ensureBrainSkillsLoaded() {
+    if (brainSkillsRequested) {
+        return
+    }
+
+    brainSkillsRequested = true
+    void Promise.allSettled([
+        loadBrainSkills(true),
+        loadBrainSkillPlanningContext(),
+    ])
 }
 
 function defaultWindowOrigin(source: TalosWindowLaunchOrigin['source'] = 'default'): TalosWindowLaunchOrigin {
@@ -294,6 +388,16 @@ watch(
 )
 
 watch(
+    () => props.visibleWindowIds.includes('brain'),
+    (visible) => {
+        if (visible) {
+            ensureBrainSkillsLoaded()
+        }
+    },
+    { immediate: true },
+)
+
+watch(
     () => props.windowLaunchRevisions,
     (nextRevisions, previousRevisions = {}) => {
         for (const [id, revision] of Object.entries(nextRevisions)) {
@@ -309,6 +413,18 @@ watch(
         }
     },
     { flush: 'post' },
+)
+
+watch(
+    () => props.requestedWindowSectionRevision,
+    () => {
+        for (const [id, sectionId] of Object.entries(props.requestedWindowSections ?? {})) {
+            if (isWindowId(id) && typeof sectionId === 'string') {
+                setActiveWindowSection(id, sectionId)
+            }
+        }
+    },
+    { flush: 'pre' },
 )
 
 function defaultFloatingWindowPosition(index: number): TalosWindowPosition {
@@ -586,16 +702,75 @@ onBeforeUnmount(() => {
                 />
             </template>
             <template v-else-if="id === 'search'">
-                <TalosContextVault
-                    @context-set-created="emit('contextSetCreated', $event)"
-                    @benchmark-scenario-selected="emit('benchmarkScenarioSelected', $event)"
+                <TalosWindowSectionTabs
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
                 />
-                <TalosDocuments class="mt-3" />
+                <section
+                    v-show="activeSectionFor(id) === 'context'"
+                    :id="`talos-window-section-panel-${id}-context`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-context`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-search-context"
+                >
+                    <TalosContextVault
+                        @context-set-created="emit('contextSetCreated', $event)"
+                        @benchmark-scenario-selected="emit('benchmarkScenarioSelected', $event)"
+                    />
+                </section>
+                <section
+                    v-show="activeSectionFor(id) === 'documents'"
+                    :id="`talos-window-section-panel-${id}-documents`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-documents`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-search-documents"
+                >
+                    <TalosDocuments />
+                </section>
             </template>
             <template v-else-if="id === 'brain'">
-                <TalosMemoryManager />
-                <TalosSkillRegistry class="mt-3" />
-                <TalosSkillAudit class="mt-3" />
+                <TalosWindowSectionTabs
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
+                />
+                <section
+                    v-show="activeSectionFor(id) === 'memory'"
+                    :id="`talos-window-section-panel-${id}-memory`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-memory`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-brain-memory"
+                >
+                    <TalosMemoryManager />
+                </section>
+                <section
+                    v-show="activeSectionFor(id) === 'skills'"
+                    :id="`talos-window-section-panel-${id}-skills`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-skills`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-brain-skills"
+                >
+                    <TalosSkillRegistry
+                        :skills="brainSkills"
+                        :planning-context="brainSkillPlanningContext"
+                    />
+                </section>
+                <section
+                    v-show="activeSectionFor(id) === 'skill_audit'"
+                    :id="`talos-window-section-panel-${id}-skill_audit`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-skill_audit`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-brain-skill-audit"
+                >
+                    <TalosSkillAudit
+                        :skill="activeBrainSkill"
+                        :planning-enabled="activeBrainSkill ? brainSkillPlanningContext?.skills.some((skill) => skill.name === activeBrainSkill.name) ?? false : false"
+                        :exclusion-reason="null"
+                    />
+                </section>
             </template>
             <template v-else-if="id === 'calendar'">
                 <TalosCalendar />
@@ -611,8 +786,30 @@ onBeforeUnmount(() => {
                 />
             </template>
             <template v-else-if="id === 'model_lab'">
-                <TalosCookbook />
-                <TalosModelCenter class="mt-3" />
+                <TalosWindowSectionTabs
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
+                />
+                <section
+                    v-show="activeSectionFor(id) === 'cookbook'"
+                    :id="`talos-window-section-panel-${id}-cookbook`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-cookbook`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-model_lab-cookbook"
+                >
+                    <TalosCookbook />
+                </section>
+                <section
+                    v-show="activeSectionFor(id) === 'models'"
+                    :id="`talos-window-section-panel-${id}-models`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-models`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-model_lab-models"
+                >
+                    <TalosModelCenter />
+                </section>
             </template>
             <template v-else-if="id === 'research'">
                 <TalosResearchWorkbench @open-library="emit('openWindow', 'library')" />
@@ -621,19 +818,63 @@ onBeforeUnmount(() => {
                 <TalosArtifactGallery />
             </template>
             <template v-else-if="id === 'library'">
-                <TalosContextVault
-                    @context-set-created="emit('contextSetCreated', $event)"
-                    @benchmark-scenario-selected="emit('benchmarkScenarioSelected', $event)"
+                <TalosWindowSectionTabs
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
                 />
-                <TalosDocuments class="mt-3" />
+                <section
+                    v-show="activeSectionFor(id) === 'context'"
+                    :id="`talos-window-section-panel-${id}-context`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-context`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-library-context"
+                >
+                    <TalosContextVault
+                        @context-set-created="emit('contextSetCreated', $event)"
+                        @benchmark-scenario-selected="emit('benchmarkScenarioSelected', $event)"
+                    />
+                </section>
+                <section
+                    v-show="activeSectionFor(id) === 'documents'"
+                    :id="`talos-window-section-panel-${id}-documents`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-documents`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-library-documents"
+                >
+                    <TalosDocuments />
+                </section>
             </template>
             <template v-else-if="id === 'notes'">
                 <TalosNotes />
             </template>
             <template v-else-if="id === 'tasks'">
-                <TalosTasks />
-                <section data-testid="talos-productivity-section-email-triage" tabindex="-1" class="mt-3 outline-none">
-                    <TalosEmailTriage />
+                <TalosWindowSectionTabs
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
+                />
+                <section
+                    v-show="activeSectionFor(id) === 'tasks'"
+                    :id="`talos-window-section-panel-${id}-tasks`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-tasks`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-tasks-tasks"
+                >
+                    <TalosTasks />
+                </section>
+                <section
+                    v-show="activeSectionFor(id) === 'email'"
+                    :id="`talos-window-section-panel-${id}-email`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-email`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-tasks-email"
+                >
+                    <section data-testid="talos-productivity-section-email-triage" tabindex="-1" class="outline-none">
+                        <TalosEmailTriage />
+                    </section>
                 </section>
             </template>
             <template v-else-if="id === 'tools'">
@@ -677,20 +918,67 @@ onBeforeUnmount(() => {
                         aria-label="TALOS admin API token"
                     />
                 </Card>
-                <section data-testid="talos-admin-section-doctor" tabindex="-1" class="mt-3 outline-none">
-                    <TalosDoctorPanel :token="adminToken" />
+                <TalosWindowSectionTabs
+                    class="mt-3"
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
+                />
+                <section
+                    v-show="activeSectionFor(id) === 'doctor'"
+                    :id="`talos-window-section-panel-${id}-doctor`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-doctor`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-doctor-doctor"
+                >
+                    <section data-testid="talos-admin-section-doctor" tabindex="-1" class="outline-none">
+                        <TalosDoctorPanel :token="adminToken" />
+                    </section>
                 </section>
-                <section data-testid="talos-admin-section-policy" tabindex="-1" class="mt-3 outline-none">
-                    <TalosPolicyPanel :token="adminToken" />
+                <section
+                    v-show="activeSectionFor(id) === 'policy'"
+                    :id="`talos-window-section-panel-${id}-policy`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-policy`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-doctor-policy"
+                >
+                    <section data-testid="talos-admin-section-policy" tabindex="-1" class="outline-none">
+                        <TalosPolicyPanel :token="adminToken" />
+                    </section>
                 </section>
-                <section data-testid="talos-admin-section-shell" tabindex="-1" class="mt-3 outline-none">
-                    <TalosShellPolicyPanel :token="adminToken" />
+                <section
+                    v-show="activeSectionFor(id) === 'shell'"
+                    :id="`talos-window-section-panel-${id}-shell`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-shell`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-doctor-shell"
+                >
+                    <section data-testid="talos-admin-section-shell" tabindex="-1" class="outline-none">
+                        <TalosShellPolicyPanel :token="adminToken" />
+                    </section>
                 </section>
-                <section data-testid="talos-admin-section-backup" tabindex="-1" class="mt-3 outline-none">
-                    <TalosBackupPanel :token="adminToken" />
+                <section
+                    v-show="activeSectionFor(id) === 'backup'"
+                    :id="`talos-window-section-panel-${id}-backup`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-backup`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-doctor-backup"
+                >
+                    <section data-testid="talos-admin-section-backup" tabindex="-1" class="outline-none">
+                        <TalosBackupPanel :token="adminToken" />
+                    </section>
                 </section>
-                <section data-testid="talos-admin-section-audit" tabindex="-1" class="mt-3 outline-none">
-                    <TalosAuditLog :token="adminToken" />
+                <section
+                    v-show="activeSectionFor(id) === 'audit'"
+                    :id="`talos-window-section-panel-${id}-audit`"
+                    :aria-labelledby="`talos-window-section-tab-${id}-audit`"
+                    role="tabpanel"
+                    data-testid="talos-window-section-doctor-audit"
+                >
+                    <section data-testid="talos-admin-section-audit" tabindex="-1" class="outline-none">
+                        <TalosAuditLog :token="adminToken" />
+                    </section>
                 </section>
             </template>
         </TalosToolWindow>

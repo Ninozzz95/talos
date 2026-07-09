@@ -618,6 +618,42 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
     })
 })
 
+test('chat provider failures render typed recovery guidance instead of generic errors', async ({ page }) => {
+    await openWorkspace(page)
+    await page.route('**/api/talos/chat', async (route) => {
+        await route.fulfill({
+            status: 502,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                error: 'Provider chat failed.',
+                message: 'DeepSeek rejected the configured credential.',
+                chat_error: {
+                    layer: 'provider',
+                    code: 'PROVIDER_AUTHENTICATION_FAILED',
+                    message: 'DeepSeek rejected the configured credential.',
+                    next_action: 'Open Model Lab, update the DeepSeek server-side profile secret, then run Test before sending again.',
+                    retryable: false,
+                    status: 401,
+                    provider: 'deepseek',
+                    model: 'deepseek-chat',
+                },
+                run: {
+                    id: 'run-provider-auth-failed-e2e',
+                },
+            }),
+        })
+    }, { times: 1 })
+
+    await page.getByLabel('Message TALOS').fill('Use DeepSeek for this request.')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+
+    const systemMessage = page.locator('[data-message-role="system"]').last()
+    await expect(systemMessage).toContainText('DeepSeek rejected the configured credential.')
+    await expect(systemMessage).toContainText('Next action: Open Model Lab, update the DeepSeek server-side profile secret, then run Test before sending again.')
+    await expect(systemMessage).toContainText('PROVIDER_AUTHENTICATION_FAILED')
+    await expect(page.getByText('TALOS chat failed after your prompt was saved.')).toHaveCount(0)
+})
+
 test('composer slash commands open real TALOS modules and keep unavailable actions disabled', async ({ page }) => {
     await openWorkspace(page)
 
@@ -736,7 +772,7 @@ test('settings boolean preferences render as accessible switch controls', async 
 
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByRole('switch', { name: 'Settings disable motion' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Settings disable background motion' })).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Settings disable procedural background' })).toBeVisible()
     await page.getByRole('tab', { name: 'Visibility' }).click()
     await expect(page.getByRole('switch', { name: 'Brand name' })).toBeVisible()
@@ -774,7 +810,11 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await expect(page.getByText('encrypted_secret')).toBeHidden()
 
     await selectDashboardTab(page, 'Knowledge')
-    await expect(page.getByText('Context Vault', { exact: true })).toBeVisible()
+    const libraryWindow = page.locator('[data-window-id="library"]')
+    const librarySectionTabs = libraryWindow.getByTestId('talos-window-section-tabs-library')
+    await expect(libraryWindow.getByTestId('talos-window-section-library-context').getByText('Context Vault', { exact: true })).toBeVisible()
+    await librarySectionTabs.getByRole('tab', { name: 'Documents', exact: true }).click()
+    await expect(librarySectionTabs.getByRole('tab', { name: 'Documents', exact: true })).toHaveAttribute('aria-selected', 'true')
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
@@ -804,7 +844,8 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await page.getByLabel('Search TALOS commands').fill('attach file')
     await expect(page.getByRole('option', { name: /Attach file/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Attach file/ }).click()
-    await expect(page.getByText('Context Vault', { exact: true })).toBeVisible()
+    await expect(librarySectionTabs.getByRole('tab', { name: 'Context Vault', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(libraryWindow.getByTestId('talos-window-section-library-context').getByText('Context Vault', { exact: true })).toBeVisible()
     await expect(page.locator('input[type="file"]')).toBeVisible()
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
@@ -824,8 +865,17 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await page.getByLabel('Search TALOS commands').fill('audit log')
     await expect(page.getByRole('option', { name: /Open audit log/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Open audit log/ }).click()
+    const doctorWindow = page.locator('[data-window-id="doctor"]')
+    const doctorSectionTabs = doctorWindow.getByTestId('talos-window-section-tabs-doctor')
+    await expect(doctorSectionTabs.getByRole('tab', { name: 'Audit', exact: true })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByTestId('talos-admin-section-audit')).toBeVisible()
     await expect(page.getByTestId('talos-admin-section-audit')).toContainText('Redacted security events')
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('open doctor')
+    await page.getByRole('option', { name: /Open doctor/ }).click()
+    await expect(doctorSectionTabs.getByRole('tab', { name: 'Doctor', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByTestId('talos-admin-section-doctor')).toBeVisible()
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await page.getByLabel('Search TALOS commands').fill('policy panel')
@@ -843,10 +893,19 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await page.getByLabel('Search TALOS commands').fill('email triage')
     await page.getByRole('option', { name: /Open email triage/ }).click()
+    const tasksWindow = page.locator('[data-window-id="tasks"]')
+    const tasksSectionTabs = tasksWindow.getByTestId('talos-window-section-tabs-tasks')
+    await expect(tasksSectionTabs.getByRole('tab', { name: 'Email', exact: true })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByTestId('talos-productivity-section-email-triage')).toBeVisible()
     await expect(page.getByTestId('talos-productivity-section-email-triage')).toContainText('Read-only and draft-only')
     await expect(page.getByTestId('talos-productivity-section-email-triage')).toContainText('send_enabled false')
     await expect(page.getByTestId('talos-productivity-section-email-triage').getByRole('button', { name: 'Create draft' })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('open tasks')
+    await page.getByRole('option', { name: /Open tasks/ }).click()
+    await expect(tasksSectionTabs.getByRole('tab', { name: 'Tasks', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(tasksWindow.getByTestId('talos-window-section-tasks-tasks')).toBeVisible()
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await page.getByLabel('Search TALOS commands').fill('send email draft')
@@ -1187,7 +1246,7 @@ test('settings window loads safe preferences and persists theme through the sett
     await auroraPreset.click()
     await presetResetPatchRequest
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-aurora/)
-    await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /--talos-accent/)
+    await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /#31d6c8/)
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'signal-mesh')
     const auroraActionMotion = await page.locator('.talos-shell').evaluate((element) => {
         const style = window.getComputedStyle(element)
@@ -1613,7 +1672,7 @@ test('theme switches disable motion separately from the procedural background', 
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByRole('switch', { name: 'Disable motion' })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Disable background motion' })).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Disable procedural background' })).toBeVisible()
 
     const motionDisabledRequest = page.waitForRequest((request) => {
@@ -1627,7 +1686,7 @@ test('theme switches disable motion separately from the procedural background', 
         return preferences?.theme_motion_disabled === true
             && preferences?.theme_background_disabled === false
     })
-    await page.getByRole('switch', { name: 'Disable motion' }).click()
+    await page.getByRole('switch', { name: 'Disable background motion' }).click()
     await motionDisabledRequest
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
@@ -1683,7 +1742,7 @@ test('theme switches disable motion separately from the procedural background', 
         return preferences?.theme_motion_disabled === false
             && preferences?.theme_background_disabled === false
     })
-    await page.getByRole('switch', { name: 'Disable motion' }).click()
+    await page.getByRole('switch', { name: 'Disable background motion' }).click()
     await motionEnabledRequest
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
@@ -1829,6 +1888,119 @@ test('every theme preset switches to its animated procedural default', async ({ 
             contentType: 'image/png',
         })
     }
+})
+
+test('theme color mode forces light and dark variants across presets and chat bubbles', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+
+    await page.getByLabel('Message TALOS').fill('Show theme color contrast in the chat runtime.')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Presets' }).click()
+
+    const lightModeRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_mode === 'light'
+    })
+    await page.getByLabel('Theme color mode').selectOption('light')
+    await lightModeRequest
+
+    const terminalRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme === 'terminal' && preferences?.theme_mode === 'light'
+    })
+    await page.getByRole('button', { name: 'Terminal Operator' }).click()
+    await terminalRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-preset', 'terminal')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-mode', 'light')
+
+    const lightVariant = await page.locator('.talos-shell').evaluate((shell) => {
+        const style = window.getComputedStyle(shell)
+        const user = document.querySelector('[data-message-role="user"] > div') as HTMLElement | null
+        const assistant = document.querySelector('[data-message-role="assistant"] > div') as HTMLElement | null
+        const userStyle = user ? window.getComputedStyle(user) : null
+        const assistantStyle = assistant ? window.getComputedStyle(assistant) : null
+
+        return {
+            background: style.getPropertyValue('--talos-background').trim(),
+            text: style.getPropertyValue('--talos-text').trim(),
+            userBackground: userStyle?.backgroundColor ?? '',
+            userText: userStyle?.color ?? '',
+            assistantBackground: assistantStyle?.backgroundColor ?? '',
+            assistantText: assistantStyle?.color ?? '',
+        }
+    })
+
+    const darkModeRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_mode === 'dark'
+    })
+    await page.getByLabel('Theme color mode').selectOption('dark')
+    await darkModeRequest
+
+    const paperRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme === 'paper' && preferences?.theme_mode === 'dark'
+    })
+    await page.getByRole('button', { name: 'Paper Review' }).click()
+    await paperRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-preset', 'paper')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-mode', 'dark')
+
+    const darkVariant = await page.locator('.talos-shell').evaluate((shell) => {
+        const style = window.getComputedStyle(shell)
+        const user = document.querySelector('[data-message-role="user"] > div') as HTMLElement | null
+        const assistant = document.querySelector('[data-message-role="assistant"] > div') as HTMLElement | null
+        const userStyle = user ? window.getComputedStyle(user) : null
+        const assistantStyle = assistant ? window.getComputedStyle(assistant) : null
+
+        return {
+            background: style.getPropertyValue('--talos-background').trim(),
+            text: style.getPropertyValue('--talos-text').trim(),
+            userBackground: userStyle?.backgroundColor ?? '',
+            userText: userStyle?.color ?? '',
+            assistantBackground: assistantStyle?.backgroundColor ?? '',
+            assistantText: assistantStyle?.color ?? '',
+        }
+    })
+
+    expect(lightVariant.background).not.toBe(darkVariant.background)
+    expect(lightVariant.text).not.toBe(darkVariant.text)
+    expect(lightVariant.userBackground).not.toBe(darkVariant.userBackground)
+    expect(lightVariant.assistantBackground).not.toBe(darkVariant.assistantBackground)
+    expect(lightVariant.userText).toBeTruthy()
+    expect(darkVariant.assistantText).toBeTruthy()
+
+    await testInfo.attach(`theme-color-mode-variants-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
 })
 
 test('theme engine shows workspace policy lock as read only', async ({ page }) => {
@@ -2037,6 +2209,98 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
 
     await expectNoHorizontalOverflow(page)
     await testInfo.attach(`floating-window-transitions-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('floating windows organize multi-section modules with first-level section tabs', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop section tab navigation is covered by the desktop project')
+
+    await openWorkspace(page)
+
+    const windows = [
+        {
+            button: 'Library',
+            windowId: 'library',
+            tabs: ['Context Vault', 'Documents'],
+            secondTab: 'Documents',
+            secondPanelTestId: 'talos-window-section-library-documents',
+        },
+        {
+            button: 'Brain',
+            windowId: 'brain',
+            tabs: ['Memory', 'Skills', 'Skill Audit'],
+            secondTab: 'Skills',
+            secondPanelTestId: 'talos-window-section-brain-skills',
+        },
+        {
+            button: 'Model Lab',
+            windowId: 'model_lab',
+            tabs: ['Cookbook', 'Models'],
+            secondTab: 'Models',
+            secondPanelTestId: 'talos-window-section-model_lab-models',
+        },
+        {
+            button: 'Tasks',
+            windowId: 'tasks',
+            tabs: ['Tasks', 'Email'],
+            secondTab: 'Email',
+            secondPanelTestId: 'talos-window-section-tasks-email',
+        },
+        {
+            button: 'Doctor',
+            windowId: 'doctor',
+            tabs: ['Doctor', 'Policy', 'Shell', 'Backup', 'Audit'],
+            secondTab: 'Policy',
+            secondPanelTestId: 'talos-window-section-doctor-policy',
+        },
+        {
+            button: 'Knowledge',
+            windowId: 'search',
+            tabs: ['Context Vault', 'Documents'],
+            secondTab: 'Documents',
+            secondPanelTestId: 'talos-window-section-search-documents',
+        },
+    ] as const
+
+    for (const item of windows) {
+        await page.getByRole('button', { name: item.button, exact: true }).click()
+        const window = page.locator(`[data-window-id="${item.windowId}"]`)
+        await expect(window).toBeVisible()
+        await expect.poll(async () => window.getAttribute('data-window-transition')).toBe('idle')
+
+        const tablist = window.getByTestId(`talos-window-section-tabs-${item.windowId}`)
+        await expect(tablist).toBeVisible()
+
+        const layout = await tablist.evaluate((element) => {
+            const style = window.getComputedStyle(element)
+
+            return {
+                display: style.display,
+                flexDirection: style.flexDirection,
+                cursor: window.getComputedStyle(element.querySelector('[role="tab"]') as Element).cursor,
+            }
+        })
+        expect(layout.display).toBe('flex')
+        expect(layout.flexDirection).toBe('row')
+        expect(layout.cursor).toBe('pointer')
+
+        for (const label of item.tabs) {
+            const tab = tablist.getByRole('tab', { name: label, exact: true })
+            await expect(tab).toBeVisible()
+            const panelId = await tab.getAttribute('aria-controls')
+            expect(panelId).toBeTruthy()
+            await expect(window.locator(`#${panelId}`)).toHaveCount(1)
+        }
+
+        await tablist.getByRole('tab', { name: item.secondTab, exact: true }).click()
+        await expect(tablist.getByRole('tab', { name: item.secondTab, exact: true })).toHaveAttribute('aria-selected', 'true')
+        await expect(window.getByTestId(item.secondPanelTestId)).toBeVisible()
+    }
+
+    await expectNoHorizontalOverflow(page)
+    await testInfo.attach(`window-section-tabs-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })

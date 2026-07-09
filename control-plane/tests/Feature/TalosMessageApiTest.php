@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\TalosSession;
 use App\Models\TalosRun;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,15 +14,18 @@ final class TalosMessageApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_messages_can_be_created_and_listed_for_a_session(): void
     {
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Message session',
             'mode' => 'verified_execution',
         ]);
@@ -59,6 +63,7 @@ final class TalosMessageApiTest extends TestCase
     public function test_message_validation_rejects_invalid_payloads(): void
     {
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Validation session',
             'mode' => 'verified_execution',
         ]);
@@ -75,10 +80,12 @@ final class TalosMessageApiTest extends TestCase
     public function test_message_run_id_must_belong_to_the_session(): void
     {
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Run linked session',
             'mode' => 'verified_execution',
         ]);
         $otherSession = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Other session',
             'mode' => 'verified_execution',
         ]);
@@ -123,10 +130,12 @@ final class TalosMessageApiTest extends TestCase
     public function test_message_action_metadata_references_must_stay_inside_the_session_and_reject_secret_fields(): void
     {
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Action metadata session',
             'mode' => 'verified_execution',
         ]);
         $otherSession = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Other action metadata session',
             'mode' => 'verified_execution',
         ]);
@@ -200,9 +209,49 @@ final class TalosMessageApiTest extends TestCase
             ->assertJsonPath('data.metadata.usage.total_tokens', 160);
     }
 
+    public function test_messages_are_scoped_to_sessions_owned_by_the_authenticated_user(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => $other->id,
+            'title' => 'Foreign session',
+            'mode' => 'verified_execution',
+        ]);
+
+        $foreignMessage = $foreignSession->messages()->create([
+            'role' => 'user',
+            'content' => 'Private foreign prompt.',
+        ]);
+
+        $this->actingAs($owner);
+
+        $this->getJson('/api/talos/sessions/' . $foreignSession->id . '/messages')
+            ->assertNotFound()
+            ->assertJsonMissing(['Private foreign prompt.']);
+
+        $this->postJson('/api/talos/sessions/' . $foreignSession->id . '/messages', [
+            'role' => 'assistant',
+            'content' => 'Injected into someone else session.',
+        ])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('talos_messages', [
+            'id' => $foreignMessage->id,
+            'session_id' => $foreignSession->id,
+            'content' => 'Private foreign prompt.',
+        ]);
+
+        $this->assertDatabaseMissing('talos_messages', [
+            'session_id' => $foreignSession->id,
+            'content' => 'Injected into someone else session.',
+        ]);
+    }
+
     public function test_deleting_a_session_deletes_its_messages(): void
     {
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Cascade session',
             'mode' => 'verified_execution',
         ]);

@@ -33,6 +33,7 @@ final class TalosSkillPlanningChatTest extends TestCase
     public function test_chat_selects_matching_approved_skill_and_records_redacted_skill_plan(): void
     {
         $session = TalosSession::query()->create([
+            'user_id' => auth()->id(),
             'title' => 'Skill routed chat',
             'mode' => 'verified_execution',
         ]);

@@ -191,6 +191,37 @@ final class TalosSettingsApiTest extends TestCase
         }
     }
 
+    public function test_settings_persist_safe_theme_mode_separately_from_theme_preset(): void
+    {
+        foreach (['system', 'light', 'dark'] as $mode) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => [
+                    'theme' => 'terminal',
+                    'theme_mode' => $mode,
+                ],
+            ])
+                ->assertOk()
+                ->assertJsonPath('data.preferences.theme', 'terminal')
+                ->assertJsonPath('data.preferences.theme_mode', $mode);
+
+            $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+            $this->assertIsString($storedPreferences);
+            $this->assertStringContainsString('"theme":"terminal"', $storedPreferences);
+            $this->assertStringContainsString("\"theme_mode\":\"{$mode}\"", $storedPreferences);
+        }
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'terminal',
+                'theme_mode' => 'solarized-secret',
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme', 'terminal');
+
+        $this->assertArrayNotHasKey('theme_mode', $this->getJson('/api/talos/settings')->json('data.preferences'));
+    }
+
     public function test_settings_sanitize_theme_engine_preferences(): void
     {
         $response = $this->patchJson('/api/talos/settings', [
@@ -225,6 +256,7 @@ final class TalosSettingsApiTest extends TestCase
                         'id' => 'operator',
                         'name' => 'Operator',
                         'base_theme' => 'forge',
+                        'theme_mode' => 'dark',
                         'tokens' => [
                             'background' => '#02080c',
                             'accent' => '#31d6c8',
@@ -282,6 +314,7 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme_library.0.id', 'operator')
             ->assertJsonPath('data.preferences.theme_library.0.name', 'Operator')
             ->assertJsonPath('data.preferences.theme_library.0.base_theme', 'forge')
+            ->assertJsonPath('data.preferences.theme_library.0.theme_mode', 'dark')
             ->assertJsonPath('data.preferences.theme_library.0.tokens.background', '#02080c')
             ->assertJsonPath('data.preferences.theme_library.0.area_tokens.chat.accent', '#31d6c8')
             ->assertJsonPath('data.preferences.theme_library.0.motion', 'subtle')

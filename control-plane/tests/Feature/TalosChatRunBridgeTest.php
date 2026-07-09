@@ -26,6 +26,7 @@ final class TalosChatRunBridgeTest extends TestCase
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         $session = TalosSession::query()->create([
+            'user_id' => auth()->id(),
             'title' => 'Run bridge',
             'mode' => 'verified_execution',
         ]);
@@ -86,6 +87,7 @@ final class TalosChatRunBridgeTest extends TestCase
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         $session = TalosSession::query()->create([
+            'user_id' => auth()->id(),
             'title' => 'Run bridge failure',
             'mode' => 'verified_execution',
         ]);

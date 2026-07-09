@@ -22,8 +22,10 @@ import { talosFetch } from '../../../lib/api'
 import { talosCommands } from '../../../lib/commandRegistry'
 import {
     TALOS_DEFAULT_THEME,
+    effectiveTalosThemeMode,
     normalizeTalosTheme,
     resolveTalosMotionMode,
+    resolveTalosThemeMode,
     resolveTalosUiAnimationProfile,
     sanitizeTalosThemeAreaTokens,
     sanitizeTalosThemeCustomization,
@@ -32,6 +34,7 @@ import {
     talosThemeAreaTokenStyle,
     talosThemeClass,
     talosThemeCustomizationStyle,
+    talosThemeModeVariantStyle,
     talosThemeMotionStyle,
     talosUiAnimationStyle,
     talosThemePreset,
@@ -65,22 +68,22 @@ const props = withDefaults(defineProps<{
     csrfToken: '',
 })
 const windowIds: TalosWindowId[] = ['runtime', 'search', 'brain', 'calendar', 'compare', 'model_lab', 'research', 'gallery', 'library', 'notes', 'tasks', 'settings', 'theme', 'doctor', 'tools']
-type CommandRoute = { windowId: TalosWindowId; sectionTestId?: string; runtimeTab?: 'timeline' | 'dag' | 'replay' | 'recovery' | 'artifacts' }
+type CommandRoute = { windowId: TalosWindowId; sectionTestId?: string; windowSection?: string; runtimeTab?: 'timeline' | 'dag' | 'replay' | 'recovery' | 'artifacts' }
 const commandWindowTargets: Partial<Record<TalosCommand['id'], CommandRoute>> = {
-    attach_file: { windowId: 'library' },
-    open_context_vault: { windowId: 'library' },
+    attach_file: { windowId: 'library', windowSection: 'context' },
+    open_context_vault: { windowId: 'library', windowSection: 'context' },
     open_trace_replay: { windowId: 'runtime', runtimeTab: 'replay' },
     open_benchmark_workbench: { windowId: 'compare' },
-    open_model_center: { windowId: 'model_lab' },
-    open_doctor: { windowId: 'doctor' },
-    open_audit_log: { windowId: 'doctor', sectionTestId: 'talos-admin-section-audit' },
-    open_policy_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-policy' },
-    open_shell_policy_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-shell' },
-    open_backup_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-backup' },
+    open_model_center: { windowId: 'model_lab', windowSection: 'models' },
+    open_doctor: { windowId: 'doctor', windowSection: 'doctor' },
+    open_audit_log: { windowId: 'doctor', windowSection: 'audit', sectionTestId: 'talos-admin-section-audit' },
+    open_policy_panel: { windowId: 'doctor', windowSection: 'policy', sectionTestId: 'talos-admin-section-policy' },
+    open_shell_policy_panel: { windowId: 'doctor', windowSection: 'shell', sectionTestId: 'talos-admin-section-shell' },
+    open_backup_panel: { windowId: 'doctor', windowSection: 'backup', sectionTestId: 'talos-admin-section-backup' },
     open_notes: { windowId: 'notes' },
-    open_tasks: { windowId: 'tasks' },
+    open_tasks: { windowId: 'tasks', windowSection: 'tasks' },
     open_calendar_drafts: { windowId: 'calendar' },
-    open_email_triage: { windowId: 'tasks', sectionTestId: 'talos-productivity-section-email-triage' },
+    open_email_triage: { windowId: 'tasks', windowSection: 'email', sectionTestId: 'talos-productivity-section-email-triage' },
 }
 const theme = ref<TalosThemeId>(TALOS_DEFAULT_THEME)
 const prompt = ref('')
@@ -95,6 +98,8 @@ const runtimeRequestedTab = ref<NonNullable<CommandRoute['runtimeTab']>>('timeli
 const runtimeRequestedTabRevision = ref(0)
 const settingsRequestedTab = ref<'models' | 'account'>('models')
 const settingsRequestedTabRevision = ref(0)
+const requestedWindowSections = ref<Partial<Record<TalosWindowId, string>>>({})
+const requestedWindowSectionRevision = ref(0)
 const exportDialogOpen = ref(false)
 const sessionExportResult = ref<TalosSessionExportPayload | null>(null)
 const expandedEvidenceMessageIds = ref<string[]>([])
@@ -110,9 +115,11 @@ const railCollapsed = ref(false)
 const railWidth = ref(236)
 const themeDraftCustomization = ref<TalosThemeCustomization | null>(null)
 const browserReducedMotion = ref(false)
+const browserPrefersDark = ref<boolean | null>(null)
 const windowLaunchOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
 const windowLaunchRevisions = ref<Partial<Record<TalosWindowId, number>>>({})
 let reducedMotionQuery: MediaQueryList | null = null
+let colorSchemeQuery: MediaQueryList | null = null
 const {
     sessions,
     activeSession,
@@ -192,9 +199,12 @@ const {
     resetWindowSize,
     saveWindowLayout,
 } = useTalosWindows(props.initialSurface === 'dashboard' ? ['runtime'] : [])
+const workspaceThemeMode = computed(() => resolveTalosThemeMode(workspaceSettings.value?.preferences?.theme_mode))
+const workspaceResolvedThemeMode = computed(() => effectiveTalosThemeMode(theme.value, workspaceThemeMode.value, browserPrefersDark.value))
 const shellClass = computed(() => [
     talosThemeClass(theme.value),
-    talosThemeIsLight(theme.value) ? 'talos-light' : 'talos-dark',
+    workspaceResolvedThemeMode.value === 'light' ? 'talos-light' : 'talos-dark',
+    `talos-theme-mode-${workspaceResolvedThemeMode.value}`,
     `talos-density-${workspaceEffectiveThemeCustomization.value.density ?? 'comfortable'}`,
     `talos-radius-${workspaceEffectiveThemeCustomization.value.radius ?? 'balanced'}`,
     `talos-effect-${workspaceBackgroundEffect.value}`,
@@ -244,6 +254,7 @@ const workspaceStyle = computed(() => ({
         workspaceUiMotionDisabled.value,
         workspaceUiAnimationCustomization.value,
     ),
+    ...talosThemeModeVariantStyle(theme.value, workspaceResolvedThemeMode.value),
     ...talosThemeCustomizationStyle(workspaceEffectiveThemeCustomization.value),
     ...talosThemeAreaTokenStyle(workspaceAreaTokens.value),
 }))
@@ -910,6 +921,13 @@ async function focusCommandRoute(route: CommandRoute) {
         runtimeRequestedTab.value = route.runtimeTab
         runtimeRequestedTabRevision.value += 1
     }
+    if (route.windowSection) {
+        requestedWindowSections.value = {
+            ...requestedWindowSections.value,
+            [route.windowId]: route.windowSection,
+        }
+        requestedWindowSectionRevision.value += 1
+    }
     openWindowFromSource(route.windowId, undefined, 'command')
     if (dockedWindowIds.value.includes(route.windowId)) {
         toggleDock(route.windowId)
@@ -1090,9 +1108,25 @@ function stopReducedMotionWatcher() {
     reducedMotionQuery?.removeEventListener('change', handleReducedMotionChange)
     reducedMotionQuery = null
 }
+function handleColorSchemeChange(event: MediaQueryListEvent) {
+    browserPrefersDark.value = event.matches
+}
+function startColorSchemeWatcher() {
+    if (!window.matchMedia) {
+        return
+    }
+    colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    browserPrefersDark.value = colorSchemeQuery.matches
+    colorSchemeQuery.addEventListener('change', handleColorSchemeChange)
+}
+function stopColorSchemeWatcher() {
+    colorSchemeQuery?.removeEventListener('change', handleColorSchemeChange)
+    colorSchemeQuery = null
+}
 onMounted(async () => {
     loadWorkspacePreferences()
     startReducedMotionWatcher()
+    startColorSchemeWatcher()
     applyQueryModules()
     try {
         await refreshModelAndContext()
@@ -1113,6 +1147,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
     stopReducedMotionWatcher()
+    stopColorSchemeWatcher()
     stopRailResize()
 })
 </script>
@@ -1121,6 +1156,9 @@ onBeforeUnmount(() => {
         :class="['talos-shell talos-workspace talos-chat-layout flex min-h-screen overflow-hidden', shellClass]"
         :style="workspaceStyle"
         :data-background-effect="workspaceBackgroundEffect"
+        :data-theme-preset="theme"
+        :data-theme-mode="workspaceResolvedThemeMode"
+        :data-theme-mode-preference="workspaceThemeMode"
         :data-ui-animation-profile="workspaceUiAnimationProfile"
         :data-ui-motion-disabled="workspaceUiMotionDisabled ? 'true' : 'false'"
         data-testid="talos-workspace"
@@ -1219,6 +1257,7 @@ onBeforeUnmount(() => {
                 :model-profiles="modelProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-context-set-id="selectedContextSetId"
                 :settings-requested-tab="settingsRequestedTab" :settings-requested-tab-revision="settingsRequestedTabRevision" :authenticated="authenticated" :auth-user-name="authUserName" :logout-url="logoutUrl" :csrf-token="csrfToken"
                 :theme="theme" :ui-motion-disabled="workspaceUiMotionDisabled" :window-launch-origins="windowLaunchOrigins" :window-launch-revisions="windowLaunchRevisions"
+                :requested-window-sections="requestedWindowSections" :requested-window-section-revision="requestedWindowSectionRevision"
                 @close-window="closeWindow" @minimize-window="minimizeWindow" @dock-window="toggleDock" @fullscreen-window="toggleFullscreenWindow" @focus-window="focusWindow"
                 @open-window="openWindowFromSource($event, undefined, 'command')" @restore-window="openWindow" @set-window-position="setWindowPosition" @set-window-size="setWindowSize"
                 @reset-window-size="resetWindowSize" @save-window-layout="saveWindowLayout" @open-audit-log="openAuditLogFromRuntime" @context-set-created="handleContextSetCreated"

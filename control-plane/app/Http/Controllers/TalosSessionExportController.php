@@ -14,6 +14,8 @@ final class TalosSessionExportController extends Controller
 {
     public function __invoke(Request $request, TalosSession $session, TalosSessionExportService $exports): JsonResponse
     {
+        abort_unless($request->user()?->id === $session->user_id, 404);
+
         $validated = $request->validate([
             'format' => ['sometimes', 'string', Rule::in(['json', 'markdown', 'context_manifest', 'benchmark_scenario'])],
         ]);

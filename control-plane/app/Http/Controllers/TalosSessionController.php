@@ -26,9 +26,13 @@ final class TalosSessionController extends Controller
         'artifact-output',
     ];
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $sessions = TalosSession::query()
+            ->where('user_id', $userId)
             ->latest('updated_at')
             ->latest('created_at')
             ->get();
@@ -38,8 +42,10 @@ final class TalosSessionController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $validated = $request->validate([
-            'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'title' => ['required', 'string', 'min:1', 'max:255'],
             'mode' => ['sometimes', 'string', Rule::in(['answer_only', 'verified_execution'])],
             'persistence_mode' => ['sometimes', 'string', Rule::in(['persistent', 'temporary'])],
@@ -51,6 +57,7 @@ final class TalosSessionController extends Controller
 
         $session = TalosSession::query()->create([
             ...$validated,
+            'user_id' => $userId,
             'mode' => $validated['mode'] ?? 'verified_execution',
             'persistence_mode' => $validated['persistence_mode'] ?? 'persistent',
         ]);
@@ -58,15 +65,18 @@ final class TalosSessionController extends Controller
         return response()->json(['data' => $session], 201);
     }
 
-    public function show(TalosSession $session): JsonResponse
+    public function show(Request $request, TalosSession $session): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $session);
+
         return response()->json(['data' => $session]);
     }
 
     public function update(Request $request, TalosSession $session): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $session);
+
         $validated = $request->validate([
-            'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'title' => ['sometimes', 'string', 'min:1', 'max:255'],
             'mode' => ['sometimes', 'string', Rule::in(['answer_only', 'verified_execution'])],
             'persistence_mode' => ['sometimes', 'string', Rule::in(['persistent', 'temporary'])],
@@ -83,8 +93,10 @@ final class TalosSessionController extends Controller
         return response()->json(['data' => $session->refresh()]);
     }
 
-    public function destroy(TalosSession $session): JsonResponse
+    public function destroy(Request $request, TalosSession $session): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $session);
+
         $session->delete();
 
         return response()->json(null, 204);
@@ -235,5 +247,10 @@ final class TalosSessionController extends Controller
             || $normalized === 'token'
             || str_ends_with($normalized, '_token')
             || str_ends_with($normalized, '-token');
+    }
+
+    private function abortUnlessOwnedByCurrentUser(Request $request, TalosSession $session): void
+    {
+        abort_unless($request->user()?->id === $session->user_id, 404);
     }
 }

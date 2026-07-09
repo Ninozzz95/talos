@@ -1,10 +1,23 @@
-import { talosFetch } from '../lib/api'
+import { TalosApiError, talosFetch } from '../lib/api'
 import type { TalosMessage, TalosRun } from '../lib/talosTypes'
 import type { CreateTalosMessagePayload } from './useTalosSessions'
+
+export type TalosChatError = {
+    layer: string
+    code: string
+    message: string
+    next_action?: string
+    retryable?: boolean
+    status?: number
+    provider?: string
+    model?: string
+}
 
 export type TalosChatProxyResponse = {
     text?: string
     error?: string
+    message?: string
+    chat_error?: TalosChatError
     errors?: string[]
     mutations?: unknown[]
     dag?: unknown
@@ -46,6 +59,76 @@ function summarizeJmp(mutations: unknown) {
 
 function normalizeUsedContext(value: unknown) {
     return Array.isArray(value) ? value : []
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+
+function stringValue(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function booleanValue(value: unknown) {
+    return typeof value === 'boolean' ? value : undefined
+}
+
+function numberValue(value: unknown) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function normalizeChatError(value: unknown): TalosChatError | null {
+    const data = record(value)
+    if (!data) {
+        return null
+    }
+
+    const layer = stringValue(data.layer)
+    const code = stringValue(data.code)
+    const message = stringValue(data.message)
+
+    if (!layer || !code || !message) {
+        return null
+    }
+
+    return {
+        layer,
+        code,
+        message,
+        ...(stringValue(data.next_action) ? { next_action: stringValue(data.next_action) ?? undefined } : {}),
+        ...(booleanValue(data.retryable) !== undefined ? { retryable: booleanValue(data.retryable) } : {}),
+        ...(numberValue(data.status) !== undefined ? { status: numberValue(data.status) } : {}),
+        ...(stringValue(data.provider) ? { provider: stringValue(data.provider) ?? undefined } : {}),
+        ...(stringValue(data.model) ? { model: stringValue(data.model) ?? undefined } : {}),
+    }
+}
+
+function chatErrorFromResponse(response: TalosChatProxyResponse | null): TalosChatError | null {
+    return normalizeChatError(response?.chat_error)
+}
+
+function chatErrorFromException(error: unknown): TalosChatError | null {
+    if (!(error instanceof TalosApiError)) {
+        return null
+    }
+
+    return normalizeChatError(record(error.details)?.chat_error)
+}
+
+function runIdFromException(error: unknown) {
+    if (!(error instanceof TalosApiError)) {
+        return null
+    }
+
+    return stringValue(record(record(error.details)?.run)?.id)
+}
+
+function chatErrorContent(chatError: TalosChatError) {
+    const codeLine = `Code: ${chatError.code}`
+
+    return chatError.next_action
+        ? `${chatError.message}\n\n${codeLine}\nNext action: ${chatError.next_action}`
+        : `${chatError.message}\n\n${codeLine}`
 }
 
 export function useTalosChat() {
@@ -136,8 +219,11 @@ export function useTalosChat() {
             })
 
             if (response.error) {
-                const systemMessage = await persistSystemMessage(options.sessionId, response.error, options.persistMessage, {
-                    fault_type: 'validator_error',
+                const chatError = chatErrorFromResponse(response)
+                const systemMessage = await persistSystemMessage(options.sessionId, chatError ? chatErrorContent(chatError) : response.error, options.persistMessage, {
+                    fault_type: chatError?.code ?? 'validator_error',
+                    fault_layer: chatError?.layer ?? 'validator_payload',
+                    chat_error: chatError,
                     run_id: response.run?.id ?? null,
                 }, response.run?.id ?? null)
 
@@ -165,14 +251,18 @@ export function useTalosChat() {
                 response,
             }
         } catch (error) {
-            const failure = error instanceof Error ? error.message : 'TALOS chat failed after your prompt was saved.'
+            const chatError = chatErrorFromException(error)
+            const failure = chatError ? chatErrorContent(chatError) : (error instanceof Error ? error.message : 'TALOS chat failed after your prompt was saved.')
             const systemMessage = await persistSystemMessage(
                 options.sessionId,
-                `TALOS chat failed after your prompt was saved. ${failure}`,
+                chatError ? failure : `TALOS chat failed after your prompt was saved. ${failure}`,
                 options.persistMessage,
                 {
-                    fault_type: 'chat_proxy_failure',
+                    fault_type: chatError?.code ?? 'chat_proxy_failure',
+                    fault_layer: chatError?.layer ?? 'control_plane',
+                    chat_error: chatError,
                 },
+                chatError ? runIdFromException(error) : null,
             )
 
             return {

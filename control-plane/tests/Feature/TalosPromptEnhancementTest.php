@@ -40,6 +40,7 @@ final class TalosPromptEnhancementTest extends TestCase
             'status' => 'healthy',
         ]);
         $session = TalosSession::query()->create([
+            'user_id' => auth()->id(),
             'title' => 'Scratch session',
             'mode' => 'verified_execution',
         ]);

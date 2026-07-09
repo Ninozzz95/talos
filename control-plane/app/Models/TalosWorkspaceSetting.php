@@ -56,6 +56,7 @@ final class TalosWorkspaceSetting extends Model
         'id' => true,
         'name' => true,
         'base_theme' => true,
+        'theme_mode' => true,
         'tokens' => true,
         'area_tokens' => true,
         'motion' => true,
@@ -69,6 +70,12 @@ final class TalosWorkspaceSetting extends Model
         'subtle' => true,
         'normal' => true,
         'cinematic' => true,
+    ];
+
+    private const THEME_MODE_VALUES = [
+        'system' => true,
+        'light' => true,
+        'dark' => true,
     ];
 
     private const UI_ANIMATION_PROFILE_VALUES = [
@@ -269,6 +276,14 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'theme_motion') {
                 if (is_string($value) && isset(self::THEME_MOTION_VALUES[$value])) {
+                    $safe[$key] = $value;
+                }
+
+                continue;
+            }
+
+            if ($key === 'theme_mode') {
+                if (is_string($value) && isset(self::THEME_MODE_VALUES[$value])) {
                     $safe[$key] = $value;
                 }
 
@@ -584,6 +599,14 @@ final class TalosWorkspaceSetting extends Model
 
                 if ($key === 'motion') {
                     if (is_string($recordValue) && isset(self::THEME_MOTION_VALUES[$recordValue])) {
+                        $safeRecord[$key] = $recordValue;
+                    }
+
+                    continue;
+                }
+
+                if ($key === 'theme_mode') {
+                    if (is_string($recordValue) && isset(self::THEME_MODE_VALUES[$recordValue])) {
                         $safeRecord[$key] = $recordValue;
                     }
 
