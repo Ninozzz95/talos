@@ -142,6 +142,14 @@ function secretTone(profile: TalosModelProfile): BadgeTone {
     return profile.has_secret ? 'success' : 'warning'
 }
 
+function secretLabel(profile: TalosModelProfile) {
+    if (!talosProviderById(profile.provider).requiresSecret) {
+        return 'No bearer token used.'
+    }
+
+    return profile.has_secret ? 'Secret stored server-side.' : 'Provider secret missing.'
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value)
         ? value as Record<string, unknown>
@@ -532,7 +540,10 @@ onMounted(() => {
                         <span class="flex min-w-0 flex-col items-start gap-2 sm:items-end">
                             <Badge :tone="avmCompatibility(profile).tone">AVM compatibility {{ avmCompatibility(profile).grade }}</Badge>
                             <Badge :tone="statusTone(profile.status)">{{ profile.status }}</Badge>
-                            <Badge :tone="secretTone(profile)">has_secret={{ profile.has_secret ? 'true' : 'false' }}</Badge>
+                            <span class="flex flex-wrap items-center gap-2 sm:justify-end">
+                                <Badge :tone="secretTone(profile)">has_secret={{ profile.has_secret ? 'true' : 'false' }}</Badge>
+                                <span class="text-[11px] text-[var(--talos-muted)]">{{ secretLabel(profile) }}</span>
+                            </span>
                         </span>
                     </button>
 

@@ -207,6 +207,90 @@ final class TalosModelProfileApiTest extends TestCase
             && $request->hasHeader('Authorization', 'Bearer sk-draft-probe'));
     }
 
+    public function test_draft_probe_normalizes_openai_compatible_base_url_without_duplicate_chat_path(): void
+    {
+        Http::fake([
+            'api.deepseek.test/v1/chat/completions' => Http::response(['id' => 'normalized-probe-ok'], 200),
+        ]);
+
+        $this->postJson('/api/talos/model-profiles/probe-draft', [
+            'provider' => 'deepseek',
+            'secret' => 'sk-deepseek-secret',
+            'base_url' => 'https://api.deepseek.test/v1/chat/completions/',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'healthy')
+            ->assertJsonPath('data.result.ok', true)
+            ->assertJsonPath('data.result.url', 'https://api.deepseek.test/v1/chat/completions')
+            ->assertJsonMissing(['sk-deepseek-secret']);
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'https://api.deepseek.test/v1/chat/completions'
+            && $request->hasHeader('Authorization', 'Bearer sk-deepseek-secret'));
+    }
+
+    public function test_draft_probe_returns_structured_provider_failure_without_leaking_secret(): void
+    {
+        Http::fake([
+            'api.deepseek.test/v1/chat/completions' => Http::response([
+                'error' => [
+                    'message' => 'invalid api key sk-deepseek-secret',
+                    'type' => 'authentication_error',
+                ],
+            ], 401),
+        ]);
+
+        $this->postJson('/api/talos/model-profiles/probe-draft', [
+            'provider' => 'deepseek',
+            'secret' => 'sk-deepseek-secret',
+            'base_url' => 'https://api.deepseek.test/v1',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'degraded')
+            ->assertJsonPath('data.result.ok', false)
+            ->assertJsonPath('data.result.code', 'PROVIDER_HTTP_ERROR')
+            ->assertJsonPath('data.result.message', 'Provider returned HTTP 401 during probe.')
+            ->assertJsonPath('data.result.provider', 'deepseek')
+            ->assertJsonPath('data.result.base_url_policy.allowed', true)
+            ->assertJsonPath('data.result.provider_response_excerpt', '{"error":{"message":"invalid api key [redacted]","type":"authentication_error"}}')
+            ->assertJsonMissing(['sk-deepseek-secret']);
+    }
+
+    public function test_draft_probe_redacts_exact_submitted_secret_from_provider_preview(): void
+    {
+        Http::fake([
+            'api.openai.test/v1/chat/completions' => Http::response('provider echoed plain-provider-secret-42 in a proxy error', 502),
+        ]);
+
+        $this->postJson('/api/talos/model-profiles/probe-draft', [
+            'provider' => 'openai',
+            'secret' => 'plain-provider-secret-42',
+            'base_url' => 'https://api.openai.test/v1',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'degraded')
+            ->assertJsonPath('data.result.body_preview', 'provider echoed [redacted] in a proxy error')
+            ->assertJsonPath('data.result.provider_response_excerpt', 'provider echoed [redacted] in a proxy error')
+            ->assertJsonMissing(['plain-provider-secret-42']);
+    }
+
+    public function test_draft_probe_redacts_short_submitted_secret_from_provider_preview(): void
+    {
+        Http::fake([
+            'api.openai.test/v1/chat/completions' => Http::response('provider echoed abc in a proxy error', 502),
+        ]);
+
+        $this->postJson('/api/talos/model-profiles/probe-draft', [
+            'provider' => 'openai',
+            'secret' => 'abc',
+            'base_url' => 'https://api.openai.test/v1',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'degraded')
+            ->assertJsonPath('data.result.body_preview', 'provider echoed [redacted] in a proxy error')
+            ->assertJsonPath('data.result.provider_response_excerpt', 'provider echoed [redacted] in a proxy error')
+            ->assertJsonMissing(['abc']);
+    }
+
     public function test_provider_catalog_accepts_anthropic_and_gemini_without_client_side_defaults(): void
     {
         $this->postJson('/api/talos/model-profiles', [
@@ -302,6 +386,9 @@ final class TalosModelProfileApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.status', 'failed')
             ->assertJsonPath('data.probe_result.ok', false)
+            ->assertJsonPath('data.probe_result.code', 'BASE_URL_POLICY_BLOCKED')
+            ->assertJsonPath('data.probe_result.provider', 'openai')
+            ->assertJsonPath('data.probe_result.base_url_policy.allowed', false)
             ->assertJsonMissing(['private-secret']);
 
         Http::assertNothingSent();

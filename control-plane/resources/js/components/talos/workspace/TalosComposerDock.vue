@@ -31,6 +31,7 @@ const props = defineProps<{
     promptEnhancementResult: TalosPromptEnhancementResult | null
     enhancingPrompt: boolean
     promptEnhancementError: string | null
+    visibility: Record<string, boolean>
 }>()
 
 const emit = defineEmits<{
@@ -149,6 +150,7 @@ const composerPrompt = computed({
                 :temporary-mode="temporaryMode"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
+                :visibility="visibility"
                 @send="emit('send')"
                 @open-model="emit('openModel')"
                 @open-context="emit('openContext')"

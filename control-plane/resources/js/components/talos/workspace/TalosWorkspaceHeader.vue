@@ -28,7 +28,7 @@ const emit = defineEmits<{
         <div class="min-w-0">
             <div data-testid="talos-header-brand" class="flex min-w-0 items-center gap-2">
                 <span class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
-                    <img :src="logoUrl" alt="TALOS short logo" class="h-full w-full object-cover">
+                    <span class="talos-short-logo-mark"></span>
                 </span>
                 <h1 class="talos-orbitron-brand truncate text-base font-semibold text-[var(--talos-text)]">TALOS</h1>
             </div>

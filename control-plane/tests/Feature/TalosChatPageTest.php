@@ -77,6 +77,13 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringContainsString('selectedContextSetId', $workspace);
         $this->assertStringContainsString('talos-chat-layout', $workspace);
         $this->assertStringContainsString('TalosChatSurface', $workspace);
+        $this->assertFileExists(base_path('resources/js/lib/talosWelcomePrompts.ts'));
+        $this->assertStringContainsString('talosWelcomePrompts', file_get_contents(base_path('resources/js/lib/talosWelcomePrompts.ts')));
+        $this->assertStringContainsString('resolveTalosWelcomePrompt', $chatSurface);
+        $this->assertStringContainsString('welcome-prompt-id', $workspace);
+        $this->assertStringContainsString("metadata?.welcome_prompt_id", $workspace);
+        $this->assertStringContainsString('/talos/brand/logo-short.svg', $workspace);
+        $this->assertStringNotContainsString('/talos/brand/logo-short.png', $workspace);
         $this->assertStringContainsString('talos-chat-composer-shell', $composer);
         $this->assertStringContainsString('talos-chat-thread', $chatSurface);
         $this->assertStringContainsString('sendChat', $workspace);

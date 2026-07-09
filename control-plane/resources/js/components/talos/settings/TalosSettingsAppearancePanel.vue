@@ -2,22 +2,21 @@
 import Select from '../../ui/Select.vue'
 import Switch from '../../ui/Switch.vue'
 import { TALOS_THEME_MOTION_OPTIONS, TALOS_THEME_PRESETS, type TalosThemeId, type TalosThemeMotionMode } from '../../../lib/talosThemes'
-
-type AppearancePreferences = {
-    session_header: boolean
-    welcome_message: boolean
-    thinking_process: boolean
-    sensitive_blur: boolean
-    compact_sidebar: boolean
-}
+import Button from '../../ui/Button.vue'
+import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
 
 defineProps<{
     theme: TalosThemeId
     themeMotion: TalosThemeMotionMode
     themeMotionDisabled: boolean
     themeBackgroundDisabled: boolean
-    appearance: AppearancePreferences
-    appearanceOptions: Array<{ key: keyof AppearancePreferences; label: string }>
+    appearanceVisibility: TalosAppearanceVisibility
+    appearanceGroups: Array<{
+        id: TalosAppearanceGroup
+        label: string
+        description: string
+        items: Array<{ key: string; label: string }>
+    }>
 }>()
 
 const emit = defineEmits<{
@@ -25,7 +24,9 @@ const emit = defineEmits<{
     updateThemeMotion: [mode: TalosThemeMotionMode]
     updateThemeMotionDisabled: [disabled: boolean]
     updateThemeBackgroundDisabled: [disabled: boolean]
-    updateAppearance: [key: keyof AppearancePreferences, enabled: boolean]
+    updateAppearance: [group: TalosAppearanceGroup, key: string, enabled: boolean]
+    resetAppearanceGroup: [group: TalosAppearanceGroup]
+    resetAllAppearance: []
 }>()
 
 function selectTheme(value: unknown) {
@@ -78,10 +79,42 @@ function selectThemeMotion(value: unknown) {
             <Switch :model-value="themeBackgroundDisabled" class="mt-1" aria-label="Settings disable procedural background" @update:model-value="(value) => emit('updateThemeBackgroundDisabled', Boolean(value))" />
         </label>
     </div>
-    <div class="grid gap-2 md:grid-cols-2">
-        <label v-for="item in appearanceOptions" :key="item.key" class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-            <span>{{ item.label }}</span>
-            <Switch :model-value="appearance[item.key]" :aria-label="item.label" @update:model-value="(value) => emit('updateAppearance', item.key, Boolean(value))" />
-        </label>
+    <div class="space-y-3">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h4 class="text-sm font-semibold text-[var(--talos-text)]">Interface visibility</h4>
+                <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                    Hide visible controls without removing their command routes. Backend stores only allowlisted boolean preferences.
+                </p>
+            </div>
+            <Button type="button" size="sm" variant="secondary" @click="emit('resetAllAppearance')">Reset all</Button>
+        </div>
+        <section
+            v-for="group in appearanceGroups"
+            :key="group.id"
+            class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3"
+        >
+            <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h5 class="text-sm font-semibold text-[var(--talos-text)]">{{ group.label }}</h5>
+                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ group.description }}</p>
+                </div>
+                <Button type="button" size="sm" variant="ghost" @click="emit('resetAppearanceGroup', group.id)">Reset group</Button>
+            </div>
+            <div class="grid gap-2 md:grid-cols-2">
+                <label
+                    v-for="item in group.items"
+                    :key="`${group.id}-${item.key}`"
+                    class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-sm text-[var(--talos-text)]"
+                >
+                    <span>{{ item.label }}</span>
+                    <Switch
+                        :model-value="Boolean((appearanceVisibility[group.id] as Record<string, boolean>)[item.key])"
+                        :aria-label="item.label"
+                        @update:model-value="(value) => emit('updateAppearance', group.id, item.key, Boolean(value))"
+                    />
+                </label>
+            </div>
+        </section>
     </div>
 </template>

@@ -21,6 +21,7 @@ const props = defineProps<{
     temporaryMode: boolean
     sendDisabledReason?: string
     enhancerDisabledReason?: string
+    visibility: Record<string, boolean>
 }>()
 
 const emit = defineEmits<{
@@ -148,6 +149,7 @@ function handleKeydown(event: KeyboardEvent) {
                 <span class="truncate">{{ modelLabel }}</span>
             </button>
             <button
+                v-if="visibility.attach_files !== false"
                 type="button"
                 class="inline-flex h-8 min-w-0 items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs font-medium text-[var(--talos-text)] transition hover:border-[var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 aria-label="Choose grounding context"
@@ -157,6 +159,7 @@ function handleKeydown(event: KeyboardEvent) {
                 <span class="truncate">{{ contextLabel }}</span>
             </button>
             <button
+                v-if="visibility.agent_mode_switcher !== false"
                 type="button"
                 class="inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 :class="temporaryMode
@@ -180,6 +183,7 @@ function handleKeydown(event: KeyboardEvent) {
                 <WandSparkles class="h-4 w-4" />
             </button>
             <button
+                v-if="visibility.more_tools !== false"
                 type="button"
                 class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] transition hover:border-[var(--talos-accent)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 aria-label="Open settings"

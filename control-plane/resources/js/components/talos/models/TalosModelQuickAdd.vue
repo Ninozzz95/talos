@@ -35,6 +35,7 @@ const addingProfile = ref(false)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
 const draftProbe = ref<TalosModelDraftProbeResult | null>(null)
+const lastProbeFingerprint = ref('')
 
 const form = reactive({
     secret: '',
@@ -50,6 +51,34 @@ const remoteSecretReady = computed(() => !selectedProvider.value.requiresSecret 
 const effectiveModel = computed(() => form.model.trim() || selectedProvider.value.defaultModel)
 const effectiveBaseUrl = computed(() => form.baseUrl.trim() || selectedProvider.value.defaultBaseUrl)
 const canRunProviderAction = computed(() => remoteSecretReady.value && !testingDraft.value && !addingProfile.value)
+const draftFingerprint = computed(() => JSON.stringify({
+    provider: selectedProviderId.value,
+    secret: selectedProvider.value.requiresSecret ? form.secret.trim() : '',
+    model: effectiveModel.value,
+    baseUrl: effectiveBaseUrl.value,
+    timeoutSeconds: Math.min(300, Math.max(5, Number(form.timeoutSeconds) || selectedProvider.value.defaultTimeoutSeconds)),
+    capabilities: form.capabilities,
+}))
+const draftProbeReady = computed(() => (
+    draftProbe.value?.status === 'healthy'
+    && lastProbeFingerprint.value === draftFingerprint.value
+    && canRunProviderAction.value
+))
+const draftProbeReason = computed(() => {
+    const result = draftProbe.value?.result
+    if (!result) {
+        return ''
+    }
+
+    for (const key of ['message', 'error', 'provider_response_excerpt']) {
+        const value = result[key]
+        if (typeof value === 'string' && value.trim()) {
+            return value
+        }
+    }
+
+    return ''
+})
 
 watch(selectedProviderId, (providerId) => {
     const provider = talosProviderById(providerId)
@@ -63,7 +92,16 @@ watch(selectedProviderId, (providerId) => {
     actionError.value = null
     actionMessage.value = null
     draftProbe.value = null
+    lastProbeFingerprint.value = ''
 }, { immediate: true })
+
+watch(draftFingerprint, () => {
+    actionMessage.value = null
+    if (draftProbe.value && lastProbeFingerprint.value !== draftFingerprint.value) {
+        draftProbe.value = null
+        lastProbeFingerprint.value = ''
+    }
+})
 
 function payload(provider: TalosProviderDefinition): CreateTalosModelProfilePayload {
     const request: CreateTalosModelProfilePayload = {
@@ -106,7 +144,11 @@ async function runDraftProbe() {
     try {
         const result = await probeDraftModelProfile(payload(selectedProvider.value))
         draftProbe.value = result
+        lastProbeFingerprint.value = draftFingerprint.value
         actionMessage.value = probeStatusText(result)
+        if (result.status !== 'healthy') {
+            actionError.value = draftProbeReason.value || 'Draft probe did not pass. Fix the provider response before saving.'
+        }
 
         return result
     } catch (error) {
@@ -124,20 +166,17 @@ async function testAndAdd() {
         return
     }
 
+    if (!draftProbeReady.value) {
+        actionError.value = 'Run a successful provider test before saving this profile.'
+        return
+    }
+
     addingProfile.value = true
     actionError.value = null
     actionMessage.value = null
 
     try {
         const provider = selectedProvider.value
-        const probe = await probeDraftModelProfile(payload(provider))
-        draftProbe.value = probe
-
-        if (probe.status === 'failed') {
-            actionError.value = 'Draft probe failed. Fix the provider settings before saving.'
-            return
-        }
-
         const profile = await createModelProfile({
             ...payload(provider),
             status: 'untested',
@@ -236,7 +275,13 @@ async function testAndAdd() {
                     <PlugZap v-else class="h-4 w-4" />
                     Test
                 </Button>
-                <Button type="button" size="sm" :disabled="!canRunProviderAction" @click="testAndAdd">
+                <Button
+                    type="button"
+                    size="sm"
+                    :disabled="!draftProbeReady"
+                    :title="draftProbeReady ? 'Save this tested provider profile' : 'Run a successful provider test before saving'"
+                    @click="testAndAdd"
+                >
                     <Loader2 v-if="addingProfile" class="h-4 w-4 animate-spin" />
                     <Plus v-else class="h-4 w-4" />
                     Test and add
@@ -250,6 +295,7 @@ async function testAndAdd() {
 
         <p v-if="draftProbe" class="text-xs text-[var(--talos-muted)]">
             Last draft probe: <span class="font-semibold text-[var(--talos-text)]">{{ probeStatusText(draftProbe) }}</span>
+            <span v-if="draftProbeReason" class="block">{{ draftProbeReason }}</span>
         </p>
 
         <TalosModelAdvancedOptions

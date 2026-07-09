@@ -131,6 +131,7 @@ export function useTalosWindows(initialOpen: TalosWindowId[] = []) {
     const openWindowIds = ref<TalosWindowId[]>([...initialOpen])
     const minimizedWindowIds = ref<TalosWindowId[]>([])
     const dockedWindowIds = ref<TalosWindowId[]>([])
+    const fullscreenWindowIds = ref<TalosWindowId[]>([])
     const activeWindowId = ref<TalosWindowId | null>(initialOpen[0] ?? null)
     const windowPositions = ref<Partial<Record<TalosWindowId, TalosWindowPosition>>>(storedLayout.positions ?? {})
     const windowSizes = ref<Partial<Record<TalosWindowId, TalosWindowSize>>>(storedLayout.sizes ?? {})
@@ -152,6 +153,7 @@ export function useTalosWindows(initialOpen: TalosWindowId[] = []) {
         openWindowIds.value = openWindowIds.value.filter((item) => item !== id)
         minimizedWindowIds.value = minimizedWindowIds.value.filter((item) => item !== id)
         dockedWindowIds.value = dockedWindowIds.value.filter((item) => item !== id)
+        fullscreenWindowIds.value = fullscreenWindowIds.value.filter((item) => item !== id)
 
         if (activeWindowId.value === id) {
             activeWindowId.value = visibleWindowIds.value[0] ?? null
@@ -169,10 +171,28 @@ export function useTalosWindows(initialOpen: TalosWindowId[] = []) {
     }
 
     function toggleDock(id: TalosWindowId) {
+        fullscreenWindowIds.value = fullscreenWindowIds.value.filter((item) => item !== id)
         dockedWindowIds.value = dockedWindowIds.value.includes(id)
             ? dockedWindowIds.value.filter((item) => item !== id)
             : [...dockedWindowIds.value, id]
         focusWindow(id)
+    }
+
+    function toggleFullscreenWindow(id: TalosWindowId) {
+        if (!openWindowIds.value.includes(id)) {
+            openWindow(id)
+        }
+
+        dockedWindowIds.value = dockedWindowIds.value.filter((item) => item !== id)
+        minimizedWindowIds.value = minimizedWindowIds.value.filter((item) => item !== id)
+        fullscreenWindowIds.value = fullscreenWindowIds.value.includes(id)
+            ? fullscreenWindowIds.value.filter((item) => item !== id)
+            : [...fullscreenWindowIds.value, id]
+        focusWindow(id)
+    }
+
+    function exitFullscreenWindow(id: TalosWindowId) {
+        fullscreenWindowIds.value = fullscreenWindowIds.value.filter((item) => item !== id)
     }
 
     function focusWindow(id: TalosWindowId) {
@@ -220,6 +240,7 @@ export function useTalosWindows(initialOpen: TalosWindowId[] = []) {
         visibleWindowIds,
         minimizedWindowIds,
         dockedWindowIds,
+        fullscreenWindowIds,
         activeWindowId,
         windowPositions,
         windowSizes,
@@ -228,6 +249,8 @@ export function useTalosWindows(initialOpen: TalosWindowId[] = []) {
         closeWindow,
         minimizeWindow,
         toggleDock,
+        toggleFullscreenWindow,
+        exitFullscreenWindow,
         focusWindow,
         setWindowPosition,
         setWindowSize,

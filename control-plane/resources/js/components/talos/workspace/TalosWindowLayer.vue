@@ -41,6 +41,7 @@ const props = defineProps<{
     visibleWindowIds: TalosWindowId[]
     minimizedWindowIds: TalosWindowId[]
     dockedWindowIds: TalosWindowId[]
+    fullscreenWindowIds: TalosWindowId[]
     activeWindowId: TalosWindowId | null
     windowPositions: Partial<Record<TalosWindowId, TalosWindowPosition>>
     windowSizes: Partial<Record<TalosWindowId, TalosWindowSize>>
@@ -65,6 +66,7 @@ const emit = defineEmits<{
     closeWindow: [id: TalosWindowId]
     minimizeWindow: [id: TalosWindowId]
     dockWindow: [id: TalosWindowId]
+    fullscreenWindow: [id: TalosWindowId]
     focusWindow: [id: TalosWindowId]
     openWindow: [id: TalosWindowId]
     setWindowPosition: [id: TalosWindowId, position: TalosWindowPosition]
@@ -114,7 +116,7 @@ function isWindowId(value: string): value is TalosWindowId {
     return Object.prototype.hasOwnProperty.call(TALOS_WINDOW_DEFAULT_SIZES, value)
 }
 
-function emitWindow(action: 'closeWindow' | 'minimizeWindow' | 'dockWindow' | 'focusWindow' | 'openWindow', id: string) {
+function emitWindow(action: 'closeWindow' | 'minimizeWindow' | 'dockWindow' | 'fullscreenWindow' | 'focusWindow' | 'openWindow', id: string) {
     if (!isWindowId(id)) {
         return
     }
@@ -125,6 +127,8 @@ function emitWindow(action: 'closeWindow' | 'minimizeWindow' | 'dockWindow' | 'f
         emit('minimizeWindow', id)
     } else if (action === 'dockWindow') {
         emit('dockWindow', id)
+    } else if (action === 'fullscreenWindow') {
+        emit('fullscreenWindow', id)
     } else if (action === 'focusWindow') {
         emit('focusWindow', id)
     } else {
@@ -195,6 +199,12 @@ function floatingWindowSize(id: TalosWindowId, index: number): TalosWindowSize {
 }
 
 function floatingWindowStyle(id: TalosWindowId, index: number) {
+    if (props.fullscreenWindowIds.includes(id)) {
+        return {
+            zIndex: String(60 + (props.windowZIndexes[id] ?? index)),
+        }
+    }
+
     const position = floatingWindowPosition(id, index)
     const size = floatingWindowSize(id, index)
     const minSize = TALOS_WINDOW_MIN_SIZES[id]
@@ -206,7 +216,7 @@ function floatingWindowStyle(id: TalosWindowId, index: number) {
         '--talos-window-height': `${size.height}px`,
         '--talos-window-min-width': `${minSize.width}px`,
         '--talos-window-min-height': `${minSize.height}px`,
-        zIndex: String(30 + (props.windowZIndexes[id] ?? index)),
+        zIndex: String(50 + (props.windowZIndexes[id] ?? index)),
     }
 }
 
@@ -225,7 +235,7 @@ function stopWindowResize() {
 }
 
 function startWindowDrag(id: string, event: PointerEvent) {
-    if (!isWindowId(id) || event.button !== 0 || props.dockedWindowIds.includes(id)) {
+    if (!isWindowId(id) || event.button !== 0 || props.dockedWindowIds.includes(id) || props.fullscreenWindowIds.includes(id)) {
         return
     }
 
@@ -265,7 +275,7 @@ function startWindowDrag(id: string, event: PointerEvent) {
 }
 
 function startWindowResize(id: string, edge: WindowResizeEdge, event: PointerEvent) {
-    if (!isWindowId(id) || event.button !== 0 || props.dockedWindowIds.includes(id)) {
+    if (!isWindowId(id) || event.button !== 0 || props.dockedWindowIds.includes(id) || props.fullscreenWindowIds.includes(id)) {
         return
     }
 
@@ -345,7 +355,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="pointer-events-none absolute inset-x-3 bottom-32 top-24 z-30 flex flex-col gap-3 overflow-y-auto pb-3 lg:inset-x-0 lg:bottom-32 lg:top-14 lg:block lg:overflow-hidden lg:pb-0">
+    <div class="pointer-events-none absolute inset-x-3 bottom-32 top-24 z-50 flex flex-col gap-3 overflow-y-auto pb-3 lg:inset-x-0 lg:bottom-32 lg:top-14 lg:block lg:overflow-hidden lg:pb-0">
         <TalosToolWindow
             v-for="(id, index) in floatingWindowIds"
             :id="id"
@@ -356,11 +366,14 @@ onBeforeUnmount(() => {
             :width="floatingWindowSize(id, index).width"
             :height="floatingWindowSize(id, index).height"
             :interacting="interactingWindowId === id"
+            :fullscreen="fullscreenWindowIds.includes(id)"
             class="talos-floating-window pointer-events-auto"
+            :class="fullscreenWindowIds.includes(id) ? 'talos-floating-window-fullscreen' : ''"
             :style="floatingWindowStyle(id, index)"
             @close="emitWindow('closeWindow', $event)"
             @minimize="emitWindow('minimizeWindow', $event)"
             @dock="emitWindow('dockWindow', $event)"
+            @fullscreen="emitWindow('fullscreenWindow', $event)"
             @focus="emitWindow('focusWindow', $event)"
             @drag-start="startWindowDrag"
             @resize-start="startWindowResize"
@@ -504,12 +517,14 @@ onBeforeUnmount(() => {
         </TalosToolWindow>
     </aside>
 
-    <div v-if="minimizedWindowIds.length" class="absolute bottom-28 left-4 z-40 flex flex-wrap gap-2 lg:left-6">
+    <div v-if="minimizedWindowIds.length" data-testid="talos-minimized-window-dock" class="absolute bottom-28 left-4 z-40 flex flex-wrap gap-2 lg:left-6" aria-label="Minimized windows">
         <button
             v-for="id in minimizedWindowIds"
             :key="`min-${id}`"
             type="button"
             class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] px-3 py-2 text-xs font-medium text-[var(--talos-text)] shadow"
+            :aria-label="`Restore ${windowCopy[id].title}`"
+            :data-testid="`talos-restore-window-${id}`"
             @click="emit('openWindow', id)"
         >
             {{ windowCopy[id].title }}

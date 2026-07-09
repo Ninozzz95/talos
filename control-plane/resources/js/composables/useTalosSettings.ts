@@ -20,11 +20,27 @@ export type UpdateTalosSettingsPayload = {
     preferences?: Record<string, unknown>
 }
 
-const SECRET_KEY_PATTERN = /(api_key|secret|password|(^|[_-])token$|token$)/i
+function isSecretPreferenceKey(key: string) {
+    const normalized = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+    const segments = normalized.split(/[^a-z0-9]+/).filter(Boolean)
+
+    return normalized.includes('api_key')
+        || normalized.includes('secret')
+        || normalized.includes('password')
+        || segments.includes('key')
+        || segments.includes('credential')
+        || segments.includes('credentials')
+        || segments.includes('authorization')
+        || segments.includes('bearer')
+        || segments.includes('oauth')
+        || normalized.endsWith('token')
+        || normalized.endsWith('_token')
+        || normalized.endsWith('-token')
+}
 
 function sanitizePreferences(preferences: Record<string, unknown>) {
     return Object.fromEntries(Object.entries(preferences).flatMap(([key, value]) => {
-        if (SECRET_KEY_PATTERN.test(key)) {
+        if (isSecretPreferenceKey(key)) {
             return []
         }
 

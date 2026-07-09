@@ -80,6 +80,10 @@ type ThemeCustomizationForm = {
     radius: TalosThemeRadius
     effect: TalosBackgroundEffect
     effect_intensity: number
+    scrollbar_track: string
+    scrollbar_thumb: string
+    scrollbar_thumb_hover: string
+    scrollbar_width: number
 }
 
 type UiAnimationForm = {
@@ -157,6 +161,10 @@ function emptyCustomizationForm(): ThemeCustomizationForm {
         radius: 'balanced',
         effect: 'dag-flow',
         effect_intensity: 70,
+        scrollbar_track: '#071017',
+        scrollbar_thumb: '#c98b32',
+        scrollbar_thumb_hover: '#d99f49',
+        scrollbar_width: 10,
     }
 }
 
@@ -209,6 +217,10 @@ function formFromCustomization(customization: TalosThemeCustomization, preset = 
         radius: customization.radius ?? 'balanced',
         effect: customization.effect ?? preset.defaultEffect,
         effect_intensity: customization.effect_intensity ?? 70,
+        scrollbar_track: customization.scrollbar_track ?? preset.preview.background,
+        scrollbar_thumb: customization.scrollbar_thumb ?? preset.preview.accent,
+        scrollbar_thumb_hover: customization.scrollbar_thumb_hover ?? preset.preview.secondary,
+        scrollbar_width: customization.scrollbar_width ?? 10,
     }
 }
 
@@ -305,6 +317,10 @@ function sanitizedForm(): TalosThemeCustomization {
         radius: customizationForm.value.radius,
         effect: customizationForm.value.effect,
         effect_intensity: customizationForm.value.effect_intensity,
+        scrollbar_track: customizationForm.value.scrollbar_track,
+        scrollbar_thumb: customizationForm.value.scrollbar_thumb,
+        scrollbar_thumb_hover: customizationForm.value.scrollbar_thumb_hover,
+        scrollbar_width: customizationForm.value.scrollbar_width,
     })
 }
 
@@ -893,6 +909,39 @@ onMounted(async () => {
                         :disabled="themePolicyLocked"
                     />
                 </label>
+
+                <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                    <div class="text-sm font-semibold text-[var(--talos-text)]">Scrollbar tokens</div>
+                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                        Applies to chat, settings, window bodies and long evidence panels.
+                    </p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Scrollbar track</span>
+                            <Input v-model="customizationForm.scrollbar_track" aria-label="Scrollbar track" placeholder="#071017" :disabled="themePolicyLocked" />
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Scrollbar thumb</span>
+                            <Input v-model="customizationForm.scrollbar_thumb" aria-label="Scrollbar thumb" placeholder="#31d6c8" :disabled="themePolicyLocked" />
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Scrollbar hover</span>
+                            <Input v-model="customizationForm.scrollbar_thumb_hover" aria-label="Scrollbar hover" placeholder="#b4f06f" :disabled="themePolicyLocked" />
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Scrollbar width</span>
+                            <Input
+                                v-model.number="customizationForm.scrollbar_width"
+                                type="number"
+                                min="6"
+                                max="18"
+                                step="1"
+                                aria-label="Scrollbar width"
+                                :disabled="themePolicyLocked"
+                            />
+                        </label>
+                    </div>
+                </div>
 
                 <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                     <div class="flex flex-wrap items-start justify-between gap-3">
