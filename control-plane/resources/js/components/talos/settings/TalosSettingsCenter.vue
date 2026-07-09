@@ -25,6 +25,7 @@ import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
 import TalosSettingsIntegrationsPanel from './TalosSettingsIntegrationsPanel.vue'
 import TalosSettingsModelsPanel from './TalosSettingsModelsPanel.vue'
 import TalosSettingsSearchPanel from './TalosSettingsSearchPanel.vue'
+import TalosSettingsShortcutsPanel from './TalosSettingsShortcutsPanel.vue'
 import TalosSettingsToolsPanel from './TalosSettingsToolsPanel.vue'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
@@ -34,6 +35,18 @@ import {
     type TalosThemeId,
     type TalosThemeMotionMode,
 } from '../../../lib/talosThemes'
+import {
+    TALOS_APPEARANCE_GROUPS,
+    resolveTalosAppearanceVisibility,
+    type TalosAppearanceGroup,
+    type TalosAppearanceVisibility,
+} from '../../../lib/talosAppearancePreferences'
+import {
+    defaultTalosShortcuts,
+    resolveTalosShortcuts,
+    shortcutConflict,
+    type TalosShortcutActionId,
+} from '../../../lib/talosShortcuts'
 
 type SettingsTab =
     | 'models'
@@ -75,13 +88,8 @@ type SettingsPreferences = {
         ai_synthesis: boolean
         public_app_url: string
     }
-    appearance: {
-        session_header: boolean
-        welcome_message: boolean
-        thinking_process: boolean
-        sensitive_blur: boolean
-        compact_sidebar: boolean
-    }
+    appearance_visibility: TalosAppearanceVisibility
+    keyboard_shortcuts: Record<TalosShortcutActionId, string>
     agent_tools: {
         tool_call_limit: number
         max_steps_per_message: number
@@ -127,20 +135,6 @@ const tabs: Array<{ id: SettingsTab; label: string; icon: unknown; group?: strin
     { id: 'system', label: 'System', icon: Settings, group: 'Admin' },
 ]
 
-const shortcuts = [
-    { scope: 'Navigation', action: 'Search commands', keys: 'Ctrl K' },
-    { scope: 'Navigation', action: 'Cancel or close focused overlay', keys: 'Esc' },
-    { scope: 'Chat', action: 'Send prompt from composer', keys: 'Enter' },
-    { scope: 'Chat', action: 'New line in composer', keys: 'Shift Enter' },
-    { scope: 'Workspace', action: 'Open Settings from composer', keys: 'Composer settings icon' },
-]
-const appearanceOptions: Array<{ key: keyof SettingsPreferences['appearance']; label: string }> = [
-    { key: 'session_header', label: 'Session header' },
-    { key: 'welcome_message', label: 'Welcome message' },
-    { key: 'thinking_process', label: 'Thinking process' },
-    { key: 'sensitive_blur', label: 'Sensitive blur' },
-    { key: 'compact_sidebar', label: 'Compact sidebar' },
-]
 const agentToolOptions: Array<{ key: keyof Omit<SettingsPreferences['agent_tools'], 'tool_call_limit' | 'max_steps_per_message'>; label: string }> = [
     { key: 'code_enabled', label: 'Code tools' },
     { key: 'search_enabled', label: 'Search tools' },
@@ -179,13 +173,8 @@ const preferences = reactive<SettingsPreferences>({
         ai_synthesis: false,
         public_app_url: '',
     },
-    appearance: {
-        session_header: true,
-        welcome_message: true,
-        thinking_process: true,
-        sensitive_blur: true,
-        compact_sidebar: true,
-    },
+    appearance_visibility: resolveTalosAppearanceVisibility({}),
+    keyboard_shortcuts: defaultTalosShortcuts(),
     agent_tools: {
         tool_call_limit: 0,
         max_steps_per_message: 20,
@@ -266,12 +255,8 @@ function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.reminders.ai_synthesis = booleanValue(reminders.ai_synthesis, preferences.reminders.ai_synthesis)
     preferences.reminders.public_app_url = stringValue(reminders.public_app_url, preferences.reminders.public_app_url)
 
-    const appearance = record(nextPreferences.appearance)
-    preferences.appearance.session_header = booleanValue(appearance.session_header, preferences.appearance.session_header)
-    preferences.appearance.welcome_message = booleanValue(appearance.welcome_message, preferences.appearance.welcome_message)
-    preferences.appearance.thinking_process = booleanValue(appearance.thinking_process, preferences.appearance.thinking_process)
-    preferences.appearance.sensitive_blur = booleanValue(appearance.sensitive_blur, preferences.appearance.sensitive_blur)
-    preferences.appearance.compact_sidebar = booleanValue(appearance.compact_sidebar, preferences.appearance.compact_sidebar)
+    preferences.appearance_visibility = resolveTalosAppearanceVisibility(nextPreferences.appearance_visibility)
+    preferences.keyboard_shortcuts = resolveTalosShortcuts(nextPreferences.keyboard_shortcuts)
 
     const agentTools = record(nextPreferences.agent_tools)
     preferences.agent_tools.tool_call_limit = numberValue(agentTools.tool_call_limit, preferences.agent_tools.tool_call_limit)
@@ -314,9 +299,8 @@ function preferencesPayload() {
         reminders: {
             ...preferences.reminders,
         },
-        appearance: {
-            ...preferences.appearance,
-        },
+        appearance_visibility: preferences.appearance_visibility,
+        keyboard_shortcuts: preferences.keyboard_shortcuts,
         agent_tools: {
             ...preferences.agent_tools,
         },
@@ -356,8 +340,37 @@ function updateDeepResearchPreferences(nextPreferences: Partial<SettingsPreferen
     Object.assign(preferences.search.deep_research, nextPreferences)
 }
 
-function updateAppearancePreference(key: keyof SettingsPreferences['appearance'], enabled: boolean) {
-    preferences.appearance[key] = enabled
+function updateAppearancePreference(group: TalosAppearanceGroup, key: string, enabled: boolean) {
+    const groupPreferences = preferences.appearance_visibility[group] as Record<string, boolean>
+    if (Object.prototype.hasOwnProperty.call(groupPreferences, key)) {
+        groupPreferences[key] = enabled
+    }
+}
+
+function resetAppearanceGroup(group: TalosAppearanceGroup) {
+    const defaults = resolveTalosAppearanceVisibility({})
+    preferences.appearance_visibility[group] = defaults[group]
+}
+
+function resetAllAppearance() {
+    preferences.appearance_visibility = resolveTalosAppearanceVisibility({})
+}
+
+function updateShortcutBinding(id: TalosShortcutActionId, binding: string) {
+    const conflict = shortcutConflict(preferences.keyboard_shortcuts, id, binding)
+    if (conflict) {
+        settingsError.value = `${binding} is already assigned to ${conflict}.`
+        return
+    }
+
+    preferences.keyboard_shortcuts = {
+        ...preferences.keyboard_shortcuts,
+        [id]: binding,
+    }
+}
+
+function resetShortcuts() {
+    preferences.keyboard_shortcuts = defaultTalosShortcuts()
 }
 
 function updateAgentToolPreference(
@@ -540,24 +553,24 @@ onMounted(async () => {
                             :theme-motion="preferences.theme_motion"
                             :theme-motion-disabled="preferences.theme_motion_disabled"
                             :theme-background-disabled="preferences.theme_background_disabled"
-                            :appearance="preferences.appearance"
-                            :appearance-options="appearanceOptions"
+                            :appearance-visibility="preferences.appearance_visibility"
+                            :appearance-groups="TALOS_APPEARANCE_GROUPS"
                             @update-theme="preferences.theme = $event"
                             @update-theme-motion="preferences.theme_motion = $event"
                             @update-theme-motion-disabled="preferences.theme_motion_disabled = $event"
                             @update-theme-background-disabled="preferences.theme_background_disabled = $event"
                             @update-appearance="updateAppearancePreference"
+                            @reset-appearance-group="resetAppearanceGroup"
+                            @reset-all-appearance="resetAllAppearance"
                         />
                     </template>
 
                     <template v-else-if="activeTab === 'shortcuts'">
-                        <div class="overflow-hidden rounded-md border border-[var(--talos-border)]">
-                            <div v-for="shortcut in shortcuts" :key="`${shortcut.scope}-${shortcut.action}`" class="grid grid-cols-[110px_1fr_auto] gap-3 border-b border-[var(--talos-border)] px-3 py-2 text-sm last:border-b-0">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ shortcut.scope }}</span>
-                                <span class="text-[var(--talos-text)]">{{ shortcut.action }}</span>
-                                <span class="rounded-sm border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-2 py-0.5 text-xs text-[var(--talos-muted)]">{{ shortcut.keys }}</span>
-                            </div>
-                        </div>
+                        <TalosSettingsShortcutsPanel
+                            :shortcuts="preferences.keyboard_shortcuts"
+                            @update-shortcut="updateShortcutBinding"
+                            @reset-shortcuts="resetShortcuts"
+                        />
                     </template>
 
                     <template v-else-if="activeTab === 'account'">

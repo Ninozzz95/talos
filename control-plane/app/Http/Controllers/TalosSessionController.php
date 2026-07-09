@@ -11,6 +11,21 @@ use Illuminate\Validation\Rule;
 
 final class TalosSessionController extends Controller
 {
+    private const WELCOME_PROMPT_IDS = [
+        'workflow-handle',
+        'evidence-not-vibes',
+        'avm-start',
+        'replayable-run',
+        'system-building',
+        'incident-triage',
+        'context-ingestion',
+        'benchmark-proof',
+        'research-brief',
+        'operator-handoff',
+        'policy-safe',
+        'artifact-output',
+    ];
+
     public function index(): JsonResponse
     {
         $sessions = TalosSession::query()
@@ -31,6 +46,8 @@ final class TalosSessionController extends Controller
             'active_model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);
+
+        $validated['metadata'] = $this->metadataWithWelcomePrompt($validated['metadata'] ?? []);
 
         $session = TalosSession::query()->create([
             ...$validated,
@@ -67,5 +84,23 @@ final class TalosSessionController extends Controller
         $session->delete();
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * @param mixed $metadata
+     * @return array<string, mixed>
+     */
+    private function metadataWithWelcomePrompt(mixed $metadata): array
+    {
+        $safe = is_array($metadata) ? $metadata : [];
+        $promptId = $safe['welcome_prompt_id'] ?? null;
+
+        if (is_string($promptId) && in_array($promptId, self::WELCOME_PROMPT_IDS, true)) {
+            return $safe;
+        }
+
+        $safe['welcome_prompt_id'] = self::WELCOME_PROMPT_IDS[random_int(0, count(self::WELCOME_PROMPT_IDS) - 1)];
+
+        return $safe;
     }
 }

@@ -59,6 +59,10 @@ export type TalosThemeCustomization = {
     radius?: TalosThemeRadius
     effect?: TalosBackgroundEffect
     effect_intensity?: number
+    scrollbar_track?: string
+    scrollbar_thumb?: string
+    scrollbar_thumb_hover?: string
+    scrollbar_width?: number
 }
 
 export type TalosThemeAreaTokens = Partial<Record<TalosThemeAreaId, Partial<Record<TalosThemeAreaTokenKey, string>>>>
@@ -603,6 +607,26 @@ export function sanitizeTalosThemeCustomization(value: unknown): TalosThemeCusto
         customization.effect_intensity = intensity
     }
 
+    const scrollbarTrack = normalizeHex(value.scrollbar_track)
+    if (scrollbarTrack) {
+        customization.scrollbar_track = scrollbarTrack
+    }
+
+    const scrollbarThumb = normalizeHex(value.scrollbar_thumb)
+    if (scrollbarThumb) {
+        customization.scrollbar_thumb = scrollbarThumb
+    }
+
+    const scrollbarThumbHover = normalizeHex(value.scrollbar_thumb_hover)
+    if (scrollbarThumbHover) {
+        customization.scrollbar_thumb_hover = scrollbarThumbHover
+    }
+
+    const scrollbarWidth = clampInteger(value.scrollbar_width, 6, 18)
+    if (scrollbarWidth !== undefined) {
+        customization.scrollbar_width = scrollbarWidth
+    }
+
     return customization
 }
 
@@ -1136,6 +1160,22 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
 
     if (customization.effect_intensity !== undefined) {
         style['--talos-effect-opacity'] = String(customization.effect_intensity / 100)
+    }
+
+    if (customization.scrollbar_track) {
+        style['--talos-scrollbar-track'] = customization.scrollbar_track
+    }
+
+    if (customization.scrollbar_thumb) {
+        style['--talos-scrollbar-thumb'] = customization.scrollbar_thumb
+    }
+
+    if (customization.scrollbar_thumb_hover) {
+        style['--talos-scrollbar-thumb-hover'] = customization.scrollbar_thumb_hover
+    }
+
+    if (customization.scrollbar_width !== undefined) {
+        style['--talos-scrollbar-width'] = `${customization.scrollbar_width}px`
     }
 
     return style

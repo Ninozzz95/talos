@@ -233,7 +233,7 @@ async function chooseContextSet(page: Page, contextSetId = 'context-set-e2e') {
 async function expectUnifiedWorkspaceChrome(page: Page) {
     await expect(page.getByRole('heading', { name: 'TALOS', exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-header-brand')).toBeVisible()
-    await expect(page.getByAltText('TALOS short logo')).toBeVisible()
+    await expect(page.locator('.talos-short-logo-mark:visible').first()).toBeVisible()
     await expect(page.getByText('Ready for verified workflows', { exact: true })).toBeVisible()
     await expect(page.locator('[data-testid="talos-workspace"], .talos-workspace').first()).toBeVisible()
     await expect(page.locator('[aria-label="TALOS workspace rail"]').filter({ visible: true }).first()).toBeVisible()
@@ -716,8 +716,9 @@ test('model center offers provider-first quick add with draft test before persis
     await createRequest
     await persistedProbeRequest
 
-    await expect(page.getByText('OpenRouter quick profile')).toBeVisible()
-    await expect(page.getByText('Secret stored server-side.')).toBeVisible()
+    const openRouterProfile = page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })
+    await expect(openRouterProfile).toBeVisible()
+    await expect(openRouterProfile.getByText('Secret stored server-side.')).toBeVisible()
     await expect(page.getByText('sk-openrouter-e2e-secret')).toBeHidden()
     await expect(page.getByText('encrypted_secret')).toBeHidden()
 
@@ -730,6 +731,38 @@ test('model center offers provider-first quick add with draft test before persis
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
+})
+
+test('model center keeps provider save blocked after a failed draft probe', async ({ page }) => {
+    await page.route('**/api/talos/model-profiles/probe-draft', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                data: {
+                    status: 'failed',
+                    result: {
+                        ok: false,
+                        code: 'PROVIDER_HTTP_ERROR',
+                        message: 'Provider rejected the test request.',
+                    },
+                },
+            }),
+        })
+    })
+
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
+
+    const quickAdd = page.getByTestId('talos-model-quick-add')
+    await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
+    await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
+    await expect(quickAdd.getByRole('button', { name: 'Test and add' })).toBeDisabled()
+
+    await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
+    await expect(quickAdd.getByText('Draft probe failed').first()).toBeVisible()
+    await expect(quickAdd.getByText('Provider rejected the test request.').first()).toBeVisible()
+    await expect(quickAdd.getByRole('button', { name: 'Test and add' })).toBeDisabled()
 })
 
 test('cookbook model lab shows hardware scan fit score and preview-only commands', async ({ page }, testInfo) => {
@@ -761,6 +794,11 @@ test('settings window loads safe preferences and persists theme through the sett
     test.setTimeout(130_000)
 
     await openWorkspace(page)
+
+    await page.getByLabel('Message TALOS').fill('Keep focus in the composer.')
+    await page.keyboard.press('Control+K')
+    await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
+    await page.keyboard.press('Escape')
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
@@ -1673,6 +1711,83 @@ test('floating tool windows are resizable and can reset their saved size', async
     await expectNoHorizontalOverflow(page)
 
     await testInfo.attach(`floating-window-resize-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('slice one appearance shortcuts and fullscreen windows stay connected to workspace state', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop fullscreen and keyboard shortcut behavior is covered by the desktop project')
+
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    const appearancePatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const appearance = preferences?.appearance_visibility as Record<string, Record<string, unknown>> | undefined
+
+        return appearance?.chat_area?.welcome_message === false
+            && appearance?.chat_area?.full_width_chat === true
+    })
+    await page.getByRole('switch', { name: 'Welcome message' }).click()
+    await page.getByRole('switch', { name: 'Full-width chat' }).click()
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await appearancePatchRequest
+    await expect(page.locator('[aria-label="TALOS chat thread"] h2')).toHaveCount(0)
+
+    await page.getByRole('tab', { name: 'Shortcuts' }).click()
+    const compareShortcutRow = page.getByTestId('talos-shortcut-row-open_compare')
+    await compareShortcutRow.getByRole('button', { name: /^Set$/ }).click()
+    await page.keyboard.press('Control+Alt+M')
+    await expect(compareShortcutRow.getByText('Ctrl+Alt+M')).toBeVisible()
+
+    const cookbookShortcutRow = page.getByTestId('talos-shortcut-row-open_cookbook')
+    await cookbookShortcutRow.getByRole('button', { name: /^Set$/ }).click()
+    await page.keyboard.press('Control+Alt+M')
+    await expect(page.getByText('Ctrl+Alt+M is already assigned to Open Compare.')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    const shortcutPatchRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const shortcuts = preferences?.keyboard_shortcuts as Record<string, unknown> | undefined
+
+        return shortcuts?.open_compare === 'Ctrl+Alt+M'
+    })
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await shortcutPatchRequest
+
+    await page.locator('body').click({ position: { x: 24, y: 24 } })
+    await page.keyboard.press('Control+Alt+M')
+    await expect(page.getByRole('heading', { name: 'Compare', exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
+    await expect(themeWindow).toBeVisible()
+    await page.getByRole('button', { name: 'Fullscreen Theme' }).click()
+    await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
+    const fullscreenBox = await themeWindow.boundingBox()
+    expect(fullscreenBox?.width).toBeGreaterThan(900)
+    expect(fullscreenBox?.height).toBeGreaterThan(620)
+
+    await page.getByRole('button', { name: 'Minimize Theme' }).click()
+    await expect(page.getByTestId('talos-minimized-window-dock')).toBeVisible()
+    await page.getByTestId('talos-restore-window-theme').click()
+    await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
+
+    await testInfo.attach(`slice-one-workspace-controls-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })

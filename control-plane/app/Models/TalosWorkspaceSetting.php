@@ -44,6 +44,10 @@ final class TalosWorkspaceSetting extends Model
         'radius' => true,
         'effect' => true,
         'effect_intensity' => true,
+        'scrollbar_track' => true,
+        'scrollbar_thumb' => true,
+        'scrollbar_thumb_hover' => true,
+        'scrollbar_width' => true,
     ];
 
     private const THEME_LIBRARY_RECORD_KEYS = [
@@ -129,6 +133,68 @@ final class TalosWorkspaceSetting extends Model
         'benchmark' => true,
         'trace' => true,
         'replay' => true,
+    ];
+
+    private const APPEARANCE_VISIBILITY_GROUPS = [
+        'chat_area' => [
+            'session_header' => true,
+            'full_width_chat' => true,
+            'welcome_message' => true,
+            'incognito' => true,
+            'text_only_emoji_output' => true,
+            'thinking_process' => true,
+            'sensitive_blur' => true,
+        ],
+        'chat_bar' => [
+            'web_search' => true,
+            'document_editor' => true,
+            'shell' => true,
+            'more_tools' => true,
+            'agent_mode_switcher' => true,
+            'attach_files' => true,
+            'deep_research' => true,
+            'personas' => true,
+        ],
+        'sidebar' => [
+            'brand_name' => true,
+            'search' => true,
+            'new_chat' => true,
+            'chats' => true,
+            'email' => true,
+            'models' => true,
+            'tools' => true,
+            'brain' => true,
+            'calendar' => true,
+            'compare' => true,
+            'cookbook' => true,
+            'deep_research' => true,
+            'gallery' => true,
+            'library' => true,
+            'notes' => true,
+            'tasks' => true,
+            'theme' => true,
+            'user' => true,
+            'settings_button' => true,
+        ],
+    ];
+
+    private const KEYBOARD_SHORTCUT_ACTIONS = [
+        'search_conversations' => true,
+        'toggle_sidebar' => true,
+        'focus_chat_input' => true,
+        'toggle_active_window' => true,
+        'new_session' => true,
+        'cancel_close' => true,
+        'open_calendar' => true,
+        'open_compare' => true,
+        'open_cookbook' => true,
+        'open_deep_research' => true,
+        'open_gallery' => true,
+        'open_library' => true,
+        'open_memory' => true,
+        'open_notes' => true,
+        'open_tasks' => true,
+        'open_theme' => true,
     ];
 
     public $incrementing = false;
@@ -233,6 +299,24 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'appearance_visibility') {
+                $visibility = self::sanitizeAppearanceVisibility($value);
+                if ($visibility !== []) {
+                    $safe[$key] = $visibility;
+                }
+
+                continue;
+            }
+
+            if ($key === 'keyboard_shortcuts') {
+                $shortcuts = self::sanitizeKeyboardShortcuts($value);
+                if ($shortcuts !== []) {
+                    $safe[$key] = $shortcuts;
+                }
+
+                continue;
+            }
+
             $safe[$key] = is_array($value) ? self::sanitizePreferences($value) : $value;
         }
 
@@ -251,11 +335,18 @@ final class TalosWorkspaceSetting extends Model
 
     private static function isSecretPreferenceKey(string $key): bool
     {
-        $normalized = strtolower($key);
+        $normalized = strtolower((string) preg_replace('/([a-z])([A-Z])/', '$1_$2', $key));
+        $segments = preg_split('/[^a-z0-9]+/', $normalized) ?: [];
 
         return str_contains($normalized, 'api_key')
             || str_contains($normalized, 'secret')
             || str_contains($normalized, 'password')
+            || in_array('key', $segments, true)
+            || in_array('credential', $segments, true)
+            || in_array('credentials', $segments, true)
+            || in_array('authorization', $segments, true)
+            || in_array('bearer', $segments, true)
+            || in_array('oauth', $segments, true)
             || str_ends_with($normalized, 'token')
             || str_ends_with($normalized, '_token')
             || str_ends_with($normalized, '-token');
@@ -285,10 +376,164 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'scrollbar_width') {
+                $width = self::clampInteger($tokenValue, 6, 18);
+                if ($width !== null) {
+                    $safe[$key] = $width;
+                }
+
+                continue;
+            }
+
             $safe[$key] = $tokenValue;
         }
 
         return $safe;
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<string, array<string, bool>>
+     */
+    private static function sanitizeAppearanceVisibility(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $safe = [];
+        foreach ($value as $group => $settings) {
+            if (! is_string($group) || ! isset(self::APPEARANCE_VISIBILITY_GROUPS[$group]) || ! is_array($settings)) {
+                continue;
+            }
+
+            $safeGroup = [];
+            foreach ($settings as $key => $enabled) {
+                if (! is_string($key)
+                    || ! isset(self::APPEARANCE_VISIBILITY_GROUPS[$group][$key])
+                    || self::isSecretPreferenceKey($key)
+                    || self::isUnsafeThemeKey($key)
+                    || ! is_bool($enabled)
+                ) {
+                    continue;
+                }
+
+                $safeGroup[$key] = $enabled;
+            }
+
+            if ($safeGroup !== []) {
+                $safe[$group] = $safeGroup;
+            }
+        }
+
+        return $safe;
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<string, string>
+     */
+    private static function sanitizeKeyboardShortcuts(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $safe = [];
+        $usedBindings = [];
+
+        foreach ($value as $action => $binding) {
+            if (! is_string($action)
+                || ! isset(self::KEYBOARD_SHORTCUT_ACTIONS[$action])
+                || self::isSecretPreferenceKey($action)
+                || (! is_string($binding) && $binding !== null)
+            ) {
+                continue;
+            }
+
+            $normalized = $binding === null ? '' : self::normalizeKeyboardShortcut($binding);
+            if ($normalized === null) {
+                continue;
+            }
+
+            if ($normalized !== '') {
+                $bindingKey = strtolower($normalized);
+                if (isset($usedBindings[$bindingKey])) {
+                    continue;
+                }
+
+                $usedBindings[$bindingKey] = true;
+            }
+
+            $safe[$action] = $normalized;
+        }
+
+        return $safe;
+    }
+
+    private static function normalizeKeyboardShortcut(string $binding): ?string
+    {
+        $trimmed = trim($binding);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        if (strlen($trimmed) > 48 || preg_match('/[<>{};]/', $trimmed) === 1) {
+            return null;
+        }
+
+        $parts = preg_split('/\s*\+\s*/', $trimmed);
+        if (! is_array($parts) || count($parts) < 1 || count($parts) > 4) {
+            return null;
+        }
+
+        $modifiers = [];
+        $key = null;
+        foreach ($parts as $part) {
+            $token = trim($part);
+            if ($token === '') {
+                return null;
+            }
+
+            $lower = strtolower($token);
+            $modifier = match ($lower) {
+                'ctrl', 'control' => 'Ctrl',
+                'alt', 'option' => 'Alt',
+                'shift' => 'Shift',
+                'meta', 'cmd', 'command' => 'Meta',
+                default => null,
+            };
+
+            if ($modifier !== null) {
+                $modifiers[$modifier] = true;
+                continue;
+            }
+
+            if ($key !== null || preg_match('~^[A-Za-z0-9,./`\\[\\]\\\\-]$~', $token) !== 1 && ! in_array($token, ['Esc', 'Escape', 'Enter', 'Tab', 'Space'], true)) {
+                return null;
+            }
+
+            $key = match ($token) {
+                'Escape' => 'Esc',
+                ' ' => 'Space',
+                default => strlen($token) === 1 ? strtoupper($token) : $token,
+            };
+        }
+
+        if ($key === null) {
+            return null;
+        }
+
+        $ordered = [];
+        foreach (['Ctrl', 'Alt', 'Shift', 'Meta'] as $modifier) {
+            if (isset($modifiers[$modifier])) {
+                $ordered[] = $modifier;
+            }
+        }
+
+        $ordered[] = $key;
+
+        return implode('+', $ordered);
     }
 
     /**

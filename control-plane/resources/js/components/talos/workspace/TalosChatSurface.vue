@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { AlertCircle, BarChart3, Loader2, ShieldCheck } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosGuidedStart from './TalosGuidedStart.vue'
+import { resolveTalosWelcomePrompt } from '../../../lib/talosWelcomePrompts'
 import type { TalosMessage } from '../../../lib/talosTypes'
 
 type MessageSource = {
@@ -33,6 +34,10 @@ const props = defineProps<{
     sending: boolean
     benchmarkingRunId: string | null
     expandedEvidenceMessageIds: string[]
+    welcomePromptId?: string | null
+    showWelcomeMessage: boolean
+    fullWidthChat: boolean
+    sensitiveBlur: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,6 +54,7 @@ const emit = defineEmits<{
 }>()
 
 const chatThreadEl = ref<HTMLElement | null>(null)
+const welcomePrompt = computed(() => resolveTalosWelcomePrompt(props.welcomePromptId, props.welcomePromptId ?? 'talos'))
 
 function scrollToBottom() {
     const el = chatThreadEl.value
@@ -196,12 +202,18 @@ function sourcePreview(source: MessageSource) {
     return source.preview || 'Context source attached to this answer.'
 }
 
+function messageContainsSensitiveText(value: string) {
+    return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value)
+        || /\b(?:sk|pk|tok|key|secret)[-_][A-Za-z0-9._-]{8,}\b/i.test(value)
+        || /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password)\b/i.test(value)
+}
+
 defineExpose({ scrollToBottom })
 </script>
 
 <template>
     <section ref="chatThreadEl" class="talos-chat-thread relative z-10 min-h-0 flex-1 overflow-y-auto px-4 pb-48 pt-7 md:px-6 lg:pb-52" aria-label="TALOS chat thread">
-        <div class="mx-auto flex min-h-full w-full max-w-3xl flex-col">
+        <div class="mx-auto flex min-h-full w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                 <span>{{ uiError || sessionError || messageError }}</span>
@@ -223,15 +235,18 @@ defineExpose({ scrollToBottom })
             <div v-else-if="!messages.length" class="flex flex-1 flex-col items-center justify-center text-center">
                 <div data-testid="talos-empty-brand" class="mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
                     <span class="talos-short-logo" aria-hidden="true">
-                        <img :src="logoUrl" alt="" class="h-full w-full object-cover">
+                        <span class="talos-short-logo-mark"></span>
                     </span>
                     <span class="talos-orbitron-brand text-3xl font-semibold text-[var(--talos-text)] sm:text-4xl">TALOS</span>
                 </div>
-                <h2 class="text-2xl font-semibold text-[var(--talos-text)]">What workflow should TALOS handle?</h2>
-                <p class="mt-3 max-w-[560px] text-sm leading-6 text-[var(--talos-muted)]">
-                    Type a task, attach a context set when needed, and TALOS will route it through the AVM control plane with replayable evidence.
-                </p>
+                <template v-if="showWelcomeMessage">
+                    <h2 class="text-2xl font-semibold text-[var(--talos-text)]">{{ welcomePrompt.headline }}</h2>
+                    <p class="mt-3 max-w-[560px] text-sm leading-6 text-[var(--talos-muted)]">
+                        {{ welcomePrompt.body }}
+                    </p>
+                </template>
                 <TalosGuidedStart
+                    v-if="showWelcomeMessage"
                     class="mt-5"
                     :model-ready="selectedModelProfileIsUsable"
                     :context-selected="contextSelected"
@@ -241,7 +256,7 @@ defineExpose({ scrollToBottom })
                     @open-model="emit('openModel')"
                     @open-context="emit('openContext')"
                 />
-                <div class="mt-5 flex flex-wrap justify-center gap-2">
+                <div v-if="showWelcomeMessage" class="mt-5 flex flex-wrap justify-center gap-2">
                     <button type="button" class="rounded-md border border-[var(--talos-border)] px-3 py-2 text-sm text-[var(--talos-muted)] transition hover:border-[var(--talos-accent)] hover:text-[var(--talos-accent)]" @click="emit('setPrompt', 'Create a verified workflow for checking an external API.')">
                         Verify API
                     </button>
@@ -274,7 +289,12 @@ defineExpose({ scrollToBottom })
                             <span>{{ messageMeta(message) }}</span>
                             <span>{{ formatTime(message.created_at) }}</span>
                         </div>
-                        <p class="whitespace-pre-wrap text-sm leading-6">{{ message.content }}</p>
+                        <p
+                            class="whitespace-pre-wrap text-sm leading-6"
+                            :class="sensitiveBlur && message.role === 'assistant' && messageContainsSensitiveText(message.content) ? 'talos-sensitive-output' : ''"
+                        >
+                            {{ message.content }}
+                        </p>
                         <TalosMessageActions
                             class="mt-3"
                             :message="message"

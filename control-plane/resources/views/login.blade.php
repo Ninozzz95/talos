@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TALOS Access</title>
+    <link rel="icon" type="image/svg+xml" href="/talos/brand/logo-short.svg">
     <style>
         :root {
             color-scheme: dark;
@@ -46,6 +47,39 @@
             margin: 0;
             font-size: 22px;
             line-height: 1.2;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-logo {
+            width: 42px;
+            height: 42px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel);
+            color: var(--accent);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .brand-logo::before {
+            content: "";
+            display: block;
+            width: 74%;
+            height: 74%;
+            background: currentColor;
+            mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+            -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+        }
+
+        .brand-title {
+            font-family: Orbitron, Inter, ui-sans-serif, system-ui, sans-serif;
+            letter-spacing: 0;
         }
 
         p {
@@ -138,11 +172,14 @@
 </head>
 <body>
     <main aria-labelledby="talos-login-title">
-        <div>
-            <div style="color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;">AVM</div>
-            <h1 id="talos-login-title">TALOS Access</h1>
-            <p>Sign in with a Laravel operator account to manage protected workspace actions.</p>
+        <div class="brand">
+            <span class="brand-logo" aria-hidden="true"></span>
+            <div>
+                <div style="color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;">AVM</div>
+                <h1 id="talos-login-title" class="brand-title">TALOS</h1>
+            </div>
         </div>
+        <p>Sign in with a Laravel operator account to manage protected workspace actions.</p>
 
         @if ($errors->any())
             <div class="error" role="alert">

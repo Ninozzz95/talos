@@ -69,6 +69,48 @@ final class TalosSessionApiTest extends TestCase
             ->assertJsonPath('data.mode', 'verified_execution');
     }
 
+    public function test_session_creation_assigns_stable_welcome_prompt_metadata(): void
+    {
+        $createResponse = $this->postJson('/api/talos/sessions', [
+            'title' => 'Prompted session',
+            'metadata' => ['surface' => 'chat'],
+        ]);
+
+        $createResponse
+            ->assertCreated()
+            ->assertJsonPath('data.metadata.surface', 'chat');
+
+        $sessionId = $createResponse->json('data.id');
+        $promptId = $createResponse->json('data.metadata.welcome_prompt_id');
+
+        $this->assertIsString($promptId);
+        $this->assertContains($promptId, [
+            'workflow-handle',
+            'evidence-not-vibes',
+            'avm-start',
+            'replayable-run',
+            'system-building',
+            'incident-triage',
+            'context-ingestion',
+            'benchmark-proof',
+            'research-brief',
+            'operator-handoff',
+            'policy-safe',
+            'artifact-output',
+        ]);
+
+        $this->getJson('/api/talos/sessions/' . $sessionId)
+            ->assertOk()
+            ->assertJsonPath('data.metadata.surface', 'chat')
+            ->assertJsonPath('data.metadata.welcome_prompt_id', $promptId);
+
+        $this->patchJson('/api/talos/sessions/' . $sessionId, [
+            'title' => 'Renamed prompted session',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.metadata.welcome_prompt_id', $promptId);
+    }
+
     public function test_session_validation_rejects_invalid_payloads(): void
     {
         $this->postJson('/api/talos/sessions', [

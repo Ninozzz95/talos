@@ -42,8 +42,14 @@ final class TalosSettingsApiTest extends TestCase
             'preferences' => [
                 'density' => 'compact',
                 'api_key' => 'client-secret',
+                'private_key' => 'client-private-key',
+                'authorization' => 'client-authorization',
+                'credential' => 'client-credential',
+                'bearer' => 'client-bearer',
                 'nested' => [
                     'secret' => 'nested-secret',
+                    'private_key' => 'nested-private-key',
+                    'credential' => 'nested-credential',
                     'theme' => 'forge',
                 ],
                 'theme' => 'terminal',
@@ -99,14 +105,26 @@ final class TalosSettingsApiTest extends TestCase
 
         $data = $response->json('data');
         $this->assertArrayNotHasKey('api_key', $data['preferences']);
+        $this->assertArrayNotHasKey('private_key', $data['preferences']);
+        $this->assertArrayNotHasKey('authorization', $data['preferences']);
+        $this->assertArrayNotHasKey('credential', $data['preferences']);
+        $this->assertArrayNotHasKey('bearer', $data['preferences']);
         $this->assertArrayNotHasKey('secret', $data['preferences']['nested']);
+        $this->assertArrayNotHasKey('private_key', $data['preferences']['nested']);
+        $this->assertArrayNotHasKey('credential', $data['preferences']['nested']);
         $this->assertArrayNotHasKey('encrypted_secret', $data['preferences']['providers'][0]);
 
         $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
         $this->assertIsString($storedPreferences);
         $this->assertStringContainsString('compact', $storedPreferences);
         $this->assertStringNotContainsString('client-secret', $storedPreferences);
+        $this->assertStringNotContainsString('client-private-key', $storedPreferences);
+        $this->assertStringNotContainsString('client-authorization', $storedPreferences);
+        $this->assertStringNotContainsString('client-credential', $storedPreferences);
+        $this->assertStringNotContainsString('client-bearer', $storedPreferences);
         $this->assertStringNotContainsString('nested-secret', $storedPreferences);
+        $this->assertStringNotContainsString('nested-private-key', $storedPreferences);
+        $this->assertStringNotContainsString('nested-credential', $storedPreferences);
         $this->assertStringNotContainsString('provider-secret', $storedPreferences);
 
         $this->getJson('/api/talos/settings')
@@ -116,7 +134,13 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme', 'terminal')
             ->assertJsonPath('data.preferences.search.provider', 'searxng')
             ->assertJsonMissing(['api_key' => 'client-secret'])
+            ->assertJsonMissing(['private_key' => 'client-private-key'])
+            ->assertJsonMissing(['authorization' => 'client-authorization'])
+            ->assertJsonMissing(['credential' => 'client-credential'])
+            ->assertJsonMissing(['bearer' => 'client-bearer'])
             ->assertJsonMissing(['secret' => 'nested-secret'])
+            ->assertJsonMissing(['private_key' => 'nested-private-key'])
+            ->assertJsonMissing(['credential' => 'nested-credential'])
             ->assertJsonMissing(['encrypted_secret' => 'provider-secret']);
     }
 
@@ -181,6 +205,10 @@ final class TalosSettingsApiTest extends TestCase
                     'radius' => 'balanced',
                     'effect' => 'signal-mesh',
                     'effect_intensity' => 72,
+                    'scrollbar_track' => '#071017',
+                    'scrollbar_thumb' => '#31d6c8',
+                    'scrollbar_thumb_hover' => '#b4f06f',
+                    'scrollbar_width' => 11,
                     'api_key' => 'theme-secret',
                     'style' => 'body { display: none; }',
                     'script' => 'alert(1)',
@@ -244,6 +272,10 @@ final class TalosSettingsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.preferences.theme_customization.background', '#02080c')
             ->assertJsonPath('data.preferences.theme_customization.effect', 'signal-mesh')
+            ->assertJsonPath('data.preferences.theme_customization.scrollbar_track', '#071017')
+            ->assertJsonPath('data.preferences.theme_customization.scrollbar_thumb', '#31d6c8')
+            ->assertJsonPath('data.preferences.theme_customization.scrollbar_thumb_hover', '#b4f06f')
+            ->assertJsonPath('data.preferences.theme_customization.scrollbar_width', 11)
             ->assertJsonPath('data.preferences.theme_library.0.id', 'operator')
             ->assertJsonPath('data.preferences.theme_library.0.name', 'Operator')
             ->assertJsonPath('data.preferences.theme_library.0.base_theme', 'forge')
@@ -283,6 +315,106 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertStringNotContainsString('javascript:alert', $storedPreferences);
         $this->assertStringNotContainsString('display: none', $storedPreferences);
         $this->assertStringNotContainsString('alert(1)', $storedPreferences);
+    }
+
+    public function test_settings_sanitize_appearance_visibility_preferences(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'appearance_visibility' => [
+                    'chat_area' => [
+                        'session_header' => false,
+                        'full_width_chat' => true,
+                        'welcome_message' => false,
+                        'unknown_chat_control' => true,
+                        'api_key' => 'appearance-secret',
+                    ],
+                    'chat_bar' => [
+                        'web_search' => false,
+                        'attach_files' => true,
+                        'deep_research' => true,
+                        'style' => 'display:none',
+                    ],
+                    'sidebar' => [
+                        'brand_name' => true,
+                        'compare' => false,
+                        'cookbook' => true,
+                        'deep_research' => true,
+                        'script' => 'alert(1)',
+                    ],
+                    'unknown_group' => [
+                        'compare' => true,
+                    ],
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.preferences.appearance_visibility.chat_area.session_header', false)
+            ->assertJsonPath('data.preferences.appearance_visibility.chat_area.full_width_chat', true)
+            ->assertJsonPath('data.preferences.appearance_visibility.chat_area.welcome_message', false)
+            ->assertJsonPath('data.preferences.appearance_visibility.chat_bar.web_search', false)
+            ->assertJsonPath('data.preferences.appearance_visibility.chat_bar.attach_files', true)
+            ->assertJsonPath('data.preferences.appearance_visibility.sidebar.brand_name', true)
+            ->assertJsonPath('data.preferences.appearance_visibility.sidebar.compare', false);
+
+        $preferences = $response->json('data.preferences');
+        $this->assertArrayNotHasKey('unknown_chat_control', $preferences['appearance_visibility']['chat_area']);
+        $this->assertArrayNotHasKey('api_key', $preferences['appearance_visibility']['chat_area']);
+        $this->assertArrayNotHasKey('style', $preferences['appearance_visibility']['chat_bar']);
+        $this->assertArrayNotHasKey('script', $preferences['appearance_visibility']['sidebar']);
+        $this->assertArrayNotHasKey('unknown_group', $preferences['appearance_visibility']);
+
+        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $this->assertIsString($storedPreferences);
+        $this->assertStringNotContainsString('appearance-secret', $storedPreferences);
+        $this->assertStringNotContainsString('display:none', $storedPreferences);
+        $this->assertStringNotContainsString('alert(1)', $storedPreferences);
+    }
+
+    public function test_settings_sanitize_keyboard_shortcut_preferences(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'keyboard_shortcuts' => [
+                    'search_conversations' => 'Ctrl+K',
+                    'toggle_sidebar' => 'Ctrl+B',
+                    'open_compare' => 'Ctrl+Alt+M',
+                    'open_cookbook' => '',
+                    'duplicate_binding' => 'Ctrl+K',
+                    'unknown_action' => 'Ctrl+Alt+U',
+                    'favorite_session' => 'Ctrl+Alt+F',
+                    'delete_session' => 'Ctrl+Alt+D',
+                    'toggle_incognito' => 'Ctrl+Alt+I',
+                    'play_stop_tts' => 'Alt+Shift+T',
+                    'open_theme' => '<script>alert(1)</script>',
+                    'api_key' => 'shortcut-secret',
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.preferences.keyboard_shortcuts.search_conversations', 'Ctrl+K')
+            ->assertJsonPath('data.preferences.keyboard_shortcuts.toggle_sidebar', 'Ctrl+B')
+            ->assertJsonPath('data.preferences.keyboard_shortcuts.open_compare', 'Ctrl+Alt+M')
+            ->assertJsonPath('data.preferences.keyboard_shortcuts.open_cookbook', '');
+
+        $preferences = $response->json('data.preferences');
+        $this->assertArrayNotHasKey('duplicate_binding', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('unknown_action', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('favorite_session', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('delete_session', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('toggle_incognito', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('play_stop_tts', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('open_theme', $preferences['keyboard_shortcuts']);
+        $this->assertArrayNotHasKey('api_key', $preferences['keyboard_shortcuts']);
+
+        $storedPreferences = DB::table('talos_workspace_settings')->value('preferences');
+        $this->assertIsString($storedPreferences);
+        $this->assertStringNotContainsString('shortcut-secret', $storedPreferences);
+        $this->assertStringNotContainsString('<script>', $storedPreferences);
     }
 
     public function test_settings_reject_unsafe_theme_motion_values(): void

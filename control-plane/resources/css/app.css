@@ -99,10 +99,46 @@ button {
     --talos-motion-surface-style: slide-fade;
     --talos-motion-feedback-style: pulse;
     --talos-motion-hover-style: edge-glow;
+    --talos-scrollbar-track: color-mix(in srgb, var(--talos-panel-soft) 88%, black);
+    --talos-scrollbar-thumb: color-mix(in srgb, var(--talos-accent) 52%, var(--talos-border));
+    --talos-scrollbar-thumb-hover: color-mix(in srgb, var(--talos-accent) 78%, var(--talos-text));
+    --talos-scrollbar-width: 10px;
     background:
         linear-gradient(180deg, rgba(201, 139, 50, 0.08), transparent 260px),
         var(--talos-sidebar);
     font-family: var(--talos-font-ui);
+    scrollbar-color: var(--talos-scrollbar-thumb) var(--talos-scrollbar-track);
+    scrollbar-width: thin;
+}
+
+.talos-shell * {
+    scrollbar-color: var(--talos-scrollbar-thumb) var(--talos-scrollbar-track);
+    scrollbar-width: thin;
+}
+
+.talos-shell ::-webkit-scrollbar {
+    width: var(--talos-scrollbar-width);
+    height: var(--talos-scrollbar-width);
+}
+
+.talos-shell ::-webkit-scrollbar-track {
+    background: var(--talos-scrollbar-track);
+}
+
+.talos-shell ::-webkit-scrollbar-thumb {
+    border: 2px solid var(--talos-scrollbar-track);
+    border-radius: 999px;
+    background: var(--talos-scrollbar-thumb);
+}
+
+.talos-shell ::-webkit-scrollbar-thumb:hover {
+    background: var(--talos-scrollbar-thumb-hover);
+}
+
+.talos-tool-window-body,
+.talos-chat-thread,
+.talos-left-rail nav {
+    scrollbar-width: thin;
 }
 
 .talos-orbitron-brand {
@@ -124,6 +160,15 @@ button {
     color: var(--talos-accent);
     box-shadow: 0 14px 38px var(--talos-shadow);
     overflow: hidden;
+}
+
+.talos-short-logo-mark {
+    display: block;
+    width: 74%;
+    height: 74%;
+    background: currentColor;
+    mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+    -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
 }
 
 .talos-short-logo-compact {
@@ -808,6 +853,31 @@ button {
     }
 }
 
+.talos-shell .talos-floating-window-fullscreen {
+    position: fixed !important;
+    inset: 0.75rem !important;
+    width: auto !important;
+    height: calc(100dvh - 1.5rem) !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    transform: none !important;
+}
+
+.talos-shell .talos-tool-window-fullscreen {
+    max-height: none !important;
+}
+
+.talos-shell .talos-tool-window-fullscreen .talos-tool-window-body {
+    padding-bottom: 1rem;
+}
+
+@media (min-width: 1024px) {
+    .talos-shell .talos-floating-window-fullscreen {
+        inset: 1rem 1rem 1rem calc(var(--talos-rail-width) + 1rem) !important;
+        height: calc(100dvh - 2rem) !important;
+    }
+}
+
 .talos-tool-window-interacting {
     transition: none !important;
 }
@@ -831,6 +901,16 @@ button {
 
 .talos-chat-message {
     animation: talos-message-enter var(--talos-motion-surface-duration) var(--talos-motion-ease) both;
+}
+
+.talos-sensitive-output {
+    filter: blur(5px);
+    transition: filter var(--talos-motion-surface-duration) var(--talos-motion-ease);
+}
+
+.talos-chat-message:hover .talos-sensitive-output,
+.talos-chat-message:focus-within .talos-sensitive-output {
+    filter: blur(0);
 }
 
 .talos-chat-message:nth-child(2) {

@@ -34,7 +34,12 @@ final class TalosModelProbeService
                 'status' => 'failed',
                 'result' => [
                     'ok' => false,
+                    'code' => 'BASE_URL_POLICY_BLOCKED',
+                    'message' => "Provider base URL blocked by TALOS policy: {$policyDecision['reason']}",
+                    'provider' => $provider,
+                    'url' => $url,
                     'url_host' => $policyDecision['host'],
+                    'base_url_policy' => $policyDecision,
                     'error' => "Provider base URL blocked by TALOS policy: {$policyDecision['reason']}",
                 ],
             ];
@@ -45,6 +50,11 @@ final class TalosModelProbeService
                 'status' => 'failed',
                 'result' => [
                     'ok' => false,
+                    'code' => 'PROVIDER_SECRET_MISSING',
+                    'message' => 'Profile has no provider secret.',
+                    'provider' => $provider,
+                    'url' => $url,
+                    'base_url_policy' => $policyDecision,
                     'error' => 'Profile has no provider secret.',
                 ],
             ];
@@ -60,6 +70,11 @@ final class TalosModelProbeService
                 'status' => 'failed',
                 'result' => [
                     'ok' => false,
+                    'code' => 'PROVIDER_SECRET_DECRYPT_FAILED',
+                    'message' => 'Profile secret could not be decrypted.',
+                    'provider' => $provider,
+                    'url' => $url,
+                    'base_url_policy' => $policyDecision,
                     'error' => 'Profile secret could not be decrypted.',
                 ],
             ];
@@ -70,7 +85,12 @@ final class TalosModelProbeService
                 'status' => 'failed',
                 'result' => [
                     'ok' => false,
+                    'code' => 'BEARER_TOKEN_POLICY_BLOCKED',
+                    'message' => 'Bearer token blocked for non-public provider endpoint.',
+                    'provider' => $provider,
+                    'url' => $url,
                     'url_host' => $policyDecision['host'],
+                    'base_url_policy' => $policyDecision,
                     'error' => 'Bearer token blocked for non-public provider endpoint.',
                 ],
             ];
@@ -93,24 +113,34 @@ final class TalosModelProbeService
                 'status' => 'failed',
                 'result' => [
                     'ok' => false,
+                    'code' => 'PROVIDER_CONNECTION_FAILED',
+                    'message' => 'Provider connection failed during probe.',
+                    'provider' => $provider,
                     'url' => $url,
-                    'error' => $this->redactError($exception->getMessage()),
+                    'base_url_policy' => $policyDecision,
+                    'error' => $this->redactSensitiveText($exception->getMessage(), [$secret]),
                 ],
             ];
         }
 
         $json = $response->json();
         $hasJson = is_array($json);
+        $ok = $response->successful() && $hasJson;
 
         return [
-            'status' => $response->successful() && $hasJson ? 'healthy' : 'degraded',
+            'status' => $ok ? 'healthy' : 'degraded',
             'result' => [
-                'ok' => $response->successful() && $hasJson,
+                'ok' => $ok,
+                'code' => $this->probeResultCode($response->status(), $hasJson),
+                'message' => $this->probeResultMessage($response->status(), $hasJson),
+                'provider' => $provider,
                 'url' => $url,
+                'base_url_policy' => $policyDecision,
                 'http_status' => $response->status(),
                 'json' => $hasJson,
                 'json_keys' => $hasJson ? array_values(array_map('strval', array_keys($json))) : [],
-                'body_preview' => $hasJson ? null : substr($response->body(), 0, 500),
+                'body_preview' => $hasJson ? null : $this->responseExcerpt($response->body(), [$secret]),
+                'provider_response_excerpt' => $this->responseExcerpt($hasJson ? json_encode($json, JSON_UNESCAPED_SLASHES) ?: '' : $response->body(), [$secret]),
             ],
         ];
     }
@@ -161,9 +191,58 @@ final class TalosModelProbeService
         ];
     }
 
-    private function redactError(string $message): string
+    private function probeResultCode(int $status, bool $hasJson): string
     {
-        $redacted = preg_replace('/(Bearer|Token|Api-Key|x-api-key)\s+[^\s]+/i', '$1 [redacted]', $message) ?? $message;
+        if ($status >= 200 && $status < 300 && $hasJson) {
+            return 'PROVIDER_OK';
+        }
+
+        if ($status >= 200 && $status < 300) {
+            return 'PROVIDER_INVALID_JSON';
+        }
+
+        return 'PROVIDER_HTTP_ERROR';
+    }
+
+    private function probeResultMessage(int $status, bool $hasJson): string
+    {
+        if ($status >= 200 && $status < 300 && $hasJson) {
+            return 'Provider probe succeeded.';
+        }
+
+        if ($status >= 200 && $status < 300) {
+            return 'Provider returned a non-JSON response during probe.';
+        }
+
+        return "Provider returned HTTP {$status} during probe.";
+    }
+
+    /**
+     * @param list<string|null> $knownSensitiveValues
+     */
+    private function responseExcerpt(string $body, array $knownSensitiveValues = []): string
+    {
+        return substr($this->redactSensitiveText($body, $knownSensitiveValues), 0, 500);
+    }
+
+    /**
+     * @param list<string|null> $knownSensitiveValues
+     */
+    private function redactSensitiveText(string $message, array $knownSensitiveValues = []): string
+    {
+        $redacted = $message;
+        foreach ($knownSensitiveValues as $sensitiveValue) {
+            if (! is_string($sensitiveValue) || $sensitiveValue === '') {
+                continue;
+            }
+
+            $redacted = str_replace($sensitiveValue, '[redacted]', $redacted);
+            $redacted = str_replace(rawurlencode($sensitiveValue), '[redacted]', $redacted);
+        }
+
+        $redacted = preg_replace('/(Bearer|Token|Api-Key|x-api-key)\s+[^\s]+/i', '$1 [redacted]', $redacted) ?? $redacted;
+        $redacted = preg_replace('/\bsk-[A-Za-z0-9._-]+/i', '[redacted]', $redacted) ?? $redacted;
+        $redacted = preg_replace('/([?&](?:api_key|key|token|secret)=)[^&\s]+/i', '$1[redacted]', $redacted) ?? $redacted;
 
         return substr($redacted, 0, 500);
     }

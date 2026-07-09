@@ -136,8 +136,13 @@ final class TalosModelProviderCatalog
     {
         $base = (string) ($baseUrl ?: self::defaultsFor($provider)['default_base_url']);
         $suffix = $provider === 'anthropic' ? '/messages' : '/chat/completions';
+        $normalizedBase = rtrim($base, '/');
 
-        return rtrim($base, '/') . $suffix;
+        if (str_ends_with($normalizedBase, $suffix)) {
+            return $normalizedBase;
+        }
+
+        return $normalizedBase . $suffix;
     }
 
     private static function normalizeHost(string $host): string

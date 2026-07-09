@@ -15,6 +15,7 @@ import { useTalosModelProfiles } from '../../../composables/useTalosModelProfile
 import { useTalosPromptEnhancement } from '../../../composables/useTalosPromptEnhancement'
 import { useTalosSessions, type TalosSessionPersistenceMode } from '../../../composables/useTalosSessions'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
+import { useTalosShortcuts } from '../../../composables/useTalosShortcuts'
 import { useTalosWindows, type TalosWindowId } from '../../../composables/useTalosWindows'
 import { talosFetch } from '../../../lib/api'
 import { talosCommands } from '../../../lib/commandRegistry'
@@ -37,9 +38,11 @@ import {
     type TalosThemeCustomization,
     type TalosThemeId,
 } from '../../../lib/talosThemes'
+import { resolveTalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
+import { resolveTalosShortcuts } from '../../../lib/talosShortcuts'
 import type { TalosCommand, TalosContextSet, TalosMessage, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload } from '../../../lib/talosTypes'
 type InitialSurface = 'workspace' | 'chat' | 'dashboard'
-const talosShortLogoUrl = '/talos/brand/logo-short.png'
+const talosShortLogoUrl = '/talos/brand/logo-short.svg'
 const props = withDefaults(defineProps<{
     initialSurface?: InitialSurface
     authenticated?: boolean
@@ -147,6 +150,7 @@ const {
     visibleWindowIds,
     minimizedWindowIds,
     dockedWindowIds,
+    fullscreenWindowIds,
     activeWindowId,
     windowPositions,
     windowSizes,
@@ -155,6 +159,7 @@ const {
     closeWindow,
     minimizeWindow,
     toggleDock,
+    toggleFullscreenWindow,
     focusWindow,
     setWindowPosition,
     setWindowSize,
@@ -188,6 +193,8 @@ const workspaceMotionDisabled = computed(() => (
 const workspaceThemeCustomization = computed(() => sanitizeTalosThemeCustomization(workspaceSettings.value?.preferences?.theme_customization))
 const workspaceEffectiveThemeCustomization = computed(() => themeDraftCustomization.value ?? workspaceThemeCustomization.value)
 const workspaceAreaTokens = computed(() => sanitizeTalosThemeAreaTokens(workspaceSettings.value?.preferences?.theme_area_tokens))
+const workspaceAppearanceVisibility = computed(() => resolveTalosAppearanceVisibility(workspaceSettings.value?.preferences?.appearance_visibility))
+const workspaceKeyboardShortcuts = computed(() => resolveTalosShortcuts(workspaceSettings.value?.preferences?.keyboard_shortcuts))
 const workspaceUiAnimationProfile = computed(() => resolveTalosUiAnimationProfile(workspaceSettings.value?.preferences?.ui_animation_profile))
 const workspaceUiAnimationCustomization = computed(() => sanitizeTalosUiAnimationCustomization(workspaceSettings.value?.preferences?.ui_animation_customization))
 const workspaceUiMotionDisabled = computed(() => (
@@ -218,6 +225,11 @@ const selectedContextSet = computed(() => contextSets.value.find((contextSet) =>
 const selectedModelProfileIsUsable = computed(() => Boolean(selectedModelProfile.value && selectedModelProfile.value.status !== 'disabled' && selectedModelProfile.value.has_secret))
 const messageEvidenceReady = computed(() => messages.value.some((message) => message.role === 'assistant' && Boolean(message.run_id)))
 const activeSessionIsTemporary = computed(() => activeSession.value?.persistence_mode === 'temporary')
+const activeWelcomePromptId = computed(() => (
+    typeof activeSession.value?.metadata?.welcome_prompt_id === 'string'
+        ? activeSession.value.metadata.welcome_prompt_id
+        : null
+))
 const canSend = computed(() => prompt.value.trim().length > 0 && !sending.value && selectedModelProfileIsUsable.value)
 const selectedBenchmarkScenarioIsRunnable = computed(() => {
     const path = selectedBenchmarkScenarioPath.value?.trim() ?? ''
@@ -717,6 +729,9 @@ function openCommandPalette() {
 function closeCommandPalette() {
     commandPaletteOpen.value = false
 }
+function focusChatInput() {
+    document.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')?.focus()
+}
 async function focusCommandRoute(route: CommandRoute) {
     if (route.windowId === 'runtime' && route.runtimeTab) {
         runtimeRequestedTab.value = route.runtimeTab
@@ -809,19 +824,41 @@ async function openAuditLogFromRuntime() {
         ? 'Audit log opened.'
         : 'Audit log opened, but TALOS could not focus the audit section.'
 }
-function handleKeyboard(event: KeyboardEvent) {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        openCommandPalette()
-        return
-    }
-    if (event.key === 'Escape') {
+useTalosShortcuts(workspaceKeyboardShortcuts, {
+    search_conversations: openCommandPalette,
+    toggle_sidebar: () => {
+        railCollapsed.value = !railCollapsed.value
+    },
+    focus_chat_input: focusChatInput,
+    toggle_active_window: () => {
+        if (activeWindowId.value) {
+            minimizeWindow(activeWindowId.value)
+        }
+    },
+    new_session: () => {
+        void startNewChat()
+    },
+    cancel_close: () => {
         if (commandPaletteOpen.value) {
             closeCommandPalette()
+            return
         }
         closePopover()
-    }
-}
+        if (activeWindowId.value) {
+            closeWindow(activeWindowId.value)
+        }
+    },
+    open_calendar: () => openWindow('calendar'),
+    open_compare: () => openWindow('compare'),
+    open_cookbook: () => openWindow('model_lab'),
+    open_deep_research: () => openWindow('research'),
+    open_gallery: () => openWindow('gallery'),
+    open_library: () => openWindow('library'),
+    open_memory: () => openWindow('brain'),
+    open_notes: () => openWindow('notes'),
+    open_tasks: () => openWindow('tasks'),
+    open_theme: () => openWindow('theme'),
+})
 async function refreshModelAndContext() {
     await Promise.allSettled([
         loadModelProfiles(),
@@ -878,7 +915,6 @@ function stopReducedMotionWatcher() {
 onMounted(async () => {
     loadWorkspacePreferences()
     startReducedMotionWatcher()
-    window.addEventListener('keydown', handleKeyboard)
     applyQueryModules()
     try {
         await refreshModelAndContext()
@@ -898,7 +934,6 @@ onMounted(async () => {
     }
 })
 onBeforeUnmount(() => {
-    window.removeEventListener('keydown', handleKeyboard)
     stopReducedMotionWatcher()
     stopRailResize()
 })
@@ -918,6 +953,7 @@ onBeforeUnmount(() => {
             :creating-session="creatingSession"
             :collapsed="railCollapsed"
             :width="railWidth"
+            :visibility="workspaceAppearanceVisibility.sidebar"
             @open="openModule"
             @new-chat="startNewChat"
             @toggle-theme="toggleTheme()"
@@ -932,6 +968,7 @@ onBeforeUnmount(() => {
                 :motion-disabled="workspaceMotionDisabled"
             />
             <TalosWorkspaceHeader
+                v-if="workspaceAppearanceVisibility.chat_area.session_header"
                 :logo-url="talosShortLogoUrl"
                 :workspace-subtitle="workspaceSubtitle"
                 :status-text="statusText"
@@ -948,6 +985,7 @@ onBeforeUnmount(() => {
             />
             <TalosMobileRail
                 :creating-session="creatingSession"
+                :visibility="workspaceAppearanceVisibility.sidebar"
                 @new-chat="startNewChat"
                 @open-window="openWindow"
             />
@@ -969,6 +1007,10 @@ onBeforeUnmount(() => {
                 :sending="sending"
                 :benchmarking-run-id="benchmarkingRunId"
                 :expanded-evidence-message-ids="expandedEvidenceMessageIds"
+                :welcome-prompt-id="activeWelcomePromptId"
+                :show-welcome-message="workspaceAppearanceVisibility.chat_area.welcome_message"
+                :full-width-chat="workspaceAppearanceVisibility.chat_area.full_width_chat"
+                :sensitive-blur="workspaceAppearanceVisibility.chat_area.sensitive_blur"
                 @open-model="openWindow('model_lab')"
                 @open-context="openWindow('library')"
                 @set-prompt="prompt = $event"
@@ -984,6 +1026,7 @@ onBeforeUnmount(() => {
                 :visible-window-ids="visibleWindowIds"
                 :minimized-window-ids="minimizedWindowIds"
                 :docked-window-ids="dockedWindowIds"
+                :fullscreen-window-ids="fullscreenWindowIds"
                 :active-window-id="activeWindowId"
                 :window-positions="windowPositions"
                 :window-sizes="windowSizes"
@@ -1005,6 +1048,7 @@ onBeforeUnmount(() => {
                 @close-window="closeWindow"
                 @minimize-window="minimizeWindow"
                 @dock-window="toggleDock"
+                @fullscreen-window="toggleFullscreenWindow"
                 @focus-window="focusWindow"
                 @open-window="openWindow"
                 @set-window-position="setWindowPosition"
@@ -1045,6 +1089,7 @@ onBeforeUnmount(() => {
                 :prompt-enhancement-result="promptEnhancementResult"
                 :enhancing-prompt="enhancingPrompt"
                 :prompt-enhancement-error="promptEnhancementError"
+                :visibility="workspaceAppearanceVisibility.chat_bar"
                 @update-prompt="prompt = $event"
                 @send="sendChat"
                 @open-model="toggleModelPopover"
