@@ -179,6 +179,7 @@ const shellClass = computed(() => [
 const currentThemePreset = computed(() => talosThemePreset(theme.value))
 const workspaceMotionMode = computed(() => resolveTalosMotionMode(workspaceSettings.value?.preferences?.theme_motion))
 const workspaceMotionDisabledPreference = computed(() => workspaceSettings.value?.preferences?.theme_motion_disabled === true)
+const workspaceSimpleAnimation = computed(() => workspaceSettings.value?.preferences?.theme_simple_animation !== false)
 const workspaceBackgroundDisabled = computed(() => workspaceSettings.value?.preferences?.theme_background_disabled === true)
 const workspaceReducedMotionPreference = computed(() => workspaceSettings.value?.preferences?.reduced_motion === true)
 const workspaceReducedMotion = computed(() => (
@@ -954,8 +955,11 @@ onBeforeUnmount(() => {
             :collapsed="railCollapsed"
             :width="railWidth"
             :visibility="workspaceAppearanceVisibility.sidebar"
+            :sessions="sessions"
+            :active-session-id="activeSession?.id ?? null"
             @open="openModule"
             @new-chat="startNewChat"
+            @select-session="chooseSession"
             @toggle-theme="toggleTheme()"
             @collapse="railCollapsed = true"
             @expand="railCollapsed = false"
@@ -966,6 +970,7 @@ onBeforeUnmount(() => {
                 :effect="workspaceBackgroundEffect"
                 :motion="workspaceMotionMode"
                 :motion-disabled="workspaceMotionDisabled"
+                :simple-animation="workspaceSimpleAnimation"
             />
             <TalosWorkspaceHeader
                 v-if="workspaceAppearanceVisibility.chat_area.session_header"

@@ -25,7 +25,6 @@ const emit = defineEmits<{
 const {
     createModelProfile,
     probeDraftModelProfile,
-    probeModelProfile,
 } = useTalosModelProfiles()
 
 const selectedProviderId = ref<TalosProviderId>('openai')
@@ -59,11 +58,7 @@ const draftFingerprint = computed(() => JSON.stringify({
     timeoutSeconds: Math.min(300, Math.max(5, Number(form.timeoutSeconds) || selectedProvider.value.defaultTimeoutSeconds)),
     capabilities: form.capabilities,
 }))
-const draftProbeReady = computed(() => (
-    draftProbe.value?.status === 'healthy'
-    && lastProbeFingerprint.value === draftFingerprint.value
-    && canRunProviderAction.value
-))
+const canAddProfile = computed(() => canRunProviderAction.value)
 const draftProbeReason = computed(() => {
     const result = draftProbe.value?.result
     if (!result) {
@@ -162,12 +157,7 @@ async function runDraftProbe() {
 }
 
 async function testAndAdd() {
-    if (!canRunProviderAction.value) {
-        return
-    }
-
-    if (!draftProbeReady.value) {
-        actionError.value = 'Run a successful provider test before saving this profile.'
+    if (!canAddProfile.value) {
         return
     }
 
@@ -181,13 +171,14 @@ async function testAndAdd() {
             ...payload(provider),
             status: 'untested',
         })
-        const probedProfile = await probeModelProfile(profile.id)
 
-        emit('created', probedProfile)
+        emit('created', profile)
         actionMessage.value = provider.requiresSecret
-            ? 'Secret stored server-side.'
-            : 'Local endpoint stored without bearer token.'
+            ? 'Secret stored server-side. Run Test later to verify live provider readiness.'
+            : 'Local endpoint stored without bearer token. Run Test later to verify readiness.'
         form.secret = ''
+        draftProbe.value = null
+        lastProbeFingerprint.value = ''
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not add this provider profile.'
     } finally {
@@ -278,13 +269,13 @@ async function testAndAdd() {
                 <Button
                     type="button"
                     size="sm"
-                    :disabled="!draftProbeReady"
-                    :title="draftProbeReady ? 'Save this tested provider profile' : 'Run a successful provider test before saving'"
+                    :disabled="!canAddProfile"
+                    :title="canAddProfile ? 'Save this provider profile server-side' : 'Add the required provider credential before saving'"
                     @click="testAndAdd"
                 >
                     <Loader2 v-if="addingProfile" class="h-4 w-4 animate-spin" />
                     <Plus v-else class="h-4 w-4" />
-                    Test and add
+                    Add profile
                 </Button>
                 <Button type="button" variant="ghost" size="sm" @click="advancedOpen = !advancedOpen">
                     <ChevronDown class="h-4 w-4 transition" :class="advancedOpen ? 'rotate-180' : ''" />

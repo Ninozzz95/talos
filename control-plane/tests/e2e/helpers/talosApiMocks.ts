@@ -957,6 +957,8 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let modelProfiles = [
         modelProfilePayload(),
     ]
+    let createdSessionCount = 0
+    const messagesBySession = new Map<string, Record<string, unknown>[]>()
     let sessions = (options.initialSessions ?? []).map((session) => sessionPayload(
         session.title,
         session.persistence_mode ?? 'persistent',
@@ -1057,7 +1059,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 model: body.model || preset.model,
                 base_url: body.base_url ?? preset.base_url,
                 timeout_seconds: body.timeout_seconds ?? 60,
-                status: 'healthy',
+                status: String(body.status ?? 'untested'),
                 has_secret: provider !== 'ollama',
                 probe_result: {
                     ok: true,
@@ -1130,7 +1132,9 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         if (path === '/api/talos/sessions' && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             activeSessionPersistenceMode = body.persistence_mode === 'temporary' ? 'temporary' : 'persistent'
-            const session = sessionPayload(String(body.title ?? 'E2E verified workflow'), activeSessionPersistenceMode, 'session-e2e')
+            createdSessionCount += 1
+            const sessionId = createdSessionCount === 1 ? 'session-e2e' : `session-e2e-${createdSessionCount}`
+            const session = sessionPayload(String(body.title ?? 'E2E verified workflow'), activeSessionPersistenceMode, sessionId)
             sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
             return json(route, { data: session }, 201)
         }
@@ -1154,13 +1158,16 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         const sessionMessagesMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/messages$/)
         if (sessionMessagesMatch && method === 'GET') {
-            return json(route, { data: [] })
+            return json(route, { data: messagesBySession.get(sessionMessagesMatch[1]) ?? [] })
         }
 
         if (sessionMessagesMatch && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             messageSequence += 1
-            return json(route, { data: messagePayload(body, messageSequence, sessionMessagesMatch[1]) }, 201)
+            const sessionId = sessionMessagesMatch[1]
+            const message = messagePayload(body, messageSequence, sessionId)
+            messagesBySession.set(sessionId, [...(messagesBySession.get(sessionId) ?? []), message])
+            return json(route, { data: message }, 201)
         }
 
         if (path === '/api/talos/chat' && method === 'POST') {

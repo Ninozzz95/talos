@@ -6,6 +6,14 @@
     <title>TALOS Setup</title>
     <link rel="icon" type="image/svg+xml" href="/talos/brand/logo-short.svg">
     <style>
+        @font-face {
+            font-family: "Orbitron";
+            font-style: normal;
+            font-display: swap;
+            font-weight: 600;
+            src: url("/talos/fonts/orbitron-latin-600-normal.woff2") format("woff2");
+        }
+
         :root {
             color-scheme: dark;
             --accent: #c98b32;
@@ -56,11 +64,8 @@
         }
 
         .brand-logo {
-            width: 42px;
-            height: 42px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: var(--panel);
+            width: 52px;
+            height: 52px;
             color: var(--accent);
             display: inline-flex;
             align-items: center;
@@ -70,8 +75,8 @@
         .brand-logo::before {
             content: "";
             display: block;
-            width: 74%;
-            height: 74%;
+            width: 92%;
+            height: 92%;
             background: currentColor;
             mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
             -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;

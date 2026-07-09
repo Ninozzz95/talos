@@ -120,6 +120,7 @@ const importJson = ref('')
 const localThemeError = ref('')
 const motionMode = ref<TalosThemeMotionMode>('system')
 const motionDisabled = ref(false)
+const simpleAnimation = ref(true)
 const backgroundDisabled = ref(false)
 const uiAnimationProfile = ref<TalosUiAnimationProfile>('preset')
 const uiAnimationForm = ref<UiAnimationForm>(emptyUiAnimationForm())
@@ -264,6 +265,7 @@ function syncThemeState() {
     activeCustomThemeId.value = typeof preferences.active_custom_theme_id === 'string' ? preferences.active_custom_theme_id : null
     motionMode.value = resolveTalosMotionMode(preferences.theme_motion)
     motionDisabled.value = preferences.theme_motion_disabled === true
+    simpleAnimation.value = preferences.theme_simple_animation !== false
     backgroundDisabled.value = preferences.theme_background_disabled === true
     uiAnimationProfile.value = resolveTalosUiAnimationProfile(preferences.ui_animation_profile)
     uiAnimationForm.value = uiAnimationFormFromCustomization(preferences.ui_animation_customization)
@@ -620,6 +622,22 @@ async function persistMotionDisabled() {
             theme_motion_disabled: motionDisabled.value,
         },
     }, motionDisabled.value ? 'Theme motion disabled.' : 'Theme motion enabled.')
+    syncThemeState()
+    emit('themeCustomizationChanged', nextSettings)
+}
+
+async function persistSimpleAnimation() {
+    if (!canWriteTheme()) {
+        simpleAnimation.value = preferencesRecord().theme_simple_animation !== false
+        return
+    }
+
+    const nextSettings = await updateSettings({
+        preferences: {
+            ...preferencesRecord(),
+            theme_simple_animation: simpleAnimation.value,
+        },
+    }, simpleAnimation.value ? 'Simple animation enabled.' : 'Rich animation enabled.')
     syncThemeState()
     emit('themeCustomizationChanged', nextSettings)
 }
@@ -1146,6 +1164,22 @@ onMounted(async () => {
                     </div>
                 </div>
                 <div class="grid gap-3 md:grid-cols-2">
+                    <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                        <span>
+                            <span class="block text-sm font-semibold text-[var(--talos-text)]">Use simple animation</span>
+                            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Default optimized canvas profile for slower devices and long sessions.</span>
+                        </span>
+                        <Switch
+                            v-model="simpleAnimation"
+                            class="mt-1"
+                            aria-label="Use simple animation"
+                            :disabled="savingSettings || themePolicyLocked"
+                            @change="persistSimpleAnimation"
+                        />
+                    </label>
+                    <div v-if="!simpleAnimation" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3 text-xs leading-5 text-[var(--talos-text)]">
+                        Rich animation raises frame rate, DPR and effect complexity. It can slow lower-end devices.
+                    </div>
                     <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                         <span>
                             <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>

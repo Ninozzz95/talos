@@ -168,6 +168,8 @@ final class TalosSettingsApiTest extends TestCase
             'noir',
             'signal',
             'violet',
+            'claudius',
+            'basicus',
         ];
 
         foreach ($themes as $theme) {
@@ -248,6 +250,7 @@ final class TalosSettingsApiTest extends TestCase
                 'workspace_default_theme' => 'violet',
                 'theme_motion' => 'cinematic',
                 'theme_motion_disabled' => true,
+                'theme_simple_animation' => false,
                 'theme_background_disabled' => false,
                 'theme_area_tokens' => [
                     'chat' => [
@@ -286,6 +289,7 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.workspace_default_theme', 'violet')
             ->assertJsonPath('data.preferences.theme_motion', 'cinematic')
             ->assertJsonPath('data.preferences.theme_motion_disabled', true)
+            ->assertJsonPath('data.preferences.theme_simple_animation', false)
             ->assertJsonPath('data.preferences.theme_background_disabled', false)
             ->assertJsonPath('data.preferences.theme_area_tokens.chat.background', '#02080c')
             ->assertJsonPath('data.preferences.theme_area_tokens.dashboard.text', '#e8fbff');
