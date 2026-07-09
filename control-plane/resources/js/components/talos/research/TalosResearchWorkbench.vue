@@ -28,6 +28,8 @@ const {
     loadResearchReports,
     loadResearchReport,
     createResearchReport,
+    exportResearchReport,
+    createFollowUpSession,
     researchReportById,
 } = useTalosResearch()
 
@@ -44,7 +46,10 @@ const sourceTitle = ref('')
 const claimText = ref('')
 const settingsOpen = ref(false)
 const actionError = ref<string | null>(null)
+const actionMessage = ref('')
 const submitMode = ref<SubmitMode | null>(null)
+const exportingReportId = ref<string | null>(null)
+const creatingFollowUpReportId = ref<string | null>(null)
 const historyRef = ref<HTMLElement | null>(null)
 const settings = ref<TalosResearchSettings>({
     rounds: 1,
@@ -69,7 +74,7 @@ const chatWithReportDisabledReason = computed(() => {
         return 'Select a report before opening report chat.'
     }
 
-    return 'Report chat context export is not available yet.'
+    return null
 })
 const benchmarkDisabledReason = computed(() => {
     if (!selectedReport.value) {
@@ -162,6 +167,60 @@ async function submitResearchReport(mode: SubmitMode) {
     }
 }
 
+async function exportSelectedReport() {
+    const report = selectedReport.value
+    if (!report) {
+        actionError.value = 'Select a report before exporting.'
+        return
+    }
+
+    exportingReportId.value = report.id
+    actionError.value = null
+    actionMessage.value = ''
+
+    try {
+        const exported = await exportResearchReport(report.id, 'markdown')
+        const content = typeof exported.content === 'string'
+            ? exported.content
+            : JSON.stringify(exported.content, null, 2)
+        const blob = new Blob([content], { type: exported.mime_type })
+        const objectUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = `talos-research-${report.id}.md`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        URL.revokeObjectURL(objectUrl)
+        actionMessage.value = 'Research report exported.'
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not export this report.'
+    } finally {
+        exportingReportId.value = null
+    }
+}
+
+async function openFollowUpSession() {
+    const report = selectedReport.value
+    if (!report) {
+        actionError.value = 'Select a report before creating a follow-up session.'
+        return
+    }
+
+    creatingFollowUpReportId.value = report.id
+    actionError.value = null
+    actionMessage.value = ''
+
+    try {
+        const session = await createFollowUpSession(report.id, `Continue from ${report.title}.`)
+        actionMessage.value = `Follow-up session created: ${session.title}`
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not create a follow-up session.'
+    } finally {
+        creatingFollowUpReportId.value = null
+    }
+}
+
 function shortHash(value: string | null | undefined) {
     if (!value) {
         return 'unknown'
@@ -212,6 +271,9 @@ onMounted(() => {
             <div v-if="visibleError" class="flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
                 <AlertCircle class="mt-1 h-4 w-4 shrink-0 text-[var(--talos-warning)]" />
                 <span>{{ visibleError }}</span>
+            </div>
+            <div v-if="actionMessage" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-muted)]">
+                {{ actionMessage }}
             </div>
 
             <section class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
@@ -341,20 +403,22 @@ onMounted(() => {
                                     <p v-if="selectedArtifact" class="mt-2 truncate font-mono text-[11px] text-[var(--talos-accent)]">{{ selectedArtifact.uri }}</p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <Button type="button" size="sm" disabled>
+                                    <Button type="button" size="sm" :disabled="Boolean(chatWithReportDisabledReason) || creatingFollowUpReportId === selectedReport.id" @click="openFollowUpSession">
+                                        <Loader2 v-if="creatingFollowUpReportId === selectedReport.id" class="h-4 w-4 animate-spin" />
                                         Chat with report
                                     </Button>
-                                    <Button type="button" variant="secondary" size="sm" disabled>
-                                        Benchmark report
+                                    <Button type="button" variant="secondary" size="sm" :disabled="exportingReportId === selectedReport.id" @click="exportSelectedReport">
+                                        <Loader2 v-if="exportingReportId === selectedReport.id" class="h-4 w-4 animate-spin" />
+                                        Export report
                                     </Button>
                                 </div>
                             </div>
                             <div class="mt-3 grid gap-2 text-xs leading-5 text-[var(--talos-muted)] md:grid-cols-2">
                                 <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2">
-                                    {{ chatWithReportDisabledReason }}
+                                    {{ chatWithReportDisabledReason || 'Creates a bounded follow-up session with report metadata.' }}
                                 </div>
                                 <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2">
-                                    {{ benchmarkDisabledReason }}
+                                    {{ benchmarkDisabledReason }} Export is available as Markdown/JSON.
                                 </div>
                             </div>
                         </div>

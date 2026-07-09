@@ -9,17 +9,25 @@ use App\Models\TalosResearchReport;
 use App\Models\TalosResearchSource;
 use App\Models\TalosRun;
 use App\Models\TalosRunArtifact;
+use App\Models\TalosSession;
+use App\Services\Research\TalosResearchReportRenderer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule as ValidationRule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 final class TalosResearchReportController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user !== null, 401);
+
         $reports = TalosResearchReport::query()
+            ->where('user_id', $user->id)
             ->withCount(['sources', 'claims'])
             ->latest('created_at')
             ->get()
@@ -31,6 +39,9 @@ final class TalosResearchReportController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user !== null, 401);
+
         $validated = $request->validate([
             'title' => ['required', 'string', 'min:1', 'max:255'],
             'query' => ['required', 'string', 'min:1', 'max:20000'],
@@ -64,7 +75,7 @@ final class TalosResearchReportController extends Controller
 
         $this->validateResearchGraph($sources, $claims);
 
-        $report = DB::transaction(function () use ($validated, $sources, $claims): TalosResearchReport {
+        $report = DB::transaction(function () use ($validated, $sources, $claims, $user): TalosResearchReport {
             $run = TalosRun::query()->create([
                 'context_set_id' => $validated['context_set_id'] ?? null,
                 'mode' => 'verified_execution',
@@ -90,6 +101,7 @@ final class TalosResearchReportController extends Controller
             assert($run instanceof TalosRun);
 
             $report = TalosResearchReport::query()->create([
+                'user_id' => $user->id,
                 'run_id' => $run->id,
                 'context_set_id' => $validated['context_set_id'] ?? null,
                 'benchmark_group_id' => $validated['benchmark_group_id'] ?? null,
@@ -182,9 +194,92 @@ final class TalosResearchReportController extends Controller
 
     public function show(TalosResearchReport $researchReport): JsonResponse
     {
+        $this->authorizeReport($researchReport);
         $researchReport->load(['sources', 'claims.sources']);
 
         return response()->json(['data' => $researchReport->toApiArray(includeDetails: true)]);
+    }
+
+    public function followUpSession(Request $request, TalosResearchReport $researchReport): JsonResponse
+    {
+        $this->authorizeReport($researchReport);
+        $validated = $request->validate([
+            'prompt' => ['sometimes', 'nullable', 'string', 'max:20000'],
+        ]);
+
+        $researchReport->load(['sources', 'claims']);
+        $session = TalosSession::query()->create([
+            'user_id' => $request->user()?->id,
+            'title' => 'Follow-up: '.$researchReport->title,
+            'mode' => 'research_follow_up',
+            'persistence_mode' => 'persistent',
+            'metadata' => [
+                'source' => 'research_report_follow_up',
+                'research_report_id' => $researchReport->id,
+                'run_id' => $researchReport->run_id,
+                'context' => [
+                    'summary' => $researchReport->summary,
+                    'source_count' => $researchReport->sources->count(),
+                    'claim_count' => $researchReport->claims->count(),
+                    'prompt' => $validated['prompt'] ?? null,
+                ],
+            ],
+        ]);
+        assert($session instanceof TalosSession);
+
+        return response()->json(['data' => $session], 201);
+    }
+
+    public function export(Request $request, TalosResearchReport $researchReport, TalosResearchReportRenderer $renderer): JsonResponse
+    {
+        $this->authorizeReport($researchReport);
+        $validated = $request->validate([
+            'format' => ['sometimes', 'string', ValidationRule::in(['json', 'markdown', 'pdf'])],
+        ]);
+
+        $format = $validated['format'] ?? $request->query('format', 'json');
+        if (! is_string($format)) {
+            $format = 'json';
+        }
+
+        $researchReport->load(['sources', 'claims.sources', 'run.artifacts']);
+
+        if ($format === 'pdf') {
+            return response()->json([
+                'code' => 'RESEARCH_PDF_RENDERER_UNAVAILABLE',
+                'message' => 'PDF export requires a configured renderer. Markdown and JSON export are available.',
+                'research_report_id' => $researchReport->id,
+            ], 422);
+        }
+
+        if ($format === 'markdown') {
+            return response()->json([
+                'data' => [
+                    'research_report_id' => $researchReport->id,
+                    'format' => 'markdown',
+                    'mime_type' => 'text/markdown',
+                    'export_status' => 'complete',
+                    'content' => $renderer->markdown($researchReport),
+                    'generated_at' => now()->toJSON(),
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'data' => [
+                'research_report_id' => $researchReport->id,
+                'format' => 'json',
+                'mime_type' => 'application/json',
+                'export_status' => 'complete',
+                'content' => $renderer->payload($researchReport),
+                'generated_at' => now()->toJSON(),
+            ],
+        ]);
+    }
+
+    private function authorizeReport(TalosResearchReport $report): void
+    {
+        abort_unless(Auth::id() === $report->user_id, 404);
     }
 
     /**

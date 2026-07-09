@@ -6,6 +6,7 @@ import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
 import TalosBenchmarkLane from './TalosBenchmarkLane.vue'
 import TalosDiffViewer from './TalosDiffViewer.vue'
+import TalosModelComparison from '../compare/TalosModelComparison.vue'
 import { useTalosBenchmarks } from '../../../composables/useTalosBenchmarks'
 import { talosFetch } from '../../../lib/api'
 import type { TalosBenchmarkGroup, TalosBenchmarkResult } from '../../../lib/talosTypes'
@@ -43,6 +44,7 @@ const {
 const scenarioPath = ref(props.initialScenarioPath ?? '')
 const runs = ref(props.defaultRuns)
 const selectedGroupId = ref<string | null>(props.initialBenchmarkGroupId)
+const activeWorkbenchTab = ref<'avm' | 'model'>('avm')
 const actionError = ref<string | null>(null)
 const actionMessage = ref('')
 const exportingBenchmark = ref(false)
@@ -54,13 +56,18 @@ const canRun = computed(() => {
         && scenarioPath.value.trim().endsWith('.json')
         && !runningBenchmarkComparison.value
 })
-const canExport = computed(() => Boolean(props.exportEndpoint && selectedGroup.value))
 const selectedResults = computed<TalosBenchmarkResult[]>(() => selectedGroup.value?.results ?? [])
 const hasToolAgentLane = computed(() => selectedResults.value.some((result) => result.mode === 'tool_agent'))
+const isModelComparisonGroup = computed(() => selectedGroup.value?.metadata?.comparison_type === 'model_profile_blind_compare')
+const canExport = computed(() => Boolean(props.exportEndpoint && selectedGroup.value && !isModelComparisonGroup.value))
 const visibleResults = computed(() => {
-    const orderedModes = hasToolAgentLane.value
-        ? ['avm_on', 'avm_off_direct', 'tool_agent']
-        : ['avm_on', 'avm_off_direct']
+    let orderedModes = ['avm_on', 'avm_off_direct']
+
+    if (isModelComparisonGroup.value) {
+        orderedModes = ['model_lane_a', 'model_lane_b', 'model_lane_c']
+    } else if (hasToolAgentLane.value) {
+        orderedModes = ['avm_on', 'avm_off_direct', 'tool_agent']
+    }
 
     return orderedModes.flatMap((mode) => {
         const result = selectedResults.value.find((candidate) => candidate.mode === mode)
@@ -107,6 +114,10 @@ const proofExportLabel = computed(() => canExport.value ? 'Export ready' : 'Expo
 const proofExportDetail = computed(() => {
     if (canExport.value) {
         return 'Selected group can use the benchmark export endpoint.'
+    }
+
+    if (isModelComparisonGroup.value) {
+        return 'Model-comparison evidence is not an AVM ON/OFF export contract.'
     }
 
     return 'Select a persisted benchmark group before exporting.'
@@ -237,6 +248,20 @@ async function downloadBenchmarkReport() {
     }
 }
 
+async function handleModelBenchmarkPromoted(group: TalosBenchmarkGroup) {
+    actionError.value = null
+    actionMessage.value = 'Model comparison promoted to benchmark evidence.'
+    selectedGroupId.value = group.id
+    activeWorkbenchTab.value = 'avm'
+
+    try {
+        await loadBenchmarkGroups()
+        await loadBenchmarkGroup(group.id)
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS promoted the comparison but could not reload the benchmark group.'
+    }
+}
+
 onMounted(() => {
     void refreshGroups()
 })
@@ -287,6 +312,32 @@ watch(() => props.initialScenarioPath, (path) => {
                 {{ actionMessage }}
             </div>
 
+            <div role="tablist" aria-label="Compare workbench mode" class="grid grid-cols-2 gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-1">
+                <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="activeWorkbenchTab === 'avm'"
+                    class="rounded px-3 py-2 text-sm font-semibold transition"
+                    :class="activeWorkbenchTab === 'avm' ? 'bg-[var(--talos-panel)] text-[var(--talos-text)] shadow-sm' : 'text-[var(--talos-muted)] hover:text-[var(--talos-text)]'"
+                    @click="activeWorkbenchTab = 'avm'"
+                >
+                    AVM Evidence
+                </button>
+                <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="activeWorkbenchTab === 'model'"
+                    class="rounded px-3 py-2 text-sm font-semibold transition"
+                    :class="activeWorkbenchTab === 'model' ? 'bg-[var(--talos-panel)] text-[var(--talos-text)] shadow-sm' : 'text-[var(--talos-muted)] hover:text-[var(--talos-text)]'"
+                    @click="activeWorkbenchTab = 'model'"
+                >
+                    Model Compare
+                </button>
+            </div>
+
+            <TalosModelComparison v-if="activeWorkbenchTab === 'model'" @benchmark-promoted="handleModelBenchmarkPromoted" />
+
+            <template v-else>
             <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
                 <div class="border-b border-[var(--talos-border)] px-3 py-2">
                     <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Proof Builder</div>
@@ -387,6 +438,7 @@ watch(() => props.initialScenarioPath, (path) => {
                 <Download v-else class="h-4 w-4" />
                 {{ exportEndpoint ? 'Export report' : 'Export report unavailable' }}
             </Button>
+            </template>
         </div>
     </Surface>
 </template>

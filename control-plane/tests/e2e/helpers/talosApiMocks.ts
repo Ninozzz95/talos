@@ -934,6 +934,168 @@ function modelProfilePayload(overrides: Record<string, unknown> = {}) {
     }
 }
 
+function modelComparisonPayload(revealed = false) {
+    const lanes = [
+        {
+            id: 'model-comparison-lane-a-e2e',
+            comparison_id: 'model-comparison-e2e',
+            display_alias: 'Model A',
+            position: 1,
+            weight: 100,
+            status: 'completed',
+            response_text: 'Model A chat response: Compare recovery options for a blocked DAG.',
+            latency_ms: 320,
+            cost: 0.0015,
+            run_id: 'run-model-comparison-a-e2e',
+            error_code: null,
+            error_message: null,
+            metadata: {
+                trace_replayable: true,
+                context_coverage: 'not_measured',
+            },
+        },
+        {
+            id: 'model-comparison-lane-b-e2e',
+            comparison_id: 'model-comparison-e2e',
+            display_alias: 'Model B',
+            position: 2,
+            weight: 100,
+            status: 'completed',
+            response_text: 'Model B chat response: Compare recovery options for a blocked DAG.',
+            latency_ms: 395,
+            cost: 0.0022,
+            run_id: 'run-model-comparison-b-e2e',
+            error_code: null,
+            error_message: null,
+            metadata: {
+                trace_replayable: true,
+                context_coverage: 'not_measured',
+            },
+        },
+    ]
+
+    if (revealed) {
+        return {
+            id: 'model-comparison-e2e',
+            prompt: 'Compare recovery options for a blocked DAG.',
+            mode: 'blind',
+            task_type: 'chat',
+            blind: true,
+            status: 'completed',
+            timeout_seconds: 60,
+            winner_lane_id: 'model-comparison-lane-a-e2e',
+            revealed: true,
+            revealed_at: now,
+            benchmark_group_id: null,
+            scorecard: {
+                reason: 'Selected from TALOS scorecard.',
+            },
+            metadata: { source: 'e2e' },
+            lanes: lanes.map((lane, index) => ({
+                ...lane,
+                model_profile_id: index === 0 ? 'profile-e2e' : 'profile-alt-e2e',
+                model_profile: index === 0
+                    ? {
+                        id: 'profile-e2e',
+                        display_name: 'E2E server-side profile',
+                        provider: 'openai',
+                        model: 'gpt-e2e',
+                        status: 'healthy',
+                    }
+                    : {
+                        id: 'profile-alt-e2e',
+                        display_name: 'E2E alternate profile',
+                        provider: 'anthropic',
+                        model: 'claude-e2e',
+                        status: 'healthy',
+                    },
+            })),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    return {
+        id: 'model-comparison-e2e',
+        prompt: 'Compare recovery options for a blocked DAG.',
+        mode: 'blind',
+        task_type: 'chat',
+        blind: true,
+        status: 'completed',
+        timeout_seconds: 60,
+        winner_lane_id: null,
+        revealed: false,
+        revealed_at: null,
+        benchmark_group_id: null,
+        scorecard: null,
+        metadata: { source: 'e2e' },
+        lanes: lanes.map(({ run_id: _runId, ...lane }) => lane),
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function modelComparisonBenchmarkGroupPayload(includeResults = false) {
+    const group = {
+        id: 'benchmark-group-model-comparison-e2e',
+        name: 'Model comparison V4',
+        source_run_id: 'run-model-comparison-a-e2e',
+        scenario_path: 'talos://model-comparisons/model-comparison-e2e',
+        scenario_hash: 'scenariohash-model-comparison-e2e',
+        prompt_hash: 'prompthash-model-comparison-e2e',
+        context_hash: 'contexthash-model-comparison-e2e',
+        model: 'model-comparison',
+        evaluator_version: 'talos-model-comparison-v1',
+        metadata: {
+            comparison_type: 'model_profile_blind_compare',
+            model_comparison_id: 'model-comparison-e2e',
+        },
+        results_count: 2,
+        created_at: now,
+        updated_at: now,
+    }
+
+    if (!includeResults) {
+        return group
+    }
+
+    return {
+        ...group,
+        results: [
+            {
+                id: 'benchmark-result-model-lane-a',
+                benchmark_group_id: 'benchmark-group-model-comparison-e2e',
+                mode: 'model_lane_a',
+                label: 'Model Lane A',
+                status: 'complete',
+                prompt_hash: 'prompthash-model-comparison-e2e',
+                context_hash: 'contexthash-model-comparison-e2e',
+                evaluator_version: 'talos-model-comparison-v1',
+                metrics: { latency_ms: 320, cost: 0.0015 },
+                raw_report: { lane_id: 'model-comparison-lane-a-e2e', response_text: 'Model A chat response: Compare recovery options for a blocked DAG.' },
+                trace_replayable: true,
+                created_at: now,
+                updated_at: now,
+            },
+            {
+                id: 'benchmark-result-model-lane-b',
+                benchmark_group_id: 'benchmark-group-model-comparison-e2e',
+                mode: 'model_lane_b',
+                label: 'Model Lane B',
+                status: 'complete',
+                prompt_hash: 'prompthash-model-comparison-e2e',
+                context_hash: 'contexthash-model-comparison-e2e',
+                evaluator_version: 'talos-model-comparison-v1',
+                metrics: { latency_ms: 395, cost: 0.0022 },
+                raw_report: { lane_id: 'model-comparison-lane-b-e2e', response_text: 'Model B chat response: Compare recovery options for a blocked DAG.' },
+                trace_replayable: true,
+                created_at: now,
+                updated_at: now,
+            },
+        ],
+    }
+}
+
 export type InstallTalosApiMocksOptions = {
     initialSessions?: Array<{
         id: string
@@ -947,6 +1109,8 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let fileUploaded = false
     let contextSetCreated = false
     let comparisonCreated = false
+    let modelComparisonPromoted = false
+    let currentModelComparison: Record<string, unknown> | null = null
     let researchReports: Record<string, unknown>[] = []
     let calendarDrafts: Record<string, unknown>[] = []
     let importedDriveFiles: Record<string, unknown>[] = []
@@ -956,6 +1120,12 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let cookbookModels: Record<string, unknown>[] = [cookbookModelPayload()]
     let modelProfiles = [
         modelProfilePayload(),
+        modelProfilePayload({
+            id: 'profile-alt-e2e',
+            display_name: 'E2E alternate profile',
+            provider: 'anthropic',
+            model: 'claude-e2e',
+        }),
     ]
     let createdSessionCount = 0
     const messagesBySession = new Map<string, Record<string, unknown>[]>()
@@ -1089,6 +1259,37 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             const profile = modelProfiles.find((candidate) => candidate.id === profileId)
 
             return json(route, { data: profile ?? modelProfilePayload({ id: profileId }) })
+        }
+
+        if (path === '/api/talos/model-comparisons' && method === 'POST') {
+            currentModelComparison = modelComparisonPayload(false)
+
+            return json(route, { data: currentModelComparison }, 201)
+        }
+
+        const modelComparisonVoteMatch = path.match(/^\/api\/talos\/model-comparisons\/([^/]+)\/vote$/)
+        if (modelComparisonVoteMatch && method === 'POST') {
+            currentModelComparison = modelComparisonPayload(true)
+
+            return json(route, { data: currentModelComparison })
+        }
+
+        const modelComparisonBenchmarkMatch = path.match(/^\/api\/talos\/model-comparisons\/([^/]+)\/benchmark$/)
+        if (modelComparisonBenchmarkMatch && method === 'POST') {
+            modelComparisonPromoted = true
+            if (currentModelComparison) {
+                currentModelComparison = {
+                    ...currentModelComparison,
+                    benchmark_group_id: 'benchmark-group-model-comparison-e2e',
+                }
+            }
+
+            return json(route, { data: modelComparisonBenchmarkGroupPayload(true) }, 201)
+        }
+
+        const modelComparisonMatch = path.match(/^\/api\/talos\/model-comparisons\/([^/]+)$/)
+        if (modelComparisonMatch && method === 'GET') {
+            return json(route, { data: currentModelComparison ?? modelComparisonPayload(false) })
         }
 
         if (path === '/api/talos/settings' && method === 'GET') {
@@ -1438,6 +1639,38 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             return json(route, { data: report }, 201)
         }
 
+        const researchReportExportMatch = path.match(/^\/api\/talos\/research-reports\/([^/]+)\/export$/)
+        if (researchReportExportMatch && method === 'GET') {
+            return json(route, {
+                data: {
+                    research_report_id: researchReportExportMatch[1],
+                    format: 'markdown',
+                    mime_type: 'text/markdown',
+                    export_status: 'complete',
+                    content: '# E2E research report\n\nSource-backed evidence.',
+                    generated_at: now,
+                },
+            })
+        }
+
+        const researchReportFollowUpMatch = path.match(/^\/api\/talos\/research-reports\/([^/]+)\/follow-up-session$/)
+        if (researchReportFollowUpMatch && method === 'POST') {
+            return json(route, {
+                data: {
+                    id: 'session-research-follow-up-e2e',
+                    title: 'Follow-up: AVM evidence review',
+                    mode: 'research_follow_up',
+                    persistence_mode: 'persistent',
+                    metadata: {
+                        source: 'research_report_follow_up',
+                        research_report_id: researchReportFollowUpMatch[1],
+                    },
+                    created_at: now,
+                    updated_at: now,
+                },
+            }, 201)
+        }
+
         if (path === '/api/talos/google/accounts' && method === 'GET') {
             return json(route, { data: googleAccounts })
         }
@@ -1541,15 +1774,23 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         }
 
         if (path === '/api/talos/benchmark-groups' && method === 'GET') {
+            const groups = [
+                ...(modelComparisonPromoted ? [modelComparisonBenchmarkGroupPayload(false)] : []),
+                ...(comparisonCreated ? [comparisonBenchmarkGroupPayload(false)] : []),
+                benchmarkGroupPayload(false),
+            ]
+
             return json(route, {
-                data: comparisonCreated
-                    ? [comparisonBenchmarkGroupPayload(false), benchmarkGroupPayload(false)]
-                    : [benchmarkGroupPayload(false)],
+                data: groups,
             })
         }
 
         if (path === '/api/talos/benchmark-groups/benchmark-group-e2e' && method === 'GET') {
             return json(route, { data: benchmarkGroupPayload(true) })
+        }
+
+        if (path === '/api/talos/benchmark-groups/benchmark-group-model-comparison-e2e' && method === 'GET') {
+            return json(route, { data: modelComparisonBenchmarkGroupPayload(true) })
         }
 
         if (path === '/api/talos/benchmark-groups/benchmark-group-compare-e2e' && method === 'GET') {
