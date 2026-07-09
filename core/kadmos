@@ -208,7 +208,7 @@ switch ($command) {
 
         echo blue("Model: ") . ($useMock ? 'MockLLM' : $model) . "\n";
         echo blue("Cycles: ") . "$cycles\n";
-        echo blue("Talos: ") . "http://127.0.0.1:8001/chat (run: kadmos dashboard)\n";
+        echo blue("Talos: ") . "http://127.0.0.1:8000/ (run: kadmos dashboard)\n";
         echo blue("Validator telemetry: ") . "http://127.0.0.1:3000/validator-dashboard (legacy)\n\n";
 
         $controller = new \Kadmos\MainLoopController($orchestrator, $llm, $validator, $cycles, $broadcast, $demoThrottle);
@@ -256,7 +256,7 @@ switch ($command) {
             break;
         }
 
-        $port = '8001';
+        $port = '8000';
         foreach ($args as $arg) {
             if (is_numeric($arg)) {
                 $port = $arg;
@@ -269,7 +269,7 @@ switch ($command) {
             exit(1);
         }
 
-        echo yellow("Starting Talos chat on http://127.0.0.1:{$port}/chat ...\n");
+        echo yellow("Starting Talos workspace on http://127.0.0.1:{$port}/ ...\n");
         echo yellow("Legacy validator dashboard: kadmos dashboard --validator\n");
         echo yellow("Press Ctrl+C to stop\n\n");
 
@@ -410,6 +410,7 @@ switch ($command) {
             'ValidatorBypassContract' => "$baseDir/tests/ValidatorBypassContractTest.php",
             'CurlNoDeprecatedClose' => "$baseDir/tests/CurlNoDeprecatedCloseTest.php",
             'AgentOperatingModelContract' => "$baseDir/tests/AgentOperatingModelContractTest.php",
+            'DeploymentPackagingContract' => "$baseDir/tests/DeploymentPackagingContractTest.php",
             'CliTestSuiteContract' => "$baseDir/tests/CliTestSuiteContractTest.php",
         ];
 
@@ -486,7 +487,7 @@ switch ($command) {
 
     case 'demo':
         echo yellow("Running HMI demo...\n");
-        echo yellow("Open Talos at http://127.0.0.1:8001/chat (run: kadmos dashboard)\n");
+        echo yellow("Open Talos at http://127.0.0.1:8000/ (run: kadmos dashboard)\n");
         echo yellow("Legacy validator telemetry remains at http://127.0.0.1:3000/validator-dashboard\n\n");
 
         $demoScript = $baseDir . '/tests/hmi-demo.php';
@@ -531,7 +532,7 @@ switch ($command) {
 
         $envKey = getenv('KADMOS_API_KEY') ?: getenv('DEEPSEEK_API_KEY');
         echo bold("API key: ") . ($envKey ? green("set") : red("not set")) . "\n";
-        echo bold("Chat: ") . "http://127.0.0.1:8001/chat\n";
+        echo bold("Talos: ") . "http://127.0.0.1:8000/\n";
         break;
 
     // ═══════════════════════════════════════════════

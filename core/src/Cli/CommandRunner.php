@@ -443,7 +443,7 @@ final class CommandRunner
 
     private static function controlPlaneUrl(array $args): string
     {
-        $url = self::option($args, '--control-plane') ?? (getenv('KADMOS_CONTROL_PLANE_URL') ?: 'http://127.0.0.1:8001');
+        $url = self::option($args, '--control-plane') ?? (getenv('KADMOS_CONTROL_PLANE_URL') ?: 'http://127.0.0.1:8000');
 
         return rtrim((string) $url, '/');
     }

@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
+
+BOOT_STATE_DIR="$ROOT_DIR/.talos"
+BOOT_STATE_FILE="$ROOT_DIR/.talos/state.json"
+BOOT_DISABLED=0
+
+usage() {
+  cat <<'HELP'
+talos - AVM/TALOS deployment helper
+
+Usage:
+  talos up              Create .env if needed and start TALOS, queue, and validator
+  talos down            Stop the Docker Compose stack
+  talos logs            Follow stack logs
+  talos doctor          Check Docker, env, compose config, and service readiness
+  talos open            Open the TALOS URL in the default browser
+  talos fresh           Development-only reset of Compose volumes, then start
+  talos help            Show this help
+
+Global options:
+  --no-boot, --plain    Disable the first-run TALOS bootstrap animation
+
+Environment:
+  TALOS_NO_BOOT=1       Disable bootstrap output for this invocation
+HELP
+}
+
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+print_step() {
+  printf '\n[TALOS] %s\n' "$1"
+}
+
+mark_boot_seen() {
+  mkdir -p "$BOOT_STATE_DIR"
+  printf '{\n  "boot_seen": true,\n  "updated_at": "%s"\n}\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "$BOOT_STATE_FILE"
+}
+
+should_boot() {
+  local command_name="${1:-help}"
+
+  if [ "$BOOT_DISABLED" -eq 1 ]; then
+    return 1
+  fi
+
+  if is_truthy "${TALOS_NO_BOOT:-}" || is_truthy "${CI:-}"; then
+    return 1
+  fi
+
+  if [ ! -t 1 ]; then
+    return 1
+  fi
+
+  case "$command_name" in
+    help|-h|--help) return 1 ;;
+  esac
+
+  [ ! -f "$BOOT_STATE_FILE" ]
+}
+
+boot_sequence() {
+  local delay="0.08"
+  if is_truthy "${TALOS_BOOT_FAST:-}"; then
+    delay="0"
+  fi
+
+  printf '\033[?25l'
+  printf '\n'
+  printf 'TALOS bootstrap\n'
+  printf '---------------\n'
+
+  local phases=(
+    "AVM graph core"
+    "JMP validator"
+    "Laravel control plane"
+    "Queue worker"
+    "Readiness probe"
+  )
+
+  local phase
+  for phase in "${phases[@]}"; do
+    printf '  [..] %s' "$phase"
+    if [ "$delay" != "0" ]; then
+      sleep "$delay"
+    fi
+    printf '\r  [OK] %s\n' "$phase"
+  done
+
+  printf 'Runtime profile: Docker-first TALOS workspace\n'
+  printf 'Operator mode: HMI-first, fail-closed, evidence-ready\n\n'
+  printf '\033[?25h'
+}
+
+maybe_boot() {
+  local command_name="${1:-help}"
+  if should_boot "$command_name"; then
+    boot_sequence
+    mark_boot_seen
+  fi
+}
+
+php_bin() {
+  if [ -x "$ROOT_DIR/.tools/php/php.exe" ]; then
+    printf '%s\n' "$ROOT_DIR/.tools/php/php.exe"
+    return
+  fi
+
+  if command -v php >/dev/null 2>&1; then
+    command -v php
+    return
+  fi
+
+  printf '%s\n' ""
+}
+
+compose() {
+  docker compose "$@"
+}
+
+env_value() {
+  local key="$1"
+  if [ ! -f .env ]; then
+    return 1
+  fi
+  grep -E "^${key}=" .env | tail -n 1 | cut -d= -f2- || true
+}
+
+ensure_env() {
+  if [ ! -f .env ]; then
+    cp .env.example .env
+    echo "Created .env from .env.example"
+  fi
+
+  local app_key
+  app_key="$(env_value APP_KEY)"
+  if [[ ! "$app_key" =~ ^base64:.+ ]]; then
+    local php
+    php="$(php_bin)"
+    if [ -z "$php" ]; then
+      echo "APP_KEY is missing and PHP is not available to generate it." >&2
+      echo "Set APP_KEY manually in .env, then rerun: talos up" >&2
+      exit 1
+    fi
+
+    local generated
+    generated="$("$php" -r "echo 'base64:'.base64_encode(random_bytes(32));")"
+    if grep -q '^APP_KEY=' .env; then
+      sed -i.bak "s|^APP_KEY=.*|APP_KEY=${generated}|" .env
+      rm -f .env.bak
+    else
+      printf '\nAPP_KEY=%s\n' "$generated" >> .env
+    fi
+    echo "Generated APP_KEY in .env"
+  fi
+}
+
+talos_url() {
+  local app_url
+  app_url="$(env_value APP_URL)"
+  if [ -n "$app_url" ]; then
+    printf '%s\n' "$app_url"
+    return
+  fi
+
+  local port
+  port="$(env_value APP_PORT)"
+  printf 'http://localhost:%s\n' "${port:-8088}"
+}
+
+open_url() {
+  local url="$1"
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "Start-Process '$url'" >/dev/null 2>&1 || true
+  elif command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 || true
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 || true
+  else
+    echo "Open $url"
+  fi
+}
+
+wait_for_ready() {
+  local url
+  url="$(talos_url)"
+  local ready_url="${url%/}/readyz"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "Readiness probe skipped; curl is not available."
+    return 0
+  fi
+
+  local attempt
+  for attempt in $(seq 1 30); do
+    if curl -fsS "$ready_url" >/dev/null 2>&1; then
+      echo "Readiness OK: $ready_url"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Readiness still warming up: $ready_url"
+  echo "Run: talos doctor"
+  return 0
+}
+
+doctor() {
+  local ok=0
+  local docker_available=0
+  local compose_available=0
+  echo "TALOS Doctor"
+  echo "------------"
+
+  if command -v docker >/dev/null 2>&1; then
+    echo "docker              OK   $(docker --version)"
+    docker_available=1
+  else
+    echo "docker              FAIL Docker CLI is not available"
+    ok=1
+  fi
+
+  if docker compose version >/dev/null 2>&1; then
+    echo "docker compose      OK   $(docker compose version)"
+    compose_available=1
+  else
+    echo "docker compose      FAIL Docker Compose plugin is not available"
+    ok=1
+  fi
+
+  if [ -f .env ]; then
+    echo ".env                OK   present"
+  else
+    echo ".env                WARN missing; talos up will create it"
+  fi
+
+  if [ -f docker-compose.yml ]; then
+    echo "compose file        OK   docker-compose.yml"
+  else
+    echo "compose file        FAIL docker-compose.yml missing"
+    ok=1
+  fi
+
+  if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ]; then
+    if docker compose config >/dev/null 2>&1; then
+      echo "compose config      OK   valid"
+    else
+      echo "compose config      FAIL invalid"
+      ok=1
+    fi
+  else
+    echo "compose config      SKIP Docker Compose unavailable"
+  fi
+
+  if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ] && docker compose ps >/dev/null 2>&1; then
+    docker compose ps
+  fi
+
+  local url
+  url="$(talos_url)"
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fsS "${url%/}/readyz" >/dev/null 2>&1; then
+      echo "readyz              OK   ${url%/}/readyz"
+    else
+      echo "readyz              WARN ${url%/}/readyz is not healthy or not running"
+    fi
+  fi
+
+  return "$ok"
+}
+
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --no-boot|--plain)
+      BOOT_DISABLED=1
+      ;;
+    *)
+      args+=("$arg")
+      ;;
+  esac
+done
+
+set -- "${args[@]}"
+cmd="${1:-help}"
+maybe_boot "$cmd"
+
+case "$cmd" in
+  up)
+    print_step "Preparing environment"
+    ensure_env
+    print_step "Building and starting TALOS, queue, and validator"
+    docker compose up -d --build
+    print_step "Checking readiness"
+    wait_for_ready
+    echo "TALOS is starting at $(talos_url)"
+    ;;
+  down)
+    print_step "Stopping TALOS stack"
+    docker compose down
+    ;;
+  logs)
+    docker compose logs -f
+    ;;
+  doctor)
+    doctor
+    ;;
+  open)
+    print_step "Opening TALOS workspace"
+    ensure_env
+    open_url "$(talos_url)"
+    ;;
+  fresh)
+    echo "This removes local TALOS Docker volumes. Use only for development."
+    read -r -p "Type RESET to continue: " confirm
+    if [ "$confirm" != "RESET" ]; then
+      echo "Aborted."
+      exit 1
+    fi
+    print_step "Resetting Docker volumes"
+    docker compose down -v
+    print_step "Preparing environment"
+    ensure_env
+    print_step "Building and starting fresh TALOS stack"
+    docker compose up -d --build
+    print_step "Checking readiness"
+    wait_for_ready
+    echo "Fresh TALOS stack is starting at $(talos_url)"
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $cmd" >&2
+    usage
+    exit 1
+    ;;
+esac

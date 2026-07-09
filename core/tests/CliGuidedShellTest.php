@@ -93,7 +93,8 @@ function testDashboardCommandTargetsTalosControlPlaneByDefault(): void
     $cli = (string) file_get_contents(__DIR__ . '/../kadmos');
 
     assertTrue(str_contains($cli, "../control-plane"), 'Dashboard command should target the Laravel control-plane by default.');
-    assertTrue(str_contains($cli, 'http://127.0.0.1:8001/chat'), 'Dashboard command should advertise the dedicated Talos chat URL.');
+    assertTrue(str_contains($cli, 'http://127.0.0.1:8000/'), 'Dashboard command should advertise the canonical Talos workspace URL.');
+    assertTrue(!str_contains($cli, 'http://127.0.0.1:8001/chat'), 'Dashboard command should not advertise the retired 8001 chat route.');
     assertTrue(str_contains($cli, "--validator"), 'Dashboard command should keep the legacy validator dashboard behind an explicit flag.');
     assertTrue(str_contains($cli, 'Validator telemetry') && str_contains($cli, 'legacy'), 'Validator dashboard should be described as legacy telemetry, not primary Talos.');
 }

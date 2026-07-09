@@ -73,7 +73,7 @@ export function buildServer() {
 
   // Canonical UI lives in the Laravel control-plane. The validator remains API/telemetry only.
   server.get('/dashboard', async (_request, reply) => {
-    const talosUrl = process.env.TALOS_CHAT_URL ?? process.env.TALOS_DASHBOARD_URL ?? 'http://127.0.0.1:8001/chat';
+    const talosUrl = process.env.TALOS_CHAT_URL ?? process.env.TALOS_DASHBOARD_URL ?? 'http://127.0.0.1:8000/';
     reply.redirect(talosUrl, 302);
   });
 
@@ -272,7 +272,7 @@ if (isMainModule) {
   const port = Number(process.env.PORT ?? 3000);
   const host = process.env.HOST ?? '127.0.0.1';
   server.listen({ port, host }).then(() => {
-    const talosUrl = process.env.TALOS_CHAT_URL ?? process.env.TALOS_DASHBOARD_URL ?? 'http://127.0.0.1:8001/chat';
+    const talosUrl = process.env.TALOS_CHAT_URL ?? process.env.TALOS_DASHBOARD_URL ?? 'http://127.0.0.1:8000/';
     console.log(`AVM at http://${host}:${port} | Talos: ${talosUrl} | Validator telemetry: http://${host}:${port}/validator-dashboard | WS: ws://${host}:${port}/ws`);
   }).catch((e: unknown) => { console.error(e); process.exit(1); });
 }

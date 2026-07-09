@@ -18,7 +18,19 @@ function testDoctorReportIncludesEnterpriseChecks(): void
     $report = DoctorCommand::report(dirname(__DIR__));
     $names = array_column($report['checks'], 'name');
 
-    foreach (['php', 'composer', 'node', 'validator_dependencies', 'laravel', 'sqlite_writable', 'provider_key', 'ssl_verification'] as $check) {
+    foreach ([
+        'php',
+        'composer',
+        'node',
+        'validator_dependencies',
+        'laravel',
+        'sqlite_writable',
+        'control_plane_url',
+        'validator_health_url',
+        'root_packaging',
+        'provider_key',
+        'ssl_verification',
+    ] as $check) {
         assertTrue(in_array($check, $names, true), "Doctor report should include {$check}.");
     }
 
@@ -43,9 +55,19 @@ function testDoctorJsonCommandEmitsMachineReadableReport(): void
     assertTrue(isset($report['checks']) && is_array($report['checks']), 'doctor --json should include checks.');
 }
 
+function testDoctorDocumentsCanonicalRuntimeUrls(): void
+{
+    $report = DoctorCommand::report(dirname(__DIR__));
+    $checks = array_column($report['checks'], null, 'name');
+
+    assertTrue(str_contains((string) ($checks['control_plane_url']['message'] ?? ''), 'http://127.0.0.1:8000'), 'Doctor should document canonical TALOS control-plane URL.');
+    assertTrue(str_contains((string) ($checks['validator_health_url']['message'] ?? ''), 'http://127.0.0.1:3000/health'), 'Doctor should document canonical validator health URL.');
+}
+
 $tests = [
     'testDoctorReportIncludesEnterpriseChecks',
     'testDoctorJsonCommandEmitsMachineReadableReport',
+    'testDoctorDocumentsCanonicalRuntimeUrls',
 ];
 
 foreach ($tests as $test) {
