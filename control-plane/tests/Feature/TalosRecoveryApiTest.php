@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosSession;
 use App\Models\TalosRun;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -12,10 +14,12 @@ final class TalosRecoveryApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_invalid_recovery_action_is_rejected(): void
@@ -108,9 +112,30 @@ final class TalosRecoveryApiTest extends TestCase
             ->assertJsonPath('data.events.0.payload.edited_payload.url', 'https://api.example.test');
     }
 
+    public function test_recovery_rejects_runs_owned_by_another_user(): void
+    {
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'title' => 'Foreign recovery session',
+            'mode' => 'avm_on',
+        ]);
+        $foreignRun = TalosRun::query()->create([
+            'session_id' => $foreignSession->id,
+            'mode' => 'avm_on',
+            'status' => 'failed',
+            'prompt_hash' => hash('sha256', 'foreign recovery'),
+        ]);
+
+        $this->postJson("/api/talos/runs/{$foreignRun->id}/recover", [
+            'action' => 'retry_node',
+            'node_id' => 'extract_file',
+        ])->assertNotFound();
+    }
+
     private function createBlockedRun(): TalosRun
     {
         return TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'avm_on',
             'status' => 'blocked',
             'prompt_hash' => hash('sha256', 'recover this run'),

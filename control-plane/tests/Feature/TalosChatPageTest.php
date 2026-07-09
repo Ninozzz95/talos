@@ -105,4 +105,20 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringNotContainsString('TalosRecoveryPanel', $component);
         $this->assertStringNotContainsString('dropzone', strtolower($component));
     }
+
+    public function test_chat_surface_uses_internal_viewport_scroll_instead_of_page_scroll(): void
+    {
+        $workspace = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $chatSurface = file_get_contents(base_path('resources/js/components/talos/workspace/TalosChatSurface.vue'));
+
+        $this->assertIsString($workspace);
+        $this->assertIsString($chatSurface);
+        $this->assertStringContainsString('talos-chat-scroll-root', $workspace);
+        $this->assertStringContainsString('h-[100dvh]', $workspace);
+        $this->assertStringContainsString('overflow-hidden', $workspace);
+        $this->assertStringContainsString('talos-chat-thread', $chatSurface);
+        $this->assertStringContainsString('overflow-y-auto', $chatSurface);
+        $this->assertStringContainsString('overscroll-contain', $chatSurface);
+        $this->assertStringContainsString('scrollbar-gutter: stable', $chatSurface);
+    }
 }

@@ -72,6 +72,7 @@ final class TalosAuditApiTest extends TestCase
         $this->assertIsString($fileId);
 
         $run = TalosRun::query()->create([
+            'user_id' => auth()->id(),
             'mode' => 'avm_on',
             'status' => 'blocked',
             'prompt_hash' => hash('sha256', 'audit recovery'),

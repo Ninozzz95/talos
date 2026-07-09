@@ -212,7 +212,7 @@ defineExpose({ scrollToBottom })
 </script>
 
 <template>
-    <section ref="chatThreadEl" class="talos-chat-thread relative z-10 min-h-0 flex-1 overflow-y-auto px-4 pb-48 pt-7 md:px-6 lg:pb-52" aria-label="TALOS chat thread">
+    <section ref="chatThreadEl" class="talos-chat-thread relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-48 pt-7 md:px-6 lg:pb-52" aria-label="TALOS chat thread">
         <div class="mx-auto flex min-h-full w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
@@ -363,3 +363,9 @@ defineExpose({ scrollToBottom })
         </div>
     </section>
 </template>
+
+<style scoped>
+.talos-chat-thread {
+    scrollbar-gutter: stable;
+}
+</style>

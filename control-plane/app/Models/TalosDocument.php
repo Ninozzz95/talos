@@ -17,6 +17,7 @@ final class TalosDocument extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'run_id',
         'run_artifact_id',
         'research_report_id',
@@ -62,6 +63,7 @@ final class TalosDocument extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'run_id' => $this->run_id,
             'run_artifact_id' => $this->run_artifact_id,
             'research_report_id' => $this->research_report_id,

@@ -6,14 +6,19 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosResearchReport;
 use App\Models\TalosRunArtifact;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 final class TalosArtifactController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
+
         $artifacts = TalosRunArtifact::query()
             ->with('run')
+            ->whereHas('run', fn ($query) => $query->where('user_id', $userId))
             ->latest('created_at')
             ->get()
             ->map(fn (TalosRunArtifact $artifact): array => $artifact->toApiArray(includeRun: true))
@@ -22,20 +27,23 @@ final class TalosArtifactController extends Controller
         return response()->json(['data' => $artifacts]);
     }
 
-    public function show(TalosRunArtifact $artifact): JsonResponse
+    public function show(Request $request, TalosRunArtifact $artifact): JsonResponse
     {
         $artifact->load('run');
+        $this->assertArtifactOwnedByCurrentUser($request, $artifact);
 
         return response()->json(['data' => $artifact->toApiArray(includeRun: true)]);
     }
 
-    public function preview(TalosRunArtifact $artifact): JsonResponse
+    public function preview(Request $request, TalosRunArtifact $artifact): JsonResponse
     {
         $artifact->load('run');
+        $userId = $this->assertArtifactOwnedByCurrentUser($request, $artifact);
 
         if ($artifact->artifact_type === 'research_report') {
             $reportId = $this->researchReportIdFromArtifact($artifact);
             $report = $reportId ? TalosResearchReport::query()
+                ->where('user_id', $userId)
                 ->with(['sources', 'claims.sources'])
                 ->find($reportId) : null;
 
@@ -75,5 +83,21 @@ final class TalosArtifactController extends Controller
         }
 
         return null;
+    }
+
+    private function currentUserId(Request $request): int
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        return (int) $user->id;
+    }
+
+    private function assertArtifactOwnedByCurrentUser(Request $request, TalosRunArtifact $artifact): int
+    {
+        $userId = $this->currentUserId($request);
+        abort_unless($artifact->run !== null && (int) $artifact->run->user_id === $userId, 404);
+
+        return $userId;
     }
 }

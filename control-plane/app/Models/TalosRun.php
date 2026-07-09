@@ -18,6 +18,7 @@ final class TalosRun extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'session_id',
         'model_profile_id',
         'model_routing_profile_id',
@@ -100,6 +101,7 @@ final class TalosRun extends Model
     {
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'session_id' => $this->session_id,
             'model_profile_id' => $this->model_profile_id,
             'model_routing_profile_id' => $this->model_routing_profile_id,

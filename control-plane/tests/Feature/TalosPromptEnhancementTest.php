@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\TalosModelProfile;
 use App\Models\TalosSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -15,10 +16,12 @@ final class TalosPromptEnhancementTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_prompt_enhancement_returns_controlled_unavailable_without_a_usable_profile(): void
@@ -33,6 +36,7 @@ final class TalosPromptEnhancementTest extends TestCase
     public function test_prompt_enhancement_uses_server_side_profile_without_persisting_chat_messages_or_leaking_secrets(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-test',
             'display_name' => 'OpenAI test',
@@ -67,6 +71,7 @@ final class TalosPromptEnhancementTest extends TestCase
     public function test_prompt_enhancement_rejects_raw_client_secrets(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-test',
             'display_name' => 'OpenAI test',
@@ -89,5 +94,26 @@ final class TalosPromptEnhancementTest extends TestCase
         $this->assertStringNotContainsString('client-secret', $response->getContent());
         $this->assertStringNotContainsString('another-client-secret', $response->getContent());
         $this->assertStringNotContainsString('encrypted-client-secret', $response->getContent());
+    }
+
+    public function test_prompt_enhancement_does_not_use_foreign_model_profiles(): void
+    {
+        $otherUser = User::factory()->create();
+        $foreignProfile = TalosModelProfile::query()->create([
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-foreign',
+            'display_name' => 'Foreign profile',
+            'encrypted_secret' => Crypt::encryptString('foreign-secret'),
+            'status' => 'healthy',
+        ]);
+
+        $this->postJson('/api/talos/prompts/enhance', [
+            'prompt' => 'Improve this',
+            'model_profile_id' => $foreignProfile->id,
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'PROMPT_ENHANCER_UNAVAILABLE')
+            ->assertJsonMissing(['foreign-secret']);
     }
 }

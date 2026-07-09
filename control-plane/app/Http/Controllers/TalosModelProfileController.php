@@ -24,9 +24,13 @@ final class TalosModelProfileController extends Controller
         $this->urlPolicy = PublicHttpUrlPolicy::fromConfig();
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $profiles = TalosModelProfile::query()
+            ->where('user_id', $userId)
             ->latest('updated_at')
             ->latest('created_at')
             ->get()
@@ -38,8 +42,10 @@ final class TalosModelProfileController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $validated = $request->validate([
-            'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'provider' => ['required', 'string', Rule::in(TalosModelProviderCatalog::ids())],
             'model' => ['sometimes', 'nullable', 'string', 'min:1', 'max:255'],
             'display_name' => ['sometimes', 'nullable', 'string', 'min:1', 'max:255'],
@@ -56,7 +62,7 @@ final class TalosModelProfileController extends Controller
         $this->assertSafeBaseUrl((string) $validated['provider'], $validated['base_url'] ?? null);
 
         $profile = TalosModelProfile::query()->create([
-            'user_id' => $validated['user_id'] ?? null,
+            'user_id' => $userId,
             'provider' => $validated['provider'],
             'model' => $validated['model'],
             'display_name' => $validated['display_name'],
@@ -95,15 +101,18 @@ final class TalosModelProfileController extends Controller
         return response()->json(['data' => $probeService->probeDraft($validated)]);
     }
 
-    public function show(TalosModelProfile $profile): JsonResponse
+    public function show(Request $request, TalosModelProfile $profile): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $profile);
+
         return response()->json(['data' => $profile->toApiArray()]);
     }
 
     public function update(Request $request, TalosModelProfile $profile): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $profile);
+
         $validated = $request->validate([
-            'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'provider' => ['sometimes', 'string', Rule::in(TalosModelProviderCatalog::ids())],
             'model' => ['sometimes', 'string', 'min:1', 'max:255'],
             'display_name' => ['sometimes', 'string', 'min:1', 'max:255'],
@@ -139,15 +148,19 @@ final class TalosModelProfileController extends Controller
         return response()->json(['data' => $profile->refresh()->toApiArray()]);
     }
 
-    public function destroy(TalosModelProfile $profile): JsonResponse
+    public function destroy(Request $request, TalosModelProfile $profile): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $profile);
+
         $profile->delete();
 
         return response()->json(null, 204);
     }
 
-    public function probe(TalosModelProfile $profile, TalosModelProbeService $probeService): JsonResponse
+    public function probe(Request $request, TalosModelProfile $profile, TalosModelProbeService $probeService): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $profile);
+
         $probe = $probeService->probe($profile);
 
         $profile->update([
@@ -193,5 +206,10 @@ final class TalosModelProfileController extends Controller
                 'secret' => 'Local providers are allowed only without bearer tokens.',
             ]);
         }
+    }
+
+    private function abortUnlessOwnedByCurrentUser(Request $request, TalosModelProfile $profile): void
+    {
+        abort_unless($request->user()?->id === $profile->user_id, 404);
     }
 }

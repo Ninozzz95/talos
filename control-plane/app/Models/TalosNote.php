@@ -17,6 +17,7 @@ final class TalosNote extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'run_id',
         'scope_type',
         'scope_id',
@@ -53,6 +54,7 @@ final class TalosNote extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'run_id' => $this->run_id,
             'scope_type' => $this->scope_type,
             'scope_id' => $this->scope_id,

@@ -106,11 +106,82 @@ final class TalosChatApiTest extends TestCase
         ]);
     }
 
+    public function test_talos_chat_includes_bounded_session_history_when_session_is_supplied(): void
+    {
+        config(['services.avm_validator.url' => 'http://validator.test']);
+
+        $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Stateful chat',
+            'mode' => 'verified_execution',
+        ]);
+        $session->messages()->create([
+            'role' => 'user',
+            'content' => 'Il mio database si chiama kadmos_prod.',
+        ]);
+        $session->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Terrò kadmos_prod come riferimento per i prossimi passaggi.',
+        ]);
+        $session->messages()->create([
+            'role' => 'user',
+            'content' => 'Quale database ho nominato?',
+        ]);
+
+        Http::fake([
+            'validator.test/chat' => Http::response(['text' => 'Hai nominato kadmos_prod.']),
+        ]);
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $session->id,
+            'message' => 'Quale database ho nominato?',
+            'api_key' => 'sk-test',
+        ])->assertOk();
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'http://validator.test/chat'
+            && str_contains((string) $request['message'], 'TALOS_CONVERSATION_CONTEXT')
+            && str_contains((string) $request['message'], '[user] Il mio database si chiama kadmos_prod.')
+            && str_contains((string) $request['message'], '[assistant] Terrò kadmos_prod come riferimento')
+            && str_contains((string) $request['message'], "CURRENT_USER_TASK:\nQuale database ho nominato?")
+            && substr_count((string) $request['message'], '[user] Quale database ho nominato?') === 0);
+    }
+
+    public function test_talos_chat_rejects_model_profiles_owned_by_another_user(): void
+    {
+        config(['services.avm_validator.url' => 'http://validator.test']);
+
+        $otherUser = User::factory()->create();
+        $foreignProfile = TalosModelProfile::query()->create([
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-foreign',
+            'display_name' => 'Foreign profile',
+            'status' => 'healthy',
+            'encrypted_secret' => Crypt::encryptString('foreign-secret'),
+            'base_url' => 'https://api.openai.test/v1',
+        ]);
+
+        Http::fake([
+            'validator.test/chat' => Http::response(['text' => 'Should not be called']),
+        ]);
+
+        $this->postJson('/api/talos/chat', [
+            'message' => 'Use another user model profile.',
+            'model_profile_id' => $foreignProfile->id,
+        ])
+            ->assertNotFound()
+            ->assertJsonMissing(['Should not be called'])
+            ->assertJsonMissing(['foreign-secret']);
+
+        Http::assertNothingSent();
+    }
+
     public function test_talos_chat_accepts_model_profile_id_without_returning_secret(): void
     {
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'OpenAI Work',
@@ -155,6 +226,7 @@ final class TalosChatApiTest extends TestCase
         ]);
 
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'deepseek',
             'model' => 'deepseek-chat',
             'display_name' => 'DeepSeek',
@@ -207,6 +279,7 @@ final class TalosChatApiTest extends TestCase
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'OpenAI Work',
@@ -214,6 +287,7 @@ final class TalosChatApiTest extends TestCase
             'encrypted_secret' => Crypt::encryptString('profile-secret'),
         ]);
         $file = TalosFile::query()->create([
+            'user_id' => $this->user->id,
             'original_name' => 'incident.md',
             'mime_type' => 'text/markdown',
             'size_bytes' => 64,
@@ -231,6 +305,7 @@ final class TalosChatApiTest extends TestCase
             'end_offset' => 61,
         ]);
         $contextSet = TalosContextSet::query()->create([
+            'user_id' => $this->user->id,
             'name' => 'Incident packet',
             'status' => 'available',
         ]);
@@ -269,9 +344,39 @@ final class TalosChatApiTest extends TestCase
             && ! str_contains((string) $request['message'], 'ingested/private/incident.md'));
     }
 
+    public function test_talos_chat_rejects_context_sets_owned_by_another_user(): void
+    {
+        config(['services.avm_validator.url' => 'http://validator.test']);
+
+        $otherUser = User::factory()->create();
+        $foreignContextSet = TalosContextSet::query()->create([
+            'user_id' => $otherUser->id,
+            'name' => 'Foreign packet',
+            'status' => 'available',
+        ]);
+
+        Http::fake([
+            'validator.test/chat' => Http::response(['text' => 'Should not be called']),
+        ]);
+
+        $this->postJson('/api/talos/chat', [
+            'message' => 'Use foreign context.',
+            'api_key' => 'sk-test',
+            'context_set_id' => $foreignContextSet->id,
+        ])
+            ->assertNotFound()
+            ->assertJsonMissing(['Should not be called']);
+
+        Http::assertNothingSent();
+        $this->assertDatabaseMissing('talos_runs', [
+            'context_set_id' => $foreignContextSet->id,
+        ]);
+    }
+
     public function test_talos_chat_rejects_disabled_profile_without_secret_leak(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'Disabled',
@@ -292,6 +397,7 @@ final class TalosChatApiTest extends TestCase
     public function test_talos_chat_rejects_private_profile_base_url_without_secret_leak(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'Unsafe Local',
@@ -315,6 +421,7 @@ final class TalosChatApiTest extends TestCase
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         TalosMemory::query()->create([
+            'user_id' => $this->user->id,
             'scope_type' => 'project',
             'scope_id' => 'avm',
             'kind' => 'project_fact',
@@ -344,6 +451,7 @@ final class TalosChatApiTest extends TestCase
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         $memory = TalosMemory::query()->create([
+            'user_id' => $this->user->id,
             'scope_type' => 'project',
             'scope_id' => 'avm',
             'kind' => 'project_fact',

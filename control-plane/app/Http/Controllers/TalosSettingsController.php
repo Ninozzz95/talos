@@ -4,21 +4,29 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\TalosContextSet;
+use App\Models\TalosModelProfile;
 use App\Models\TalosWorkspaceSetting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 final class TalosSettingsController extends Controller
 {
-    public function show(): JsonResponse
+    public function show(Request $request): JsonResponse
     {
         $settings = $this->settings();
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
 
-        return response()->json(['data' => $settings->toApiArray()]);
+        return response()->json(['data' => $this->settingsPayload($settings, $userId)]);
     }
 
     public function update(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $validated = $request->validate([
             'default_model_profile_id' => ['sometimes', 'nullable', 'string', 'exists:talos_model_profiles,id'],
             'default_context_set_id' => ['sometimes', 'nullable', 'string', 'exists:talos_context_sets,id'],
@@ -26,6 +34,23 @@ final class TalosSettingsController extends Controller
         ]);
 
         $settings = $this->settings();
+        $defaultErrors = [];
+
+        if (array_key_exists('default_model_profile_id', $validated)) {
+            if (! $this->modelProfileOwned($validated['default_model_profile_id'], $userId)) {
+                $defaultErrors['default_model_profile_id'] = ['Default model profile must belong to the authenticated user.'];
+            }
+        }
+
+        if (array_key_exists('default_context_set_id', $validated)) {
+            if (! $this->contextSetOwned($validated['default_context_set_id'], $userId)) {
+                $defaultErrors['default_context_set_id'] = ['Default context set must belong to the authenticated user.'];
+            }
+        }
+
+        if ($defaultErrors !== []) {
+            throw ValidationException::withMessages($defaultErrors);
+        }
 
         if (array_key_exists('default_model_profile_id', $validated)) {
             $settings->default_model_profile_id = $validated['default_model_profile_id'];
@@ -50,7 +75,7 @@ final class TalosSettingsController extends Controller
 
         $settings->save();
 
-        return response()->json(['data' => $settings->refresh()->toApiArray()]);
+        return response()->json(['data' => $this->settingsPayload($settings->refresh(), $userId)]);
     }
 
     private function settings(): TalosWorkspaceSetting
@@ -67,6 +92,52 @@ final class TalosSettingsController extends Controller
         $preferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
 
         return ($preferences['theme_policy_locked'] ?? false) === true;
+    }
+
+    private function modelProfileOwned(mixed $profileId, int $userId): bool
+    {
+        if ($profileId === null || $profileId === '') {
+            return true;
+        }
+
+        return TalosModelProfile::query()
+            ->whereKey((string) $profileId)
+            ->where('user_id', $userId)
+            ->exists();
+    }
+
+    private function contextSetOwned(mixed $contextSetId, int $userId): bool
+    {
+        if ($contextSetId === null || $contextSetId === '') {
+            return true;
+        }
+
+        return TalosContextSet::query()
+            ->whereKey((string) $contextSetId)
+            ->where('user_id', $userId)
+            ->exists();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function settingsPayload(TalosWorkspaceSetting $settings, int $userId): array
+    {
+        $payload = $settings->toApiArray();
+
+        if (($payload['default_model_profile_id'] ?? null) !== null
+            && ! $this->modelProfileOwned($payload['default_model_profile_id'], $userId)
+        ) {
+            $payload['default_model_profile_id'] = null;
+        }
+
+        if (($payload['default_context_set_id'] ?? null) !== null
+            && ! $this->contextSetOwned($payload['default_context_set_id'], $userId)
+        ) {
+            $payload['default_context_set_id'] = null;
+        }
+
+        return $payload;
     }
 
     /**

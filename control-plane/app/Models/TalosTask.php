@@ -17,6 +17,7 @@ final class TalosTask extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'run_id',
         'title',
         'description',
@@ -52,6 +53,7 @@ final class TalosTask extends Model
     {
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'run_id' => $this->run_id,
             'title' => $this->title,
             'description' => $this->description,

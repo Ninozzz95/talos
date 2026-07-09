@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosSession;
 use App\Models\TalosRun;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -12,10 +14,12 @@ final class TalosRunApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_run_can_be_created_and_events_are_appended_in_order(): void
@@ -93,6 +97,7 @@ final class TalosRunApiTest extends TestCase
     public function test_run_events_reject_associative_event_payloads(): void
     {
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'avm_on',
             'status' => 'queued',
             'prompt_hash' => hash('sha256', 'prompt'),
@@ -110,6 +115,7 @@ final class TalosRunApiTest extends TestCase
     public function test_run_events_redact_sensitive_payload_fields_before_returning_or_storing(): void
     {
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'avm_on',
             'status' => 'queued',
             'prompt_hash' => hash('sha256', 'prompt'),
@@ -146,6 +152,7 @@ final class TalosRunApiTest extends TestCase
     public function test_run_artifact_metadata_can_be_stored(): void
     {
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'avm_on',
             'status' => 'succeeded',
             'prompt_hash' => hash('sha256', 'prompt'),
@@ -165,5 +172,52 @@ final class TalosRunApiTest extends TestCase
             'run_id' => $run->id,
             'artifact_type' => 'evidence_report',
         ]);
+    }
+
+    public function test_runs_and_nested_run_resources_are_scoped_to_the_authenticated_user(): void
+    {
+        $ownRun = TalosRun::query()->create([
+            'user_id' => $this->user->id,
+            'mode' => 'avm_on',
+            'status' => 'queued',
+            'prompt_hash' => hash('sha256', 'own run'),
+        ]);
+
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'title' => 'Foreign session',
+            'mode' => 'avm_on',
+        ]);
+        $foreignRun = TalosRun::query()->create([
+            'session_id' => $foreignSession->id,
+            'mode' => 'avm_on',
+            'status' => 'queued',
+            'prompt_hash' => hash('sha256', 'foreign run'),
+        ]);
+        $foreignRun->events()->create([
+            'sequence' => 1,
+            'event_type' => 'worker.output',
+            'severity' => 'info',
+            'payload' => ['secret' => 'foreign'],
+            'occurred_at' => now(),
+        ]);
+
+        $this->getJson('/api/talos/runs')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $ownRun->id)
+            ->assertJsonMissing(['id' => $foreignRun->id]);
+
+        $this->getJson("/api/talos/runs/{$foreignRun->id}")->assertNotFound();
+        $this->patchJson("/api/talos/runs/{$foreignRun->id}", ['status' => 'running'])->assertNotFound();
+        $this->getJson("/api/talos/runs/{$foreignRun->id}/events")->assertNotFound();
+        $this->postJson("/api/talos/runs/{$foreignRun->id}/events", [
+            'events' => [['event_type' => 'policy.decision']],
+        ])->assertNotFound();
+        $this->getJson("/api/talos/runs/{$foreignRun->id}/replay")->assertNotFound();
+        $this->getJson("/api/talos/runs/{$foreignRun->id}/artifacts")->assertNotFound();
+        $this->postJson("/api/talos/runs/{$foreignRun->id}/artifacts", [
+            'artifact_type' => 'evidence_report',
+            'uri' => 'local://foreign.json',
+        ])->assertNotFound();
     }
 }

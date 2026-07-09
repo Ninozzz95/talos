@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Models\TalosContextSet;
 use App\Models\TalosModelProfile;
 use App\Models\TalosWorkspaceSetting;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -16,15 +17,18 @@ final class TalosSettingsApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_settings_can_store_and_return_only_safe_preferences(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-test',
             'display_name' => 'OpenAI test',
@@ -32,6 +36,7 @@ final class TalosSettingsApiTest extends TestCase
             'status' => 'healthy',
         ]);
         $contextSet = TalosContextSet::query()->create([
+            'user_id' => $this->user->id,
             'name' => 'Default context',
             'status' => 'available',
         ]);
@@ -153,6 +158,33 @@ final class TalosSettingsApiTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['default_model_profile_id', 'default_context_set_id']);
+    }
+
+    public function test_settings_reject_default_references_owned_by_another_user(): void
+    {
+        $otherUser = User::factory()->create();
+        $foreignProfile = TalosModelProfile::query()->create([
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-foreign',
+            'display_name' => 'Foreign profile',
+            'encrypted_secret' => Crypt::encryptString('foreign-secret'),
+            'status' => 'healthy',
+        ]);
+        $foreignContextSet = TalosContextSet::query()->create([
+            'user_id' => $otherUser->id,
+            'name' => 'Foreign context',
+            'status' => 'available',
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'default_model_profile_id' => $foreignProfile->id,
+            'default_context_set_id' => $foreignContextSet->id,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['default_model_profile_id', 'default_context_set_id'])
+            ->assertJsonMissing(['foreign-secret'])
+            ->assertJsonMissing(['Foreign context']);
     }
 
     public function test_settings_persist_each_theme_preset_via_settings_api(): void

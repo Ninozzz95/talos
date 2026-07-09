@@ -4,21 +4,29 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\TalosContextSet;
+use App\Models\TalosModelProfile;
 use App\Models\TalosRun;
 use App\Models\TalosRunArtifact;
 use App\Models\TalosRunEvent;
+use App\Models\TalosSession;
+use App\Models\User;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\TraceReplay\TraceReplayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 final class TalosRunController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
+
         $runs = TalosRun::query()
+            ->where('user_id', $userId)
             ->latest('created_at')
             ->get()
             ->map(fn (TalosRun $run): array => $run->toApiArray())
@@ -29,10 +37,13 @@ final class TalosRunController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
         $validated = $request->validate($this->runValidationRules(required: true));
+        $this->assertReferencesOwnedByCurrentUser($validated, $userId);
 
         $run = TalosRun::query()->create([
             ...$validated,
+            'user_id' => $userId,
             'mode' => $validated['mode'] ?? 'avm_on',
             'status' => $validated['status'] ?? 'queued',
         ]);
@@ -40,22 +51,28 @@ final class TalosRunController extends Controller
         return response()->json(['data' => $run->toApiArray()], 201);
     }
 
-    public function show(TalosRun $run): JsonResponse
+    public function show(Request $request, TalosRun $run): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         return response()->json(['data' => $run->toApiArray()]);
     }
 
     public function update(Request $request, TalosRun $run): JsonResponse
     {
+        $userId = $this->assertRunOwnedByCurrentUser($request, $run);
         $validated = $request->validate($this->runValidationRules(required: false));
+        $this->assertReferencesOwnedByCurrentUser($validated, $userId);
 
         $run->update($validated);
 
         return response()->json(['data' => $run->refresh()->toApiArray()]);
     }
 
-    public function events(TalosRun $run): JsonResponse
+    public function events(Request $request, TalosRun $run): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         $events = $run->events()
             ->oldest('sequence')
             ->get()
@@ -65,8 +82,10 @@ final class TalosRunController extends Controller
         return response()->json(['data' => $events]);
     }
 
-    public function replay(TalosRun $run, TraceReplayService $traces): JsonResponse
+    public function replay(Request $request, TalosRun $run, TraceReplayService $traces): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         $events = $run->events()
             ->oldest('sequence')
             ->get()
@@ -87,8 +106,10 @@ final class TalosRunController extends Controller
         return response()->json($traces->build($run->id, $events));
     }
 
-    public function artifacts(TalosRun $run): JsonResponse
+    public function artifacts(Request $request, TalosRun $run): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         $artifacts = $run->artifacts()
             ->latest('created_at')
             ->get()
@@ -100,6 +121,8 @@ final class TalosRunController extends Controller
 
     public function storeEvents(Request $request, TalosRun $run, RunEventNormalizer $normalizer): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         $validated = $request->validate([
             'events' => [
                 'required',
@@ -146,6 +169,8 @@ final class TalosRunController extends Controller
 
     public function storeArtifact(Request $request, TalosRun $run): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         $validated = $request->validate([
             'artifact_type' => ['required', 'string', 'min:1', 'max:255'],
             'uri' => ['required', 'string', 'min:1', 'max:2048'],
@@ -180,5 +205,54 @@ final class TalosRunController extends Controller
             'started_at' => ['sometimes', 'nullable', 'date'],
             'completed_at' => ['sometimes', 'nullable', 'date'],
         ];
+    }
+
+    private function currentUserId(Request $request): int
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        return (int) $user->id;
+    }
+
+    private function assertRunOwnedByCurrentUser(Request $request, TalosRun $run): int
+    {
+        $userId = $this->currentUserId($request);
+        abort_unless((int) $run->user_id === $userId, 404);
+
+        return $userId;
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function assertReferencesOwnedByCurrentUser(array $validated, int $userId): void
+    {
+        $errors = [];
+
+        if (filled($validated['session_id'] ?? null) && ! TalosSession::query()
+            ->where('user_id', $userId)
+            ->whereKey((string) $validated['session_id'])
+            ->exists()) {
+            $errors['session_id'] = ['The selected session does not belong to the current user.'];
+        }
+
+        if (filled($validated['model_profile_id'] ?? null) && ! TalosModelProfile::query()
+            ->where('user_id', $userId)
+            ->whereKey((string) $validated['model_profile_id'])
+            ->exists()) {
+            $errors['model_profile_id'] = ['The selected model profile does not belong to the current user.'];
+        }
+
+        if (filled($validated['context_set_id'] ?? null) && ! TalosContextSet::query()
+            ->where('user_id', $userId)
+            ->whereKey((string) $validated['context_set_id'])
+            ->exists()) {
+            $errors['context_set_id'] = ['The selected context set does not belong to the current user.'];
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 }

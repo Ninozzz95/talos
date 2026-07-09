@@ -25,7 +25,10 @@ final class FileIngestionController extends Controller
             ],
         ]);
 
-        $result = $this->ingestion->ingest($validated['file']);
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
+        $result = $this->ingestion->ingest($validated['file'], $userId);
 
         TalosAuditEvent::record('file.uploaded', 'file', (string) ($result['id'] ?? ''), [
             'original_name' => $result['original_name'] ?? null,

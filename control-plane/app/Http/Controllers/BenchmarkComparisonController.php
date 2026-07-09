@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Services\Benchmarking\BenchmarkComparisonService;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -29,7 +30,10 @@ final class BenchmarkComparisonController extends Controller
             ]);
         }
 
-        $report = $this->benchmarks->compare($scenarioPath, (int) ($validated['runs'] ?? 1));
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        $report = $this->benchmarks->compare($scenarioPath, (int) ($validated['runs'] ?? 1), null, $user);
 
         return response()->json($report);
     }

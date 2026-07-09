@@ -1153,7 +1153,7 @@ onBeforeUnmount(() => {
 </script>
 <template>
     <main
-        :class="['talos-shell talos-workspace talos-chat-layout flex min-h-screen overflow-hidden', shellClass]"
+        :class="['talos-shell talos-workspace talos-chat-layout flex h-[100dvh] min-h-[100dvh] overflow-hidden', shellClass]"
         :style="workspaceStyle"
         :data-background-effect="workspaceBackgroundEffect"
         :data-theme-preset="theme"
@@ -1187,7 +1187,7 @@ onBeforeUnmount(() => {
             @expand="railCollapsed = false"
             @resize-start="startRailResize"
         />
-        <section class="relative flex min-w-0 flex-1 flex-col">
+        <section class="talos-chat-scroll-root relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <TalosProceduralBackground
                 :effect="workspaceBackgroundEffect"
                 :motion="workspaceMotionMode"

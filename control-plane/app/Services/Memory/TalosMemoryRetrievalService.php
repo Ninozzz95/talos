@@ -11,9 +11,10 @@ final class TalosMemoryRetrievalService
     /**
      * @return array<string, mixed>
      */
-    public function context(string $scopeType, ?string $scopeId, int $limit = 20): array
+    public function context(string $scopeType, ?string $scopeId, int $limit = 20, int $userId = 0): array
     {
         $memories = TalosMemory::query()
+            ->where('user_id', $userId)
             ->where('status', 'active')
             ->where('kind', '!=', 'rejected')
             ->where(function ($query) use ($scopeType, $scopeId): void {

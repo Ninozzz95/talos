@@ -17,6 +17,7 @@ final class TalosBenchmarkGroup extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'session_id',
         'source_run_id',
         'name',
@@ -54,6 +55,7 @@ final class TalosBenchmarkGroup extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'session_id' => $this->session_id,
             'source_run_id' => $this->source_run_id,
             'name' => $this->name,
