@@ -7,6 +7,7 @@ import type { TalosSkill } from '../../../lib/talosTypes'
 const props = defineProps<{
     skill: TalosSkill | null
     planningEnabled: boolean
+    exclusionReason?: string | null
 }>()
 
 const allowedToolsText = computed(() => props.skill?.allowed_tools?.join(', ') || 'none')
@@ -23,6 +24,7 @@ const allowedToolsText = computed(() => props.skill?.allowed_tools?.join(', ') |
         <div v-if="skill" class="mt-3 space-y-3">
             <div class="flex flex-wrap gap-2">
                 <Badge :tone="planningEnabled ? 'success' : 'neutral'">{{ planningEnabled ? 'planning' : 'excluded' }}</Badge>
+                <Badge v-if="!planningEnabled && exclusionReason" tone="warning">{{ exclusionReason }}</Badge>
                 <Badge :tone="skill.eval_status === 'passed' ? 'success' : skill.eval_status === 'failed' ? 'danger' : 'warning'">
                     {{ skill.eval_status }}
                 </Badge>

@@ -7,17 +7,23 @@ namespace App\Http\Controllers;
 use App\Models\TalosContextSet;
 use App\Models\TalosFileChunk;
 use App\Models\TalosModelProfile;
+use App\Models\TalosModelRoutingProfile;
 use App\Models\TalosRun;
 use App\Models\TalosSession;
+use App\Models\User;
 use App\Services\Memory\TalosMemoryRetrievalService;
+use App\Services\Models\TalosModelRoutingService;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\Security\PublicHttpUrlPolicy;
+use App\Services\Skills\TalosSkillPlanningContextService;
 use App\Services\Tools\TalosToolPlanningContextService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 final class TalosChatController extends Controller
@@ -29,6 +35,8 @@ final class TalosChatController extends Controller
         RunEventNormalizer $normalizer,
         TalosToolPlanningContextService $toolPlanningContext,
         TalosMemoryRetrievalService $memoryRetrieval,
+        TalosModelRoutingService $modelRouting,
+        TalosSkillPlanningContextService $skillPlanningContext,
     ): JsonResponse
     {
         $validated = $request->validate([
@@ -36,6 +44,7 @@ final class TalosChatController extends Controller
             'api_key' => ['sometimes', 'nullable', 'string', 'max:4096'],
             'session_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'model_routing_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'context_set_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'memory_scope_type' => ['sometimes', 'nullable', 'string', 'in:global,project,session'],
             'memory_scope_id' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -44,11 +53,16 @@ final class TalosChatController extends Controller
         $apiKey = (string) ($validated['api_key'] ?? '');
         $session = null;
         $profile = null;
+        $routingProfile = null;
+        $routingContext = null;
         $contextSet = null;
         $originalMessage = (string) $validated['message'];
         $message = $originalMessage;
         $usedMemories = [];
         $usedContext = [];
+        $skillSelection = $skillPlanningContext->selectionForPrompt($originalMessage);
+        $skillPlan = $skillSelection['plan'];
+        $validatorSkillContext = $skillSelection['validator_context'];
 
         if (filled($validated['session_id'] ?? null)) {
             $session = TalosSession::query()->find((string) $validated['session_id']);
@@ -58,6 +72,12 @@ final class TalosChatController extends Controller
                     'error' => 'Session was not found.',
                 ], 404);
             }
+        }
+
+        if (filled($validated['model_profile_id'] ?? null) && filled($validated['model_routing_profile_id'] ?? null)) {
+            throw ValidationException::withMessages([
+                'model_routing_profile_id' => ['Choose either a single model profile or a model routing profile, not both.'],
+            ]);
         }
 
         if (filled($validated['model_profile_id'] ?? null)) {
@@ -99,6 +119,27 @@ final class TalosChatController extends Controller
             }
         }
 
+        if (filled($validated['model_routing_profile_id'] ?? null)) {
+            $user = Auth::user();
+            abort_unless($user !== null, 401);
+            assert($user instanceof User);
+
+            $routingProfile = $modelRouting->resolveEnabled((string) $validated['model_routing_profile_id'], $user);
+            assert($routingProfile instanceof TalosModelRoutingProfile);
+
+            $primaryLane = $modelRouting->primaryLane($routingProfile, $user);
+            $profile = $primaryLane['profile'];
+            $routingContext = $modelRouting->routingContext($routingProfile);
+
+            try {
+                $apiKey = Crypt::decryptString((string) $profile->encrypted_secret);
+            } catch (Throwable) {
+                return response()->json([
+                    'error' => 'Primary routing model secret could not be decrypted.',
+                ], 422);
+            }
+        }
+
         if (filled($validated['context_set_id'] ?? null)) {
             $contextSet = TalosContextSet::query()->find((string) $validated['context_set_id']);
 
@@ -133,6 +174,7 @@ final class TalosChatController extends Controller
             $run = TalosRun::query()->create([
                 'session_id' => $session->id,
                 'model_profile_id' => $profile?->id,
+                'model_routing_profile_id' => $routingProfile?->id,
                 'context_set_id' => $contextSet?->id,
                 'mode' => $session->mode,
                 'status' => 'running',
@@ -140,7 +182,11 @@ final class TalosChatController extends Controller
                 'prompt' => $originalMessage,
                 'provider' => $profile?->provider,
                 'model' => $profile?->model,
-                'metadata' => ['source' => 'talos_chat'],
+                'metadata' => array_filter([
+                    'source' => 'talos_chat',
+                    'model_routing' => $routingContext,
+                    'skill_plan' => $skillPlan,
+                ], static fn (mixed $value): bool => $value !== null),
                 'started_at' => now(),
             ]);
 
@@ -150,11 +196,45 @@ final class TalosChatController extends Controller
                 'payload' => [
                     'message_length' => strlen($originalMessage),
                     'model_profile_id' => $profile?->id,
+                    'model_routing_profile_id' => $routingProfile?->id,
+                    'model_routing_lane_count' => is_array($routingContext) ? count($routingContext['lanes'] ?? []) : 0,
                     'context_set_id' => $contextSet?->id,
                     'used_context_ids' => array_column($usedContext, 'chunk_id'),
                     'used_memory_ids' => array_column($usedMemories, 'id'),
                 ],
             ]);
+
+            if ($this->skillPlanHasEntries($skillPlan)) {
+                $this->appendRunEvent($run, $normalizer, [
+                    'event_type' => 'chat.skill_plan',
+                    'severity' => 'info',
+                    'payload' => $skillPlan,
+                ]);
+            }
+
+            if (is_array($routingContext)) {
+                foreach ($routingContext['lanes'] as $lane) {
+                    if (! is_array($lane)) {
+                        continue;
+                    }
+
+                    $model = isset($lane['model']) && is_array($lane['model']) ? $lane['model'] : [];
+                    $this->appendRunEvent($run, $normalizer, [
+                        'event_type' => 'chat.model_contribution',
+                        'severity' => 'info',
+                        'payload' => [
+                            'model_routing_profile_id' => $routingProfile?->id,
+                            'model_profile_id' => $lane['model_profile_id'] ?? null,
+                            'position' => $lane['position'] ?? null,
+                            'role' => $lane['role'] ?? null,
+                            'weight' => $lane['weight'] ?? null,
+                            'provider' => $model['provider'] ?? null,
+                            'model' => $model['model'] ?? null,
+                            'status' => 'planned',
+                        ],
+                    ]);
+                }
+            }
         }
 
         $validatorUrl = rtrim((string) config(
@@ -168,10 +248,20 @@ final class TalosChatController extends Controller
             'tool_context' => $toolPlanningContext->context(),
         ];
 
+        if (is_array($validatorSkillContext['selected_skills'] ?? null)
+            && count($validatorSkillContext['selected_skills']) > 0
+        ) {
+            $validatorPayload['skill_context'] = $validatorSkillContext;
+        }
+
         if ($profile instanceof TalosModelProfile) {
             $validatorPayload['provider'] = $profile->provider;
             $validatorPayload['model'] = $profile->model;
             $validatorPayload['base_url'] = $profile->base_url;
+        }
+
+        if (is_array($routingContext)) {
+            $validatorPayload['model_routing'] = $routingContext;
         }
 
         try {
@@ -220,6 +310,14 @@ final class TalosChatController extends Controller
             ]);
         }
 
+        if (isset($payload['error']) && is_string($payload['error']) && trim($payload['error']) !== '') {
+            return $this->failedChatResponse($payload, $run, $session, $normalizer, [
+                'reason' => 'validator_payload_error',
+                'code' => isset($payload['code']) ? (string) $payload['code'] : null,
+                'response_keys' => $this->stringKeys($payload),
+            ]);
+        }
+
         if ($run instanceof TalosRun) {
             $this->appendRunEvent($run, $normalizer, [
                 'event_type' => 'chat.response',
@@ -237,6 +335,10 @@ final class TalosChatController extends Controller
 
         $payload['used_memories'] = $usedMemories;
         $payload['used_context'] = $usedContext;
+        $payload['skill_plan'] = $skillPlan;
+        if (is_array($routingContext)) {
+            $payload['model_routing'] = $routingContext;
+        }
 
         return response()->json($payload);
     }
@@ -254,6 +356,15 @@ final class TalosChatController extends Controller
     }
 
     /**
+     * @param array<string, mixed> $skillPlan
+     */
+    private function skillPlanHasEntries(array $skillPlan): bool
+    {
+        return (isset($skillPlan['selected_skills']) && is_array($skillPlan['selected_skills']) && count($skillPlan['selected_skills']) > 0)
+            || (isset($skillPlan['excluded_skills']) && is_array($skillPlan['excluded_skills']) && count($skillPlan['excluded_skills']) > 0);
+    }
+
+    /**
      * @param array<string, mixed> $payload
      * @param array<string, mixed> $eventPayload
      */
@@ -264,6 +375,10 @@ final class TalosChatController extends Controller
         RunEventNormalizer $normalizer,
         array $eventPayload,
     ): JsonResponse {
+        if (isset($payload['error']) && is_string($payload['error']) && ! isset($payload['message'])) {
+            $payload['message'] = $payload['error'];
+        }
+
         if ($run instanceof TalosRun) {
             $this->appendRunEvent($run, $normalizer, [
                 'event_type' => 'chat.failed',

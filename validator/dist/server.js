@@ -23,6 +23,20 @@ function broadcast(message) {
 function isSafeScenarioName(value) {
     return /^[a-zA-Z0-9_-]+$/.test(value);
 }
+function redactSensitiveText(message, knownSecrets = []) {
+    let redacted = message;
+    for (const secret of knownSecrets) {
+        if (!secret)
+            continue;
+        redacted = redacted.split(secret).join('[redacted]');
+        redacted = redacted.split(encodeURIComponent(secret)).join('[redacted]');
+    }
+    return redacted
+        .replace(/(Bearer|Token|Api-Key|x-api-key)\s+[^\s]+/gi, '$1 [redacted]')
+        .replace(/\bsk-[A-Za-z0-9._-]+/gi, '[redacted]')
+        .replace(/([?&](?:api_key|key|token|secret)=)[^&\s]+/gi, '$1[redacted]')
+        .slice(0, 800);
+}
 export function buildServer() {
     const server = Fastify({ logger: false });
     server.register(fastifyWebsocket);
@@ -93,15 +107,36 @@ export function buildServer() {
                 },
             });
             let output = '';
+            let errorOutput = '';
             php.stdout.on('data', (data) => { output += data.toString(); });
-            php.stderr.on('data', () => { });
-            php.on('close', () => {
-                try {
-                    resolve(JSON.parse(output.trim().split('\n').pop() || '{}'));
+            php.stderr.on('data', (data) => { errorOutput += data.toString(); });
+            php.on('close', (code) => {
+                const lastLine = output.trim().split('\n').filter(Boolean).pop() || '';
+                if (lastLine !== '') {
+                    try {
+                        resolve(JSON.parse(lastLine));
+                        return;
+                    }
+                    catch {
+                        resolve({
+                            error: 'Core chat process returned invalid JSON.',
+                            code: 'CORE_CHAT_INVALID_JSON',
+                            exit_code: code,
+                            details: redactSensitiveText(lastLine || output.slice(-500), [api_key]),
+                        });
+                        return;
+                    }
                 }
-                catch {
-                    resolve({ error: 'chat error', raw: output.slice(-200) });
+                if (code !== 0 || errorOutput.trim() !== '') {
+                    resolve({
+                        error: 'Core chat process failed.',
+                        code: 'CORE_CHAT_PROCESS_FAILED',
+                        exit_code: code,
+                        details: redactSensitiveText(errorOutput.trim() || 'Process exited without output.', [api_key]),
+                    });
+                    return;
                 }
+                resolve({ error: 'Core chat process returned no output.', code: 'CORE_CHAT_EMPTY_OUTPUT' });
             });
             php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context }) + '\n');
             php.stdin.end();

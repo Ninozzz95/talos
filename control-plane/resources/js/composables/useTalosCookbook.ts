@@ -3,6 +3,9 @@ import { talosFetch } from '../lib/api'
 import type {
     TalosCookbookCommandPreview,
     TalosCookbookCreateModelPayload,
+    TalosCookbookDependencyCatalog,
+    TalosCookbookDependencyPolicy,
+    TalosCookbookDependencyPreview,
     TalosCookbookModel,
     TalosCookbookOverview,
     TalosCookbookPreviewRequest,
@@ -20,6 +23,9 @@ function errorMessage(error: unknown, fallback: string) {
 export function useTalosCookbook() {
     const overview = ref<TalosCookbookOverview | null>(null)
     const models = ref<TalosCookbookModel[]>([])
+    const dependencyCatalog = ref<TalosCookbookDependencyCatalog | null>(null)
+    const dependencyPreview = ref<TalosCookbookDependencyPreview | null>(null)
+    const dependencyPolicy = ref<TalosCookbookDependencyPolicy | null>(null)
     const loading = ref(false)
     const actionMessage = ref<string | null>(null)
     const errorMessageRef = ref<string | null>(null)
@@ -167,9 +173,66 @@ export function useTalosCookbook() {
         }
     }
 
+    async function loadDependencies() {
+        loading.value = true
+        clearMessages()
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosCookbookDependencyCatalog>>('/api/talos/cookbook/dependencies')
+            dependencyCatalog.value = response.data
+            dependencyPolicy.value = response.data.policy
+            return response.data
+        } catch (error) {
+            errorMessageRef.value = errorMessage(error, 'TALOS could not load Cookbook dependency catalog.')
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
+    async function previewDependencyPlan(payload: TalosCookbookPreviewRequest) {
+        loading.value = true
+        clearMessages()
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosCookbookDependencyPreview>>('/api/talos/cookbook/dependencies/preview', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+                validationMessage: 'TALOS could not preview this dependency plan.',
+            })
+            dependencyPreview.value = response.data
+            actionMessage.value = 'Dependency plan preview generated.'
+            return response.data
+        } catch (error) {
+            errorMessageRef.value = errorMessage(error, 'TALOS could not preview this dependency plan.')
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
+    async function loadCookbookPolicy() {
+        loading.value = true
+        clearMessages()
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosCookbookDependencyPolicy>>('/api/talos/cookbook/policy')
+            dependencyPolicy.value = response.data
+            return response.data
+        } catch (error) {
+            errorMessageRef.value = errorMessage(error, 'TALOS could not load Cookbook policy.')
+            return null
+        } finally {
+            loading.value = false
+        }
+    }
+
     return {
         overview,
         models,
+        dependencyCatalog,
+        dependencyPreview,
+        dependencyPolicy,
         loading,
         actionMessage,
         errorMessage: errorMessageRef,
@@ -179,5 +242,8 @@ export function useTalosCookbook() {
         createModel,
         previewDownload,
         previewServe,
+        loadDependencies,
+        previewDependencyPlan,
+        loadCookbookPolicy,
     }
 }

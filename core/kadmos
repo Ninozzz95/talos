@@ -400,6 +400,7 @@ switch ($command) {
             'SslVerification' => "$baseDir/tests/Security/SslVerificationTest.php",
             'ExecutionPolicy' => "$baseDir/tests/Security/ExecutionPolicyTest.php",
             'OpenAIClientPolicy' => "$baseDir/tests/Security/OpenAIClientPolicyTest.php",
+            'OpenAIClientEndpoint' => "$baseDir/tests/OpenAIClientEndpointTest.php",
             'ToolContextPolicy' => "$baseDir/tests/Security/ToolContextPolicyTest.php",
             'ValidatorImplementations' => "$baseDir/tests/ValidatorImplementationsTest.php",
             'MainLoopValidatorInterface' => "$baseDir/tests/MainLoopValidatorInterfaceContractTest.php",

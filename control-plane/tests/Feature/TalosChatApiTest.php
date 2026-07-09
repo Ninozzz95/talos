@@ -10,6 +10,8 @@ use App\Models\TalosContextSource;
 use App\Models\TalosFile;
 use App\Models\TalosFileChunk;
 use App\Models\TalosMemory;
+use App\Models\TalosRun;
+use App\Models\TalosSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -104,6 +106,57 @@ final class TalosChatApiTest extends TestCase
             && $request['provider'] === 'openai'
             && $request['model'] === 'gpt-4.1-mini'
             && $request['base_url'] === 'https://api.openai.test/v1');
+    }
+
+    public function test_talos_chat_marks_validator_payload_errors_as_failed_runs(): void
+    {
+        config(['services.avm_validator.url' => 'http://validator.test']);
+
+        $session = TalosSession::query()->create([
+            'title' => 'DeepSeek debug',
+            'mode' => 'ask',
+            'status' => 'active',
+        ]);
+
+        $profile = TalosModelProfile::query()->create([
+            'provider' => 'deepseek',
+            'model' => 'deepseek-chat',
+            'display_name' => 'DeepSeek',
+            'status' => 'healthy',
+            'encrypted_secret' => Crypt::encryptString('deepseek-secret'),
+            'base_url' => 'https://api.deepseek.com/v1',
+        ]);
+
+        Http::fake([
+            'validator.test/chat' => Http::response([
+                'error' => 'Provider chat failed.',
+                'code' => 'PROVIDER_CHAT_FAILED',
+                'details' => 'OpenAI API error HTTP 401: bad auth',
+            ]),
+        ]);
+
+        $response = $this->postJson('/api/talos/chat', [
+            'message' => 'Use DeepSeek.',
+            'session_id' => $session->id,
+            'model_profile_id' => $profile->id,
+        ]);
+
+        $response
+            ->assertStatus(502)
+            ->assertJsonPath('error', 'Provider chat failed.')
+            ->assertJsonPath('message', 'Provider chat failed.')
+            ->assertJsonMissing(['deepseek-secret']);
+
+        $run = TalosRun::query()->latest('created_at')->first();
+        $this->assertNotNull($run);
+        $this->assertSame('failed', $run->status);
+        $this->assertSame('deepseek', $run->provider);
+        $this->assertSame('deepseek-chat', $run->model);
+        $this->assertDatabaseHas('talos_run_events', [
+            'run_id' => $run->id,
+            'event_type' => 'chat.failed',
+            'severity' => 'error',
+        ]);
     }
 
     public function test_talos_chat_injects_selected_context_set_as_untrusted_grounding(): void

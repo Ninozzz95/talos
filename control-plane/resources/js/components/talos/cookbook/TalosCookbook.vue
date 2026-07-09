@@ -27,13 +27,18 @@ const tabs: Array<{
 const {
     overview,
     models,
+    dependencyCatalog,
+    dependencyPreview,
     loading,
     actionMessage,
     errorMessage,
     loadOverview,
+    loadDependencies,
+    loadCookbookPolicy,
     scanHardware,
     loadModels,
     previewDownload,
+    previewDependencyPlan,
     previewServe,
 } = useTalosCookbook()
 
@@ -101,6 +106,16 @@ async function runServePreview() {
     servePreview.value = await previewServe(payload)
 }
 
+async function runDependencyPreview() {
+    const payload = selectedPreviewPayload()
+
+    if (!payload) {
+        return
+    }
+
+    await previewDependencyPlan(payload)
+}
+
 watch(models, (nextModels) => {
     if (!nextModels.length) {
         selectedModelId.value = ''
@@ -120,6 +135,8 @@ watch(runtimes, () => {
 
 onMounted(() => {
     void loadOverview()
+    void loadDependencies()
+    void loadCookbookPolicy()
 })
 </script>
 
@@ -199,6 +216,10 @@ onMounted(() => {
                 <TalosCookbookDependencies
                     v-else-if="activeTab === 'dependencies'"
                     :runtimes="runtimes"
+                    :dependency-catalog="dependencyCatalog"
+                    :dependency-preview="dependencyPreview"
+                    :loading="loading"
+                    @preview="runDependencyPreview"
                 />
                 <TalosCookbookSettings
                     v-else

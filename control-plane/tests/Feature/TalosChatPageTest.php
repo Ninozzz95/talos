@@ -28,6 +28,7 @@ final class TalosChatPageTest extends TestCase
         $chatComposable = file_get_contents(base_path('resources/js/composables/useTalosChat.ts'));
         $exportDialogPath = base_path('resources/js/components/talos/chat/TalosExportDialog.vue');
         $modelProfilesPath = base_path('resources/js/composables/useTalosModelProfiles.ts');
+        $modelRoutingProfilesPath = base_path('resources/js/composables/useTalosModelRoutingProfiles.ts');
         $contextVaultPath = base_path('resources/js/composables/useTalosContextVault.ts');
 
         $this->assertIsString($component);
@@ -38,20 +39,24 @@ final class TalosChatPageTest extends TestCase
         $this->assertIsString($chatComposable);
         $this->assertFileExists($exportDialogPath);
         $this->assertFileExists($modelProfilesPath);
+        $this->assertFileExists($modelRoutingProfilesPath);
         $this->assertFileExists($contextVaultPath);
 
         $exportDialog = file_get_contents($exportDialogPath);
         $modelProfilesComposable = file_get_contents($modelProfilesPath);
+        $modelRoutingProfilesComposable = file_get_contents($modelRoutingProfilesPath);
         $contextVaultComposable = file_get_contents($contextVaultPath);
 
         $this->assertIsString($exportDialog);
         $this->assertIsString($modelProfilesComposable);
+        $this->assertIsString($modelRoutingProfilesComposable);
         $this->assertIsString($contextVaultComposable);
         $this->assertStringContainsString('/api/talos/sessions', $sessionsComposable);
         $this->assertStringContainsString('/api/talos/sessions/${sessionId}/messages', $sessionsComposable);
         $this->assertStringContainsString('/api/talos/sessions/${sessionId}/export', $sessionsComposable);
         $this->assertStringContainsString('exportSession', $sessionsComposable);
         $this->assertStringContainsString('/api/talos/model-profiles', $modelProfilesComposable);
+        $this->assertStringContainsString('/api/talos/model-routing-profiles', $modelRoutingProfilesComposable);
         $this->assertStringContainsString('/api/talos/context-sets', $contextVaultComposable);
         $this->assertStringContainsString('talosFetch<', $sessionsComposable);
         $this->assertStringContainsString('talosFetch<', $modelProfilesComposable);
@@ -60,6 +65,7 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringContainsString('persistSystemMessage', $chatComposable);
         $this->assertStringContainsString('session_id', $chatComposable);
         $this->assertStringContainsString('model_profile_id', $chatComposable);
+        $this->assertStringContainsString('model_routing_profile_id', $chatComposable);
         $this->assertStringContainsString('context_set_id', $chatComposable);
         $this->assertStringContainsString('run_id', $chatComposable);
         $this->assertStringContainsString('TalosWorkspace', $component);
@@ -74,7 +80,10 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringContainsString('Benchmark run', $workspace);
         $this->assertStringContainsString('/api/talos/chat', $workspace);
         $this->assertStringContainsString('selectedModelProfileId', $workspace);
+        $this->assertStringContainsString('selectedModelRoutingProfileId', $workspace);
         $this->assertStringContainsString('selectedContextSetId', $workspace);
+        $this->assertStringContainsString('loadModelRoutingProfiles', $workspace);
+        $this->assertStringContainsString('selectModelRoutingProfile', $workspace);
         $this->assertStringContainsString('talos-chat-layout', $workspace);
         $this->assertStringContainsString('TalosChatSurface', $workspace);
         $this->assertFileExists(base_path('resources/js/lib/talosWelcomePrompts.ts'));

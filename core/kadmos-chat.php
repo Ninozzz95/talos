@@ -66,6 +66,28 @@ function formatToolContext(array $toolContext): string
     return count($lines) > 2 ? implode("\n", $lines) : '';
 }
 
+/**
+ * @param list<string> $knownSecrets
+ */
+function redactChatError(string $message, array $knownSecrets = []): string
+{
+    $redacted = $message;
+    foreach ($knownSecrets as $secret) {
+        if ($secret === '') {
+            continue;
+        }
+
+        $redacted = str_replace($secret, '[redacted]', $redacted);
+        $redacted = str_replace(rawurlencode($secret), '[redacted]', $redacted);
+    }
+
+    $redacted = preg_replace('/(Bearer|Token|Api-Key|x-api-key)\s+[^\s]+/i', '$1 [redacted]', $redacted) ?? $redacted;
+    $redacted = preg_replace('/\bsk-[A-Za-z0-9._-]+/i', '[redacted]', $redacted) ?? $redacted;
+    $redacted = preg_replace('/([?&](?:api_key|key|token|secret)=)[^&\s]+/i', '$1[redacted]', $redacted) ?? $redacted;
+
+    return substr($redacted, 0, 600);
+}
+
 $registry = new WorkerRegistry();
 $orchestrator = new ASTOrchestrator($registry);
 
@@ -118,7 +140,18 @@ while (true) {
 
     // Init LLM on first message
     if ($llm === null) {
-        $llm = new OpenAIClient($apiKey, $model, $baseUrl);
+        try {
+            $llm = new OpenAIClient($apiKey, $model, $baseUrl);
+        } catch (\Throwable $e) {
+            echo json_encode([
+                'error' => 'Provider chat failed.',
+                'code' => 'PROVIDER_CHAT_FAILED',
+                'provider' => $provider,
+                'model' => $model,
+                'details' => redactChatError($e->getMessage(), [$apiKey]),
+            ]) . "\n";
+            continue;
+        }
     }
 
     // Build prompt
@@ -132,7 +165,20 @@ while (true) {
         $prompt .= "\n\n{$toolContextPrompt}";
     }
 
-    $rawResponse = $llm->generate($prompt);
+    try {
+        $rawResponse = $llm->generate($prompt);
+    } catch (\Throwable $e) {
+        echo json_encode([
+            'error' => 'Provider chat failed.',
+            'code' => 'PROVIDER_CHAT_FAILED',
+            'provider' => $provider,
+            'model' => $model,
+            'details' => redactChatError($e->getMessage(), [$apiKey]),
+            'dag' => $dagState,
+            'mutations' => [],
+        ]) . "\n";
+        continue;
+    }
 
     // Try to extract JMP JSON from response
     $jmpJson = null;

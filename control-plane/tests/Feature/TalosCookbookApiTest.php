@@ -131,7 +131,56 @@ final class TalosCookbookApiTest extends TestCase
             ->assertJsonPath('tools.0.id', 'scan_hardware')
             ->assertJsonPath('tools.1.id', 'list_fit_models')
             ->assertJsonPath('tools.2.id', 'runtime_readiness')
+            ->assertJsonPath('tools.3.id', 'dependency_catalog')
             ->assertJsonMissing(['id' => 'download_model'])
             ->assertJsonMissing(['id' => 'serve_model']);
+    }
+
+    public function test_cookbook_dependency_catalog_reports_policy_gates_without_execution(): void
+    {
+        TalosLocalRuntime::query()->create([
+            'name' => 'Ollama',
+            'kind' => 'ollama',
+            'status' => 'missing',
+            'version' => null,
+            'executable_path' => null,
+            'evidence' => ['path_check' => false],
+            'last_checked_at' => now(),
+        ]);
+
+        $this->getJson('/api/talos/cookbook/dependencies')
+            ->assertOk()
+            ->assertJsonPath('data.policy.execution_allowed', false)
+            ->assertJsonPath('data.dependencies.0.runtime', 'ollama')
+            ->assertJsonPath('data.dependencies.0.install_allowed', false)
+            ->assertJsonPath('data.dependencies.0.required_scope', 'talos.shell.exec')
+            ->assertJsonPath('data.dependencies.0.detected_status', 'missing');
+    }
+
+    public function test_cookbook_dependency_preview_returns_dry_run_plan_only(): void
+    {
+        $this->postJson('/api/talos/cookbook/dependencies/preview', [
+            'runtime' => 'ollama',
+            'model_id' => 'meta-llama/Llama-3.1-8B-Instruct',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.mode', 'dry_run')
+            ->assertJsonPath('data.executed', false)
+            ->assertJsonPath('data.install_allowed', false)
+            ->assertJsonPath('data.requires_approval', true)
+            ->assertJsonPath('data.runtime', 'ollama')
+            ->assertJsonPath('data.steps.0.kind', 'dependency_check')
+            ->assertJsonPath('data.steps.1.kind', 'install_preview')
+            ->assertJsonPath('data.policy.execution_allowed', false);
+    }
+
+    public function test_cookbook_policy_endpoint_is_fail_closed_for_dependency_execution(): void
+    {
+        $this->getJson('/api/talos/cookbook/policy')
+            ->assertOk()
+            ->assertJsonPath('data.default_decision', 'deny')
+            ->assertJsonPath('data.execution_allowed', false)
+            ->assertJsonPath('data.install_execution_enabled', false)
+            ->assertJsonPath('data.required_scope', 'talos.shell.exec');
     }
 }

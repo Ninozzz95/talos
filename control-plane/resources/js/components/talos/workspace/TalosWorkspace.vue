@@ -12,6 +12,7 @@ import TalosCommandPalette from '../shell/TalosCommandPalette.vue'
 import { useTalosChat } from '../../../composables/useTalosChat'
 import { useTalosContextVault } from '../../../composables/useTalosContextVault'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
+import { useTalosModelRoutingProfiles } from '../../../composables/useTalosModelRoutingProfiles'
 import { useTalosPromptEnhancement } from '../../../composables/useTalosPromptEnhancement'
 import { useTalosSessions, type TalosSessionPersistenceMode } from '../../../composables/useTalosSessions'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
@@ -74,6 +75,7 @@ const commandWindowTargets: Partial<Record<TalosCommand['id'], CommandRoute>> = 
     open_doctor: { windowId: 'doctor' },
     open_audit_log: { windowId: 'doctor', sectionTestId: 'talos-admin-section-audit' },
     open_policy_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-policy' },
+    open_shell_policy_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-shell' },
     open_backup_panel: { windowId: 'doctor', sectionTestId: 'talos-admin-section-backup' },
     open_notes: { windowId: 'notes' },
     open_tasks: { windowId: 'tasks' },
@@ -101,6 +103,7 @@ const selectedBenchmarkScenarioPath = ref<string | null>(null)
 const modelPopoverOpen = ref(false)
 const contextPopoverOpen = ref(false)
 const selectedModelProfileId = ref('')
+const selectedModelRoutingProfileId = ref('')
 const selectedContextSetId = ref('')
 const sessionPersistenceMode = ref<TalosSessionPersistenceMode>('persistent')
 const railCollapsed = ref(false)
@@ -136,6 +139,14 @@ const {
     loadModelProfiles,
     findModelProfile,
 } = useTalosModelProfiles()
+const {
+    modelRoutingProfiles,
+    usableModelRoutingProfiles,
+    loadingModelRoutingProfiles,
+    modelRoutingProfileError,
+    loadModelRoutingProfiles,
+    findModelRoutingProfile,
+} = useTalosModelRoutingProfiles()
 const {
     contextSets,
     loadingContextSets,
@@ -233,6 +244,16 @@ const workspaceStyle = computed(() => ({
 const selectedModelProfile = computed(() => findModelProfile(selectedModelProfileId.value))
 const selectedContextSet = computed(() => contextSets.value.find((contextSet) => contextSet.id === selectedContextSetId.value) ?? null)
 const selectedModelProfileIsUsable = computed(() => Boolean(selectedModelProfile.value && selectedModelProfile.value.status !== 'disabled' && selectedModelProfile.value.has_secret))
+const selectedModelRoutingProfile = computed(() => findModelRoutingProfile(selectedModelRoutingProfileId.value))
+const selectedModelRoutingProfileIsUsable = computed(() => Boolean(
+    selectedModelRoutingProfile.value
+    && selectedModelRoutingProfile.value.status === 'enabled'
+    && selectedModelRoutingProfile.value.lanes.length > 0,
+))
+const selectedChatPrimaryModelProfileId = computed(() => selectedModelProfileId.value
+    || selectedModelRoutingProfile.value?.lanes[0]?.model_profile_id
+    || '')
+const selectedModelSelectionIsUsable = computed(() => selectedModelProfileIsUsable.value || selectedModelRoutingProfileIsUsable.value)
 const messageEvidenceReady = computed(() => messages.value.some((message) => message.role === 'assistant' && Boolean(message.run_id)))
 const activeSessionIsTemporary = computed(() => activeSession.value?.persistence_mode === 'temporary')
 const activeWelcomePromptId = computed(() => (
@@ -240,7 +261,7 @@ const activeWelcomePromptId = computed(() => (
         ? activeSession.value.metadata.welcome_prompt_id
         : null
 ))
-const canSend = computed(() => prompt.value.trim().length > 0 && !sending.value && selectedModelProfileIsUsable.value)
+const canSend = computed(() => prompt.value.trim().length > 0 && !sending.value && selectedModelSelectionIsUsable.value)
 const selectedBenchmarkScenarioIsRunnable = computed(() => {
     const path = selectedBenchmarkScenarioPath.value?.trim() ?? ''
     return path.startsWith('benchmark-scenarios/') && path.endsWith('.json')
@@ -252,8 +273,8 @@ const sendMessageCommandDisabledReason = computed(() => {
     if (!prompt.value.trim()) {
         return 'Type a workflow in the composer before sending.'
     }
-    if (!selectedModelProfileIsUsable.value) {
-        return 'Choose a usable server-side model profile before sending.'
+    if (!selectedModelSelectionIsUsable.value) {
+        return 'Choose a usable model or routing profile before sending.'
     }
     return ''
 })
@@ -294,6 +315,9 @@ const modelLabel = computed(() => {
     if (selectedModelProfile.value) {
         return selectedModelProfile.value.display_name
     }
+    if (selectedModelRoutingProfile.value) {
+        return `${selectedModelRoutingProfile.value.name} route`
+    }
     if (loadingModelProfiles.value) {
         return 'Loading model'
     }
@@ -312,9 +336,16 @@ const statusText = computed(() => {
     if (sending.value) {
         return 'Kadmos is processing'
     }
+    if (selectedModelRoutingProfileIsUsable.value) {
+        const context = selectedContextSet.value ? ` + ${selectedContextSet.value.name}` : ''
+        return `${selectedModelRoutingProfile.value?.name} route${context}`
+    }
     if (selectedModelProfileIsUsable.value) {
         const context = selectedContextSet.value ? ` + ${selectedContextSet.value.name}` : ''
         return `${selectedModelProfile.value?.display_name}${context}`
+    }
+    if (modelRoutingProfiles.value.length > 0) {
+        return 'Choose a usable model routing profile'
     }
     if (modelProfiles.value.length > 0) {
         return 'Choose a usable server-side model profile'
@@ -325,7 +356,7 @@ const assistantEnhancerDisabledReason = computed(() => {
     if (enhancingPrompt.value) {
         return 'Enhancing prompt'
     }
-    if (!selectedModelProfileIsUsable.value) {
+    if (!selectedChatPrimaryModelProfileId.value) {
         return 'Add a model profile first'
     }
     if (!prompt.value.trim()) {
@@ -334,7 +365,7 @@ const assistantEnhancerDisabledReason = computed(() => {
     return ''
 })
 const workspaceSubtitle = computed(() => {
-    if (selectedModelProfileIsUsable.value) {
+    if (selectedModelSelectionIsUsable.value) {
         return 'Ready for verified workflows'
     }
     if (loadingModelProfiles.value) {
@@ -419,8 +450,9 @@ function loadWorkspacePreferences() {
         return
     }
     try {
-        const parsed = JSON.parse(savedPreferences) as { model_profile_id?: string; context_set_id?: string }
+        const parsed = JSON.parse(savedPreferences) as { model_profile_id?: string; model_routing_profile_id?: string; context_set_id?: string }
         selectedModelProfileId.value = typeof parsed.model_profile_id === 'string' ? parsed.model_profile_id : ''
+        selectedModelRoutingProfileId.value = typeof parsed.model_routing_profile_id === 'string' ? parsed.model_routing_profile_id : ''
         selectedContextSetId.value = typeof parsed.context_set_id === 'string' ? parsed.context_set_id : ''
     } catch {
         localStorage.removeItem('talos_workspace_preferences')
@@ -429,6 +461,7 @@ function loadWorkspacePreferences() {
 function saveWorkspacePreferences() {
     localStorage.setItem('talos_workspace_preferences', JSON.stringify({
         model_profile_id: selectedModelProfileId.value,
+        model_routing_profile_id: selectedModelRoutingProfileId.value,
         context_set_id: selectedContextSetId.value,
     }))
 }
@@ -565,7 +598,7 @@ async function enhanceCurrentPrompt() {
     try {
         await enhancePrompt({
             prompt: prompt.value.trim(),
-            model_profile_id: selectedModelProfileId.value,
+            model_profile_id: selectedChatPrimaryModelProfileId.value,
             session_id: activeSession.value?.id ?? null,
         })
     } catch (error) {
@@ -594,8 +627,8 @@ async function sendChatText(message: string, userMessageMetadata: Record<string,
     if (!normalizedMessage || sending.value) {
         return false
     }
-    if (!selectedModelProfileIsUsable.value) {
-        uiError.value = 'Choose a usable server-side model profile before sending.'
+    if (!selectedModelSelectionIsUsable.value) {
+        uiError.value = 'Choose a usable model or routing profile before sending.'
         openSettings()
         modelPopoverOpen.value = true
         return false
@@ -610,7 +643,8 @@ async function sendChatText(message: string, userMessageMetadata: Record<string,
         await sendPersistentChat({
             sessionId: session.id,
             prompt: normalizedMessage,
-            modelProfileId: selectedModelProfileId.value,
+            modelProfileId: selectedModelProfileId.value || null,
+            modelRoutingProfileId: selectedModelRoutingProfileId.value || null,
             contextSetId: selectedContextSetId.value || null,
             chatEndpoint: '/api/talos/chat',
             userMessageMetadata,
@@ -756,6 +790,16 @@ function toggleContextPopover() {
 }
 function selectModelProfile(profileId: string) {
     selectedModelProfileId.value = profileId
+    if (profileId) {
+        selectedModelRoutingProfileId.value = ''
+    }
+    saveWorkspacePreferences()
+}
+function selectModelRoutingProfile(profileId: string) {
+    selectedModelRoutingProfileId.value = profileId
+    if (profileId) {
+        selectedModelProfileId.value = ''
+    }
     saveWorkspacePreferences()
 }
 function selectContextSet(contextSetId: string) {
@@ -914,10 +958,14 @@ useTalosShortcuts(workspaceKeyboardShortcuts, {
 async function refreshModelAndContext() {
     await Promise.allSettled([
         loadModelProfiles(),
+        loadModelRoutingProfiles(),
         loadContextSets(),
     ])
-    if (!selectedModelProfileId.value && usableModelProfiles.value.length > 0) {
+    if (!selectedModelProfileId.value && !selectedModelRoutingProfileId.value && usableModelProfiles.value.length > 0) {
         selectedModelProfileId.value = usableModelProfiles.value[0].id
+        saveWorkspacePreferences()
+    } else if (!selectedModelProfileId.value && !selectedModelRoutingProfileId.value && usableModelRoutingProfiles.value.length > 0) {
+        selectedModelRoutingProfileId.value = usableModelRoutingProfiles.value[0].id
         saveWorkspacePreferences()
     }
 }
@@ -925,6 +973,7 @@ async function loadPersistedWorkspaceSettings() {
     const settings = await loadWorkspaceSettings()
     if (settings.default_model_profile_id) {
         selectedModelProfileId.value = settings.default_model_profile_id
+        selectedModelRoutingProfileId.value = ''
     }
     if (settings.default_context_set_id) {
         selectedContextSetId.value = settings.default_context_set_id
@@ -1051,12 +1100,12 @@ onBeforeUnmount(() => {
                 :ui-error="uiError"
                 :session-error="sessionError"
                 :message-error="messageError"
-                :model-profile-error="modelProfileError"
+                :model-profile-error="modelProfileError || modelRoutingProfileError"
                 :context-set-error="contextSetError"
                 :loading-messages="loadingMessages"
                 :messages="messages"
                 :logo-url="talosShortLogoUrl"
-                :selected-model-profile-is-usable="selectedModelProfileIsUsable"
+                :selected-model-profile-is-usable="selectedModelSelectionIsUsable"
                 :context-selected="Boolean(selectedContextSet)"
                 :context-sets-count="contextSets.length"
                 :session-ready="Boolean(activeSession)"
@@ -1080,95 +1129,29 @@ onBeforeUnmount(() => {
                 @benchmark-message-run="benchmarkMessageRun"
             />
             <TalosWindowLayer
-                :visible-window-ids="visibleWindowIds"
-                :minimized-window-ids="minimizedWindowIds"
-                :docked-window-ids="dockedWindowIds"
-                :fullscreen-window-ids="fullscreenWindowIds"
-                :active-window-id="activeWindowId"
-                :window-positions="windowPositions"
-                :window-sizes="windowSizes"
-                :window-z-indexes="windowZIndexes"
-                :current-rail-width="currentRailWidth"
-                :runtime-requested-tab="runtimeRequestedTab"
-                :runtime-requested-tab-revision="runtimeRequestedTabRevision"
-                :selected-benchmark-group-id="selectedBenchmarkGroupId"
-                :selected-benchmark-scenario-path="selectedBenchmarkScenarioPath"
-                :model-profiles="modelProfiles"
-                :context-sets="contextSets"
-                :selected-model-profile-id="selectedModelProfileId"
-                :selected-context-set-id="selectedContextSetId"
-                :settings-requested-tab="settingsRequestedTab"
-                :settings-requested-tab-revision="settingsRequestedTabRevision"
-                :authenticated="authenticated"
-                :auth-user-name="authUserName"
-                :logout-url="logoutUrl"
-                :csrf-token="csrfToken"
-                :theme="theme"
-                :ui-motion-disabled="workspaceUiMotionDisabled"
-                :window-launch-origins="windowLaunchOrigins"
-                :window-launch-revisions="windowLaunchRevisions"
-                @close-window="closeWindow"
-                @minimize-window="minimizeWindow"
-                @dock-window="toggleDock"
-                @fullscreen-window="toggleFullscreenWindow"
-                @focus-window="focusWindow"
-                @open-window="openWindowFromSource($event, undefined, 'command')"
-                @restore-window="openWindow"
-                @set-window-position="setWindowPosition"
-                @set-window-size="setWindowSize"
-                @reset-window-size="resetWindowSize"
-                @save-window-layout="saveWindowLayout"
-                @open-audit-log="openAuditLogFromRuntime"
-                @context-set-created="handleContextSetCreated"
-                @benchmark-scenario-selected="handleBenchmarkScenarioSelected"
-                @select-model="selectModelProfile"
-                @select-context="selectContextSet"
-                @change-theme="toggleTheme"
-                @open-module="openModule"
-                @settings-saved="handleWorkspaceSettingsSaved"
-                @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate"
-                @theme-draft-changed="handleThemeDraftChanged"
+                :visible-window-ids="visibleWindowIds" :minimized-window-ids="minimizedWindowIds" :docked-window-ids="dockedWindowIds" :fullscreen-window-ids="fullscreenWindowIds"
+                :active-window-id="activeWindowId" :window-positions="windowPositions" :window-sizes="windowSizes" :window-z-indexes="windowZIndexes" :current-rail-width="currentRailWidth"
+                :runtime-requested-tab="runtimeRequestedTab" :runtime-requested-tab-revision="runtimeRequestedTabRevision" :selected-benchmark-group-id="selectedBenchmarkGroupId" :selected-benchmark-scenario-path="selectedBenchmarkScenarioPath"
+                :model-profiles="modelProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-context-set-id="selectedContextSetId"
+                :settings-requested-tab="settingsRequestedTab" :settings-requested-tab-revision="settingsRequestedTabRevision" :authenticated="authenticated" :auth-user-name="authUserName" :logout-url="logoutUrl" :csrf-token="csrfToken"
+                :theme="theme" :ui-motion-disabled="workspaceUiMotionDisabled" :window-launch-origins="windowLaunchOrigins" :window-launch-revisions="windowLaunchRevisions"
+                @close-window="closeWindow" @minimize-window="minimizeWindow" @dock-window="toggleDock" @fullscreen-window="toggleFullscreenWindow" @focus-window="focusWindow"
+                @open-window="openWindowFromSource($event, undefined, 'command')" @restore-window="openWindow" @set-window-position="setWindowPosition" @set-window-size="setWindowSize"
+                @reset-window-size="resetWindowSize" @save-window-layout="saveWindowLayout" @open-audit-log="openAuditLogFromRuntime" @context-set-created="handleContextSetCreated"
+                @benchmark-scenario-selected="handleBenchmarkScenarioSelected" @select-model="selectModelProfile" @select-context="selectContextSet" @change-theme="toggleTheme"
+                @open-module="openModule" @settings-saved="handleWorkspaceSettingsSaved" @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate" @theme-draft-changed="handleThemeDraftChanged"
             />
             <TalosComposerDock
-                :prompt="prompt"
-                :commands="workspaceCommands"
-                :can-send="canSend"
-                :sending="sending"
-                :status-text="statusText"
-                :model-label="modelLabel"
-                :context-label="contextLabel"
-                :temporary-mode="sessionPersistenceMode === 'temporary'"
-                :send-disabled-reason="sendMessageCommandDisabledReason"
-                :enhancer-disabled-reason="assistantEnhancerDisabledReason"
-                :model-popover-open="modelPopoverOpen"
-                :context-popover-open="contextPopoverOpen"
-                :model-profiles="modelProfiles"
-                :context-sets="contextSets"
-                :selected-model-profile-id="selectedModelProfileId"
-                :selected-context-set-id="selectedContextSetId"
-                :selected-context-set="selectedContextSet"
-                :loading-model-profiles="loadingModelProfiles"
-                :loading-context-sets="loadingContextSets"
-                :prompt-enhancement-result="promptEnhancementResult"
-                :enhancing-prompt="enhancingPrompt"
-                :prompt-enhancement-error="promptEnhancementError"
-                :visibility="workspaceAppearanceVisibility.chat_bar"
-                @update-prompt="prompt = $event"
-                @send="sendChat"
-                @open-model="toggleModelPopover"
-                @open-context="toggleContextPopover"
-                @open-settings="openSettings()"
-                @toggle-temporary="toggleTemporaryMode"
-                @enhance="enhanceCurrentPrompt"
-                @slash-command="selectCommand"
-                @select-model-profile="selectModelProfile"
-                @select-context-set="selectContextSet"
-                @refresh-model-and-context="refreshModelAndContext"
-                @open-model-lab="openWindowFromSource('model_lab', undefined, 'command')"
-                @open-library="openWindowFromSource('library', undefined, 'command')"
-                @replace-prompt-with-enhanced="replacePromptWithEnhanced"
-                @insert-enhanced-prompt-below="insertEnhancedPromptBelow"
-                @clear-prompt-enhancement="clearPromptEnhancement"
+                :prompt="prompt" :commands="workspaceCommands" :can-send="canSend" :sending="sending" :status-text="statusText" :model-label="modelLabel" :context-label="contextLabel"
+                :temporary-mode="sessionPersistenceMode === 'temporary'" :send-disabled-reason="sendMessageCommandDisabledReason" :enhancer-disabled-reason="assistantEnhancerDisabledReason"
+                :model-popover-open="modelPopoverOpen" :context-popover-open="contextPopoverOpen" :model-profiles="modelProfiles" :model-routing-profiles="modelRoutingProfiles" :context-sets="contextSets"
+                :selected-model-profile-id="selectedModelProfileId" :selected-model-routing-profile-id="selectedModelRoutingProfileId" :selected-context-set-id="selectedContextSetId" :selected-context-set="selectedContextSet"
+                :loading-model-profiles="loadingModelProfiles" :loading-model-routing-profiles="loadingModelRoutingProfiles" :loading-context-sets="loadingContextSets"
+                :prompt-enhancement-result="promptEnhancementResult" :enhancing-prompt="enhancingPrompt" :prompt-enhancement-error="promptEnhancementError" :visibility="workspaceAppearanceVisibility.chat_bar"
+                @update-prompt="prompt = $event" @send="sendChat" @open-model="toggleModelPopover" @open-context="toggleContextPopover" @open-settings="openSettings()" @toggle-temporary="toggleTemporaryMode"
+                @enhance="enhanceCurrentPrompt" @slash-command="selectCommand" @select-model-profile="selectModelProfile" @select-model-routing-profile="selectModelRoutingProfile" @select-context-set="selectContextSet"
+                @refresh-model-and-context="refreshModelAndContext" @open-model-lab="openWindowFromSource('model_lab', undefined, 'command')" @open-library="openWindowFromSource('library', undefined, 'command')"
+                @replace-prompt-with-enhanced="replacePromptWithEnhanced" @insert-enhanced-prompt-below="insertEnhancedPromptBelow" @clear-prompt-enhancement="clearPromptEnhancement"
             />
             <div
                 v-if="commandPaletteOpen"

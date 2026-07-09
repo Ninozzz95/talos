@@ -20,6 +20,7 @@ final class TalosRun extends Model
     protected $fillable = [
         'session_id',
         'model_profile_id',
+        'model_routing_profile_id',
         'context_set_id',
         'mode',
         'status',
@@ -46,6 +47,14 @@ final class TalosRun extends Model
     public function modelProfile(): BelongsTo
     {
         return $this->belongsTo(TalosModelProfile::class, 'model_profile_id');
+    }
+
+    /**
+     * @return BelongsTo<TalosModelRoutingProfile, $this>
+     */
+    public function modelRoutingProfile(): BelongsTo
+    {
+        return $this->belongsTo(TalosModelRoutingProfile::class, 'model_routing_profile_id');
     }
 
     /**
@@ -93,6 +102,7 @@ final class TalosRun extends Model
             'id' => $this->id,
             'session_id' => $this->session_id,
             'model_profile_id' => $this->model_profile_id,
+            'model_routing_profile_id' => $this->model_routing_profile_id,
             'context_set_id' => $this->context_set_id,
             'mode' => $this->mode,
             'status' => $this->status,
