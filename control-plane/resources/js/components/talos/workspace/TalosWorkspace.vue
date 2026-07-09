@@ -14,7 +14,7 @@ import { useTalosContextVault } from '../../../composables/useTalosContextVault'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
 import { useTalosModelRoutingProfiles } from '../../../composables/useTalosModelRoutingProfiles'
 import { useTalosPromptEnhancement } from '../../../composables/useTalosPromptEnhancement'
-import { useTalosSessions, type TalosSessionPersistenceMode } from '../../../composables/useTalosSessions'
+import { sessionChatState, useTalosSessions, type TalosSessionPersistenceMode } from '../../../composables/useTalosSessions'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import { useTalosShortcuts } from '../../../composables/useTalosShortcuts'
 import { useTalosWindows, type TalosWindowId } from '../../../composables/useTalosWindows'
@@ -126,6 +126,12 @@ const {
     loadSessions,
     createSession,
     updateSessionTitle,
+    toggleSessionFavorite,
+    toggleManagedSessionSelected,
+    archiveSession,
+    moveSessionToFolder,
+    deleteSession,
+    copySession,
     selectSession,
     createMessage,
     exportSession,
@@ -571,6 +577,77 @@ async function chooseSession(session: TalosSession) {
         scrollChat()
     } catch (error) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not load this session.'
+    }
+}
+async function renameChatSession(session: TalosSession, title: string) {
+    const nextTitle = title.trim()
+    if (!nextTitle) {
+        uiError.value = 'Chat name cannot be empty.'
+        return
+    }
+
+    try {
+        uiError.value = null
+        await updateSessionTitle(session.id, nextTitle)
+        commandFeedback.value = 'Chat renamed.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not rename this chat.'
+    }
+}
+async function favoriteChatSession(session: TalosSession) {
+    try {
+        uiError.value = null
+        const updated = await toggleSessionFavorite(session)
+        commandFeedback.value = sessionChatState(updated).favorite
+            ? 'Chat added to Favorites.'
+            : 'Chat removed from Favorites.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not update the favorite state.'
+    }
+}
+async function toggleChatSelection(session: TalosSession) {
+    try {
+        uiError.value = null
+        await toggleManagedSessionSelected(session)
+        commandFeedback.value = 'Chat selection updated.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not update the chat selection.'
+    }
+}
+async function archiveChatSession(session: TalosSession) {
+    try {
+        uiError.value = null
+        await archiveSession(session)
+        commandFeedback.value = 'Chat archived.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not archive this chat.'
+    }
+}
+async function moveChatSession(session: TalosSession, folder: string) {
+    try {
+        uiError.value = null
+        await moveSessionToFolder(session, folder)
+        commandFeedback.value = folder.trim() ? `Chat moved to ${folder.trim()}.` : 'Chat moved to Recent.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not move this chat.'
+    }
+}
+async function deleteChatSession(session: TalosSession) {
+    try {
+        uiError.value = null
+        await deleteSession(session.id)
+        commandFeedback.value = 'Chat deleted.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not delete this chat.'
+    }
+}
+async function copyChatSession(session: TalosSession) {
+    try {
+        uiError.value = null
+        await copySession(session)
+        commandFeedback.value = 'Chat copied.'
+    } catch (error) {
+        uiError.value = error instanceof Error ? error.message : 'TALOS could not copy this chat.'
     }
 }
 async function ensureSessionForPrompt(message: string) {
@@ -1060,6 +1137,13 @@ onBeforeUnmount(() => {
             @open="openModule"
             @new-chat="startNewChat"
             @select-session="chooseSession"
+            @rename-session="renameChatSession"
+            @favorite-session="favoriteChatSession"
+            @toggle-session-selected="toggleChatSelection"
+            @archive-session="archiveChatSession"
+            @move-session-to-folder="moveChatSession"
+            @delete-session="deleteChatSession"
+            @copy-session="copyChatSession"
             @toggle-theme="toggleTheme()"
             @collapse="railCollapsed = true"
             @expand="railCollapsed = false"
