@@ -1009,14 +1009,15 @@ function scaledMs(base: number, scale: number) {
 export function talosUiAnimationStyle(
     theme: TalosThemeId,
     profile: TalosUiAnimationProfile,
-    motionMode: TalosThemeMotionMode,
-    motionDisabled: boolean,
+    _motionMode: TalosThemeMotionMode,
+    uiMotionDisabled: boolean,
     customization: TalosUiAnimationCustomization = {},
 ): Record<string, string> {
-    if (motionDisabled || motionMode === 'off' || profile === 'off') {
+    if (uiMotionDisabled || profile === 'off') {
         return {
             '--talos-motion-open-duration': '0ms',
             '--talos-motion-close-duration': '0ms',
+            '--talos-window-minimize-duration': '0ms',
             '--talos-motion-surface-duration': '0ms',
             '--talos-motion-feedback-duration': '0ms',
             '--talos-motion-stagger': '0ms',
@@ -1036,6 +1037,7 @@ export function talosUiAnimationStyle(
     return {
         '--talos-motion-open-duration': scaledMs(160, resolved.duration_scale),
         '--talos-motion-close-duration': scaledMs(120, resolved.duration_scale),
+        '--talos-window-minimize-duration': scaledMs(420, resolved.duration_scale),
         '--talos-motion-surface-duration': scaledMs(180, resolved.duration_scale),
         '--talos-motion-feedback-duration': scaledMs(700, resolved.duration_scale),
         '--talos-motion-stagger': `${resolved.stagger}ms`,

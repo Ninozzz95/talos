@@ -20,6 +20,7 @@ const props = defineProps<{
 const emit = defineEmits<{
     openCommands: []
     openExport: []
+    openAccount: []
 }>()
 </script>
 
@@ -51,9 +52,14 @@ const emit = defineEmits<{
             </Button>
             <form v-if="authenticated" :action="logoutUrl" method="post" class="hidden items-center gap-2 md:flex" aria-label="TALOS account">
                 <input type="hidden" name="_token" :value="csrfToken">
-                <span class="max-w-32 truncate rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 py-1.5 text-xs text-[var(--talos-muted)]">
+                <button
+                    type="button"
+                    class="max-w-32 cursor-pointer truncate rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 py-1.5 text-xs text-[var(--talos-muted)] transition hover:border-[var(--talos-accent-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    :aria-label="`Open account settings for ${authLabel}`"
+                    @click="emit('openAccount')"
+                >
                     {{ authLabel }}
-                </span>
+                </button>
                 <Button type="submit" variant="ghost" size="sm">Sign out</Button>
             </form>
             <a

@@ -62,7 +62,11 @@ const composerPrompt = computed({
 <template>
     <div class="pointer-events-none fixed inset-x-0 bottom-7 z-40 px-4 lg:left-[var(--talos-rail-width)] lg:px-6">
         <div class="relative">
-            <div v-if="modelPopoverOpen" class="pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[420px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl">
+            <div
+                v-if="modelPopoverOpen"
+                data-testid="talos-model-popover"
+                class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[420px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+            >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model profile</div>
                 <label class="sr-only" for="talos-workspace-model-profile">Server-side model profile</label>
                 <Select
@@ -89,7 +93,11 @@ const composerPrompt = computed({
                 </div>
             </div>
 
-            <div v-if="contextPopoverOpen" class="pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[420px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl">
+            <div
+                v-if="contextPopoverOpen"
+                data-testid="talos-context-popover"
+                class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[420px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+            >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Grounding context</div>
                 <label class="sr-only" for="talos-workspace-context-set">Grounding context set</label>
                 <Select
@@ -119,7 +127,11 @@ const composerPrompt = computed({
                 </div>
             </div>
 
-            <div v-if="promptEnhancementResult" class="pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[560px] -translate-x-1/2">
+            <div
+                v-if="promptEnhancementResult"
+                data-testid="talos-enhancement-popover"
+                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[560px] -translate-x-1/2"
+            >
                 <TalosPromptEnhancerPopover
                     :result="promptEnhancementResult"
                     @replace="emit('replacePromptWithEnhanced')"
@@ -128,7 +140,11 @@ const composerPrompt = computed({
                 />
             </div>
 
-            <div v-else-if="enhancingPrompt || promptEnhancementError" class="pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[560px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl">
+            <div
+                v-else-if="enhancingPrompt || promptEnhancementError"
+                data-testid="talos-enhancement-status-popover"
+                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[560px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl"
+            >
                 <div v-if="enhancingPrompt" class="flex items-center gap-2 text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                     Enhancing prompt

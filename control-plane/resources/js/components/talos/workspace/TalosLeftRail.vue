@@ -35,7 +35,7 @@ type RailItem = {
 }
 
 const emit = defineEmits<{
-    open: [id: string]
+    open: [id: string, event?: PointerEvent]
     newChat: []
     selectSession: [session: TalosSession]
     toggleTheme: []
@@ -127,19 +127,22 @@ function sessionTimestamp(session: TalosSession) {
         class="talos-left-rail relative z-30 hidden h-screen shrink-0 border-r border-[var(--talos-border)] bg-[var(--talos-sidebar)] py-2 lg:flex lg:flex-col"
         :class="collapsed ? 'px-2' : 'px-2.5'"
         :style="railStyle"
+        :data-sidebar-state="collapsed ? 'collapsed' : 'expanded'"
         aria-label="TALOS workspace rail"
     >
         <div class="flex items-center gap-2 px-1" :class="collapsed ? 'justify-center' : 'justify-between'">
-            <div v-if="!collapsed && visibility.brand_name !== false" class="min-w-0">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-accent)]">AVM</div>
-                <div class="talos-orbitron-brand text-base font-semibold leading-5 text-[var(--talos-text)]">TALOS</div>
-            </div>
-            <div v-if="!collapsed && visibility.brand_name !== false" class="talos-short-logo talos-short-logo-compact">
-                <span class="talos-short-logo-mark"></span>
+            <div v-if="!collapsed && visibility.brand_name !== false" data-testid="talos-rail-brand" class="flex min-w-0 flex-1 items-center gap-2">
+                <span data-testid="talos-rail-brand-logo" class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
+                    <span class="talos-short-logo-mark"></span>
+                </span>
+                <div data-testid="talos-rail-brand-copy" class="min-w-0">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-accent)]">AVM</div>
+                    <div class="talos-orbitron-brand truncate text-base font-semibold leading-5 text-[var(--talos-text)]">TALOS</div>
+                </div>
             </div>
             <button
                 type="button"
-                class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] transition hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] transition hover:border-[var(--talos-accent-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="collapsed ? emit('expand') : emit('collapse')"
             >
@@ -151,7 +154,7 @@ function sessionTimestamp(session: TalosSession) {
         <Button
             v-if="visibility.new_chat !== false"
             class="mt-3 w-full"
-            :class="collapsed ? 'justify-center px-0' : 'justify-start'"
+            :class="collapsed ? 'cursor-pointer justify-center px-0' : 'cursor-pointer justify-start'"
             size="sm"
             :disabled="creatingSession"
             aria-label="New Chat"
@@ -176,7 +179,7 @@ function sessionTimestamp(session: TalosSession) {
                     v-for="session in visibleSessions"
                     :key="session.id"
                     type="button"
-                    class="group flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    class="group flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                     :class="activeSessionId === session.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]' : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]'"
                     :aria-current="activeSessionId === session.id ? 'page' : undefined"
                     :aria-label="`Open chat ${session.title}`"
@@ -197,7 +200,7 @@ function sessionTimestamp(session: TalosSession) {
                 v-for="item in visiblePrimaryItems"
                 :key="item.id"
                 type="button"
-                class="group flex w-full items-center rounded-md border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="group flex w-full cursor-pointer items-center rounded-md border text-left transition hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-60"
                 :class="[
                     collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5',
                     activeIds.includes(item.id)
@@ -208,7 +211,7 @@ function sessionTimestamp(session: TalosSession) {
                 :aria-label="item.label"
                 :title="item.disabledReason || item.description"
                 :disabled="Boolean(item.disabledReason)"
-                @click="emit('open', item.id)"
+                @click="emit('open', item.id, $event)"
             >
                 <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                 <span v-if="!collapsed" class="min-w-0">
@@ -224,12 +227,12 @@ function sessionTimestamp(session: TalosSession) {
                     v-for="item in visibleSystemItems"
                     :key="item.id"
                     type="button"
-                    class="flex w-full items-center rounded-md border border-transparent text-left text-[13px] text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    class="flex w-full cursor-pointer items-center rounded-md border border-transparent text-left text-[13px] text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                     :class="collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5'"
                     :aria-pressed="activeIds.includes(item.id)"
                     :aria-label="item.label"
                     :title="item.description"
-                    @click="emit('open', item.id)"
+                    @click="emit('open', item.id, $event)"
                 >
                     <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                     <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
@@ -239,7 +242,7 @@ function sessionTimestamp(session: TalosSession) {
             <button
                 v-if="visibility.theme !== false"
                 type="button"
-                class="mt-2 flex w-full items-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] py-2 text-[13px] text-[var(--talos-text)] transition hover:border-[var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="mt-2 flex w-full cursor-pointer items-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] py-2 text-[13px] text-[var(--talos-text)] transition hover:border-[var(--talos-accent)] hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 :class="collapsed ? 'justify-center px-0' : 'justify-between px-2.5'"
                 aria-label="Toggle theme"
                 @click="emit('toggleTheme')"

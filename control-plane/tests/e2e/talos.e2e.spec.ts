@@ -418,6 +418,61 @@ test('left rail exposes real persistent chat history', async ({ page }) => {
     await expect(page.getByLabel('TALOS chat thread').getByText('Investigate missing history rail')).toBeVisible()
 })
 
+test('left rail and empty chat brand expose polished pointer and logo affordances', async ({ page }) => {
+    await openWorkspace(page)
+
+    const knowledgeButton = page.getByRole('button', { name: 'Knowledge', exact: true })
+    await expect(knowledgeButton).toBeVisible()
+    await expect.poll(async () => knowledgeButton.evaluate((element) => window.getComputedStyle(element).cursor)).toBe('pointer')
+
+    const railBrand = page.getByTestId('talos-rail-brand')
+    await expect(railBrand).toBeVisible()
+    const brandMetrics = await railBrand.evaluate((element) => {
+        const logo = element.querySelector('[data-testid="talos-rail-brand-logo"]')?.getBoundingClientRect()
+        const copy = element.querySelector('[data-testid="talos-rail-brand-copy"]')?.getBoundingClientRect()
+
+        return {
+            hasLogo: Boolean(logo),
+            hasCopy: Boolean(copy),
+            logoLeft: Math.round(logo?.left ?? 0),
+            copyLeft: Math.round(copy?.left ?? 0),
+            logoCenterY: Math.round((logo?.top ?? 0) + ((logo?.height ?? 0) / 2)),
+            copyCenterY: Math.round((copy?.top ?? 0) + ((copy?.height ?? 0) / 2)),
+        }
+    })
+    expect(brandMetrics.hasLogo).toBe(true)
+    expect(brandMetrics.hasCopy).toBe(true)
+    expect(brandMetrics.logoLeft).toBeLessThan(brandMetrics.copyLeft)
+    expect(Math.abs(brandMetrics.logoCenterY - brandMetrics.copyCenterY), JSON.stringify(brandMetrics)).toBeLessThanOrEqual(10)
+
+    const emptyBrandLogo = page.getByTestId('talos-empty-brand').locator('.talos-short-logo').first()
+    const headerBrandLogo = page.getByTestId('talos-header-brand').locator('.talos-short-logo').first()
+    const logoSizes = await page.evaluate(() => {
+        const empty = document.querySelector('[data-testid="talos-empty-brand"] .talos-short-logo')?.getBoundingClientRect()
+        const header = document.querySelector('[data-testid="talos-header-brand"] .talos-short-logo')?.getBoundingClientRect()
+
+        return {
+            emptyWidth: Math.round(empty?.width ?? 0),
+            headerWidth: Math.round(header?.width ?? 0),
+        }
+    })
+    await expect(emptyBrandLogo).toBeVisible()
+    await expect(headerBrandLogo).toBeVisible()
+    expect(logoSizes.emptyWidth, JSON.stringify(logoSizes)).toBeGreaterThanOrEqual(64)
+    expect(logoSizes.emptyWidth, JSON.stringify(logoSizes)).toBeGreaterThan(logoSizes.headerWidth + 20)
+})
+
+test('header account label opens settings directly on account tab', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: /Open account settings for/i }).click()
+
+    const settingsWindow = page.locator('[data-window-id="settings"]')
+    await expect(settingsWindow).toBeVisible()
+    await expect(settingsWindow.getByRole('tab', { name: 'Account', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(settingsWindow.getByText('Authenticated Laravel operator session.')).toBeVisible()
+})
+
 test('chat loads, sends a deterministic persisted turn, and stays keyboard reachable', async ({ page }, testInfo) => {
     await openWorkspace(page)
 
@@ -486,7 +541,10 @@ test('composer slash commands open real TALOS modules and keep unavailable actio
     await openWorkspace(page)
 
     await page.getByLabel('Message TALOS').fill('/')
+    const slashMenu = page.getByTestId('talos-slash-command-menu')
+    await expect(slashMenu).toBeVisible()
     await expect(page.getByRole('listbox', { name: 'Composer slash commands' })).toBeVisible()
+    await expect.poll(async () => slashMenu.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-composer-popover-in')
     await expect(page.getByRole('option', { name: /\/model/ })).toContainText('Open model center')
     await expect(page.getByRole('option', { name: /\/doctor/ })).toContainText('Open doctor')
     await expect(page.getByRole('option', { name: /\/recover/ })).toHaveAttribute('aria-disabled', 'true')
@@ -501,6 +559,23 @@ test('composer slash commands open real TALOS modules and keep unavailable actio
     await expect(page.getByRole('listbox', { name: 'Composer slash commands' })).toBeVisible()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('region', { name: 'Doctor' })).toBeVisible()
+})
+
+test('composer model and context popovers animate from the chat field', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Choose model profile' }).click()
+    const modelPopover = page.getByTestId('talos-model-popover')
+    await expect(modelPopover).toBeVisible()
+    await expect.poll(async () => modelPopover.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-composer-popover-in')
+
+    await page.getByRole('button', { name: 'Choose grounding context' }).click()
+    await expect(modelPopover).toHaveCount(0)
+    const contextPopover = page.getByTestId('talos-context-popover')
+    await expect(contextPopover).toBeVisible()
+    await expect.poll(async () => contextPopover.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-composer-popover-in')
+
+    await expectNoHorizontalOverflow(page)
 })
 
 test('message actions copy, reuse, resend, and retry through explicit chat controls', async ({ page }) => {
@@ -1474,11 +1549,12 @@ test('theme switches disable motion separately from the procedural background', 
     await page.getByRole('switch', { name: 'Disable motion' }).click()
     await motionDisabledRequest
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
     await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
-    ))).toBe('0ms')
+    ))).not.toBe('0ms')
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
     await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
     await expectProceduralCanvasFrameStaysStill(page)
 
@@ -1707,12 +1783,35 @@ test('desktop sidebar collapses, expands, and resizes without overflow', async (
     expect(expandedBefore?.width).toBeGreaterThan(200)
 
     await page.getByRole('button', { name: 'Collapse sidebar' }).click()
-    const collapsed = await rail.boundingBox()
-    expect(collapsed?.width).toBeLessThan(96)
+    await expect(rail).toHaveAttribute('data-sidebar-state', 'collapsed')
+    const collapsedMotion = await rail.evaluate((element) => {
+        const style = window.getComputedStyle(element)
+        const duration = style.transitionDuration.split(',')[0]?.trim() ?? '0s'
+        const durationMs = duration.endsWith('ms')
+            ? Number(duration.replace('ms', ''))
+            : Number(duration.replace('s', '')) * 1000
+
+        return {
+            transitionProperty: style.transitionProperty,
+            transitionDurationMs: durationMs,
+        }
+    })
+    expect(collapsedMotion.transitionProperty).toContain('width')
+    expect(collapsedMotion.transitionDurationMs).toBeGreaterThanOrEqual(140)
+    await expect.poll(async () => {
+        const collapsed = await rail.boundingBox()
+
+        return collapsed?.width ?? 0
+    }).toBeLessThan(96)
 
     await page.getByRole('button', { name: 'Expand sidebar' }).click()
+    await expect(rail).toHaveAttribute('data-sidebar-state', 'expanded')
+    await expect.poll(async () => {
+        const expanded = await rail.boundingBox()
+
+        return expanded?.width ?? 0
+    }).toBeGreaterThan(180)
     const expanded = await rail.boundingBox()
-    expect(expanded?.width).toBeGreaterThan(180)
 
     const resizeHandle = page.getByLabel('Resize sidebar')
     const handleBox = await resizeHandle.boundingBox()
@@ -1741,6 +1840,7 @@ test('floating tool windows are independent, draggable, and the right dock is on
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect(themeWindow).toBeVisible()
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
 
     const before = await themeWindow.boundingBox()
     const dragHandle = page.getByLabel('Drag Theme window')
@@ -1766,6 +1866,101 @@ test('floating tool windows are independent, draggable, and the right dock is on
     })
 })
 
+test('floating windows launch from the sidebar and animate minimize, restore, and expand', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop window transition behavior is covered by the desktop project')
+
+    await openWorkspace(page)
+
+    const rail = page.locator('.talos-left-rail')
+    const railBox = await rail.boundingBox()
+    expect(railBox).toBeTruthy()
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    const themeWindow = page.locator('[data-window-id="theme"]')
+    await expect(themeWindow).toBeVisible()
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'opening')
+    await expect(themeWindow).toHaveAttribute('data-window-origin-source', 'sidebar')
+
+    const openingMotion = await themeWindow.evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            animationName: style.animationName,
+            originX: Number(element.getAttribute('data-window-origin-x')),
+            launchDx: style.getPropertyValue('--talos-window-launch-dx').trim(),
+        }
+    })
+    expect(openingMotion.animationName).toContain('talos-window-open-from-sidebar')
+    expect(openingMotion.originX).toBeLessThan(0)
+    expect(openingMotion.launchDx).toMatch(/px$/)
+
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    await page.getByRole('button', { name: 'Minimize Theme' }).click()
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'minimizing')
+    await expect.poll(async () => themeWindow.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-window-minimize-to-dock')
+    await page.waitForTimeout(170)
+    const midMinimizeMotion = await themeWindow.evaluate((element) => {
+        const style = window.getComputedStyle(element)
+        const duration = style.animationDuration.split(',')[0]?.trim() ?? '0s'
+        const durationMs = duration.endsWith('ms')
+            ? Number(duration.replace('ms', ''))
+            : Number(duration.replace('s', '')) * 1000
+
+        return {
+            animationDurationMs: durationMs,
+            opacity: Number(style.opacity),
+        }
+    })
+    expect(midMinimizeMotion.animationDurationMs).toBeGreaterThanOrEqual(280)
+    expect(midMinimizeMotion.opacity).toBeGreaterThan(0.1)
+    await expect(themeWindow).toHaveCount(0)
+
+    const restoreButton = page.getByTestId('talos-restore-window-theme')
+    await expect(restoreButton).toBeVisible()
+    await restoreButton.click()
+    await expect(themeWindow).toBeVisible()
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'restoring')
+    await expect(themeWindow).toHaveAttribute('data-window-origin-source', 'dock')
+    await expect.poll(async () => themeWindow.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-window-restore-from-dock')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'opening')
+    await expect(themeWindow).toHaveAttribute('data-window-origin-source', 'sidebar')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    await page.getByRole('button', { name: 'Minimize Theme' }).click()
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'minimizing')
+    await expect.poll(async () => themeWindow.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-window-minimize-to-dock')
+    await page.waitForTimeout(170)
+    const sidebarRefocusMinimizeMotion = await themeWindow.evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            opacity: Number(style.opacity),
+            animationName: style.animationName,
+        }
+    })
+    expect(sidebarRefocusMinimizeMotion.animationName).toContain('talos-window-minimize-to-dock')
+    expect(sidebarRefocusMinimizeMotion.opacity).toBeGreaterThan(0.1)
+    await expect(themeWindow).toHaveCount(0)
+    await restoreButton.click()
+    await expect(themeWindow).toBeVisible()
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    await page.getByRole('button', { name: 'Fullscreen Theme' }).click()
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'expanding')
+    await expect.poll(async () => themeWindow.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-window-expand')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    await expectNoHorizontalOverflow(page)
+    await testInfo.attach(`floating-window-transitions-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
 test('floating tool windows are resizable and can reset their saved size', async ({ page, isMobile }, testInfo) => {
     test.skip(Boolean(isMobile), 'desktop window resizing is covered by the desktop project')
 
@@ -1774,6 +1969,7 @@ test('floating tool windows are resizable and can reset their saved size', async
 
     const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect(themeWindow).toBeVisible()
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
 
     const before = await themeWindow.boundingBox()
     const resizeHandle = page.getByLabel('Resize Theme window bottom right')

@@ -43,6 +43,11 @@ import { resolveTalosShortcuts } from '../../../lib/talosShortcuts'
 import type { TalosCommand, TalosContextSet, TalosMessage, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload } from '../../../lib/talosTypes'
 type InitialSurface = 'workspace' | 'chat' | 'dashboard'
 const talosShortLogoUrl = '/talos/brand/logo-short.svg'
+type TalosWindowLaunchOrigin = {
+    x: number
+    y: number
+    source: 'sidebar' | 'command' | 'dock' | 'default'
+}
 const props = withDefaults(defineProps<{
     initialSurface?: InitialSurface
     authenticated?: boolean
@@ -86,6 +91,8 @@ const commandPaletteOpen = ref(false)
 const commandFeedback = ref('')
 const runtimeRequestedTab = ref<NonNullable<CommandRoute['runtimeTab']>>('timeline')
 const runtimeRequestedTabRevision = ref(0)
+const settingsRequestedTab = ref<'models' | 'account'>('models')
+const settingsRequestedTabRevision = ref(0)
 const exportDialogOpen = ref(false)
 const sessionExportResult = ref<TalosSessionExportPayload | null>(null)
 const expandedEvidenceMessageIds = ref<string[]>([])
@@ -100,6 +107,8 @@ const railCollapsed = ref(false)
 const railWidth = ref(236)
 const themeDraftCustomization = ref<TalosThemeCustomization | null>(null)
 const browserReducedMotion = ref(false)
+const windowLaunchOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
+const windowLaunchRevisions = ref<Partial<Record<TalosWindowId, number>>>({})
 let reducedMotionQuery: MediaQueryList | null = null
 const {
     sessions,
@@ -199,7 +208,7 @@ const workspaceKeyboardShortcuts = computed(() => resolveTalosShortcuts(workspac
 const workspaceUiAnimationProfile = computed(() => resolveTalosUiAnimationProfile(workspaceSettings.value?.preferences?.ui_animation_profile))
 const workspaceUiAnimationCustomization = computed(() => sanitizeTalosUiAnimationCustomization(workspaceSettings.value?.preferences?.ui_animation_customization))
 const workspaceUiMotionDisabled = computed(() => (
-    workspaceMotionDisabled.value
+    workspaceReducedMotion.value
     || workspaceUiAnimationProfile.value === 'off'
 ))
 const workspaceBackgroundEffect = computed(() => talosBackgroundEffectFromCustomization(
@@ -340,6 +349,38 @@ const authLabel = computed(() => props.authUserName.trim() || 'Operator')
 let stopRailResizeListeners: (() => void) | null = null
 function isWindowId(value: string): value is TalosWindowId {
     return windowIds.includes(value as TalosWindowId)
+}
+function launchOriginFromEvent(event?: MouseEvent | PointerEvent, source: TalosWindowLaunchOrigin['source'] = 'default'): TalosWindowLaunchOrigin {
+    const target = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
+    const rect = target?.getBoundingClientRect()
+
+    if (rect) {
+        return {
+            x: Math.round(rect.left + (rect.width / 2) - currentRailWidth.value),
+            y: Math.round(rect.top + (rect.height / 2)),
+            source,
+        }
+    }
+
+    return {
+        x: -Math.round(Math.max(72, currentRailWidth.value * 0.45)),
+        y: typeof window === 'undefined' ? 120 : Math.round(window.innerHeight * 0.42),
+        source,
+    }
+}
+function setWindowLaunchOrigin(id: TalosWindowId, origin: TalosWindowLaunchOrigin) {
+    windowLaunchOrigins.value = {
+        ...windowLaunchOrigins.value,
+        [id]: origin,
+    }
+    windowLaunchRevisions.value = {
+        ...windowLaunchRevisions.value,
+        [id]: (windowLaunchRevisions.value[id] ?? 0) + 1,
+    }
+}
+function openWindowFromSource(id: TalosWindowId, event?: MouseEvent | PointerEvent, source: TalosWindowLaunchOrigin['source'] = 'default') {
+    setWindowLaunchOrigin(id, launchOriginFromEvent(event, source))
+    openWindow(id)
 }
 function stopRailResize() {
     if (stopRailResizeListeners) {
@@ -557,7 +598,7 @@ async function sendChatText(message: string, userMessageMetadata: Record<string,
     }
     if (!selectedModelProfileIsUsable.value) {
         uiError.value = 'Choose a usable server-side model profile before sending.'
-        openWindow('settings')
+        openSettings()
         modelPopoverOpen.value = true
         return false
     }
@@ -647,7 +688,7 @@ async function benchmarkMessageRun(message: TalosMessage) {
                 benchmark_group: response.benchmark_group ?? null,
             },
         })
-        openWindow('compare')
+        openWindowFromSource('compare', undefined, 'command')
         await nextTick()
         scrollChat()
     } catch (error) {
@@ -660,7 +701,7 @@ async function runSelectedBenchmarkScenario() {
     const path = selectedBenchmarkScenarioPath.value?.trim() ?? ''
     if (!selectedBenchmarkScenarioIsRunnable.value) {
         uiError.value = runAvmCompareCommandDisabledReason.value
-        openWindow('compare')
+        openWindowFromSource('compare', undefined, 'command')
         return
     }
     uiError.value = null
@@ -677,17 +718,29 @@ async function runSelectedBenchmarkScenario() {
             validationMessage: 'TALOS rejected the benchmark comparison request.',
         })
         selectedBenchmarkGroupId.value = response.benchmark_group?.id ?? null
-        openWindow('compare')
+        openWindowFromSource('compare', undefined, 'command')
         commandFeedback.value = 'Benchmark comparison completed.'
     } catch (error) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not run the benchmark comparison.'
     }
 }
-function openModule(id: string) {
+function openModule(id: string, event?: MouseEvent | PointerEvent) {
     if (!isWindowId(id)) {
         return
     }
-    openWindow(id)
+    if (id === 'settings') {
+        openSettings('models', event)
+        return
+    }
+    openWindowFromSource(id, event, 'sidebar')
+}
+function openSettings(tab: 'models' | 'account' = 'models', event?: MouseEvent | PointerEvent) {
+    settingsRequestedTab.value = tab
+    settingsRequestedTabRevision.value += 1
+    openWindowFromSource('settings', event, event ? 'sidebar' : 'command')
+}
+function openAccountSettings() {
+    openSettings('account')
 }
 function closePopover() {
     modelPopoverOpen.value = false
@@ -722,7 +775,7 @@ async function handleContextSetCreated(contextSet: TalosContextSet) {
 }
 function handleBenchmarkScenarioSelected(scenarioPath: string) {
     selectedBenchmarkScenarioPath.value = scenarioPath
-    openWindow('compare')
+    openWindowFromSource('compare', undefined, 'command')
 }
 function openCommandPalette() {
     commandPaletteOpen.value = true
@@ -738,7 +791,7 @@ async function focusCommandRoute(route: CommandRoute) {
         runtimeRequestedTab.value = route.runtimeTab
         runtimeRequestedTabRevision.value += 1
     }
-    openWindow(route.windowId)
+    openWindowFromSource(route.windowId, undefined, 'command')
     if (dockedWindowIds.value.includes(route.windowId)) {
         toggleDock(route.windowId)
     }
@@ -849,16 +902,16 @@ useTalosShortcuts(workspaceKeyboardShortcuts, {
             closeWindow(activeWindowId.value)
         }
     },
-    open_calendar: () => openWindow('calendar'),
-    open_compare: () => openWindow('compare'),
-    open_cookbook: () => openWindow('model_lab'),
-    open_deep_research: () => openWindow('research'),
-    open_gallery: () => openWindow('gallery'),
-    open_library: () => openWindow('library'),
-    open_memory: () => openWindow('brain'),
-    open_notes: () => openWindow('notes'),
-    open_tasks: () => openWindow('tasks'),
-    open_theme: () => openWindow('theme'),
+    open_calendar: () => openWindowFromSource('calendar', undefined, 'command'),
+    open_compare: () => openWindowFromSource('compare', undefined, 'command'),
+    open_cookbook: () => openWindowFromSource('model_lab', undefined, 'command'),
+    open_deep_research: () => openWindowFromSource('research', undefined, 'command'),
+    open_gallery: () => openWindowFromSource('gallery', undefined, 'command'),
+    open_library: () => openWindowFromSource('library', undefined, 'command'),
+    open_memory: () => openWindowFromSource('brain', undefined, 'command'),
+    open_notes: () => openWindowFromSource('notes', undefined, 'command'),
+    open_tasks: () => openWindowFromSource('tasks', undefined, 'command'),
+    open_theme: () => openWindowFromSource('theme', undefined, 'command'),
 })
 async function refreshModelAndContext() {
     await Promise.allSettled([
@@ -889,13 +942,13 @@ function applyQueryModules() {
     const params = new URLSearchParams(window.location.search)
     const module = params.get('module')
     if (module && isWindowId(module)) {
-        openWindow(module)
+        openWindowFromSource(module, undefined, 'command')
     }
     if (params.has('run')) {
-        openWindow('runtime')
+        openWindowFromSource('runtime', undefined, 'command')
     }
     if (params.has('benchmark')) {
-        openWindow('compare')
+        openWindowFromSource('compare', undefined, 'command')
     }
 }
 function handleReducedMotionChange(event: MediaQueryListEvent) {
@@ -987,12 +1040,13 @@ onBeforeUnmount(() => {
                 :csrf-token="csrfToken"
                 @open-commands="openCommandPalette"
                 @open-export="openSessionExportDialog"
+                @open-account="openAccountSettings"
             />
             <TalosMobileRail
                 :creating-session="creatingSession"
                 :visibility="workspaceAppearanceVisibility.sidebar"
                 @new-chat="startNewChat"
-                @open-window="openWindow"
+                @open-window="openModule"
             />
             <TalosChatSurface
                 ref="chatSurface"
@@ -1016,8 +1070,8 @@ onBeforeUnmount(() => {
                 :show-welcome-message="workspaceAppearanceVisibility.chat_area.welcome_message"
                 :full-width-chat="workspaceAppearanceVisibility.chat_area.full_width_chat"
                 :sensitive-blur="workspaceAppearanceVisibility.chat_area.sensitive_blur"
-                @open-model="openWindow('model_lab')"
-                @open-context="openWindow('library')"
+                @open-model="openWindowFromSource('model_lab', undefined, 'command')"
+                @open-context="openWindowFromSource('library', undefined, 'command')"
                 @set-prompt="prompt = $event"
                 @message-copied="commandFeedback = 'Message copied.'"
                 @message-copy-failed="uiError = 'TALOS could not access the clipboard. Use your browser copy shortcut.'"
@@ -1045,17 +1099,23 @@ onBeforeUnmount(() => {
                 :context-sets="contextSets"
                 :selected-model-profile-id="selectedModelProfileId"
                 :selected-context-set-id="selectedContextSetId"
+                :settings-requested-tab="settingsRequestedTab"
+                :settings-requested-tab-revision="settingsRequestedTabRevision"
                 :authenticated="authenticated"
                 :auth-user-name="authUserName"
                 :logout-url="logoutUrl"
                 :csrf-token="csrfToken"
                 :theme="theme"
+                :ui-motion-disabled="workspaceUiMotionDisabled"
+                :window-launch-origins="windowLaunchOrigins"
+                :window-launch-revisions="windowLaunchRevisions"
                 @close-window="closeWindow"
                 @minimize-window="minimizeWindow"
                 @dock-window="toggleDock"
                 @fullscreen-window="toggleFullscreenWindow"
                 @focus-window="focusWindow"
-                @open-window="openWindow"
+                @open-window="openWindowFromSource($event, undefined, 'command')"
+                @restore-window="openWindow"
                 @set-window-position="setWindowPosition"
                 @set-window-size="setWindowSize"
                 @reset-window-size="resetWindowSize"
@@ -1099,15 +1159,15 @@ onBeforeUnmount(() => {
                 @send="sendChat"
                 @open-model="toggleModelPopover"
                 @open-context="toggleContextPopover"
-                @open-settings="openWindow('settings')"
+                @open-settings="openSettings()"
                 @toggle-temporary="toggleTemporaryMode"
                 @enhance="enhanceCurrentPrompt"
                 @slash-command="selectCommand"
                 @select-model-profile="selectModelProfile"
                 @select-context-set="selectContextSet"
                 @refresh-model-and-context="refreshModelAndContext"
-                @open-model-lab="openWindow('model_lab')"
-                @open-library="openWindow('library')"
+                @open-model-lab="openWindowFromSource('model_lab', undefined, 'command')"
+                @open-library="openWindowFromSource('library', undefined, 'command')"
                 @replace-prompt-with-enhanced="replacePromptWithEnhanced"
                 @insert-enhanced-prompt-below="insertEnhancedPromptBelow"
                 @clear-prompt-enhancement="clearPromptEnhancement"

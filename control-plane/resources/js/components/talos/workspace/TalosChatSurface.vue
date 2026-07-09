@@ -234,10 +234,10 @@ defineExpose({ scrollToBottom })
 
             <div v-else-if="!messages.length" class="flex flex-1 flex-col items-center justify-center text-center">
                 <div data-testid="talos-empty-brand" class="mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
-                    <span class="talos-short-logo" aria-hidden="true">
+                    <span class="talos-short-logo talos-short-logo-hero" aria-hidden="true">
                         <span class="talos-short-logo-mark"></span>
                     </span>
-                    <span class="talos-orbitron-brand text-3xl font-semibold text-[var(--talos-text)] sm:text-4xl">TALOS</span>
+                    <span class="talos-orbitron-brand text-4xl font-semibold text-[var(--talos-text)] sm:text-5xl">TALOS</span>
                 </div>
                 <template v-if="showWelcomeMessage">
                     <h2 class="text-2xl font-semibold text-[var(--talos-text)]">{{ welcomePrompt.headline }}</h2>

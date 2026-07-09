@@ -27,7 +27,8 @@ function selectCommand(command: TalosCommand) {
 
 <template>
     <section
-        class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] shadow-xl shadow-[var(--talos-shadow)]"
+        data-testid="talos-slash-command-menu"
+        class="talos-composer-popover talos-slash-command-menu rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] shadow-xl shadow-[var(--talos-shadow)]"
     >
         <div class="border-b border-[var(--talos-border)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--talos-muted)]">
             Slash commands
