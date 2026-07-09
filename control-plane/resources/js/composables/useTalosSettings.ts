@@ -82,7 +82,7 @@ export function useTalosSettings() {
                 if (settingsSavedMessage.value === message) {
                     settingsSavedMessage.value = ''
                 }
-            }, 2400)
+            }, 15000)
             return response.data
         } catch (error) {
             settingsError.value = error instanceof Error ? error.message : 'TALOS could not save workspace settings.'

@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { BrainCircuit, Database, Loader2, Send, ShieldAlert, SlidersHorizontal, WandSparkles } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
 import Textarea from '../../ui/Textarea.vue'
+import TalosSlashCommandMenu from './TalosSlashCommandMenu.vue'
+import { isTalosCommandEnabled } from '../../../lib/commandRegistry'
+import { filterTalosSlashCommands } from '../../../lib/talosSlashCommands'
+import type { TalosCommand } from '../../../lib/talosTypes'
 
 const prompt = defineModel<string>('prompt', { required: true })
 
 const props = defineProps<{
+    commands: TalosCommand[]
     canSend: boolean
     sending: boolean
     statusText: string
@@ -25,20 +30,113 @@ const emit = defineEmits<{
     openSettings: []
     enhance: []
     toggleTemporary: []
+    slashCommand: [id: TalosCommand['id']]
 }>()
 
 const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve prompt')
 const sendTitle = computed(() => props.sendDisabledReason || 'Send message')
+const activeSlashIndex = ref(0)
+const slashQuery = computed(() => {
+    const value = prompt.value
+
+    if (!value.startsWith('/')) {
+        return null
+    }
+
+    const commandInput = value.slice(1)
+
+    if (commandInput.includes('\n')) {
+        return null
+    }
+
+    return commandInput.trimStart()
+})
+const slashCommands = computed(() => slashQuery.value === null
+    ? []
+    : filterTalosSlashCommands(props.commands, slashQuery.value))
+const slashMenuOpen = computed(() => slashQuery.value !== null && slashCommands.value.length > 0)
+const activeSlashCommand = computed(() => slashCommands.value[activeSlashIndex.value] ?? slashCommands.value[0] ?? null)
+
+watch(slashCommands, (commands) => {
+    if (activeSlashIndex.value >= commands.length) {
+        activeSlashIndex.value = 0
+    }
+})
 
 function handleEnter() {
     if (props.canSend) {
         emit('send')
     }
 }
+
+function selectSlashCommand(command: TalosCommand) {
+    if (!isTalosCommandEnabled(command)) {
+        return
+    }
+
+    prompt.value = ''
+    emit('slashCommand', command.id)
+}
+
+function selectActiveSlashCommand() {
+    const command = activeSlashCommand.value
+
+    if (command) {
+        selectSlashCommand(command)
+    }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+    if (slashMenuOpen.value) {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            activeSlashIndex.value = (activeSlashIndex.value + 1) % slashCommands.value.length
+            return
+        }
+
+        if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            activeSlashIndex.value = (activeSlashIndex.value - 1 + slashCommands.value.length) % slashCommands.value.length
+            return
+        }
+
+        if (event.key === 'Escape') {
+            event.preventDefault()
+            prompt.value = ''
+            activeSlashIndex.value = 0
+            return
+        }
+
+        if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault()
+            selectActiveSlashCommand()
+            return
+        }
+    }
+
+    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        handleEnter()
+    }
+}
 </script>
 
 <template>
-    <Card class="talos-chat-composer-shell pointer-events-auto mx-auto w-full max-w-[820px] border-[var(--talos-border-strong)] bg-[var(--talos-card)]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur" :padded="false">
+    <Card class="talos-chat-composer-shell pointer-events-auto relative mx-auto w-full max-w-[820px] border-[var(--talos-border-strong)] bg-[var(--talos-card)]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur" :padded="false">
+        <TalosSlashCommandMenu
+            v-if="slashMenuOpen"
+            class="absolute inset-x-0 bottom-full mb-3"
+            :commands="commands"
+            :query="slashQuery ?? ''"
+            :active-index="activeSlashIndex"
+            @selected="(id) => {
+                const command = slashCommands.find((item) => item.id === id)
+                if (command) {
+                    selectSlashCommand(command)
+                }
+            }"
+        />
+
         <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-1 px-1 pb-2">
             <button
                 type="button"
@@ -98,7 +196,7 @@ function handleEnter() {
             placeholder="Message TALOS..."
             aria-label="Message TALOS"
             :disabled="sending"
-            @keydown.enter.exact.prevent="handleEnter"
+            @keydown="handleKeydown"
         />
 
         <div class="flex items-center justify-between gap-3 px-2 pb-1 pt-2">

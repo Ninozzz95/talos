@@ -32,7 +32,7 @@ const windowClass = computed(() => {
     <section
         :class="[
             windowClass,
-            'min-h-0 overflow-hidden rounded-md border bg-[var(--talos-card)] shadow-[0_24px_90px_rgba(0,0,0,0.34)]',
+            'flex max-h-[calc(100dvh-18rem)] min-h-0 flex-col overflow-hidden rounded-md border bg-[var(--talos-card)] shadow-[0_24px_90px_rgba(0,0,0,0.34)] lg:max-h-[calc(100vh-7rem)]',
             active ? 'border-[var(--talos-accent-border)]' : 'border-[var(--talos-border)]',
         ]"
         :aria-label="title"
@@ -62,7 +62,7 @@ const windowClass = computed(() => {
                 </Button>
             </div>
         </header>
-        <div class="talos-tool-window-body min-h-0 overflow-auto p-3">
+        <div class="talos-tool-window-body min-h-0 flex-1 overflow-auto overscroll-contain p-3 pb-36">
             <slot />
         </div>
     </section>
