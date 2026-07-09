@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\TalosModelProfile;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -14,10 +15,12 @@ final class TalosModelProfileApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
 
         config([
             'services.talos.model_provider_allowed_hosts' => [
@@ -54,11 +57,13 @@ final class TalosModelProfileApiTest extends TestCase
 
         $this->assertNotSame('sk-secret-value', $profile->encrypted_secret);
         $this->assertSame('sk-secret-value', Crypt::decryptString((string) $profile->encrypted_secret));
+        $this->assertSame($this->user->id, $profile->user_id);
     }
 
     public function test_list_and_show_omit_secret_fields(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'deepseek',
             'model' => 'deepseek-chat',
             'display_name' => 'DeepSeek',
@@ -80,9 +85,64 @@ final class TalosModelProfileApiTest extends TestCase
             ->assertJsonMissingPath('data.encrypted_secret');
     }
 
+    public function test_model_profiles_are_scoped_to_the_authenticated_user(): void
+    {
+        $otherUser = User::factory()->create();
+        $foreign = TalosModelProfile::query()->create([
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-foreign',
+            'display_name' => 'Foreign profile',
+            'status' => 'healthy',
+            'encrypted_secret' => Crypt::encryptString('foreign-secret'),
+            'base_url' => 'https://api.openai.test/v1',
+        ]);
+
+        $createResponse = $this->postJson('/api/talos/model-profiles', [
+            'user_id' => $otherUser->id,
+            'provider' => 'openai',
+            'model' => 'gpt-owned',
+            'display_name' => 'Owned profile',
+            'secret' => 'owned-secret',
+            'base_url' => 'https://api.openai.test/v1',
+        ]);
+
+        $createResponse
+            ->assertCreated()
+            ->assertJsonPath('data.user_id', $this->user->id);
+
+        $ownedId = $createResponse->json('data.id');
+
+        $this->getJson('/api/talos/model-profiles')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $ownedId])
+            ->assertJsonMissing(['id' => $foreign->id])
+            ->assertJsonMissing(['foreign-secret']);
+
+        $this->getJson("/api/talos/model-profiles/{$foreign->id}")
+            ->assertNotFound();
+
+        $this->patchJson("/api/talos/model-profiles/{$foreign->id}", [
+            'display_name' => 'Hijacked profile',
+        ])->assertNotFound();
+
+        $this->postJson("/api/talos/model-profiles/{$foreign->id}/probe")
+            ->assertNotFound();
+
+        $this->deleteJson("/api/talos/model-profiles/{$foreign->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('talos_model_profiles', [
+            'id' => $foreign->id,
+            'user_id' => $otherUser->id,
+            'display_name' => 'Foreign profile',
+        ]);
+    }
+
     public function test_update_without_secret_preserves_existing_secret(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1',
             'display_name' => 'Before',
@@ -107,6 +167,7 @@ final class TalosModelProfileApiTest extends TestCase
     public function test_update_with_secret_rotates_secret_without_returning_it(): void
     {
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1',
             'display_name' => 'Before',
@@ -375,6 +436,7 @@ final class TalosModelProfileApiTest extends TestCase
         Http::fake();
 
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'Unsafe Local',
@@ -401,6 +463,7 @@ final class TalosModelProfileApiTest extends TestCase
         ]);
 
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'OpenAI',
@@ -425,6 +488,7 @@ final class TalosModelProfileApiTest extends TestCase
         ]);
 
         $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
             'provider' => 'deepseek',
             'model' => 'deepseek-chat',
             'display_name' => 'DeepSeek',

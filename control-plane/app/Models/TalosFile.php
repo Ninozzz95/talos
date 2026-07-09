@@ -18,6 +18,7 @@ final class TalosFile extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'original_name',
         'mime_type',
         'size_bytes',
@@ -53,6 +54,7 @@ final class TalosFile extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'original_name' => $this->original_name,
             'mime_type' => $this->mime_type,
             'size_bytes' => $this->size_bytes,

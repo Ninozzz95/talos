@@ -8,6 +8,8 @@ use App\Models\TalosBenchmarkGroup;
 use App\Models\TalosBenchmarkResult;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosRun;
+use App\Models\TalosSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -16,10 +18,12 @@ final class BenchmarkComparisonApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_private_benchmark_scenario_can_be_compared(): void
@@ -167,6 +171,7 @@ final class BenchmarkComparisonApiTest extends TestCase
     public function test_persisted_benchmark_group_can_be_exported_with_audit_event(): void
     {
         $group = TalosBenchmarkGroup::query()->create([
+            'user_id' => $this->user->id,
             'name' => 'exportable_benchmark',
             'scenario_path' => 'benchmark-scenarios/test/exportable.json',
             'scenario_hash' => hash('sha256', 'scenario'),
@@ -226,6 +231,7 @@ final class BenchmarkComparisonApiTest extends TestCase
     public function test_incomplete_benchmark_group_export_is_rejected_without_audit_event(): void
     {
         $group = TalosBenchmarkGroup::query()->create([
+            'user_id' => $this->user->id,
             'name' => 'incomplete_benchmark',
             'scenario_path' => 'benchmark-scenarios/test/incomplete.json',
             'scenario_hash' => hash('sha256', 'scenario'),
@@ -263,6 +269,7 @@ final class BenchmarkComparisonApiTest extends TestCase
     public function test_benchmark_group_export_rejects_mismatched_fairness_hashes(): void
     {
         $group = TalosBenchmarkGroup::query()->create([
+            'user_id' => $this->user->id,
             'name' => 'mismatched_benchmark',
             'scenario_path' => 'benchmark-scenarios/test/mismatched.json',
             'scenario_hash' => hash('sha256', 'scenario'),
@@ -338,6 +345,7 @@ final class BenchmarkComparisonApiTest extends TestCase
         $this->useIsolatedLocalStorage();
 
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'avm_on',
             'status' => 'succeeded',
             'prompt_hash' => hash('sha256', 'Summarize this operational workflow.'),
@@ -373,6 +381,7 @@ final class BenchmarkComparisonApiTest extends TestCase
         $this->useIsolatedLocalStorage();
 
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'avm_on',
             'status' => 'succeeded',
             'prompt_hash' => hash('sha256', 'missing prompt'),
@@ -383,5 +392,47 @@ final class BenchmarkComparisonApiTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['run']);
+    }
+
+    public function test_benchmark_groups_exports_and_run_benchmark_are_scoped_to_the_authenticated_user(): void
+    {
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'title' => 'Foreign benchmark session',
+            'mode' => 'avm_on',
+        ]);
+        $foreignRun = TalosRun::query()->create([
+            'session_id' => $foreignSession->id,
+            'mode' => 'avm_on',
+            'status' => 'succeeded',
+            'prompt_hash' => hash('sha256', 'foreign benchmark prompt'),
+            'prompt' => 'Foreign benchmark prompt',
+            'provider' => 'openai',
+            'model' => 'gpt-test',
+        ]);
+        $foreignGroup = TalosBenchmarkGroup::query()->create([
+            'session_id' => $foreignSession->id,
+            'source_run_id' => $foreignRun->id,
+            'name' => 'foreign benchmark',
+            'scenario_path' => 'benchmark-scenarios/test/foreign.json',
+            'scenario_hash' => hash('sha256', 'foreign scenario'),
+            'prompt_hash' => hash('sha256', 'foreign prompt'),
+            'context_hash' => hash('sha256', 'foreign context'),
+            'model' => 'gpt-test',
+            'evaluator_version' => 'kadmos-core-benchmark-v1',
+        ]);
+
+        $this->getJson('/api/talos/benchmark-groups')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $foreignGroup->id]);
+
+        $this->getJson("/api/talos/benchmark-groups/{$foreignGroup->id}")->assertNotFound();
+        $this->getJson("/api/talos/benchmark-groups/{$foreignGroup->id}/export")->assertNotFound();
+        $this->postJson("/api/talos/runs/{$foreignRun->id}/benchmark", ['runs' => 1])->assertNotFound();
+
+        $this->assertSame(0, TalosAuditEvent::query()
+            ->where('event_type', 'benchmark_report.exported')
+            ->where('subject_id', $foreignGroup->id)
+            ->count());
     }
 }

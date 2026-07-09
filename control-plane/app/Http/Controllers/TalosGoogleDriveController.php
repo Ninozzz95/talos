@@ -91,6 +91,7 @@ final class TalosGoogleDriveController extends Controller
                 'google_drive_account_email' => $account->email,
                 'imported_at' => now()->toJSON(),
             ],
+            $request->user()?->id,
         );
 
         TalosAuditEvent::record('google.drive.file_imported', 'file', (string) ($result['id'] ?? ''), [

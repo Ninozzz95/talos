@@ -100,6 +100,7 @@ final class TraceReplayApiTest extends TestCase
     public function test_persisted_run_events_are_replayed_without_mutating_the_run(): void
     {
         $run = TalosRun::query()->create([
+            'user_id' => auth()->id(),
             'mode' => 'avm_on',
             'status' => 'blocked',
             'prompt_hash' => hash('sha256', 'persisted replay'),

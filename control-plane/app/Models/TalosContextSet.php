@@ -18,6 +18,7 @@ final class TalosContextSet extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'name',
         'status',
         'metadata',
@@ -38,6 +39,7 @@ final class TalosContextSet extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'name' => $this->name,
             'status' => $this->status,
             'metadata' => $this->metadata,

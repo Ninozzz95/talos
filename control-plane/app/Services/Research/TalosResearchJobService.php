@@ -26,6 +26,7 @@ final class TalosResearchJobService
             $settings = $payload['settings'] ?? [];
 
             $run = TalosRun::query()->create([
+                'user_id' => $user->id,
                 'mode' => 'research_job',
                 'status' => 'running',
                 'prompt_hash' => hash('sha256', $query),

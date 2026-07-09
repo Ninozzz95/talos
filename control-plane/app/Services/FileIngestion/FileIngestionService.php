@@ -24,21 +24,21 @@ final class FileIngestionService
     /**
      * @return array<string, mixed>
      */
-    public function ingest(UploadedFile $file): array
+    public function ingest(UploadedFile $file, ?int $userId = null): array
     {
         $contents = (string) file_get_contents($file->getRealPath());
         $extension = strtolower((string) $file->getClientOriginalExtension());
         $mimeType = $file->getMimeType() ?: 'application/octet-stream';
         $originalName = $file->getClientOriginalName();
 
-        return $this->ingestContents($contents, $originalName, $mimeType, $extension);
+        return $this->ingestContents($contents, $originalName, $mimeType, $extension, [], $userId);
     }
 
     /**
      * @param array<string, mixed> $metadata
      * @return array<string, mixed>
      */
-    public function ingestString(string $contents, string $originalName, string $mimeType, array $metadata = []): array
+    public function ingestString(string $contents, string $originalName, string $mimeType, array $metadata = [], ?int $userId = null): array
     {
         return $this->ingestContents(
             $contents,
@@ -49,6 +49,7 @@ final class FileIngestionService
                 ...$metadata,
                 'trust_level' => 'untrusted',
             ],
+            $userId,
         );
     }
 
@@ -62,6 +63,7 @@ final class FileIngestionService
         string $mimeType,
         string $extension,
         array $metadata = [],
+        ?int $userId = null,
     ): array {
         $sha256 = hash('sha256', $contents);
         $parser = $this->parserForExtension($extension);
@@ -76,6 +78,7 @@ final class FileIngestionService
         Storage::disk('local')->put($storagePath, $contents);
 
         $talosFile = TalosFile::query()->create([
+            'user_id' => $userId,
             'original_name' => $originalName,
             'mime_type' => $mimeType,
             'size_bytes' => strlen($contents),
@@ -91,7 +94,7 @@ final class FileIngestionService
             $extractedText = $this->extractText($contents, $extension);
             $chunkPayloads = $this->chunkText($extractedText, $parser);
 
-            $contextSet = DB::transaction(function () use ($talosFile, $chunkPayloads, $extension, $extractedText, $originalName): TalosContextSet {
+            $contextSet = DB::transaction(function () use ($talosFile, $chunkPayloads, $extension, $extractedText, $originalName, $userId): TalosContextSet {
                 $chunks = [];
                 foreach ($chunkPayloads as $payload) {
                     $chunks[] = TalosFileChunk::query()->create([
@@ -111,7 +114,7 @@ final class FileIngestionService
                     ],
                 ]);
 
-                return $this->createDefaultContextSet($talosFile->refresh(), $chunks, $originalName);
+                return $this->createDefaultContextSet($talosFile->refresh(), $chunks, $originalName, $userId);
             });
 
             $talosFile->refresh()->load('chunks');
@@ -260,9 +263,10 @@ final class FileIngestionService
     /**
      * @param list<TalosFileChunk> $chunks
      */
-    private function createDefaultContextSet(TalosFile $file, array $chunks, string $name): TalosContextSet
+    private function createDefaultContextSet(TalosFile $file, array $chunks, string $name, ?int $userId): TalosContextSet
     {
         $contextSet = TalosContextSet::query()->create([
+            'user_id' => $userId,
             'name' => $name,
             'status' => $file->status,
             'metadata' => [

@@ -60,6 +60,7 @@ final class TalosModelComparisonService
                 $hasFailedLane = $hasFailedLane || $isFailed;
 
                 $run = TalosRun::query()->create([
+                    'user_id' => $user->id,
                     'model_profile_id' => $profile->id,
                     'mode' => 'model_comparison_lane',
                     'status' => $isFailed ? 'failed' : 'succeeded',
@@ -161,6 +162,7 @@ final class TalosModelComparisonService
             $sourceRunId = $comparison->lanes->sortBy('position')->first()?->run_id;
 
             $group = TalosBenchmarkGroup::query()->create([
+                'user_id' => $comparison->user_id,
                 'source_run_id' => $sourceRunId,
                 'name' => 'Model comparison: '.mb_substr($comparison->prompt, 0, 80),
                 'scenario_path' => 'talos://model-comparisons/'.$comparison->id,

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\TalosBenchmarkGroup;
+use App\Models\TalosContextSet;
 use App\Models\TalosResearchClaim;
 use App\Models\TalosResearchReport;
 use App\Models\TalosResearchSource;
@@ -74,9 +76,11 @@ final class TalosResearchReportController extends Controller
         $claims = $validated['claims'];
 
         $this->validateResearchGraph($sources, $claims);
+        $this->validateOwnedProvenance($validated, (int) $user->id);
 
         $report = DB::transaction(function () use ($validated, $sources, $claims, $user): TalosResearchReport {
             $run = TalosRun::query()->create([
+                'user_id' => $user->id,
                 'context_set_id' => $validated['context_set_id'] ?? null,
                 'mode' => 'verified_execution',
                 'status' => $this->containsFailedSource($sources) ? 'failed' : 'succeeded',
@@ -280,6 +284,32 @@ final class TalosResearchReportController extends Controller
     private function authorizeReport(TalosResearchReport $report): void
     {
         abort_unless(Auth::id() === $report->user_id, 404);
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function validateOwnedProvenance(array $validated, int $userId): void
+    {
+        $errors = [];
+
+        if (filled($validated['context_set_id'] ?? null) && ! TalosContextSet::query()
+            ->where('user_id', $userId)
+            ->whereKey((string) $validated['context_set_id'])
+            ->exists()) {
+            $errors['context_set_id'] = ['The selected context set does not belong to the current user.'];
+        }
+
+        if (filled($validated['benchmark_group_id'] ?? null) && ! TalosBenchmarkGroup::query()
+            ->where('user_id', $userId)
+            ->whereKey((string) $validated['benchmark_group_id'])
+            ->exists()) {
+            $errors['benchmark_group_id'] = ['The selected benchmark group does not belong to the current user.'];
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     /**

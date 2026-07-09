@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosBenchmarkGroup;
+use App\Models\TalosContextSet;
 use App\Models\TalosResearchJob;
 use App\Models\TalosRun;
 use App\Models\User;
@@ -272,6 +274,49 @@ final class TalosResearchApiTest extends TestCase
 
         $this->get("/research/reports/{$reportId}")
             ->assertNotFound();
+    }
+
+    public function test_research_report_rejects_foreign_context_and_benchmark_provenance(): void
+    {
+        $foreignUser = User::factory()->create();
+        $foreignContextSet = TalosContextSet::query()->create([
+            'user_id' => $foreignUser->id,
+            'name' => 'Foreign context',
+            'status' => 'available',
+        ]);
+        $foreignBenchmarkGroup = TalosBenchmarkGroup::query()->create([
+            'user_id' => $foreignUser->id,
+            'name' => 'Foreign benchmark',
+            'scenario_path' => 'benchmark-scenarios/test/foreign.json',
+            'scenario_hash' => hash('sha256', 'foreign scenario'),
+            'prompt_hash' => hash('sha256', 'foreign prompt'),
+            'context_hash' => hash('sha256', 'foreign context'),
+            'model' => 'gpt-test',
+            'evaluator_version' => 'kadmos-core-benchmark-v1',
+        ]);
+
+        $this->postJson('/api/talos/research-reports', [
+            'title' => 'Cross-owner provenance',
+            'query' => 'Do not attach foreign provenance.',
+            'context_set_id' => $foreignContextSet->id,
+            'benchmark_group_id' => $foreignBenchmarkGroup->id,
+            'sources' => [
+                [
+                    'client_id' => 'src-1',
+                    'url' => 'https://example.com/source',
+                    'status' => 'fetched',
+                ],
+            ],
+            'claims' => [
+                [
+                    'text' => 'Claim.',
+                    'status' => 'verified',
+                    'source_refs' => ['src-1'],
+                ],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['context_set_id', 'benchmark_group_id']);
     }
 
     public function test_research_job_starts_with_persisted_run_and_planned_events(): void

@@ -7,13 +7,18 @@ namespace App\Http\Controllers;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosBenchmarkGroup;
 use App\Models\TalosBenchmarkResult;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 final class TalosBenchmarkGroupController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
+
         $groups = TalosBenchmarkGroup::query()
+            ->where('user_id', $userId)
             ->withCount('results')
             ->latest('created_at')
             ->get()
@@ -23,15 +28,17 @@ final class TalosBenchmarkGroupController extends Controller
         return response()->json(['data' => $groups]);
     }
 
-    public function show(TalosBenchmarkGroup $benchmarkGroup): JsonResponse
+    public function show(Request $request, TalosBenchmarkGroup $benchmarkGroup): JsonResponse
     {
+        $this->assertGroupOwnedByCurrentUser($request, $benchmarkGroup);
         $benchmarkGroup->load('results');
 
         return response()->json(['data' => $benchmarkGroup->toApiArray(includeResults: true)]);
     }
 
-    public function export(TalosBenchmarkGroup $benchmarkGroup): JsonResponse
+    public function export(Request $request, TalosBenchmarkGroup $benchmarkGroup): JsonResponse
     {
+        $this->assertGroupOwnedByCurrentUser($request, $benchmarkGroup);
         $benchmarkGroup->load('results');
         $exportReadiness = $this->exportReadiness($benchmarkGroup);
 
@@ -135,5 +142,18 @@ final class TalosBenchmarkGroupController extends Controller
             'fairness_violations' => $fairnessViolations,
             'evidence_violations' => $evidenceViolations,
         ];
+    }
+
+    private function currentUserId(Request $request): int
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        return (int) $user->id;
+    }
+
+    private function assertGroupOwnedByCurrentUser(Request $request, TalosBenchmarkGroup $benchmarkGroup): void
+    {
+        abort_unless((int) $benchmarkGroup->user_id === $this->currentUserId($request), 404);
     }
 }

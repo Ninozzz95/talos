@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosResearchReport;
+use App\Models\TalosDocument;
 use App\Models\TalosRun;
 use App\Models\TalosRunArtifact;
+use App\Models\TalosSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -13,15 +17,18 @@ final class TalosDocumentArtifactApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_document_can_be_saved_from_run_artifact_and_export_includes_metadata(): void
     {
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'verified_execution',
             'status' => 'succeeded',
             'prompt_hash' => hash('sha256', 'research prompt'),
@@ -71,6 +78,7 @@ final class TalosDocumentArtifactApiTest extends TestCase
     public function test_artifact_links_to_run_provenance_and_unsupported_preview_falls_back_to_download(): void
     {
         $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
             'mode' => 'verified_execution',
             'status' => 'succeeded',
             'prompt_hash' => hash('sha256', 'binary artifact prompt'),
@@ -131,5 +139,98 @@ final class TalosDocumentArtifactApiTest extends TestCase
             ->assertJsonPath('data.preview_available', true)
             ->assertJsonPath('data.preview_type', 'research_report')
             ->assertJsonPath('data.report.claims.0.sources.0.client_id', 'src-1');
+    }
+
+    public function test_artifacts_and_research_previews_are_scoped_to_the_authenticated_user(): void
+    {
+        $foreignUser = User::factory()->create();
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => $foreignUser->id,
+            'title' => 'Foreign artifact session',
+            'mode' => 'verified_execution',
+        ]);
+        $foreignRun = TalosRun::query()->create([
+            'session_id' => $foreignSession->id,
+            'mode' => 'verified_execution',
+            'status' => 'succeeded',
+            'prompt_hash' => hash('sha256', 'foreign artifact prompt'),
+        ]);
+        $foreignReport = TalosResearchReport::query()->create([
+            'user_id' => $foreignUser->id,
+            'run_id' => $foreignRun->id,
+            'title' => 'Foreign report',
+            'query' => 'foreign',
+            'status' => 'succeeded',
+            'summary' => 'hidden',
+            'report_markdown' => '# Hidden',
+        ]);
+        $foreignArtifact = $foreignRun->artifacts()->create([
+            'artifact_type' => 'research_report',
+            'uri' => "talos://research-reports/{$foreignReport->id}",
+            'mime_type' => 'application/json',
+            'metadata' => ['research_report_id' => $foreignReport->id],
+        ]);
+        assert($foreignArtifact instanceof TalosRunArtifact);
+
+        $this->getJson('/api/talos/artifacts')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $foreignArtifact->id]);
+
+        $this->getJson("/api/talos/artifacts/{$foreignArtifact->id}")->assertNotFound();
+        $this->getJson("/api/talos/artifacts/{$foreignArtifact->id}/preview")->assertNotFound();
+    }
+
+    public function test_documents_and_document_provenance_are_scoped_to_the_authenticated_user(): void
+    {
+        $foreignUser = User::factory()->create();
+        $foreignRun = TalosRun::query()->create([
+            'user_id' => $foreignUser->id,
+            'mode' => 'verified_execution',
+            'status' => 'succeeded',
+            'prompt_hash' => hash('sha256', 'foreign document prompt'),
+        ]);
+        $foreignArtifact = $foreignRun->artifacts()->create([
+            'artifact_type' => 'research_report',
+            'uri' => 'talos://research-reports/foreign',
+            'mime_type' => 'application/json',
+        ]);
+        assert($foreignArtifact instanceof TalosRunArtifact);
+        $foreignReport = TalosResearchReport::query()->create([
+            'user_id' => $foreignUser->id,
+            'run_id' => $foreignRun->id,
+            'title' => 'Foreign document report',
+            'query' => 'foreign',
+            'status' => 'succeeded',
+            'summary' => 'hidden',
+            'report_markdown' => '# Hidden',
+        ]);
+        $foreignDocument = TalosDocument::query()->create([
+            'run_id' => $foreignRun->id,
+            'run_artifact_id' => $foreignArtifact->id,
+            'research_report_id' => $foreignReport->id,
+            'title' => 'Foreign document',
+            'document_type' => 'research_report',
+            'format' => 'markdown',
+            'status' => 'active',
+            'content' => '# Hidden document',
+            'content_hash' => hash('sha256', '# Hidden document'),
+        ]);
+
+        $this->getJson('/api/talos/documents')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $foreignDocument->id]);
+
+        $this->getJson("/api/talos/documents/{$foreignDocument->id}")->assertNotFound();
+        $this->getJson("/api/talos/documents/{$foreignDocument->id}/export")->assertNotFound();
+
+        $this->postJson('/api/talos/documents', [
+            'run_id' => $foreignRun->id,
+            'run_artifact_id' => $foreignArtifact->id,
+            'research_report_id' => $foreignReport->id,
+            'title' => 'Stolen provenance',
+            'content' => '# Should not be saved',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['run_id', 'run_artifact_id', 'research_report_id']);
     }
 }

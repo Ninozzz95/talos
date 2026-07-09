@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosRun;
 use App\Models\TalosRunEvent;
+use App\Models\User;
 use App\Services\Runs\RunEventNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,6 +29,8 @@ final class TalosRecoveryController extends Controller
 
     public function __invoke(Request $request, TalosRun $run, RunEventNormalizer $normalizer): JsonResponse
     {
+        $this->assertRunOwnedByCurrentUser($request, $run);
+
         $validated = $request->validate([
             'action' => ['required', 'string', Rule::in([
                 'retry_node',
@@ -154,5 +157,12 @@ final class TalosRecoveryController extends Controller
             'skip_node', 'mark_resolved' => 'running',
             default => 'queued',
         };
+    }
+
+    private function assertRunOwnedByCurrentUser(Request $request, TalosRun $run): void
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+        abort_unless((int) $run->user_id === (int) $user->id, 404);
     }
 }

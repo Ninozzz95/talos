@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosModelProfile;
 use App\Models\TalosWorkspaceSetting;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -22,7 +23,10 @@ final class TalosPromptEnhancementController extends Controller
             'encrypted_secret' => ['prohibited'],
         ]);
 
-        $profile = $this->usableProfile($validated['model_profile_id'] ?? null);
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        $profile = $this->usableProfile($validated['model_profile_id'] ?? null, $user);
         if (! $profile instanceof TalosModelProfile) {
             return response()->json([
                 'error' => [
@@ -44,7 +48,7 @@ final class TalosPromptEnhancementController extends Controller
         ]);
     }
 
-    private function usableProfile(?string $profileId): ?TalosModelProfile
+    private function usableProfile(?string $profileId, User $user): ?TalosModelProfile
     {
         if (! filled($profileId)) {
             $profileId = TalosWorkspaceSetting::query()
@@ -56,7 +60,9 @@ final class TalosPromptEnhancementController extends Controller
             return null;
         }
 
-        $profile = TalosModelProfile::query()->find((string) $profileId);
+        $profile = TalosModelProfile::query()
+            ->where('user_id', $user->id)
+            ->find((string) $profileId);
         if (! $profile instanceof TalosModelProfile) {
             return null;
         }

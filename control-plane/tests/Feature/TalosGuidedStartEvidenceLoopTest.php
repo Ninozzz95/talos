@@ -38,6 +38,7 @@ final class TalosGuidedStartEvidenceLoopTest extends TestCase
             'mode' => 'verified_execution',
         ]);
         $profile = TalosModelProfile::query()->create([
+            'user_id' => auth()->id(),
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'Guided model',
@@ -46,6 +47,7 @@ final class TalosGuidedStartEvidenceLoopTest extends TestCase
         ]);
         $fileContent = 'Approve deployment only after replay evidence is attached.';
         $file = TalosFile::query()->create([
+            'user_id' => auth()->id(),
             'original_name' => 'workflow.md',
             'mime_type' => 'text/markdown',
             'size_bytes' => strlen($fileContent),
@@ -63,6 +65,7 @@ final class TalosGuidedStartEvidenceLoopTest extends TestCase
             'end_offset' => strlen($fileContent),
         ]);
         $contextSet = TalosContextSet::query()->create([
+            'user_id' => auth()->id(),
             'name' => 'Deployment packet',
             'status' => 'available',
         ]);

@@ -10,6 +10,7 @@ use App\Models\TalosContextSource;
 use App\Models\TalosFile;
 use App\Models\TalosFileChunk;
 use App\Models\TalosRun;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -21,7 +22,7 @@ final class BenchmarkComparisonService
     /**
      * @return array<string, mixed>
      */
-    public function compare(string $scenarioPath, int $runs = 1, ?TalosRun $sourceRun = null): array
+    public function compare(string $scenarioPath, int $runs = 1, ?TalosRun $sourceRun = null, ?User $user = null): array
     {
         if (! Storage::disk('local')->exists($scenarioPath)) {
             abort(404, 'Benchmark scenario not found.');
@@ -67,7 +68,7 @@ final class BenchmarkComparisonService
             ...$decoded,
         ];
 
-        $persisted = $this->persistComparison($scenarioPath, $scenario, $identity, $report, $sourceRun);
+        $persisted = $this->persistComparison($scenarioPath, $scenario, $identity, $report, $sourceRun, $user);
 
         return [
             ...$report,
@@ -186,10 +187,11 @@ final class BenchmarkComparisonService
      * @param array<string, mixed> $report
      * @return array{group: array<string, mixed>, results: list<array<string, mixed>>}
      */
-    private function persistComparison(string $scenarioPath, array $scenario, array $identity, array $report, ?TalosRun $sourceRun = null): array
+    private function persistComparison(string $scenarioPath, array $scenario, array $identity, array $report, ?TalosRun $sourceRun = null, ?User $user = null): array
     {
-        return DB::transaction(function () use ($scenarioPath, $scenario, $identity, $report, $sourceRun): array {
+        return DB::transaction(function () use ($scenarioPath, $scenario, $identity, $report, $sourceRun, $user): array {
             $group = TalosBenchmarkGroup::query()->create([
+                'user_id' => $sourceRun?->user_id ?? $user?->id,
                 'session_id' => $sourceRun?->session_id,
                 'source_run_id' => $sourceRun?->id,
                 'name' => (string) ($scenario['name'] ?? 'benchmark'),
@@ -228,7 +230,7 @@ final class BenchmarkComparisonService
                         'metrics' => $this->metricsFromMode($mode, $modeReport),
                         'raw_report' => $modeReport,
                         'raw_log_path' => null,
-                    'trace_replayable' => $this->isTraceReplayable($modeReport),
+                        'trace_replayable' => $this->isTraceReplayable($modeReport),
                     ]);
                 }
             }

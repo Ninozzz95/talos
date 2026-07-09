@@ -16,6 +16,7 @@ final class TalosEmailDraft extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'referenced_message_ids',
         'to_addresses',
         'cc_addresses',
@@ -47,6 +48,7 @@ final class TalosEmailDraft extends Model
     {
         return [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'referenced_message_ids' => $this->referenced_message_ids ?? [],
             'to' => $this->to_addresses ?? [],
             'cc' => $this->cc_addresses ?? [],

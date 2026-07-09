@@ -16,6 +16,7 @@ final class TalosEmailMessage extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'external_id',
         'from_address',
         'to_addresses',
@@ -47,6 +48,7 @@ final class TalosEmailMessage extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'external_id' => $this->external_id,
             'from' => $this->from_address,
             'to' => $this->to_addresses ?? [],

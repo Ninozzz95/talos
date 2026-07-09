@@ -7,8 +7,10 @@ namespace App\Http\Controllers;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosEmailDraft;
 use App\Models\TalosEmailMessage;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 final class TalosEmailController extends Controller
 {
@@ -24,9 +26,12 @@ final class TalosEmailController extends Controller
         ]);
     }
 
-    public function messages(): JsonResponse
+    public function messages(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
+
         $messages = TalosEmailMessage::query()
+            ->where('user_id', $userId)
             ->latest('received_at')
             ->latest('created_at')
             ->get()
@@ -38,6 +43,7 @@ final class TalosEmailController extends Controller
 
     public function storeMessage(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
         $validated = $request->validate([
             'external_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'from' => ['required', 'email', 'max:255'],
@@ -52,6 +58,7 @@ final class TalosEmailController extends Controller
         ]);
 
         $message = TalosEmailMessage::query()->create([
+            'user_id' => $userId,
             'external_id' => $validated['external_id'] ?? null,
             'from_address' => $validated['from'],
             'to_addresses' => $validated['to'],
@@ -68,13 +75,24 @@ final class TalosEmailController extends Controller
 
     public function messageContext(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
         $validated = $request->validate([
             'message_ids' => ['required', 'array', 'min:1'],
             'message_ids.*' => ['string', 'exists:talos_email_messages,id'],
         ]);
 
-        $messages = TalosEmailMessage::query()
-            ->whereIn('id', $validated['message_ids'])
+        $messageIds = array_values(array_unique($validated['message_ids']));
+        $messagesQuery = TalosEmailMessage::query()
+            ->where('user_id', $userId)
+            ->whereIn('id', $messageIds);
+
+        if ((clone $messagesQuery)->count() !== count($messageIds)) {
+            throw ValidationException::withMessages([
+                'message_ids' => ['All selected email messages must belong to the current user.'],
+            ]);
+        }
+
+        $messages = $messagesQuery
             ->latest('received_at')
             ->get()
             ->map(fn (TalosEmailMessage $message): array => $message->toApiArray(includeBody: true))
@@ -93,9 +111,12 @@ final class TalosEmailController extends Controller
         ]);
     }
 
-    public function drafts(): JsonResponse
+    public function drafts(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
+
         $drafts = TalosEmailDraft::query()
+            ->where('user_id', $userId)
             ->latest('created_at')
             ->get()
             ->map(fn (TalosEmailDraft $draft): array => $draft->toApiArray())
@@ -106,6 +127,7 @@ final class TalosEmailController extends Controller
 
     public function storeDraft(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
         $validated = $request->validate([
             'message_ids' => ['sometimes', 'nullable', 'array'],
             'message_ids.*' => ['string', 'exists:talos_email_messages,id'],
@@ -117,8 +139,10 @@ final class TalosEmailController extends Controller
             'body' => ['required', 'string', 'min:1', 'max:500000'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);
+        $this->assertMessagesOwnedByCurrentUser($validated['message_ids'] ?? [], $userId);
 
         $draft = TalosEmailDraft::query()->create([
+            'user_id' => $userId,
             'referenced_message_ids' => $validated['message_ids'] ?? [],
             'to_addresses' => $validated['to'],
             'cc_addresses' => $validated['cc'] ?? [],
@@ -133,8 +157,10 @@ final class TalosEmailController extends Controller
         return response()->json(['data' => $draft->toApiArray()], 201);
     }
 
-    public function send(TalosEmailDraft $emailDraft): JsonResponse
+    public function send(Request $request, TalosEmailDraft $emailDraft): JsonResponse
     {
+        abort_unless((int) $emailDraft->user_id === $this->currentUserId($request), 404);
+
         TalosAuditEvent::record('email.send_denied', 'email_draft', (string) $emailDraft->id, [
             'send_enabled' => false,
             'status' => $emailDraft->status,
@@ -147,5 +173,35 @@ final class TalosEmailController extends Controller
             'send_enabled' => false,
             'draft_id' => $emailDraft->id,
         ], 403);
+    }
+
+    private function currentUserId(Request $request): int
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        return (int) $user->id;
+    }
+
+    /**
+     * @param list<string> $messageIds
+     */
+    private function assertMessagesOwnedByCurrentUser(array $messageIds, int $userId): void
+    {
+        $messageIds = array_values(array_unique($messageIds));
+        if ($messageIds === []) {
+            return;
+        }
+
+        $ownedCount = TalosEmailMessage::query()
+            ->where('user_id', $userId)
+            ->whereIn('id', $messageIds)
+            ->count();
+
+        if ($ownedCount !== count($messageIds)) {
+            throw ValidationException::withMessages([
+                'message_ids' => ['All referenced email messages must belong to the current user.'],
+            ]);
+        }
     }
 }

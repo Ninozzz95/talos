@@ -31,6 +31,7 @@ final class TalosChatRunBridgeTest extends TestCase
             'mode' => 'verified_execution',
         ]);
         $profile = TalosModelProfile::query()->create([
+            'user_id' => auth()->id(),
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'OpenAI Work',
@@ -92,6 +93,7 @@ final class TalosChatRunBridgeTest extends TestCase
             'mode' => 'verified_execution',
         ]);
         $profile = TalosModelProfile::query()->create([
+            'user_id' => auth()->id(),
             'provider' => 'openai',
             'model' => 'gpt-4.1-mini',
             'display_name' => 'OpenAI Work',

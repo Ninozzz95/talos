@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\TalosMemory;
+use App\Models\User;
 use App\Services\Memory\TalosMemoryRetrievalService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,10 @@ final class TalosMemoryController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $userId = $this->currentUserId($request);
+
         $memories = TalosMemory::query()
+            ->where('user_id', $userId)
             ->when(! $request->boolean('include_inactive'), fn ($query) => $query->where('status', 'active'))
             ->latest('updated_at')
             ->latest('created_at')
@@ -27,13 +31,17 @@ final class TalosMemoryController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $memory = TalosMemory::query()->create($this->validated($request, true));
+        $memory = TalosMemory::query()->create([
+            ...$this->validated($request, true),
+            'user_id' => $this->currentUserId($request),
+        ]);
 
         return response()->json(['data' => $memory->toApiArray()], 201);
     }
 
     public function retrievalContext(Request $request, TalosMemoryRetrievalService $retrieval): JsonResponse
     {
+        $userId = $this->currentUserId($request);
         $validated = $request->validate([
             'scope_type' => ['required', 'string', Rule::in(['global', 'project', 'session'])],
             'scope_id' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -45,24 +53,31 @@ final class TalosMemoryController extends Controller
                 (string) $validated['scope_type'],
                 $validated['scope_id'] ?? null,
                 (int) ($validated['limit'] ?? 20),
+                $userId,
             ),
         ]);
     }
 
-    public function show(TalosMemory $memory): JsonResponse
+    public function show(Request $request, TalosMemory $memory): JsonResponse
     {
+        $this->assertMemoryOwnedByCurrentUser($request, $memory);
+
         return response()->json(['data' => $memory->toApiArray(includeContent: true)]);
     }
 
     public function update(Request $request, TalosMemory $memory): JsonResponse
     {
+        $this->assertMemoryOwnedByCurrentUser($request, $memory);
+
         $memory->update($this->validated($request, false));
 
         return response()->json(['data' => $memory->refresh()->toApiArray()]);
     }
 
-    public function destroy(TalosMemory $memory): JsonResponse
+    public function destroy(Request $request, TalosMemory $memory): JsonResponse
     {
+        $this->assertMemoryOwnedByCurrentUser($request, $memory);
+
         $memory->delete();
 
         return response()->json(null, 204);
@@ -74,7 +89,6 @@ final class TalosMemoryController extends Controller
     private function validated(Request $request, bool $create): array
     {
         return $request->validate([
-            'user_id' => ['sometimes', 'nullable', 'integer', 'exists:users,id'],
             'scope_type' => [$create ? 'required' : 'sometimes', 'string', Rule::in(['global', 'project', 'session'])],
             'scope_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'kind' => [$create ? 'required' : 'sometimes', 'string', Rule::in(['preference', 'project_fact', 'procedure', 'policy_note', 'rejected'])],
@@ -85,5 +99,18 @@ final class TalosMemoryController extends Controller
             'metadata' => ['sometimes', 'nullable', 'array'],
             'last_used_at' => ['sometimes', 'nullable', 'date'],
         ]);
+    }
+
+    private function currentUserId(Request $request): int
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        return (int) $user->id;
+    }
+
+    private function assertMemoryOwnedByCurrentUser(Request $request, TalosMemory $memory): void
+    {
+        abort_unless((int) $memory->user_id === $this->currentUserId($request), 404);
     }
 }

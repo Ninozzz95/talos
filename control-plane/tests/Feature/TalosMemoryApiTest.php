@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\TalosMemory;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -12,10 +13,12 @@ final class TalosMemoryApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_memory_can_be_created_and_returned_without_trusting_content(): void
@@ -81,6 +84,42 @@ final class TalosMemoryApiTest extends TestCase
             ->assertJsonCount(0, 'data.memories');
     }
 
+    public function test_memories_are_scoped_to_the_authenticated_user_and_ignore_client_user_id(): void
+    {
+        $foreignUser = User::factory()->create();
+        $foreignMemory = TalosMemory::query()->create([
+            ...$this->memoryPayload('foreign-memory', 'active', 'project', 'avm'),
+            'user_id' => $foreignUser->id,
+        ]);
+
+        $created = $this->postJson('/api/talos/memories', [
+            'user_id' => $foreignUser->id,
+            'scope_type' => 'project',
+            'scope_id' => 'avm',
+            'kind' => 'project_fact',
+            'title' => 'Owned memory',
+            'content' => 'Owned by authenticated user.',
+            'status' => 'active',
+        ])->assertCreated();
+
+        $created->assertJsonPath('data.user_id', $this->user->id);
+
+        $this->getJson('/api/talos/memories?include_inactive=1')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $foreignMemory->id]);
+
+        $this->getJson('/api/talos/memories/retrieval-context?scope_type=project&scope_id=avm')
+            ->assertOk()
+            ->assertJsonMissing(['id' => $foreignMemory->id])
+            ->assertJsonPath('data.memories.0.title', 'Owned memory');
+
+        $this->getJson("/api/talos/memories/{$foreignMemory->id}")->assertNotFound();
+        $this->patchJson("/api/talos/memories/{$foreignMemory->id}", [
+            'status' => 'disabled',
+        ])->assertNotFound();
+        $this->deleteJson("/api/talos/memories/{$foreignMemory->id}")->assertNotFound();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -91,6 +130,7 @@ final class TalosMemoryApiTest extends TestCase
         ?string $scopeId = 'avm',
     ): array {
         return [
+            'user_id' => $this->user->id,
             'scope_type' => $scopeType,
             'scope_id' => $scopeId,
             'kind' => 'project_fact',

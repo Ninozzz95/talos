@@ -15,9 +15,13 @@ use Illuminate\Validation\ValidationException;
 
 final class TalosContextSetController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $contextSets = TalosContextSet::query()
+            ->where('user_id', $userId)
             ->withCount('sources')
             ->latest('updated_at')
             ->latest('created_at')
@@ -30,6 +34,9 @@ final class TalosContextSetController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $userId = $request->user()?->id;
+        abort_unless($userId !== null, 401);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:1', 'max:255'],
             'file_ids' => ['sometimes', 'array'],
@@ -41,15 +48,16 @@ final class TalosContextSetController extends Controller
 
         $fileIds = array_values($validated['file_ids'] ?? []);
         $chunkIds = array_values($validated['chunk_ids'] ?? []);
-        $this->assertSourcesAreAvailable($fileIds, $chunkIds);
+        $this->assertSourcesAreAvailable($fileIds, $chunkIds, $userId);
 
         $chunksById = TalosFileChunk::query()
             ->whereIn('id', $chunkIds)
             ->get()
             ->keyBy('id');
 
-        $contextSet = DB::transaction(function () use ($validated, $fileIds, $chunkIds, $chunksById): TalosContextSet {
+        $contextSet = DB::transaction(function () use ($validated, $fileIds, $chunkIds, $chunksById, $userId): TalosContextSet {
             $contextSet = TalosContextSet::query()->create([
+                'user_id' => $userId,
                 'name' => $validated['name'],
                 'status' => 'available',
                 'metadata' => $validated['metadata'] ?? null,
@@ -88,8 +96,10 @@ final class TalosContextSetController extends Controller
         return response()->json(['data' => $contextSet->toApiArray(includeSources: true)], 201);
     }
 
-    public function show(TalosContextSet $contextSet): JsonResponse
+    public function show(Request $request, TalosContextSet $contextSet): JsonResponse
     {
+        abort_unless($request->user()?->id === $contextSet->user_id, 404);
+
         $contextSet->load(['sources.file', 'sources.fileChunk']);
 
         return response()->json(['data' => $contextSet->toApiArray(includeSources: true)]);
@@ -99,11 +109,12 @@ final class TalosContextSetController extends Controller
      * @param list<string> $fileIds
      * @param list<string> $chunkIds
      */
-    private function assertSourcesAreAvailable(array $fileIds, array $chunkIds): void
+    private function assertSourcesAreAvailable(array $fileIds, array $chunkIds, int $userId): void
     {
         if ($fileIds !== []) {
             $availableFileCount = TalosFile::query()
                 ->whereIn('id', $fileIds)
+                ->where('user_id', $userId)
                 ->where('status', 'available')
                 ->count();
 
@@ -117,7 +128,9 @@ final class TalosContextSetController extends Controller
         if ($chunkIds !== []) {
             $availableChunkCount = TalosFileChunk::query()
                 ->whereIn('talos_file_chunks.id', $chunkIds)
-                ->whereHas('file', fn ($query) => $query->where('status', 'available'))
+                ->whereHas('file', fn ($query) => $query
+                    ->where('user_id', $userId)
+                    ->where('status', 'available'))
                 ->count();
 
             if ($availableChunkCount !== count($chunkIds)) {
