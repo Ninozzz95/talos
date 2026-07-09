@@ -19,6 +19,7 @@ type SendPersistentChatOptions = {
     prompt: string
     apiKey?: string
     modelProfileId?: string | null
+    modelRoutingProfileId?: string | null
     contextSetId?: string | null
     chatEndpoint?: string
     userMessageMetadata?: Record<string, unknown>
@@ -80,6 +81,7 @@ export function useTalosChat() {
                 validation_errors: errors,
                 run: response.run ?? null,
                 used_context: normalizeUsedContext(response.used_context),
+                model_routing: response.model_routing ?? null,
             },
         })
     }
@@ -118,6 +120,8 @@ export function useTalosChat() {
 
             if (options.modelProfileId) {
                 payload.model_profile_id = options.modelProfileId
+            } else if (options.modelRoutingProfileId) {
+                payload.model_routing_profile_id = options.modelRoutingProfileId
             } else if (options.apiKey) {
                 payload.api_key = options.apiKey
             }

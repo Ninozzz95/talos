@@ -143,6 +143,29 @@ describe('POST /chat', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().received_tool_context.tools[0].name).toBe('HTTP_REQUEST');
   });
+
+  it('returns structured core process errors instead of generic chat error', async () => {
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_CHAT_SCRIPT = resolve(__dirname, 'fixtures/chat-stderr-fail.mjs');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat',
+      payload: {
+        message: 'Use DeepSeek.',
+        api_key: 'sk-test',
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        base_url: 'https://api.deepseek.com/v1',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().error).toBe('Core chat process failed.');
+    expect(response.json().code).toBe('CORE_CHAT_PROCESS_FAILED');
+    expect(response.json().details).toContain('HTTP 401');
+    expect(response.json().details).not.toContain('sk-test');
+  });
 });
 
 describe('POST /benchmark/compare', () => {

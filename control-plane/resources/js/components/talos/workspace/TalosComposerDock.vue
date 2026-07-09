@@ -6,7 +6,7 @@ import Select from '../../ui/Select.vue'
 import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
-import type { TalosCommand, TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
+import type { TalosCommand, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
 const props = defineProps<{
     prompt: string
@@ -22,11 +22,14 @@ const props = defineProps<{
     modelPopoverOpen: boolean
     contextPopoverOpen: boolean
     modelProfiles: TalosModelProfile[]
+    modelRoutingProfiles: TalosModelRoutingProfile[]
     contextSets: TalosContextSet[]
     selectedModelProfileId: string
+    selectedModelRoutingProfileId: string
     selectedContextSetId: string
     selectedContextSet: TalosContextSet | null
     loadingModelProfiles: boolean
+    loadingModelRoutingProfiles: boolean
     loadingContextSets: boolean
     promptEnhancementResult: TalosPromptEnhancementResult | null
     enhancingPrompt: boolean
@@ -44,6 +47,7 @@ const emit = defineEmits<{
     enhance: []
     slashCommand: [id: TalosCommand['id']]
     selectModelProfile: [profileId: string]
+    selectModelRoutingProfile: [profileId: string]
     selectContextSet: [contextSetId: string]
     refreshModelAndContext: []
     openModelLab: []
@@ -85,6 +89,26 @@ const composerPrompt = computed({
                         :disabled="profile.status === 'disabled' || !profile.has_secret"
                     >
                         {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
+                    </option>
+                </Select>
+                <div class="mt-3 text-xs font-semibold uppercase text-[var(--talos-muted)]">Routing profile</div>
+                <label class="sr-only" for="talos-workspace-model-routing-profile">Model routing profile</label>
+                <Select
+                    id="talos-workspace-model-routing-profile"
+                    :model-value="selectedModelRoutingProfileId"
+                    class="mt-2"
+                    :disabled="loadingModelRoutingProfiles || !modelRoutingProfiles.length"
+                    aria-label="Model routing profile"
+                    @update:model-value="(value) => emit('selectModelRoutingProfile', String(value))"
+                >
+                    <option value="">{{ loadingModelRoutingProfiles ? 'Loading routes' : 'No routing profile' }}</option>
+                    <option
+                        v-for="profile in modelRoutingProfiles"
+                        :key="profile.id"
+                        :value="profile.id"
+                        :disabled="profile.status !== 'enabled' || profile.lanes.length === 0"
+                    >
+                        {{ profile.name }} - {{ profile.lanes.length }} lanes - {{ profile.status }}
                     </option>
                 </Select>
                 <div class="mt-3 flex justify-between gap-2">

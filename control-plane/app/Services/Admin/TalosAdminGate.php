@@ -21,6 +21,8 @@ final class TalosAdminGate
             'talos.policy.read',
             'talos.backup.read',
             'talos.backup.restore',
+            'talos.shell.preview',
+            'talos.shell.exec',
             'talos.admin.all',
         ];
     }

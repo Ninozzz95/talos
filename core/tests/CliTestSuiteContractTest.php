@@ -36,6 +36,7 @@ function testMainCliRunsContractTests(): void
         'Security/SslVerificationTest.php',
         'Security/ExecutionPolicyTest.php',
         'Security/OpenAIClientPolicyTest.php',
+        'OpenAIClientEndpointTest.php',
         'Security/ToolContextPolicyTest.php',
         'AgentOperatingModelContractTest.php',
         'DeploymentPackagingContractTest.php',

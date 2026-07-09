@@ -17,6 +17,7 @@ final class TalosAdminUiTest extends TestCase
         $doctorPath = base_path('resources/js/components/talos/admin/TalosDoctorPanel.vue');
         $auditPath = base_path('resources/js/components/talos/admin/TalosAuditLog.vue');
         $policyPath = base_path('resources/js/components/talos/admin/TalosPolicyPanel.vue');
+        $shellPath = base_path('resources/js/components/talos/admin/TalosShellPolicyPanel.vue');
         $backupPath = base_path('resources/js/components/talos/admin/TalosBackupPanel.vue');
 
         $this->assertIsString($shell);
@@ -26,37 +27,45 @@ final class TalosAdminUiTest extends TestCase
         $this->assertFileExists($doctorPath);
         $this->assertFileExists($auditPath);
         $this->assertFileExists($policyPath);
+        $this->assertFileExists($shellPath);
         $this->assertFileExists($backupPath);
 
         $composable = file_get_contents($composablePath);
         $doctor = file_get_contents($doctorPath);
         $audit = file_get_contents($auditPath);
         $policy = file_get_contents($policyPath);
+        $shellPanel = file_get_contents($shellPath);
         $backup = file_get_contents($backupPath);
 
         $this->assertIsString($composable);
         $this->assertIsString($doctor);
         $this->assertIsString($audit);
         $this->assertIsString($policy);
+        $this->assertIsString($shellPanel);
         $this->assertIsString($backup);
         $this->assertStringContainsString('/api/talos/admin/doctor', $composable);
         $this->assertStringContainsString('/api/talos/admin/audit-events', $composable);
         $this->assertStringContainsString('/api/talos/admin/policy', $composable);
+        $this->assertStringContainsString('/api/talos/admin/shell/preview', $composable);
+        $this->assertStringContainsString('/api/talos/admin/shell/execute', $composable);
         $this->assertStringContainsString('/api/talos/admin/backup/manifest', $composable);
         $this->assertStringContainsString('/api/talos/admin/backup/validate-restore', $composable);
         $this->assertStringContainsString('TalosWindowLayer', $shell);
         $this->assertStringContainsString('TalosDoctorPanel', $windowLayer);
         $this->assertStringContainsString('TalosAuditLog', $windowLayer);
         $this->assertStringContainsString('TalosPolicyPanel', $windowLayer);
+        $this->assertStringContainsString('TalosShellPolicyPanel', $windowLayer);
         $this->assertStringContainsString('TalosBackupPanel', $windowLayer);
         $this->assertStringContainsString('validator_health', $doctor);
         $this->assertStringContainsString('event_type', $audit);
         $this->assertStringContainsString('default_decision', $policy);
+        $this->assertStringContainsString('host commands', strtolower($shellPanel));
+        $this->assertStringContainsString('Execute disabled', $shellPanel);
         $this->assertStringContainsString('dry_run_required', $backup);
         $this->assertStringNotContainsString('TalosDoctorPanel', $chat);
-        $this->assertStringNotContainsString('mock', strtolower($doctor.$audit.$policy.$backup));
-        $this->assertStringNotContainsString('fake', strtolower($doctor.$audit.$policy.$backup));
-        $this->assertStringNotContainsString('placeholder action', strtolower($doctor.$audit.$policy.$backup));
+        $this->assertStringNotContainsString('mock', strtolower($doctor.$audit.$policy.$shellPanel.$backup));
+        $this->assertStringNotContainsString('fake', strtolower($doctor.$audit.$policy.$shellPanel.$backup));
+        $this->assertStringNotContainsString('placeholder action', strtolower($doctor.$audit.$policy.$shellPanel.$backup));
     }
 
     public function test_command_registry_exposes_admin_panels_without_fake_actions(): void
@@ -71,6 +80,7 @@ final class TalosAdminUiTest extends TestCase
             'open_doctor',
             'open_audit_log',
             'open_policy_panel',
+            'open_shell_policy_panel',
             'open_backup_panel',
             'validate_backup_restore',
         ] as $commandId) {
@@ -80,6 +90,7 @@ final class TalosAdminUiTest extends TestCase
 
         $this->assertStringNotContainsString('web doctor endpoint and panel are not implemented yet', strtolower($registry));
         $this->assertStringContainsString('talos.backup.restore', $registry);
+        $this->assertStringContainsString('talos.shell.preview', $registry);
         $this->assertStringContainsString('dry-run', strtolower($registry));
     }
 }

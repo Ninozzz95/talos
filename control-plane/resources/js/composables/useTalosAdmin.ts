@@ -6,6 +6,7 @@ import type {
     TalosDoctorReport,
     TalosPolicyStatus,
     TalosRestoreValidation,
+    TalosShellDecision,
 } from '../lib/talosTypes'
 
 type ApiEnvelope<T> = {
@@ -24,6 +25,7 @@ export function useTalosAdmin() {
     const policyStatus = ref<TalosPolicyStatus | null>(null)
     const backupManifest = ref<TalosBackupManifest | null>(null)
     const restoreValidation = ref<TalosRestoreValidation | null>(null)
+    const shellDecision = ref<TalosShellDecision | null>(null)
     const loadingAdmin = ref(false)
     const adminError = ref<string | null>(null)
 
@@ -126,12 +128,63 @@ export function useTalosAdmin() {
         }
     }
 
+    async function previewShell(token: string, command: string) {
+        loadingAdmin.value = true
+        adminError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosShellDecision>>('/api/talos/admin/shell/preview', {
+                method: 'POST',
+                headers: tokenHeaders(token),
+                body: JSON.stringify({
+                    command,
+                    timeout_seconds: 30,
+                    use_pty: false,
+                    use_tmux: false,
+                }),
+                validationMessage: 'TALOS rejected this shell preview request.',
+            })
+            shellDecision.value = response.data
+            return response.data
+        } catch (error) {
+            adminError.value = error instanceof Error ? error.message : 'TALOS could not preview shell policy.'
+            throw error
+        } finally {
+            loadingAdmin.value = false
+        }
+    }
+
+    async function executeShell(token: string, command: string) {
+        loadingAdmin.value = true
+        adminError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosShellDecision>>('/api/talos/admin/shell/execute', {
+                method: 'POST',
+                headers: tokenHeaders(token),
+                body: JSON.stringify({
+                    command,
+                    timeout_seconds: 30,
+                }),
+                validationMessage: 'TALOS shell execution is blocked by policy.',
+            })
+            shellDecision.value = response.data
+            return response.data
+        } catch (error) {
+            adminError.value = error instanceof Error ? error.message : 'TALOS shell execution is blocked by policy.'
+            throw error
+        } finally {
+            loadingAdmin.value = false
+        }
+    }
+
     return {
         doctorReport,
         auditEvents,
         policyStatus,
         backupManifest,
         restoreValidation,
+        shellDecision,
         loadingAdmin,
         adminError,
         loadDoctor,
@@ -139,5 +192,7 @@ export function useTalosAdmin() {
         loadPolicy,
         loadBackupManifest,
         validateRestore,
+        previewShell,
+        executeShell,
     }
 }

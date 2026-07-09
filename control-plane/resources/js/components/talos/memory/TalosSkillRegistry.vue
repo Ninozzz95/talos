@@ -12,7 +12,15 @@ const props = defineProps<{
 
 const selectedSkillId = ref<string | null>(null)
 const planningSkillNames = computed(() => new Set(props.planningContext?.skills.map((skill) => skill.name) ?? []))
+const excludedReasonByName = computed(() => new Map((props.planningContext?.excluded_skills ?? []).map((skill) => [skill.name, skill.reason])))
 const selectedSkill = computed(() => props.skills.find((skill) => skill.id === selectedSkillId.value) ?? props.skills[0] ?? null)
+const selectedSkillExclusionReason = computed(() => {
+    if (!selectedSkill.value) {
+        return null
+    }
+
+    return excludedReasonByName.value.get(selectedSkill.value.name) ?? null
+})
 
 function selectSkill(skill: TalosSkill) {
     selectedSkillId.value = skill.id
@@ -66,6 +74,7 @@ watch(() => props.skills, (skills) => {
         <TalosSkillAudit
             :skill="selectedSkill"
             :planning-enabled="selectedSkill ? planningSkillNames.has(selectedSkill.name) : false"
+            :exclusion-reason="selectedSkillExclusionReason"
         />
     </div>
 </template>

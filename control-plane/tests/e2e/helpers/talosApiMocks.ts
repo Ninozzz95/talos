@@ -665,6 +665,67 @@ function cookbookPreviewPayload(modelId = 'meta-llama/Llama-3.1-8B-Instruct', ru
     }
 }
 
+function cookbookDependencyPolicyPayload() {
+    return {
+        default_decision: 'deny',
+        execution_allowed: false,
+        install_execution_enabled: false,
+        serve_execution_enabled: false,
+        required_scope: 'talos.shell.exec',
+        preview_scope: 'talos.shell.preview',
+        plain_commands_are_preview_only: true,
+    }
+}
+
+function cookbookDependencyCatalogPayload() {
+    return {
+        policy: cookbookDependencyPolicyPayload(),
+        dependencies: [
+            {
+                runtime: 'ollama',
+                name: 'Ollama',
+                package_manager: 'official_installer',
+                install_hint: 'Install Ollama from the official package before enabling local serving.',
+                supports: ['pull', 'serve'],
+                detected_status: 'available',
+                detected_version: '0.9.0',
+                evidence: { source: 'e2e' },
+                install_allowed: false,
+                required_scope: 'talos.shell.exec',
+                execution_gate: 'host_shell_execution_disabled',
+            },
+        ],
+    }
+}
+
+function cookbookDependencyPreviewPayload(modelId = 'meta-llama/Llama-3.1-8B-Instruct', runtime = 'ollama') {
+    return {
+        mode: 'dry_run',
+        runtime,
+        model_id: modelId,
+        executed: false,
+        requires_approval: true,
+        install_allowed: false,
+        policy: cookbookDependencyPolicyPayload(),
+        steps: [
+            {
+                kind: 'dependency_check',
+                runtime,
+                description: 'Inspect runtime readiness from TALOS local evidence.',
+                read_only: true,
+            },
+            {
+                kind: 'install_preview',
+                runtime,
+                package_manager: 'official_installer',
+                description: 'Preview install only; no host command is executed.',
+                read_only: true,
+                executed: false,
+            },
+        ],
+    }
+}
+
 function researchReportPayload(overrides: Record<string, unknown> = {}) {
     const reportId = String(overrides.id ?? 'research-report-e2e')
     const status = String(overrides.status ?? 'draft')
@@ -1614,6 +1675,22 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             return json(route, {
                 data: cookbookPreviewPayload(String(body.model_id ?? 'meta-llama/Llama-3.1-8B-Instruct'), String(body.runtime ?? 'ollama'), 'serve'),
             })
+        }
+
+        if (path === '/api/talos/cookbook/dependencies' && method === 'GET') {
+            return json(route, { data: cookbookDependencyCatalogPayload() })
+        }
+
+        if (path === '/api/talos/cookbook/dependencies/preview' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+
+            return json(route, {
+                data: cookbookDependencyPreviewPayload(String(body.model_id ?? 'meta-llama/Llama-3.1-8B-Instruct'), String(body.runtime ?? 'ollama')),
+            })
+        }
+
+        if (path === '/api/talos/cookbook/policy' && method === 'GET') {
+            return json(route, { data: cookbookDependencyPolicyPayload() })
         }
 
         if (path === '/api/talos/research-reports' && method === 'GET') {

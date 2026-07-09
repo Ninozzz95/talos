@@ -84,6 +84,26 @@ export type TalosModelProfile = {
     updated_at: string
 }
 
+export type TalosModelRoutingLane = {
+    model_profile_id: string
+    role: string
+    weight: number
+    position: number
+    model?: Pick<TalosModelProfile, 'id' | 'display_name' | 'provider' | 'model' | 'status' | 'has_secret'> | null
+}
+
+export type TalosModelRoutingProfile = {
+    id: string
+    user_id?: number | null
+    name: string
+    task_type: 'chat' | 'agent' | 'search' | 'research'
+    status: 'enabled' | 'disabled'
+    lanes: TalosModelRoutingLane[]
+    metadata?: Record<string, unknown> | null
+    created_at: string
+    updated_at: string
+}
+
 export type TalosGoogleAccountStatus = 'connected' | 'revoked' | 'error' | string
 
 export type TalosGoogleAccount = {
@@ -249,6 +269,54 @@ export type TalosCookbookCommandPreview = {
     requires_approval: boolean
     message?: string | null
     [key: string]: unknown
+}
+
+export type TalosCookbookDependency = {
+    runtime: TalosCookbookRuntimeKind
+    name: string
+    package_manager: string
+    install_hint: string
+    supports?: string[]
+    detected_status: TalosCookbookRuntimeStatus
+    detected_version?: string | null
+    evidence?: Record<string, unknown> | unknown[]
+    install_allowed: boolean
+    required_scope: string
+    execution_gate: string
+}
+
+export type TalosCookbookDependencyPolicy = {
+    default_decision: 'deny' | string
+    execution_allowed: boolean
+    install_execution_enabled: boolean
+    serve_execution_enabled: boolean
+    required_scope: string
+    preview_scope: string
+    plain_commands_are_preview_only: boolean
+}
+
+export type TalosCookbookDependencyCatalog = {
+    policy: TalosCookbookDependencyPolicy
+    dependencies: TalosCookbookDependency[]
+}
+
+export type TalosCookbookDependencyPreview = {
+    mode: 'dry_run' | string
+    runtime: TalosCookbookRuntimeKind
+    model_id: string
+    executed: boolean
+    requires_approval: boolean
+    install_allowed: boolean
+    policy: TalosCookbookDependencyPolicy
+    steps: Array<{
+        kind: string
+        runtime: TalosCookbookRuntimeKind
+        description: string
+        read_only: boolean
+        executed?: boolean
+        model_id?: string
+        package_manager?: string
+    }>
 }
 
 export type TalosMessage = {
@@ -620,6 +688,16 @@ export type TalosSkillPlanningContext = {
         review_status: string
         eval_status: string
     }>
+    excluded_skills?: Array<{
+        id: string
+        name: string
+        display_name: string
+        reason: string
+        review_status: string
+        eval_status: string
+        risk_level: string
+        source_type: string
+    }>
 }
 
 export type TalosResearchSourceStatus = 'planned' | 'fetched' | 'failed' | 'skipped'
@@ -864,6 +942,20 @@ export type TalosPolicyStatus = {
     }
 }
 
+export type TalosShellDecision = {
+    allowed: boolean
+    decision: 'allow' | 'deny' | string
+    reason: string
+    required_scope: string
+    executed: boolean
+    command_hash: string
+    command_length: number
+    timeout_seconds: number
+    use_pty: boolean
+    use_tmux: boolean
+    policy: Record<string, unknown>
+}
+
 export type TalosBackupManifest = {
     schema_version: string
     generated_at: string
@@ -893,6 +985,7 @@ export type TalosCommandId =
     | 'open_doctor'
     | 'open_audit_log'
     | 'open_policy_panel'
+    | 'open_shell_policy_panel'
     | 'open_backup_panel'
     | 'validate_backup_restore'
     | 'export_report'

@@ -16,6 +16,7 @@ final class OpenAIClient implements LLMClientInterface
     private string $baseUrl;
     private string $systemPrompt;
     private int $timeoutMs;
+    private ?\Closure $transport;
 
     /** @var list<array{role: string, content: string}> */
     private array $conversation = [];
@@ -32,11 +33,13 @@ final class OpenAIClient implements LLMClientInterface
         string $model = 'gpt-4o',
         string $baseUrl = 'https://api.openai.com/v1',
         int $timeoutMs = 30000,
+        ?callable $transport = null,
     ) {
         $this->apiKey = $apiKey;
         $this->model = $model;
-        $this->baseUrl = $baseUrl;
+        $this->baseUrl = rtrim($baseUrl, '/');
         $this->timeoutMs = $timeoutMs;
+        $this->transport = $transport !== null ? \Closure::fromCallable($transport) : null;
         $this->assertProviderBaseUrlAllowed($baseUrl, $timeoutMs);
         $this->systemPrompt = SystemPromptBuilder::build();
     }
@@ -59,7 +62,7 @@ final class OpenAIClient implements LLMClientInterface
             'max_tokens' => 4096,
         ]);
 
-        $response = $this->callApi("{$this->baseUrl}/chat/completions", $body);
+        $response = $this->callApi(self::chatCompletionsEndpoint($this->baseUrl), $body);
 
         $content = $response['choices'][0]['message']['content'] ?? '';
 
@@ -109,6 +112,18 @@ final class OpenAIClient implements LLMClientInterface
     /**
      * @return array<string, mixed>
      */
+    public static function chatCompletionsEndpoint(string $baseUrl): string
+    {
+        $normalizedBase = \rtrim($baseUrl, '/');
+        $suffix = '/chat/completions';
+
+        if (\str_ends_with($normalizedBase, $suffix)) {
+            return $normalizedBase;
+        }
+
+        return $normalizedBase . $suffix;
+    }
+
     private function callApi(string $url, string $body): array
     {
         $insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
@@ -116,15 +131,24 @@ final class OpenAIClient implements LLMClientInterface
             fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
         }
 
+        $headers = [
+            'Content-Type: application/json',
+            "Authorization: Bearer {$this->apiKey}",
+        ];
+
+        if ($this->transport !== null) {
+            /** @var array<string, mixed> $response */
+            $response = ($this->transport)($url, $body, $headers, $this->timeoutMs);
+
+            return $response;
+        }
+
         $ch = \curl_init($url);
         $options = [
             \CURLOPT_RETURNTRANSFER => true,
             \CURLOPT_POST => true,
             \CURLOPT_POSTFIELDS => $body,
-            \CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                "Authorization: Bearer {$this->apiKey}",
-            ],
+            \CURLOPT_HTTPHEADER => $headers,
             \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
         ];
 
@@ -160,7 +184,7 @@ final class OpenAIClient implements LLMClientInterface
             \explode(',', \getenv('KADMOS_ALLOWED_PROVIDER_HOSTS') ?: 'api.openai.com,api.deepseek.com'),
         )));
         $policy = new ExecutionPolicy(allowedHosts: $allowedHosts);
-        $decision = $policy->inspectUrl(\rtrim($baseUrl, '/') . '/chat/completions', $timeoutMs);
+        $decision = $policy->inspectUrl(self::chatCompletionsEndpoint($baseUrl), $timeoutMs);
 
         if (!$decision->allowed) {
             throw new \RuntimeException("Provider base URL blocked by execution policy: {$decision->reason}");

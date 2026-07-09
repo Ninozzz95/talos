@@ -23,6 +23,7 @@ import TalosDoctorPanel from '../admin/TalosDoctorPanel.vue'
 import TalosAuditLog from '../admin/TalosAuditLog.vue'
 import TalosPolicyPanel from '../admin/TalosPolicyPanel.vue'
 import TalosBackupPanel from '../admin/TalosBackupPanel.vue'
+import TalosShellPolicyPanel from '../admin/TalosShellPolicyPanel.vue'
 import TalosSettingsCenter from '../settings/TalosSettingsCenter.vue'
 import TalosThemeEngine from '../settings/TalosThemeEngine.vue'
 import {
@@ -681,6 +682,9 @@ onBeforeUnmount(() => {
                 </section>
                 <section data-testid="talos-admin-section-policy" tabindex="-1" class="mt-3 outline-none">
                     <TalosPolicyPanel :token="adminToken" />
+                </section>
+                <section data-testid="talos-admin-section-shell" tabindex="-1" class="mt-3 outline-none">
+                    <TalosShellPolicyPanel :token="adminToken" />
                 </section>
                 <section data-testid="talos-admin-section-backup" tabindex="-1" class="mt-3 outline-none">
                     <TalosBackupPanel :token="adminToken" />

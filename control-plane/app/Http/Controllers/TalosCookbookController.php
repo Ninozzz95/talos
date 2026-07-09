@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\TalosHardwareProfile;
 use App\Models\TalosLocalRuntime;
 use App\Models\TalosModelCatalogEntry;
+use App\Services\Cookbook\DependencyPlanner;
 use App\Services\Cookbook\HardwareScanner;
 use App\Services\Cookbook\LocalModelCommandPlanner;
 use App\Services\Cookbook\ModelFitScorer;
@@ -130,6 +131,23 @@ final class TalosCookbookController extends Controller
         return response()->json(['data' => $planner->servePreview($validated['model_id'], $validated['runtime'])]);
     }
 
+    public function dependencies(DependencyPlanner $planner): JsonResponse
+    {
+        return response()->json(['data' => $planner->catalog()]);
+    }
+
+    public function dependencyPreview(Request $request, DependencyPlanner $planner): JsonResponse
+    {
+        $validated = $this->validatedPreview($request);
+
+        return response()->json(['data' => $planner->preview($validated['runtime'], $validated['model_id'])]);
+    }
+
+    public function policy(DependencyPlanner $planner): JsonResponse
+    {
+        return response()->json(['data' => $planner->policy()]);
+    }
+
     public function planningContext(): JsonResponse
     {
         return response()->json([
@@ -156,6 +174,12 @@ final class TalosCookbookController extends Controller
                     'id' => 'runtime_readiness',
                     'description' => 'Inspect local runtime readiness without installing or starting services.',
                     'risk_level' => 'low',
+                    'read_only' => true,
+                ],
+                [
+                    'id' => 'dependency_catalog',
+                    'description' => 'Resolve dependency catalog and install gates without executing host commands.',
+                    'risk_level' => 'medium',
                     'read_only' => true,
                 ],
             ],

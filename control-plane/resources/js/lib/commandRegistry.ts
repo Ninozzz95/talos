@@ -99,6 +99,14 @@ export const talosCommands: TalosCommand[] = [
         capability: 'talos.policy.read',
     },
     {
+        id: 'open_shell_policy_panel',
+        label: 'Open shell policy',
+        description: 'Preview shell policy decisions without executing host commands.',
+        category: 'system',
+        risk: 'high',
+        capability: 'talos.shell.preview',
+    },
+    {
         id: 'open_backup_panel',
         label: 'Open backup panel',
         description: 'Inspect backup manifest domains and restore safety policy.',

@@ -45,6 +45,9 @@ final class TalosMemorySkillUiTest extends TestCase
         $this->assertStringContainsString('used memory', strtolower($memory));
         $this->assertStringContainsString('TalosSkillRegistry', $memory);
         $this->assertStringContainsString('TalosSkillAudit', $skill);
+        $this->assertStringContainsString('excluded_skills', $types);
+        $this->assertStringContainsString('excludedReasonByName', $skill);
+        $this->assertStringContainsString('exclusionReason', $audit);
         $this->assertStringContainsString('allowed_tools', $audit);
         $this->assertStringContainsString('TalosMemory', $types);
         $this->assertStringContainsString('TalosSkill', $types);
