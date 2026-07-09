@@ -15,6 +15,7 @@ export type TalosBackgroundPerformanceState = TalosBackgroundPerformanceProfile 
     rafActive: boolean
     frameCount: number
     resizeCount: number
+    simpleAnimation: boolean
 }
 
 function cssVariable(element: HTMLElement, name: string, fallback: string) {
@@ -56,6 +57,7 @@ export function talosBackgroundPerformanceProfile(options: {
     motion: TalosThemeMotionMode
     motionDisabled: boolean
     hidden?: boolean
+    simpleAnimation?: boolean
     viewportWidth?: number
     viewportHeight?: number
     devicePixelRatio?: number
@@ -66,7 +68,8 @@ export function talosBackgroundPerformanceProfile(options: {
     const viewportScale = viewportWidth >= 1024
         ? 1
         : Math.min(1, Math.max(0.72, viewportArea / (1024 * 768)))
-    const dprCap = 1.5
+    const simpleAnimation = options.simpleAnimation !== false
+    const dprCap = simpleAnimation ? 1 : 1.5
     const visibilityPaused = options.hidden === true
 
     if (options.effect === 'none') {
@@ -91,9 +94,11 @@ export function talosBackgroundPerformanceProfile(options: {
 
     return {
         mode: 'motion',
-        fpsCap: options.motion === 'cinematic' ? 45 : 30,
+        fpsCap: simpleAnimation
+            ? (options.motion === 'cinematic' ? 24 : 18)
+            : (options.motion === 'cinematic' ? 45 : 30),
         dprCap,
-        viewportScale,
+        viewportScale: simpleAnimation ? Math.min(viewportScale, 0.82) : viewportScale,
         visibilityPaused,
     }
 }
@@ -290,6 +295,7 @@ export function useTalosProceduralCanvas(
     effect: Ref<TalosBackgroundEffect>,
     motion: Ref<TalosThemeMotionMode>,
     motionDisabled: Ref<boolean>,
+    simpleAnimation: Ref<boolean>,
 ) {
     let frame = 0
     let frameTimer = 0
@@ -304,6 +310,7 @@ export function useTalosProceduralCanvas(
         rafActive: false,
         frameCount: 0,
         resizeCount: 0,
+        simpleAnimation: true,
     })
 
     function stop() {
@@ -329,6 +336,7 @@ export function useTalosProceduralCanvas(
             motion: motion.value,
             motionDisabled: motionDisabled.value,
             hidden: document.hidden,
+            simpleAnimation: simpleAnimation.value !== false,
             viewportWidth: window.innerWidth,
             viewportHeight: window.innerHeight,
             devicePixelRatio: window.devicePixelRatio || 1,
@@ -347,6 +355,7 @@ export function useTalosProceduralCanvas(
             ...profile,
             rafActive,
             frameCount: renderedFrameCount,
+            simpleAnimation: simpleAnimation.value !== false,
         }
     }
 
@@ -392,7 +401,9 @@ export function useTalosProceduralCanvas(
 
         drawGrid(context, width, height, accent, scale, renderTime)
 
-        if (effect.value === 'trace-rain') {
+        if (simpleAnimation.value !== false) {
+            drawKahnGrid(context, width, height, accent, Math.max(0.55, scale * 0.72), renderTime)
+        } else if (effect.value === 'trace-rain') {
             drawTraceRain(context, width, height, accent, secondary, scale, renderTime)
         } else if (effect.value === 'dag-flow') {
             drawDagFlow(context, width, height, accent, secondary, scale, renderTime)
@@ -427,6 +438,7 @@ export function useTalosProceduralCanvas(
             ...profile,
             frameCount: 0,
             rafActive: false,
+            simpleAnimation: simpleAnimation.value !== false,
         }
         draw(0)
     }
@@ -475,7 +487,7 @@ export function useTalosProceduralCanvas(
         document.removeEventListener('visibilitychange', onVisibilityChange)
     })
 
-    watch([effect, motion, motionDisabled], restart, { flush: 'post' })
+    watch([effect, motion, motionDisabled, simpleAnimation], restart, { flush: 'post' })
     watch(canvas, (element) => {
         if (element) {
             restart()

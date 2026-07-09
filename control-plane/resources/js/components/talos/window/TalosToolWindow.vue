@@ -44,6 +44,10 @@ const windowClass = computed(() => {
         return 'talos-tool-window talos-tool-window-docked lg:w-[420px]'
     }
 
+    if (props.fullscreen) {
+        return 'talos-tool-window w-full'
+    }
+
     return 'talos-tool-window w-full lg:max-w-[min(980px,calc(100vw-300px))]'
 })
 </script>

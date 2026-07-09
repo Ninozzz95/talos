@@ -65,6 +65,7 @@ type SettingsPreferences = {
     theme: TalosThemeId
     theme_motion: TalosThemeMotionMode
     theme_motion_disabled: boolean
+    theme_simple_animation: boolean
     theme_background_disabled: boolean
     ai_defaults: {
         utility_model_mode: string
@@ -150,6 +151,7 @@ const preferences = reactive<SettingsPreferences>({
     theme: 'forge',
     theme_motion: 'system',
     theme_motion_disabled: false,
+    theme_simple_animation: true,
     theme_background_disabled: false,
     ai_defaults: {
         utility_model_mode: 'same_as_chat',
@@ -231,6 +233,7 @@ function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme = normalizeTalosTheme(nextPreferences.theme)
     preferences.theme_motion = resolveTalosMotionMode(nextPreferences.theme_motion)
     preferences.theme_motion_disabled = booleanValue(nextPreferences.theme_motion_disabled, false)
+    preferences.theme_simple_animation = booleanValue(nextPreferences.theme_simple_animation, true)
     preferences.theme_background_disabled = booleanValue(nextPreferences.theme_background_disabled, false)
 
     const aiDefaults = record(nextPreferences.ai_defaults)
@@ -280,6 +283,7 @@ function preferencesPayload() {
         ...(themeChanged ? { theme_customization: {} } : {}),
         theme_motion: preferences.theme_motion,
         theme_motion_disabled: preferences.theme_motion_disabled,
+        theme_simple_animation: preferences.theme_simple_animation,
         theme_background_disabled: preferences.theme_background_disabled,
         ai_defaults: {
             ...preferences.ai_defaults,
@@ -552,12 +556,14 @@ onMounted(async () => {
                             :theme="preferences.theme"
                             :theme-motion="preferences.theme_motion"
                             :theme-motion-disabled="preferences.theme_motion_disabled"
+                            :theme-simple-animation="preferences.theme_simple_animation"
                             :theme-background-disabled="preferences.theme_background_disabled"
                             :appearance-visibility="preferences.appearance_visibility"
                             :appearance-groups="TALOS_APPEARANCE_GROUPS"
                             @update-theme="preferences.theme = $event"
                             @update-theme-motion="preferences.theme_motion = $event"
                             @update-theme-motion-disabled="preferences.theme_motion_disabled = $event"
+                            @update-theme-simple-animation="preferences.theme_simple_animation = $event"
                             @update-theme-background-disabled="preferences.theme_background_disabled = $event"
                             @update-appearance="updateAppearancePreference"
                             @reset-appearance-group="resetAppearanceGroup"

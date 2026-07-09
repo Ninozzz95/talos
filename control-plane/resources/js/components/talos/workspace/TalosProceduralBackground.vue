@@ -7,6 +7,7 @@ const props = defineProps<{
     effect: TalosBackgroundEffect
     motion: TalosThemeMotionMode
     motionDisabled: boolean
+    simpleAnimation: boolean
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
@@ -17,6 +18,7 @@ const { performanceState } = useTalosProceduralCanvas(
     toRef(props, 'effect'),
     toRef(props, 'motion'),
     toRef(props, 'motionDisabled'),
+    toRef(props, 'simpleAnimation'),
 )
 </script>
 
@@ -34,6 +36,7 @@ const { performanceState } = useTalosProceduralCanvas(
         :data-performance-frame-count="String(performanceState.frameCount)"
         :data-performance-resize-count="String(performanceState.resizeCount)"
         :data-performance-visibility-paused="performanceState.visibilityPaused ? 'true' : 'false'"
+        :data-simple-animation="performanceState.simpleAnimation ? 'true' : 'false'"
         aria-hidden="true"
     >
         <canvas

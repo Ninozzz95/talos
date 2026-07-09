@@ -9,6 +9,8 @@ export const TALOS_THEME_IDS = [
     'noir',
     'signal',
     'violet',
+    'claudius',
+    'basicus',
 ] as const
 
 export type TalosThemeId = typeof TALOS_THEME_IDS[number]
@@ -347,6 +349,34 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         poster: themePoster('violet'),
         defaultEffect: 'dag-flow',
     },
+    {
+        id: 'claudius',
+        label: 'Claudius Review',
+        shortLabel: 'Claudius',
+        description: 'Warm document-first assistant surface inspired by Claude-style review flows.',
+        mood: 'Cod gray, pampas, clay',
+        motion: 'Soft proof grid',
+        isLight: true,
+        fontUi: 'Lora',
+        fontMono: 'IBM Plex Mono',
+        preview: { background: '#faf9f5', accent: '#d97757', secondary: '#6a9bcc', line: '#e8e6dc' },
+        poster: themePoster('claudius'),
+        defaultEffect: 'kahn-grid',
+    },
+    {
+        id: 'basicus',
+        label: 'Basicus Material',
+        shortLabel: 'Basicus',
+        description: 'Generic Material-style baseline for familiar enterprise forms and predictable controls.',
+        mood: 'Paper, Roboto, blue',
+        motion: 'System grid',
+        isLight: true,
+        fontUi: 'Roboto',
+        fontMono: 'Roboto Mono',
+        preview: { background: '#fafafa', accent: '#1976d2', secondary: '#9c27b0', line: '#e0e0e0' },
+        poster: themePoster('basicus'),
+        defaultEffect: 'kahn-grid',
+    },
 ]
 
 const THEME_BY_ID = new Map(TALOS_THEME_PRESETS.map((theme) => [theme.id, theme]))
@@ -494,6 +524,26 @@ const TALOS_THEME_UI_ANIMATION_PRESETS: Record<TalosThemeId, Required<TalosUiAni
         intensity: 90,
         easing: 'cinematic',
         stagger: 60,
+    },
+    claudius: {
+        open_close: 'soft-fade',
+        surface_transition: 'fade',
+        feedback: 'none',
+        hover: 'underline',
+        duration_scale: 90,
+        intensity: 28,
+        easing: 'soft',
+        stagger: 10,
+    },
+    basicus: {
+        open_close: 'standard',
+        surface_transition: 'fade',
+        feedback: 'edge-flash',
+        hover: 'lift',
+        duration_scale: 80,
+        intensity: 34,
+        easing: 'precise',
+        stagger: 8,
     },
 }
 

@@ -30,6 +30,8 @@ final class TalosWorkspaceSetting extends Model
         'noir' => true,
         'signal' => true,
         'violet' => true,
+        'claudius' => true,
+        'basicus' => true,
     ];
 
     private const THEME_CUSTOMIZATION_KEYS = [

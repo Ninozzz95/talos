@@ -6,6 +6,7 @@ const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
+const talosThemePresetCount = 12
 
 async function expectNoHorizontalOverflow(page: Page) {
     const result = await page.evaluate(() => {
@@ -346,7 +347,8 @@ test('guest users see the auth gate before the TALOS workspace', async ({ browse
     try {
         await page.goto('/', { waitUntil: 'domcontentloaded' })
         await expect(page.locator('#talos-workspace-root')).toHaveCount(0)
-        await expect(page.getByText(/TALOS Access|TALOS Setup/)).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'TALOS' })).toBeVisible()
+        await expect(page.getByText(/Sign in with a Laravel operator account|Create the first local administrator/)).toBeVisible()
         await expect(page.getByRole('link', { name: 'Back to TALOS' })).toHaveCount(0)
     } finally {
         await context.close()
@@ -370,12 +372,58 @@ test('root is the canonical TALOS workspace and legacy routes redirect to it', a
     }
 })
 
+test('floating windows enter real fullscreen across the workspace width', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Artifacts', exact: true }).click()
+    const artifactWindow = page.locator('[data-window-id="gallery"]')
+    await expect(artifactWindow).toBeVisible()
+
+    await artifactWindow.getByRole('button', { name: 'Fullscreen Artifacts' }).click()
+    await expect(artifactWindow).toHaveAttribute('data-window-fullscreen', 'true')
+
+    const metrics = await artifactWindow.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        const rail = document.querySelector('[aria-label="TALOS workspace rail"]')?.getBoundingClientRect()
+        const railWidth = rail?.width ?? 0
+
+        return {
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+            width: Math.round(rect.width),
+            expectedMinWidth: Math.round(window.innerWidth - railWidth - 48),
+        }
+    })
+
+    expect(metrics.left).toBeLessThanOrEqual(280)
+    expect(metrics.right).toBeGreaterThan(1200)
+    expect(metrics.width, JSON.stringify(metrics)).toBeGreaterThanOrEqual(metrics.expectedMinWidth)
+})
+
+test('left rail exposes real persistent chat history', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'New Chat', exact: true }).click()
+    await expect(page.getByTestId('talos-session-history')).toBeVisible()
+    await expect(page.getByTestId('talos-session-history')).toContainText('New chat')
+
+    await page.getByLabel('Message TALOS').fill('Investigate missing history rail')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
+    await expect(page.getByTestId('talos-session-history')).toContainText('Investigate missing history rail')
+
+    await page.getByRole('button', { name: 'New Chat', exact: true }).click()
+    await expect(page.getByTestId('talos-session-history').getByRole('button', { name: /New chat/ })).toBeVisible()
+    await page.getByTestId('talos-session-history').getByRole('button', { name: /Investigate missing history rail/ }).click()
+    await expect(page.getByLabel('TALOS chat thread').getByText('Investigate missing history rail')).toBeVisible()
+})
+
 test('chat loads, sends a deterministic persisted turn, and stays keyboard reachable', async ({ page }, testInfo) => {
     await openWorkspace(page)
 
-    await expect(page.getByRole('heading', { name: 'What workflow should TALOS handle?' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /^(What workflow should TALOS handle\?|What claim should we benchmark\?)$/ })).toBeVisible()
     await expect(page.getByTestId('talos-empty-brand')).toContainText('TALOS')
-    await expect(page.getByTestId('talos-empty-brand').locator('img')).toBeVisible()
+    await expect(page.getByTestId('talos-empty-brand').locator('.talos-short-logo-mark')).toBeVisible()
     await expect(page.getByText('Mission Path', { exact: true })).toBeVisible()
     await expect(page.getByText('Model linked', { exact: true })).toBeVisible()
     await expect(page.getByText('Context optional', { exact: true })).toBeVisible()
@@ -531,9 +579,11 @@ test('settings boolean preferences render as accessible switch controls', async 
     await visionPatchRequest
 
     await page.getByRole('tab', { name: 'Appearance' }).click()
+    await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByRole('switch', { name: 'Settings disable motion' })).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Settings disable procedural background' })).toBeVisible()
-    await expect(page.getByRole('switch', { name: 'Compact sidebar' })).toBeVisible()
+    await page.getByRole('tab', { name: 'Visibility' }).click()
+    await expect(page.getByRole('switch', { name: 'Brand name' })).toBeVisible()
 
     await page.getByRole('tab', { name: 'Agent Tools' }).click()
     await expect(page.getByRole('switch', { name: 'Code tools' })).toBeVisible()
@@ -656,7 +706,7 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     })
 })
 
-test('model center offers provider-first quick add with draft test before persistence', async ({ page }, testInfo) => {
+test('model center offers provider-first quick add with optional draft test', async ({ page }, testInfo) => {
     await openWorkspace(page)
     await selectDashboardTab(page, 'Agents')
 
@@ -673,6 +723,7 @@ test('model center offers provider-first quick add with draft test before persis
     await expect(quickAdd.getByLabel('Base URL')).toBeHidden()
 
     await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
+    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
     await quickAdd.getByRole('button', { name: 'Advanced options' }).click()
     await expect(quickAdd.getByLabel('Timeout seconds')).toBeVisible()
     await quickAdd.getByLabel('Timeout seconds').fill('45')
@@ -707,14 +758,8 @@ test('model center offers provider-first quick add with draft test before persis
             && body.base_url === 'https://openrouter.ai/api/v1'
             && body.timeout_seconds === 45
     })
-    const persistedProbeRequest = page.waitForRequest((request) => (
-        /\/api\/talos\/model-profiles\/profile-openrouter-quick-add\/probe$/.test(new URL(request.url()).pathname)
-        && request.method() === 'POST'
-    ))
-
-    await quickAdd.getByRole('button', { name: 'Test and add' }).click()
+    await quickAdd.getByRole('button', { name: 'Add profile' }).click()
     await createRequest
-    await persistedProbeRequest
 
     const openRouterProfile = page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })
     await expect(openRouterProfile).toBeVisible()
@@ -733,7 +778,7 @@ test('model center offers provider-first quick add with draft test before persis
     })
 })
 
-test('model center keeps provider save blocked after a failed draft probe', async ({ page }) => {
+test('model center can save a provider profile after a failed optional draft probe', async ({ page }) => {
     await page.route('**/api/talos/model-profiles/probe-draft', async (route) => {
         await route.fulfill({
             status: 200,
@@ -757,12 +802,28 @@ test('model center keeps provider save blocked after a failed draft probe', asyn
     const quickAdd = page.getByTestId('talos-model-quick-add')
     await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
     await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
-    await expect(quickAdd.getByRole('button', { name: 'Test and add' })).toBeDisabled()
+    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
 
     await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
     await expect(quickAdd.getByText('Draft probe failed').first()).toBeVisible()
     await expect(quickAdd.getByText('Provider rejected the test request.').first()).toBeVisible()
-    await expect(quickAdd.getByRole('button', { name: 'Test and add' })).toBeDisabled()
+    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
+
+    const createRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/model-profiles') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+
+        return body.provider === 'openrouter'
+            && body.secret === 'sk-openrouter-e2e-secret'
+            && body.status === 'untested'
+    })
+
+    await quickAdd.getByRole('button', { name: 'Add profile' }).click()
+    await createRequest
+    await expect(page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })).toBeVisible()
 })
 
 test('cookbook model lab shows hardware scan fit score and preview-only commands', async ({ page }, testInfo) => {
@@ -836,7 +897,7 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByRole('tab', { name: 'Customize' })).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Video backgrounds' })).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-preview-video')).toHaveCount(0)
-    await expect(page.getByTestId('talos-theme-preview-poster')).toHaveCount(10)
+    await expect(page.getByTestId('talos-theme-preview-poster')).toHaveCount(talosThemePresetCount)
     await expect.poll(async () => page.getByTestId('talos-theme-preview-poster').evaluateAll((images) => images.every((image) => {
         const poster = image as HTMLImageElement
 
@@ -845,10 +906,12 @@ test('settings window loads safe preferences and persists theme through the sett
     const posterSources = await page.getByTestId('talos-theme-preview-poster').evaluateAll((images) => (
         images.map((image) => (image as HTMLImageElement).getAttribute('src'))
     ))
-    expect(new Set(posterSources).size).toBe(10)
+    expect(new Set(posterSources).size).toBe(talosThemePresetCount)
     expect(posterSources).toContain('/talos/backgrounds/violet-poster.webp')
-    await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(10)
-    await expect(page.locator('[data-testid="talos-theme-preview-swatch"]')).toHaveCount(10)
+    expect(posterSources).toContain('/talos/backgrounds/claudius-poster.webp')
+    expect(posterSources).toContain('/talos/backgrounds/basicus-poster.webp')
+    await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(talosThemePresetCount)
+    await expect(page.locator('[data-testid="talos-theme-preview-swatch"]')).toHaveCount(talosThemePresetCount)
     const forgeActionMotion = await page.locator('.talos-shell').evaluate((element) => {
         const style = window.getComputedStyle(element)
 
@@ -1335,6 +1398,32 @@ test('system motion follows browser reduced motion while explicit motion can ani
     await expectProceduralCanvasFrameChanges(page)
 })
 
+test('theme engine defaults to simple animation and warns before rich motion', async ({ page }) => {
+    await openWorkspace(page)
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+
+    await expect(page.getByRole('switch', { name: 'Use simple animation' })).toBeChecked()
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-simple-animation', 'true')
+
+    const richMotionRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+
+        return preferences?.theme_simple_animation === false
+    })
+    await page.getByRole('switch', { name: 'Use simple animation' }).click()
+    await richMotionRequest
+
+    await expect(page.getByText('Rich animation raises frame rate, DPR and effect complexity.')).toBeVisible()
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-simple-animation', 'false')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-performance-dpr-cap', '1.5')
+})
+
 test('theme switches disable motion separately from the procedural background', async ({ page }) => {
     test.setTimeout(90_000)
 
@@ -1551,6 +1640,8 @@ test('every theme preset switches to its animated procedural default', async ({ 
         ['Noir Contrast', 'talos-theme-noir', 'trace-rain'],
         ['Signal Command', 'talos-theme-signal', 'signal-mesh'],
         ['Violet Lab', 'talos-theme-violet', 'dag-flow'],
+        ['Claudius Review', 'talos-theme-claudius', 'kahn-grid'],
+        ['Basicus Material', 'talos-theme-basicus', 'kahn-grid'],
     ] as const
 
     for (const [label, themeClass, effect] of presets) {
@@ -1725,6 +1816,7 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
     await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
 
     await page.getByRole('tab', { name: 'Appearance' }).click()
+    await page.getByRole('tab', { name: 'Visibility' }).click()
     const appearancePatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -1929,7 +2021,7 @@ test('dashboard opens a real file benchmark scenario from a fresh upload', async
     await expect(page.getByText('workflow.md uploaded through /api/files/ingest.')).toBeVisible()
     await page.getByRole('button', { name: 'Benchmark this file' }).click()
 
-    await expect(page.getByText('AVM ON/OFF evidence')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'AVM ON/OFF evidence' })).toBeVisible()
     await expect(page.getByText('Proof Builder', { exact: true })).toBeVisible()
     await expect(page.getByText('File handoff', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Benchmark scenario path')).toHaveValue('benchmark-scenarios/e2e/workflow-file.json')

@@ -149,32 +149,27 @@ button {
 
 .talos-short-logo {
     display: inline-flex;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 3rem;
+    height: 3rem;
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--talos-border-strong);
-    border-radius: var(--talos-radius-control);
-    background: var(--talos-panel);
     color: var(--talos-accent);
-    box-shadow: 0 14px 38px var(--talos-shadow);
     overflow: hidden;
 }
 
 .talos-short-logo-mark {
     display: block;
-    width: 74%;
-    height: 74%;
+    width: 92%;
+    height: 92%;
     background: currentColor;
     mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
     -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
 }
 
 .talos-short-logo-compact {
-    width: 2rem;
-    height: 2rem;
-    box-shadow: 0 10px 26px var(--talos-shadow);
+    width: 2.35rem;
+    height: 2.35rem;
 }
 
 .talos-light {
@@ -517,6 +512,94 @@ button {
     --talos-line-a: rgba(183, 148, 246, 0.34);
     --talos-line-b: rgba(110, 231, 183, 0.30);
     --talos-node: rgba(183, 148, 246, 0.72);
+}
+
+.talos-theme-claudius {
+    --talos-font-ui: Lora, Georgia, ui-serif, serif;
+    --talos-font-display: Poppins, Arial, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-radius-card: 8px;
+    --talos-radius-control: 7px;
+    --talos-accent: #d97757;
+    --talos-accent-border: #b86248;
+    --talos-accent-hover: #cc785c;
+    --talos-accent-soft: #f3dfd5;
+    --talos-accent-text: #141413;
+    --talos-active: #f0efea;
+    --talos-background: #faf9f5;
+    --talos-border: #d8d5ca;
+    --talos-border-strong: #b0aea5;
+    --talos-card: #ffffff;
+    --talos-header: #f0efea;
+    --talos-input: #c9c5b9;
+    --talos-muted: #67635a;
+    --talos-panel: #ffffff;
+    --talos-panel-soft: #f0efea;
+    --talos-ring: #d97757;
+    --talos-ring-soft: rgba(217, 119, 87, 0.18);
+    --talos-secondary: #e8e6dc;
+    --talos-sidebar: #f0efea;
+    --talos-shadow: rgba(20, 20, 19, 0.10);
+    --talos-success: #788c5d;
+    --talos-success-border: #bdc8aa;
+    --talos-success-soft: #eef3e8;
+    --talos-text: #141413;
+    --talos-track: #e8e6dc;
+    --talos-user: #141413;
+    --talos-user-text: #faf9f5;
+    --talos-warning: #a8683f;
+    --talos-warning-border: #e0bda8;
+    --talos-warning-soft: #fbefe8;
+    --talos-workspace-glow-a: rgba(106, 155, 204, 0.10);
+    --talos-workspace-glow-b: rgba(217, 119, 87, 0.10);
+    --talos-grid-color: rgba(176, 174, 165, 0.16);
+    --talos-line-a: rgba(106, 155, 204, 0.28);
+    --talos-line-b: rgba(217, 119, 87, 0.32);
+    --talos-node: rgba(120, 140, 93, 0.58);
+}
+
+.talos-theme-basicus {
+    --talos-font-ui: Roboto, Arial, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: Roboto, Arial, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "Roboto Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-radius-card: 4px;
+    --talos-radius-control: 4px;
+    --talos-accent: #1976d2;
+    --talos-accent-border: #1565c0;
+    --talos-accent-hover: #42a5f5;
+    --talos-accent-soft: #e3f2fd;
+    --talos-accent-text: #ffffff;
+    --talos-active: #eeeeee;
+    --talos-background: #fafafa;
+    --talos-border: #e0e0e0;
+    --talos-border-strong: #bdbdbd;
+    --talos-card: #ffffff;
+    --talos-header: #ffffff;
+    --talos-input: #bdbdbd;
+    --talos-muted: #616161;
+    --talos-panel: #ffffff;
+    --talos-panel-soft: #f5f5f5;
+    --talos-ring: #1976d2;
+    --talos-ring-soft: rgba(25, 118, 210, 0.18);
+    --talos-secondary: #eeeeee;
+    --talos-sidebar: #ffffff;
+    --talos-shadow: rgba(0, 0, 0, 0.12);
+    --talos-success: #2e7d32;
+    --talos-success-border: #a5d6a7;
+    --talos-success-soft: #e8f5e9;
+    --talos-text: #212121;
+    --talos-track: #eeeeee;
+    --talos-user: #1976d2;
+    --talos-user-text: #ffffff;
+    --talos-warning: #ed6c02;
+    --talos-warning-border: #ffcc80;
+    --talos-warning-soft: #fff3e0;
+    --talos-workspace-glow-a: rgba(25, 118, 210, 0.08);
+    --talos-workspace-glow-b: rgba(156, 39, 176, 0.06);
+    --talos-grid-color: rgba(33, 33, 33, 0.08);
+    --talos-line-a: rgba(25, 118, 210, 0.24);
+    --talos-line-b: rgba(156, 39, 176, 0.22);
+    --talos-node: rgba(25, 118, 210, 0.48);
 }
 
 .talos-chat-thread {
@@ -865,6 +948,7 @@ button {
 
 .talos-shell .talos-tool-window-fullscreen {
     max-height: none !important;
+    max-width: none !important;
 }
 
 .talos-shell .talos-tool-window-fullscreen .talos-tool-window-body {

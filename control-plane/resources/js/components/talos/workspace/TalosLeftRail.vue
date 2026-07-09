@@ -24,6 +24,7 @@ import {
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
+import type { TalosSession } from '../../../lib/talosTypes'
 
 type RailItem = {
     id: string
@@ -36,6 +37,7 @@ type RailItem = {
 const emit = defineEmits<{
     open: [id: string]
     newChat: []
+    selectSession: [session: TalosSession]
     toggleTheme: []
     collapse: []
     expand: []
@@ -70,6 +72,8 @@ const props = defineProps<{
     collapsed?: boolean
     width: number
     visibility: Record<string, boolean>
+    sessions: TalosSession[]
+    activeSessionId?: string | null
 }>()
 
 const railStyle = computed(() => ({
@@ -102,6 +106,20 @@ const visibleSystemItems = computed(() => systemItems.filter((item) => {
 
     return props.visibility[item.id] !== false
 }))
+
+const visibleSessions = computed(() => props.sessions.filter((session) => session.persistence_mode !== 'temporary').slice(0, 12))
+
+function sessionTimestamp(session: TalosSession) {
+    const value = Date.parse(session.updated_at || session.created_at)
+    if (!Number.isFinite(value)) {
+        return ''
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+    }).format(value)
+}
 </script>
 
 <template>
@@ -114,7 +132,7 @@ const visibleSystemItems = computed(() => systemItems.filter((item) => {
         <div class="flex items-center gap-2 px-1" :class="collapsed ? 'justify-center' : 'justify-between'">
             <div v-if="!collapsed && visibility.brand_name !== false" class="min-w-0">
                 <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-accent)]">AVM</div>
-                <div class="text-base font-semibold leading-5 text-[var(--talos-text)]">TALOS</div>
+                <div class="talos-orbitron-brand text-base font-semibold leading-5 text-[var(--talos-text)]">TALOS</div>
             </div>
             <div v-if="!collapsed && visibility.brand_name !== false" class="talos-short-logo talos-short-logo-compact">
                 <span class="talos-short-logo-mark"></span>
@@ -142,6 +160,37 @@ const visibleSystemItems = computed(() => systemItems.filter((item) => {
             <MessageSquarePlus class="h-4 w-4" />
             <span v-if="!collapsed">New Chat</span>
         </Button>
+
+        <section
+            v-if="!collapsed && visibility.chats !== false"
+            data-testid="talos-session-history"
+            class="mt-3 border-t border-[var(--talos-border)] pt-3"
+            aria-label="Chat history"
+        >
+            <div class="mb-2 flex items-center justify-between gap-2 px-1">
+                <span class="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-muted)]">Chats</span>
+                <span class="text-[10px] font-medium text-[var(--talos-muted)]">{{ visibleSessions.length }}</span>
+            </div>
+            <div v-if="visibleSessions.length" class="max-h-40 space-y-0.5 overflow-y-auto pr-1">
+                <button
+                    v-for="session in visibleSessions"
+                    :key="session.id"
+                    type="button"
+                    class="group flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    :class="activeSessionId === session.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]' : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]'"
+                    :aria-current="activeSessionId === session.id ? 'page' : undefined"
+                    :aria-label="`Open chat ${session.title}`"
+                    @click="emit('selectSession', session)"
+                >
+                    <span class="min-w-0">
+                        <span class="block truncate text-[12px] font-medium">{{ session.title || 'Untitled chat' }}</span>
+                        <span class="block truncate text-[10px] text-[var(--talos-muted)]">{{ session.persistence_mode === 'temporary' ? 'Temporary' : 'Persistent' }}</span>
+                    </span>
+                    <span class="shrink-0 text-[10px] text-[var(--talos-muted)]">{{ sessionTimestamp(session) }}</span>
+                </button>
+            </div>
+            <p v-else class="px-1 text-xs leading-5 text-[var(--talos-muted)]">No chats yet.</p>
+        </section>
 
         <nav class="mt-3 min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="TALOS modules">
             <button
