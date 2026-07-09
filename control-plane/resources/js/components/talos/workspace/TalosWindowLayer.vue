@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import TalosToolWindow from '../window/TalosToolWindow.vue'
@@ -36,6 +36,12 @@ import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes
 import type { TalosThemeCustomization, TalosThemeId } from '../../../lib/talosThemes'
 
 type WindowResizeEdge = 'top' | 'right' | 'bottom' | 'left' | 'top-right' | 'bottom-right' | 'bottom-left' | 'top-left'
+type TalosWindowTransitionState = 'idle' | 'opening' | 'restoring' | 'minimizing' | 'expanding'
+type TalosWindowLaunchOrigin = {
+    x: number
+    y: number
+    source: 'sidebar' | 'command' | 'dock' | 'default'
+}
 
 const props = defineProps<{
     visibleWindowIds: TalosWindowId[]
@@ -46,6 +52,8 @@ const props = defineProps<{
     windowPositions: Partial<Record<TalosWindowId, TalosWindowPosition>>
     windowSizes: Partial<Record<TalosWindowId, TalosWindowSize>>
     windowZIndexes: Partial<Record<TalosWindowId, number>>
+    windowLaunchOrigins: Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>
+    windowLaunchRevisions: Partial<Record<TalosWindowId, number>>
     currentRailWidth: number
     runtimeRequestedTab: 'timeline' | 'dag' | 'replay' | 'recovery' | 'artifacts'
     runtimeRequestedTabRevision: number
@@ -55,11 +63,14 @@ const props = defineProps<{
     contextSets: TalosContextSet[]
     selectedModelProfileId: string
     selectedContextSetId: string
+    settingsRequestedTab: 'models' | 'account'
+    settingsRequestedTabRevision: number
     authenticated: boolean
     authUserName: string
     logoutUrl: string
     csrfToken: string
     theme: TalosThemeId
+    uiMotionDisabled: boolean
 }>()
 
 const emit = defineEmits<{
@@ -69,6 +80,7 @@ const emit = defineEmits<{
     fullscreenWindow: [id: TalosWindowId]
     focusWindow: [id: TalosWindowId]
     openWindow: [id: TalosWindowId]
+    restoreWindow: [id: TalosWindowId]
     setWindowPosition: [id: TalosWindowId, position: TalosWindowPosition]
     setWindowSize: [id: TalosWindowId, size: TalosWindowSize]
     resetWindowSize: [id: TalosWindowId]
@@ -105,8 +117,15 @@ const windowCopy: Record<TalosWindowId, { title: string; description: string }> 
 
 const adminToken = ref('')
 const interactingWindowId = ref<TalosWindowId | null>(null)
+const windowTransitionStates = ref<Partial<Record<TalosWindowId, TalosWindowTransitionState>>>({})
+const windowTransitionOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
 let stopWindowDragListeners: (() => void) | null = null
 let stopWindowResizeListeners: (() => void) | null = null
+const transitionTimers = new Map<TalosWindowId, number>()
+const pendingRestoreWindowIds = ref<TalosWindowId[]>([])
+const pendingRestoreOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})
+const WINDOW_TRANSITION_MS = 260
+const WINDOW_MINIMIZE_TRANSITION_MS = 500
 
 const floatingWindowIds = computed(() => props.visibleWindowIds.filter((item) => !props.dockedWindowIds.includes(item)))
 const dockedVisibleWindowIds = computed(() => props.visibleWindowIds.filter((item) => props.dockedWindowIds.includes(item)))
@@ -114,6 +133,98 @@ const hasDockedWindows = computed(() => dockedVisibleWindowIds.value.length > 0)
 
 function isWindowId(value: string): value is TalosWindowId {
     return Object.prototype.hasOwnProperty.call(TALOS_WINDOW_DEFAULT_SIZES, value)
+}
+
+function defaultWindowOrigin(source: TalosWindowLaunchOrigin['source'] = 'default'): TalosWindowLaunchOrigin {
+    return {
+        x: -Math.round(Math.max(72, props.currentRailWidth * 0.45)),
+        y: typeof window === 'undefined' ? 140 : Math.round(window.innerHeight * 0.42),
+        source,
+    }
+}
+
+function originFromElement(target: EventTarget | null, source: TalosWindowLaunchOrigin['source']): TalosWindowLaunchOrigin {
+    if (target instanceof HTMLElement) {
+        const rect = target.getBoundingClientRect()
+
+        return {
+            x: Math.round(rect.left + (rect.width / 2) - props.currentRailWidth),
+            y: Math.round(rect.top + (rect.height / 2)),
+            source,
+        }
+    }
+
+    return defaultWindowOrigin(source)
+}
+
+function minimizeDockOrigin(): TalosWindowLaunchOrigin {
+    return {
+        x: 32,
+        y: typeof window === 'undefined' ? 620 : Math.round(window.innerHeight - 112),
+        source: 'dock',
+    }
+}
+
+function clearTransitionTimer(id: TalosWindowId) {
+    const timer = transitionTimers.get(id)
+    if (timer !== undefined) {
+        window.clearTimeout(timer)
+        transitionTimers.delete(id)
+    }
+}
+
+function transitionDurationFor(state: TalosWindowTransitionState) {
+    if (props.uiMotionDisabled || state === 'idle') {
+        return 0
+    }
+
+    return state === 'minimizing' ? WINDOW_MINIMIZE_TRANSITION_MS : WINDOW_TRANSITION_MS
+}
+
+function setWindowTransition(id: TalosWindowId, state: TalosWindowTransitionState, origin?: TalosWindowLaunchOrigin, onComplete?: () => void) {
+    clearTransitionTimer(id)
+    if (origin) {
+        windowTransitionOrigins.value = {
+            ...windowTransitionOrigins.value,
+            [id]: origin,
+        }
+    }
+    windowTransitionStates.value = {
+        ...windowTransitionStates.value,
+        [id]: state,
+    }
+
+    const duration = transitionDurationFor(state)
+    if (duration === 0) {
+        windowTransitionStates.value = {
+            ...windowTransitionStates.value,
+            [id]: 'idle',
+        }
+        onComplete?.()
+        return
+    }
+
+    const timer = window.setTimeout(() => {
+        if (windowTransitionStates.value[id] === state) {
+            windowTransitionStates.value = {
+                ...windowTransitionStates.value,
+                [id]: 'idle',
+            }
+        }
+        transitionTimers.delete(id)
+        onComplete?.()
+    }, duration)
+    transitionTimers.set(id, timer)
+}
+
+function transitionStateFor(id: TalosWindowId): TalosWindowTransitionState {
+    return windowTransitionStates.value[id] ?? 'idle'
+}
+
+function transitionOriginFor(id: TalosWindowId): TalosWindowLaunchOrigin {
+    return windowTransitionOrigins.value[id]
+        ?? props.windowLaunchOrigins[id]
+        ?? defaultWindowOrigin('default')
 }
 
 function emitWindow(action: 'closeWindow' | 'minimizeWindow' | 'dockWindow' | 'fullscreenWindow' | 'focusWindow' | 'openWindow', id: string) {
@@ -124,17 +235,80 @@ function emitWindow(action: 'closeWindow' | 'minimizeWindow' | 'dockWindow' | 'f
     if (action === 'closeWindow') {
         emit('closeWindow', id)
     } else if (action === 'minimizeWindow') {
-        emit('minimizeWindow', id)
+        requestWindowMinimize(id)
     } else if (action === 'dockWindow') {
         emit('dockWindow', id)
     } else if (action === 'fullscreenWindow') {
-        emit('fullscreenWindow', id)
+        requestWindowFullscreen(id)
     } else if (action === 'focusWindow') {
         emit('focusWindow', id)
     } else {
         emit('openWindow', id)
     }
 }
+
+function requestWindowMinimize(id: TalosWindowId) {
+    setWindowTransition(id, 'minimizing', minimizeDockOrigin(), () => {
+        emit('minimizeWindow', id)
+    })
+}
+
+function requestWindowFullscreen(id: TalosWindowId) {
+    emit('fullscreenWindow', id)
+    setWindowTransition(id, 'expanding', transitionOriginFor(id))
+}
+
+function restoreMinimizedWindow(id: TalosWindowId, event: MouseEvent) {
+    const origin = originFromElement(event.currentTarget, 'dock')
+    pendingRestoreWindowIds.value = [...pendingRestoreWindowIds.value.filter((item) => item !== id), id]
+    pendingRestoreOrigins.value = {
+        ...pendingRestoreOrigins.value,
+        [id]: origin,
+    }
+    emit('restoreWindow', id)
+}
+
+watch(
+    () => props.visibleWindowIds,
+    (nextIds, previousIds = []) => {
+        for (const id of nextIds) {
+            if (previousIds.includes(id)) {
+                continue
+            }
+
+            const restoreOrigin = pendingRestoreOrigins.value[id]
+            if (pendingRestoreWindowIds.value.includes(id) && restoreOrigin) {
+                setWindowTransition(id, 'restoring', restoreOrigin)
+                pendingRestoreWindowIds.value = pendingRestoreWindowIds.value.filter((item) => item !== id)
+                const nextOrigins = { ...pendingRestoreOrigins.value }
+                delete nextOrigins[id]
+                pendingRestoreOrigins.value = nextOrigins
+                continue
+            }
+
+            setWindowTransition(id, 'opening', props.windowLaunchOrigins[id] ?? defaultWindowOrigin('sidebar'))
+        }
+    },
+    { flush: 'pre' },
+)
+
+watch(
+    () => props.windowLaunchRevisions,
+    (nextRevisions, previousRevisions = {}) => {
+        for (const [id, revision] of Object.entries(nextRevisions)) {
+            if (!isWindowId(id) || previousRevisions[id] === revision) {
+                continue
+            }
+
+            if (!props.visibleWindowIds.includes(id) || props.minimizedWindowIds.includes(id)) {
+                continue
+            }
+
+            setWindowTransition(id, 'opening', props.windowLaunchOrigins[id] ?? defaultWindowOrigin('sidebar'))
+        }
+    },
+    { flush: 'post' },
+)
 
 function defaultFloatingWindowPosition(index: number): TalosWindowPosition {
     const viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth
@@ -199,8 +373,11 @@ function floatingWindowSize(id: TalosWindowId, index: number): TalosWindowSize {
 }
 
 function floatingWindowStyle(id: TalosWindowId, index: number) {
+    const origin = transitionOriginFor(id)
     if (props.fullscreenWindowIds.includes(id)) {
         return {
+            '--talos-window-origin-x': `${origin.x}px`,
+            '--talos-window-origin-y': `${origin.y}px`,
             zIndex: String(60 + (props.windowZIndexes[id] ?? index)),
         }
     }
@@ -208,6 +385,10 @@ function floatingWindowStyle(id: TalosWindowId, index: number) {
     const position = floatingWindowPosition(id, index)
     const size = floatingWindowSize(id, index)
     const minSize = TALOS_WINDOW_MIN_SIZES[id]
+    const launchDx = Math.round(origin.x - position.x)
+    const launchDy = Math.round(origin.y - position.y)
+    const launchMidDx = Math.round(launchDx * 0.55)
+    const launchMidDy = Math.round(launchDy * 0.55)
 
     return {
         '--talos-window-x': `${position.x}px`,
@@ -216,6 +397,12 @@ function floatingWindowStyle(id: TalosWindowId, index: number) {
         '--talos-window-height': `${size.height}px`,
         '--talos-window-min-width': `${minSize.width}px`,
         '--talos-window-min-height': `${minSize.height}px`,
+        '--talos-window-origin-x': `${origin.x}px`,
+        '--talos-window-origin-y': `${origin.y}px`,
+        '--talos-window-launch-dx': `${launchDx}px`,
+        '--talos-window-launch-dy': `${launchDy}px`,
+        '--talos-window-launch-mid-dx': `${launchMidDx}px`,
+        '--talos-window-launch-mid-dy': `${launchMidDy}px`,
         zIndex: String(50 + (props.windowZIndexes[id] ?? index)),
     }
 }
@@ -351,6 +538,10 @@ function resetFloatingWindowSize(id: string) {
 onBeforeUnmount(() => {
     stopWindowDrag()
     stopWindowResize()
+    for (const timer of transitionTimers.values()) {
+        window.clearTimeout(timer)
+    }
+    transitionTimers.clear()
 })
 </script>
 
@@ -368,8 +559,15 @@ onBeforeUnmount(() => {
             :interacting="interactingWindowId === id"
             :fullscreen="fullscreenWindowIds.includes(id)"
             class="talos-floating-window pointer-events-auto"
-            :class="fullscreenWindowIds.includes(id) ? 'talos-floating-window-fullscreen' : ''"
+            :class="[
+                fullscreenWindowIds.includes(id) ? 'talos-floating-window-fullscreen' : '',
+                `talos-window-transition-${transitionStateFor(id)}`,
+            ]"
             :style="floatingWindowStyle(id, index)"
+            :data-window-transition="transitionStateFor(id)"
+            :data-window-origin-source="transitionOriginFor(id).source"
+            :data-window-origin-x="String(transitionOriginFor(id).x)"
+            :data-window-origin-y="String(transitionOriginFor(id).y)"
             @close="emitWindow('closeWindow', $event)"
             @minimize="emitWindow('minimizeWindow', $event)"
             @dock="emitWindow('dockWindow', $event)"
@@ -446,6 +644,8 @@ onBeforeUnmount(() => {
                     :context-sets="contextSets"
                     :selected-model-profile-id="selectedModelProfileId"
                     :selected-context-set-id="selectedContextSetId"
+                    :focused-tab="settingsRequestedTab"
+                    :focused-tab-revision="settingsRequestedTabRevision"
                     :authenticated="authenticated"
                     :auth-user-name="authUserName"
                     :logout-url="logoutUrl"
@@ -525,7 +725,7 @@ onBeforeUnmount(() => {
             class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] px-3 py-2 text-xs font-medium text-[var(--talos-text)] shadow"
             :aria-label="`Restore ${windowCopy[id].title}`"
             :data-testid="`talos-restore-window-${id}`"
-            @click="emit('openWindow', id)"
+            @click="restoreMinimizedWindow(id, $event)"
         >
             {{ windowCopy[id].title }}
         </button>

@@ -334,7 +334,7 @@ const motionPreviewStyle = computed(() => talosUiAnimationStyle(
     activeTheme.value,
     uiAnimationProfile.value,
     motionMode.value,
-    motionDisabled.value,
+    uiAnimationProfile.value === 'off',
     sanitizedUiAnimationForm(),
 ))
 
@@ -1183,7 +1183,7 @@ onMounted(async () => {
                     <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                         <span>
                             <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
-                            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep the selected background visible, but freeze canvas and DOM animation.</span>
+                            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep the selected background visible, but freeze canvas and background DOM animation.</span>
                         </span>
                         <Switch
                             v-model="motionDisabled"

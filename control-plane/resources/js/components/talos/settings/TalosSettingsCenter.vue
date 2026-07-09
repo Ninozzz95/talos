@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
     Bell,
     Bot,
@@ -108,6 +108,8 @@ const props = defineProps<{
     contextSets: TalosContextSet[]
     selectedModelProfileId: string
     selectedContextSetId: string
+    focusedTab?: SettingsTab | null
+    focusedTabRevision?: number
     authenticated?: boolean
     authUserName?: string
     logoutUrl?: string
@@ -227,6 +229,10 @@ function numberValue(value: unknown, fallback: number) {
 
 function booleanValue(value: unknown, fallback: boolean) {
     return typeof value === 'boolean' ? value : fallback
+}
+
+function isSettingsTab(value: unknown): value is SettingsTab {
+    return tabs.some((tab) => tab.id === value)
 }
 
 function applyPreferences(nextPreferences: Record<string, unknown>) {
@@ -395,6 +401,16 @@ onMounted(async () => {
     applyPreferences(loaded?.preferences ?? {})
     emit('changeTheme', preferences.theme, false)
 })
+
+watch(
+    () => [props.focusedTab, props.focusedTabRevision] as const,
+    ([tab]) => {
+        if (isSettingsTab(tab)) {
+            activeTab.value = tab
+        }
+    },
+    { immediate: true },
+)
 </script>
 
 <template>
