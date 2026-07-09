@@ -58,9 +58,12 @@ final class TalosCalendarDraft extends Model
      */
     public function toApiArray(): array
     {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+
         return [
             'id' => $this->id,
             'run_id' => $this->run_id,
+            'source_run_id' => $this->run_id,
             'title' => $this->title,
             'description' => $this->description,
             'starts_at' => $this->starts_at?->toJSON(),
@@ -71,6 +74,8 @@ final class TalosCalendarDraft extends Model
             'confirmation_required' => $this->confirmation_required,
             'confirmed_at' => $this->confirmed_at?->toJSON(),
             'metadata' => $this->metadata,
+            'external_provider' => $metadata['external_provider'] ?? null,
+            'external_event_id' => $metadata['external_event_id'] ?? null,
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
         ];

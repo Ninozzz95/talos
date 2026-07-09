@@ -53,6 +53,8 @@ final class TalosWorkspaceSetting extends Model
         'tokens' => true,
         'area_tokens' => true,
         'motion' => true,
+        'ui_animation_profile' => true,
+        'ui_animation_customization' => true,
     ];
 
     private const THEME_MOTION_VALUES = [
@@ -60,6 +62,54 @@ final class TalosWorkspaceSetting extends Model
         'off' => true,
         'subtle' => true,
         'normal' => true,
+        'cinematic' => true,
+    ];
+
+    private const UI_ANIMATION_PROFILE_VALUES = [
+        'preset' => true,
+        'minimal' => true,
+        'expressive' => true,
+        'custom' => true,
+        'off' => true,
+    ];
+
+    private const UI_ANIMATION_OPEN_CLOSE_VALUES = [
+        'instant' => true,
+        'standard' => true,
+        'depth' => true,
+        'terminal-snap' => true,
+        'soft-fade' => true,
+    ];
+
+    private const UI_ANIMATION_SURFACE_TRANSITION_VALUES = [
+        'fade' => true,
+        'slide-fade' => true,
+        'scale-fade' => true,
+        'scanline' => true,
+        'axis-shift' => true,
+    ];
+
+    private const UI_ANIMATION_FEEDBACK_VALUES = [
+        'none' => true,
+        'pulse' => true,
+        'trace' => true,
+        'edge-flash' => true,
+        'status-lock' => true,
+    ];
+
+    private const UI_ANIMATION_HOVER_VALUES = [
+        'none' => true,
+        'lift' => true,
+        'edge-glow' => true,
+        'underline' => true,
+        'node-glow' => true,
+    ];
+
+    private const UI_ANIMATION_EASING_VALUES = [
+        'precise' => true,
+        'soft' => true,
+        'elastic-light' => true,
+        'linear' => true,
         'cinematic' => true,
     ];
 
@@ -152,6 +202,23 @@ final class TalosWorkspaceSetting extends Model
             if ($key === 'theme_motion') {
                 if (is_string($value) && isset(self::THEME_MOTION_VALUES[$value])) {
                     $safe[$key] = $value;
+                }
+
+                continue;
+            }
+
+            if ($key === 'ui_animation_profile') {
+                if (is_string($value) && isset(self::UI_ANIMATION_PROFILE_VALUES[$value])) {
+                    $safe[$key] = $value;
+                }
+
+                continue;
+            }
+
+            if ($key === 'ui_animation_customization') {
+                $customization = self::sanitizeUiAnimationCustomization($value);
+                if ($customization !== []) {
+                    $safe[$key] = $customization;
                 }
 
                 continue;
@@ -276,6 +343,23 @@ final class TalosWorkspaceSetting extends Model
                     continue;
                 }
 
+                if ($key === 'ui_animation_profile') {
+                    if (is_string($recordValue) && isset(self::UI_ANIMATION_PROFILE_VALUES[$recordValue])) {
+                        $safeRecord[$key] = $recordValue;
+                    }
+
+                    continue;
+                }
+
+                if ($key === 'ui_animation_customization') {
+                    $animation = self::sanitizeUiAnimationCustomization($recordValue);
+                    if ($animation !== []) {
+                        $safeRecord[$key] = $animation;
+                    }
+
+                    continue;
+                }
+
                 if (is_array($recordValue)) {
                     continue;
                 }
@@ -327,6 +411,115 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return $safe;
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<string, mixed>
+     */
+    private static function sanitizeUiAnimationCustomization(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $safe = [];
+
+        foreach ($value as $key => $animationValue) {
+            if (! is_string($key)
+                || self::isSecretPreferenceKey($key)
+                || self::isUnsafeThemeKey($key)
+                || is_array($animationValue)
+            ) {
+                continue;
+            }
+
+            if ($key === 'open_close') {
+                if (is_string($animationValue) && isset(self::UI_ANIMATION_OPEN_CLOSE_VALUES[$animationValue])) {
+                    $safe[$key] = $animationValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'surface_transition') {
+                if (is_string($animationValue) && isset(self::UI_ANIMATION_SURFACE_TRANSITION_VALUES[$animationValue])) {
+                    $safe[$key] = $animationValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'feedback') {
+                if (is_string($animationValue) && isset(self::UI_ANIMATION_FEEDBACK_VALUES[$animationValue])) {
+                    $safe[$key] = $animationValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'hover') {
+                if (is_string($animationValue) && isset(self::UI_ANIMATION_HOVER_VALUES[$animationValue])) {
+                    $safe[$key] = $animationValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'easing') {
+                if (is_string($animationValue) && isset(self::UI_ANIMATION_EASING_VALUES[$animationValue])) {
+                    $safe[$key] = $animationValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'duration_scale') {
+                $durationScale = self::clampInteger($animationValue, 50, 150);
+                if ($durationScale !== null) {
+                    $safe[$key] = $durationScale;
+                }
+
+                continue;
+            }
+
+            if ($key === 'intensity') {
+                $intensity = self::clampInteger($animationValue, 0, 100);
+                if ($intensity !== null) {
+                    $safe[$key] = $intensity;
+                }
+
+                continue;
+            }
+
+            if ($key === 'stagger') {
+                $stagger = self::clampInteger($animationValue, 0, 120);
+                if ($stagger !== null) {
+                    $safe[$key] = $stagger;
+                }
+            }
+        }
+
+        return $safe;
+    }
+
+    private static function clampInteger(mixed $value, int $min, int $max): ?int
+    {
+        if (! is_int($value) && ! is_float($value) && ! is_string($value)) {
+            return null;
+        }
+
+        if (is_string($value) && trim($value) === '') {
+            return null;
+        }
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        $numeric = (int) round((float) $value);
+
+        return min($max, max($min, $numeric));
     }
 
     private static function isUnsafeThemeKey(string $key): bool

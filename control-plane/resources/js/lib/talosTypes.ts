@@ -47,15 +47,35 @@ export type TalosSession = {
     updated_at: string
 }
 
+export type TalosSessionExportFormat = 'json' | 'markdown' | 'context_manifest' | 'benchmark_scenario'
+
+export type TalosSessionExportPayload = {
+    schema_version: number
+    report_type: string
+    export_status: string
+    exported_at?: string
+    content_type?: string
+    content?: string
+    benchmark_readiness?: {
+        ready: boolean
+        missing?: string[]
+        scenario?: Record<string, unknown>
+    }
+    context_manifest?: Record<string, unknown>
+    scenario?: Record<string, unknown>
+    [key: string]: unknown
+}
+
 export type TalosModelProfileStatus = 'untested' | 'healthy' | 'degraded' | 'failed' | 'disabled'
 
 export type TalosModelProfile = {
     id: string
     user_id?: number | null
-    provider: 'deepseek' | 'openai'
+    provider: 'anthropic' | 'deepseek' | 'gemini' | 'ollama' | 'openai' | 'openrouter'
     model: string
     display_name: string
     base_url?: string | null
+    timeout_seconds: number
     status: TalosModelProfileStatus
     capabilities?: Record<string, unknown> | null
     probe_result?: Record<string, unknown> | null
@@ -84,6 +104,8 @@ export type TalosRun = {
     mode: TalosRunMode
     status: RunStatus
     model_profile_id?: string | null
+    provider?: string | null
+    model?: string | null
     prompt_hash: string
     context_hash?: string | null
     started_at?: string | null
@@ -534,6 +556,7 @@ export type TalosTask = {
 export type TalosCalendarDraft = {
     id: string
     run_id?: string | null
+    source_run_id?: string | null
     title: string
     description?: string | null
     starts_at: string
@@ -543,6 +566,8 @@ export type TalosCalendarDraft = {
     status: 'draft' | 'confirmed' | string
     confirmation_required: boolean
     confirmed_at?: string | null
+    external_provider?: string | null
+    external_event_id?: string | null
     metadata?: Record<string, unknown> | null
     created_at: string
     updated_at: string

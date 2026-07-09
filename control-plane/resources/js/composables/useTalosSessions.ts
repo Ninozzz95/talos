@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { talosFetch } from '../lib/api'
-import type { TalosMessage, TalosMessageRole, TalosSession } from '../lib/talosTypes'
+import type { TalosMessage, TalosMessageRole, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload } from '../lib/talosTypes'
 
 type ApiEnvelope<T> = {
     data: T
@@ -26,8 +26,10 @@ export function useTalosSessions() {
     const messages = ref<TalosMessage[]>([])
     const loadingSessions = ref(false)
     const loadingMessages = ref(false)
+    const exportingSession = ref(false)
     const sessionError = ref<string | null>(null)
     const messageError = ref<string | null>(null)
+    const sessionExportError = ref<string | null>(null)
 
     const hasSessions = computed(() => sessions.value.length > 0)
 
@@ -140,6 +142,23 @@ export function useTalosSessions() {
         }
     }
 
+    async function exportSession(sessionId: string, format: TalosSessionExportFormat = 'json') {
+        exportingSession.value = true
+        sessionExportError.value = null
+
+        try {
+            const params = new URLSearchParams({ format })
+            return await talosFetch<TalosSessionExportPayload>(`/api/talos/sessions/${sessionId}/export?${params.toString()}`, {
+                validationMessage: 'TALOS could not export this session.',
+            })
+        } catch (error) {
+            sessionExportError.value = error instanceof Error ? error.message : 'TALOS could not export this session.'
+            throw error
+        } finally {
+            exportingSession.value = false
+        }
+    }
+
     function replaceMessages(nextMessages: TalosMessage[]) {
         messages.value = nextMessages
     }
@@ -150,8 +169,10 @@ export function useTalosSessions() {
         messages,
         loadingSessions,
         loadingMessages,
+        exportingSession,
         sessionError,
         messageError,
+        sessionExportError,
         hasSessions,
         loadSessions,
         createSession,
@@ -159,6 +180,7 @@ export function useTalosSessions() {
         selectSession,
         loadMessages,
         createMessage,
+        exportSession,
         replaceMessages,
     }
 }

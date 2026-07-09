@@ -72,8 +72,35 @@ const localError = ref<string | null>(null)
 const selectedNodeId = computed(() => props.node?.id ?? props.event?.node_id ?? null)
 const selectedOption = computed(() => options.find((option) => option.action === selectedAction.value) ?? options[0])
 const requiresPayload = computed(() => selectedAction.value === 'edit_payload_and_retry')
+const previewTargetStatus = computed(() => {
+    if (selectedAction.value === 'skip_node') {
+        return 'SKIPPED'
+    }
+
+    if (selectedAction.value === 'mark_resolved') {
+        return 'SUCCESS'
+    }
+
+    return 'RETRYING'
+})
+const previewScope = computed(() => selectedAction.value === 'retry_branch' ? 'branch' : 'node')
+const recoveryUnavailableReason = computed(() => {
+    if (!props.run) {
+        return null
+    }
+
+    if (props.run.status === 'succeeded') {
+        return 'This run succeeded; recovery is not available.'
+    }
+
+    if (props.run.status === 'cancelled') {
+        return 'This run was cancelled; recovery is not available.'
+    }
+
+    return null
+})
 const canSubmit = computed(() => {
-    if (!props.run || !selectedNodeId.value || props.loading) {
+    if (!props.run || !selectedNodeId.value || props.loading || recoveryUnavailableReason.value) {
         return false
     }
 
@@ -87,6 +114,10 @@ const canSubmit = computed(() => {
 const disabledReason = computed(() => {
     if (!props.run) {
         return 'Select a run before requesting recovery.'
+    }
+
+    if (recoveryUnavailableReason.value) {
+        return recoveryUnavailableReason.value
     }
 
     if (!selectedNodeId.value) {
@@ -214,6 +245,30 @@ watch(selectedAction, () => {
                 >
                 <span>I have the `talos.recovery.high_risk` capability for this run.</span>
             </label>
+
+            <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+                <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Recovery preview</div>
+                <dl class="mt-2 grid gap-2 text-xs leading-5 text-[var(--talos-muted)]">
+                    <div class="flex items-center justify-between gap-3">
+                        <dt>Target</dt>
+                        <dd class="font-mono text-[var(--talos-text)]">Target node {{ selectedNodeId || 'none selected' }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                        <dt>Scope</dt>
+                        <dd class="font-semibold text-[var(--talos-text)]">{{ previewScope }}</dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                        <dt>Status after request</dt>
+                        <dd>
+                            <Badge :tone="selectedOption.highRisk ? 'warning' : 'neutral'">{{ previewTargetStatus }}</Badge>
+                        </dd>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                        <dt>Audit event</dt>
+                        <dd class="font-mono text-[var(--talos-text)]">recovery.requested</dd>
+                    </div>
+                </dl>
+            </section>
 
             <div v-if="disabledReason" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs leading-5 text-[var(--talos-muted)]">
                 {{ disabledReason }}

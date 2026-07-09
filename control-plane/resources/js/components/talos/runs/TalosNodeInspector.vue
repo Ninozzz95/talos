@@ -101,6 +101,45 @@ const payloadJson = computed(() => {
     return payload.value ? JSON.stringify(payload.value, null, 2) : ''
 })
 
+const evidencePayload = computed<Record<string, unknown>>(() => {
+    if (props.selection === 'event' && props.event) {
+        return props.event.payload
+    }
+
+    if (props.selection === 'node' && props.node) {
+        return props.node.payload
+    }
+
+    if (props.run && props.run.metadata && typeof props.run.metadata === 'object') {
+        return props.run.metadata
+    }
+
+    return {}
+})
+
+const validationFaults = computed(() => {
+    return valueFromKeys(evidencePayload.value, ['validation_faults', 'validation_errors', 'faults', 'errors'])
+})
+
+const policyDecisions = computed(() => {
+    return valueFromKeys(evidencePayload.value, ['policy_decision', 'policy_decisions', 'policy', 'decision'])
+})
+
+const workerOutput = computed(() => {
+    return valueFromKeys(evidencePayload.value, ['worker_output', 'worker_result', 'output', 'result', 'response'])
+})
+
+const workerOutputSummary = computed(() => {
+    if (!workerOutput.value || typeof workerOutput.value !== 'object' || Array.isArray(workerOutput.value)) {
+        return null
+    }
+
+    const output = workerOutput.value as Record<string, unknown>
+    const status = output.http_status ?? output.status_code
+
+    return typeof status === 'number' || typeof status === 'string' ? `HTTP ${status}` : null
+})
+
 function severityTone(severity: TalosRunEventSeverity): BadgeTone {
     if (severity === 'error') {
         return 'danger'
@@ -127,6 +166,30 @@ function nodeStatusTone(status: TalosRunNodeStatus): BadgeTone {
     }
 
     return 'neutral'
+}
+
+function valueFromKeys(source: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+        const value = source[key]
+
+        if (value !== undefined && value !== null && value !== '') {
+            return value
+        }
+    }
+
+    return null
+}
+
+function formatEvidence(value: unknown) {
+    if (value === null || value === undefined || value === '') {
+        return 'None recorded.'
+    }
+
+    if (typeof value === 'string') {
+        return value
+    }
+
+    return JSON.stringify(value, null, 2)
 }
 </script>
 
@@ -161,6 +224,29 @@ function nodeStatusTone(status: TalosRunNodeStatus): BadgeTone {
             Select a run, event, or node to inspect payload data.
         </div>
 
-        <pre v-else class="max-h-[520px] overflow-auto p-3 text-xs leading-5 text-[var(--talos-text)]"><code>{{ payloadJson }}</code></pre>
+        <div v-else class="space-y-3 p-3">
+            <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3" aria-label="Validation faults evidence">
+                <h5 class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Validation faults</h5>
+                <pre class="mt-2 max-h-[140px] overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--talos-text)]"><code>{{ formatEvidence(validationFaults) }}</code></pre>
+            </section>
+
+            <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3" aria-label="Policy decisions evidence">
+                <h5 class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Policy decisions</h5>
+                <pre class="mt-2 max-h-[140px] overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--talos-text)]"><code>{{ formatEvidence(policyDecisions) }}</code></pre>
+            </section>
+
+            <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3" aria-label="Worker output evidence">
+                <div class="flex items-center justify-between gap-2">
+                    <h5 class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Worker output</h5>
+                    <Badge v-if="workerOutputSummary" tone="warning">{{ workerOutputSummary }}</Badge>
+                </div>
+                <pre class="mt-2 max-h-[140px] overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--talos-text)]"><code>{{ formatEvidence(workerOutput) }}</code></pre>
+            </section>
+
+            <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3" aria-label="Raw payload evidence">
+                <h5 class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Raw payload</h5>
+                <pre class="mt-2 max-h-[260px] overflow-auto text-xs leading-5 text-[var(--talos-text)]"><code>{{ payloadJson }}</code></pre>
+            </section>
+        </div>
     </aside>
 </template>

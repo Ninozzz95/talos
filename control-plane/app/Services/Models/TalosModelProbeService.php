@@ -25,9 +25,11 @@ final class TalosModelProbeService
      */
     public function probe(TalosModelProfile $profile): array
     {
-        $url = $this->chatCompletionsUrl($profile);
+        $provider = (string) $profile->provider;
+        $url = TalosModelProviderCatalog::chatEndpointUrl($provider, $profile->base_url);
         $policyDecision = $this->urlPolicy->inspect($url);
-        if (! $policyDecision['allowed']) {
+        $trustedLocalProvider = TalosModelProviderCatalog::allowsTrustedLocalBaseUrl($provider, $profile->base_url);
+        if (! $policyDecision['allowed'] && ! $trustedLocalProvider) {
             return [
                 'status' => 'failed',
                 'result' => [
@@ -38,7 +40,7 @@ final class TalosModelProbeService
             ];
         }
 
-        if (! filled($profile->encrypted_secret)) {
+        if (TalosModelProviderCatalog::requiresSecret($provider) && ! filled($profile->encrypted_secret)) {
             return [
                 'status' => 'failed',
                 'result' => [
@@ -48,8 +50,11 @@ final class TalosModelProbeService
             ];
         }
 
+        $secret = null;
         try {
-            $secret = Crypt::decryptString((string) $profile->encrypted_secret);
+            if (filled($profile->encrypted_secret)) {
+                $secret = Crypt::decryptString((string) $profile->encrypted_secret);
+            }
         } catch (Throwable) {
             return [
                 'status' => 'failed',
@@ -60,24 +65,36 @@ final class TalosModelProbeService
             ];
         }
 
+        if (filled($secret) && ! $policyDecision['allowed']) {
+            return [
+                'status' => 'failed',
+                'result' => [
+                    'ok' => false,
+                    'url_host' => $policyDecision['host'],
+                    'error' => 'Bearer token blocked for non-public provider endpoint.',
+                ],
+            ];
+        }
+
         try {
-            $response = Http::timeout(15)
-                ->acceptJson()
-                ->withToken($secret)
-                ->post($url, [
-                    'model' => $profile->model,
-                    'messages' => [
-                        ['role' => 'user', 'content' => 'Reply with OK.'],
-                    ],
-                    'max_tokens' => 8,
+            $request = Http::timeout((int) ($profile->timeout_seconds ?? 60))->acceptJson();
+            if ($provider === 'anthropic' && filled($secret)) {
+                $request = $request->withHeaders([
+                    'x-api-key' => (string) $secret,
+                    'anthropic-version' => '2023-06-01',
                 ]);
+            } elseif (filled($secret)) {
+                $request = $request->withToken((string) $secret);
+            }
+
+            $response = $request->post($url, $this->probePayload($provider, (string) $profile->model));
         } catch (ConnectionException $exception) {
             return [
                 'status' => 'failed',
                 'result' => [
                     'ok' => false,
                     'url' => $url,
-                    'error' => $exception->getMessage(),
+                    'error' => $this->redactError($exception->getMessage()),
                 ],
             ];
         }
@@ -98,13 +115,56 @@ final class TalosModelProbeService
         ];
     }
 
-    private function chatCompletionsUrl(TalosModelProfile $profile): string
+    /**
+     * @param array<string, mixed> $data
+     * @return array{status: string, result: array<string, mixed>}
+     */
+    public function probeDraft(array $data): array
     {
-        $baseUrl = (string) ($profile->base_url ?: match ($profile->provider) {
-            'deepseek' => 'https://api.deepseek.com',
-            default => 'https://api.openai.com/v1',
-        });
+        $profile = new TalosModelProfile([
+            'provider' => (string) $data['provider'],
+            'model' => (string) $data['model'],
+            'display_name' => (string) $data['display_name'],
+            'base_url' => $data['base_url'] ?? null,
+            'timeout_seconds' => (int) ($data['timeout_seconds'] ?? 60),
+            'capabilities' => $data['capabilities'] ?? null,
+        ]);
 
-        return rtrim($baseUrl, '/') . '/chat/completions';
+        if (filled($data['secret'] ?? null)) {
+            $profile->encrypted_secret = Crypt::encryptString((string) $data['secret']);
+        }
+
+        return $this->probe($profile);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function probePayload(string $provider, string $model): array
+    {
+        if ($provider === 'anthropic') {
+            return [
+                'model' => $model,
+                'max_tokens' => 8,
+                'messages' => [
+                    ['role' => 'user', 'content' => 'Reply with OK.'],
+                ],
+            ];
+        }
+
+        return [
+            'model' => $model,
+            'messages' => [
+                ['role' => 'user', 'content' => 'Reply with OK.'],
+            ],
+            'max_tokens' => 8,
+        ];
+    }
+
+    private function redactError(string $message): string
+    {
+        $redacted = preg_replace('/(Bearer|Token|Api-Key|x-api-key)\s+[^\s]+/i', '$1 [redacted]', $message) ?? $message;
+
+        return substr($redacted, 0, 500);
     }
 }

@@ -12,15 +12,27 @@ final class TalosModelCenterTest extends TestCase
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
         $componentPath = base_path('resources/js/components/talos/models/TalosModelCenter.vue');
+        $quickAddPath = base_path('resources/js/components/talos/models/TalosModelQuickAdd.vue');
+        $advancedOptionsPath = base_path('resources/js/components/talos/models/TalosModelAdvancedOptions.vue');
+        $providerIconPath = base_path('resources/js/components/talos/models/TalosProviderIcon.vue');
+        $providerCatalogPath = base_path('resources/js/lib/talosProviders.ts');
         $composable = file_get_contents(base_path('resources/js/composables/useTalosModelProfiles.ts'));
 
         $this->assertIsString($shell);
         $this->assertIsString($composable);
         $this->assertFileExists($componentPath);
+        $this->assertFileExists($quickAddPath);
+        $this->assertFileExists($advancedOptionsPath);
+        $this->assertFileExists($providerIconPath);
+        $this->assertFileExists($providerCatalogPath);
 
         $component = file_get_contents($componentPath);
+        $quickAdd = file_get_contents($quickAddPath);
+        $providerCatalog = file_get_contents($providerCatalogPath);
 
         $this->assertIsString($component);
+        $this->assertIsString($quickAdd);
+        $this->assertIsString($providerCatalog);
         $this->assertStringContainsString('TalosModelCenter', $shell);
         $this->assertStringContainsString('<TalosModelCenter', $shell);
         $this->assertStringContainsString('/api/talos/model-profiles', $composable);
@@ -28,12 +40,23 @@ final class TalosModelCenterTest extends TestCase
         $this->assertStringContainsString('updateModelProfile', $composable);
         $this->assertStringContainsString('deleteModelProfile', $composable);
         $this->assertStringContainsString('probeModelProfile', $composable);
-        $this->assertStringContainsString('createModelProfile', $component);
+        $this->assertStringContainsString('createModelProfile', $quickAdd);
+        $this->assertStringContainsString('probeDraftModelProfile', $quickAdd);
         $this->assertStringContainsString('probeModelProfile', $component);
         $this->assertStringContainsString('deleteModelProfile', $component);
+        $this->assertStringContainsString('TalosModelQuickAdd', $component);
+        $this->assertStringContainsString('TalosProviderIcon', $component);
+        $this->assertStringContainsString('Test and add', $quickAdd);
+        $this->assertStringContainsString('Advanced options', $quickAdd);
+        $this->assertStringContainsString('timeout_seconds', $quickAdd);
+        $this->assertStringContainsString('Timeout seconds', file_get_contents($advancedOptionsPath));
+        $this->assertStringContainsString('openrouter', $providerCatalog);
+        $this->assertStringContainsString('anthropic', $providerCatalog);
+        $this->assertStringContainsString('gemini', $providerCatalog);
+        $this->assertStringContainsString('ollama', $providerCatalog);
         $this->assertStringContainsString('secret', $component);
         $this->assertStringContainsString('has_secret', $component);
-        $this->assertStringContainsString('Server-side provider profiles', $component);
+        $this->assertStringContainsString('Provider-first model setup', $quickAdd);
         $this->assertStringNotContainsString('mock', strtolower($component));
         $this->assertStringNotContainsString('placeholder action', strtolower($component));
     }

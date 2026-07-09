@@ -86,6 +86,19 @@ button {
     --talos-grid-duration: 12s;
     --talos-node-duration-a: 5.8s;
     --talos-node-duration-b: 6.4s;
+    --talos-motion-open-duration: 160ms;
+    --talos-motion-close-duration: 120ms;
+    --talos-motion-surface-duration: 180ms;
+    --talos-motion-feedback-duration: 700ms;
+    --talos-motion-stagger: 40ms;
+    --talos-motion-intensity: 0.7;
+    --talos-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --talos-motion-open-transform: translateY(8px) scale(0.985);
+    --talos-motion-surface-transform: translateY(6px);
+    --talos-motion-open-style: standard;
+    --talos-motion-surface-style: slide-fade;
+    --talos-motion-feedback-style: pulse;
+    --talos-motion-hover-style: edge-glow;
     background:
         linear-gradient(180deg, rgba(201, 139, 50, 0.08), transparent 260px),
         var(--talos-sidebar);
@@ -472,6 +485,10 @@ button {
     border-color: var(--talos-composer-border);
     background: color-mix(in srgb, var(--talos-composer-bg) 95%, transparent);
     color: var(--talos-composer-text);
+    transition:
+        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        background-color var(--talos-motion-surface-duration) var(--talos-motion-ease);
 }
 
 .talos-chat-composer-shell textarea {
@@ -484,6 +501,10 @@ button {
 
 .talos-tool-window {
     background: var(--talos-window-bg);
+    transition:
+        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        opacity var(--talos-motion-open-duration) var(--talos-motion-ease);
 }
 
 .talos-shell code,
@@ -760,6 +781,8 @@ button {
     display: flex;
     max-height: calc(100dvh - 18rem);
     flex-direction: column;
+    min-height: var(--talos-window-min-height, 360px);
+    min-width: min(100%, var(--talos-window-min-width, 420px));
 }
 
 .talos-tool-window-body {
@@ -778,10 +801,270 @@ button {
 @media (min-width: 1024px) {
     .talos-floating-window {
         position: absolute;
-        width: min(760px, calc(100vw - var(--talos-rail-width) - 48px));
-        max-height: calc(100vh - 7rem);
+        width: min(var(--talos-window-width, 760px), calc(100vw - var(--talos-rail-width) - 48px));
+        height: min(var(--talos-window-height, 520px), calc(100vh - var(--talos-window-y, 24px) - 10rem));
+        max-height: calc(100vh - var(--talos-window-y, 24px) - 10rem);
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0);
     }
+}
+
+.talos-tool-window-interacting {
+    transition: none !important;
+}
+
+.talos-action-surface,
+.talos-command-palette,
+.talos-evidence-drawer,
+.talos-chat-message,
+.talos-motion-preview-surface {
+    transform-origin: center top;
+    will-change: opacity, transform;
+}
+
+.talos-command-palette {
+    animation: talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+}
+
+.talos-command-palette-overlay {
+    animation: talos-action-fade-in var(--talos-motion-close-duration) linear both;
+}
+
+.talos-chat-message {
+    animation: talos-message-enter var(--talos-motion-surface-duration) var(--talos-motion-ease) both;
+}
+
+.talos-chat-message:nth-child(2) {
+    animation-delay: min(var(--talos-motion-stagger), 80ms);
+}
+
+.talos-chat-message:nth-child(3) {
+    animation-delay: min(calc(var(--talos-motion-stagger) * 2), 120ms);
+}
+
+.talos-evidence-drawer {
+    animation: talos-action-surface-in var(--talos-motion-surface-duration) var(--talos-motion-ease) both;
+}
+
+.talos-motion-preview-surface {
+    opacity: 0.74;
+    transition:
+        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        opacity var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        transform var(--talos-motion-surface-duration) var(--talos-motion-ease);
+}
+
+.talos-motion-preview-surface[data-preview-state="closed"] {
+    opacity: 0.56;
+    transform: var(--talos-motion-surface-transform);
+}
+
+.talos-motion-preview-surface[data-preview-state="open"] {
+    animation: talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    border-color: color-mix(in srgb, var(--talos-accent) calc(42% * var(--talos-motion-intensity)), var(--talos-border));
+    box-shadow: 0 0 calc(34px * var(--talos-motion-intensity)) color-mix(in srgb, var(--talos-accent) 28%, transparent);
+    opacity: 1;
+}
+
+.talos-shell:not(.talos-motion-disabled) .talos-action-composer:focus-within {
+    border-color: color-mix(in srgb, var(--talos-accent) calc(68% * var(--talos-motion-intensity)), var(--talos-border-strong));
+    box-shadow: 0 0 calc(42px * var(--talos-motion-intensity)) var(--talos-ring-soft);
+}
+
+.talos-shell:not(.talos-motion-disabled) .talos-command-row,
+.talos-shell:not(.talos-motion-disabled) .talos-theme-preset-card,
+.talos-shell:not(.talos-motion-disabled) .talos-motion-preview-surface {
+    transition:
+        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        color var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        background-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
+        transform var(--talos-motion-surface-duration) var(--talos-motion-ease);
+}
+
+.talos-shell:not(.talos-motion-disabled) .talos-command-row:hover,
+.talos-shell:not(.talos-motion-disabled) .talos-command-row:focus-visible,
+.talos-shell:not(.talos-motion-disabled) .talos-theme-preset-card:hover,
+.talos-shell:not(.talos-motion-disabled) .talos-theme-preset-card:focus-visible {
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--talos-accent) calc(72% * var(--talos-motion-intensity)), transparent);
+}
+
+.talos-shell:not(.talos-motion-disabled) .talos-tool-window:not(.talos-tool-window-interacting) {
+    animation: talos-window-activate var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+}
+
+.talos-shell[style*="--talos-motion-hover-style: lift"]:not(.talos-motion-disabled) .talos-command-row:hover,
+.talos-shell[style*="--talos-motion-hover-style: lift"]:not(.talos-motion-disabled) .talos-theme-preset-card:hover {
+    transform: translateY(-1px);
+}
+
+.talos-shell[style*="--talos-motion-hover-style: node-glow"]:not(.talos-motion-disabled) .talos-command-row:hover,
+.talos-shell[style*="--talos-motion-hover-style: node-glow"]:not(.talos-motion-disabled) .talos-theme-preset-card:hover {
+    box-shadow:
+        inset 2px 0 0 color-mix(in srgb, var(--talos-accent) 78%, transparent),
+        0 0 calc(26px * var(--talos-motion-intensity)) color-mix(in srgb, var(--talos-node) 34%, transparent);
+}
+
+.talos-shell[style*="--talos-motion-hover-style: underline"]:not(.talos-motion-disabled) .talos-command-row:hover,
+.talos-shell[style*="--talos-motion-hover-style: underline"]:not(.talos-motion-disabled) .talos-theme-preset-card:hover {
+    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--talos-accent) 72%, transparent);
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: pulse"][data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: pulse"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-motion-preview-surface[data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: pulse"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-command-row:active {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-pulse var(--talos-motion-feedback-duration) var(--talos-motion-ease) both;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: trace"][data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: trace"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-motion-preview-surface[data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: trace"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-command-row:active {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-trace var(--talos-motion-feedback-duration) linear both;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: edge-flash"][data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: edge-flash"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-motion-preview-surface[data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: edge-flash"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-command-row:active {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-edge-flash var(--talos-motion-feedback-duration) var(--talos-motion-ease) both;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: status-lock"][data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: status-lock"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-motion-preview-surface[data-preview-state="open"],
+.talos-shell[style*="--talos-motion-feedback-style: status-lock"]:not(.talos-motion-disabled):not(.talos-ui-motion-disabled) .talos-command-row:active {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-status-lock var(--talos-motion-feedback-duration) steps(2, end) both;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: pulse"][data-preview-state="open"] {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-pulse var(--talos-motion-feedback-duration) var(--talos-motion-ease) both !important;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: trace"][data-preview-state="open"] {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-trace var(--talos-motion-feedback-duration) linear both !important;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: edge-flash"][data-preview-state="open"] {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-edge-flash var(--talos-motion-feedback-duration) var(--talos-motion-ease) both !important;
+}
+
+.talos-motion-preview-surface[style*="--talos-motion-feedback-style: status-lock"][data-preview-state="open"] {
+    animation:
+        talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both,
+        talos-feedback-status-lock var(--talos-motion-feedback-duration) steps(2, end) both !important;
+}
+
+.talos-motion-disabled .talos-action-surface,
+.talos-motion-disabled .talos-command-palette,
+.talos-motion-disabled .talos-command-palette-overlay,
+.talos-motion-disabled .talos-chat-message,
+.talos-motion-disabled .talos-evidence-drawer,
+.talos-motion-disabled .talos-motion-preview-surface,
+.talos-motion-disabled .talos-tool-window,
+.talos-ui-motion-disabled .talos-action-surface,
+.talos-ui-motion-disabled .talos-command-palette,
+.talos-ui-motion-disabled .talos-command-palette-overlay,
+.talos-ui-motion-disabled .talos-chat-message,
+.talos-ui-motion-disabled .talos-evidence-drawer,
+.talos-ui-motion-disabled .talos-motion-preview-surface,
+.talos-ui-motion-disabled .talos-tool-window {
+    animation: none !important;
+    transition-duration: 0ms !important;
+}
+
+.talos-window-resize-handle {
+    position: absolute;
+    z-index: 5;
+    border: 0;
+    background: transparent;
+    outline: none;
+}
+
+.talos-window-resize-handle:focus-visible {
+    background: color-mix(in srgb, var(--talos-accent) 26%, transparent);
+    box-shadow: inset 0 0 0 2px var(--talos-ring);
+}
+
+.talos-window-resize-top,
+.talos-window-resize-bottom {
+    left: 12px;
+    right: 12px;
+    height: 10px;
+    cursor: ns-resize;
+}
+
+.talos-window-resize-top {
+    top: 0;
+}
+
+.talos-window-resize-bottom {
+    bottom: 0;
+}
+
+.talos-window-resize-left,
+.talos-window-resize-right {
+    bottom: 12px;
+    top: 12px;
+    width: 10px;
+    cursor: ew-resize;
+}
+
+.talos-window-resize-left {
+    left: 0;
+}
+
+.talos-window-resize-right {
+    right: 0;
+}
+
+.talos-window-resize-top-right,
+.talos-window-resize-bottom-right,
+.talos-window-resize-bottom-left,
+.talos-window-resize-top-left {
+    height: 18px;
+    width: 18px;
+}
+
+.talos-window-resize-top-right,
+.talos-window-resize-bottom-left {
+    cursor: nesw-resize;
+}
+
+.talos-window-resize-top-left,
+.talos-window-resize-bottom-right {
+    cursor: nwse-resize;
+}
+
+.talos-window-resize-top-right {
+    right: 0;
+    top: 0;
+}
+
+.talos-window-resize-bottom-right {
+    bottom: 0;
+    right: 0;
+}
+
+.talos-window-resize-bottom-left {
+    bottom: 0;
+    left: 0;
+}
+
+.talos-window-resize-top-left {
+    left: 0;
+    top: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -842,6 +1125,99 @@ button {
 
     .talos-effect-kahn-grid .talos-dag-grid {
         animation: talos-grid-drift var(--talos-grid-duration) linear infinite;
+    }
+}
+
+@keyframes talos-action-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes talos-action-surface-in {
+    from {
+        opacity: 0;
+        transform: var(--talos-motion-open-transform);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes talos-message-enter {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes talos-window-activate {
+    from {
+        opacity: 0.76;
+        box-shadow: 0 12px 42px rgba(0, 0, 0, 0.2);
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes talos-feedback-pulse {
+    0%,
+    100% {
+        box-shadow: none;
+    }
+
+    38% {
+        box-shadow: 0 0 calc(34px * var(--talos-motion-intensity)) color-mix(in srgb, var(--talos-accent) 32%, transparent);
+    }
+}
+
+@keyframes talos-feedback-trace {
+    0% {
+        box-shadow: inset -4px 0 0 color-mix(in srgb, var(--talos-accent) 76%, transparent);
+    }
+
+    50% {
+        box-shadow: inset 4px 0 0 color-mix(in srgb, var(--talos-node) 70%, transparent);
+    }
+
+    100% {
+        box-shadow: inset 0 0 0 color-mix(in srgb, var(--talos-accent) 0%, transparent);
+    }
+}
+
+@keyframes talos-feedback-edge-flash {
+    0%,
+    100% {
+        border-color: var(--talos-border);
+    }
+
+    35% {
+        border-color: color-mix(in srgb, var(--talos-warning) 60%, var(--talos-accent));
+    }
+}
+
+@keyframes talos-feedback-status-lock {
+    0%,
+    100% {
+        outline: 0 solid transparent;
+    }
+
+    50% {
+        outline: 2px solid color-mix(in srgb, var(--talos-success) 56%, transparent);
+        outline-offset: -2px;
     }
 }
 

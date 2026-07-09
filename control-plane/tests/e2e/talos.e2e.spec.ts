@@ -74,10 +74,10 @@ async function expectProceduralCanvasFrameChanges(page: Page) {
     await expect(canvas).toHaveCount(1)
 
     const firstFrame = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())
-    await page.waitForTimeout(360)
-    const secondFrame = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())
-
-    expect(secondFrame).not.toBe(firstFrame)
+    await expect.poll(async () => canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL()), {
+        timeout: 2500,
+        intervals: [180, 240, 360, 520, 800],
+    }).not.toBe(firstFrame)
 }
 
 async function expectProceduralCanvasFrameStaysStill(page: Page) {
@@ -261,7 +261,7 @@ async function isAuthenticatedWorkspace(page: Page) {
 
 async function waitForWorkspaceReady(page: Page) {
     await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
-    await expect(page.getByLabel('Message TALOS')).toBeVisible()
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
 }
 
 async function openWorkspace(page: Page) {
@@ -594,8 +594,14 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await page.getByLabel('Search TALOS commands').fill('trace replay')
     await expect(page.getByRole('option', { name: /Open trace replay/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Open trace replay/ }).click()
-    await expect(page.getByText('Run timeline', { exact: true })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Trace replay' })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: 'Timeline' }).click()
+    await expect(page.getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true')
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await page.getByLabel('Search TALOS commands').fill('trace replay')
+    await page.getByRole('option', { name: /Open trace replay/ }).click()
+    await expect(page.getByRole('tab', { name: 'Trace replay' })).toHaveAttribute('aria-selected', 'true')
 
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await page.getByLabel('Search TALOS commands').fill('audit log')
@@ -634,6 +640,82 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeHidden()
     await expectNoHorizontalOverflow(page)
     await testInfo.attach(`dashboard-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('model center offers provider-first quick add with draft test before persistence', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
+
+    await expect(page.getByText('Provider-first model setup', { exact: true })).toBeVisible()
+    const quickAdd = page.getByTestId('talos-model-quick-add')
+
+    for (const provider of ['OpenAI', 'DeepSeek', 'Anthropic', 'Google Gemini', 'OpenRouter', 'Ollama Local']) {
+        await expect(quickAdd.getByRole('button', { name: `Choose ${provider} provider` })).toBeVisible()
+    }
+
+    await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
+    await expect(quickAdd.getByLabel('Provider API key')).toBeVisible()
+    await expect(quickAdd.getByLabel('Model name')).toBeHidden()
+    await expect(quickAdd.getByLabel('Base URL')).toBeHidden()
+
+    await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
+    await quickAdd.getByRole('button', { name: 'Advanced options' }).click()
+    await expect(quickAdd.getByLabel('Timeout seconds')).toBeVisible()
+    await quickAdd.getByLabel('Timeout seconds').fill('45')
+    const draftProbeRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/model-profiles/probe-draft') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+
+        return body.provider === 'openrouter'
+            && body.secret === 'sk-openrouter-e2e-secret'
+            && body.model === 'openai/gpt-4.1-mini'
+            && body.base_url === 'https://openrouter.ai/api/v1'
+            && body.timeout_seconds === 45
+    })
+
+    await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
+    await draftProbeRequest
+    await expect(quickAdd.getByText('Draft probe healthy').first()).toBeVisible()
+
+    const createRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/model-profiles') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+
+        return body.provider === 'openrouter'
+            && body.secret === 'sk-openrouter-e2e-secret'
+            && body.model === 'openai/gpt-4.1-mini'
+            && body.base_url === 'https://openrouter.ai/api/v1'
+            && body.timeout_seconds === 45
+    })
+    const persistedProbeRequest = page.waitForRequest((request) => (
+        /\/api\/talos\/model-profiles\/profile-openrouter-quick-add\/probe$/.test(new URL(request.url()).pathname)
+        && request.method() === 'POST'
+    ))
+
+    await quickAdd.getByRole('button', { name: 'Test and add' }).click()
+    await createRequest
+    await persistedProbeRequest
+
+    await expect(page.getByText('OpenRouter quick profile')).toBeVisible()
+    await expect(page.getByText('Secret stored server-side.')).toBeVisible()
+    await expect(page.getByText('sk-openrouter-e2e-secret')).toBeHidden()
+    await expect(page.getByText('encrypted_secret')).toBeHidden()
+
+    await quickAdd.getByRole('button', { name: 'Choose Ollama Local provider' }).click()
+    await expect(quickAdd.getByLabel('Local endpoint')).toBeVisible()
+    await expect(quickAdd.getByLabel('Provider API key')).toBeHidden()
+    await expect(page.getByText('Local providers are allowed only without bearer tokens.')).toBeVisible()
+
+    await testInfo.attach(`model-center-quick-add-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
@@ -693,6 +775,15 @@ test('settings window loads safe preferences and persists theme through the sett
     expect(posterSources).toContain('/talos/backgrounds/violet-poster.webp')
     await expect(page.locator('[data-testid="talos-theme-preset"]')).toHaveCount(10)
     await expect(page.locator('[data-testid="talos-theme-preview-swatch"]')).toHaveCount(10)
+    const forgeActionMotion = await page.locator('.talos-shell').evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            surface: style.getPropertyValue('--talos-motion-surface-style').trim(),
+            feedback: style.getPropertyValue('--talos-motion-feedback-style').trim(),
+            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
+        }
+    })
     const terminalThemePreset = page.getByRole('button', { name: 'Terminal Operator' })
     await expect(terminalThemePreset).toContainText('Procedural effect')
     const themePatchRequest = page.waitForRequest((request) => {
@@ -709,6 +800,21 @@ test('settings window loads safe preferences and persists theme through the sett
     await themePatchRequest
     await expect(page.getByText('Theme saved through /api/talos/settings.')).toBeVisible()
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
+    const terminalActionMotion = await page.locator('.talos-shell').evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            surface: style.getPropertyValue('--talos-motion-surface-style').trim(),
+            feedback: style.getPropertyValue('--talos-motion-feedback-style').trim(),
+            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
+        }
+    })
+    expect(terminalActionMotion).not.toEqual(forgeActionMotion)
+    expect(terminalActionMotion).toMatchObject({
+        surface: 'scanline',
+        feedback: 'trace',
+        hover: 'underline',
+    })
     await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
@@ -790,6 +896,20 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-aurora/)
     await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /--talos-accent/)
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'signal-mesh')
+    const auroraActionMotion = await page.locator('.talos-shell').evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            surface: style.getPropertyValue('--talos-motion-surface-style').trim(),
+            feedback: style.getPropertyValue('--talos-motion-feedback-style').trim(),
+            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
+        }
+    })
+    expect(auroraActionMotion).toMatchObject({
+        surface: 'scale-fade',
+        feedback: 'pulse',
+        hover: 'node-glow',
+    })
     const auroraAccent = await page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-accent').trim()
     ))
@@ -972,6 +1092,116 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
     })
 })
 
+test('theme engine v3 persists interface motion tokens and previews action animation', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+
+    const defaultMotionState = await page.locator('.talos-shell').evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            profile: element.getAttribute('data-ui-animation-profile'),
+            openDuration: style.getPropertyValue('--talos-motion-open-duration').trim(),
+            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
+        }
+    })
+    expect(defaultMotionState.profile).toBe('preset')
+    expect(defaultMotionState.openDuration).toMatch(/ms$/)
+    expect(defaultMotionState.hover).toBeTruthy()
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Customize' }).click()
+    await expect(page.getByText('Interface motion', { exact: true })).toBeVisible()
+
+    await page.getByLabel('Animation profile').selectOption('custom')
+    await page.getByLabel('Open/close style').selectOption('terminal-snap')
+    await page.getByLabel('Surface transition').selectOption('scanline')
+    await page.getByLabel('Feedback style').selectOption('trace')
+    await page.getByLabel('Hover/focus style').selectOption('node-glow')
+    await page.getByLabel('Duration scale').fill('125')
+    await page.getByLabel('Motion intensity').fill('86')
+    await page.getByLabel('Motion stagger').fill('64')
+    await page.getByLabel('Motion easing').selectOption('cinematic')
+
+    await page.getByRole('button', { name: 'Preview motion' }).click()
+    await expect(page.getByTestId('talos-motion-preview-surface')).toHaveAttribute('data-preview-state', 'open')
+    await expect.poll(async () => page.getByTestId('talos-motion-preview-surface').evaluate((element) => (
+        window.getComputedStyle(element).animationName
+    ))).toContain('talos-feedback-trace')
+
+    const saveMotionRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        const animation = preferences?.ui_animation_customization as Record<string, unknown> | undefined
+
+        return preferences?.ui_animation_profile === 'custom'
+            && animation?.open_close === 'terminal-snap'
+            && animation?.surface_transition === 'scanline'
+            && animation?.feedback === 'trace'
+            && animation?.hover === 'node-glow'
+            && animation?.duration_scale === 125
+            && animation?.intensity === 86
+            && animation?.stagger === 64
+            && animation?.easing === 'cinematic'
+    })
+    await page.getByRole('button', { name: 'Save customization' }).click()
+    await saveMotionRequest
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-animation-profile', 'custom')
+
+    const customMotionState = await page.locator('.talos-shell').evaluate((element) => {
+        const style = window.getComputedStyle(element)
+
+        return {
+            profile: element.getAttribute('data-ui-animation-profile'),
+            surface: style.getPropertyValue('--talos-motion-surface-style').trim(),
+            feedback: style.getPropertyValue('--talos-motion-feedback-style').trim(),
+            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
+            intensity: style.getPropertyValue('--talos-motion-intensity').trim(),
+            stagger: style.getPropertyValue('--talos-motion-stagger').trim(),
+        }
+    })
+    expect(customMotionState.profile).toBe('custom')
+    expect(customMotionState.surface).toBe('scanline')
+    expect(customMotionState.feedback).toBe('trace')
+    expect(customMotionState.hover).toBe('node-glow')
+    expect(Number(customMotionState.intensity)).toBeGreaterThan(0.8)
+    expect(customMotionState.stagger).toBe('64ms')
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const persistedMotionState = await page.locator('.talos-shell').evaluate((element) => ({
+        profile: element.getAttribute('data-ui-animation-profile'),
+        feedback: window.getComputedStyle(element).getPropertyValue('--talos-motion-feedback-style').trim(),
+    }))
+    expect(persistedMotionState).toEqual({
+        profile: 'custom',
+        feedback: 'trace',
+    })
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Library' }).click()
+    await page.getByRole('button', { name: 'Export active theme' }).click()
+    const exportedTheme = JSON.parse(await page.getByTestId('talos-theme-export-json').inputValue()) as Record<string, unknown>
+    expect(exportedTheme).toMatchObject({
+        schema: 'talos_theme_export_v1',
+        theme: {
+            ui_animation_profile: 'custom',
+            ui_animation_customization: {
+                feedback: 'trace',
+            },
+        },
+    })
+
+    await testInfo.attach(`theme-engine-v3-motion-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
 test('system motion follows browser reduced motion while explicit motion can animate', async ({ page }) => {
     await openWorkspace(page)
     await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -997,6 +1227,10 @@ test('system motion follows browser reduced motion while explicit motion can ani
     await waitForWorkspaceReady(page)
 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
+    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
+        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
+    ))).toBe('0ms')
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
     await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
     await expectProceduralCanvasFrameStaysStill(page)
@@ -1017,6 +1251,10 @@ test('system motion follows browser reduced motion while explicit motion can ani
     await motionCinematicRequest
 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
+    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
+        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
+    ))).not.toBe('0ms')
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'false')
     await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
     await expectProceduralCanvasAboveScrim(page)
@@ -1073,6 +1311,10 @@ test('theme switches disable motion separately from the procedural background', 
     await page.getByRole('switch', { name: 'Disable motion' }).click()
     await motionDisabledRequest
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
+    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
+        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
+    ))).toBe('0ms')
     await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
     await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
     await expectProceduralCanvasFrameStaysStill(page)
@@ -1124,6 +1366,43 @@ test('theme switches disable motion separately from the procedural background', 
     await page.getByRole('switch', { name: 'Disable motion' }).click()
     await motionEnabledRequest
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
+    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
+        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
+    ))).not.toBe('0ms')
+    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expectProceduralCanvasFrameChanges(page)
+
+    await page.evaluate(async () => {
+        await fetch('/api/talos/settings', {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                preferences: {
+                    theme: 'terminal',
+                    reduced_motion: false,
+                    theme_motion: 'cinematic',
+                    theme_motion_disabled: false,
+                    theme_background_disabled: false,
+                    ui_animation_profile: 'off',
+                    theme_customization: {
+                        effect: 'trace-rain',
+                    },
+                },
+            }),
+        })
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-animation-profile', 'off')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
+    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
+        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
+    ))).toBe('0ms')
+    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'false')
     await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
     await expectProceduralCanvasFrameChanges(page)
 })
@@ -1179,8 +1458,8 @@ test('settings preset changes refresh procedural background immediately', async 
     await expectProceduralBackgroundVisiblyChanges(page)
 })
 
-test('every theme preset switches to its animated procedural default', async ({ page, isMobile }) => {
-    test.setTimeout(60_000)
+test('every theme preset switches to its animated procedural default', async ({ page, isMobile }, testInfo) => {
+    test.setTimeout(120_000)
     test.skip(Boolean(isMobile), 'desktop covers exhaustive preset animation; mobile verifies preset refresh in the targeted settings flow.')
 
     await openWorkspace(page)
@@ -1223,6 +1502,10 @@ test('every theme preset switches to its animated procedural default', async ({ 
         await expectProceduralCanvasAboveScrim(page)
         await expectProceduralCanvasFrameChanges(page)
         await expectProceduralCanvasHasVisibleSignal(page)
+        await testInfo.attach(`theme-preset-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${testInfo.project.name}.png`, {
+            body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+            contentType: 'image/png',
+        })
     }
 })
 
@@ -1313,6 +1596,47 @@ test('floating tool windows are independent, draggable, and the right dock is on
     await expect(page.getByTestId('talos-right-dock')).toBeVisible()
     await expectNoHorizontalOverflow(page)
     await testInfo.attach(`floating-window-dock-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('floating tool windows are resizable and can reset their saved size', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop window resizing is covered by the desktop project')
+
+    await openWorkspace(page)
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+
+    const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
+    await expect(themeWindow).toBeVisible()
+
+    const before = await themeWindow.boundingBox()
+    const resizeHandle = page.getByLabel('Resize Theme window bottom right')
+    const handleBox = await resizeHandle.boundingBox()
+    expect(before).toBeTruthy()
+    expect(handleBox).toBeTruthy()
+
+    await page.mouse.move((handleBox?.x ?? 0) + 8, (handleBox?.y ?? 0) + 8)
+    await page.mouse.down()
+    await page.mouse.move((handleBox?.x ?? 0) + 168, (handleBox?.y ?? 0) + 108)
+    await page.mouse.up()
+
+    const resized = await themeWindow.boundingBox()
+    expect(resized?.width).toBeGreaterThan((before?.width ?? 0) + 100)
+    expect(resized?.height).toBeGreaterThan((before?.height ?? 0) + 70)
+    await expect(themeWindow).toHaveAttribute('data-window-width', String(Math.round(resized?.width ?? 0)))
+    await expect(themeWindow).toHaveAttribute('data-window-height', String(Math.round(resized?.height ?? 0)))
+    const storedLayout = await page.evaluate(() => JSON.parse(window.localStorage.getItem('talos.windowLayout.v1') ?? '{}'))
+    expect(storedLayout?.sizes?.theme?.width).toBe(Math.round(resized?.width ?? 0))
+    expect(storedLayout?.sizes?.theme?.height).toBe(Math.round(resized?.height ?? 0))
+    await expectNoComposerOverlap(page)
+
+    await page.getByRole('button', { name: 'Reset Theme size' }).click()
+    const reset = await themeWindow.boundingBox()
+    expect(reset?.width).toBeLessThan((resized?.width ?? 0) - 80)
+    await expectNoHorizontalOverflow(page)
+
+    await testInfo.attach(`floating-window-resize-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
@@ -1503,22 +1827,139 @@ test('file context grounds a chat turn and exposes source provenance', async ({ 
     await expect(chatThread.getByText('Workflow file says approve the deployment checklist.')).toBeVisible()
 })
 
+test('deep research v3 queues source-backed draft reports with claim graph evidence', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Deep Research')
+
+    await expect(page.getByRole('heading', { name: 'Deep Research V3' })).toBeVisible()
+    await expect(page.getByLabel('Research query')).toBeVisible()
+    await page.getByLabel('Report title').fill('AVM evidence review')
+    await page.getByLabel('Research query').fill('Map AVM evidence to every product claim before publishing.')
+    await page.getByLabel('Primary source URL').fill('https://example.com/avm-evidence')
+    await page.getByLabel('Source title').fill('AVM evidence source')
+    await page.getByLabel('Initial claim').fill('AVM research claims stay pending until fetched evidence exists.')
+
+    await page.getByRole('button', { name: 'Research settings' }).click()
+    await page.getByLabel('Rounds selector').selectOption('2')
+    await page.getByLabel('Format selector').selectOption('briefing')
+    await page.getByLabel('Search engine selector').selectOption('searxng')
+    await page.getByLabel('Endpoint selector').selectOption('local')
+    await page.getByLabel('Model selector').selectOption('profile-e2e')
+
+    const createRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/research-reports') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const metadata = body.metadata as Record<string, unknown>
+        const sources = body.sources as Array<Record<string, unknown>>
+        const claims = body.claims as Array<Record<string, unknown>>
+
+        return metadata.queue_status === 'queued'
+            && metadata.rounds === 2
+            && metadata.format === 'briefing'
+            && metadata.search_engine === 'searxng'
+            && metadata.endpoint === 'local'
+            && metadata.model_profile_id === 'profile-e2e'
+            && sources[0]?.status === 'planned'
+            && claims[0]?.status === 'pending'
+    })
+
+    await page.getByRole('button', { name: 'Queue report' }).click()
+    await createRequest
+
+    await expect(page.getByText('Research queue')).toBeVisible()
+    const queuedReport = page.getByRole('button', { name: /AVM evidence review/ })
+    await expect(queuedReport.getByText('queue_status')).toBeVisible()
+    await expect(queuedReport.getByText('queued', { exact: true })).toBeVisible()
+    await expect(page.getByText('Claim-source graph')).toBeVisible()
+    await expect(page.getByText('src-1 -> claim #1')).toBeVisible()
+    await expect(page.getByText('planned').first()).toBeVisible()
+    await expect(page.getByText('pending').first()).toBeVisible()
+    await expect(page.getByText('talos://research-reports/')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Chat with report' })).toBeDisabled()
+    await expect(page.getByText('Report chat context export is not available yet.')).toBeVisible()
+
+    await expectNoHorizontalOverflow(page)
+    await testInfo.attach(`deep-research-v3-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('calendar v3 renders drafts as events and parses quick add safely', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Calendar')
+
+    await expect(page.getByRole('heading', { name: 'Calendar V3' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Previous month' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Today' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Next month' })).toBeVisible()
+    await expect(page.getByLabel('Calendar view mode')).toContainText('Week')
+    await expect(page.getByLabel('Calendar view mode')).toContainText('Month')
+    await expect(page.getByLabel('Calendar view mode')).toContainText('Year')
+    await expect(page.getByLabel('Calendar view mode')).toContainText('Agenda')
+    await expect(page.getByText('Month grid')).toBeVisible()
+
+    await page.getByLabel('Quick add event').fill('just vibes')
+    await page.getByRole('button', { name: 'Quick add' }).click()
+    await expect(page.getByText('Could not parse quick add. Try "crew muster 10am daily", "meeting tomorrow 15:00", or "review Friday 9-10".')).toBeVisible()
+    await expect(page.getByLabel('Quick add event')).toHaveValue('just vibes')
+
+    const createRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/calendar-drafts') || request.method() !== 'POST') {
+            return false
+        }
+
+        const body = request.postDataJSON() as Record<string, unknown>
+        const metadata = body.metadata as Record<string, unknown>
+
+        return body.title === 'crew muster'
+            && body.timezone === 'Europe/Rome'
+            && metadata.quick_add_raw === 'crew muster 10am daily'
+            && metadata.recurrence === 'daily'
+    })
+
+    await page.getByLabel('Quick add event').fill('crew muster 10am daily')
+    await page.getByRole('button', { name: 'Quick add' }).click()
+    await createRequest
+
+    await expect(page.getByText('crew muster')).toBeVisible()
+    await expect(page.getByText('confirmation_required: true')).toBeVisible()
+    await page.getByLabel('Search all events').fill('crew')
+    await expect(page.getByText('crew muster')).toBeVisible()
+
+    const confirmRequest = page.waitForRequest((request) => request.url().includes('/api/talos/calendar-drafts/calendar-draft-e2e-1/confirm') && request.method() === 'POST')
+    await page.getByRole('button', { name: 'Confirm draft' }).click()
+    await confirmRequest
+    await expect(page.getByText('confirmed')).toBeVisible()
+    await expect(page.getByText('confirmation_required: false')).toBeVisible()
+
+    await expectNoHorizontalOverflow(page)
+    await testInfo.attach(`calendar-v3-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
 test('dashboard replays a persisted failed run and exposes fault evidence', async ({ page }) => {
     await openWorkspace(page)
     await selectDashboardTab(page, 'Runtime')
 
     await expect(page.getByRole('button', { name: /run-e2e verified execution/ })).toBeVisible()
-    await expect(page.getByRole('button', { name: /#2 node_failed HTTP 503 failure fault/ })).toBeVisible()
-    await expect(page.getByText('2 events', { exact: true })).toBeVisible()
-    await expect(page.getByText('1 node states')).toBeVisible()
+    await expect(page.getByRole('button', { name: /#2 node_failed/ })).toBeVisible()
+    await expect(page.getByLabel('Run timeline').getByText('3 events', { exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: 'Trace replay' }).click()
+    await expect(page.getByText('2 node states')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
-    await expect(page.getByText('HTTP 503 failure')).toBeVisible()
     await expect(page.getByRole('button', { name: /#2 node_failed HTTP 503 failure fault/ }).getByText('fault', { exact: true })).toBeVisible()
 })
 
 test('dashboard replay filters to fault steps through a real control', async ({ page }) => {
     await openWorkspace(page)
     await selectDashboardTab(page, 'Runtime')
+    await page.getByRole('tab', { name: 'Trace replay', exact: true }).click()
 
     await expect(page.getByRole('button', { name: /#1 node_started Node started state/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /#2 node_failed HTTP 503 failure fault/ })).toBeVisible()
@@ -1527,10 +1968,70 @@ test('dashboard replay filters to fault steps through a real control', async ({ 
 
     await expect(page.getByRole('button', { name: /#1 node_started Node started state/ })).toBeHidden()
     await expect(page.getByRole('button', { name: /#2 node_failed HTTP 503 failure fault/ })).toBeVisible()
-    await expect(page.getByText('1/1')).toBeVisible()
+    await expect(page.getByRole('button', { name: /#3 node_blocked Blocked by node-e2e fault/ })).toBeVisible()
+    await expect(page.getByText('1/2')).toBeVisible()
 
     await page.keyboard.press('Tab')
     await expect(page.locator(':focus')).toBeVisible()
+})
+
+test('runtime cockpit organizes run evidence into summary tabs and recovery preview', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Runtime')
+
+    await expect(page.getByRole('heading', { name: 'Runtime cockpit' })).toBeVisible()
+    const runSummary = page.getByLabel('Run summary')
+    await expect(runSummary.getByText('Run summary')).toBeVisible()
+    await expect(runSummary.getByText('Model', { exact: true })).toBeVisible()
+    await expect(runSummary.getByText('profile-e2e')).toBeVisible()
+    await expect(runSummary.getByText('AVM mode')).toBeVisible()
+    await expect(runSummary.getByText('verified execution')).toBeVisible()
+    await expect(runSummary.getByText('Replayable')).toBeVisible()
+    await expect(runSummary.getByText('3 events')).toBeVisible()
+    await expect(runSummary.getByText('2 nodes')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Trace replay', exact: true }).click()
+    await page.getByLabel('Replay step filter').selectOption('fault')
+    await expect(page.getByRole('button', { name: /#1 node_started Node started state/ })).toBeHidden()
+    await expect(page.getByRole('button', { name: /#2 node_failed HTTP 503 failure fault/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /#3 node_blocked Blocked by node-e2e fault/ })).toBeVisible()
+
+    await page.getByRole('tab', { name: 'DAG', exact: true }).click()
+    await expect(page.getByText('Blocked by dependency')).toBeVisible()
+    await expect(page.getByText('Parent node node-e2e failed before this branch could run.')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Timeline', exact: true }).click()
+    await page.getByLabel('Runtime event filter').selectOption('fault')
+    await expect(page.getByRole('button', { name: /#1 node_started/ })).toBeHidden()
+    await expect(page.getByRole('button', { name: /#2 node_failed/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /#3 node_blocked/ })).toBeVisible()
+
+    await page.getByRole('button', { name: /#2 node_failed/ }).click()
+    await expect(page.getByText('Validation faults')).toBeVisible()
+    await expect(page.getByLabel('Validation faults evidence').getByText('UPSTREAM_UNAVAILABLE')).toBeVisible()
+    await expect(page.getByText('Policy decisions')).toBeVisible()
+    await expect(page.getByText('Worker output')).toBeVisible()
+    await expect(page.getByLabel('Worker output evidence').getByText('HTTP 503')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Recovery', exact: true }).click()
+    await expect(page.getByText('Recovery preview')).toBeVisible()
+    await expect(page.getByText('Target node node-e2e')).toBeVisible()
+    await page.getByLabel('Recovery reason').fill('Retry after upstream returned healthy.')
+    await page.getByRole('button', { name: 'Submit recovery' }).click()
+    await expect(page.getByText('Audit: recovery.requested for node-e2e')).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Artifacts', exact: true }).click()
+    await expect(page.getByText('Run evidence report')).toBeVisible()
+    await expect(page.getByText('local://reports/run-e2e.json')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Open audit log' }).click()
+    await expect(page.getByTestId('talos-admin-section-audit')).toBeVisible()
+
+    await expectNoHorizontalOverflow(page)
+    await testInfo.attach(`runtime-cockpit-v3-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
 })
 
 test('dashboard runs a fresh benchmark comparison and inspects created lanes', async ({ page }) => {
@@ -1559,6 +2060,43 @@ test('mobile chat and dashboard avoid layout overflow', async ({ page, isMobile 
     await openWorkspace(page)
     await expectUnifiedWorkspaceChrome(page)
     await expectNoHorizontalOverflow(page)
+})
+
+test('chat exports session evidence pack with context and benchmark readiness', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+
+    await page.getByLabel('Message TALOS').fill('Create a replayable export pack.')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Export session' }).click()
+    const exportDialog = page.getByRole('dialog', { name: 'Export session evidence' })
+    await expect(exportDialog).toBeVisible()
+    await expect(exportDialog.getByText('JSON evidence pack', { exact: true })).toBeVisible()
+    await expect(exportDialog.getByText('Markdown transcript', { exact: true })).toBeVisible()
+    await expect(exportDialog.getByText('Context manifest', { exact: true })).toBeVisible()
+    await expect(exportDialog.getByText('Benchmark scenario', { exact: true })).toBeVisible()
+
+    const jsonRequest = page.waitForRequest((request) => request.url().includes('/api/talos/sessions/session-e2e/export?format=json') && request.method() === 'GET')
+    await page.getByRole('button', { name: 'Export JSON evidence pack' }).click()
+    await jsonRequest
+    await expect(exportDialog.getByText('talos_session_export', { exact: true })).toBeVisible()
+    await expect(exportDialog.getByText('workflow.md').first()).toBeVisible()
+    await expect(exportDialog.getByText('Benchmark ready', { exact: true })).toBeVisible()
+    await expect(page.getByText('sk-live-secret')).toBeHidden()
+    await expect(page.getByText('private/storage/path')).toBeHidden()
+
+    const markdownRequest = page.waitForRequest((request) => request.url().includes('/api/talos/sessions/session-e2e/export?format=markdown') && request.method() === 'GET')
+    await page.getByRole('button', { name: 'Export Markdown transcript' }).click()
+    await markdownRequest
+    await expect(exportDialog.getByText('talos_session_markdown_export', { exact: true })).toBeVisible()
+    await expect(exportDialog.getByText('# TALOS Session Export')).toBeVisible()
+
+    await expectNoHorizontalOverflow(page)
+    await testInfo.attach(`session-export-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
 })
 
 test('mobile tool windows stay above the composer', async ({ page, isMobile }) => {

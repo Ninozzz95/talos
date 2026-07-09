@@ -18,14 +18,23 @@ import {
     TALOS_THEME_MOTION_OPTIONS,
     TALOS_THEME_PRESETS,
     TALOS_THEME_RADIUS_OPTIONS,
+    TALOS_UI_ANIMATION_EASING_OPTIONS,
+    TALOS_UI_ANIMATION_FEEDBACK_OPTIONS,
+    TALOS_UI_ANIMATION_HOVER_OPTIONS,
+    TALOS_UI_ANIMATION_OPEN_CLOSE_OPTIONS,
+    TALOS_UI_ANIMATION_PROFILE_OPTIONS,
+    TALOS_UI_ANIMATION_SURFACE_OPTIONS,
     buildTalosThemeExport,
     normalizeTalosTheme,
     parseTalosThemeExport,
     resolveTalosMotionMode,
+    resolveTalosUiAnimationProfile,
     sanitizeTalosNamedTheme,
     sanitizeTalosThemeAreaTokens,
     sanitizeTalosThemeCustomization,
     sanitizeTalosThemeLibrary,
+    sanitizeTalosUiAnimationCustomization,
+    talosUiAnimationStyle,
     talosThemePreset,
     type TalosBackgroundEffect,
     type TalosNamedTheme,
@@ -38,6 +47,13 @@ import {
     type TalosThemeId,
     type TalosThemeMotionMode,
     type TalosThemeRadius,
+    type TalosUiAnimationCustomization,
+    type TalosUiAnimationEasing,
+    type TalosUiAnimationFeedback,
+    type TalosUiAnimationHover,
+    type TalosUiAnimationOpenClose,
+    type TalosUiAnimationProfile,
+    type TalosUiAnimationSurfaceTransition,
 } from '../../../lib/talosThemes'
 
 const props = defineProps<{
@@ -66,6 +82,17 @@ type ThemeCustomizationForm = {
     effect_intensity: number
 }
 
+type UiAnimationForm = {
+    open_close: TalosUiAnimationOpenClose
+    surface_transition: TalosUiAnimationSurfaceTransition
+    feedback: TalosUiAnimationFeedback
+    hover: TalosUiAnimationHover
+    duration_scale: number
+    intensity: number
+    easing: TalosUiAnimationEasing
+    stagger: number
+}
+
 type AreaTokenForm = Record<TalosThemeAreaTokenKey, string>
 
 const {
@@ -90,6 +117,9 @@ const localThemeError = ref('')
 const motionMode = ref<TalosThemeMotionMode>('system')
 const motionDisabled = ref(false)
 const backgroundDisabled = ref(false)
+const uiAnimationProfile = ref<TalosUiAnimationProfile>('preset')
+const uiAnimationForm = ref<UiAnimationForm>(emptyUiAnimationForm())
+const motionPreviewOpen = ref(false)
 const areaTokens = ref<TalosThemeAreaTokens>({})
 const selectedArea = ref<TalosThemeAreaId>('composer')
 const areaTokenForm = ref<AreaTokenForm>(emptyAreaTokenForm())
@@ -103,7 +133,14 @@ const activeTheme = computed(() => {
 const activePreset = computed(() => talosThemePreset(activeTheme.value))
 const activeNamedTheme = computed(() => themeLibrary.value.find((theme) => theme.id === activeCustomThemeId.value) ?? null)
 const savedCustomization = computed(() => sanitizeTalosThemeCustomization(settings.value?.preferences?.theme_customization))
-const draftIsDirty = computed(() => JSON.stringify(customizationForm.value) !== JSON.stringify(formFromCurrentSettings()))
+const savedUiAnimationCustomization = computed(() => sanitizeTalosUiAnimationCustomization(settings.value?.preferences?.ui_animation_customization))
+const savedUiAnimationProfile = computed(() => resolveTalosUiAnimationProfile(settings.value?.preferences?.ui_animation_profile))
+const themeDraftIsDirty = computed(() => JSON.stringify(customizationForm.value) !== JSON.stringify(formFromCurrentSettings()))
+const animationDraftIsDirty = computed(() => (
+    uiAnimationProfile.value !== savedUiAnimationProfile.value
+    || JSON.stringify(uiAnimationForm.value) !== JSON.stringify(uiAnimationFormFromCustomization(savedUiAnimationCustomization.value))
+))
+const draftIsDirty = computed(() => themeDraftIsDirty.value || animationDraftIsDirty.value)
 const hasAreaDraft = computed(() => Object.values(areaTokenForm.value).some((value) => value.trim() !== ''))
 const themePolicyLocked = computed(() => preferencesRecord().theme_policy_locked === true)
 
@@ -120,6 +157,19 @@ function emptyCustomizationForm(): ThemeCustomizationForm {
         radius: 'balanced',
         effect: 'dag-flow',
         effect_intensity: 70,
+    }
+}
+
+function emptyUiAnimationForm(): UiAnimationForm {
+    return {
+        open_close: 'standard',
+        surface_transition: 'slide-fade',
+        feedback: 'pulse',
+        hover: 'edge-glow',
+        duration_scale: 100,
+        intensity: 70,
+        easing: 'precise',
+        stagger: 40,
     }
 }
 
@@ -166,9 +216,18 @@ function formFromCurrentSettings(): ThemeCustomizationForm {
     return formFromCustomization(savedCustomization.value)
 }
 
+function uiAnimationFormFromCustomization(customization: TalosUiAnimationCustomization): UiAnimationForm {
+    return {
+        ...emptyUiAnimationForm(),
+        ...sanitizeTalosUiAnimationCustomization(customization),
+    }
+}
+
 function syncCustomizationForm() {
     syncingForm.value = true
     customizationForm.value = formFromCurrentSettings()
+    uiAnimationForm.value = uiAnimationFormFromCustomization(savedUiAnimationCustomization.value)
+    uiAnimationProfile.value = savedUiAnimationProfile.value
     window.requestAnimationFrame(() => {
         syncingForm.value = false
     })
@@ -194,6 +253,8 @@ function syncThemeState() {
     motionMode.value = resolveTalosMotionMode(preferences.theme_motion)
     motionDisabled.value = preferences.theme_motion_disabled === true
     backgroundDisabled.value = preferences.theme_background_disabled === true
+    uiAnimationProfile.value = resolveTalosUiAnimationProfile(preferences.ui_animation_profile)
+    uiAnimationForm.value = uiAnimationFormFromCustomization(preferences.ui_animation_customization)
     areaTokens.value = sanitizeTalosThemeAreaTokens(preferences.theme_area_tokens)
     syncAreaForm()
 }
@@ -247,16 +308,38 @@ function sanitizedForm(): TalosThemeCustomization {
     })
 }
 
+function sanitizedUiAnimationForm(): TalosUiAnimationCustomization {
+    return sanitizeTalosUiAnimationCustomization(uiAnimationForm.value)
+}
+
+const motionPreviewStyle = computed(() => talosUiAnimationStyle(
+    activeTheme.value,
+    uiAnimationProfile.value,
+    motionMode.value,
+    motionDisabled.value,
+    sanitizedUiAnimationForm(),
+))
+
+function previewMotion() {
+    motionPreviewOpen.value = false
+    window.setTimeout(() => {
+        motionPreviewOpen.value = true
+    }, 20)
+}
+
 async function saveCustomization() {
     if (!canWriteTheme()) {
         return
     }
 
     const themeCustomization = sanitizedForm()
+    const uiAnimationCustomization = sanitizedUiAnimationForm()
     const nextSettings = await updateSettings({
         preferences: {
             ...preferencesRecord(),
             theme_customization: themeCustomization,
+            ui_animation_profile: uiAnimationProfile.value,
+            ui_animation_customization: uiAnimationCustomization,
             active_custom_theme_id: activeCustomThemeId.value,
         },
     }, 'Theme customization saved through /api/talos/settings.')
@@ -280,6 +363,8 @@ async function resetCustomization() {
         preferences: {
             ...preferencesRecord(),
             theme_customization: {},
+            ui_animation_profile: 'preset',
+            ui_animation_customization: {},
             active_custom_theme_id: null,
         },
     }, 'Theme customization reset.')
@@ -303,6 +388,8 @@ function currentNamedTheme(name: string, id = generateThemeId(name)): TalosNamed
         tokens: sanitizedForm(),
         area_tokens: areaTokens.value,
         motion: motionMode.value,
+        ui_animation_profile: uiAnimationProfile.value,
+        ui_animation_customization: sanitizedUiAnimationForm(),
         created_at: now,
         updated_at: now,
     }
@@ -333,6 +420,8 @@ async function saveAsNamedTheme() {
             active_custom_theme_id: theme.id,
             theme_area_tokens: theme.area_tokens ?? {},
             theme_motion: theme.motion ?? 'system',
+            ui_animation_profile: theme.ui_animation_profile ?? 'preset',
+            ui_animation_customization: theme.ui_animation_customization ?? {},
         },
     }, 'Custom theme saved through /api/talos/settings.')
     activeTab.value = 'library'
@@ -358,6 +447,8 @@ async function applyNamedTheme(theme: TalosNamedTheme) {
             theme_customization: theme.tokens,
             theme_area_tokens: theme.area_tokens ?? {},
             theme_motion: theme.motion ?? 'system',
+            ui_animation_profile: theme.ui_animation_profile ?? 'preset',
+            ui_animation_customization: theme.ui_animation_customization ?? {},
             active_custom_theme_id: theme.id,
         },
     }, 'Custom theme applied.')
@@ -471,6 +562,8 @@ async function importTheme() {
             active_custom_theme_id: theme.id,
             theme_area_tokens: theme.area_tokens ?? {},
             theme_motion: theme.motion ?? 'system',
+            ui_animation_profile: theme.ui_animation_profile ?? 'preset',
+            ui_animation_customization: theme.ui_animation_customization ?? {},
         },
     }, 'Theme imported.')
     importJson.value = ''
@@ -670,7 +763,7 @@ onMounted(async () => {
                         :key="preset.id"
                         type="button"
                         data-testid="talos-theme-preset"
-                        class="rounded-md border px-3 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        class="talos-theme-preset-card rounded-md border px-3 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                         :class="activeTheme === preset.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel-soft)] hover:border-[var(--talos-accent-border)]'"
                         :aria-label="preset.label"
                         :disabled="themePolicyLocked || savingSettings"
@@ -800,6 +893,119 @@ onMounted(async () => {
                         :disabled="themePolicyLocked"
                     />
                 </label>
+
+                <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Interface motion</h4>
+                            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                                Controls how TALOS panels, messages and command surfaces move. Reduced motion can still disable nonessential animation.
+                            </p>
+                        </div>
+                        <Badge tone="neutral">{{ uiAnimationProfile }}</Badge>
+                    </div>
+
+                    <div class="mt-3 grid gap-3 md:grid-cols-3">
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Animation profile</span>
+                            <Select v-model="uiAnimationProfile" aria-label="Animation profile" :disabled="themePolicyLocked">
+                                <option v-for="profile in TALOS_UI_ANIMATION_PROFILE_OPTIONS" :key="profile.value" :value="profile.value">
+                                    {{ profile.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Open/close style</span>
+                            <Select v-model="uiAnimationForm.open_close" aria-label="Open/close style" :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'">
+                                <option v-for="option in TALOS_UI_ANIMATION_OPEN_CLOSE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Surface transition</span>
+                            <Select v-model="uiAnimationForm.surface_transition" aria-label="Surface transition" :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'">
+                                <option v-for="option in TALOS_UI_ANIMATION_SURFACE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Feedback style</span>
+                            <Select v-model="uiAnimationForm.feedback" aria-label="Feedback style" :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'">
+                                <option v-for="option in TALOS_UI_ANIMATION_FEEDBACK_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Hover/focus style</span>
+                            <Select v-model="uiAnimationForm.hover" aria-label="Hover/focus style" :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'">
+                                <option v-for="option in TALOS_UI_ANIMATION_HOVER_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Motion easing</span>
+                            <Select v-model="uiAnimationForm.easing" aria-label="Motion easing" :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'">
+                                <option v-for="option in TALOS_UI_ANIMATION_EASING_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Duration scale</span>
+                            <Input
+                                v-model.number="uiAnimationForm.duration_scale"
+                                type="number"
+                                min="50"
+                                max="150"
+                                step="1"
+                                aria-label="Duration scale"
+                                :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'"
+                            />
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Motion intensity</span>
+                            <Input
+                                v-model.number="uiAnimationForm.intensity"
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                aria-label="Motion intensity"
+                                :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'"
+                            />
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Motion stagger</span>
+                            <Input
+                                v-model.number="uiAnimationForm.stagger"
+                                type="number"
+                                min="0"
+                                max="120"
+                                step="1"
+                                aria-label="Motion stagger"
+                                :disabled="themePolicyLocked || uiAnimationProfile !== 'custom'"
+                            />
+                        </label>
+                    </div>
+
+                    <div class="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                        <div
+                            data-testid="talos-motion-preview-surface"
+                            class="talos-motion-preview-surface rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3"
+                            :data-preview-state="motionPreviewOpen ? 'open' : 'closed'"
+                            :style="motionPreviewStyle"
+                        >
+                            <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Preview surface</div>
+                            <div class="mt-2 text-sm font-semibold text-[var(--talos-text)]">Command panel transition</div>
+                            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Uses the same action-motion tokens as TALOS windows and command surfaces.</p>
+                        </div>
+                        <Button type="button" variant="secondary" :disabled="themePolicyLocked" @click="previewMotion">Preview motion</Button>
+                    </div>
+                </div>
 
                 <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                     <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">

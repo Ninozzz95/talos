@@ -8,10 +8,11 @@ type ApiEnvelope<T> = {
 
 export type CreateTalosModelProfilePayload = {
     provider: TalosModelProfile['provider']
-    model: string
-    display_name: string
-    secret: string
+    model?: string | null
+    display_name?: string | null
+    secret?: string | null
     base_url?: string | null
+    timeout_seconds?: number | null
     status?: TalosModelProfile['status']
     capabilities?: Record<string, unknown> | null
     probe_result?: Record<string, unknown> | null
@@ -19,7 +20,12 @@ export type CreateTalosModelProfilePayload = {
 }
 
 export type UpdateTalosModelProfilePayload = Partial<Omit<CreateTalosModelProfilePayload, 'secret'>> & {
-    secret?: string
+    secret?: string | null
+}
+
+export type TalosModelDraftProbeResult = {
+    status: TalosModelProfile['status'] | string
+    result: Record<string, unknown>
 }
 
 export function useTalosModelProfiles() {
@@ -69,6 +75,23 @@ export function useTalosModelProfiles() {
             return storeModelProfile(response.data)
         } catch (error) {
             modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not create this model profile.'
+            throw error
+        }
+    }
+
+    async function probeDraftModelProfile(payload: CreateTalosModelProfilePayload) {
+        modelProfileError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosModelDraftProbeResult>>('/api/talos/model-profiles/probe-draft', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+                validationMessage: 'TALOS could not test this provider setup.',
+            })
+
+            return response.data
+        } catch (error) {
+            modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not test this provider setup.'
             throw error
         }
     }
@@ -138,6 +161,7 @@ export function useTalosModelProfiles() {
         updateModelProfile,
         deleteModelProfile,
         probeModelProfile,
+        probeDraftModelProfile,
         findModelProfile,
     }
 }

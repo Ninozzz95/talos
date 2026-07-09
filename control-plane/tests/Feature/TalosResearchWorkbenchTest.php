@@ -16,6 +16,9 @@ final class TalosResearchWorkbenchTest extends TestCase
         $workbenchPath = base_path('resources/js/components/talos/research/TalosResearchWorkbench.vue');
         $sourceTablePath = base_path('resources/js/components/talos/research/TalosSourceTable.vue');
         $claimVerifierPath = base_path('resources/js/components/talos/research/TalosClaimVerifier.vue');
+        $queuePath = base_path('resources/js/components/talos/research/TalosResearchQueue.vue');
+        $settingsPath = base_path('resources/js/components/talos/research/TalosResearchSettingsPanel.vue');
+        $graphPath = base_path('resources/js/components/talos/research/TalosClaimSourceGraph.vue');
 
         $this->assertIsString($shell);
         $this->assertIsString($chat);
@@ -23,22 +26,44 @@ final class TalosResearchWorkbenchTest extends TestCase
         $this->assertFileExists($workbenchPath);
         $this->assertFileExists($sourceTablePath);
         $this->assertFileExists($claimVerifierPath);
+        $this->assertFileExists($queuePath);
+        $this->assertFileExists($settingsPath);
+        $this->assertFileExists($graphPath);
 
         $composable = file_get_contents($composablePath);
         $workbench = file_get_contents($workbenchPath);
         $sourceTable = file_get_contents($sourceTablePath);
         $claimVerifier = file_get_contents($claimVerifierPath);
+        $queue = file_get_contents($queuePath);
+        $settings = file_get_contents($settingsPath);
+        $graph = file_get_contents($graphPath);
 
         $this->assertIsString($composable);
         $this->assertIsString($workbench);
         $this->assertIsString($sourceTable);
         $this->assertIsString($claimVerifier);
+        $this->assertIsString($queue);
+        $this->assertIsString($settings);
+        $this->assertIsString($graph);
         $this->assertStringContainsString('/api/talos/research-reports', $composable);
         $this->assertStringContainsString('createResearchReport', $composable);
         $this->assertStringContainsString('TalosResearchWorkbench', $shell);
         $this->assertStringContainsString('<TalosResearchWorkbench', $shell);
         $this->assertStringContainsString('TalosSourceTable', $workbench);
         $this->assertStringContainsString('TalosClaimVerifier', $workbench);
+        $this->assertStringContainsString('TalosResearchQueue', $workbench);
+        $this->assertStringContainsString('TalosResearchSettingsPanel', $workbench);
+        $this->assertStringContainsString('TalosClaimSourceGraph', $workbench);
+        $this->assertStringContainsString('Research query', $workbench);
+        $this->assertStringContainsString('Queue report', $workbench);
+        $this->assertStringContainsString('Start research', $workbench);
+        $this->assertStringContainsString('Rounds selector', $settings);
+        $this->assertStringContainsString('Format selector', $settings);
+        $this->assertStringContainsString('Search engine selector', $settings);
+        $this->assertStringContainsString('Endpoint selector', $settings);
+        $this->assertStringContainsString('Model selector', $settings);
+        $this->assertStringContainsString('Claim-source graph', $graph);
+        $this->assertStringContainsString('queue_status', $queue);
         $this->assertStringContainsString("status: 'planned'", $workbench);
         $this->assertStringContainsString("status: 'pending'", $workbench);
         $this->assertStringNotContainsString("status: 'fetched'", $workbench);
@@ -47,8 +72,8 @@ final class TalosResearchWorkbenchTest extends TestCase
         $this->assertStringContainsString('failure_reason', $sourceTable);
         $this->assertStringContainsString('claim-source mapping', strtolower($claimVerifier));
         $this->assertStringNotContainsString('TalosResearchWorkbench', $chat);
-        $this->assertStringNotContainsString('mock', strtolower($workbench.$sourceTable.$claimVerifier));
-        $this->assertStringNotContainsString('fake', strtolower($workbench.$sourceTable.$claimVerifier));
-        $this->assertStringNotContainsString('placeholder action', strtolower($workbench.$sourceTable.$claimVerifier));
+        $this->assertStringNotContainsString('mock', strtolower($workbench.$sourceTable.$claimVerifier.$queue.$settings.$graph));
+        $this->assertStringNotContainsString('fake', strtolower($workbench.$sourceTable.$claimVerifier.$queue.$settings.$graph));
+        $this->assertStringNotContainsString('placeholder action', strtolower($workbench.$sourceTable.$claimVerifier.$queue.$settings.$graph));
     }
 }

@@ -2,10 +2,25 @@ import { defineConfig, devices } from '@playwright/test'
 
 const baseURL = process.env.TALOS_E2E_BASE_URL ?? 'http://127.0.0.1:8014'
 const reuseExistingServer = process.env.TALOS_E2E_REUSE_SERVER === '1'
+const useViteDevServer = process.env.TALOS_E2E_USE_VITE === '1'
+
+const laravelServer = {
+    command: '..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014',
+    url: baseURL,
+    reuseExistingServer,
+    timeout: 120_000,
+}
+
+const viteServer = {
+    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+    url: 'http://127.0.0.1:5173/resources/js/app.js',
+    reuseExistingServer,
+    timeout: 120_000,
+}
 
 export default defineConfig({
     testDir: './tests/e2e',
-    timeout: 30_000,
+    timeout: 60_000,
     expect: {
         timeout: 8_000,
     },
@@ -22,20 +37,9 @@ export default defineConfig({
     },
     webServer: process.env.TALOS_E2E_BASE_URL
         ? undefined
-        : [
-            {
-                command: '..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014',
-                url: baseURL,
-                reuseExistingServer,
-                timeout: 120_000,
-            },
-            {
-                command: 'npm run dev -- --host 127.0.0.1 --port 5173',
-                url: 'http://127.0.0.1:5173/resources/js/app.js',
-                reuseExistingServer,
-                timeout: 120_000,
-            },
-        ],
+        : useViteDevServer
+            ? [laravelServer, viteServer]
+            : laravelServer,
     projects: [
         {
             name: 'chromium',

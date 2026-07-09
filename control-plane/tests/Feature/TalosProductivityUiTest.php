@@ -17,6 +17,12 @@ final class TalosProductivityUiTest extends TestCase
         $notesPath = base_path('resources/js/components/talos/productivity/TalosNotes.vue');
         $tasksPath = base_path('resources/js/components/talos/productivity/TalosTasks.vue');
         $calendarPath = base_path('resources/js/components/talos/productivity/TalosCalendar.vue');
+        $calendarLibPath = base_path('resources/js/lib/talosCalendar.ts');
+        $calendarGridPath = base_path('resources/js/components/talos/productivity/TalosCalendarGrid.vue');
+        $calendarToolbarPath = base_path('resources/js/components/talos/productivity/TalosCalendarToolbar.vue');
+        $calendarQuickAddPath = base_path('resources/js/components/talos/productivity/TalosCalendarQuickAdd.vue');
+        $calendarEventListPath = base_path('resources/js/components/talos/productivity/TalosCalendarEventList.vue');
+        $calendarEventEditorPath = base_path('resources/js/components/talos/productivity/TalosCalendarEventEditor.vue');
         $emailTriagePath = base_path('resources/js/components/talos/email/TalosEmailTriage.vue');
         $draftReviewPath = base_path('resources/js/components/talos/email/TalosEmailDraftReview.vue');
         $commandRegistryPath = base_path('resources/js/lib/commandRegistry.ts');
@@ -28,6 +34,12 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertFileExists($notesPath);
         $this->assertFileExists($tasksPath);
         $this->assertFileExists($calendarPath);
+        $this->assertFileExists($calendarLibPath);
+        $this->assertFileExists($calendarGridPath);
+        $this->assertFileExists($calendarToolbarPath);
+        $this->assertFileExists($calendarQuickAddPath);
+        $this->assertFileExists($calendarEventListPath);
+        $this->assertFileExists($calendarEventEditorPath);
         $this->assertFileExists($emailTriagePath);
         $this->assertFileExists($draftReviewPath);
 
@@ -36,6 +48,12 @@ final class TalosProductivityUiTest extends TestCase
         $notes = file_get_contents($notesPath);
         $tasks = file_get_contents($tasksPath);
         $calendar = file_get_contents($calendarPath);
+        $calendarLib = file_get_contents($calendarLibPath);
+        $calendarGrid = file_get_contents($calendarGridPath);
+        $calendarToolbar = file_get_contents($calendarToolbarPath);
+        $calendarQuickAdd = file_get_contents($calendarQuickAddPath);
+        $calendarEventList = file_get_contents($calendarEventListPath);
+        $calendarEventEditor = file_get_contents($calendarEventEditorPath);
         $emailTriage = file_get_contents($emailTriagePath);
         $draftReview = file_get_contents($draftReviewPath);
         $commandRegistry = file_get_contents($commandRegistryPath);
@@ -45,6 +63,12 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertIsString($notes);
         $this->assertIsString($tasks);
         $this->assertIsString($calendar);
+        $this->assertIsString($calendarLib);
+        $this->assertIsString($calendarGrid);
+        $this->assertIsString($calendarToolbar);
+        $this->assertIsString($calendarQuickAdd);
+        $this->assertIsString($calendarEventList);
+        $this->assertIsString($calendarEventEditor);
         $this->assertIsString($emailTriage);
         $this->assertIsString($draftReview);
         $this->assertIsString($commandRegistry);
@@ -62,6 +86,17 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertStringContainsString('trust_level', $notes);
         $this->assertStringContainsString('run_id', $tasks);
         $this->assertStringContainsString('confirmation_required', $calendar);
+        $this->assertStringContainsString('TalosCalendarGrid', $calendar);
+        $this->assertStringContainsString('TalosCalendarToolbar', $calendar);
+        $this->assertStringContainsString('TalosCalendarQuickAdd', $calendar);
+        $this->assertStringContainsString('TalosCalendarEventList', $calendar);
+        $this->assertStringContainsString('TalosCalendarEventEditor', $calendar);
+        $this->assertStringContainsString('crew muster 10am daily', $calendarLib);
+        $this->assertStringContainsString('meeting tomorrow 15:00', $calendarLib);
+        $this->assertStringContainsString('review Friday 9-10', $calendarLib);
+        $this->assertStringContainsString('Current month', $calendarToolbar);
+        $this->assertStringContainsString('Search all events', $calendarEventList);
+        $this->assertStringContainsString('Month grid', $calendarGrid);
         $this->assertStringContainsString('send_enabled', $emailTriage.$draftReview);
         $this->assertStringContainsString('EMAIL_SEND_DISABLED', $draftReview);
         $this->assertStringContainsString('open_notes', $commandRegistry);
@@ -72,8 +107,9 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertStringContainsString('Email send is disabled until HMI confirmation and audit exist.', $commandRegistry);
         $this->assertStringNotContainsString('TalosEmailTriage', $chat);
         $this->assertStringNotContainsString('TalosCalendar', $chat);
-        $this->assertStringNotContainsString('mock', strtolower($notes.$tasks.$calendar.$emailTriage.$draftReview));
-        $this->assertStringNotContainsString('fake', strtolower($notes.$tasks.$calendar.$emailTriage.$draftReview));
-        $this->assertStringNotContainsString('placeholder action', strtolower($notes.$tasks.$calendar.$emailTriage.$draftReview));
+        $calendarSurface = $calendar.$calendarLib.$calendarGrid.$calendarToolbar.$calendarQuickAdd.$calendarEventList.$calendarEventEditor;
+        $this->assertStringNotContainsString('mock', strtolower($notes.$tasks.$calendarSurface.$emailTriage.$draftReview));
+        $this->assertStringNotContainsString('fake', strtolower($notes.$tasks.$calendarSurface.$emailTriage.$draftReview));
+        $this->assertStringNotContainsString('placeholder action', strtolower($notes.$tasks.$calendarSurface.$emailTriage.$draftReview));
     }
 }

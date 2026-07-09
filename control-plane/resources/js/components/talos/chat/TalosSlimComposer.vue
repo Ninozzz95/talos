@@ -122,7 +122,7 @@ function handleKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-    <Card class="talos-chat-composer-shell pointer-events-auto relative mx-auto w-full max-w-[820px] border-[var(--talos-border-strong)] bg-[var(--talos-card)]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur" :padded="false">
+    <Card class="talos-chat-composer-shell talos-action-composer pointer-events-auto relative mx-auto w-full max-w-[820px] border-[var(--talos-border-strong)] bg-[var(--talos-card)]/95 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur" :padded="false">
         <TalosSlashCommandMenu
             v-if="slashMenuOpen"
             class="absolute inset-x-0 bottom-full mb-3"

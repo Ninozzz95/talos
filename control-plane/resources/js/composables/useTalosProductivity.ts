@@ -47,6 +47,7 @@ export function useTalosProductivity() {
     const creatingNote = ref(false)
     const creatingTask = ref(false)
     const creatingCalendarDraft = ref(false)
+    const confirmingCalendarDraftId = ref<string | null>(null)
     const productivityError = ref<string | null>(null)
 
     async function loadNotes() {
@@ -177,6 +178,25 @@ export function useTalosProductivity() {
         }
     }
 
+    async function confirmCalendarDraft(draftId: string) {
+        confirmingCalendarDraftId.value = draftId
+        productivityError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosCalendarDraft>>(`/api/talos/calendar-drafts/${draftId}/confirm`, {
+                method: 'POST',
+                validationMessage: 'TALOS rejected this calendar confirmation.',
+            })
+            calendarDrafts.value = [response.data, ...calendarDrafts.value.filter((draft) => draft.id !== response.data.id)]
+            return response.data
+        } catch (error) {
+            productivityError.value = error instanceof Error ? error.message : 'TALOS could not confirm this calendar draft.'
+            throw error
+        } finally {
+            confirmingCalendarDraftId.value = null
+        }
+    }
+
     return {
         notes,
         noteRetrievalContext,
@@ -188,6 +208,7 @@ export function useTalosProductivity() {
         creatingNote,
         creatingTask,
         creatingCalendarDraft,
+        confirmingCalendarDraftId,
         productivityError,
         loadNotes,
         createNote,
@@ -196,5 +217,6 @@ export function useTalosProductivity() {
         createTask,
         loadCalendarDrafts,
         createCalendarDraft,
+        confirmCalendarDraft,
     }
 }

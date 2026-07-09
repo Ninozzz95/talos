@@ -69,7 +69,10 @@ final class TalosProductivityApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.status', 'draft')
             ->assertJsonPath('data.confirmation_required', true)
-            ->assertJsonPath('data.confirmed_at', null);
+            ->assertJsonPath('data.confirmed_at', null)
+            ->assertJsonPath('data.source_run_id', null)
+            ->assertJsonPath('data.external_provider', null)
+            ->assertJsonPath('data.external_event_id', null);
     }
 
     public function test_note_retrieval_context_marks_notes_as_untrusted(): void
