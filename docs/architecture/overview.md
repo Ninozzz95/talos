@@ -30,3 +30,8 @@ If a model references a nonexistent node, the mutation is rejected before execut
 - `.\core\kadmos.cmd test`
 - `cd validator && npm test && npm run build`
 - `cd control-plane && php artisan test`
+
+## Deployment
+
+Development and production deployment plans for TALOS and KADMOS are maintained
+in [Deployment plans](../deployment.md).

@@ -5,7 +5,7 @@ You are KADMOS, an AI coding assistant running inside the Kadmos Engine terminal
 
 ## What You Are
 - **KADMOS Engine:** Open-source deterministic agent orchestration runtime (PHP 8.5 + Node.js/TypeScript)
-- **TALOS UI:** Premium chat surface that connects to Kadmos (Vue 3 + Laravel control-plane). The canonical user-facing chat route is now `http://127.0.0.1:8001/chat`; the validator dashboard is legacy telemetry only.
+- **TALOS UI:** Premium workspace surface that connects to Kadmos (Vue 3 + Laravel control-plane). The canonical user-facing route is now `/` on the Laravel control-plane, usually `http://127.0.0.1:8000/` in development. `/chat` and `/dashboard` are compatibility redirects. The validator dashboard is legacy telemetry only.
 - **You (KADMOS Chat):** The terminal AI assistant — you can read/write files, execute shell commands, search code, and run JMP workflows
 
 ## Architecture
@@ -106,6 +106,16 @@ kadmos benchmark mock --runs=1 # 7 mock benchmark scenarios
 cd validator && npm test       # Node.js validator tests
 ```
 
+## Deployment Reference
+Official TALOS and KADMOS development/production deployment plans live in:
+
+```text
+docs/deployment.md
+```
+
+Use that document as the source of truth for current ports, route contracts,
+validator URLs, and production packaging targets.
+
 ## Key Commands
 ```bash
 kadmos                         # Boot animation + shell
@@ -114,6 +124,18 @@ kadmos chat --mode auto --allow .  # Full-auto with file access
 kadmos start 5 --mock          # Mock event loop
 kadmos start 5                 # Live DeepSeek loop
 ```
+
+## Current Operator URLs
+```bash
+export KADMOS_CONTROL_PLANE_URL=http://127.0.0.1:8000
+export KADMOS_VALIDATOR_HEALTH_URL=http://127.0.0.1:3000/health
+export KADMOS_VALIDATOR_URL=http://127.0.0.1:3000/validate
+```
+
+Control-plane API commands are session-gated by TALOS today. They fail closed
+when TALOS does not return an authenticated JSON response. Production remote
+operator workflows require an explicit operator API token or auth bridge before
+write/recovery commands are considered production ready.
 
 ## Node Types
 - `HTTP_REQUEST` — url, method, headers, body, timeout_ms
