@@ -2,6 +2,13 @@ import type { Page, Route } from '@playwright/test'
 
 type Json = Record<string, unknown> | unknown[]
 type PersistenceMode = 'persistent' | 'temporary'
+type InitialSessionMessage = {
+    role?: string
+    content?: string
+    model_profile_id?: string | null
+    run_id?: string | null
+    metadata?: Record<string, unknown>
+}
 
 const now = '2026-07-07T10:00:00.000000Z'
 
@@ -41,14 +48,36 @@ function hasSecretPreferenceKey(value: unknown): boolean {
     })
 }
 
-function sessionPayload(title = 'E2E verified workflow', persistenceMode: PersistenceMode = 'persistent', id = 'session-e2e') {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeMetadata(existing: unknown, patch: unknown) {
+    const current = isPlainRecord(existing) ? existing : {}
+    const next = isPlainRecord(patch) ? patch : {}
+    const currentChatState = isPlainRecord(current.chat_state) ? current.chat_state : {}
+    const nextChatState = isPlainRecord(next.chat_state) ? next.chat_state : {}
+
+    return {
+        ...current,
+        ...next,
+        ...(isPlainRecord(next.chat_state) ? { chat_state: { ...currentChatState, ...nextChatState } } : {}),
+    }
+}
+
+function sessionPayload(
+    title = 'E2E verified workflow',
+    persistenceMode: PersistenceMode = 'persistent',
+    id = 'session-e2e',
+    metadata: Record<string, unknown> = { surface: 'chat' },
+) {
     return {
         id,
         title,
         mode: 'verified_execution',
         persistence_mode: persistenceMode,
         active_model_profile_id: null,
-        metadata: { surface: 'chat' },
+        metadata,
         created_at: now,
         updated_at: now,
     }
@@ -1162,6 +1191,8 @@ export type InstallTalosApiMocksOptions = {
         id: string
         title: string
         persistence_mode?: PersistenceMode
+        metadata?: Record<string, unknown>
+        messages?: InitialSessionMessage[]
     }>
 }
 
@@ -1194,7 +1225,19 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         session.title,
         session.persistence_mode ?? 'persistent',
         session.id,
+        session.metadata ?? { surface: 'chat' },
     ))
+    for (const session of options.initialSessions ?? []) {
+        if (!session.messages?.length) {
+            continue
+        }
+
+        messagesBySession.set(session.id, session.messages.map((message) => {
+            messageSequence += 1
+
+            return messagePayload(message, messageSequence, session.id)
+        }))
+    }
     let activeSessionPersistenceMode: PersistenceMode = 'persistent'
     let workspaceSettings: {
         id: string
@@ -1396,7 +1439,15 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             activeSessionPersistenceMode = body.persistence_mode === 'temporary' ? 'temporary' : 'persistent'
             createdSessionCount += 1
             const sessionId = createdSessionCount === 1 ? 'session-e2e' : `session-e2e-${createdSessionCount}`
-            const session = sessionPayload(String(body.title ?? 'E2E verified workflow'), activeSessionPersistenceMode, sessionId)
+            const session = {
+                ...sessionPayload(
+                    String(body.title ?? 'E2E verified workflow'),
+                    activeSessionPersistenceMode,
+                    sessionId,
+                    mergeMetadata({ surface: 'chat' }, body.metadata),
+                ),
+                active_model_profile_id: typeof body.active_model_profile_id === 'string' ? body.active_model_profile_id : null,
+            }
             sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
             return json(route, { data: session }, 201)
         }
@@ -1407,9 +1458,25 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             const sessionId = sessionPatchMatch[1]
             const existing = sessions.find((item) => item.id === sessionId)
             const persistenceMode = existing?.persistence_mode === 'temporary' ? 'temporary' : activeSessionPersistenceMode
-            const session = sessionPayload(String(body.title ?? existing?.title ?? 'E2E verified workflow'), persistenceMode, sessionId)
+            const session = {
+                ...(existing ?? sessionPayload(String(body.title ?? 'E2E verified workflow'), persistenceMode, sessionId)),
+                title: String(body.title ?? existing?.title ?? 'E2E verified workflow'),
+                mode: body.mode === 'answer_only' ? 'answer_only' : existing?.mode ?? 'verified_execution',
+                persistence_mode: persistenceMode,
+                active_model_profile_id: typeof body.active_model_profile_id === 'string' ? body.active_model_profile_id : existing?.active_model_profile_id ?? null,
+                metadata: mergeMetadata(existing?.metadata, body.metadata),
+                updated_at: now,
+            }
             sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
             return json(route, { data: session })
+        }
+
+        if (sessionPatchMatch && method === 'DELETE') {
+            const sessionId = sessionPatchMatch[1]
+            sessions = sessions.filter((item) => item.id !== sessionId)
+            messagesBySession.delete(sessionId)
+
+            return route.fulfill({ status: 204 })
         }
 
         const sessionExportMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/export$/)

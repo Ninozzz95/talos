@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosSession;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -109,6 +110,61 @@ final class TalosSessionApiTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('data.metadata.welcome_prompt_id', $promptId);
+    }
+
+    public function test_session_update_preserves_and_sanitizes_chat_management_metadata(): void
+    {
+        $createResponse = $this->postJson('/api/talos/sessions', [
+            'title' => 'Managed chat',
+            'metadata' => ['surface' => 'chat'],
+        ]);
+
+        $sessionId = $createResponse->json('data.id');
+        $promptId = $createResponse->json('data.metadata.welcome_prompt_id');
+
+        TalosSession::query()->findOrFail($sessionId)->update([
+            'metadata' => [
+                'surface' => 'chat',
+                'welcome_prompt_id' => $promptId,
+                'api-key' => 'existing-api-key',
+                'private key' => 'existing-private-key',
+                'unsafe_html' => '<script>alert(1)</script>',
+                'nested' => [
+                    'auth token' => 'existing-auth-token',
+                ],
+            ],
+        ]);
+
+        $this->patchJson('/api/talos/sessions/' . $sessionId, [
+            'metadata' => [
+                'chat_state' => [
+                    'favorite' => true,
+                    'archived' => true,
+                    'selected' => true,
+                    'folder' => 'Ops / Incidents',
+                    'copied_from_session_id' => 'source-session',
+                    'unsafe_html' => '<script>alert(1)</script>',
+                ],
+                'api key' => 'incoming-api-key',
+                'private-key' => 'incoming-private-key',
+                'secret_token' => 'should-not-survive',
+                'welcome_prompt_id' => 'not-allowed',
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.metadata.welcome_prompt_id', $promptId)
+            ->assertJsonPath('data.metadata.chat_state.favorite', true)
+            ->assertJsonPath('data.metadata.chat_state.archived', true)
+            ->assertJsonPath('data.metadata.chat_state.selected', true)
+            ->assertJsonPath('data.metadata.chat_state.folder', 'Ops / Incidents')
+            ->assertJsonPath('data.metadata.chat_state.copied_from_session_id', 'source-session')
+            ->assertJsonMissing(['should-not-survive'])
+            ->assertJsonMissing(['existing-api-key'])
+            ->assertJsonMissing(['existing-private-key'])
+            ->assertJsonMissing(['existing-auth-token'])
+            ->assertJsonMissing(['incoming-api-key'])
+            ->assertJsonMissing(['incoming-private-key'])
+            ->assertJsonMissing(['unsafe_html']);
     }
 
     public function test_session_validation_rejects_invalid_payloads(): void

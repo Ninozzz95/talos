@@ -1,28 +1,40 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
     Activity,
+    Archive,
     BarChart3,
     BookOpen,
     Brain,
     CalendarDays,
+    CheckSquare,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    Copy,
     FileArchive,
+    Folder,
+    FolderInput,
     FlaskConical,
     Image,
     ListTodo,
     MessageSquarePlus,
     Moon,
+    MoreHorizontal,
     NotebookPen,
     Palette,
+    Pencil,
     Search,
     Settings,
+    Square,
+    Star,
     Stethoscope,
     Sun,
+    Trash2,
     Wrench,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import { sessionChatState } from '../../../composables/useTalosSessions'
 import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
 import type { TalosSession } from '../../../lib/talosTypes'
 
@@ -42,6 +54,13 @@ const emit = defineEmits<{
     collapse: []
     expand: []
     resizeStart: [event: PointerEvent]
+    renameSession: [session: TalosSession, title: string]
+    favoriteSession: [session: TalosSession]
+    toggleSessionSelected: [session: TalosSession]
+    archiveSession: [session: TalosSession]
+    moveSessionToFolder: [session: TalosSession, folder: string]
+    deleteSession: [session: TalosSession]
+    copySession: [session: TalosSession]
 }>()
 
 const primaryItems: RailItem[] = [
@@ -79,6 +98,12 @@ const props = defineProps<{
 const railStyle = computed(() => ({
     width: `${props.collapsed ? 64 : props.width}px`,
 }))
+const openMenuRowKey = ref<string | null>(null)
+const renamingRowKey = ref<string | null>(null)
+const movingRowKey = ref<string | null>(null)
+const renameValue = ref('')
+const folderValue = ref('')
+const collapsedGroups = ref<Record<string, boolean>>({})
 const lightThemeActive = computed(() => talosThemeIsLight(props.theme))
 const visiblePrimaryItems = computed(() => primaryItems.filter((item) => {
     if (item.id === 'search') {
@@ -107,7 +132,47 @@ const visibleSystemItems = computed(() => systemItems.filter((item) => {
     return props.visibility[item.id] !== false
 }))
 
-const visibleSessions = computed(() => props.sessions.filter((session) => session.persistence_mode !== 'temporary').slice(0, 12))
+const chatSessions = computed(() => props.sessions.filter((session) => session.persistence_mode !== 'temporary'))
+const visibleSessions = computed(() => chatSessions.value.slice(0, 24))
+const sessionGroups = computed(() => {
+    const favorites = visibleSessions.value.filter((session) => sessionChatState(session).favorite && !sessionChatState(session).archived)
+    const archived = visibleSessions.value.filter((session) => sessionChatState(session).archived)
+    const folders = new Map<string, TalosSession[]>()
+
+    for (const session of visibleSessions.value) {
+        const state = sessionChatState(session)
+        if (state.archived || !state.folder) {
+            continue
+        }
+
+        folders.set(state.folder, [...(folders.get(state.folder) ?? []), session])
+    }
+
+    const recent = visibleSessions.value.filter((session) => {
+        const state = sessionChatState(session)
+
+        return !state.archived && !state.favorite && !state.folder
+    })
+    const groups: Array<{ id: string; label: string; sessions: TalosSession[] }> = []
+
+    if (favorites.length > 0) {
+        groups.push({ id: 'favorites', label: 'Favorites', sessions: favorites })
+    }
+
+    for (const [folder, sessions] of [...folders.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+        groups.push({ id: `folder-${folder}`, label: folder, sessions })
+    }
+
+    if (recent.length > 0) {
+        groups.push({ id: 'recent', label: 'Recent', sessions: recent })
+    }
+
+    if (archived.length > 0) {
+        groups.push({ id: 'archived', label: 'Archived', sessions: archived })
+    }
+
+    return groups
+})
 
 function sessionTimestamp(session: TalosSession) {
     const value = Date.parse(session.updated_at || session.created_at)
@@ -119,6 +184,76 @@ function sessionTimestamp(session: TalosSession) {
         month: 'short',
         day: 'numeric',
     }).format(value)
+}
+
+function groupTestId(groupId: string) {
+    if (groupId === 'favorites') {
+        return 'talos-session-folder-favorites'
+    }
+    if (groupId === 'archived') {
+        return 'talos-session-folder-archived'
+    }
+    if (groupId.startsWith('folder-')) {
+        return `talos-session-folder-${groupId.slice(7).replace(/[^A-Za-z0-9_-]/g, '-')}`
+    }
+
+    return 'talos-session-folder-recent'
+}
+
+function groupOpen(groupId: string) {
+    return collapsedGroups.value[groupId] !== true
+}
+
+function sessionRowKey(groupId: string, sessionId: string) {
+    return `${groupId}:${sessionId}`
+}
+
+function toggleGroup(groupId: string) {
+    collapsedGroups.value = {
+        ...collapsedGroups.value,
+        [groupId]: groupOpen(groupId),
+    }
+}
+
+function toggleSessionMenu(rowKey: string) {
+    openMenuRowKey.value = openMenuRowKey.value === rowKey ? null : rowKey
+    renamingRowKey.value = null
+    movingRowKey.value = null
+}
+
+function closeSessionMenu() {
+    openMenuRowKey.value = null
+}
+
+function startRename(session: TalosSession, rowKey: string) {
+    renameValue.value = session.title || 'Untitled chat'
+    renamingRowKey.value = rowKey
+    movingRowKey.value = null
+    closeSessionMenu()
+}
+
+function submitRename(session: TalosSession) {
+    emit('renameSession', session, renameValue.value)
+    renamingRowKey.value = null
+}
+
+function startMove(session: TalosSession, rowKey: string) {
+    folderValue.value = sessionChatState(session).folder
+    movingRowKey.value = rowKey
+    renamingRowKey.value = null
+    closeSessionMenu()
+}
+
+function submitMove(session: TalosSession) {
+    emit('moveSessionToFolder', session, folderValue.value)
+    movingRowKey.value = null
+}
+
+function deleteWithConfirmation(session: TalosSession) {
+    closeSessionMenu()
+    if (window.confirm(`Delete "${session.title || 'Untitled chat'}"? This cannot be undone.`)) {
+        emit('deleteSession', session)
+    }
 }
 </script>
 
@@ -174,23 +309,129 @@ function sessionTimestamp(session: TalosSession) {
                 <span class="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-muted)]">Chats</span>
                 <span class="text-[10px] font-medium text-[var(--talos-muted)]">{{ visibleSessions.length }}</span>
             </div>
-            <div v-if="visibleSessions.length" class="max-h-40 space-y-0.5 overflow-y-auto pr-1">
-                <button
-                    v-for="session in visibleSessions"
-                    :key="session.id"
-                    type="button"
-                    class="group flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                    :class="activeSessionId === session.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]' : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]'"
-                    :aria-current="activeSessionId === session.id ? 'page' : undefined"
-                    :aria-label="`Open chat ${session.title}`"
-                    @click="emit('selectSession', session)"
+            <div v-if="sessionGroups.length" class="max-h-56 space-y-2 overflow-y-auto pr-1">
+                <div
+                    v-for="group in sessionGroups"
+                    :key="group.id"
+                    :data-testid="groupTestId(group.id)"
+                    class="space-y-0.5"
                 >
-                    <span class="min-w-0">
-                        <span class="block truncate text-[12px] font-medium">{{ session.title || 'Untitled chat' }}</span>
-                        <span class="block truncate text-[10px] text-[var(--talos-muted)]">{{ session.persistence_mode === 'temporary' ? 'Temporary' : 'Persistent' }}</span>
-                    </span>
-                    <span class="shrink-0 text-[10px] text-[var(--talos-muted)]">{{ sessionTimestamp(session) }}</span>
-                </button>
+                    <button
+                        type="button"
+                        class="flex w-full cursor-pointer items-center justify-between rounded-md px-1 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--talos-muted)] transition hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        :aria-expanded="groupOpen(group.id)"
+                        @click="toggleGroup(group.id)"
+                    >
+                        <span class="flex min-w-0 items-center gap-1.5">
+                            <Folder v-if="group.id.startsWith('folder-')" class="h-3.5 w-3.5 text-[var(--talos-accent)]" />
+                            <ChevronDown class="h-3.5 w-3.5 transition" :class="groupOpen(group.id) ? '' : '-rotate-90'" />
+                            <span class="truncate">{{ group.label }}</span>
+                        </span>
+                        <span>{{ group.sessions.length }}</span>
+                    </button>
+                    <div v-if="groupOpen(group.id)" class="space-y-0.5">
+                        <div
+                            v-for="session in group.sessions"
+                            :key="`${group.id}-${session.id}`"
+                            class="relative rounded-md"
+                        >
+                            <div
+                                class="group flex items-center gap-1 rounded-md border transition"
+                                :class="activeSessionId === session.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]' : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]'"
+                            >
+                                <button
+                                    type="button"
+                                    class="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                                    :aria-current="activeSessionId === session.id ? 'page' : undefined"
+                                    :aria-label="`Open chat ${session.title || 'Untitled chat'}`"
+                                    @click="emit('selectSession', session)"
+                                >
+                                    <span class="min-w-0">
+                                        <span class="flex min-w-0 items-center gap-1">
+                                            <CheckSquare v-if="sessionChatState(session).selected" class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
+                                            <span class="block truncate text-[12px] font-medium">{{ session.title || 'Untitled chat' }}</span>
+                                        </span>
+                                        <span class="block truncate text-[10px] text-[var(--talos-muted)]">
+                                            {{ sessionChatState(session).archived ? 'Archived' : (sessionChatState(session).folder || 'Persistent') }}
+                                        </span>
+                                    </span>
+                                    <span class="shrink-0 text-[10px] text-[var(--talos-muted)]">{{ sessionTimestamp(session) }}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="mr-1 inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--talos-muted)] opacity-80 transition hover:bg-[var(--talos-panel)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] group-hover:opacity-100"
+                                    :aria-label="`Chat actions for ${session.title || 'Untitled chat'}`"
+                                    @click.stop="toggleSessionMenu(sessionRowKey(group.id, session.id))"
+                                >
+                                    <MoreHorizontal class="h-4 w-4" />
+                                </button>
+                            </div>
+                            <div
+                                v-if="openMenuRowKey === sessionRowKey(group.id, session.id)"
+                                role="menu"
+                                aria-label="Chat actions"
+                                class="absolute right-0 top-8 z-40 w-48 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[12px] text-[var(--talos-text)] shadow-xl"
+                            >
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="startRename(session, sessionRowKey(group.id, session.id))">
+                                    <Pencil class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Rename
+                                </button>
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('favoriteSession', session); closeSessionMenu()">
+                                    <Star class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> {{ sessionChatState(session).favorite ? 'Unfavorite' : 'Favorite' }}
+                                </button>
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('toggleSessionSelected', session); closeSessionMenu()">
+                                    <component :is="sessionChatState(session).selected ? CheckSquare : Square" class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Select
+                                </button>
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('copySession', session); closeSessionMenu()">
+                                    <Copy class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Copy Chat
+                                </button>
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="startMove(session, sessionRowKey(group.id, session.id))">
+                                    <FolderInput class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Move to folder
+                                </button>
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('archiveSession', session); closeSessionMenu()">
+                                    <Archive class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Archive
+                                </button>
+                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-red-300 hover:bg-red-500/10" @click="deleteWithConfirmation(session)">
+                                    <Trash2 class="h-3.5 w-3.5" /> Delete
+                                </button>
+                            </div>
+                            <form
+                                v-if="renamingRowKey === sessionRowKey(group.id, session.id)"
+                                class="mt-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-2"
+                                @submit.prevent="submitRename(session)"
+                            >
+                                <label class="sr-only" :for="`rename-chat-${session.id}`">Rename chat</label>
+                                <input
+                                    :id="`rename-chat-${session.id}`"
+                                    v-model="renameValue"
+                                    aria-label="Rename chat"
+                                    class="h-8 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input)] px-2 text-xs text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                                />
+                                <div class="mt-2 flex justify-end gap-1">
+                                    <button type="button" class="rounded px-2 py-1 text-[11px] text-[var(--talos-muted)] hover:bg-[var(--talos-panel-soft)]" @click="renamingRowKey = null">Cancel</button>
+                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-contrast)]">Save name</button>
+                                </div>
+                            </form>
+                            <form
+                                v-if="movingRowKey === sessionRowKey(group.id, session.id)"
+                                class="mt-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-2"
+                                @submit.prevent="submitMove(session)"
+                            >
+                                <label class="sr-only" :for="`folder-chat-${session.id}`">Folder name</label>
+                                <input
+                                    :id="`folder-chat-${session.id}`"
+                                    v-model="folderValue"
+                                    aria-label="Folder name"
+                                    placeholder="Folder name"
+                                    class="h-8 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input)] px-2 text-xs text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                                />
+                                <div class="mt-2 flex justify-end gap-1">
+                                    <button type="button" class="rounded px-2 py-1 text-[11px] text-[var(--talos-muted)] hover:bg-[var(--talos-panel-soft)]" @click="movingRowKey = null">Cancel</button>
+                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-contrast)]">Move chat</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
             <p v-else class="px-1 text-xs leading-5 text-[var(--talos-muted)]">No chats yet.</p>
         </section>

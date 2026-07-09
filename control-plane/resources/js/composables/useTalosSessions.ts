@@ -16,8 +16,38 @@ export type CreateTalosMessagePayload = {
 
 export type TalosSessionPersistenceMode = 'persistent' | 'temporary'
 
+export type TalosSessionChatState = {
+    favorite: boolean
+    archived: boolean
+    selected: boolean
+    folder: string
+    copied_from_session_id?: string
+}
+
 function sessionMessagesEndpoint(sessionId: string) {
     return `/api/talos/sessions/${sessionId}/messages`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function asString(value: unknown) {
+    return typeof value === 'string' ? value.trim() : ''
+}
+
+export function sessionChatState(session: TalosSession): TalosSessionChatState {
+    const metadata = isRecord(session.metadata) ? session.metadata : {}
+    const chatState = isRecord(metadata.chat_state) ? metadata.chat_state : {}
+    const copiedFromSessionId = asString(chatState.copied_from_session_id)
+
+    return {
+        favorite: chatState.favorite === true,
+        archived: chatState.archived === true,
+        selected: chatState.selected === true,
+        folder: asString(chatState.folder),
+        ...(copiedFromSessionId ? { copied_from_session_id: copiedFromSessionId } : {}),
+    }
 }
 
 export function useTalosSessions() {
@@ -40,6 +70,28 @@ export function useTalosSessions() {
             sessions.value.splice(index, 1, session)
         } else {
             sessions.value.unshift(session)
+        }
+    }
+
+    function findSession(sessionId: string) {
+        return sessions.value.find((session) => session.id === sessionId) ?? null
+    }
+
+    function mergedSessionMetadata(sessionId: string, patch: Record<string, unknown>) {
+        const session = findSession(sessionId)
+        const currentMetadata = isRecord(session?.metadata) ? session.metadata : {}
+        const currentChatState = isRecord(currentMetadata.chat_state) ? currentMetadata.chat_state : {}
+        const nextChatState = isRecord(patch.chat_state)
+            ? {
+                ...currentChatState,
+                ...patch.chat_state,
+            }
+            : currentChatState
+
+        return {
+            ...currentMetadata,
+            ...patch,
+            ...(isRecord(patch.chat_state) ? { chat_state: nextChatState } : {}),
         }
     }
 
@@ -97,6 +149,136 @@ export function useTalosSessions() {
         if (activeSession.value?.id === response.data.id) {
             activeSession.value = response.data
         }
+
+        return response.data
+    }
+
+    async function updateSessionMetadata(sessionId: string, metadataPatch: Record<string, unknown>) {
+        const response = await talosFetch<ApiEnvelope<TalosSession>>(`/api/talos/sessions/${sessionId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+                metadata: mergedSessionMetadata(sessionId, metadataPatch),
+            }),
+        })
+
+        upsertSession(response.data)
+
+        if (activeSession.value?.id === response.data.id) {
+            activeSession.value = response.data
+        }
+
+        return response.data
+    }
+
+    async function toggleSessionFavorite(session: TalosSession) {
+        const current = sessionChatState(session)
+
+        return updateSessionMetadata(session.id, {
+            chat_state: {
+                ...current,
+                favorite: !current.favorite,
+            },
+        })
+    }
+
+    async function toggleManagedSessionSelected(session: TalosSession) {
+        const current = sessionChatState(session)
+
+        return updateSessionMetadata(session.id, {
+            chat_state: {
+                ...current,
+                selected: !current.selected,
+            },
+        })
+    }
+
+    async function archiveSession(session: TalosSession) {
+        const current = sessionChatState(session)
+
+        return updateSessionMetadata(session.id, {
+            chat_state: {
+                ...current,
+                archived: true,
+            },
+        })
+    }
+
+    async function moveSessionToFolder(session: TalosSession, folder: string) {
+        const current = sessionChatState(session)
+
+        return updateSessionMetadata(session.id, {
+            chat_state: {
+                ...current,
+                archived: false,
+                folder: folder.trim(),
+            },
+        })
+    }
+
+    async function deleteSession(sessionId: string) {
+        await talosFetch<void>(`/api/talos/sessions/${sessionId}`, {
+            method: 'DELETE',
+        })
+
+        const wasActive = activeSession.value?.id === sessionId
+        sessions.value = sessions.value.filter((session) => session.id !== sessionId)
+
+        if (!wasActive) {
+            return
+        }
+
+        const nextSession = sessions.value[0] ?? null
+        activeSession.value = nextSession
+
+        if (nextSession) {
+            await loadMessages(nextSession.id)
+        } else {
+            messages.value = []
+        }
+    }
+
+    async function copySession(session: TalosSession) {
+        const state = sessionChatState(session)
+        const sourceMessages = await talosFetch<ApiEnvelope<TalosMessage[]>>(sessionMessagesEndpoint(session.id))
+        const response = await talosFetch<ApiEnvelope<TalosSession>>('/api/talos/sessions', {
+            method: 'POST',
+            body: JSON.stringify({
+                title: `${session.title || 'Untitled chat'} copy`,
+                mode: session.mode,
+                persistence_mode: session.persistence_mode ?? 'persistent',
+                active_model_profile_id: session.active_model_profile_id ?? null,
+                metadata: {
+                    surface: 'chat',
+                    chat_state: {
+                        favorite: false,
+                        archived: false,
+                        selected: false,
+                        folder: state.folder,
+                        copied_from_session_id: session.id,
+                    },
+                },
+            }),
+        })
+
+        for (const sourceMessage of sourceMessages.data) {
+            await talosFetch<ApiEnvelope<TalosMessage>>(sessionMessagesEndpoint(response.data.id), {
+                method: 'POST',
+                body: JSON.stringify({
+                    role: sourceMessage.role,
+                    content: sourceMessage.content,
+                    model_profile_id: sourceMessage.model_profile_id ?? null,
+                    metadata: {
+                        ...(isRecord(sourceMessage.metadata) ? sourceMessage.metadata : {}),
+                        source: 'talos_chat_copy',
+                        copied_from_session_id: session.id,
+                        copied_from_message_id: sourceMessage.id,
+                        ...(sourceMessage.run_id ? { copied_from_run_id: sourceMessage.run_id } : {}),
+                    },
+                }),
+            })
+        }
+
+        upsertSession(response.data)
 
         return response.data
     }
@@ -177,6 +359,13 @@ export function useTalosSessions() {
         loadSessions,
         createSession,
         updateSessionTitle,
+        updateSessionMetadata,
+        toggleSessionFavorite,
+        toggleManagedSessionSelected,
+        archiveSession,
+        moveSessionToFolder,
+        deleteSession,
+        copySession,
         selectSession,
         loadMessages,
         createMessage,

@@ -413,9 +413,90 @@ test('left rail exposes real persistent chat history', async ({ page }) => {
     await expect(page.getByTestId('talos-session-history')).toContainText('Investigate missing history rail')
 
     await page.getByRole('button', { name: 'New Chat', exact: true }).click()
-    await expect(page.getByTestId('talos-session-history').getByRole('button', { name: /New chat/ })).toBeVisible()
-    await page.getByTestId('talos-session-history').getByRole('button', { name: /Investigate missing history rail/ }).click()
+    await expect(page.getByTestId('talos-session-history').getByRole('button', { name: 'Open chat New chat', exact: true })).toBeVisible()
+    await page.getByTestId('talos-session-history').getByRole('button', { name: 'Open chat Investigate missing history rail', exact: true }).click()
     await expect(page.getByLabel('TALOS chat thread').getByText('Investigate missing history rail')).toBeVisible()
+})
+
+test('left rail chat items expose connected management actions', async ({ page }) => {
+    await installTalosApiMocks(page, {
+        initialSessions: [
+            {
+                id: 'session-manage-e2e',
+                title: 'Managed chat',
+                messages: [
+                    {
+                        role: 'user',
+                        content: 'Original managed prompt',
+                        metadata: { source: 'e2e-source' },
+                    },
+                    {
+                        role: 'assistant',
+                        content: 'Original managed answer',
+                        run_id: 'run-e2e',
+                        metadata: { source: 'talos_chat_proxy' },
+                    },
+                ],
+            },
+            { id: 'session-archive-e2e', title: 'Archived source' },
+        ],
+    })
+    const copiedMessageRequests: Record<string, unknown>[] = []
+    page.on('request', (request) => {
+        if (request.url().includes('/api/talos/sessions/session-e2e/messages') && request.method() === 'POST') {
+            copiedMessageRequests.push(request.postDataJSON() as Record<string, unknown>)
+        }
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const history = page.getByTestId('talos-session-history')
+    await expect(history).toBeVisible()
+    await expect(history).toContainText('Managed chat')
+
+    await history.getByRole('button', { name: 'Chat actions for Managed chat' }).click()
+    await expect(page.getByRole('menu', { name: 'Chat actions' })).toBeVisible()
+
+    const renameRequest = page.waitForRequest((request) => request.url().includes('/api/talos/sessions/session-manage-e2e') && request.method() === 'PATCH')
+    await page.getByRole('menuitem', { name: 'Rename' }).click()
+    await page.getByLabel('Rename chat').fill('Renamed managed chat')
+    await page.getByRole('button', { name: 'Save name' }).click()
+    await renameRequest
+    await expect(history).toContainText('Renamed managed chat')
+
+    await history.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Favorite' }).click()
+    await expect(history.getByText('Favorites')).toBeVisible()
+    await expect(history.getByTestId('talos-session-folder-favorites')).toContainText('Renamed managed chat')
+
+    await history.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Copy Chat' }).click()
+    await expect(history).toContainText('Renamed managed chat copy')
+    await expect.poll(() => copiedMessageRequests.length).toBe(2)
+    expect(copiedMessageRequests.some((request) => Object.prototype.hasOwnProperty.call(request, 'run_id'))).toBe(false)
+    expect(copiedMessageRequests[1].metadata).toMatchObject({
+        source: 'talos_chat_copy',
+        copied_from_session_id: 'session-manage-e2e',
+        copied_from_run_id: 'run-e2e',
+    })
+
+    await history.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Move to folder' }).click()
+    await page.getByLabel('Folder name').fill('Ops')
+    await page.getByRole('button', { name: 'Move chat' }).click()
+    const opsGroup = history.getByTestId('talos-session-folder-Ops')
+    await expect(opsGroup).toContainText('Renamed managed chat')
+
+    await opsGroup.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Archive' }).click()
+    const archivedGroup = history.getByTestId('talos-session-folder-archived')
+    await expect(archivedGroup).toContainText('Renamed managed chat')
+
+    page.once('dialog', (dialog) => dialog.accept())
+    await archivedGroup.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await expect(history.getByRole('button', { name: 'Open chat Renamed managed chat', exact: true })).toHaveCount(0)
+    await expect(history).toContainText('Renamed managed chat copy')
 })
 
 test('left rail and empty chat brand expose polished pointer and logo affordances', async ({ page }) => {
