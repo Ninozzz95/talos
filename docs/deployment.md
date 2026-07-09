@@ -108,6 +108,10 @@ http://127.0.0.1:8000/
 Do not open the Vite port as the product URL. Vite only serves development
 assets.
 
+On Windows/Git Bash the `dev` script intentionally does not run Laravel Pail,
+because Pail requires the `pcntl` extension and Windows PHP does not provide it.
+Use `storage/logs/laravel.log` for local log inspection.
+
 ### First-run authentication
 
 If the `users` table is empty, TALOS redirects to `/setup` and creates the
