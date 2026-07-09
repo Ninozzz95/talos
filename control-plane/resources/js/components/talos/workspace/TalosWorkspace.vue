@@ -353,7 +353,6 @@ function isWindowId(value: string): value is TalosWindowId {
 function launchOriginFromEvent(event?: MouseEvent | PointerEvent, source: TalosWindowLaunchOrigin['source'] = 'default'): TalosWindowLaunchOrigin {
     const target = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
     const rect = target?.getBoundingClientRect()
-
     if (rect) {
         return {
             x: Math.round(rect.left + (rect.width / 2) - currentRailWidth.value),
@@ -361,7 +360,6 @@ function launchOriginFromEvent(event?: MouseEvent | PointerEvent, source: TalosW
             source,
         }
     }
-
     return {
         x: -Math.round(Math.max(72, currentRailWidth.value * 0.45)),
         y: typeof window === 'undefined' ? 120 : Math.round(window.innerHeight * 0.42),

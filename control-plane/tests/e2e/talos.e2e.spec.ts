@@ -2327,8 +2327,15 @@ test('deep research v3 queues source-backed draft reports with claim graph evide
     await expect(page.getByText('planned').first()).toBeVisible()
     await expect(page.getByText('pending').first()).toBeVisible()
     await expect(page.getByText('talos://research-reports/')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Chat with report' })).toBeDisabled()
-    await expect(page.getByText('Report chat context export is not available yet.')).toBeVisible()
+    const followUpRequest = page.waitForRequest((request) => request.url().includes('/api/talos/research-reports/research-report-e2e-1/follow-up-session') && request.method() === 'POST')
+    await page.getByRole('button', { name: 'Chat with report' }).click()
+    await followUpRequest
+    await expect(page.getByText('Follow-up session created:')).toBeVisible()
+
+    const exportRequest = page.waitForRequest((request) => request.url().includes('/api/talos/research-reports/research-report-e2e-1/export?format=markdown') && request.method() === 'GET')
+    await page.getByRole('button', { name: 'Export report' }).click()
+    await exportRequest
+    await expect(page.getByText('Research report exported.')).toBeVisible()
 
     await expectNoHorizontalOverflow(page)
     await testInfo.attach(`deep-research-v3-${testInfo.project.name}.png`, {
@@ -2506,6 +2513,37 @@ test('dashboard runs a fresh benchmark comparison and inspects created lanes', a
     await expect(page.getByText('AVM OFF generated')).toBeVisible()
     await expect(page.getByText('Generated AVM lane preserved node evidence.')).toBeVisible()
     await expect(page.getByText('Direct lane completed without replayable node evidence.')).toBeVisible()
+})
+
+test('dashboard runs a blind model comparison, reveals vote, and promotes benchmark evidence', async ({ page }) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Benchmarks')
+
+    await page.getByRole('tab', { name: 'Model Compare' }).click()
+    await expect(page.getByRole('heading', { name: 'Model Compare V4' })).toBeVisible()
+
+    await page.getByLabel('Comparison prompt').fill('Compare recovery options for a blocked DAG.')
+    await page.getByLabel('Model slot A').selectOption('profile-e2e')
+    await page.getByLabel('Model slot B').selectOption('profile-alt-e2e')
+    await page.getByRole('button', { name: 'Start blind comparison' }).click()
+
+    await expect(page.getByText('Model comparison completed.')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Model A' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Model B' })).toBeVisible()
+    await expect(page.getByText('Identity hidden until vote').first()).toBeVisible()
+    await expect(page.getByTestId('talos-comparison-lane-model-a').getByText('Run hidden')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Vote Model A' }).click()
+    await expect(page.getByTestId('talos-comparison-lane-model-a').getByText('E2E server-side profile')).toBeVisible()
+    await expect(page.getByTestId('talos-comparison-lane-model-b').getByText('E2E alternate profile')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Promote to benchmark' }).click()
+    await expect(page.getByText('Model comparison promoted to benchmark evidence.')).toBeVisible()
+    await expect(page.getByText('Model comparison V4')).toBeVisible()
+    await expect(page.getByText('Model Lane A')).toBeVisible()
+    await expect(page.getByText('Model Lane B')).toBeVisible()
+    await expect(page.getByText('Export gated')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Export report', exact: true })).toBeDisabled()
 })
 
 test('mobile chat and dashboard avoid layout overflow', async ({ page, isMobile }) => {

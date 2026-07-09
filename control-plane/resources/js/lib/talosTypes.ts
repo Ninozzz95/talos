@@ -436,7 +436,7 @@ export type TalosBenchmarkGroup = {
 export type TalosBenchmarkResult = {
     id: string
     benchmark_group_id: string
-    mode: 'avm_on' | 'avm_off_direct' | 'tool_agent'
+    mode: 'avm_on' | 'avm_off_direct' | 'tool_agent' | 'model_lane_a' | 'model_lane_b' | 'model_lane_c' | string
     label?: string | null
     status: string
     prompt_hash: string
@@ -446,6 +446,44 @@ export type TalosBenchmarkResult = {
     raw_report: Record<string, unknown>
     raw_log_path?: string | null
     trace_replayable: boolean
+    created_at: string
+    updated_at: string
+}
+
+export type TalosModelComparisonLane = {
+    id: string
+    comparison_id: string
+    display_alias: string
+    position: number
+    weight: number
+    status: 'queued' | 'running' | 'completed' | 'failed' | string
+    response_text?: string | null
+    latency_ms?: number | null
+    cost?: number | null
+    run_id?: string | null
+    error_code?: string | null
+    error_message?: string | null
+    metadata?: Record<string, unknown> | null
+    model_profile_id?: string
+    model_profile?: Pick<TalosModelProfile, 'id' | 'display_name' | 'provider' | 'model' | 'status'> | null
+}
+
+export type TalosModelComparison = {
+    id: string
+    user_id?: number | null
+    prompt: string
+    mode: 'blind' | 'parallel' | 'shuffle' | string
+    task_type: 'chat' | 'agent' | 'search' | 'research' | string
+    blind: boolean
+    status: string
+    timeout_seconds: number
+    winner_lane_id?: string | null
+    revealed: boolean
+    revealed_at?: string | null
+    benchmark_group_id?: string | null
+    scorecard?: Record<string, unknown> | null
+    metadata?: Record<string, unknown> | null
+    lanes: TalosModelComparisonLane[]
     created_at: string
     updated_at: string
 }

@@ -18,6 +18,7 @@ final class TalosResearchReport extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'user_id',
         'run_id',
         'context_set_id',
         'benchmark_group_id',
@@ -28,6 +29,14 @@ final class TalosResearchReport extends Model
         'report_markdown',
         'metadata',
     ];
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 
     /**
      * @return BelongsTo<TalosRun, $this>
@@ -70,6 +79,7 @@ final class TalosResearchReport extends Model
     {
         $data = [
             'id' => $this->id,
+            'user_id' => $this->user_id,
             'run_id' => $this->run_id,
             'context_set_id' => $this->context_set_id,
             'benchmark_group_id' => $this->benchmark_group_id,

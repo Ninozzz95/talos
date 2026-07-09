@@ -37,6 +37,15 @@ export type TalosCreateResearchReportInput = {
     claims: TalosResearchClaimInput[]
 }
 
+export type TalosResearchExportPayload = {
+    research_report_id: string
+    format: 'json' | 'markdown'
+    mime_type: string
+    export_status: string
+    content: string | Record<string, unknown>
+    generated_at: string
+}
+
 export function useTalosResearch() {
     const researchReports = ref<TalosResearchReport[]>([])
     const researchReportDetails = ref<Record<string, TalosResearchReport>>({})
@@ -110,6 +119,36 @@ export function useTalosResearch() {
         }
     }
 
+    async function exportResearchReport(reportId: string, format: 'json' | 'markdown' = 'markdown') {
+        researchError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosResearchExportPayload>>(`/api/talos/research-reports/${reportId}/export?format=${encodeURIComponent(format)}`)
+
+            return response.data
+        } catch (error) {
+            researchError.value = error instanceof Error ? error.message : 'TALOS could not export this research report.'
+            throw error
+        }
+    }
+
+    async function createFollowUpSession(reportId: string, prompt?: string | null) {
+        researchError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<{ id: string; title: string; mode: string; metadata?: Record<string, unknown> }>>(`/api/talos/research-reports/${reportId}/follow-up-session`, {
+                method: 'POST',
+                body: JSON.stringify({ prompt: prompt ?? null }),
+                validationMessage: 'TALOS could not create a follow-up session for this report.',
+            })
+
+            return response.data
+        } catch (error) {
+            researchError.value = error instanceof Error ? error.message : 'TALOS could not create this follow-up session.'
+            throw error
+        }
+    }
+
     function researchReportById(reportId: string | null | undefined) {
         if (!reportId) {
             return null
@@ -131,6 +170,8 @@ export function useTalosResearch() {
         loadResearchReports,
         loadResearchReport,
         createResearchReport,
+        exportResearchReport,
+        createFollowUpSession,
         researchReportById,
     }
 }
