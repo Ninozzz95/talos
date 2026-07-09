@@ -35,6 +35,19 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/') . '/integrations/google/callback'),
+        'auth_uri' => env('GOOGLE_AUTH_URI', 'https://accounts.google.com/o/oauth2/v2/auth'),
+        'token_uri' => env('GOOGLE_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
+        'userinfo_uri' => env('GOOGLE_USERINFO_URI', 'https://www.googleapis.com/oauth2/v3/userinfo'),
+        'scopes' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('GOOGLE_OAUTH_SCOPES', 'https://www.googleapis.com/auth/drive.file,https://www.googleapis.com/auth/calendar.events.readonly')),
+        ))),
+    ],
+
     'talos' => [
         'registry_write_token' => env('TALOS_REGISTRY_WRITE_TOKEN'),
         'validator_health_url' => env('TALOS_VALIDATOR_HEALTH_URL'),

@@ -11,6 +11,7 @@ final class TalosResearchWorkbenchTest extends TestCase
     public function test_dashboard_mounts_real_research_workbench_only_in_dashboard(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosResearch.ts');
         $workbenchPath = base_path('resources/js/components/talos/research/TalosResearchWorkbench.vue');
@@ -21,6 +22,7 @@ final class TalosResearchWorkbenchTest extends TestCase
         $graphPath = base_path('resources/js/components/talos/research/TalosClaimSourceGraph.vue');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertIsString($chat);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($workbenchPath);
@@ -47,8 +49,9 @@ final class TalosResearchWorkbenchTest extends TestCase
         $this->assertIsString($graph);
         $this->assertStringContainsString('/api/talos/research-reports', $composable);
         $this->assertStringContainsString('createResearchReport', $composable);
-        $this->assertStringContainsString('TalosResearchWorkbench', $shell);
-        $this->assertStringContainsString('<TalosResearchWorkbench', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosResearchWorkbench', $windowLayer);
+        $this->assertStringContainsString('<TalosResearchWorkbench', $windowLayer);
         $this->assertStringContainsString('TalosSourceTable', $workbench);
         $this->assertStringContainsString('TalosClaimVerifier', $workbench);
         $this->assertStringContainsString('TalosResearchQueue', $workbench);

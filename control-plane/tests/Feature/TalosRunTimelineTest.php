@@ -11,6 +11,7 @@ final class TalosRunTimelineTest extends TestCase
     public function test_dashboard_mounts_real_run_timeline_components(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $composablePath = base_path('resources/js/composables/useTalosRuns.ts');
         $timelinePath = base_path('resources/js/components/talos/runs/TalosRunTimeline.vue');
         $graphPath = base_path('resources/js/components/talos/runs/TalosNodeGraph.vue');
@@ -20,6 +21,7 @@ final class TalosRunTimelineTest extends TestCase
         $commandRegistryPath = base_path('resources/js/lib/commandRegistry.ts');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($timelinePath);
         $this->assertFileExists($graphPath);
@@ -46,9 +48,10 @@ final class TalosRunTimelineTest extends TestCase
         $this->assertStringContainsString('recoverRunNode', $composable);
         $this->assertStringContainsString('loadRunReplay', $composable);
         $this->assertStringContainsString('loadRunArtifacts', $composable);
-        $this->assertStringContainsString('TalosRunTimeline', $shell);
-        $this->assertStringContainsString('<TalosRunTimeline', $shell);
-        $this->assertStringContainsString('@open-audit-log="openAuditLogFromRuntime"', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosRunTimeline', $windowLayer);
+        $this->assertStringContainsString('<TalosRunTimeline', $windowLayer);
+        $this->assertStringContainsString('@open-audit-log="emit(\'openAuditLog\')"', $windowLayer);
         $this->assertStringContainsString('TalosTraceReplay', $timeline);
         $this->assertStringContainsString('TalosRecoveryPanel', $timeline);
         $this->assertStringContainsString('<TalosTraceReplay', $timeline);

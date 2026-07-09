@@ -539,6 +539,17 @@ test('settings boolean preferences render as accessible switch controls', async 
     await expect(page.getByRole('switch', { name: 'Code tools' })).toBeVisible()
 })
 
+test('google integration shows connected account without exposing tokens', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('tab', { name: /Integrations/ }).click()
+
+    await expect(page.getByText('Google Workspace')).toBeVisible()
+    await expect(page.getByText('operator@example.test')).toBeVisible()
+    await expect(page.getByText(/Access token|Refresh token|encrypted_/i)).toHaveCount(0)
+})
+
 test('dashboard loads cockpit panels and opens the command palette', async ({ page }, testInfo) => {
     await openWorkspace(page)
 
@@ -717,6 +728,31 @@ test('model center offers provider-first quick add with draft test before persis
 
     await testInfo.attach(`model-center-quick-add-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('cookbook model lab shows hardware scan fit score and preview-only commands', async ({ page }, testInfo) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Runtime')
+    await page.getByRole('button', { name: /Model Lab|Cookbook/ }).click()
+
+    await expect(page.getByRole('heading', { name: 'Model Lab', exact: true })).toBeVisible()
+    await expect(page.getByText('Hardware scan', { exact: true })).toBeVisible()
+    await expect(page.getByText('Fit score', { exact: true })).toBeVisible()
+
+    await page.getByRole('tab', { name: 'Download' }).click()
+    const previewRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/cookbook/download-preview')
+        && request.method() === 'POST'
+    ))
+    await page.getByRole('button', { name: /Preview download command/ }).click()
+    await previewRequest
+    await expect(page.getByText('Dry-run preview')).toBeVisible()
+    await expect(page.getByText('No host command has been executed.')).toBeVisible()
+
+    await testInfo.attach('cookbook-model-lab.png', {
+        body: await page.screenshot({ fullPage: true }),
         contentType: 'image/png',
     })
 })
@@ -1827,6 +1863,16 @@ test('file context grounds a chat turn and exposes source provenance', async ({ 
     await expect(chatThread.getByText('Workflow file says approve the deployment checklist.')).toBeVisible()
 })
 
+test('context vault can import a selected google drive file through the real import endpoint', async ({ page }) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Knowledge')
+
+    await page.getByRole('button', { name: /Import from Drive/ }).click()
+    await page.getByRole('button', { name: /Import Drive Notes.md/ }).click()
+
+    await expect(page.getByText('Imported Drive Notes.md into Context Vault.')).toBeVisible()
+})
+
 test('deep research v3 queues source-backed draft reports with claim graph evidence', async ({ page }, testInfo) => {
     await openWorkspace(page)
     await selectDashboardTab(page, 'Deep Research')
@@ -1941,6 +1987,15 @@ test('calendar v3 renders drafts as events and parses quick add safely', async (
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
+})
+
+test('calendar shows google sync state and keeps publish gated', async ({ page }) => {
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Productivity')
+    await page.getByRole('button', { name: /Calendar/ }).click()
+
+    await expect(page.getByText('Google Calendar')).toBeVisible()
+    await expect(page.getByText('External writes require confirmation.')).toBeVisible()
 })
 
 test('dashboard replays a persisted failed run and exposes fault evidence', async ({ page }) => {

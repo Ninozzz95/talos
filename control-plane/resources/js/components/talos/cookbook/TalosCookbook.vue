@@ -1,0 +1,216 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { AlertCircle, CheckCircle2, Cpu, Download, Loader2, PackageCheck, ServerCog } from '@lucide/vue'
+import Badge from '../../ui/Badge.vue'
+import Button from '../../ui/Button.vue'
+import Surface from '../../ui/Surface.vue'
+import TalosCookbookDependencies from './TalosCookbookDependencies.vue'
+import TalosCookbookDownload from './TalosCookbookDownload.vue'
+import TalosCookbookLaunch from './TalosCookbookLaunch.vue'
+import TalosCookbookSettings from './TalosCookbookSettings.vue'
+import { useTalosCookbook } from '../../../composables/useTalosCookbook'
+import type { TalosCookbookCommandPreview } from '../../../lib/talosTypes'
+
+type CookbookTab = 'launch' | 'download' | 'dependencies' | 'settings'
+
+const tabs: Array<{
+    id: CookbookTab
+    label: string
+    icon: typeof Cpu
+}> = [
+    { id: 'launch', label: 'Launch', icon: Cpu },
+    { id: 'download', label: 'Download', icon: Download },
+    { id: 'dependencies', label: 'Dependencies', icon: PackageCheck },
+    { id: 'settings', label: 'Settings', icon: ServerCog },
+]
+
+const {
+    overview,
+    models,
+    loading,
+    actionMessage,
+    errorMessage,
+    loadOverview,
+    scanHardware,
+    loadModels,
+    previewDownload,
+    previewServe,
+} = useTalosCookbook()
+
+const activeTab = ref<CookbookTab>('launch')
+const selectedModelId = ref('')
+const selectedRuntime = ref('')
+const downloadPreview = ref<TalosCookbookCommandPreview | null>(null)
+const servePreview = ref<TalosCookbookCommandPreview | null>(null)
+
+const runtimes = computed(() => overview.value?.runtimes ?? [])
+const profile = computed(() => overview.value?.profile ?? null)
+const runtimeCount = computed(() => runtimes.value.length)
+const modelCount = computed(() => models.value.length)
+
+const firstRuntimeKind = computed(() => {
+    return runtimes.value[0]?.kind
+        ?? models.value[0]?.runtime_modes[0]
+        ?? 'ollama'
+})
+
+function selectedModelExists(modelId: string) {
+    return models.value.some((model) => model.model_id === modelId)
+}
+
+function selectedRuntimeExists(runtime: string) {
+    return runtimes.value.some((candidate) => candidate.kind === runtime)
+}
+
+function selectedPreviewPayload() {
+    const modelId = selectedModelId.value || models.value[0]?.model_id || ''
+    const runtime = selectedRuntime.value || firstRuntimeKind.value
+
+    if (!modelId || !runtime) {
+        return null
+    }
+
+    return {
+        model_id: modelId,
+        runtime,
+    }
+}
+
+async function runHardwareScan() {
+    await scanHardware()
+    await loadModels()
+}
+
+async function runDownloadPreview() {
+    const payload = selectedPreviewPayload()
+
+    if (!payload) {
+        return
+    }
+
+    downloadPreview.value = await previewDownload(payload)
+}
+
+async function runServePreview() {
+    const payload = selectedPreviewPayload()
+
+    if (!payload) {
+        return
+    }
+
+    servePreview.value = await previewServe(payload)
+}
+
+watch(models, (nextModels) => {
+    if (!nextModels.length) {
+        selectedModelId.value = ''
+        return
+    }
+
+    if (!selectedModelId.value || !selectedModelExists(selectedModelId.value)) {
+        selectedModelId.value = nextModels[0].model_id
+    }
+}, { immediate: true })
+
+watch(runtimes, () => {
+    if (!selectedRuntime.value || !selectedRuntimeExists(selectedRuntime.value)) {
+        selectedRuntime.value = firstRuntimeKind.value
+    }
+}, { immediate: true })
+
+onMounted(() => {
+    void loadOverview()
+})
+</script>
+
+<template>
+    <Surface aria-label="Cookbook">
+        <div class="border-b border-[var(--talos-border)] p-4">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
+                        <Cpu class="h-4 w-4 text-[var(--talos-accent)]" />
+                        Cookbook
+                    </div>
+                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Local model lab</h3>
+                    <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
+                        Hardware fit scoring and preview-only local runtime commands backed by `/api/talos/cookbook/*`.
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Badge :tone="profile ? 'success' : 'warning'">{{ profile ? 'hardware scanned' : 'no scan' }}</Badge>
+                    <Badge tone="neutral">{{ runtimeCount }} runtimes</Badge>
+                    <Badge tone="neutral">{{ modelCount }} models</Badge>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-4 p-4">
+            <div v-if="errorMessage" class="flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
+                <AlertCircle class="mt-1 h-4 w-4 shrink-0 text-[var(--talos-warning)]" />
+                <span>{{ errorMessage }}</span>
+            </div>
+
+            <div v-if="actionMessage" class="flex items-start gap-2 rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
+                <CheckCircle2 class="mt-1 h-4 w-4 shrink-0 text-[var(--talos-success)]" />
+                <span>{{ actionMessage }}</span>
+            </div>
+
+            <div class="flex flex-wrap gap-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-active)] p-1" role="tablist" aria-label="Cookbook panels">
+                <Button
+                    v-for="tab in tabs"
+                    :key="tab.id"
+                    type="button"
+                    :variant="activeTab === tab.id ? 'secondary' : 'ghost'"
+                    size="sm"
+                    role="tab"
+                    :aria-selected="activeTab === tab.id"
+                    :aria-controls="`talos-cookbook-${tab.id}`"
+                    @click="activeTab = tab.id"
+                >
+                    <component :is="tab.icon" class="h-4 w-4" />
+                    {{ tab.label }}
+                </Button>
+                <div v-if="loading" class="ml-auto flex items-center gap-2 px-2 text-xs text-[var(--talos-muted)]">
+                    <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                    Syncing
+                </div>
+            </div>
+
+            <div :id="`talos-cookbook-${activeTab}`" role="tabpanel">
+                <TalosCookbookLaunch
+                    v-if="activeTab === 'launch'"
+                    :overview="overview"
+                    :models="models"
+                    :loading="loading"
+                    @scan="runHardwareScan"
+                    @refresh="loadModels"
+                />
+                <TalosCookbookDownload
+                    v-else-if="activeTab === 'download'"
+                    v-model:selected-model-id="selectedModelId"
+                    v-model:selected-runtime="selectedRuntime"
+                    :models="models"
+                    :runtimes="runtimes"
+                    :preview="downloadPreview"
+                    :loading="loading"
+                    @preview="runDownloadPreview"
+                />
+                <TalosCookbookDependencies
+                    v-else-if="activeTab === 'dependencies'"
+                    :runtimes="runtimes"
+                />
+                <TalosCookbookSettings
+                    v-else
+                    v-model:selected-model-id="selectedModelId"
+                    v-model:selected-runtime="selectedRuntime"
+                    :models="models"
+                    :runtimes="runtimes"
+                    :preview="servePreview"
+                    :loading="loading"
+                    @preview="runServePreview"
+                />
+            </div>
+        </div>
+    </Surface>
+</template>

@@ -30,7 +30,7 @@ final class TalosGuidedStartEvidenceLoopTest extends TestCase
     public function test_grounded_chat_run_can_be_benchmarked_with_source_level_evidence(): void
     {
         config(['services.avm_validator.url' => 'http://validator.test']);
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $session = TalosSession::query()->create([
             'title' => 'Guided evidence loop',

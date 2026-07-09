@@ -11,6 +11,7 @@ final class TalosContextVaultTest extends TestCase
     public function test_dashboard_mounts_real_context_vault_backed_by_file_and_context_apis(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $composablePath = base_path('resources/js/composables/useTalosContextVault.ts');
         $vaultPath = base_path('resources/js/components/talos/context/TalosContextVault.vue');
         $dropzonePath = base_path('resources/js/components/talos/context/TalosFileDropzone.vue');
@@ -18,6 +19,7 @@ final class TalosContextVaultTest extends TestCase
         $sourceDrawerPath = base_path('resources/js/components/talos/context/TalosSourceDrawer.vue');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($vaultPath);
         $this->assertFileExists($dropzonePath);
@@ -31,8 +33,9 @@ final class TalosContextVaultTest extends TestCase
         $this->assertIsString($composable);
         $this->assertIsString($vault);
         $this->assertIsString($statusList);
-        $this->assertStringContainsString('TalosContextVault', $shell);
-        $this->assertStringContainsString('<TalosContextVault', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosContextVault', $windowLayer);
+        $this->assertStringContainsString('<TalosContextVault', $windowLayer);
         $this->assertStringContainsString('/api/talos/files', $composable);
         $this->assertStringContainsString('/api/files/ingest', $composable);
         $this->assertStringContainsString('/api/talos/context-sets', $composable);

@@ -11,12 +11,14 @@ final class TalosToolRegistryTest extends TestCase
     public function test_dashboard_mounts_real_tool_registry_backed_by_connector_and_tool_apis(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $composablePath = base_path('resources/js/composables/useTalosTools.ts');
         $registryPath = base_path('resources/js/components/talos/tools/TalosToolRegistry.vue');
         $healthPath = base_path('resources/js/components/talos/tools/TalosConnectorHealth.vue');
         $schemaPath = base_path('resources/js/components/talos/tools/TalosToolSchemaViewer.vue');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($registryPath);
         $this->assertFileExists($healthPath);
@@ -31,8 +33,9 @@ final class TalosToolRegistryTest extends TestCase
         $this->assertIsString($registry);
         $this->assertIsString($health);
         $this->assertIsString($schema);
-        $this->assertStringContainsString('TalosToolRegistry', $shell);
-        $this->assertStringContainsString('<TalosToolRegistry', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosToolRegistry', $windowLayer);
+        $this->assertStringContainsString('<TalosToolRegistry', $windowLayer);
         $this->assertStringContainsString('/api/talos/connectors', $composable);
         $this->assertStringContainsString('/api/talos/tools', $composable);
         $this->assertStringContainsString('/api/talos/tools/planning-context', $composable);

@@ -11,6 +11,7 @@ final class TalosBenchmarkWorkbenchTest extends TestCase
     public function test_dashboard_mounts_real_benchmark_workbench_components(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosBenchmarks.ts');
         $workbenchPath = base_path('resources/js/components/talos/benchmarks/TalosBenchmarkWorkbench.vue');
@@ -20,6 +21,7 @@ final class TalosBenchmarkWorkbenchTest extends TestCase
         $commandRegistryPath = base_path('resources/js/lib/commandRegistry.ts');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertIsString($chat);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($workbenchPath);
@@ -40,14 +42,15 @@ final class TalosBenchmarkWorkbenchTest extends TestCase
         $this->assertStringContainsString('/api/talos/benchmark-groups', $composable);
         $this->assertStringContainsString('runBenchmarkComparison', $composable);
         $this->assertStringContainsString('loadBenchmarkGroups', $composable);
-        $this->assertStringContainsString('TalosBenchmarkWorkbench', $shell);
-        $this->assertStringContainsString('<TalosBenchmarkWorkbench', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosBenchmarkWorkbench', $windowLayer);
+        $this->assertStringContainsString('<TalosBenchmarkWorkbench', $windowLayer);
         $this->assertStringContainsString('TalosBenchmarkLane', $workbench);
         $this->assertStringContainsString('TalosMetricCard', $lane);
         $this->assertStringContainsString('TalosDiffViewer', $workbench);
         $this->assertStringContainsString("mode === 'tool_agent'", $workbench);
         $this->assertStringContainsString('downloadBenchmarkReport', $workbench);
-        $this->assertStringContainsString('/api/talos/benchmark-groups/{id}/export', $shell);
+        $this->assertStringContainsString('/api/talos/benchmark-groups/{id}/export', $windowLayer);
         $this->assertStringContainsString('same prompt', strtolower($workbench));
         $this->assertStringContainsString('same context', strtolower($workbench));
         $this->assertStringContainsString('same evaluator', strtolower($workbench));

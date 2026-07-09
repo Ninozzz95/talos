@@ -11,6 +11,7 @@ final class TalosProductivityUiTest extends TestCase
     public function test_dashboard_mounts_productivity_and_email_panels_without_active_send_controls(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $productivityComposablePath = base_path('resources/js/composables/useTalosProductivity.ts');
         $emailComposablePath = base_path('resources/js/composables/useTalosEmail.ts');
@@ -28,6 +29,7 @@ final class TalosProductivityUiTest extends TestCase
         $commandRegistryPath = base_path('resources/js/lib/commandRegistry.ts');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertIsString($chat);
         $this->assertFileExists($productivityComposablePath);
         $this->assertFileExists($emailComposablePath);
@@ -78,10 +80,11 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertStringContainsString('/api/talos/email/messages', $emailComposable);
         $this->assertStringContainsString('/api/talos/email/drafts', $emailComposable);
         $this->assertStringContainsString('/api/talos/email/connector-status', $emailComposable);
-        $this->assertStringContainsString('TalosNotes', $shell);
-        $this->assertStringContainsString('TalosTasks', $shell);
-        $this->assertStringContainsString('TalosCalendar', $shell);
-        $this->assertStringContainsString('TalosEmailTriage', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosNotes', $windowLayer);
+        $this->assertStringContainsString('TalosTasks', $windowLayer);
+        $this->assertStringContainsString('TalosCalendar', $windowLayer);
+        $this->assertStringContainsString('TalosEmailTriage', $windowLayer);
         $this->assertStringContainsString('TalosEmailDraftReview', $emailTriage);
         $this->assertStringContainsString('trust_level', $notes);
         $this->assertStringContainsString('run_id', $tasks);

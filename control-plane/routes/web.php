@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\TalosAuthController;
+use App\Http\Controllers\TalosGoogleOAuthController;
 use App\Http\Controllers\TalosReadinessController;
 use App\Http\Controllers\TalosSetupController;
 use App\Http\Controllers\TalosWorkspaceController;
@@ -20,6 +21,11 @@ Route::middleware('guest')->group(function (): void {
 Route::post('/logout', [TalosAuthController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
+
+Route::middleware('auth')->group(function (): void {
+    Route::get('/integrations/google/redirect', [TalosGoogleOAuthController::class, 'redirect']);
+    Route::get('/integrations/google/callback', [TalosGoogleOAuthController::class, 'callback']);
+});
 
 Route::redirect('/chat', '/');
 Route::redirect('/dashboard', '/');

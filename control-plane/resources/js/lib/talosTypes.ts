@@ -84,6 +84,173 @@ export type TalosModelProfile = {
     updated_at: string
 }
 
+export type TalosGoogleAccountStatus = 'connected' | 'revoked' | 'error' | string
+
+export type TalosGoogleAccount = {
+    id: string
+    provider: 'google' | string
+    provider_account_id: string
+    email?: string | null
+    display_name?: string | null
+    scopes: string[]
+    status: TalosGoogleAccountStatus
+    has_access_token?: boolean
+    has_refresh_token?: boolean
+    token_expires_at?: string | null
+    connected_at?: string | null
+    last_used_at?: string | null
+    last_error?: string | null
+    metadata?: Record<string, unknown> | null
+    created_at?: string | null
+    updated_at?: string | null
+}
+
+export type TalosGoogleDriveFile = {
+    id: string
+    name: string
+    mime_type: string
+    modified_time?: string | null
+    can_download: boolean
+    web_view_link?: string | null
+    size_bytes?: number | null
+}
+
+export type TalosGoogleDriveFilesResponse = {
+    files: TalosGoogleDriveFile[]
+    next_page_token?: string | null
+}
+
+export type TalosGoogleCalendar = {
+    id: string
+    summary: string
+    description?: string | null
+    primary: boolean
+    selected: boolean
+    access_role?: string | null
+    timezone?: string | null
+}
+
+export type TalosGoogleCalendarListResponse = {
+    calendars: TalosGoogleCalendar[]
+}
+
+export type TalosGoogleCalendarSyncResponse = {
+    calendar_id: string
+    synced_count: number
+    next_sync_token?: string | null
+    events: TalosCalendarDraft[]
+}
+
+export type TalosCookbookRuntimeKind = 'ollama' | 'llama_cpp' | 'vllm' | string
+export type TalosCookbookRuntimeStatus = 'available' | 'missing' | 'degraded' | 'unknown' | string
+
+export type TalosCookbookGpu = {
+    vendor?: string | null
+    model?: string | null
+    vram_mb?: number | null
+    [key: string]: unknown
+}
+
+export type TalosCookbookHardwareProfile = {
+    id: string
+    host_fingerprint?: string | null
+    os?: string | null
+    cpu_model?: string | null
+    cpu_cores?: number | null
+    ram_total_mb?: number | null
+    ram_free_mb?: number | null
+    gpus?: TalosCookbookGpu[]
+    runtimes?: Record<string, unknown> | unknown[]
+    raw_evidence?: Record<string, unknown> | null
+    scanned_at?: string | null
+    trust_level?: 'local_evidence' | string
+    created_at?: string
+    updated_at?: string
+}
+
+export type TalosCookbookRuntime = {
+    id?: string | null
+    kind: TalosCookbookRuntimeKind
+    name: string
+    status: TalosCookbookRuntimeStatus
+    version?: string | null
+    executable_path?: string | null
+    evidence?: Record<string, unknown> | null
+    last_checked_at?: string | null
+    created_at?: string
+    updated_at?: string
+}
+
+export type TalosCookbookModelFit = {
+    label: 'Perfect' | 'Good' | 'Borderline' | 'Too heavy' | 'Unknown' | string
+    score: number
+    reasons: string[]
+}
+
+export type TalosCookbookModel = {
+    id: string
+    provider: string
+    model_id: string
+    display_name: string
+    parameters_b?: number | string | null
+    quantization?: string | null
+    context_window?: number | null
+    runtime_modes: TalosCookbookRuntimeKind[]
+    estimated_vram_mb?: number | null
+    estimated_ram_mb?: number | null
+    tags?: string[]
+    source_url?: string | null
+    status: 'available' | 'disabled' | 'experimental' | string
+    fit?: TalosCookbookModelFit | null
+    created_at?: string
+    updated_at?: string
+}
+
+export type TalosCookbookOverview = {
+    profile: TalosCookbookHardwareProfile | null
+    runtimes: TalosCookbookRuntime[]
+    models: TalosCookbookModel[]
+}
+
+export type TalosCookbookScanResponse = {
+    profile: TalosCookbookHardwareProfile
+    runtimes: TalosCookbookRuntime[]
+}
+
+export type TalosCookbookCreateModelPayload = {
+    provider: string
+    model_id: string
+    display_name: string
+    parameters_b?: number | null
+    quantization?: string | null
+    context_window?: number | null
+    runtime_modes?: TalosCookbookRuntimeKind[]
+    estimated_vram_mb?: number | null
+    estimated_ram_mb?: number | null
+    tags?: string[]
+    source_url?: string | null
+    status?: 'available' | 'disabled' | 'experimental' | string
+}
+
+export type TalosCookbookPreviewRequest = {
+    model_id: string
+    runtime: TalosCookbookRuntimeKind
+}
+
+export type TalosCookbookCommandPreview = {
+    mode: 'dry_run' | string
+    action?: 'download' | 'serve' | string
+    runtime: TalosCookbookRuntimeKind
+    model_id: string
+    command?: string | string[] | null
+    commands?: string[]
+    warnings?: string[]
+    executed: boolean
+    requires_approval: boolean
+    message?: string | null
+    [key: string]: unknown
+}
+
 export type TalosMessage = {
     id: string
     session_id: string
@@ -567,7 +734,10 @@ export type TalosCalendarDraft = {
     confirmation_required: boolean
     confirmed_at?: string | null
     external_provider?: string | null
+    external_account_id?: string | null
+    external_calendar_id?: string | null
     external_event_id?: string | null
+    trust_level?: string | null
     metadata?: Record<string, unknown> | null
     created_at: string
     updated_at: string

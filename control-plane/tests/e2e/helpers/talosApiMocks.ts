@@ -566,6 +566,105 @@ function runArtifactsPayload() {
     ]
 }
 
+function cookbookHardwareProfilePayload() {
+    return {
+        id: 'hardware-profile-e2e',
+        host_fingerprint: 'host-e2e',
+        os: 'Windows',
+        cpu_model: 'Ryzen E2E',
+        cpu_cores: 16,
+        ram_total_mb: 65536,
+        ram_free_mb: 32768,
+        gpus: [
+            {
+                vendor: 'NVIDIA',
+                model: 'RTX E2E',
+                vram_mb: 24576,
+            },
+        ],
+        runtimes: {
+            ollama: {
+                kind: 'ollama',
+                name: 'Ollama',
+                status: 'available',
+            },
+        },
+        raw_evidence: {
+            source: 'e2e',
+        },
+        scanned_at: now,
+        created_at: now,
+        updated_at: now,
+        trust_level: 'local_evidence',
+    }
+}
+
+function cookbookRuntimePayload() {
+    return {
+        id: 'runtime-ollama-e2e',
+        kind: 'ollama',
+        name: 'Ollama',
+        status: 'available',
+        version: '0.9.0',
+        executable_path: null,
+        evidence: {
+            command: 'ollama --version',
+            source: 'e2e',
+        },
+        last_checked_at: now,
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function cookbookModelPayload(overrides: Record<string, unknown> = {}) {
+    return {
+        id: overrides.id ?? 'catalog-model-e2e',
+        provider: overrides.provider ?? 'huggingface',
+        model_id: overrides.model_id ?? 'meta-llama/Llama-3.1-8B-Instruct',
+        display_name: overrides.display_name ?? 'Llama 3.1 8B Instruct',
+        parameters_b: overrides.parameters_b ?? 8,
+        quantization: overrides.quantization ?? 'Q4_K_M',
+        context_window: overrides.context_window ?? 8192,
+        runtime_modes: overrides.runtime_modes ?? ['ollama', 'llama_cpp'],
+        estimated_vram_mb: overrides.estimated_vram_mb ?? 6144,
+        estimated_ram_mb: overrides.estimated_ram_mb ?? 8192,
+        tags: overrides.tags ?? ['chat', 'local'],
+        source_url: overrides.source_url ?? 'https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct',
+        status: overrides.status ?? 'available',
+        fit: overrides.fit ?? {
+            label: 'Good',
+            score: 88,
+            reasons: [
+                'Fits available VRAM with quantized weights.',
+                'Ollama runtime is available.',
+            ],
+        },
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function cookbookPreviewPayload(modelId = 'meta-llama/Llama-3.1-8B-Instruct', runtime = 'ollama', action = 'download') {
+    const command = action === 'serve'
+        ? `${runtime} run ${modelId}`
+        : `${runtime} pull ${modelId}`
+
+    return {
+        mode: 'dry_run',
+        action,
+        runtime,
+        model_id: modelId,
+        commands: [command],
+        executed: false,
+        requires_approval: true,
+        warnings: [
+            'Preview only. TALOS Cookbook V1 does not execute local model commands.',
+        ],
+        message: 'No host command has been executed.',
+    }
+}
+
 function researchReportPayload(overrides: Record<string, unknown> = {}) {
     const reportId = String(overrides.id ?? 'research-report-e2e')
     const status = String(overrides.status ?? 'draft')
@@ -685,6 +784,125 @@ function calendarDraftPayload(overrides: Record<string, unknown> = {}) {
     }
 }
 
+function googleAccountPayload(overrides: Record<string, unknown> = {}) {
+    return {
+        id: overrides.id ?? 'google-account-e2e',
+        provider: 'google',
+        provider_account_id: overrides.provider_account_id ?? 'google-user-e2e',
+        email: overrides.email ?? 'operator@example.test',
+        display_name: overrides.display_name ?? 'Operator',
+        scopes: overrides.scopes ?? [
+            'https://www.googleapis.com/auth/drive.file',
+            'https://www.googleapis.com/auth/calendar.events.readonly',
+        ],
+        status: overrides.status ?? 'connected',
+        has_access_token: overrides.has_access_token ?? true,
+        has_refresh_token: overrides.has_refresh_token ?? true,
+        token_expires_at: overrides.token_expires_at ?? '2026-07-09T11:00:00.000000Z',
+        connected_at: overrides.connected_at ?? now,
+        last_used_at: overrides.last_used_at ?? now,
+        last_error: overrides.last_error ?? null,
+        metadata: overrides.metadata ?? {
+            picture: null,
+        },
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function googleDriveFilesPayload() {
+    return {
+        files: [
+            {
+                id: 'drive-file-notes',
+                name: 'Drive Notes.md',
+                mime_type: 'text/markdown',
+                modified_time: '2026-07-09T10:00:00Z',
+                can_download: true,
+                web_view_link: 'https://drive.google.test/file/drive-file-notes',
+                size_bytes: 128,
+            },
+        ],
+        next_page_token: null,
+    }
+}
+
+function googleImportedFilePayload() {
+    return {
+        id: 'file-google-drive-e2e',
+        original_name: 'Drive Notes.md',
+        storage_path: 'talos/files/google-drive-notes.md',
+        mime_type: 'text/markdown',
+        size_bytes: 128,
+        checksum: 'drivefilehash-e2e',
+        status: 'available',
+        failure_reason: null,
+        metadata: {
+            source_provider: 'google_drive',
+            trust_level: 'untrusted',
+            google_drive_file_id: 'drive-file-notes',
+            google_drive_modified_time: '2026-07-09T10:00:00Z',
+            google_drive_account_id: 'google-account-e2e',
+            google_drive_account_email: 'operator@example.test',
+            imported_at: now,
+        },
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+function googleCalendarListPayload() {
+    return {
+        calendars: [
+            {
+                id: 'primary',
+                summary: 'Operator Calendar',
+                description: 'Primary Google Calendar',
+                primary: true,
+                selected: true,
+                access_role: 'owner',
+                timezone: 'Europe/Rome',
+            },
+        ],
+    }
+}
+
+function googleSyncedCalendarDraftPayload(overrides: Record<string, unknown> = {}) {
+    return calendarDraftPayload({
+        id: overrides.id ?? 'google-calendar-draft-e2e',
+        title: overrides.title ?? 'AVM sync review',
+        description: overrides.description ?? 'Review synced from Google Calendar.',
+        starts_at: overrides.starts_at ?? '2026-07-10T10:00:00.000000Z',
+        ends_at: overrides.ends_at ?? '2026-07-10T11:00:00.000000Z',
+        timezone: overrides.timezone ?? 'Europe/Rome',
+        attendees: overrides.attendees ?? ['ops@example.test'],
+        status: overrides.status ?? 'synced',
+        confirmation_required: overrides.confirmation_required ?? false,
+        external_provider: 'google_calendar',
+        external_event_id: 'google-event-e2e',
+        metadata: {
+            external_provider: 'google_calendar',
+            external_account_id: 'google-account-e2e',
+            external_calendar_id: 'primary',
+            external_event_id: 'google-event-e2e',
+            external_event_link: 'https://calendar.google.test/event/google-event-e2e',
+            trust_level: 'untrusted',
+            synced_at: now,
+        },
+    })
+}
+
+function googleCalendarSyncPayload() {
+    const event = googleSyncedCalendarDraftPayload()
+
+    return {
+        calendar_id: 'primary',
+        synced_count: 1,
+        next_sync_token: 'google-sync-token-e2e',
+        events: [event],
+    }
+}
+
 function modelProfilePayload(overrides: Record<string, unknown> = {}) {
     return {
         id: overrides.id ?? 'profile-e2e',
@@ -731,6 +949,11 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let comparisonCreated = false
     let researchReports: Record<string, unknown>[] = []
     let calendarDrafts: Record<string, unknown>[] = []
+    let importedDriveFiles: Record<string, unknown>[] = []
+    let googleAccounts: Record<string, unknown>[] = [googleAccountPayload()]
+    let cookbookHardwareProfile: Record<string, unknown> | null = cookbookHardwareProfilePayload()
+    let cookbookRuntimes: Record<string, unknown>[] = [cookbookRuntimePayload()]
+    let cookbookModels: Record<string, unknown>[] = [cookbookModelPayload()]
     let modelProfiles = [
         modelProfilePayload(),
     ]
@@ -1015,7 +1238,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         }
 
         if (path === '/api/talos/files' && method === 'GET') {
-            return json(route, { data: fileUploaded ? [filePayload()] : [] })
+            return json(route, { data: fileUploaded ? [filePayload(), ...importedDriveFiles] : importedDriveFiles })
         }
 
         if (path === '/api/talos/files/file-e2e' && method === 'GET') {
@@ -1132,6 +1355,59 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             })
         }
 
+        if (path === '/api/talos/cookbook/overview' && method === 'GET') {
+            return json(route, {
+                data: {
+                    profile: cookbookHardwareProfile,
+                    runtimes: cookbookRuntimes,
+                    models: cookbookModels,
+                },
+            })
+        }
+
+        if (path === '/api/talos/cookbook/hardware-scan' && method === 'POST') {
+            cookbookHardwareProfile = cookbookHardwareProfilePayload()
+            cookbookRuntimes = [cookbookRuntimePayload()]
+
+            return json(route, {
+                data: {
+                    profile: cookbookHardwareProfile,
+                    runtimes: cookbookRuntimes,
+                },
+            })
+        }
+
+        if (path === '/api/talos/cookbook/models' && method === 'GET') {
+            return json(route, { data: cookbookModels })
+        }
+
+        if (path === '/api/talos/cookbook/models' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            const model = cookbookModelPayload({
+                id: `catalog-model-e2e-${cookbookModels.length + 1}`,
+                ...body,
+            })
+            cookbookModels = [model, ...cookbookModels]
+
+            return json(route, { data: model }, 201)
+        }
+
+        if (path === '/api/talos/cookbook/download-preview' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+
+            return json(route, {
+                data: cookbookPreviewPayload(String(body.model_id ?? 'meta-llama/Llama-3.1-8B-Instruct'), String(body.runtime ?? 'ollama'), 'download'),
+            })
+        }
+
+        if (path === '/api/talos/cookbook/serve-preview' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+
+            return json(route, {
+                data: cookbookPreviewPayload(String(body.model_id ?? 'meta-llama/Llama-3.1-8B-Instruct'), String(body.runtime ?? 'ollama'), 'serve'),
+            })
+        }
+
         if (path === '/api/talos/research-reports' && method === 'GET') {
             return json(route, { data: researchReports })
         }
@@ -1153,6 +1429,63 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             researchReports = [report, ...researchReports]
 
             return json(route, { data: report }, 201)
+        }
+
+        if (path === '/api/talos/google/accounts' && method === 'GET') {
+            return json(route, { data: googleAccounts })
+        }
+
+        if (path === '/api/talos/google/disconnect' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            googleAccounts = googleAccounts.map((account) => account.id === body.account_id
+                ? {
+                    ...account,
+                    status: 'revoked',
+                    has_access_token: false,
+                    has_refresh_token: false,
+                    last_used_at: now,
+                    last_error: null,
+                    updated_at: now,
+                }
+                : account)
+
+            return json(route, {
+                data: googleAccounts.find((account) => account.id === body.account_id)
+                    ?? googleAccountPayload({ id: body.account_id, status: 'revoked', has_access_token: false, has_refresh_token: false }),
+            })
+        }
+
+        if (path === '/api/talos/google/drive/files' && method === 'GET') {
+            return json(route, { data: googleDriveFilesPayload() })
+        }
+
+        if (path === '/api/talos/google/drive/import' && method === 'POST') {
+            const imported = googleImportedFilePayload()
+            importedDriveFiles = [imported, ...importedDriveFiles.filter((file) => file.id !== imported.id)]
+
+            return json(route, { data: imported }, 201)
+        }
+
+        if (path === '/api/talos/google/calendar/calendars' && method === 'GET') {
+            return json(route, { data: googleCalendarListPayload() })
+        }
+
+        if (path === '/api/talos/google/calendar/sync' && method === 'POST') {
+            const payload = googleCalendarSyncPayload()
+            calendarDrafts = [
+                ...payload.events,
+                ...calendarDrafts.filter((draft) => draft.id !== payload.events[0].id),
+            ]
+
+            return json(route, { data: payload })
+        }
+
+        const googleCalendarPublishMatch = path.match(/^\/api\/talos\/google\/calendar\/drafts\/([^/]+)\/publish$/)
+        if (googleCalendarPublishMatch && method === 'POST') {
+            return json(route, {
+                code: 'GOOGLE_CALENDAR_WRITE_SCOPE_REQUIRED',
+                message: 'Google Calendar write scope is not granted.',
+            }, 403)
         }
 
         if (path === '/api/talos/calendar-drafts' && method === 'GET') {

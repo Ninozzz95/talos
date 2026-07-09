@@ -57,6 +57,11 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - `/dashboard` now mounts `TalosResearchWorkbench.vue`, `TalosDocuments.vue`, and `TalosArtifactGallery.vue` backed by `/api/talos/research-reports`, `/api/talos/documents`, and `/api/talos/artifacts`. Do not mount these cockpit panels in `/chat`.
 - `/dashboard` now mounts `TalosNotes.vue`, `TalosTasks.vue`, `TalosCalendar.vue`, and `TalosEmailTriage.vue` backed by productivity/email APIs. Do not mount these cockpit panels in `/chat`.
 - `/dashboard` now mounts `TalosDoctorPanel.vue`, `TalosAuditLog.vue`, `TalosPolicyPanel.vue`, and `TalosBackupPanel.vue` backed by `/api/talos/admin/*`. Do not mount admin cockpit panels in `/chat`.
+- Model Lab now includes Cookbook V1 backed by `/api/talos/cookbook/*`. Cookbook V1 may scan, score, show runtime readiness, and preview commands, but must not install dependencies, download models, serve models, or execute host commands.
+- Google Workspace UI is server-side only: Vue may show connected account metadata, Drive file metadata, Calendar sync state, and gated publish controls, but must never receive access tokens, refresh tokens, encrypted tokens, or provider OAuth secrets.
+- Google Drive imports must pass through Laravel ingestion, mark content as untrusted, and preserve provider/file provenance. Do not inject Drive content directly into chat from the browser.
+- Google Calendar external writes stay disabled unless backend scope, explicit HMI confirmation, validation, connector policy, and audit events all pass.
+- `TalosWorkspace.vue` should remain an orchestrator. Keep header, mobile rail, chat surface, composer dock, and floating window layer in focused components instead of re-growing the workspace monolith.
 - Use compact enterprise UI patterns; avoid toy dashboards and decorative-only visuals.
 - Prefer shadcn-vue style primitives with owned Vue components.
 - A visual must clarify state, evidence, execution, or user action.
@@ -86,6 +91,7 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - E2E mocks must be strict: unhandled TALOS API routes should fail the test instead of returning silent empty data.
 - E2E must never require live provider keys, live external model calls, or private network access.
 - Start Laravel E2E with the repo-local `.tools` PHP binary; global PHP may be incompatible with Composer platform requirements.
+- On Windows, avoid `php artisan serve` as a long-running Playwright web server: Laravel's ServeCommand can crash while parsing built-in server output. Use repo-local PHP with `php -S 127.0.0.1:<port> -t public tests/e2e/php-router.php` or an equivalent stable router.
 - Playwright must wait for both Laravel and Vite. Use the real Vite app entry (`resources/js/app.js`) as the Vite readiness URL so tests do not start before TALOS modules are transformed.
 - Browser tests should prove user-visible flows: `/chat`, `/dashboard`, command palette, persisted-turn UI, file-context source provenance, replay fault filtering, benchmark compare/export, degraded readiness, responsive overflow, and screenshot evidence.
 - Generated Playwright reports and `test-results` are artifacts, not source.
@@ -142,6 +148,7 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 Run verification before claiming completion:
 
 - Load `.tools\env.ps1` before PHP verification on this Windows workspace. Direct `php` may resolve to PHP 8.3 and fail Composer platform checks.
+- Laravel tests that write to the `local` disk should use an isolated storage root instead of `Storage::fake('local')` when Windows filesystem artifacts are involved. Stale `storage/framework/testing/disks/local` directories can become unreadable and poison unrelated tests.
 - Core PHP: relevant `core/tests/*.php`; wider core tests if shared behavior changed.
 - Validator: `npm test` and `npm run build` in `validator`.
 - Laravel/backend: `php artisan test` in `control-plane`.

@@ -75,9 +75,34 @@ final class TalosCalendarDraft extends Model
             'confirmed_at' => $this->confirmed_at?->toJSON(),
             'metadata' => $this->metadata,
             'external_provider' => $metadata['external_provider'] ?? null,
+            'external_account_id' => $metadata['external_account_id'] ?? null,
+            'external_calendar_id' => $metadata['external_calendar_id'] ?? null,
             'external_event_id' => $metadata['external_event_id'] ?? null,
+            'trust_level' => $metadata['trust_level'] ?? null,
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
         ];
+    }
+
+    public function externalEventId(): ?string
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $eventId = $metadata['external_event_id'] ?? null;
+
+        return is_string($eventId) && $eventId !== '' ? $eventId : null;
+    }
+
+    public function isLinkedToExternalEvent(): bool
+    {
+        return $this->externalEventId() !== null;
+    }
+
+    public function isValidCalendarEventDraft(): bool
+    {
+        return is_string($this->title)
+            && trim($this->title) !== ''
+            && $this->starts_at !== null
+            && $this->ends_at !== null
+            && $this->ends_at->greaterThan($this->starts_at);
     }
 }

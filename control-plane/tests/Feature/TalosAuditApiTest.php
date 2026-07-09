@@ -63,7 +63,7 @@ final class TalosAuditApiTest extends TestCase
 
     public function test_critical_runtime_actions_write_audit_events(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $fileResponse = $this->postJson('/api/files/ingest', [
             'file' => UploadedFile::fake()->createWithContent('audit.txt', 'Audit this upload.'),
