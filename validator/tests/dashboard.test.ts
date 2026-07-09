@@ -34,7 +34,7 @@ describe('legacy dashboard artifact', () => {
 });
 
 describe('dashboard route canonicalization', () => {
-  it('redirects the validator dashboard route to the dedicated Talos chat route', async () => {
+  it('redirects the validator dashboard route to the canonical Talos workspace route', async () => {
     const server = buildServer();
 
     const response = await server.inject({
@@ -43,7 +43,7 @@ describe('dashboard route canonicalization', () => {
     });
 
     expect(response.statusCode).toBe(302);
-    expect(response.headers.location).toBe('http://127.0.0.1:8001/chat');
+    expect(response.headers.location).toBe('http://127.0.0.1:8000/');
     expect(response.body).not.toContain('AVM BENCHMARK LAB');
   });
 });

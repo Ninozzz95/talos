@@ -51,7 +51,8 @@ final class TalosBenchmarkWorkbenchTest extends TestCase
         $this->assertStringContainsString('same prompt', strtolower($workbench));
         $this->assertStringContainsString('same context', strtolower($workbench));
         $this->assertStringContainsString('same evaluator', strtolower($workbench));
-        $this->assertStringContainsString('Benchmark workbench is available in the dashboard.', $commandRegistry);
+        $this->assertStringContainsString('Open the dashboard workbench for AVM evidence comparisons.', $commandRegistry);
+        $this->assertStringNotContainsString('Benchmark workbench is available in the dashboard.', $commandRegistry);
         $this->assertStringNotContainsString('TalosBenchmarkWorkbench', $chat);
         $this->assertStringNotContainsString('hardcoded', strtolower($workbench));
         $this->assertStringNotContainsString('fake', strtolower($workbench));

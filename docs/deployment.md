@@ -7,10 +7,12 @@ for the AVM workspace. It is intentionally split by product surface:
 - KADMOS is the operator CLI for diagnostics, validation, evidence, benchmark,
   trace, and recovery workflows.
 
-The current repository is native-development ready. The production target is a
-Docker-first packaging layer that starts TALOS, the queue worker, and the
-validator with one command. Until that packaging layer exists, production notes
-below are the required implementation target and the safe native fallback.
+The repository supports two deployment paths:
+
+- native development, useful while editing Laravel, Vue, the validator, and the
+  PHP core;
+- Docker-first deployment, useful for local demos and private production-like
+  installs.
 
 ## Canonical Topology
 
@@ -37,6 +39,7 @@ validation service, not the application backend.
 - TALOS canonical route: `/`
 - Compatibility redirects: `/chat` -> `/`, `/dashboard` -> `/`
 - Laravel liveness route: `/up`
+- TALOS readiness route: `/readyz`
 - Validator health route: `/health`
 - Validator validation route: `/validate`
 
@@ -231,15 +234,15 @@ cd /c/Users/ninox/Desktop/AVM/core
 ../.tools/bin/php.cmd kadmos test
 ```
 
-## TALOS Production Deployment Plan
+## TALOS Production Deployment
 
-Production should be Docker-first. The intended operator experience is:
+Production should be Docker-first. The operator experience is:
 
 ```bash
 git clone <repo-url> AVM
 cd AVM
 cp .env.example .env
-docker compose up -d --build
+./talos up
 ```
 
 Then open:
@@ -248,9 +251,21 @@ Then open:
 http://localhost:8088/
 ```
 
+The first interactive `talos` command shows a short TALOS bootstrap sequence
+before running the requested operation. The marker is stored in
+`.talos/state.json`, which is local runtime state and must not be committed.
+
+For CI, scripted provisioning, or plain log output, disable presentation output:
+
+```bash
+TALOS_NO_BOOT=1 ./talos up
+./talos up --no-boot
+./talos up --plain
+```
+
 ### Required production services
 
-The production compose stack must contain:
+The production compose stack contains:
 
 - `talos`: Laravel app with built assets.
 - `talos-queue`: Laravel queue worker using the same image and `.env`.
@@ -264,7 +279,7 @@ Optional later services:
 
 ### Production environment contract
 
-Root `.env.example` should expose only deployment-level knobs:
+Root `.env.example` exposes deployment-level knobs:
 
 ```env
 APP_NAME=TALOS
@@ -310,8 +325,8 @@ control-plane tables, not as scattered deployment variables.
 
 ### Native production fallback
 
-Use this only until Docker packaging exists. It is suitable for a private host
-behind a real reverse proxy, not for public internet exposure by itself.
+Use this only when Docker is unavailable. It is suitable for a private host
+behind a real reverse proxy, not for direct public internet exposure by itself.
 
 ```bash
 cd /srv/avm/control-plane
@@ -415,9 +430,9 @@ and benchmark export should use an explicit operator API token or equivalent
 control-plane auth bridge. Do not bypass Laravel session/auth middleware to make
 CLI operations easier.
 
-## Target Root Commands
+## Root Commands
 
-The production packaging layer should add these root commands:
+The repository ships these root commands:
 
 ```bash
 ./talos up
@@ -438,11 +453,19 @@ talos.cmd doctor
 Command responsibilities:
 
 - `up`: create `.env` if missing, generate app key if needed, build images,
-  run migrations, start TALOS, queue, and validator.
+  run migrations, start TALOS, queue, and validator, then probe `/readyz`.
 - `doctor`: check Docker/native tools, database, storage, queue, validator,
   auth bootstrap, and public URL.
 - `open`: open the canonical TALOS URL.
 - `fresh`: development-only database reset with an explicit warning.
+
+Interactive boot behavior:
+
+- the first interactive command in a workspace shows `TALOS bootstrap`;
+- `help` stays plain;
+- non-TTY output, `CI=true`, `TALOS_NO_BOOT=1`, `--no-boot`, and `--plain`
+  suppress the bootstrap;
+- state lives in `.talos/state.json` and is intentionally gitignored.
 
 ## Deployment Checklist
 
@@ -465,8 +488,7 @@ Production target:
 - [ ] TALOS is the only public web entrypoint.
 - [ ] First admin can be created from UI or pre-seeded env.
 - [ ] Queue worker is supervised.
-- [ ] `/up` or future `/readyz` is used for health checks.
+- [ ] `/up` and `/readyz` are used for liveness/readiness checks.
 - [ ] Provider keys are stored server-side, never in browser storage.
 - [ ] KADMOS remote operator commands use explicit auth before write/recovery
       actions are considered production ready.
-

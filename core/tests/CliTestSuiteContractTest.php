@@ -38,6 +38,7 @@ function testMainCliRunsContractTests(): void
         'Security/OpenAIClientPolicyTest.php',
         'Security/ToolContextPolicyTest.php',
         'AgentOperatingModelContractTest.php',
+        'DeploymentPackagingContractTest.php',
     ] as $testFile) {
         assertTrue(str_contains($cli, $testFile), "kadmos test should include {$testFile}.");
     }

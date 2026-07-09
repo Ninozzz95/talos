@@ -393,7 +393,7 @@ input,button,select,textarea{font-family:'Inter',system-ui,sans-serif}
           <div class="field"><label>Provider</label><select v-model="settings.provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option></select></div>
           <div class="field"><label>Model</label><select v-model="settings.model"><option value="deepseek-chat">deepseek-chat</option><option value="deepseek-reasoner">deepseek-reasoner</option></select></div>
           <div class="field"><label>API Key</label><input type="password" v-model="settings.api_key" placeholder="sk-..."></div>
-          <div class="field"><label>Control Plane URL</label><input v-model="settings.control_plane_url" placeholder="http://127.0.0.1:8001"></div>
+          <div class="field"><label>Control Plane URL</label><input v-model="settings.control_plane_url" placeholder="http://127.0.0.1:8000"></div>
           <button class="btn" @click="saveSettings">Save</button><span style="color:var(--green);font-size:12px;margin-left:10px" v-if="settingsSaved">✓ Saved</span>
         </div>
       </div>
@@ -417,7 +417,7 @@ createApp({
     const view = ref('chat');
     const messages = ref([]); const input = ref(''); const loading = ref(false); const nodes = ref([]);
     const inputEl = ref(null); const msgEl = ref(null);
-    const settings = ref({ provider: 'deepseek', model: 'deepseek-chat', api_key: '', control_plane_url: 'http://127.0.0.1:8001' });
+    const settings = ref({ provider: 'deepseek', model: 'deepseek-chat', api_key: '', control_plane_url: 'http://127.0.0.1:8000' });
     const settingsSaved = ref(false);
     const benchScenarios = ref([]); const benchScenario = ref('01_simple_http');
     const benchRuns = ref(1); const benchRunning = ref(false); const benchResult = ref(null);
@@ -504,7 +504,7 @@ createApp({
     }
     async function loadBenchScenarios() { try { benchScenarios.value = await (await fetch('/benchmarks')).json(); if (benchScenarios.value.length) benchScenario.value = benchScenarios.value[0].file; } catch {} }
     function controlPlaneUrl(path) {
-      const base = (settings.value.control_plane_url || 'http://127.0.0.1:8001').replace(/\/+$/, '');
+      const base = (settings.value.control_plane_url || 'http://127.0.0.1:8000').replace(/\/+$/, '');
       return `${base}${path}`;
     }
     function onBenchFileChange(event) {

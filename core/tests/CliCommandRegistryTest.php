@@ -58,10 +58,22 @@ function testMainHelpUsesCommandRegistry(): void
     assertTrue(str_contains($text, 'kadmos export benchmark'), 'help should document benchmark export.');
 }
 
+function testControlPlaneDefaultUsesCanonicalTalosPort(): void
+{
+    $help = CommandRegistry::renderHelp();
+    $runner = (string) file_get_contents(__DIR__ . '/../src/Cli/CommandRunner.php');
+
+    assertTrue(str_contains($help, 'http://127.0.0.1:8000'), 'Command help should document the canonical TALOS development port.');
+    assertTrue(!str_contains($help, 'http://127.0.0.1:8001'), 'Command help should not document the retired TALOS 8001 port.');
+    assertTrue(str_contains($runner, "http://127.0.0.1:8000"), 'Command runner should default to the canonical TALOS development port.');
+    assertTrue(!str_contains($runner, "http://127.0.0.1:8001"), 'Command runner should not default to the retired TALOS 8001 port.');
+}
+
 $tests = [
     'testCommandRegistryDocumentsPhaseThirteenCommands',
     'testCommandRegistryMachineReadablePayloadHasNoAnsi',
     'testMainHelpUsesCommandRegistry',
+    'testControlPlaneDefaultUsesCanonicalTalosPort',
 ];
 
 foreach ($tests as $test) {

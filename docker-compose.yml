@@ -1,0 +1,69 @@
+services:
+  talos:
+    build:
+      context: .
+      dockerfile: Dockerfile.talos
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8088}:8088"
+    volumes:
+      - ./.env:/app/control-plane/.env
+      - talos-database:/app/control-plane/database
+      - talos-storage:/app/control-plane/storage
+    environment:
+      - APP_URL=${APP_URL:-http://localhost:8088}
+      - AVM_VALIDATOR_URL=http://validator:3000
+      - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
+    depends_on:
+      validator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1:8088/readyz') === false ? 1 : 0);\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  talos-queue:
+    build:
+      context: .
+      dockerfile: Dockerfile.talos
+    command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
+    volumes:
+      - ./.env:/app/control-plane/.env
+      - talos-database:/app/control-plane/database
+      - talos-storage:/app/control-plane/storage
+    environment:
+      - APP_URL=${APP_URL:-http://localhost:8088}
+      - AVM_VALIDATOR_URL=http://validator:3000
+      - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
+    depends_on:
+      talos:
+        condition: service_healthy
+      validator:
+        condition: service_healthy
+    restart: unless-stopped
+
+  validator:
+    build:
+      context: .
+      dockerfile: Dockerfile.validator
+    expose:
+      - "3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      PHP_BIN: php
+      KADMOS_CHAT_SCRIPT: /app/core/kadmos-chat.php
+      TALOS_CHAT_URL: http://talos:8088/
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  talos-database:
+  talos-storage:

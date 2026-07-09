@@ -110,7 +110,7 @@ final class CommandRegistry
         $lines[] = 'Environment:';
         $lines[] = '  KADMOS_API_KEY              DeepSeek/OpenAI API key';
         $lines[] = '  KADMOS_MODEL                Model name (default: deepseek-chat)';
-        $lines[] = '  KADMOS_CONTROL_PLANE_URL    Laravel control-plane URL (default: http://127.0.0.1:8001)';
+        $lines[] = '  KADMOS_CONTROL_PLANE_URL    Laravel control-plane URL (default: http://127.0.0.1:8000)';
 
         return implode(PHP_EOL, $lines) . PHP_EOL;
     }

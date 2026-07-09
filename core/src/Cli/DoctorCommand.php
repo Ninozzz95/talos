@@ -19,6 +19,9 @@ final class DoctorCommand
             self::directoryCheck('validator_dependencies', $rootDir . '/validator/node_modules', 'Run npm install in validator/.'),
             self::directoryCheck('laravel', $rootDir . '/control-plane/vendor', 'Run composer install in control-plane/.'),
             self::sqliteWritableCheck($rootDir . '/control-plane/database'),
+            self::controlPlaneUrlCheck(),
+            self::validatorHealthUrlCheck(),
+            self::rootPackagingCheck($rootDir),
             self::providerKeyCheck(),
             self::sslVerificationCheck(),
         ];
@@ -122,6 +125,57 @@ final class DoctorCommand
             'name' => 'provider_key',
             'ok' => $configured,
             'message' => $configured ? 'Configured' : 'Missing: set KADMOS_API_KEY or configure provider profile',
+        ];
+    }
+
+    /**
+     * @return array{name: string, ok: bool, message: string}
+     */
+    private static function controlPlaneUrlCheck(): array
+    {
+        $url = getenv('KADMOS_CONTROL_PLANE_URL') ?: 'http://127.0.0.1:8000';
+
+        return [
+            'name' => 'control_plane_url',
+            'ok' => true,
+            'message' => (string) $url,
+        ];
+    }
+
+    /**
+     * @return array{name: string, ok: bool, message: string}
+     */
+    private static function validatorHealthUrlCheck(): array
+    {
+        $url = getenv('KADMOS_VALIDATOR_HEALTH_URL') ?: 'http://127.0.0.1:3000/health';
+
+        return [
+            'name' => 'validator_health_url',
+            'ok' => true,
+            'message' => (string) $url,
+        ];
+    }
+
+    /**
+     * @return array{name: string, ok: bool, message: string}
+     */
+    private static function rootPackagingCheck(string $rootDir): array
+    {
+        $required = [
+            $rootDir . '/docker-compose.yml',
+            $rootDir . '/Dockerfile.talos',
+            $rootDir . '/Dockerfile.validator',
+            $rootDir . '/talos',
+            $rootDir . '/talos.cmd',
+            $rootDir . '/.env.example',
+        ];
+
+        $missing = array_values(array_filter($required, static fn (string $path): bool => ! is_file($path)));
+
+        return [
+            'name' => 'root_packaging',
+            'ok' => $missing === [],
+            'message' => $missing === [] ? 'Docker-first packaging files present' : 'Missing: '.implode(', ', $missing),
         ];
     }
 

@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\TalosAuthController;
+use App\Http\Controllers\TalosReadinessController;
 use App\Http\Controllers\TalosSetupController;
 use App\Http\Controllers\TalosWorkspaceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', TalosWorkspaceController::class);
+Route::get('/readyz', TalosReadinessController::class);
 
 Route::get('/setup', [TalosSetupController::class, 'show'])->name('setup');
 Route::post('/setup', [TalosSetupController::class, 'store']);

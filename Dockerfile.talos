@@ -1,0 +1,42 @@
+FROM node:24-bookworm AS talos_assets
+
+WORKDIR /app/control-plane
+COPY control-plane/package*.json ./
+RUN npm ci --ignore-scripts
+COPY control-plane ./
+RUN npm run build
+
+FROM php:8.5-cli-bookworm AS talos_runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        libonig-dev \
+        libsqlite3-dev \
+        libzip-dev \
+        unzip \
+    && docker-php-ext-install mbstring pcntl pdo pdo_sqlite zip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+COPY control-plane ./control-plane
+COPY --from=talos_assets /app/control-plane/public/build ./control-plane/public/build
+COPY docker/talos-entrypoint.sh /usr/local/bin/talos-entrypoint
+
+RUN chmod +x /usr/local/bin/talos-entrypoint \
+    && cd control-plane \
+    && composer install --no-dev --optimize-autoloader --no-interaction \
+    && mkdir -p database storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && touch database/database.sqlite \
+    && chmod -R ug+rw database storage bootstrap/cache
+
+WORKDIR /app/control-plane
+
+EXPOSE 8088
+
+ENTRYPOINT ["talos-entrypoint"]
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8088"]

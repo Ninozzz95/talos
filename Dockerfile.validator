@@ -1,0 +1,37 @@
+FROM php:8.5-cli-bookworm AS validator_runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        gnupg \
+        libcurl4-openssl-dev \
+        libsqlite3-dev \
+        unzip \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && docker-php-ext-install curl pdo pdo_sqlite \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /app
+COPY core ./core
+RUN cd core && composer install --no-dev --optimize-autoloader --no-interaction
+
+WORKDIR /app/validator
+COPY validator/package*.json ./
+RUN npm ci
+COPY validator ./
+RUN npm run build
+
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV PHP_BIN=php
+ENV KADMOS_CHAT_SCRIPT=/app/core/kadmos-chat.php
+
+EXPOSE 3000
+
+CMD ["node", "dist/server.js"]
+
