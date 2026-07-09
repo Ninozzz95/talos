@@ -11,6 +11,7 @@ final class TalosDocumentsArtifactUiTest extends TestCase
     public function test_dashboard_mounts_document_and_artifact_surfaces_with_real_endpoints(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosDocuments.ts');
         $documentsPath = base_path('resources/js/components/talos/documents/TalosDocuments.vue');
@@ -18,6 +19,7 @@ final class TalosDocumentsArtifactUiTest extends TestCase
         $previewPath = base_path('resources/js/components/talos/documents/TalosArtifactPreview.vue');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertIsString($chat);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($documentsPath);
@@ -37,10 +39,11 @@ final class TalosDocumentsArtifactUiTest extends TestCase
         $this->assertStringContainsString('/api/talos/artifacts', $composable);
         $this->assertStringContainsString('/export', $composable);
         $this->assertStringContainsString('/preview', $composable);
-        $this->assertStringContainsString('TalosDocuments', $shell);
-        $this->assertStringContainsString('TalosArtifactGallery', $shell);
-        $this->assertStringContainsString('<TalosDocuments', $shell);
-        $this->assertStringContainsString('<TalosArtifactGallery', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosDocuments', $windowLayer);
+        $this->assertStringContainsString('TalosArtifactGallery', $windowLayer);
+        $this->assertStringContainsString('<TalosDocuments', $windowLayer);
+        $this->assertStringContainsString('<TalosArtifactGallery', $windowLayer);
         $this->assertStringContainsString('content_preview', $documents);
         $this->assertStringContainsString('provenance', $documents);
         $this->assertStringContainsString('fallback', $preview);

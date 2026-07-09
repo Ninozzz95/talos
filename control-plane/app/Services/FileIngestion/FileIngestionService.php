@@ -27,13 +27,51 @@ final class FileIngestionService
     public function ingest(UploadedFile $file): array
     {
         $contents = (string) file_get_contents($file->getRealPath());
-        $sha256 = hash('sha256', $contents);
         $extension = strtolower((string) $file->getClientOriginalExtension());
-        $parser = $this->parserForExtension($extension);
-        $storedName = $sha256 . '.' . $extension;
-        $storagePath = 'ingested/' . date('Y/m/d') . '/' . $storedName;
         $mimeType = $file->getMimeType() ?: 'application/octet-stream';
         $originalName = $file->getClientOriginalName();
+
+        return $this->ingestContents($contents, $originalName, $mimeType, $extension);
+    }
+
+    /**
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    public function ingestString(string $contents, string $originalName, string $mimeType, array $metadata = []): array
+    {
+        return $this->ingestContents(
+            $contents,
+            $originalName,
+            $mimeType,
+            $this->extensionFor($originalName, $mimeType),
+            [
+                ...$metadata,
+                'trust_level' => 'untrusted',
+            ],
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    private function ingestContents(
+        string $contents,
+        string $originalName,
+        string $mimeType,
+        string $extension,
+        array $metadata = [],
+    ): array {
+        $sha256 = hash('sha256', $contents);
+        $parser = $this->parserForExtension($extension);
+        $storedName = $extension === '' ? $sha256 : $sha256 . '.' . $extension;
+        $storagePath = 'ingested/' . date('Y/m/d') . '/' . $storedName;
+        $fileMetadata = [
+            ...$this->sanitizeMetadata($metadata),
+            'extension' => $extension,
+            'storage_disk' => 'local',
+        ];
 
         Storage::disk('local')->put($storagePath, $contents);
 
@@ -46,10 +84,7 @@ final class FileIngestionService
             'storage_disk' => 'local',
             'storage_path' => $storagePath,
             'parser' => $parser,
-            'metadata' => [
-                'extension' => $extension,
-                'storage_disk' => 'local',
-            ],
+            'metadata' => $fileMetadata,
         ]);
 
         try {
@@ -107,6 +142,53 @@ final class FileIngestionService
 
             return $this->buildIngestionResponse($talosFile->refresh(), $extension, '', null);
         }
+    }
+
+    private function extensionFor(string $originalName, string $mimeType): string
+    {
+        $extension = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        if ($extension !== '') {
+            return $extension;
+        }
+
+        return match (strtolower($mimeType)) {
+            'application/json' => 'json',
+            'text/csv', 'application/csv' => 'csv',
+            'text/markdown', 'text/x-markdown' => 'md',
+            'text/plain' => 'txt',
+            default => str_starts_with(strtolower($mimeType), 'text/') ? 'txt' : '',
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    private function sanitizeMetadata(array $metadata): array
+    {
+        $sanitized = [];
+
+        foreach ($metadata as $key => $value) {
+            $normalizedKey = strtolower((string) $key);
+            if (str_contains($normalizedKey, 'secret')
+                || str_contains($normalizedKey, 'token')
+                || str_contains($normalizedKey, 'password')
+                || str_contains($normalizedKey, 'api_key')
+            ) {
+                $sanitized[$key] = '[redacted]';
+                continue;
+            }
+
+            if (is_array($value)) {
+                /** @var array<string, mixed> $value */
+                $sanitized[$key] = $this->sanitizeMetadata($value);
+                continue;
+            }
+
+            $sanitized[$key] = $value;
+        }
+
+        return $sanitized;
     }
 
     private function extractText(string $contents, string $extension): string
@@ -233,6 +315,7 @@ final class FileIngestionService
             'storage_disk' => $file->storage_disk,
             'storage_path' => $file->storage_path,
             'parser' => $file->parser,
+            'metadata' => $file->metadata ?? [],
             'failure_reason' => $file->failure_reason,
             'chunks_count' => $file->chunks()->count(),
             'context_set' => $contextSet?->toApiArray(includeSources: true),

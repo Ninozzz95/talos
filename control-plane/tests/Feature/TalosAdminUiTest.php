@@ -11,6 +11,7 @@ final class TalosAdminUiTest extends TestCase
     public function test_dashboard_mounts_admin_doctor_audit_policy_and_backup_panels(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosAdmin.ts');
         $doctorPath = base_path('resources/js/components/talos/admin/TalosDoctorPanel.vue');
@@ -19,6 +20,7 @@ final class TalosAdminUiTest extends TestCase
         $backupPath = base_path('resources/js/components/talos/admin/TalosBackupPanel.vue');
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertIsString($chat);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($doctorPath);
@@ -42,10 +44,11 @@ final class TalosAdminUiTest extends TestCase
         $this->assertStringContainsString('/api/talos/admin/policy', $composable);
         $this->assertStringContainsString('/api/talos/admin/backup/manifest', $composable);
         $this->assertStringContainsString('/api/talos/admin/backup/validate-restore', $composable);
-        $this->assertStringContainsString('TalosDoctorPanel', $shell);
-        $this->assertStringContainsString('TalosAuditLog', $shell);
-        $this->assertStringContainsString('TalosPolicyPanel', $shell);
-        $this->assertStringContainsString('TalosBackupPanel', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosDoctorPanel', $windowLayer);
+        $this->assertStringContainsString('TalosAuditLog', $windowLayer);
+        $this->assertStringContainsString('TalosPolicyPanel', $windowLayer);
+        $this->assertStringContainsString('TalosBackupPanel', $windowLayer);
         $this->assertStringContainsString('validator_health', $doctor);
         $this->assertStringContainsString('event_type', $audit);
         $this->assertStringContainsString('default_decision', $policy);

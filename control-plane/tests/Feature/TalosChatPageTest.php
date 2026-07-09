@@ -22,6 +22,7 @@ final class TalosChatPageTest extends TestCase
     {
         $component = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $workspace = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $chatSurface = file_get_contents(base_path('resources/js/components/talos/workspace/TalosChatSurface.vue'));
         $composer = file_get_contents(base_path('resources/js/components/talos/chat/TalosSlimComposer.vue'));
         $sessionsComposable = file_get_contents(base_path('resources/js/composables/useTalosSessions.ts'));
         $chatComposable = file_get_contents(base_path('resources/js/composables/useTalosChat.ts'));
@@ -31,6 +32,7 @@ final class TalosChatPageTest extends TestCase
 
         $this->assertIsString($component);
         $this->assertIsString($workspace);
+        $this->assertIsString($chatSurface);
         $this->assertIsString($composer);
         $this->assertIsString($sessionsComposable);
         $this->assertIsString($chatComposable);
@@ -74,8 +76,9 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringContainsString('selectedModelProfileId', $workspace);
         $this->assertStringContainsString('selectedContextSetId', $workspace);
         $this->assertStringContainsString('talos-chat-layout', $workspace);
+        $this->assertStringContainsString('TalosChatSurface', $workspace);
         $this->assertStringContainsString('talos-chat-composer-shell', $composer);
-        $this->assertStringContainsString('talos-chat-thread', $workspace);
+        $this->assertStringContainsString('talos-chat-thread', $chatSurface);
         $this->assertStringContainsString('sendChat', $workspace);
         $this->assertStringNotContainsString('No server-side model profiles', $composer);
         $this->assertStringNotContainsString('No Context Vault sets', $composer);

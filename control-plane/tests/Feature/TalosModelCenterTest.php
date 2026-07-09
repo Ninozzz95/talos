@@ -11,6 +11,7 @@ final class TalosModelCenterTest extends TestCase
     public function test_dashboard_mounts_a_real_model_center_backed_by_profile_apis(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
         $componentPath = base_path('resources/js/components/talos/models/TalosModelCenter.vue');
         $quickAddPath = base_path('resources/js/components/talos/models/TalosModelQuickAdd.vue');
         $advancedOptionsPath = base_path('resources/js/components/talos/models/TalosModelAdvancedOptions.vue');
@@ -19,6 +20,7 @@ final class TalosModelCenterTest extends TestCase
         $composable = file_get_contents(base_path('resources/js/composables/useTalosModelProfiles.ts'));
 
         $this->assertIsString($shell);
+        $this->assertIsString($windowLayer);
         $this->assertIsString($composable);
         $this->assertFileExists($componentPath);
         $this->assertFileExists($quickAddPath);
@@ -33,8 +35,9 @@ final class TalosModelCenterTest extends TestCase
         $this->assertIsString($component);
         $this->assertIsString($quickAdd);
         $this->assertIsString($providerCatalog);
-        $this->assertStringContainsString('TalosModelCenter', $shell);
-        $this->assertStringContainsString('<TalosModelCenter', $shell);
+        $this->assertStringContainsString('TalosWindowLayer', $shell);
+        $this->assertStringContainsString('TalosModelCenter', $windowLayer);
+        $this->assertStringContainsString('<TalosModelCenter', $windowLayer);
         $this->assertStringContainsString('/api/talos/model-profiles', $composable);
         $this->assertStringContainsString('createModelProfile', $composable);
         $this->assertStringContainsString('updateModelProfile', $composable);

@@ -49,7 +49,7 @@ const primaryItems: RailItem[] = [
     { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
     { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', icon: CalendarDays },
     { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
-    { id: 'model_lab', label: 'Model Lab', description: 'Provider profiles and probes.', icon: FlaskConical },
+    { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', icon: FlaskConical },
     { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', icon: BookOpen },
     { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', icon: Image },
     { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },

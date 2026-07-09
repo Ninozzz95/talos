@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { AlertCircle, CheckCircle2, Database, Layers, Loader2, Plus, RefreshCw, ShieldCheck } from '@lucide/vue'
+import { AlertCircle, CheckCircle2, CloudDownload, Database, Layers, Loader2, Plus, RefreshCw, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
@@ -8,7 +8,8 @@ import TalosFileDropzone from './TalosFileDropzone.vue'
 import TalosFileStatusList from './TalosFileStatusList.vue'
 import TalosSourceDrawer from './TalosSourceDrawer.vue'
 import { useTalosContextVault } from '../../../composables/useTalosContextVault'
-import type { TalosContextSet, TalosFile, TalosFileChunk } from '../../../lib/talosTypes'
+import { useTalosGoogle } from '../../../composables/useTalosGoogle'
+import type { TalosContextSet, TalosFile, TalosFileChunk, TalosGoogleDriveFile } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
@@ -39,11 +40,24 @@ const {
     loadContextSet,
 } = useTalosContextVault()
 
+const {
+    accounts: googleAccounts,
+    driveFiles: googleDriveFiles,
+    loading: googleLoading,
+    actionMessage: googleActionMessage,
+    errorMessage: googleErrorMessage,
+    loadAccounts: loadGoogleAccounts,
+    loadDriveFiles: loadGoogleDriveFiles,
+    importDriveFile,
+} = useTalosGoogle()
+
 const selectedFileIds = ref<string[]>([])
 const selectedChunkIds = ref<string[]>([])
 const contextSetName = ref('')
 const drawerFileId = ref<string | null>(null)
 const loadingContextSetId = ref<string | null>(null)
+const driveImportOpen = ref(false)
+const importingDriveFileId = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
 const latestBenchmarkScenarioPath = ref<string | null>(null)
@@ -62,7 +76,16 @@ const drawerFile = computed(() => {
 })
 const drawerDetails = computed(() => drawerFileId.value ? fileDetailsById.value[drawerFileId.value] ?? null : null)
 const selectedSourceCount = computed(() => selectedFileIds.value.length + selectedChunkIds.value.length)
-const visibleError = computed(() => actionError.value || fileError.value || contextSetError.value)
+const connectedGoogleAccount = computed(() => googleAccounts.value.find((account) => account.provider === 'google' && account.status === 'connected') ?? null)
+const importedGoogleFiles = computed(() => files.value.filter((file) => {
+    const metadata = file.metadata && typeof file.metadata === 'object' && !Array.isArray(file.metadata)
+        ? file.metadata as Record<string, unknown>
+        : {}
+
+    return metadata.source_provider === 'google_drive' && metadata.trust_level === 'untrusted'
+}))
+const visibleError = computed(() => actionError.value || fileError.value || contextSetError.value || googleErrorMessage.value)
+const visibleActionMessage = computed(() => actionMessage.value || googleActionMessage.value)
 const canCreateContextSet = computed(() => {
     return contextSetName.value.trim().length > 0
         && selectedFileIds.value.length > 0
@@ -169,6 +192,17 @@ async function refreshContextSets() {
     }
 }
 
+async function refreshGoogleDrive() {
+    try {
+        const accounts = await loadGoogleAccounts()
+        if (accounts.some((account) => account.provider === 'google' && account.status === 'connected')) {
+            await loadGoogleDriveFiles()
+        }
+    } catch {
+        // The composable owns the user-facing error message.
+    }
+}
+
 async function handleUpload(file: File) {
     actionError.value = null
     actionMessage.value = null
@@ -189,6 +223,40 @@ async function handleUpload(file: File) {
         await loadFiles()
     } catch (error) {
         setActionError(error, 'TALOS could not ingest this file.')
+    }
+}
+
+async function openDriveImport() {
+    driveImportOpen.value = true
+    actionError.value = null
+    actionMessage.value = null
+
+    if (!connectedGoogleAccount.value) {
+        actionError.value = 'Connect Google Workspace before importing Drive files.'
+        return
+    }
+
+    if (!googleDriveFiles.value.length) {
+        await loadGoogleDriveFiles(connectedGoogleAccount.value.id).catch(() => null)
+    }
+}
+
+async function handleDriveImport(file: TalosGoogleDriveFile) {
+    if (!connectedGoogleAccount.value || importingDriveFileId.value) {
+        return
+    }
+
+    actionError.value = null
+    actionMessage.value = null
+    importingDriveFileId.value = file.id
+
+    try {
+        await importDriveFile(file.id, connectedGoogleAccount.value.id)
+        await loadFiles()
+    } catch (error) {
+        setActionError(error, 'TALOS could not import this Google Drive file.')
+    } finally {
+        importingDriveFileId.value = null
     }
 }
 
@@ -266,6 +334,7 @@ async function refreshVault() {
     await Promise.all([
         refreshFiles(),
         refreshContextSets(),
+        refreshGoogleDrive(),
     ])
 }
 
@@ -299,9 +368,9 @@ onMounted(() => {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div v-if="actionMessage" class="flex items-start gap-2 rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
+            <div v-if="visibleActionMessage" class="flex items-start gap-2 rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
                 <CheckCircle2 class="mt-1 h-4 w-4 shrink-0 text-[var(--talos-success)]" />
-                <span>{{ actionMessage }}</span>
+                <span>{{ visibleActionMessage }}</span>
             </div>
             <div v-if="latestBenchmarkScenarioPath" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                 <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -318,6 +387,63 @@ onMounted(() => {
                     Opens Compare with the scenario generated from {{ latestBenchmarkFileName }}.
                 </p>
             </div>
+
+            <section v-if="connectedGoogleAccount" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="flex items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                            <CloudDownload class="h-4 w-4 text-[var(--talos-accent)]" />
+                            Google Drive
+                        </div>
+                        <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                            Imports call `/api/talos/google/drive/import` and enter Context Vault as untrusted sources.
+                        </p>
+                    </div>
+                    <Button type="button" size="sm" :disabled="googleLoading" @click="openDriveImport">
+                        <Loader2 v-if="googleLoading" class="h-4 w-4 animate-spin" />
+                        <CloudDownload v-else class="h-4 w-4" />
+                        Import from Drive
+                    </Button>
+                </div>
+
+                <div v-if="driveImportOpen" class="mt-3 overflow-hidden rounded-md border border-[var(--talos-border)]">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-active)] px-3 py-2">
+                        <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ connectedGoogleAccount.email ?? 'Google account' }}</div>
+                        <Button type="button" variant="ghost" size="sm" :disabled="googleLoading" @click="loadGoogleDriveFiles(connectedGoogleAccount.id)">
+                            <Loader2 v-if="googleLoading" class="h-4 w-4 animate-spin" />
+                            <RefreshCw v-else class="h-4 w-4" />
+                            Sync
+                        </Button>
+                    </div>
+
+                    <div v-if="googleLoading && !googleDriveFiles.length" class="flex items-center gap-2 bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                        <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                        Loading Drive files
+                    </div>
+                    <div v-else-if="!googleDriveFiles.length" class="bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                        No importable Drive files returned by `/api/talos/google/drive/files`.
+                    </div>
+                    <div v-else class="divide-y divide-[var(--talos-border)]">
+                        <article v-for="file in googleDriveFiles" :key="file.id" class="flex flex-col gap-3 bg-[var(--talos-panel)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="min-w-0">
+                                <div class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ file.name }}</div>
+                                <div class="mt-1 text-xs text-[var(--talos-muted)]">{{ file.mime_type }} - {{ file.size_bytes ?? 0 }} bytes</div>
+                            </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                :disabled="!file.can_download || importingDriveFileId === file.id"
+                                @click="handleDriveImport(file)"
+                            >
+                                <Loader2 v-if="importingDriveFileId === file.id" class="h-4 w-4 animate-spin" />
+                                <CloudDownload v-else class="h-4 w-4" />
+                                Import {{ file.name }}
+                            </Button>
+                        </article>
+                    </div>
+                </div>
+            </section>
 
             <TalosFileDropzone
                 :uploading="uploadingFile"
@@ -372,6 +498,14 @@ onMounted(() => {
                 @toggle-file="toggleFile"
                 @inspect-file="inspectFile"
             />
+
+            <div v-if="importedGoogleFiles.length" class="grid gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                <div class="text-sm font-semibold text-[var(--talos-text)]">External provenance</div>
+                <div v-for="file in importedGoogleFiles" :key="file.id" class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2">
+                    <span class="truncate text-sm text-[var(--talos-text)]">{{ file.original_name }}</span>
+                    <Badge tone="warning">Google Drive / untrusted</Badge>
+                </div>
+            </div>
 
             <div class="overflow-hidden rounded-md border border-[var(--talos-border)]">
                 <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-active)] px-3 py-2">

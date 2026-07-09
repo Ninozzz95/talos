@@ -21,11 +21,14 @@ import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
 import Switch from '../../ui/Switch.vue'
+import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
+import TalosSettingsIntegrationsPanel from './TalosSettingsIntegrationsPanel.vue'
+import TalosSettingsModelsPanel from './TalosSettingsModelsPanel.vue'
+import TalosSettingsSearchPanel from './TalosSettingsSearchPanel.vue'
+import TalosSettingsToolsPanel from './TalosSettingsToolsPanel.vue'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
-    TALOS_THEME_MOTION_OPTIONS,
-    TALOS_THEME_PRESETS,
     normalizeTalosTheme,
     resolveTalosMotionMode,
     type TalosThemeId,
@@ -345,6 +348,25 @@ function openModule(id: string) {
     emit('openModule', id)
 }
 
+function updateSearchPreferences(nextPreferences: Partial<Omit<SettingsPreferences['search'], 'deep_research'>>) {
+    Object.assign(preferences.search, nextPreferences)
+}
+
+function updateDeepResearchPreferences(nextPreferences: Partial<SettingsPreferences['search']['deep_research']>) {
+    Object.assign(preferences.search.deep_research, nextPreferences)
+}
+
+function updateAppearancePreference(key: keyof SettingsPreferences['appearance'], enabled: boolean) {
+    preferences.appearance[key] = enabled
+}
+
+function updateAgentToolPreference(
+    key: keyof Omit<SettingsPreferences['agent_tools'], 'tool_call_limit' | 'max_steps_per_message'>,
+    enabled: boolean,
+) {
+    preferences.agent_tools[key] = enabled
+}
+
 onMounted(async () => {
     const loaded = await loadSettings().catch(() => null)
     if (loaded?.default_model_profile_id) {
@@ -426,64 +448,18 @@ onMounted(async () => {
 
                 <div class="mt-4 space-y-3">
                     <template v-if="activeTab === 'models'">
-                        <div class="grid gap-3 md:grid-cols-2">
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Default model</span>
-                                <Select
-                                    class="mt-2"
-                                    :model-value="selectedModelProfileId"
-                                    aria-label="Default model profile"
-                                    :disabled="loadingSettings || !modelProfiles.length"
-                                    @update:model-value="(value) => emit('selectModel', String(value))"
-                                >
-                                    <option value="">Choose profile</option>
-                                    <option
-                                        v-for="profile in modelProfiles"
-                                        :key="profile.id"
-                                        :value="profile.id"
-                                        :disabled="profile.status === 'disabled' || !profile.has_secret"
-                                    >
-                                        {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
-                                    </option>
-                                </Select>
-                            </label>
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Default context</span>
-                                <Select
-                                    class="mt-2"
-                                    :model-value="selectedContextSetId"
-                                    aria-label="Default grounding context"
-                                    :disabled="loadingSettings || !contextSets.length"
-                                    @update:model-value="(value) => emit('selectContext', String(value))"
-                                >
-                                    <option value="">No grounding context</option>
-                                    <option
-                                        v-for="contextSet in contextSets"
-                                        :key="contextSet.id"
-                                        :value="contextSet.id"
-                                        :disabled="contextSet.status !== 'available' && contextSet.status !== 'draft'"
-                                    >
-                                        {{ contextSet.name }} - {{ contextSet.status }}
-                                    </option>
-                                </Select>
-                            </label>
-                        </div>
-                        <div class="grid gap-3 md:grid-cols-2">
-                            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                                <div class="text-sm font-semibold text-[var(--talos-text)]">Active model</div>
-                                <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                                    {{ activeModelProfile ? `${activeModelProfile.display_name} - ${activeModelProfile.model}` : 'No default model selected.' }}
-                                </p>
-                                <Button class="mt-3" size="sm" variant="secondary" @click="openModule('model_lab')">Open Model Lab</Button>
-                            </div>
-                            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                                <div class="text-sm font-semibold text-[var(--talos-text)]">Active context</div>
-                                <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                                    {{ activeContextSet ? `${activeContextSet.name} - ${activeContextSet.status}` : 'No grounding context selected.' }}
-                                </p>
-                                <Button class="mt-3" size="sm" variant="secondary" @click="openModule('library')">Open Library</Button>
-                            </div>
-                        </div>
+                        <TalosSettingsModelsPanel
+                            :model-profiles="modelProfiles"
+                            :context-sets="contextSets"
+                            :selected-model-profile-id="selectedModelProfileId"
+                            :selected-context-set-id="selectedContextSetId"
+                            :active-model-profile="activeModelProfile"
+                            :active-context-set="activeContextSet"
+                            :loading-settings="loadingSettings"
+                            @select-model="emit('selectModel', $event)"
+                            @select-context="emit('selectContext', $event)"
+                            @open-module="openModule"
+                        />
                     </template>
 
                     <template v-else-if="activeTab === 'ai_defaults'">
@@ -513,50 +489,15 @@ onMounted(async () => {
                     </template>
 
                     <template v-else-if="activeTab === 'search'">
-                        <div class="grid gap-3 md:grid-cols-2">
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Provider</span>
-                                <Select v-model="preferences.search.provider" class="mt-2" aria-label="Search provider">
-                                    <option value="searxng">SearXNG self-hosted</option>
-                                    <option value="duckduckgo">DuckDuckGo fallback</option>
-                                    <option value="disabled">Disabled</option>
-                                </Select>
-                            </label>
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Results per query</span>
-                                <Input v-model="preferences.search.results_per_query" class="mt-2" type="number" min="1" max="20" aria-label="Results per query" />
-                            </label>
-                            <label class="block md:col-span-2">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Endpoint URL</span>
-                                <Input v-model="preferences.search.url" class="mt-2" placeholder="http://localhost:8080" aria-label="Search endpoint URL" />
-                            </label>
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Fallback provider</span>
-                                <Select v-model="preferences.search.fallback" class="mt-2" aria-label="Search fallback provider">
-                                    <option value="duckduckgo">DuckDuckGo</option>
-                                    <option value="none">None</option>
-                                </Select>
-                            </label>
-                        </div>
-                        <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                            <div class="text-sm font-semibold text-[var(--talos-text)]">Deep Research budgets</div>
-                            <div class="mt-3 grid gap-3 md:grid-cols-2">
-                                <Input v-model="preferences.search.deep_research.max_tokens" type="number" min="1024" aria-label="Deep research max tokens" />
-                                <Input v-model="preferences.search.deep_research.extract_timeout" type="number" min="10" aria-label="Deep research extract timeout" />
-                                <Input v-model="preferences.search.deep_research.extract_parallel" type="number" min="1" max="10" aria-label="Deep research extract parallelism" />
-                                <Input v-model="preferences.search.deep_research.timeout" type="number" min="60" aria-label="Deep research timeout" />
-                            </div>
-                        </div>
+                        <TalosSettingsSearchPanel
+                            :search="preferences.search"
+                            @update-search="updateSearchPreferences"
+                            @update-deep-research="updateDeepResearchPreferences"
+                        />
                     </template>
 
                     <template v-else-if="activeTab === 'integrations'">
-                        <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                            <div class="text-sm font-semibold text-[var(--talos-text)]">Connector registry</div>
-                            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                                Connectors and tools are read from the TALOS registry. Registry writes remain capability-gated server-side.
-                            </p>
-                            <Button class="mt-3" size="sm" variant="secondary" @click="openModule('tools')">Open Tool Registry</Button>
-                        </div>
+                        <TalosSettingsIntegrationsPanel @open-module="openModule" />
                     </template>
 
                     <template v-else-if="activeTab === 'email'">
@@ -594,52 +535,19 @@ onMounted(async () => {
                     </template>
 
                     <template v-else-if="activeTab === 'appearance'">
-                        <div class="grid gap-3 md:grid-cols-2">
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Theme preset</span>
-                                <Select v-model="preferences.theme" class="mt-2" aria-label="Theme preset">
-                                    <option v-for="preset in TALOS_THEME_PRESETS" :key="preset.id" :value="preset.id">
-                                        {{ preset.label }}
-                                    </option>
-                                </Select>
-                            </label>
-                            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
-                                Theme selection updates the same preference used by Theme Engine.
-                            </div>
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Motion mode</span>
-                                <Select v-model="preferences.theme_motion" class="mt-2" aria-label="Settings theme motion">
-                                    <option v-for="mode in TALOS_THEME_MOTION_OPTIONS" :key="mode.value" :value="mode.value">
-                                        {{ mode.label }}
-                                    </option>
-                                </Select>
-                            </label>
-                            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
-                                Motion mode controls procedural effects only; TALOS does not load theme videos.
-                            </div>
-                        </div>
-                        <div class="grid gap-2 md:grid-cols-2">
-                            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                                <span>
-                                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
-                                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Freeze the selected procedural background without removing it.</span>
-                                </span>
-                                <Switch v-model="preferences.theme_motion_disabled" class="mt-1" aria-label="Settings disable motion" />
-                            </label>
-                            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                                <span>
-                                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable procedural background</span>
-                                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Remove the animated and static procedural background layers.</span>
-                                </span>
-                                <Switch v-model="preferences.theme_background_disabled" class="mt-1" aria-label="Settings disable procedural background" />
-                            </label>
-                        </div>
-                        <div class="grid gap-2 md:grid-cols-2">
-                            <label v-for="item in appearanceOptions" :key="item.key" class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                                <span>{{ item.label }}</span>
-                                <Switch v-model="preferences.appearance[item.key]" :aria-label="item.label" />
-                            </label>
-                        </div>
+                        <TalosSettingsAppearancePanel
+                            :theme="preferences.theme"
+                            :theme-motion="preferences.theme_motion"
+                            :theme-motion-disabled="preferences.theme_motion_disabled"
+                            :theme-background-disabled="preferences.theme_background_disabled"
+                            :appearance="preferences.appearance"
+                            :appearance-options="appearanceOptions"
+                            @update-theme="preferences.theme = $event"
+                            @update-theme-motion="preferences.theme_motion = $event"
+                            @update-theme-motion-disabled="preferences.theme_motion_disabled = $event"
+                            @update-theme-background-disabled="preferences.theme_background_disabled = $event"
+                            @update-appearance="updateAppearancePreference"
+                        />
                     </template>
 
                     <template v-else-if="activeTab === 'shortcuts'">
@@ -664,23 +572,14 @@ onMounted(async () => {
                     </template>
 
                     <template v-else-if="activeTab === 'agent_tools'">
-                        <div class="grid gap-3 md:grid-cols-2">
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Tool call limit</span>
-                                <Input v-model="preferences.agent_tools.tool_call_limit" class="mt-2" type="number" min="0" aria-label="Tool call limit" />
-                            </label>
-                            <label class="block">
-                                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Max steps per message</span>
-                                <Input v-model="preferences.agent_tools.max_steps_per_message" class="mt-2" type="number" min="1" aria-label="Max steps per message" />
-                            </label>
-                        </div>
-                        <div class="grid gap-2 md:grid-cols-2">
-                            <label v-for="item in agentToolOptions" :key="item.key" class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
-                                <span>{{ item.label }}</span>
-                                <Switch v-model="preferences.agent_tools[item.key]" :aria-label="item.label" />
-                            </label>
-                        </div>
-                        <Button size="sm" variant="secondary" @click="openModule('tools')">Open Tool Registry</Button>
+                        <TalosSettingsToolsPanel
+                            :agent-tools="preferences.agent_tools"
+                            :agent-tool-options="agentToolOptions"
+                            @update-tool-call-limit="preferences.agent_tools.tool_call_limit = $event"
+                            @update-max-steps-per-message="preferences.agent_tools.max_steps_per_message = $event"
+                            @update-agent-tool="updateAgentToolPreference"
+                            @open-module="openModule"
+                        />
                     </template>
 
                     <template v-else-if="activeTab === 'system'">

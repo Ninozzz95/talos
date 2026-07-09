@@ -5,7 +5,7 @@ const reuseExistingServer = process.env.TALOS_E2E_REUSE_SERVER === '1'
 const useViteDevServer = process.env.TALOS_E2E_USE_VITE === '1'
 
 const laravelServer = {
-    command: '..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe artisan serve --host=127.0.0.1 --port=8014',
+    command: '..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe -S 127.0.0.1:8014 -t public tests/e2e/php-router.php',
     url: baseURL,
     reuseExistingServer,
     timeout: 120_000,
@@ -31,6 +31,7 @@ export default defineConfig({
     ],
     use: {
         baseURL,
+        permissions: ['clipboard-read', 'clipboard-write'],
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',

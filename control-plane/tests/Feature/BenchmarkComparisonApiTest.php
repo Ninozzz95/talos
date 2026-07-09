@@ -24,7 +24,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_private_benchmark_scenario_can_be_compared(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $scenario = [
             'name' => 'uploaded_file_summary',
@@ -101,7 +101,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_missing_private_benchmark_scenario_returns_not_found(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $response = $this->postJson('/api/benchmarks/compare', [
             'scenario_path' => 'benchmark-scenarios/missing.json',
@@ -114,7 +114,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_path_traversal_is_rejected_before_storage_access(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $response = $this->postJson('/api/benchmarks/compare', [
             'scenario_path' => '../core/tests/benchmarks/scenarios/01_simple_http.json',
@@ -127,7 +127,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_persisted_benchmark_groups_can_be_listed_and_shown(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $scenario = [
             'name' => 'listable_benchmark',
@@ -296,7 +296,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_benchmark_persistence_does_not_invent_missing_prompt_or_context_hashes(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $scenario = [
             'name' => 'minimal_benchmark',
@@ -335,7 +335,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_persisted_run_can_create_a_private_benchmark_scenario_and_comparison(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $run = TalosRun::query()->create([
             'mode' => 'avm_on',
@@ -370,7 +370,7 @@ final class BenchmarkComparisonApiTest extends TestCase
 
     public function test_run_benchmark_requires_a_persisted_prompt(): void
     {
-        Storage::fake('local');
+        $this->useIsolatedLocalStorage();
 
         $run = TalosRun::query()->create([
             'mode' => 'avm_on',

@@ -79,11 +79,14 @@ final class TalosShellTest extends TestCase
         $this->assertStringNotContainsString('Provider key dev-only', $shell);
         $this->assertStringNotContainsString('DAG from chat', $shell);
         $workspace = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
 
         $this->assertIsString($workspace);
-        $this->assertStringContainsString('TalosRunTimeline', $workspace);
-        $this->assertStringContainsString('TalosBenchmarkWorkbench', $workspace);
-        $this->assertStringContainsString('TalosToolRegistry', $workspace);
+        $this->assertIsString($windowLayer);
+        $this->assertStringContainsString('TalosWindowLayer', $workspace);
+        $this->assertStringContainsString('TalosRunTimeline', $windowLayer);
+        $this->assertStringContainsString('TalosBenchmarkWorkbench', $windowLayer);
+        $this->assertStringContainsString('TalosToolRegistry', $windowLayer);
         $this->assertStringNotContainsString('Run events unavailable', $shell);
         $this->assertStringNotContainsString('Benchmark data unavailable', $shell);
     }
