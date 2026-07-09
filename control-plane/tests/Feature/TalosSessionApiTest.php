@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\TalosSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -165,6 +166,61 @@ final class TalosSessionApiTest extends TestCase
             ->assertJsonMissing(['incoming-api-key'])
             ->assertJsonMissing(['incoming-private-key'])
             ->assertJsonMissing(['unsafe_html']);
+    }
+
+    public function test_sessions_are_scoped_to_the_authenticated_user(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => $other->id,
+            'title' => 'Other user session',
+            'mode' => 'verified_execution',
+        ]);
+
+        $this->actingAs($owner);
+
+        $createResponse = $this->postJson('/api/talos/sessions', [
+            'user_id' => $other->id,
+            'title' => 'Owned session',
+        ]);
+
+        $createResponse
+            ->assertCreated()
+            ->assertJsonPath('data.user_id', $owner->id);
+
+        $ownedSessionId = $createResponse->json('data.id');
+
+        $this->getJson('/api/talos/sessions')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $ownedSessionId])
+            ->assertJsonMissing(['id' => $foreignSession->id]);
+
+        $this->getJson('/api/talos/sessions/' . $foreignSession->id)
+            ->assertNotFound();
+
+        $this->patchJson('/api/talos/sessions/' . $foreignSession->id, [
+            'title' => 'Hijacked session',
+        ])
+            ->assertNotFound();
+
+        $this->deleteJson('/api/talos/sessions/' . $foreignSession->id)
+            ->assertNotFound();
+
+        $this->patchJson('/api/talos/sessions/' . $ownedSessionId, [
+            'user_id' => $other->id,
+            'title' => 'Still owned session',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.user_id', $owner->id)
+            ->assertJsonPath('data.title', 'Still owned session');
+
+        $this->assertDatabaseHas('talos_sessions', [
+            'id' => $foreignSession->id,
+            'user_id' => $other->id,
+            'title' => 'Other user session',
+        ]);
     }
 
     public function test_session_validation_rejects_invalid_payloads(): void

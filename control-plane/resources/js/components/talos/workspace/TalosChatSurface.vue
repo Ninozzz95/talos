@@ -275,14 +275,15 @@ defineExpose({ scrollToBottom })
                     :key="message.id"
                     class="talos-chat-message flex"
                     :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+                    :data-message-role="message.role"
                 >
                     <div
                         class="max-w-[760px] rounded-md border px-4 py-3"
                         :class="message.role === 'user'
                             ? 'border-[var(--talos-border-strong)] bg-[var(--talos-user)] text-[var(--talos-user-text)]'
                             : message.role === 'system'
-                                ? 'border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]'
-                                : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-text)]'"
+                                ? 'border-[var(--talos-warning-border)] bg-[var(--talos-system)] text-[var(--talos-system-text)]'
+                                : 'border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]'"
                     >
                         <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase opacity-75">
                             <span class="font-semibold">{{ messageLabel(message) }}</span>

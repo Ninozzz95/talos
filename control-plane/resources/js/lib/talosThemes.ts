@@ -39,6 +39,8 @@ export type TalosBackgroundEffect = 'dag-flow' | 'kahn-grid' | 'trace-rain' | 's
 export type TalosThemeFont = 'inter' | 'mono' | 'system' | 'display'
 export type TalosThemeDensity = 'compact' | 'comfortable' | 'spacious'
 export type TalosThemeRadius = 'sharp' | 'balanced' | 'soft'
+export type TalosThemeMode = 'system' | 'light' | 'dark'
+export type TalosResolvedThemeMode = Exclude<TalosThemeMode, 'system'>
 export type TalosThemeMotionMode = 'system' | 'off' | 'subtle' | 'normal' | 'cinematic'
 export type TalosUiAnimationProfile = 'preset' | 'minimal' | 'expressive' | 'custom' | 'off'
 export type TalosUiAnimationOpenClose = 'instant' | 'standard' | 'depth' | 'terminal-snap' | 'soft-fade'
@@ -84,6 +86,7 @@ export type TalosNamedTheme = {
     id: string
     name: string
     base_theme: TalosThemeId
+    theme_mode?: TalosThemeMode
     tokens: TalosThemeCustomization
     area_tokens?: TalosThemeAreaTokens
     motion?: TalosThemeMotionMode
@@ -115,6 +118,12 @@ export const TALOS_THEME_MOTION_OPTIONS: Array<{ value: TalosThemeMotionMode; la
     { value: 'subtle', label: 'Subtle', description: 'Low-intensity motion for long sessions.' },
     { value: 'normal', label: 'Normal', description: 'Default TALOS motion intensity.' },
     { value: 'cinematic', label: 'Cinematic', description: 'High-contrast motion for demos and review rooms.' },
+]
+
+export const TALOS_THEME_MODE_OPTIONS: Array<{ value: TalosThemeMode; label: string; description: string }> = [
+    { value: 'system', label: 'System', description: 'Follow the operating system color preference.' },
+    { value: 'dark', label: 'Dark', description: 'Force the high-contrast operator variant for every preset.' },
+    { value: 'light', label: 'Light', description: 'Force the bright review variant for every preset.' },
 ]
 
 export const TALOS_UI_ANIMATION_PROFILE_OPTIONS: Array<{ value: TalosUiAnimationProfile; label: string; description: string }> = [
@@ -409,11 +418,154 @@ export function talosThemeIsLight(theme: TalosThemeId) {
     return talosThemePreset(theme).isLight
 }
 
+export function resolveTalosThemeMode(value: unknown): TalosThemeMode {
+    return TALOS_THEME_MODE_OPTIONS.some((option) => option.value === value) ? value as TalosThemeMode : 'system'
+}
+
+export function effectiveTalosThemeMode(
+    theme: TalosThemeId,
+    mode: TalosThemeMode,
+    systemPrefersDark: boolean | null | undefined,
+): TalosResolvedThemeMode {
+    if (mode === 'dark' || mode === 'light') {
+        return mode
+    }
+
+    if (typeof systemPrefersDark === 'boolean') {
+        return systemPrefersDark ? 'dark' : 'light'
+    }
+
+    return talosThemeIsLight(theme) ? 'light' : 'dark'
+}
+
+function mixColor(color: string, amount: number, target: string) {
+    return `color-mix(in srgb, ${color} ${amount}%, ${target})`
+}
+
+export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResolvedThemeMode): Record<string, string> {
+    const preset = talosThemePreset(theme)
+    const accent = preset.preview.accent
+    const secondary = preset.preview.secondary
+    const line = preset.preview.line
+
+    if (mode === 'light') {
+        const background = preset.isLight ? preset.preview.background : mixColor(accent, 5, '#f8fafc')
+        const panel = mixColor(background, 92, '#ffffff')
+        const text = '#111827'
+        const muted = mixColor(text, 58, 'transparent')
+
+        return {
+            '--talos-background': background,
+            '--talos-sidebar': mixColor(background, 92, '#ffffff'),
+            '--talos-header': mixColor(background, 88, '#ffffff'),
+            '--talos-panel': panel,
+            '--talos-panel-soft': mixColor(background, 78, '#ffffff'),
+            '--talos-card': mixColor(panel, 96, '#ffffff'),
+            '--talos-window-bg': mixColor(panel, 96, '#ffffff'),
+            '--talos-chat-bg': background,
+            '--talos-composer-bg': mixColor(panel, 95, '#ffffff'),
+            '--talos-composer-surface': panel,
+            '--talos-composer-text': text,
+            '--talos-text': text,
+            '--talos-muted': muted,
+            '--talos-border': mixColor(line, 72, '#d7dee8'),
+            '--talos-border-strong': mixColor(line, 86, '#9aa7b8'),
+            '--talos-input': mixColor(line, 82, '#cbd5e1'),
+            '--talos-active': mixColor(accent, 10, '#ffffff'),
+            '--talos-secondary': mixColor(secondary, 16, '#ffffff'),
+            '--talos-accent': accent,
+            '--talos-accent-border': mixColor(accent, 74, '#1f2937'),
+            '--talos-accent-hover': mixColor(accent, 78, '#ffffff'),
+            '--talos-accent-soft': mixColor(accent, 13, background),
+            '--talos-accent-text': '#111827',
+            '--talos-user': mixColor(accent, 88, '#ffffff'),
+            '--talos-user-text': '#101827',
+            '--talos-assistant': mixColor(panel, 96, '#ffffff'),
+            '--talos-assistant-text': text,
+            '--talos-system': mixColor('#f59e0b', 13, '#ffffff'),
+            '--talos-system-text': '#3f2d0a',
+            '--talos-chat-error': mixColor('#dc2626', 12, '#ffffff'),
+            '--talos-chat-error-text': '#4c0519',
+            '--talos-warning-soft': mixColor('#f59e0b', 12, '#ffffff'),
+            '--talos-warning-border': mixColor('#f59e0b', 46, '#d7dee8'),
+            '--talos-danger-soft': mixColor('#dc2626', 10, '#ffffff'),
+            '--talos-danger-border': mixColor('#dc2626', 44, '#d7dee8'),
+            '--talos-success-soft': mixColor('#16a34a', 10, '#ffffff'),
+            '--talos-success-border': mixColor('#16a34a', 44, '#d7dee8'),
+            '--talos-code-bg': mixColor(background, 74, '#ffffff'),
+            '--talos-code-surface': mixColor(panel, 92, '#ffffff'),
+            '--talos-code-text': text,
+            '--talos-code-border': mixColor(line, 70, '#d7dee8'),
+            '--talos-workspace-glow-a': mixColor(secondary, 10, 'transparent'),
+            '--talos-workspace-glow-b': mixColor(accent, 8, 'transparent'),
+            '--talos-grid-color': mixColor(line, 18, 'transparent'),
+            '--talos-line-a': mixColor(secondary, 34, 'transparent'),
+            '--talos-line-b': mixColor(accent, 32, 'transparent'),
+            '--talos-node': mixColor(secondary, 54, 'transparent'),
+        }
+    }
+
+    const background = preset.isLight ? mixColor(accent, 10, '#06080d') : preset.preview.background
+    const panel = mixColor(background, 86, '#141a24')
+    const text = '#edf2f7'
+
+    return {
+        '--talos-background': background,
+        '--talos-sidebar': mixColor(background, 92, '#02060b'),
+        '--talos-header': mixColor(background, 90, '#02060b'),
+        '--talos-panel': panel,
+        '--talos-panel-soft': mixColor(panel, 74, '#05070b'),
+        '--talos-card': mixColor(panel, 88, '#05070b'),
+        '--talos-window-bg': mixColor(panel, 92, '#05070b'),
+        '--talos-chat-bg': background,
+        '--talos-composer-bg': mixColor(panel, 84, '#05070b'),
+        '--talos-composer-surface': panel,
+        '--talos-composer-text': text,
+        '--talos-text': text,
+        '--talos-muted': mixColor(text, 62, 'transparent'),
+        '--talos-border': mixColor(line, 74, '#111827'),
+        '--talos-border-strong': mixColor(line, 82, '#dce7f5'),
+        '--talos-input': mixColor(line, 76, '#111827'),
+        '--talos-active': mixColor(accent, 14, background),
+        '--talos-secondary': mixColor(secondary, 16, background),
+        '--talos-accent': accent,
+        '--talos-accent-border': mixColor(accent, 78, '#05070b'),
+        '--talos-accent-hover': mixColor(accent, 84, '#ffffff'),
+        '--talos-accent-soft': mixColor(accent, 18, background),
+        '--talos-accent-text': '#111827',
+        '--talos-user': mixColor(accent, 84, '#f8fbff'),
+        '--talos-user-text': '#0b111d',
+        '--talos-assistant': mixColor(panel, 94, '#05070b'),
+        '--talos-assistant-text': text,
+        '--talos-system': mixColor('#f59e0b', 18, background),
+        '--talos-system-text': text,
+        '--talos-chat-error': mixColor('#ef4444', 16, background),
+        '--talos-chat-error-text': text,
+        '--talos-warning-soft': mixColor('#f59e0b', 16, background),
+        '--talos-warning-border': mixColor('#f59e0b', 48, '#111827'),
+        '--talos-danger-soft': mixColor('#ef4444', 15, background),
+        '--talos-danger-border': mixColor('#ef4444', 45, '#111827'),
+        '--talos-success-soft': mixColor('#22c55e', 15, background),
+        '--talos-success-border': mixColor('#22c55e', 45, '#111827'),
+        '--talos-code-bg': mixColor(background, 84, '#05070b'),
+        '--talos-code-surface': mixColor(panel, 92, '#05070b'),
+        '--talos-code-text': text,
+        '--talos-code-border': mixColor(line, 64, '#111827'),
+        '--talos-workspace-glow-a': mixColor(secondary, 10, 'transparent'),
+        '--talos-workspace-glow-b': mixColor(accent, 8, 'transparent'),
+        '--talos-grid-color': mixColor(line, 16, 'transparent'),
+        '--talos-line-a': mixColor(secondary, 34, 'transparent'),
+        '--talos-line-b': mixColor(accent, 36, 'transparent'),
+        '--talos-node': mixColor(secondary, 58, 'transparent'),
+    }
+}
+
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
 const BACKGROUND_EFFECTS = new Set(TALOS_BACKGROUND_EFFECTS.map((effect) => effect.value))
 const FONT_VALUES = new Set(TALOS_THEME_FONT_OPTIONS.map((font) => font.value))
 const DENSITY_VALUES = new Set(TALOS_THEME_DENSITY_OPTIONS.map((density) => density.value))
 const RADIUS_VALUES = new Set(TALOS_THEME_RADIUS_OPTIONS.map((radius) => radius.value))
+const MODE_VALUES = new Set(TALOS_THEME_MODE_OPTIONS.map((mode) => mode.value))
 const MOTION_VALUES = new Set(TALOS_THEME_MOTION_OPTIONS.map((motion) => motion.value))
 const UI_ANIMATION_PROFILE_VALUES = new Set(TALOS_UI_ANIMATION_PROFILE_OPTIONS.map((profile) => profile.value))
 const UI_ANIMATION_OPEN_CLOSE_VALUES = new Set(TALOS_UI_ANIMATION_OPEN_CLOSE_OPTIONS.map((option) => option.value))
@@ -792,6 +944,11 @@ export function sanitizeTalosNamedTheme(value: unknown): TalosNamedTheme | null 
     const areaTokens = sanitizeTalosThemeAreaTokens(value.area_tokens)
     if (Object.keys(areaTokens).length > 0) {
         theme.area_tokens = areaTokens
+    }
+
+    const themeMode = enumValue(value.theme_mode, MODE_VALUES)
+    if (themeMode) {
+        theme.theme_mode = themeMode
     }
 
     const motion = enumValue(value.motion, MOTION_VALUES)

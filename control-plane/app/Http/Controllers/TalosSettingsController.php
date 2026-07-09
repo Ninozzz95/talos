@@ -84,6 +84,7 @@ final class TalosSettingsController extends Controller
             'theme_library' => true,
             'active_custom_theme_id' => true,
             'theme_motion' => true,
+            'theme_mode' => true,
             'theme_motion_disabled' => true,
             'theme_simple_animation' => true,
             'theme_background_disabled' => true,

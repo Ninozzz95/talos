@@ -15,6 +15,7 @@ import {
     TALOS_THEME_AREA_TOKEN_OPTIONS,
     TALOS_THEME_DENSITY_OPTIONS,
     TALOS_THEME_FONT_OPTIONS,
+    TALOS_THEME_MODE_OPTIONS,
     TALOS_THEME_MOTION_OPTIONS,
     TALOS_THEME_PRESETS,
     TALOS_THEME_RADIUS_OPTIONS,
@@ -28,6 +29,7 @@ import {
     normalizeTalosTheme,
     parseTalosThemeExport,
     resolveTalosMotionMode,
+    resolveTalosThemeMode,
     resolveTalosUiAnimationProfile,
     sanitizeTalosNamedTheme,
     sanitizeTalosThemeAreaTokens,
@@ -45,6 +47,7 @@ import {
     type TalosThemeDensity,
     type TalosThemeFont,
     type TalosThemeId,
+    type TalosThemeMode,
     type TalosThemeMotionMode,
     type TalosThemeRadius,
     type TalosUiAnimationCustomization,
@@ -118,6 +121,7 @@ const renameThemeName = ref('')
 const exportJson = ref('')
 const importJson = ref('')
 const localThemeError = ref('')
+const themeMode = ref<TalosThemeMode>('system')
 const motionMode = ref<TalosThemeMotionMode>('system')
 const motionDisabled = ref(false)
 const simpleAnimation = ref(true)
@@ -263,6 +267,7 @@ function syncThemeState() {
     const preferences = preferencesRecord()
     themeLibrary.value = sanitizeTalosThemeLibrary(preferences.theme_library)
     activeCustomThemeId.value = typeof preferences.active_custom_theme_id === 'string' ? preferences.active_custom_theme_id : null
+    themeMode.value = resolveTalosThemeMode(preferences.theme_mode)
     motionMode.value = resolveTalosMotionMode(preferences.theme_motion)
     motionDisabled.value = preferences.theme_motion_disabled === true
     simpleAnimation.value = preferences.theme_simple_animation !== false
@@ -296,6 +301,7 @@ async function chooseTheme(theme: TalosThemeId) {
         preferences: {
             ...preferencesRecord(),
             theme,
+            theme_mode: themeMode.value,
             workspace_default_theme: theme,
             theme_customization: {},
             active_custom_theme_id: null,
@@ -403,6 +409,7 @@ function currentNamedTheme(name: string, id = generateThemeId(name)): TalosNamed
         id,
         name: name.trim().slice(0, 80),
         base_theme: activeTheme.value,
+        theme_mode: themeMode.value,
         tokens: sanitizedForm(),
         area_tokens: areaTokens.value,
         motion: motionMode.value,
@@ -432,6 +439,7 @@ async function saveAsNamedTheme() {
         preferences: {
             ...preferencesRecord(),
             theme: theme.base_theme,
+            theme_mode: theme.theme_mode ?? themeMode.value,
             workspace_default_theme: theme.base_theme,
             theme_customization: theme.tokens,
             theme_library: nextLibrary,
@@ -461,6 +469,7 @@ async function applyNamedTheme(theme: TalosNamedTheme) {
         preferences: {
             ...preferencesRecord(),
             theme: theme.base_theme,
+            theme_mode: theme.theme_mode ?? themeMode.value,
             workspace_default_theme: theme.base_theme,
             theme_customization: theme.tokens,
             theme_area_tokens: theme.area_tokens ?? {},
@@ -574,6 +583,7 @@ async function importTheme() {
         preferences: {
             ...preferencesRecord(),
             theme: theme.base_theme,
+            theme_mode: theme.theme_mode ?? themeMode.value,
             workspace_default_theme: theme.base_theme,
             theme_customization: theme.tokens,
             theme_library: nextLibrary,
@@ -590,6 +600,24 @@ async function importTheme() {
     emit('themeDraftChanged', null)
     syncThemeState()
     syncCustomizationForm()
+    emit('themeCustomizationChanged', nextSettings)
+}
+
+async function persistThemeMode() {
+    if (!canWriteTheme()) {
+        themeMode.value = resolveTalosThemeMode(preferencesRecord().theme_mode)
+        return
+    }
+
+    const mode = resolveTalosThemeMode(themeMode.value)
+    themeMode.value = mode
+    const nextSettings = await updateSettings({
+        preferences: {
+            ...preferencesRecord(),
+            theme_mode: mode,
+        },
+    }, 'Theme color mode saved.')
+    syncThemeState()
     emit('themeCustomizationChanged', nextSettings)
 }
 
@@ -790,7 +818,20 @@ onMounted(async () => {
                 </button>
             </div>
 
-            <section v-if="activeTab === 'presets'" aria-label="Theme presets">
+            <section v-if="activeTab === 'presets'" aria-label="Theme presets" class="space-y-4">
+                <div class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 md:grid-cols-[minmax(0,240px)_1fr]">
+                    <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                        <span>Color mode</span>
+                        <Select v-model="themeMode" aria-label="Theme color mode" :disabled="savingSettings || themePolicyLocked" @change="persistThemeMode">
+                            <option v-for="mode in TALOS_THEME_MODE_OPTIONS" :key="mode.value" :value="mode.value">
+                                {{ mode.label }}
+                            </option>
+                        </Select>
+                    </label>
+                    <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
+                        Every preset has an explicit light and dark runtime variant. System follows the OS preference; Light and Dark force the selected variant.
+                    </div>
+                </div>
                 <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     <button
                         v-for="preset in TALOS_THEME_PRESETS"
@@ -1159,7 +1200,7 @@ onMounted(async () => {
                             Motion mode controls procedural intensity without loading video backgrounds.
                         </p>
                         <InfoPopover label="Motion and background policy">
-                            Disable motion freezes the selected procedural scene. Disable procedural background removes the scene entirely.
+                            Disable background motion freezes the selected procedural scene. Disable procedural background removes the scene entirely.
                         </InfoPopover>
                     </div>
                 </div>
@@ -1182,13 +1223,13 @@ onMounted(async () => {
                     </div>
                     <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                         <span>
-                            <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable motion</span>
+                            <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable background motion</span>
                             <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep the selected background visible, but freeze canvas and background DOM animation.</span>
                         </span>
                         <Switch
                             v-model="motionDisabled"
                             class="mt-1"
-                            aria-label="Disable motion"
+                            aria-label="Disable background motion"
                             :disabled="savingSettings || themePolicyLocked"
                             @change="persistMotionDisabled"
                         />

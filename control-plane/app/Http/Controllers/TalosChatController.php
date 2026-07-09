@@ -65,7 +65,12 @@ final class TalosChatController extends Controller
         $validatorSkillContext = $skillSelection['validator_context'];
 
         if (filled($validated['session_id'] ?? null)) {
-            $session = TalosSession::query()->find((string) $validated['session_id']);
+            $user = $request->user();
+            abort_unless($user instanceof User, 401);
+
+            $session = TalosSession::query()
+                ->where('user_id', $user->id)
+                ->find((string) $validated['session_id']);
 
             if (! $session instanceof TalosSession) {
                 return response()->json([
@@ -277,6 +282,9 @@ final class TalosChatController extends Controller
             return $this->failedChatResponse($payload, $run, $session, $normalizer, [
                 'reason' => 'connection_exception',
                 'message' => $exception->getMessage(),
+                'provider' => $profile?->provider,
+                'model' => $profile?->model,
+                'model_profile_id' => $profile?->id,
             ]);
         }
 
@@ -290,6 +298,9 @@ final class TalosChatController extends Controller
             $validatorPayloadSummary = [
                 'reason' => 'validator_http_error',
                 'status' => $response->status(),
+                'provider' => $profile?->provider,
+                'model' => $profile?->model,
+                'model_profile_id' => $profile?->id,
             ];
             $validatorJson = $response->json();
             if (is_array($validatorJson)) {
@@ -307,6 +318,9 @@ final class TalosChatController extends Controller
 
             return $this->failedChatResponse($errorPayload, $run, $session, $normalizer, [
                 'reason' => 'invalid_json',
+                'provider' => $profile?->provider,
+                'model' => $profile?->model,
+                'model_profile_id' => $profile?->id,
             ]);
         }
 
@@ -314,6 +328,9 @@ final class TalosChatController extends Controller
             return $this->failedChatResponse($payload, $run, $session, $normalizer, [
                 'reason' => 'validator_payload_error',
                 'code' => isset($payload['code']) ? (string) $payload['code'] : null,
+                'provider' => $profile?->provider,
+                'model' => $profile?->model,
+                'model_profile_id' => $profile?->id,
                 'response_keys' => $this->stringKeys($payload),
             ]);
         }
@@ -379,11 +396,18 @@ final class TalosChatController extends Controller
             $payload['message'] = $payload['error'];
         }
 
+        $chatError = $this->chatErrorFromFailure($payload, $eventPayload);
+        $payload['chat_error'] = $chatError;
+        $payload['message'] = $chatError['message'];
+
         if ($run instanceof TalosRun) {
             $this->appendRunEvent($run, $normalizer, [
                 'event_type' => 'chat.failed',
                 'severity' => 'error',
-                'payload' => $eventPayload,
+                'payload' => [
+                    ...$eventPayload,
+                    'chat_error' => $chatError,
+                ],
             ]);
 
             $run->update([
@@ -395,6 +419,210 @@ final class TalosChatController extends Controller
         }
 
         return response()->json($payload, 502);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $eventPayload
+     * @return array<string, mixed>
+     */
+    private function chatErrorFromFailure(array $payload, array $eventPayload): array
+    {
+        $reason = is_string($eventPayload['reason'] ?? null) ? (string) $eventPayload['reason'] : 'chat_failure';
+        $provider = is_string($eventPayload['provider'] ?? null) && trim((string) $eventPayload['provider']) !== ''
+            ? (string) $eventPayload['provider']
+            : null;
+        $model = is_string($eventPayload['model'] ?? null) && trim((string) $eventPayload['model']) !== ''
+            ? (string) $eventPayload['model']
+            : null;
+        $status = $this->failureStatus($payload, $eventPayload);
+        $rawCode = is_string($payload['code'] ?? null) && trim((string) $payload['code']) !== ''
+            ? (string) $payload['code']
+            : (is_string($eventPayload['code'] ?? null) && trim((string) $eventPayload['code']) !== '' ? (string) $eventPayload['code'] : null);
+
+        if ($reason === 'connection_exception') {
+            return $this->typedChatError(
+                layer: 'validator_transport',
+                code: 'VALIDATOR_UNREACHABLE',
+                message: 'TALOS could not reach the validator chat endpoint.',
+                nextAction: 'Start the validator service or update AVM_VALIDATOR_URL, then retry the chat turn.',
+                retryable: true,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'validator_http_error') {
+            return $this->typedChatError(
+                layer: 'validator_http',
+                code: 'VALIDATOR_HTTP_ERROR',
+                message: $status !== null
+                    ? "The validator chat endpoint returned HTTP {$status}."
+                    : 'The validator chat endpoint returned an HTTP error.',
+                nextAction: 'Open Doctor, inspect validator logs, then retry after the validator is healthy.',
+                retryable: $status === null || $status >= 500,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'invalid_json') {
+            return $this->typedChatError(
+                layer: 'validator_protocol',
+                code: 'VALIDATOR_INVALID_JSON',
+                message: 'The validator returned a response TALOS could not parse.',
+                nextAction: 'Open Doctor and check the validator build/version before retrying.',
+                retryable: true,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        $providerFailure = $provider !== null || ($rawCode !== null && str_starts_with($rawCode, 'PROVIDER_'));
+        if ($providerFailure) {
+            $label = $this->providerLabel($provider);
+
+            if ($this->isAuthenticationFailure($payload, $eventPayload, $status)) {
+                return $this->typedChatError(
+                    layer: 'provider',
+                    code: 'PROVIDER_AUTHENTICATION_FAILED',
+                    message: "{$label} rejected the configured credential.",
+                    nextAction: "Open Model Lab, update the {$label} server-side profile secret, then run Test before sending again.",
+                    retryable: false,
+                    status: $status,
+                    provider: $provider,
+                    model: $model,
+                );
+            }
+
+            return $this->typedChatError(
+                layer: 'provider',
+                code: $rawCode ?: 'PROVIDER_CHAT_FAILED',
+                message: "{$label} could not complete the chat request.",
+                nextAction: "Open Model Lab, run Test for the {$label} profile, and retry after the provider is healthy.",
+                retryable: $status === null || $status >= 500 || $status === 429,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        return $this->typedChatError(
+            layer: 'validator_payload',
+            code: $rawCode ?: 'VALIDATOR_PAYLOAD_ERROR',
+            message: 'The validator rejected the chat payload.',
+            nextAction: 'Open Doctor, inspect the failed run trace, then retry after the validation fault is fixed.',
+            retryable: false,
+            status: $status,
+            provider: $provider,
+            model: $model,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function typedChatError(
+        string $layer,
+        string $code,
+        string $message,
+        string $nextAction,
+        bool $retryable,
+        ?int $status = null,
+        ?string $provider = null,
+        ?string $model = null,
+    ): array {
+        return array_filter([
+            'layer' => $layer,
+            'code' => $code,
+            'message' => $message,
+            'next_action' => $nextAction,
+            'retryable' => $retryable,
+            'status' => $status,
+            'provider' => $provider,
+            'model' => $model,
+        ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $eventPayload
+     */
+    private function failureStatus(array $payload, array $eventPayload): ?int
+    {
+        foreach ([$payload['status'] ?? null, $eventPayload['status'] ?? null] as $status) {
+            if (is_int($status) && $status >= 100 && $status <= 599) {
+                return $status;
+            }
+
+            if (is_numeric($status)) {
+                $numeric = (int) $status;
+                if ($numeric >= 100 && $numeric <= 599) {
+                    return $numeric;
+                }
+            }
+        }
+
+        $details = $this->failureDetails($payload, $eventPayload);
+        if (preg_match('/\bHTTP\s+([1-5][0-9]{2})\b/i', $details, $matches) === 1) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $eventPayload
+     */
+    private function isAuthenticationFailure(array $payload, array $eventPayload, ?int $status): bool
+    {
+        if (in_array($status, [401, 403], true)) {
+            return true;
+        }
+
+        $haystack = strtolower($this->failureDetails($payload, $eventPayload));
+
+        foreach (['api key', 'apikey', 'auth', 'unauthorized', 'forbidden', 'credential', 'invalid key', 'bad auth'] as $needle) {
+            if (str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $eventPayload
+     */
+    private function failureDetails(array $payload, array $eventPayload): string
+    {
+        $parts = [];
+
+        foreach ([$payload['details'] ?? null, $payload['error'] ?? null, $payload['message'] ?? null, $eventPayload['message'] ?? null] as $value) {
+            if (is_string($value) && trim($value) !== '') {
+                $parts[] = $value;
+            }
+        }
+
+        return implode(' ', $parts);
+    }
+
+    private function providerLabel(?string $provider): string
+    {
+        return match ($provider) {
+            'anthropic' => 'Anthropic',
+            'deepseek' => 'DeepSeek',
+            'gemini' => 'Gemini',
+            'ollama' => 'Ollama',
+            'openai' => 'OpenAI',
+            'openrouter' => 'OpenRouter',
+            default => $provider !== null ? strtoupper($provider) : 'Provider',
+        };
     }
 
     /**

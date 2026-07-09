@@ -12,6 +12,7 @@ use App\Models\TalosFileChunk;
 use App\Models\TalosMemory;
 use App\Models\TalosRun;
 use App\Models\TalosSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -21,10 +22,12 @@ final class TalosChatApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
 
         config([
             'services.talos.model_provider_allowed_hosts' => [
@@ -71,6 +74,38 @@ final class TalosChatApiTest extends TestCase
         ])->assertUnprocessable();
     }
 
+    public function test_talos_chat_rejects_session_ids_owned_by_another_user(): void
+    {
+        config(['services.avm_validator.url' => 'http://validator.test']);
+
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => $other->id,
+            'title' => 'Foreign chat session',
+            'mode' => 'verified_execution',
+        ]);
+
+        $this->actingAs($owner);
+
+        Http::fake([
+            'validator.test/chat' => Http::response(['text' => 'Should not be called']),
+        ]);
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $foreignSession->id,
+            'message' => 'Attach this run to another user session.',
+            'api_key' => 'sk-test',
+        ])
+            ->assertNotFound()
+            ->assertJsonMissing(['Should not be called']);
+
+        Http::assertNothingSent();
+        $this->assertDatabaseMissing('talos_runs', [
+            'session_id' => $foreignSession->id,
+        ]);
+    }
+
     public function test_talos_chat_accepts_model_profile_id_without_returning_secret(): void
     {
         config(['services.avm_validator.url' => 'http://validator.test']);
@@ -113,6 +148,7 @@ final class TalosChatApiTest extends TestCase
         config(['services.avm_validator.url' => 'http://validator.test']);
 
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'DeepSeek debug',
             'mode' => 'ask',
             'status' => 'active',
@@ -144,7 +180,14 @@ final class TalosChatApiTest extends TestCase
         $response
             ->assertStatus(502)
             ->assertJsonPath('error', 'Provider chat failed.')
-            ->assertJsonPath('message', 'Provider chat failed.')
+            ->assertJsonPath('message', 'DeepSeek rejected the configured credential.')
+            ->assertJsonPath('chat_error.layer', 'provider')
+            ->assertJsonPath('chat_error.code', 'PROVIDER_AUTHENTICATION_FAILED')
+            ->assertJsonPath('chat_error.provider', 'deepseek')
+            ->assertJsonPath('chat_error.model', 'deepseek-chat')
+            ->assertJsonPath('chat_error.status', 401)
+            ->assertJsonPath('chat_error.retryable', false)
+            ->assertJsonPath('chat_error.next_action', 'Open Model Lab, update the DeepSeek server-side profile secret, then run Test before sending again.')
             ->assertJsonMissing(['deepseek-secret']);
 
         $run = TalosRun::query()->latest('created_at')->first();

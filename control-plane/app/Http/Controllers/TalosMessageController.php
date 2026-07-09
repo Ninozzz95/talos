@@ -11,8 +11,10 @@ use Illuminate\Validation\Rule;
 
 final class TalosMessageController extends Controller
 {
-    public function index(TalosSession $session): JsonResponse
+    public function index(Request $request, TalosSession $session): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $session);
+
         $messages = $session->messages()
             ->oldest('created_at')
             ->oldest('id')
@@ -23,6 +25,8 @@ final class TalosMessageController extends Controller
 
     public function store(Request $request, TalosSession $session): JsonResponse
     {
+        $this->abortUnlessOwnedByCurrentUser($request, $session);
+
         $sameSessionMessage = static fn () => Rule::exists('talos_messages', 'id')
             ->where(static fn ($query) => $query->where('session_id', $session->id));
 
@@ -144,5 +148,10 @@ final class TalosMessageController extends Controller
             || str_contains($normalized, 'session_token')
             || str_contains($normalized, 'token_hash')
             || str_contains($normalized, 'token_value');
+    }
+
+    private function abortUnlessOwnedByCurrentUser(Request $request, TalosSession $session): void
+    {
+        abort_unless($request->user()?->id === $session->user_id, 404);
     }
 }

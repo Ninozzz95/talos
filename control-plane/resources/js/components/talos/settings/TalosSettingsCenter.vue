@@ -32,7 +32,9 @@ import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
     normalizeTalosTheme,
     resolveTalosMotionMode,
+    resolveTalosThemeMode,
     type TalosThemeId,
+    type TalosThemeMode,
     type TalosThemeMotionMode,
 } from '../../../lib/talosThemes'
 import {
@@ -63,6 +65,7 @@ type SettingsTab =
 
 type SettingsPreferences = {
     theme: TalosThemeId
+    theme_mode: TalosThemeMode
     theme_motion: TalosThemeMotionMode
     theme_motion_disabled: boolean
     theme_simple_animation: boolean
@@ -151,6 +154,7 @@ const activeTab = ref<SettingsTab>('models')
 
 const preferences = reactive<SettingsPreferences>({
     theme: 'forge',
+    theme_mode: 'system',
     theme_motion: 'system',
     theme_motion_disabled: false,
     theme_simple_animation: true,
@@ -237,6 +241,7 @@ function isSettingsTab(value: unknown): value is SettingsTab {
 
 function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme = normalizeTalosTheme(nextPreferences.theme)
+    preferences.theme_mode = resolveTalosThemeMode(nextPreferences.theme_mode)
     preferences.theme_motion = resolveTalosMotionMode(nextPreferences.theme_motion)
     preferences.theme_motion_disabled = booleanValue(nextPreferences.theme_motion_disabled, false)
     preferences.theme_simple_animation = booleanValue(nextPreferences.theme_simple_animation, true)
@@ -285,6 +290,7 @@ function preferencesPayload() {
     return {
         ...(settings.value?.preferences ?? {}),
         theme: preferences.theme,
+        theme_mode: preferences.theme_mode,
         workspace_default_theme: preferences.theme,
         ...(themeChanged ? { theme_customization: {} } : {}),
         theme_motion: preferences.theme_motion,
@@ -570,6 +576,7 @@ watch(
                     <template v-else-if="activeTab === 'appearance'">
                         <TalosSettingsAppearancePanel
                             :theme="preferences.theme"
+                            :theme-mode="preferences.theme_mode"
                             :theme-motion="preferences.theme_motion"
                             :theme-motion-disabled="preferences.theme_motion_disabled"
                             :theme-simple-animation="preferences.theme_simple_animation"
@@ -577,6 +584,7 @@ watch(
                             :appearance-visibility="preferences.appearance_visibility"
                             :appearance-groups="TALOS_APPEARANCE_GROUPS"
                             @update-theme="preferences.theme = $event"
+                            @update-theme-mode="preferences.theme_mode = $event"
                             @update-theme-motion="preferences.theme_motion = $event"
                             @update-theme-motion-disabled="preferences.theme_motion_disabled = $event"
                             @update-theme-simple-animation="preferences.theme_simple_animation = $event"

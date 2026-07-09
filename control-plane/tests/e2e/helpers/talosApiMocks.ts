@@ -1986,8 +1986,36 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             })
         }
 
-        if (path === '/api/talos/tools/planning-context' || path === '/api/talos/skills/planning-context') {
-            return json(route, { data: [] })
+        if (path === '/api/talos/tools/planning-context') {
+            return json(route, {
+                data: {
+                    source: 'talos_tool_registry',
+                    policy: {
+                        disabled_tools_excluded: true,
+                        disabled_connectors_excluded: true,
+                        tool_outputs_are_untrusted: true,
+                    },
+                    tools: [],
+                },
+            })
+        }
+
+        if (path === '/api/talos/skills/planning-context') {
+            return json(route, {
+                data: {
+                    source: 'talos_skill_registry',
+                    policy: {
+                        approved_only: true,
+                        eval_pass_required: true,
+                        allowed_tools_are_capability_boundary: true,
+                        untrusted_imports_excluded: true,
+                        internal_dev_excluded: true,
+                        exclusion_reasons_are_reported: true,
+                    },
+                    skills: [],
+                    excluded_skills: [],
+                },
+            })
         }
 
         if (path === '/api/benchmarks/compare' && method === 'POST') {

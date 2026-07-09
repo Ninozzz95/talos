@@ -14,6 +14,7 @@ use App\Models\TalosModelProfile;
 use App\Models\TalosRun;
 use App\Models\TalosRunEvent;
 use App\Models\TalosSession;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Tests\TestCase;
@@ -22,10 +23,12 @@ final class TalosSessionExportTest extends TestCase
 {
     use RefreshDatabase;
 
+    private User $user;
+
     protected function setUp(): void
     {
         parent::setUp();
-        $this->authenticateTalosUser();
+        $this->user = $this->authenticateTalosUser();
     }
 
     public function test_session_json_export_redacts_secrets_and_includes_evidence_manifest(): void
@@ -100,6 +103,7 @@ final class TalosSessionExportTest extends TestCase
             ->assertJsonPath('scenario.context_hash', $run->metadata['context_hash']);
 
         $empty = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Empty export',
             'mode' => 'verified_execution',
         ]);
@@ -123,12 +127,34 @@ final class TalosSessionExportTest extends TestCase
             ->count());
     }
 
+    public function test_session_export_is_scoped_to_the_authenticated_user(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $foreignSession = TalosSession::query()->create([
+            'user_id' => $other->id,
+            'title' => 'Foreign export',
+            'mode' => 'verified_execution',
+        ]);
+
+        $this->actingAs($owner);
+
+        $this->getJson("/api/talos/sessions/{$foreignSession->id}/export")
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('talos_audit_events', [
+            'event_type' => 'session.exported',
+            'subject_id' => $foreignSession->id,
+        ]);
+    }
+
     /**
      * @return array{0: TalosSession, 1: TalosRun}
      */
     private function seedExportableSession(): array
     {
         $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
             'title' => 'Incident export',
             'mode' => 'verified_execution',
             'metadata' => ['surface' => 'chat', 'api_key' => 'sk-live-secret'],

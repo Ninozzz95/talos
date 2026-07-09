@@ -33,6 +33,7 @@ final class TalosGuidedStartEvidenceLoopTest extends TestCase
         $this->useIsolatedLocalStorage();
 
         $session = TalosSession::query()->create([
+            'user_id' => auth()->id(),
             'title' => 'Guided evidence loop',
             'mode' => 'verified_execution',
         ]);
