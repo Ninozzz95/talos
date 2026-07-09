@@ -15,11 +15,11 @@ final class TalosSettingsController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        $settings = $this->settings();
         $userId = $request->user()?->id;
         abort_unless($userId !== null, 401);
+        $settings = $this->settings((int) $userId);
 
-        return response()->json(['data' => $this->settingsPayload($settings, $userId)]);
+        return response()->json(['data' => $this->settingsPayload($settings, (int) $userId)]);
     }
 
     public function update(Request $request): JsonResponse
@@ -33,7 +33,7 @@ final class TalosSettingsController extends Controller
             'preferences' => ['sometimes', 'nullable', 'array'],
         ]);
 
-        $settings = $this->settings();
+        $settings = $this->settings((int) $userId);
         $defaultErrors = [];
 
         if (array_key_exists('default_model_profile_id', $validated)) {
@@ -78,11 +78,12 @@ final class TalosSettingsController extends Controller
         return response()->json(['data' => $this->settingsPayload($settings->refresh(), $userId)]);
     }
 
-    private function settings(): TalosWorkspaceSetting
+    private function settings(int $userId): TalosWorkspaceSetting
     {
         return TalosWorkspaceSetting::query()->firstOrCreate([
-            'id' => TalosWorkspaceSetting::DEFAULT_ID,
+            'user_id' => $userId,
         ], [
+            'id' => TalosWorkspaceSetting::idForUser($userId),
             'preferences' => [],
         ]);
     }

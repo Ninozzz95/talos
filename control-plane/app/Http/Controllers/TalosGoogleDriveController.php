@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosAuditEvent;
 use App\Models\TalosExternalAccount;
+use App\Models\User;
 use App\Services\FileIngestion\FileIngestionService;
 use App\Services\Google\GoogleDriveException;
 use App\Services\Google\GoogleDriveService;
@@ -18,13 +19,13 @@ final class TalosGoogleDriveController extends Controller
     public function files(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'account_id' => ['required', 'string', 'exists:talos_external_accounts,id'],
+            'account_id' => ['required', 'string'],
             'q' => ['nullable', 'string', 'max:500'],
             'page_token' => ['nullable', 'string', 'max:500'],
             'page_size' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $account = $this->connectedGoogleAccount((string) $validated['account_id']);
+        $account = $this->connectedGoogleAccount($request, (string) $validated['account_id']);
         $drive = app(GoogleDriveService::class);
 
         try {
@@ -44,11 +45,11 @@ final class TalosGoogleDriveController extends Controller
     public function import(Request $request, FileIngestionService $ingestion): JsonResponse
     {
         $validated = $request->validate([
-            'account_id' => ['required', 'string', 'exists:talos_external_accounts,id'],
+            'account_id' => ['required', 'string'],
             'file_id' => ['required', 'string', 'max:500'],
         ]);
 
-        $account = $this->connectedGoogleAccount((string) $validated['account_id']);
+        $account = $this->connectedGoogleAccount($request, (string) $validated['account_id']);
         $drive = app(GoogleDriveService::class);
 
         try {
@@ -91,7 +92,7 @@ final class TalosGoogleDriveController extends Controller
                 'google_drive_account_email' => $account->email,
                 'imported_at' => now()->toJSON(),
             ],
-            $request->user()?->id,
+            (int) $account->user_id,
         );
 
         TalosAuditEvent::record('google.drive.file_imported', 'file', (string) ($result['id'] ?? ''), [
@@ -114,10 +115,14 @@ final class TalosGoogleDriveController extends Controller
         return response()->json(['data' => $result], 201);
     }
 
-    private function connectedGoogleAccount(string $accountId): TalosExternalAccount
+    private function connectedGoogleAccount(Request $request, string $accountId): TalosExternalAccount
     {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
         $account = TalosExternalAccount::query()
             ->whereKey($accountId)
+            ->where('user_id', $user->id)
             ->where('provider', 'google')
             ->where('status', 'connected')
             ->first();

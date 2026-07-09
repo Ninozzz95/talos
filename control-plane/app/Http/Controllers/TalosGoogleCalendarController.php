@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosCalendarDraft;
 use App\Models\TalosExternalAccount;
+use App\Models\User;
 use App\Services\Google\GoogleCalendarException;
 use App\Services\Google\GoogleCalendarService;
 use Illuminate\Http\JsonResponse;
@@ -17,10 +18,10 @@ final class TalosGoogleCalendarController extends Controller
     public function calendars(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'account_id' => ['required', 'string', 'exists:talos_external_accounts,id'],
+            'account_id' => ['required', 'string'],
         ]);
 
-        $account = $this->connectedGoogleAccount((string) $validated['account_id']);
+        $account = $this->connectedGoogleAccount($request, (string) $validated['account_id']);
         $calendar = app(GoogleCalendarService::class);
 
         try {
@@ -36,11 +37,11 @@ final class TalosGoogleCalendarController extends Controller
     public function sync(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'account_id' => ['required', 'string', 'exists:talos_external_accounts,id'],
+            'account_id' => ['required', 'string'],
             'calendar_id' => ['sometimes', 'nullable', 'string', 'max:256'],
         ]);
 
-        $account = $this->connectedGoogleAccount((string) $validated['account_id']);
+        $account = $this->connectedGoogleAccount($request, (string) $validated['account_id']);
         $calendarId = $this->calendarId($validated['calendar_id'] ?? null);
         $calendar = app(GoogleCalendarService::class);
 
@@ -57,12 +58,16 @@ final class TalosGoogleCalendarController extends Controller
     public function publish(Request $request, TalosCalendarDraft $calendarDraft): JsonResponse
     {
         $validated = $request->validate([
-            'account_id' => ['required', 'string', 'exists:talos_external_accounts,id'],
+            'account_id' => ['required', 'string'],
             'confirmed' => ['required', 'boolean'],
             'calendar_id' => ['sometimes', 'nullable', 'string', 'max:256'],
         ]);
 
-        $account = $this->connectedGoogleAccount((string) $validated['account_id']);
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+        abort_unless((int) $calendarDraft->user_id === (int) $user->id, 404);
+
+        $account = $this->connectedGoogleAccount($request, (string) $validated['account_id']);
         $calendarId = $this->calendarId($validated['calendar_id'] ?? null);
         $calendar = app(GoogleCalendarService::class);
 
@@ -81,10 +86,14 @@ final class TalosGoogleCalendarController extends Controller
         return response()->json(['data' => $result]);
     }
 
-    private function connectedGoogleAccount(string $accountId): TalosExternalAccount
+    private function connectedGoogleAccount(Request $request, string $accountId): TalosExternalAccount
     {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
         $account = TalosExternalAccount::query()
             ->whereKey($accountId)
+            ->where('user_id', $user->id)
             ->where('provider', 'google')
             ->where('status', 'connected')
             ->first();

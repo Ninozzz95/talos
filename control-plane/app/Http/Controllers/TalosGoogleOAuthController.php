@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosAuditEvent;
 use App\Models\TalosExternalAccount;
+use App\Models\User;
 use App\Services\Google\GoogleOAuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -15,9 +16,13 @@ use RuntimeException;
 
 final class TalosGoogleOAuthController extends Controller
 {
-    public function accounts(): JsonResponse
+    public function accounts(Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
         $accounts = TalosExternalAccount::query()
+            ->where('user_id', $user->id)
             ->where('provider', 'google')
             ->latest('updated_at')
             ->latest('created_at')
@@ -39,6 +44,9 @@ final class TalosGoogleOAuthController extends Controller
 
     public function callback(Request $request, GoogleOAuthService $oauth): JsonResponse|RedirectResponse
     {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
         if (! $oauth->hasValidState($request)) {
             abort(403, 'Invalid Google OAuth state.');
         }
@@ -48,7 +56,7 @@ final class TalosGoogleOAuthController extends Controller
         }
 
         try {
-            $account = $oauth->connectFromCallback($request);
+            $account = $oauth->connectFromCallback($request, $user);
         } catch (RuntimeException $exception) {
             return response()->json([
                 'code' => 'GOOGLE_OAUTH_CALLBACK_FAILED',
@@ -69,11 +77,14 @@ final class TalosGoogleOAuthController extends Controller
     public function disconnect(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'account_id' => ['required', 'string', 'exists:talos_external_accounts,id'],
+            'account_id' => ['required', 'string'],
         ]);
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
 
         $account = TalosExternalAccount::query()
             ->whereKey($validated['account_id'])
+            ->where('user_id', $user->id)
             ->where('provider', 'google')
             ->first();
 

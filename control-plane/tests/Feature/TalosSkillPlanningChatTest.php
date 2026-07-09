@@ -38,6 +38,7 @@ final class TalosSkillPlanningChatTest extends TestCase
             'mode' => 'verified_execution',
         ]);
         $profile = TalosModelProfile::query()->create([
+            'user_id' => auth()->id(),
             'provider' => 'openai',
             'model' => 'gpt-5.1-mini',
             'display_name' => 'OpenAI Work',
