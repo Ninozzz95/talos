@@ -12,6 +12,15 @@ import {
 } from '../../../lib/talosThemes'
 import Button from '../../ui/Button.vue'
 import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
+import {
+    TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
+    TALOS_CHAT_COMPOSER_MODE_OPTIONS,
+} from '../../../lib/talosChatLayout'
+import type {
+    TalosChatBubbleScale,
+    TalosChatLayoutPreferences,
+    TalosComposerMode,
+} from '../../../lib/talosTypes'
 
 const emit = defineEmits<{
     updateTheme: [theme: TalosThemeId]
@@ -20,6 +29,9 @@ const emit = defineEmits<{
     updateThemeMotionDisabled: [disabled: boolean]
     updateThemeSimpleAnimation: [enabled: boolean]
     updateThemeBackgroundDisabled: [disabled: boolean]
+    updateChatBubbleScale: [scale: TalosChatBubbleScale]
+    updateChatComposerMode: [mode: TalosComposerMode]
+    updateAdvancedRailExpanded: [expanded: boolean]
     updateAppearance: [group: TalosAppearanceGroup, key: string, enabled: boolean]
     resetAppearanceGroup: [group: TalosAppearanceGroup]
     resetAllAppearance: []
@@ -38,6 +50,8 @@ const props = defineProps<{
     themeMotionDisabled: boolean
     themeSimpleAnimation: boolean
     themeBackgroundDisabled: boolean
+    chatLayout: TalosChatLayoutPreferences
+    themePolicyLocked: boolean
     appearanceVisibility: TalosAppearanceVisibility
     appearanceGroups: Array<{
         id: TalosAppearanceGroup
@@ -87,6 +101,46 @@ function selectThemeMotion(value: unknown) {
                     {{ preset.label }}
                 </option>
             </Select>
+        </label>
+        <label class="block">
+            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat message size</span>
+            <Select
+                :model-value="chatLayout.bubble_scale"
+                class="mt-2"
+                aria-label="Chat message size"
+                :disabled="themePolicyLocked"
+                @update:model-value="(value) => emit('updateChatBubbleScale', value as TalosChatBubbleScale)"
+            >
+                <option v-for="option in TALOS_CHAT_BUBBLE_SCALE_OPTIONS" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                </option>
+            </Select>
+        </label>
+        <label class="block">
+            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat composer</span>
+            <Select
+                :model-value="chatLayout.composer_mode"
+                class="mt-2"
+                aria-label="Chat composer mode"
+                :disabled="themePolicyLocked"
+                @update:model-value="(value) => emit('updateChatComposerMode', value as TalosComposerMode)"
+            >
+                <option v-for="option in TALOS_CHAT_COMPOSER_MODE_OPTIONS" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                </option>
+            </Select>
+        </label>
+        <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 md:col-span-2">
+            <span>
+                <span class="block text-sm font-semibold text-[var(--talos-text)]">Expand Advanced by default</span>
+                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep the lower-frequency workspace tools visible after reload.</span>
+            </span>
+            <Switch
+                :model-value="chatLayout.advanced_rail_expanded"
+                class="mt-1"
+                aria-label="Expand Advanced by default"
+                @update:model-value="(value) => emit('updateAdvancedRailExpanded', Boolean(value))"
+            />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Color mode</span>

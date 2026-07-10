@@ -10,6 +10,13 @@ import Switch from '../../ui/Switch.vue'
 import Textarea from '../../ui/Textarea.vue'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
+    TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
+    TALOS_CHAT_COMPOSER_MODE_OPTIONS,
+    TALOS_DEFAULT_CHAT_LAYOUT,
+    sanitizeTalosChatLayout,
+} from '../../../lib/talosChatLayout'
+import type { TalosChatLayoutPreferences } from '../../../lib/talosTypes'
+import {
     TALOS_BACKGROUND_EFFECTS,
     TALOS_THEME_AREA_OPTIONS,
     TALOS_THEME_AREA_TOKEN_OPTIONS,
@@ -132,6 +139,7 @@ const motionPreviewOpen = ref(false)
 const areaTokens = ref<TalosThemeAreaTokens>({})
 const selectedArea = ref<TalosThemeAreaId>('composer')
 const areaTokenForm = ref<AreaTokenForm>(emptyAreaTokenForm())
+const chatLayout = ref<TalosChatLayoutPreferences>({ ...TALOS_DEFAULT_CHAT_LAYOUT })
 const syncingForm = ref(false)
 
 const activeTheme = computed(() => {
@@ -144,12 +152,14 @@ const activeNamedTheme = computed(() => themeLibrary.value.find((theme) => theme
 const savedCustomization = computed(() => sanitizeTalosThemeCustomization(settings.value?.preferences?.theme_customization))
 const savedUiAnimationCustomization = computed(() => sanitizeTalosUiAnimationCustomization(settings.value?.preferences?.ui_animation_customization))
 const savedUiAnimationProfile = computed(() => resolveTalosUiAnimationProfile(settings.value?.preferences?.ui_animation_profile))
+const savedChatLayout = computed(() => sanitizeTalosChatLayout(settings.value?.preferences?.chat_layout))
 const themeDraftIsDirty = computed(() => JSON.stringify(customizationForm.value) !== JSON.stringify(formFromCurrentSettings()))
 const animationDraftIsDirty = computed(() => (
     uiAnimationProfile.value !== savedUiAnimationProfile.value
     || JSON.stringify(uiAnimationForm.value) !== JSON.stringify(uiAnimationFormFromCustomization(savedUiAnimationCustomization.value))
 ))
-const draftIsDirty = computed(() => themeDraftIsDirty.value || animationDraftIsDirty.value)
+const chatLayoutDraftIsDirty = computed(() => JSON.stringify(chatLayout.value) !== JSON.stringify(savedChatLayout.value))
+const draftIsDirty = computed(() => themeDraftIsDirty.value || animationDraftIsDirty.value || chatLayoutDraftIsDirty.value)
 const hasAreaDraft = computed(() => Object.values(areaTokenForm.value).some((value) => value.trim() !== ''))
 const themePolicyLocked = computed(() => preferencesRecord().theme_policy_locked === true)
 
@@ -245,6 +255,7 @@ function syncCustomizationForm() {
     customizationForm.value = formFromCurrentSettings()
     uiAnimationForm.value = uiAnimationFormFromCustomization(savedUiAnimationCustomization.value)
     uiAnimationProfile.value = savedUiAnimationProfile.value
+    chatLayout.value = { ...savedChatLayout.value }
     window.requestAnimationFrame(() => {
         syncingForm.value = false
     })
@@ -275,6 +286,7 @@ function syncThemeState() {
     uiAnimationProfile.value = resolveTalosUiAnimationProfile(preferences.ui_animation_profile)
     uiAnimationForm.value = uiAnimationFormFromCustomization(preferences.ui_animation_customization)
     areaTokens.value = sanitizeTalosThemeAreaTokens(preferences.theme_area_tokens)
+    chatLayout.value = sanitizeTalosChatLayout(preferences.chat_layout)
     syncAreaForm()
 }
 
@@ -364,6 +376,7 @@ async function saveCustomization() {
             theme_customization: themeCustomization,
             ui_animation_profile: uiAnimationProfile.value,
             ui_animation_customization: uiAnimationCustomization,
+            chat_layout: chatLayout.value,
             active_custom_theme_id: activeCustomThemeId.value,
         },
     }, 'Theme customization saved through /api/talos/settings.')
@@ -390,6 +403,7 @@ async function resetCustomization() {
             ui_animation_profile: 'preset',
             ui_animation_customization: {},
             active_custom_theme_id: null,
+            chat_layout: { ...TALOS_DEFAULT_CHAT_LAYOUT },
         },
     }, 'Theme customization reset.')
     emit('themeDraftChanged', null)
@@ -415,6 +429,7 @@ function currentNamedTheme(name: string, id = generateThemeId(name)): TalosNamed
         motion: motionMode.value,
         ui_animation_profile: uiAnimationProfile.value,
         ui_animation_customization: sanitizedUiAnimationForm(),
+        chat_layout: chatLayout.value,
         created_at: now,
         updated_at: now,
     }
@@ -448,6 +463,7 @@ async function saveAsNamedTheme() {
             theme_motion: theme.motion ?? 'system',
             ui_animation_profile: theme.ui_animation_profile ?? 'preset',
             ui_animation_customization: theme.ui_animation_customization ?? {},
+            chat_layout: preferencesRecord().chat_layout ?? theme.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT,
         },
     }, 'Custom theme saved through /api/talos/settings.')
     activeTab.value = 'library'
@@ -476,6 +492,7 @@ async function applyNamedTheme(theme: TalosNamedTheme) {
             theme_motion: theme.motion ?? 'system',
             ui_animation_profile: theme.ui_animation_profile ?? 'preset',
             ui_animation_customization: theme.ui_animation_customization ?? {},
+            chat_layout: preferencesRecord().chat_layout ?? theme.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT,
             active_custom_theme_id: theme.id,
         },
     }, 'Custom theme applied.')
@@ -592,6 +609,7 @@ async function importTheme() {
             theme_motion: theme.motion ?? 'system',
             ui_animation_profile: theme.ui_animation_profile ?? 'preset',
             ui_animation_customization: theme.ui_animation_customization ?? {},
+            chat_layout: preferencesRecord().chat_layout ?? theme.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT,
         },
     }, 'Theme imported.')
     importJson.value = ''
@@ -1112,6 +1130,31 @@ onMounted(async () => {
                             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Uses the same action-motion tokens as TALOS windows and command surfaces.</p>
                         </div>
                         <Button type="button" variant="secondary" :disabled="themePolicyLocked" @click="previewMotion">Preview motion</Button>
+                    </div>
+                </div>
+
+                <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                    <div class="mb-3">
+                        <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat layout</div>
+                        <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Uses the same persisted preference as Appearance settings.</p>
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Message size</span>
+                            <Select v-model="chatLayout.bubble_scale" aria-label="Theme chat message size" :disabled="themePolicyLocked">
+                                <option v-for="option in TALOS_CHAT_BUBBLE_SCALE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
+                        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                            <span>Composer mode</span>
+                            <Select v-model="chatLayout.composer_mode" aria-label="Theme chat composer mode" :disabled="themePolicyLocked">
+                                <option v-for="option in TALOS_CHAT_COMPOSER_MODE_OPTIONS" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </Select>
+                        </label>
                     </div>
                 </div>
 

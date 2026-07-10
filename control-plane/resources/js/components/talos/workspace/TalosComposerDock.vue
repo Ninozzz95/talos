@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Loader2 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Select from '../../ui/Select.vue'
 import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
+import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
-import type { TalosCommand, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+import type { TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
 const props = defineProps<{
     prompt: string
-    browseSurface?: boolean
     browserContext?: { host: string; title: string } | null
+    browserMode: TalosBrowserMode
+    composerMode: TalosComposerMode
+    chatLayoutLocked: boolean
+    viewport: TalosChatViewportController
     commands: TalosCommand[]
     canSend: boolean
     sending: boolean
@@ -59,19 +63,25 @@ const emit = defineEmits<{
     insertEnhancedPromptBelow: []
     clearPromptEnhancement: []
     detachBrowserContext: []
+    toggleComposerMode: []
+    enableBrowse: []
+    disableBrowse: []
+    restartBrowse: []
+    captureScreenshot: []
+    captureSnapshot: []
 }>()
 
 const composerPrompt = computed({
     get: () => props.prompt,
     set: (value: string) => emit('updatePrompt', value),
 })
+const composerRoot = ref<HTMLElement | null>(null)
+onMounted(() => props.viewport.registerComposer(composerRoot.value))
+onBeforeUnmount(() => props.viewport.registerComposer(null))
 </script>
 
 <template>
-    <div
-        class="pointer-events-none fixed inset-x-0 bottom-7 z-40 px-4 lg:px-6"
-        :class="browseSurface ? 'lg:left-[calc(var(--talos-rail-width)+22rem)]' : 'lg:left-[var(--talos-rail-width)]'"
-    >
+    <div ref="composerRoot" class="pointer-events-none fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 px-4 lg:left-[var(--talos-rail-width)] lg:px-6">
         <div class="relative">
             <div v-if="browserContext" data-testid="talos-browser-context-chip" class="pointer-events-auto mx-auto mb-2 flex w-full max-w-[820px] items-center justify-between gap-3 border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
                 <span class="min-w-0 truncate"><strong>Browse evidence</strong> <span class="text-[var(--talos-muted)]">{{ browserContext.host }} - {{ browserContext.title }}</span></span>
@@ -199,6 +209,9 @@ const composerPrompt = computed({
                 :model-label="modelLabel"
                 :context-label="contextLabel"
                 :temporary-mode="temporaryMode"
+                :browser-mode="browserMode"
+                :composer-mode="composerMode"
+                :chat-layout-locked="chatLayoutLocked"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
                 :visibility="visibility"
@@ -210,6 +223,12 @@ const composerPrompt = computed({
                 @enhance="emit('enhance')"
                 @slash-command="emit('slashCommand', $event)"
                 @browse-open="emit('browseOpen', $event)"
+                @toggle-composer-mode="emit('toggleComposerMode')"
+                @enable-browse="emit('enableBrowse')"
+                @disable-browse="emit('disableBrowse')"
+                @restart-browse="emit('restartBrowse')"
+                @capture-screenshot="emit('captureScreenshot')"
+                @capture-snapshot="emit('captureSnapshot')"
             />
         </div>
     </div>

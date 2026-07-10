@@ -15,17 +15,19 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
     {
         return $this->request('post', '/sessions', $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => 3600, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'downloads' => false, 'uploads' => false]]);
     }
-    public function navigate(string $ownerRef, string $workerSessionId, string $url): array { return $this->request('post', "/sessions/{$workerSessionId}/navigate", $ownerRef, ['url' => $url]); }
-    public function screenshot(string $ownerRef, string $workerSessionId): array { return $this->request('post', "/sessions/{$workerSessionId}/screenshot", $ownerRef); }
-    public function snapshot(string $ownerRef, string $workerSessionId): array { return $this->request('post', "/sessions/{$workerSessionId}/snapshot", $ownerRef); }
+    public function inspect(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array { return $this->request('get', "/sessions/{$workerSessionId}", $ownerRef, [], $timeoutMilliseconds); }
+    public function navigate(string $ownerRef, string $workerSessionId, string $url, int $timeoutMilliseconds = 15000): array { return $this->request('post', "/sessions/{$workerSessionId}/navigate", $ownerRef, ['url' => $url], $timeoutMilliseconds); }
+    public function screenshot(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array { return $this->request('post', "/sessions/{$workerSessionId}/screenshot", $ownerRef, [], $timeoutMilliseconds); }
+    public function snapshot(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array { return $this->request('post', "/sessions/{$workerSessionId}/snapshot", $ownerRef, [], $timeoutMilliseconds); }
     public function close(string $ownerRef, string $workerSessionId): void { $this->request('delete', "/sessions/{$workerSessionId}", $ownerRef); }
 
     /** @param array<string, mixed> $payload @return array<string, mixed> */
-    private function request(string $method, string $path, string $ownerRef, array $payload = []): array
+    private function request(string $method, string $path, string $ownerRef, array $payload = [], int $timeoutMilliseconds = 15000): array
     {
         if (trim($this->baseUrl) === '' || trim($this->token) === '') throw new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is not configured.');
         try {
-            $response = Http::timeout($this->timeoutSeconds)->acceptJson()->withHeaders(['X-Talos-Worker-Token' => $this->token, 'X-Talos-Owner-Ref' => $ownerRef])->send($method, rtrim($this->baseUrl, '/').$path, ['json' => $payload]);
+            $timeoutSeconds = min($this->timeoutSeconds, max(0.001, $timeoutMilliseconds / 1000));
+            $response = Http::timeout($timeoutSeconds)->acceptJson()->withHeaders(['X-Talos-Worker-Token' => $this->token, 'X-Talos-Owner-Ref' => $ownerRef])->send($method, rtrim($this->baseUrl, '/').$path, ['json' => $payload]);
         } catch (ConnectionException $exception) {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is unavailable.');
         }

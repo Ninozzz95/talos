@@ -6,6 +6,7 @@ export declare const JmpMutationSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     node_type: z.ZodEnum<{
         HTTP_REQUEST: "HTTP_REQUEST";
         QUERY_DATABASE: "QUERY_DATABASE";
+        BROWSER_COMMAND: "BROWSER_COMMAND";
     }>;
     dependencies: z.ZodDefault<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>, z.ZodObject<{

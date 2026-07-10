@@ -61,7 +61,10 @@ final class TalosSettingsController extends Controller
         }
 
         if (array_key_exists('preferences', $validated)) {
-            if ($this->themePolicyLocked($settings) && $this->containsThemeWrite($validated['preferences'] ?? [])) {
+            $storedPreferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
+            $incomingPreferences = TalosWorkspaceSetting::sanitizePreferences($validated['preferences'] ?? []);
+            $themePolicyLocked = $this->themePolicyLocked($settings);
+            if ($themePolicyLocked && $this->containsLockedThemeChange($incomingPreferences, $storedPreferences)) {
                 return response()->json([
                     'message' => 'Theme changes are locked by workspace policy.',
                     'errors' => [
@@ -70,7 +73,9 @@ final class TalosSettingsController extends Controller
                 ], 422);
             }
 
-            $settings->preferences = TalosWorkspaceSetting::sanitizePreferences($validated['preferences'] ?? []);
+            $settings->preferences = $themePolicyLocked
+                ? array_replace_recursive($storedPreferences, $incomingPreferences)
+                : $incomingPreferences;
         }
 
         $settings->save();
@@ -144,13 +149,14 @@ final class TalosSettingsController extends Controller
     /**
      * @param mixed $preferences
      */
-    private function containsThemeWrite(mixed $preferences): bool
+    private function containsLockedThemeChange(mixed $preferences, array $storedPreferences): bool
     {
         if (! is_array($preferences)) {
             return false;
         }
 
-        $themeKeys = [
+        $lockedKeys = [
+            'theme_policy_locked' => true,
             'theme' => true,
             'theme_customization' => true,
             'theme_library' => true,
@@ -166,13 +172,25 @@ final class TalosSettingsController extends Controller
             'workspace_default_theme' => true,
         ];
 
-        foreach ($preferences as $key => $value) {
-            if (is_string($key) && isset($themeKeys[$key])) {
+        foreach ($lockedKeys as $key => $_locked) {
+            if (array_key_exists($key, $preferences)
+                && ($preferences[$key] ?? null) !== ($storedPreferences[$key] ?? null)
+            ) {
                 return true;
             }
+        }
 
-            if (is_array($value) && $this->containsThemeWrite($value)) {
-                return true;
+        $incomingLayout = $preferences['chat_layout'] ?? null;
+        $storedLayout = is_array($storedPreferences['chat_layout'] ?? null)
+            ? $storedPreferences['chat_layout']
+            : [];
+        if (is_array($incomingLayout)) {
+            foreach (['bubble_scale', 'composer_mode'] as $key) {
+                if (array_key_exists($key, $incomingLayout)
+                    && ($incomingLayout[$key] ?? null) !== ($storedLayout[$key] ?? null)
+                ) {
+                    return true;
+                }
             }
         }
 

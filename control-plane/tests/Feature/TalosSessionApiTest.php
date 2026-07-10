@@ -71,27 +71,57 @@ final class TalosSessionApiTest extends TestCase
             ->assertJsonPath('data.mode', 'verified_execution');
     }
 
-    public function test_sessions_are_partitioned_by_their_product_surface(): void
+    public function test_chat_history_includes_legacy_browse_sessions_but_new_browse_sessions_are_rejected(): void
     {
         $chat = $this->postJson('/api/talos/sessions', [
             'title' => 'General chat',
         ])->assertCreated()->assertJsonPath('data.surface', 'chat');
-        $browse = $this->postJson('/api/talos/sessions', [
-            'title' => 'Browse evidence chat',
+
+        $legacyBrowse = TalosSession::query()->create([
+            'user_id' => auth()->id(),
+            'title' => 'Historic Browse evidence chat',
+            'mode' => 'verified_execution',
+            'persistence_mode' => 'persistent',
             'surface' => 'browse',
-        ])->assertCreated()->assertJsonPath('data.surface', 'browse');
+            'metadata' => ['surface' => 'browse'],
+        ]);
+
+        $this->postJson('/api/talos/sessions', [
+            'title' => 'No separate Browse chat',
+            'surface' => 'browse',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('surface');
 
         $this->getJson('/api/talos/sessions?surface=chat')
             ->assertOk()
-            ->assertJsonPath('data.0.id', $chat->json('data.id'))
-            ->assertJsonMissing(['id' => $browse->json('data.id')]);
+            ->assertJsonFragment(['id' => $chat->json('data.id')])
+            ->assertJsonFragment([
+                'id' => $legacyBrowse->id,
+                'legacy_browse' => true,
+            ]);
+
         $this->getJson('/api/talos/sessions?surface=browse')
             ->assertOk()
-            ->assertJsonPath('data.0.id', $browse->json('data.id'))
+            ->assertJsonPath('data.0.id', $legacyBrowse->id)
+            ->assertJsonPath('data.0.metadata.legacy_browse', true)
             ->assertJsonMissing(['id' => $chat->json('data.id')]);
+
         $this->getJson('/api/talos/sessions?surface=invalid')
             ->assertUnprocessable()
             ->assertJsonValidationErrors('surface');
+    }
+
+    public function test_new_sessions_force_chat_surface_metadata(): void
+    {
+        $this->postJson('/api/talos/sessions', [
+            'title' => 'Unified chat',
+            'surface' => 'chat',
+            'metadata' => ['surface' => 'browse'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.surface', 'chat')
+            ->assertJsonPath('data.metadata.surface', 'chat');
     }
 
     public function test_session_creation_assigns_stable_welcome_prompt_metadata(): void

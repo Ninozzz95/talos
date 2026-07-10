@@ -101,6 +101,33 @@ final class TalosBrowserApiTest extends TestCase
         $artifactId = $response->json('data.id'); $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
         $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
         $this->get("/api/talos/browser/artifacts/{$artifactId}/preview")->assertOk()->assertHeader('content-type', 'image/png');
+        $event = TalosBrowserEvent::query()->where('browser_session_id', $session->id)->where('type', 'screenshot.captured')->firstOrFail();
+        $this->assertSame('screenshot', $event->payload['operation'] ?? null);
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', (string) ($event->payload['command_id'] ?? ''));
+        $this->assertSame([$artifactId], $event->payload['artifact_ids'] ?? null);
+    }
+
+    public function test_direct_screenshot_rejects_binary_evidence_above_five_megabytes_without_persisting_it(): void
+    {
+        $session = $this->createSession();
+        $bytes = str_repeat('x', 5_000_001);
+        $this->client->screenshotResponse = [
+            'mime' => 'image/png',
+            'width' => 1280,
+            'height' => 800,
+            'base64' => base64_encode($bytes),
+            'sha256' => hash('sha256', $bytes),
+        ];
+
+        $this->postJson("/api/talos/browser/sessions/{$session->id}/screenshot")
+            ->assertStatus(502)
+            ->assertJsonPath('code', 'TALOS_BROWSER_WORKER_FAILURE');
+
+        $this->assertDatabaseCount('talos_browser_artifacts', 0);
+        $this->assertDatabaseMissing('talos_browser_events', [
+            'browser_session_id' => $session->id,
+            'type' => 'screenshot.captured',
+        ]);
     }
 
     public function test_snapshot_stores_digest_metadata_without_exposing_worker_internals(): void

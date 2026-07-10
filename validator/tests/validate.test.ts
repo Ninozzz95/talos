@@ -129,4 +129,49 @@ describe('validateMutations', () => {
     expect(result.errors?.[0].field).toContain('node_type');
     expect(result.errors?.[0].message).toContain('not available');
   });
+
+  it('rejects mixed browser and HTTP write batches even when a broad manifest lists both', () => {
+    const result = validateMutations(
+      [
+        { action: 'SPAWN_NODE', node_id: 'browser_1', node_type: 'BROWSER_COMMAND' },
+        { action: 'SPAWN_NODE', node_id: 'write_1', node_type: 'HTTP_REQUEST' },
+        { action: 'MUTATE_PAYLOAD', node_id: 'write_1', payload: { url: 'https://example.com/write', method: 'POST' } },
+      ],
+      { browser_1: 'BROWSER_COMMAND', write_1: 'HTTP_REQUEST' },
+      ['BROWSER_COMMAND', 'HTTP_REQUEST'],
+      ['snapshot'],
+      true,
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors?.some((fault) => fault.message.includes('planner-only'))).toBe(true);
+  });
+
+  it('requires exactly one browser spawn and one matching payload in Browse mode', () => {
+    const command = {
+      schema_version: 'talos_browser_command_v1', command_id: 'bc_1',
+      run_id: '0190f2f1-7a4b-7abc-8def-0123456789ab', node_id: 'browser_1',
+      browser_session_id: '0190f2f1-7a4b-7abc-8def-0123456789ac', operation: 'snapshot',
+      arguments: {}, observation_request: [], risk: 'read', expected_evidence_hash: null,
+      idempotency_key: `sha256:${'b'.repeat(64)}`,
+    };
+    const first = [
+      { action: 'SPAWN_NODE', node_id: 'browser_1', node_type: 'BROWSER_COMMAND' },
+      { action: 'MUTATE_PAYLOAD', node_id: 'browser_1', payload: command },
+    ];
+    const second = [
+      { action: 'SPAWN_NODE', node_id: 'browser_2', node_type: 'BROWSER_COMMAND' },
+      { action: 'MUTATE_PAYLOAD', node_id: 'browser_2', payload: { ...command, command_id: 'bc_2', node_id: 'browser_2' } },
+    ];
+
+    const duplicate = validateMutations([...first, ...second], { browser_1: 'BROWSER_COMMAND', browser_2: 'BROWSER_COMMAND' }, ['BROWSER_COMMAND'], ['snapshot'], true);
+    expect(duplicate.valid).toBe(false);
+    expect(duplicate.errors?.some((fault) => fault.message.includes('exactly one'))).toBe(true);
+
+    const extraPayload = validateMutations([
+      ...first,
+      { action: 'MUTATE_PAYLOAD', node_id: 'existing_http', payload: { url: 'https://example.com', method: 'POST' } },
+    ], { browser_1: 'BROWSER_COMMAND', existing_http: 'HTTP_REQUEST' }, ['BROWSER_COMMAND'], ['snapshot'], true);
+    expect(extraPayload.valid).toBe(false);
+  });
 });

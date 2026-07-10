@@ -1,3 +1,6 @@
+import type { TalosChatLayoutPreferences } from './talosTypes'
+import { sanitizeTalosChatLayout } from './talosChatLayout'
+
 export const TALOS_THEME_IDS = [
     'forge',
     'paper',
@@ -92,6 +95,7 @@ export type TalosNamedTheme = {
     motion?: TalosThemeMotionMode
     ui_animation_profile?: TalosUiAnimationProfile
     ui_animation_customization?: TalosUiAnimationCustomization
+    chat_layout?: TalosChatLayoutPreferences
     created_at?: string
     updated_at?: string
 }
@@ -964,6 +968,10 @@ export function sanitizeTalosNamedTheme(value: unknown): TalosNamedTheme | null 
     const uiAnimationCustomization = sanitizeTalosUiAnimationCustomization(value.ui_animation_customization)
     if (Object.keys(uiAnimationCustomization).length > 0) {
         theme.ui_animation_customization = uiAnimationCustomization
+    }
+
+    if (isRecord(value.chat_layout)) {
+        theme.chat_layout = sanitizeTalosChatLayout(value.chat_layout)
     }
 
     if (typeof value.created_at === 'string') {

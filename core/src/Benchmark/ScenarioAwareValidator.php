@@ -17,7 +17,13 @@ final class ScenarioAwareValidator implements JmpValidatorInterface
     {
     }
 
-    public function validate(array $mutations, array $context): ValidationResult
+    public function validate(
+        array $mutations,
+        array $context,
+        ?array $allowedNodeTypes = null,
+        ?array $allowedBrowserOperations = null,
+        bool $browserModeEnabled = false,
+    ): ValidationResult
     {
         $spawnedInBatch = [];
         foreach ($mutations as $mutation) {

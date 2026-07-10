@@ -32,7 +32,7 @@ final class TalosBrowserSession extends Model
     }
 
     /** @return list<string> */
-    private function apiCapabilities(): array
+    public function apiCapabilities(): array
     {
         $capabilities = is_array($this->capabilities) ? $this->capabilities : [];
         if (array_is_list($capabilities)) {
@@ -52,5 +52,26 @@ final class TalosBrowserSession extends Model
         }
 
         return $names;
+    }
+
+    public function supportsBrowserOperation(string $operation): bool
+    {
+        if ($operation === 'read') {
+            return in_array('snapshot', $this->apiCapabilities(), true);
+        }
+
+        return in_array($operation, $this->apiCapabilities(), true);
+    }
+
+    public function isOperable(): bool
+    {
+        return in_array($this->status, ['ready', 'active'], true)
+            && $this->expires_at !== null
+            && $this->expires_at->isFuture();
+    }
+
+    public function setCurrentUrlAttribute(?string $value): void
+    {
+        $this->attributes['current_url'] = \App\Services\Talos\Browser\TalosBrowserRedactor::url($value);
     }
 }

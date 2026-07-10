@@ -29,7 +29,7 @@ final class TalosRouteContractTest extends TestCase
             ->assertSee('data-talos-surface="workspace"', false);
     }
 
-    public function test_browse_renders_an_authenticated_dedicated_browse_surface(): void
+    public function test_browse_deep_link_boots_the_unified_workspace_with_browse_enabled(): void
     {
         $this->withoutVite();
         $user = User::factory()->create();

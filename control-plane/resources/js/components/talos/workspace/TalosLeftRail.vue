@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
     Activity,
     Archive,
@@ -35,6 +35,7 @@ import {
     Wrench,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
 import { sessionChatState } from '../../../composables/useTalosSessions'
 import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
 import type { TalosSession } from '../../../lib/talosTypes'
@@ -62,28 +63,32 @@ const emit = defineEmits<{
     moveSessionToFolder: [session: TalosSession, folder: string]
     deleteSession: [session: TalosSession]
     copySession: [session: TalosSession]
+    toggleAdvanced: []
 }>()
 
 const primaryItems: RailItem[] = [
     { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', icon: Activity },
-    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
-    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
     { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', icon: CalendarDays },
     { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
     { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', icon: FlaskConical },
     { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', icon: BookOpen },
     { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', icon: Image },
     { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },
-    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
-    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
     { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', icon: Globe2 },
+]
+
+const advancedItems: TalosAdvancedRailItem[] = [
+    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
+    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
+    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
+    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
+    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
+    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
 ]
 
 const systemItems: RailItem[] = [
     { id: 'settings', label: 'Settings', description: 'Workspace setup and appearance.', icon: Settings },
     { id: 'theme', label: 'Theme', description: 'Local theme switcher.', icon: Palette },
-    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
-    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
 ]
 
 const props = defineProps<{
@@ -95,12 +100,17 @@ const props = defineProps<{
     visibility: Record<string, boolean>
     sessions: TalosSession[]
     activeSessionId?: string | null
+    advancedExpanded?: boolean
 }>()
 
 const railStyle = computed(() => ({
     width: `${props.collapsed ? 64 : props.width}px`,
 }))
 const openMenuRowKey = ref<string | null>(null)
+const openMenuSession = ref<TalosSession | null>(null)
+const menuElement = ref<HTMLElement | null>(null)
+const menuPosition = ref({ left: 8, top: 8 })
+const menuThemeStyle = ref<Record<string, string>>({})
 const renamingRowKey = ref<string | null>(null)
 const movingRowKey = ref<string | null>(null)
 const renameValue = ref('')
@@ -133,6 +143,11 @@ const visibleSystemItems = computed(() => systemItems.filter((item) => {
 
     return props.visibility[item.id] !== false
 }))
+const visibleAdvancedItems = computed(() => advancedItems.filter((item) => {
+    if (item.id === 'search') return props.visibility.search !== false || props.visibility.library !== false
+    return props.visibility[item.id] !== false
+}))
+const activeAdvanced = computed(() => visibleAdvancedItems.value.some((item) => props.activeIds.includes(item.id)))
 
 const chatSessions = computed(() => props.sessions.filter((session) => session.persistence_mode !== 'temporary'))
 const visibleSessions = computed(() => chatSessions.value.slice(0, 24))
@@ -217,15 +232,101 @@ function toggleGroup(groupId: string) {
     }
 }
 
-function toggleSessionMenu(rowKey: string) {
-    openMenuRowKey.value = openMenuRowKey.value === rowKey ? null : rowKey
+async function positionSessionMenu(trigger: HTMLElement) {
+    const viewportPadding = 8
+    const gap = 4
+    const triggerRect = trigger.getBoundingClientRect()
+    const triggerStyle = window.getComputedStyle(trigger)
+    const menuWidth = 192
+    menuThemeStyle.value = {
+        '--talos-card': triggerStyle.getPropertyValue('--talos-card').trim(),
+        '--talos-border': triggerStyle.getPropertyValue('--talos-border').trim(),
+        '--talos-text': triggerStyle.getPropertyValue('--talos-text').trim(),
+        '--talos-muted': triggerStyle.getPropertyValue('--talos-muted').trim(),
+        '--talos-accent': triggerStyle.getPropertyValue('--talos-accent').trim(),
+        '--talos-panel-soft': triggerStyle.getPropertyValue('--talos-panel-soft').trim(),
+        '--talos-ring': triggerStyle.getPropertyValue('--talos-ring').trim(),
+        '--talos-font-ui': triggerStyle.getPropertyValue('--talos-font-ui').trim(),
+    }
+    const left = Math.min(
+        Math.max(viewportPadding, triggerRect.right - menuWidth),
+        window.innerWidth - menuWidth - viewportPadding,
+    )
+
+    menuPosition.value = {
+        left,
+        top: Math.min(triggerRect.bottom + gap, window.innerHeight - viewportPadding),
+    }
+    await nextTick()
+
+    const menuHeight = menuElement.value?.getBoundingClientRect().height ?? 0
+    const preferredTop = triggerRect.bottom + gap
+    const flippedTop = triggerRect.top - menuHeight - gap
+    menuPosition.value = {
+        left,
+        top: preferredTop + menuHeight <= window.innerHeight - viewportPadding
+            ? preferredTop
+            : Math.max(viewportPadding, flippedTop),
+    }
+}
+
+async function toggleSessionMenu(rowKey: string, session: TalosSession, event: MouseEvent) {
+    if (openMenuRowKey.value === rowKey) {
+        closeSessionMenu()
+        return
+    }
+
+    openMenuRowKey.value = rowKey
+    openMenuSession.value = session
     renamingRowKey.value = null
     movingRowKey.value = null
+    await positionSessionMenu(event.currentTarget as HTMLElement)
+    menuElement.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
 }
 
 function closeSessionMenu() {
     openMenuRowKey.value = null
+    openMenuSession.value = null
 }
+
+const sessionMenuStyle = computed(() => ({
+    ...menuThemeStyle.value,
+    left: `${menuPosition.value.left}px`,
+    top: `${menuPosition.value.top}px`,
+    fontFamily: 'var(--talos-font-ui)',
+}))
+
+function handleGlobalPointerDown(event: PointerEvent) {
+    const target = event.target as HTMLElement | null
+    if (!target || menuElement.value?.contains(target) || target.closest('[data-talos-session-menu-trigger="true"]')) {
+        return
+    }
+    closeSessionMenu()
+}
+
+function handleGlobalKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        closeSessionMenu()
+    }
+}
+
+function handleViewportChange() {
+    closeSessionMenu()
+}
+
+onMounted(() => {
+    document.addEventListener('pointerdown', handleGlobalPointerDown)
+    document.addEventListener('keydown', handleGlobalKeyDown)
+    window.addEventListener('scroll', handleViewportChange, true)
+    window.addEventListener('resize', handleViewportChange)
+})
+
+onBeforeUnmount(() => {
+    document.removeEventListener('pointerdown', handleGlobalPointerDown)
+    document.removeEventListener('keydown', handleGlobalKeyDown)
+    window.removeEventListener('scroll', handleViewportChange, true)
+    window.removeEventListener('resize', handleViewportChange)
+})
 
 function startRename(session: TalosSession, rowKey: string) {
     renameValue.value = session.title || 'Untitled chat'
@@ -361,39 +462,14 @@ function deleteWithConfirmation(session: TalosSession) {
                                 </button>
                                 <button
                                     type="button"
+                                    data-talos-session-menu-trigger="true"
                                     class="mr-1 inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--talos-muted)] opacity-80 transition hover:bg-[var(--talos-panel)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] group-hover:opacity-100"
                                     :aria-label="`Chat actions for ${session.title || 'Untitled chat'}`"
-                                    @click.stop="toggleSessionMenu(sessionRowKey(group.id, session.id))"
+                                    aria-haspopup="menu"
+                                    :aria-expanded="openMenuRowKey === sessionRowKey(group.id, session.id)"
+                                    @click.stop="toggleSessionMenu(sessionRowKey(group.id, session.id), session, $event)"
                                 >
                                     <MoreHorizontal class="h-4 w-4" />
-                                </button>
-                            </div>
-                            <div
-                                v-if="openMenuRowKey === sessionRowKey(group.id, session.id)"
-                                role="menu"
-                                aria-label="Chat actions"
-                                class="absolute right-0 top-8 z-40 w-48 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[12px] text-[var(--talos-text)] shadow-xl"
-                            >
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="startRename(session, sessionRowKey(group.id, session.id))">
-                                    <Pencil class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Rename
-                                </button>
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('favoriteSession', session); closeSessionMenu()">
-                                    <Star class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> {{ sessionChatState(session).favorite ? 'Unfavorite' : 'Favorite' }}
-                                </button>
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('toggleSessionSelected', session); closeSessionMenu()">
-                                    <component :is="sessionChatState(session).selected ? CheckSquare : Square" class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Select
-                                </button>
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('copySession', session); closeSessionMenu()">
-                                    <Copy class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Copy Chat
-                                </button>
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="startMove(session, sessionRowKey(group.id, session.id))">
-                                    <FolderInput class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Move to folder
-                                </button>
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)]" @click="emit('archiveSession', session); closeSessionMenu()">
-                                    <Archive class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Archive
-                                </button>
-                                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-red-300 hover:bg-red-500/10" @click="deleteWithConfirmation(session)">
-                                    <Trash2 class="h-3.5 w-3.5" /> Delete
                                 </button>
                             </div>
                             <form
@@ -438,6 +514,39 @@ function deleteWithConfirmation(session: TalosSession) {
             <p v-else class="px-1 text-xs leading-5 text-[var(--talos-muted)]">No chats yet.</p>
         </section>
 
+        <Teleport to="body">
+            <div
+                v-if="openMenuRowKey && openMenuSession"
+                ref="menuElement"
+                role="menu"
+                aria-label="Chat actions"
+                :style="sessionMenuStyle"
+                class="fixed z-[90] max-h-[calc(100dvh-1rem)] w-48 overflow-y-auto rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[12px] text-[var(--talos-text)] shadow-xl"
+            >
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="startRename(openMenuSession, openMenuRowKey)">
+                    <Pencil class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Rename
+                </button>
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('favoriteSession', openMenuSession); closeSessionMenu()">
+                    <Star class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> {{ sessionChatState(openMenuSession).favorite ? 'Unfavorite' : 'Favorite' }}
+                </button>
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('toggleSessionSelected', openMenuSession); closeSessionMenu()">
+                    <component :is="sessionChatState(openMenuSession).selected ? CheckSquare : Square" class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Select
+                </button>
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('copySession', openMenuSession); closeSessionMenu()">
+                    <Copy class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Copy Chat
+                </button>
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="startMove(openMenuSession, openMenuRowKey)">
+                    <FolderInput class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Move to folder
+                </button>
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('archiveSession', openMenuSession); closeSessionMenu()">
+                    <Archive class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Archive
+                </button>
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-red-300 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400" @click="deleteWithConfirmation(openMenuSession)">
+                    <Trash2 class="h-3.5 w-3.5" /> Delete
+                </button>
+            </div>
+        </Teleport>
+
         <nav class="mt-3 min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="TALOS modules">
             <button
                 v-for="item in visiblePrimaryItems"
@@ -462,6 +571,16 @@ function deleteWithConfirmation(session: TalosSession) {
                     <span class="sr-only">{{ item.description }}</span>
                 </span>
             </button>
+            <TalosAdvancedRailGroup
+                v-if="visibleAdvancedItems.length"
+                :items="visibleAdvancedItems"
+                :active-ids="activeIds"
+                :collapsed="collapsed"
+                :expanded="Boolean(advancedExpanded || activeAdvanced)"
+                id="talos-advanced-items-desktop"
+                @toggle="emit('toggleAdvanced')"
+                @open="(id, event) => emit('open', id, event)"
+            />
         </nav>
 
         <div class="mt-2 border-t border-[var(--talos-border)] pt-2">

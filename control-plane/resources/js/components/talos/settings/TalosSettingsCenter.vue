@@ -27,7 +27,15 @@ import TalosSettingsModelsPanel from './TalosSettingsModelsPanel.vue'
 import TalosSettingsSearchPanel from './TalosSettingsSearchPanel.vue'
 import TalosSettingsShortcutsPanel from './TalosSettingsShortcutsPanel.vue'
 import TalosSettingsToolsPanel from './TalosSettingsToolsPanel.vue'
-import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
+import type {
+    TalosChatLayoutPreferences,
+    TalosContextSet,
+    TalosModelProfile,
+} from '../../../lib/talosTypes'
+import {
+    TALOS_DEFAULT_CHAT_LAYOUT,
+    sanitizeTalosChatLayout,
+} from '../../../lib/talosChatLayout'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
     normalizeTalosTheme,
@@ -70,6 +78,7 @@ type SettingsPreferences = {
     theme_motion_disabled: boolean
     theme_simple_animation: boolean
     theme_background_disabled: boolean
+    chat_layout: TalosChatLayoutPreferences
     ai_defaults: {
         utility_model_mode: string
         vision_enabled: boolean
@@ -159,6 +168,7 @@ const preferences = reactive<SettingsPreferences>({
     theme_motion_disabled: false,
     theme_simple_animation: true,
     theme_background_disabled: false,
+    chat_layout: { ...TALOS_DEFAULT_CHAT_LAYOUT },
     ai_defaults: {
         utility_model_mode: 'same_as_chat',
         vision_enabled: true,
@@ -209,6 +219,7 @@ const selectedTab = computed(() => tabs.find((tab) => tab.id === activeTab.value
 const activeModelProfile = computed(() => props.modelProfiles.find((profile) => profile.id === props.selectedModelProfileId) ?? null)
 const activeContextSet = computed(() => props.contextSets.find((contextSet) => contextSet.id === props.selectedContextSetId) ?? null)
 const operatorLabel = computed(() => props.authUserName?.trim() || 'Operator')
+const themePolicyLocked = computed(() => settings.value?.preferences?.theme_policy_locked === true)
 
 function record(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -246,6 +257,7 @@ function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme_motion_disabled = booleanValue(nextPreferences.theme_motion_disabled, false)
     preferences.theme_simple_animation = booleanValue(nextPreferences.theme_simple_animation, true)
     preferences.theme_background_disabled = booleanValue(nextPreferences.theme_background_disabled, false)
+    preferences.chat_layout = sanitizeTalosChatLayout(nextPreferences.chat_layout)
 
     const aiDefaults = record(nextPreferences.ai_defaults)
     preferences.ai_defaults.utility_model_mode = stringValue(aiDefaults.utility_model_mode, preferences.ai_defaults.utility_model_mode)
@@ -297,6 +309,9 @@ function preferencesPayload() {
         theme_motion_disabled: preferences.theme_motion_disabled,
         theme_simple_animation: preferences.theme_simple_animation,
         theme_background_disabled: preferences.theme_background_disabled,
+        chat_layout: {
+            ...preferences.chat_layout,
+        },
         ai_defaults: {
             ...preferences.ai_defaults,
         },
@@ -581,6 +596,8 @@ watch(
                             :theme-motion-disabled="preferences.theme_motion_disabled"
                             :theme-simple-animation="preferences.theme_simple_animation"
                             :theme-background-disabled="preferences.theme_background_disabled"
+                            :chat-layout="preferences.chat_layout"
+                            :theme-policy-locked="themePolicyLocked"
                             :appearance-visibility="preferences.appearance_visibility"
                             :appearance-groups="TALOS_APPEARANCE_GROUPS"
                             @update-theme="preferences.theme = $event"
@@ -589,6 +606,9 @@ watch(
                             @update-theme-motion-disabled="preferences.theme_motion_disabled = $event"
                             @update-theme-simple-animation="preferences.theme_simple_animation = $event"
                             @update-theme-background-disabled="preferences.theme_background_disabled = $event"
+                            @update-chat-bubble-scale="preferences.chat_layout.bubble_scale = $event"
+                            @update-chat-composer-mode="preferences.chat_layout.composer_mode = $event"
+                            @update-advanced-rail-expanded="preferences.chat_layout.advanced_rail_expanded = $event"
                             @update-appearance="updateAppearancePreference"
                             @reset-appearance-group="resetAppearanceGroup"
                             @reset-all-appearance="resetAllAppearance"

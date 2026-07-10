@@ -56,10 +56,23 @@ export function buildServer() {
                         message: 'Request body must contain mutations array and context object',
                     }] };
         }
-        const allowedNodeTypes = Array.isArray(request.body.allowed_node_types)
-            ? request.body.allowed_node_types.filter((value) => typeof value === 'string')
-            : undefined;
-        return validateMutations(mutations, context, allowedNodeTypes);
+        const body = request.body;
+        for (const policyKey of ['allowed_node_types', 'allowed_browser_operations']) {
+            const policy = body[policyKey];
+            if (Object.prototype.hasOwnProperty.call(body, policyKey)
+                && policy !== null
+                && (!Array.isArray(policy) || policy.some((value) => typeof value !== 'string'))) {
+                return { valid: false, errors: [{
+                            field: policyKey,
+                            expected: 'null or an array of strings',
+                            received: Array.isArray(policy) ? 'array with non-string values' : typeof policy,
+                            message: `${policyKey} must be null or an array containing only strings.`,
+                        }] };
+            }
+        }
+        const allowedNodeTypes = Array.isArray(body.allowed_node_types) ? body.allowed_node_types : undefined;
+        const allowedBrowserOperations = Array.isArray(body.allowed_browser_operations) ? body.allowed_browser_operations : undefined;
+        return validateMutations(mutations, context, allowedNodeTypes, allowedBrowserOperations, request.body.browser_mode_enabled === true);
     });
     // Get DAG state (polling fallback)
     server.get('/state', async () => ({ dag: currentDagState ?? null }));
@@ -90,7 +103,7 @@ export function buildServer() {
     });
     // Chat relay to PHP
     server.post('/chat', async (request) => {
-        const { message, api_key, provider, model, base_url, tool_context } = request.body;
+        const { message, api_key, provider, model, base_url, tool_context, browser_mode } = request.body;
         if (!message)
             return { error: 'message required' };
         // Use absolute path to PHP binary — env var override if set
@@ -138,7 +151,7 @@ export function buildServer() {
                 }
                 resolve({ error: 'Core chat process returned no output.', code: 'CORE_CHAT_EMPTY_OUTPUT' });
             });
-            php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context }) + '\n');
+            php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode }) + '\n');
             php.stdin.end();
         });
     });

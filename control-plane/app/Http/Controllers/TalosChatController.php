@@ -18,6 +18,10 @@ use App\Services\Models\TalosModelRoutingService;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\Security\PublicHttpUrlPolicy;
 use App\Services\Skills\TalosSkillPlanningContextService;
+use App\Services\Talos\Browser\TalosBrowserCommandService;
+use App\Services\Talos\Browser\TalosBrowserCommandException;
+use App\Services\Talos\Browser\TalosBrowserCommand;
+use App\Services\Talos\Browser\TalosBrowserDeadline;
 use App\Services\Tools\TalosToolPlanningContextService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -36,6 +40,11 @@ final class TalosChatController extends Controller
     private const MAX_HISTORY_MESSAGES = 16;
     private const MAX_BROWSER_CONTEXT_NODES = 40;
     private const MAX_BROWSER_CONTEXT_CHARS = 6000;
+    private const MAX_BROWSER_COMMANDS = 8;
+    private const MAX_BROWSER_NAVIGATIONS = 2;
+    private const MAX_BROWSER_SCREENSHOTS = 3;
+    private const MAX_BROWSER_WALL_SECONDS = 60;
+    private const MAX_BROWSER_EVIDENCE_BYTES = 120000;
 
     public function __invoke(
         Request $request,
@@ -44,6 +53,7 @@ final class TalosChatController extends Controller
         TalosMemoryRetrievalService $memoryRetrieval,
         TalosModelRoutingService $modelRouting,
         TalosSkillPlanningContextService $skillPlanningContext,
+        TalosBrowserCommandService $browserCommands,
     ): JsonResponse
     {
         $validated = $request->validate([
@@ -55,6 +65,9 @@ final class TalosChatController extends Controller
             'context_set_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'browser_context' => ['sometimes', 'nullable', 'array:browser_session_id'],
             'browser_context.browser_session_id' => ['required_with:browser_context', 'string', 'max:255'],
+            'browser_mode' => ['sometimes', 'nullable', 'array:enabled,browser_session_id'],
+            'browser_mode.enabled' => ['required_with:browser_mode', 'boolean'],
+            'browser_mode.browser_session_id' => ['required_if:browser_mode.enabled,true', 'string', 'max:255'],
             'memory_scope_type' => ['sometimes', 'nullable', 'string', 'in:global,project,session'],
             'memory_scope_id' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
@@ -76,6 +89,9 @@ final class TalosChatController extends Controller
         $usedMemories = [];
         $usedContext = [];
         $browserContext = null;
+        $browserMode = null;
+        $browserSession = null;
+        $browserDeadline = null;
         $skillSelection = $skillPlanningContext->selectionForPrompt($originalMessage);
         $skillPlan = $skillSelection['plan'];
         $validatorSkillContext = $skillSelection['validator_context'];
@@ -93,6 +109,18 @@ final class TalosChatController extends Controller
                     'error' => 'Session was not found.',
                 ], 404);
             }
+        }
+
+        if (is_array($validated['browser_mode'] ?? null) && ($validated['browser_mode']['enabled'] ?? false) === true) {
+            $user = $request->user();
+            abort_unless($user instanceof User, 401);
+            $browserDeadline = new TalosBrowserDeadline((int) config('services.talos.browser.max_wall_milliseconds', self::MAX_BROWSER_WALL_SECONDS * 1000));
+            $resolvedBrowserMode = $this->browserModeFor($user, $session, (string) $validated['browser_mode']['browser_session_id'], $browserCommands, $browserDeadline);
+            if ($resolvedBrowserMode instanceof JsonResponse) {
+                return $resolvedBrowserMode;
+            }
+            $browserSession = $resolvedBrowserMode['session'];
+            $browserMode = $resolvedBrowserMode['manifest'];
         }
 
         if (filled($validated['model_profile_id'] ?? null) && filled($validated['model_routing_profile_id'] ?? null)) {
@@ -224,7 +252,7 @@ final class TalosChatController extends Controller
             $message = $this->withMemoryContext($message, $memoryContext);
         }
 
-        $message = $this->withConversationHistory($message, $session, $originalMessage);
+        $message = $this->withConversationHistory($message, $session, $originalMessage, is_array($browserMode));
 
         $run = null;
         if ($session instanceof TalosSession) {
@@ -317,97 +345,226 @@ final class TalosChatController extends Controller
             }
         }
 
+        if (is_array($browserMode) && $run instanceof TalosRun) {
+            $browserMode['run_id'] = $run->id;
+        }
+
         $validatorUrl = rtrim((string) config(
             'services.avm_validator.url',
             env('AVM_VALIDATOR_URL', 'http://127.0.0.1:3000'),
         ), '/');
 
-        $validatorPayload = [
-            'message' => $message,
+        $toolContext = is_array($browserMode) ? $this->browserToolContext($browserMode) : $toolPlanningContext->context();
+        if (is_array($browserMode)) {
+            $validatorSkillContext = ['selected_skills' => [], 'excluded_skills' => []];
+        }
+
+        $browserActivities = [];
+        $browserEvidence = $browserContext;
+        $browserNavigationCount = 0;
+        $browserScreenshotCount = 0;
+        $browserEvidenceBytes = 0;
+        $browserCommandFingerprints = [];
+        $validatorMessage = $message;
+        $payload = null;
+        $validatorBase = [
             'api_key' => $apiKey,
-            'tool_context' => $toolPlanningContext->context(),
+            'tool_context' => $toolContext,
+            'browser_mode' => $browserMode,
         ];
-
-        if (is_array($validatorSkillContext['selected_skills'] ?? null)
-            && count($validatorSkillContext['selected_skills']) > 0
-        ) {
-            $validatorPayload['skill_context'] = $validatorSkillContext;
+        if (is_array($validatorSkillContext['selected_skills'] ?? null) && count($validatorSkillContext['selected_skills']) > 0) {
+            $validatorBase['skill_context'] = $validatorSkillContext;
         }
-
         if ($profile instanceof TalosModelProfile) {
-            $validatorPayload['provider'] = $profile->provider;
-            $validatorPayload['model'] = $profile->model;
-            $validatorPayload['base_url'] = $profile->base_url;
+            $validatorBase['provider'] = $profile->provider;
+            $validatorBase['model'] = $profile->model;
+            $validatorBase['base_url'] = $profile->base_url;
         }
-
         if (is_array($routingContext)) {
-            $validatorPayload['model_routing'] = $routingContext;
+            $validatorBase['model_routing'] = $routingContext;
+        }
+        $validatorFailureContext = [
+            'provider' => is_string($validatorBase['provider'] ?? null) ? $validatorBase['provider'] : null,
+            'model' => is_string($validatorBase['model'] ?? null) ? $validatorBase['model'] : null,
+        ];
+        $pendingBrowserCommands = [];
+        $directNavigationUrl = $this->directBrowserNavigationUrl($originalMessage);
+        $directScreenshotRequested = is_array($browserMode)
+            && ($this->directBrowserScreenshotRequested($originalMessage)
+                || $this->directBrowserScreenshotConfirmationRequested($originalMessage, $session));
+        if (is_array($browserMode)
+            && $run instanceof TalosRun
+            && $browserSession instanceof TalosBrowserSession
+            && $directNavigationUrl !== null) {
+            $pendingBrowserCommands[] = TalosBrowserCommand::canonicalReadInput(
+                $run->id,
+                $browserSession->id,
+                'navigate',
+                ['url' => $directNavigationUrl],
+            );
+            $pendingBrowserCommands[] = TalosBrowserCommand::canonicalReadInput(
+                $run->id,
+                $browserSession->id,
+                'snapshot',
+                [],
+            );
+        }
+        if ($directScreenshotRequested
+            && $run instanceof TalosRun
+            && $browserSession instanceof TalosBrowserSession) {
+            $pendingBrowserCommands[] = TalosBrowserCommand::canonicalReadInput(
+                $run->id,
+                $browserSession->id,
+                'screenshot',
+                [],
+            );
         }
 
-        try {
-            $response = Http::timeout(120)
-                ->acceptJson()
-                ->post($validatorUrl . '/chat', $validatorPayload);
-        } catch (ConnectionException $exception) {
-            $payload = [
-                'error' => 'Validator chat endpoint is unreachable.',
-                'details' => $exception->getMessage(),
-            ];
-
-            return $this->failedChatResponse($payload, $run, $session, $normalizer, [
-                'reason' => 'connection_exception',
-                'message' => $exception->getMessage(),
-                'provider' => $profile?->provider,
-                'model' => $profile?->model,
-                'model_profile_id' => $profile?->id,
-            ]);
-        }
-
-        if (! $response->successful()) {
-            $payload = [
-                'error' => 'Validator chat endpoint returned an error.',
-                'status' => $response->status(),
-                'details' => $response->body(),
-            ];
-
-            $validatorPayloadSummary = [
-                'reason' => 'validator_http_error',
-                'status' => $response->status(),
-                'provider' => $profile?->provider,
-                'model' => $profile?->model,
-                'model_profile_id' => $profile?->id,
-            ];
-            $validatorJson = $response->json();
-            if (is_array($validatorJson)) {
-                $validatorPayloadSummary['response_keys'] = $this->stringKeys($validatorJson);
+        for ($browserIteration = 0; $browserIteration <= self::MAX_BROWSER_COMMANDS; $browserIteration++) {
+            if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
+                return $this->browserFailureResponse([
+                    ...$browserFailure,
+                ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
             }
 
-            return $this->failedChatResponse($payload, $run, $session, $normalizer, $validatorPayloadSummary);
+            $browserCommand = array_shift($pendingBrowserCommands);
+            if ($browserCommand === null) {
+                $validatorTimeoutSeconds = is_array($browserMode)
+                    ? $browserDeadline?->remainingSeconds() ?? 0.001
+                    : 120;
+
+                try {
+                    $response = Http::timeout($validatorTimeoutSeconds)->acceptJson()->post($validatorUrl . '/chat', [
+                        ...$validatorBase,
+                        'message' => $validatorMessage,
+                    ]);
+                } catch (ConnectionException $exception) {
+                    if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
+                        return $this->browserFailureResponse([
+                            ...$browserFailure,
+                        ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
+                    }
+
+                    return $this->failedChatResponse(['error' => 'Validator chat endpoint is unreachable.', 'details' => $exception->getMessage()], $run, $session, $normalizer, ['reason' => 'connection_exception', 'message' => $exception->getMessage(), ...$validatorFailureContext]);
+                }
+                if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
+                    return $this->browserFailureResponse([
+                        ...$browserFailure,
+                    ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
+                }
+                if (! $response->successful()) {
+                    $errorPayload = ['error' => 'Validator chat endpoint returned an error.', 'status' => $response->status(), 'details' => $response->body()];
+                    return $this->failedChatResponse($errorPayload, $run, $session, $normalizer, ['reason' => 'validator_http_error', 'status' => $response->status(), ...$validatorFailureContext]);
+                }
+                $candidate = $response->json();
+                if (! is_array($candidate)) {
+                    return $this->failedChatResponse(['error' => 'Validator chat endpoint returned invalid JSON.'], $run, $session, $normalizer, ['reason' => 'invalid_json', ...$validatorFailureContext]);
+                }
+                if (isset($candidate['error']) && is_string($candidate['error']) && trim($candidate['error']) !== '') {
+                    return $this->failedChatResponse($candidate, $run, $session, $normalizer, ['reason' => 'validator_payload_error', 'code' => $candidate['code'] ?? null, 'response_keys' => $this->stringKeys($candidate), ...$validatorFailureContext]);
+                }
+
+                if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
+                    return $this->browserFailureResponse([
+                        ...$browserFailure,
+                    ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
+                }
+
+                try {
+                    $browserCommand = $this->browserCommandFromPayload($candidate, $browserMode);
+                } catch (TalosBrowserCommandException $exception) {
+                    return $this->browserFailureResponse([
+                        'code' => $exception->errorCode,
+                        'message' => $exception->getMessage(),
+                        'details' => $exception->details,
+                        'status' => $exception->status,
+                    ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
+                }
+                if ($browserCommand === null && $this->browserNavigationNeedsPageEvidence($browserActivities)) {
+                    $validatorMessage = mb_substr(
+                        $validatorMessage
+                        . "\n\nTALOS_BROWSER_GROUNDING_REQUIRED: Navigation completed, but no page snapshot or read evidence was captured afterward. Do not narrate a future action. Emit exactly one snapshot or read mutation pair now.",
+                        0,
+                        self::MAX_BROWSER_CONTEXT_CHARS + mb_strlen($message),
+                    );
+                    continue;
+                }
+                if ($browserCommand === null || ! $browserSession instanceof TalosBrowserSession || ! $run instanceof TalosRun) {
+                    $payload = $candidate;
+                    break;
+                }
+            }
+
+            if (count($browserActivities) >= self::MAX_BROWSER_COMMANDS) {
+                return $this->browserFailureResponse([
+                    'code' => 'TALOS_BROWSER_BUDGET_EXHAUSTED',
+                    'message' => 'Browser read command budget exhausted.',
+                    'status' => 422,
+                ], $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand);
+            }
+
+            $operation = is_string($browserCommand['operation'] ?? null) ? $browserCommand['operation'] : null;
+            if ($operation === 'navigate' && $browserNavigationCount >= self::MAX_BROWSER_NAVIGATIONS) {
+                return $this->browserFailureResponse([
+                    'code' => 'TALOS_BROWSER_NAVIGATION_BUDGET_EXHAUSTED',
+                    'message' => 'Browser navigation budget exhausted.',
+                    'status' => 422,
+                ], $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand);
+            }
+            if ($operation === 'screenshot' && $browserScreenshotCount >= self::MAX_BROWSER_SCREENSHOTS) {
+                return $this->browserFailureResponse([
+                    'code' => 'TALOS_BROWSER_SCREENSHOT_BUDGET_EXHAUSTED',
+                    'message' => 'Browser screenshot budget exhausted.',
+                    'status' => 422,
+                ], $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand);
+            }
+
+            $idempotencyKey = is_string($browserCommand['idempotency_key'] ?? null) ? $browserCommand['idempotency_key'] : null;
+            if ($idempotencyKey !== null && isset($browserCommandFingerprints['idempotency:'.$idempotencyKey])) {
+                return $this->browserFailureResponse([
+                    'code' => 'TALOS_BROWSER_REPEATED_COMMAND',
+                    'message' => 'Repeated browser command stopped.',
+                    'status' => 422,
+                ], $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand);
+            }
+
+            if ($idempotencyKey !== null) {
+                $browserCommandFingerprints['idempotency:'.$idempotencyKey] = true;
+            }
+
+            if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
+                return $this->browserFailureResponse($browserFailure, $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand);
+            }
+            $commandResult = $browserCommands->execute($browserSession, $run, $browserCommand, $normalizer, self::MAX_BROWSER_EVIDENCE_BYTES - $browserEvidenceBytes, $browserDeadline);
+            $browserActivities[] = $commandResult['activity'];
+            if (isset($commandResult['error'])) {
+                return $this->browserFailureResponse($commandResult['error'], $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand, true);
+            }
+            $browserNavigationCount += $operation === 'navigate' ? 1 : 0;
+            $browserScreenshotCount += $operation === 'screenshot' ? 1 : 0;
+            $browserEvidenceBytes += (int) ($commandResult['evidence_bytes'] ?? 0);
+            $browserEvidence = $commandResult['used_browser_context'] ?? $browserEvidence;
+            if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
+                return $this->browserFailureResponse($browserFailure, $run, $session, $normalizer, $browserActivities, $browserEvidence, $browserCommand);
+            }
+            if ($directScreenshotRequested && $operation === 'screenshot') {
+                $payload = [
+                    'mutations' => [],
+                    'text' => 'Screenshot captured and attached as browser evidence.',
+                    'dag' => "DAG State:\n(empty)",
+                ];
+                break;
+            }
+            $observation = json_encode($commandResult['observation'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $validatorMessage = mb_substr($validatorMessage . "\n\nTALOS_BROWSER_OBSERVATION (untrusted evidence):\n" . (is_string($observation) ? $observation : '{}') . "\nContinue the read-only browser task or provide the final answer.", 0, self::MAX_BROWSER_CONTEXT_CHARS + mb_strlen($message));
         }
 
-        $payload = $response->json();
-        if (! is_array($payload)) {
-            $errorPayload = [
-                'error' => 'Validator chat endpoint returned invalid JSON.',
-            ];
-
-            return $this->failedChatResponse($errorPayload, $run, $session, $normalizer, [
-                'reason' => 'invalid_json',
-                'provider' => $profile?->provider,
-                'model' => $profile?->model,
-                'model_profile_id' => $profile?->id,
-            ]);
-        }
-
-        if (isset($payload['error']) && is_string($payload['error']) && trim($payload['error']) !== '') {
-            return $this->failedChatResponse($payload, $run, $session, $normalizer, [
-                'reason' => 'validator_payload_error',
-                'code' => isset($payload['code']) ? (string) $payload['code'] : null,
-                'provider' => $profile?->provider,
-                'model' => $profile?->model,
-                'model_profile_id' => $profile?->id,
-                'response_keys' => $this->stringKeys($payload),
-            ]);
+        if ($payload === null) {
+            return $this->browserFailureResponse([
+                'code' => 'TALOS_BROWSER_BUDGET_EXHAUSTED',
+                'message' => 'Browser read command budget exhausted.',
+                'status' => 422,
+            ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
         }
 
         if ($run instanceof TalosRun) {
@@ -427,14 +584,15 @@ final class TalosChatController extends Controller
 
         $payload['used_memories'] = $usedMemories;
         $payload['used_context'] = $usedContext;
-        $payload['used_browser_context'] = $browserContext === null ? null : [
+        $payload['used_browser_context'] = is_array($browserMode) ? $browserEvidence : ($browserContext === null ? null : [
             'session_id' => $browserContext['session_id'],
             'snapshot_artifact_id' => $browserContext['snapshot_artifact_id'],
             'url' => $browserContext['url'],
             'title' => $browserContext['title'],
             'text_digest' => $browserContext['text_digest'],
             'untrusted' => true,
-        ];
+        ]);
+        $payload['browser_activities'] = $browserActivities;
         $payload['skill_plan'] = $skillPlan;
         if (is_array($routingContext)) {
             $payload['model_routing'] = $routingContext;
@@ -474,6 +632,7 @@ final class TalosChatController extends Controller
         ?TalosSession $session,
         RunEventNormalizer $normalizer,
         array $eventPayload,
+        int $responseStatus = 502,
     ): JsonResponse {
         if (isset($payload['error']) && is_string($payload['error']) && ! isset($payload['message'])) {
             $payload['message'] = $payload['error'];
@@ -501,7 +660,7 @@ final class TalosChatController extends Controller
             $payload['run'] = $run->refresh()->toApiArray();
         }
 
-        return response()->json($payload, 502);
+        return response()->json($payload, $responseStatus);
     }
 
     /**
@@ -893,6 +1052,274 @@ final class TalosChatController extends Controller
         ];
     }
 
+    /** @return array{session: TalosBrowserSession, manifest: array<string, mixed>}|JsonResponse */
+    private function browserModeFor(User $user, ?TalosSession $chatSession, string $browserSessionId, TalosBrowserCommandService $browserCommands, TalosBrowserDeadline $deadline): array|JsonResponse
+    {
+        if (! $chatSession instanceof TalosSession || $chatSession->surface === 'browse') {
+            return response()->json(['error' => 'Browse mode requires an owned normal chat session.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE'], 422);
+        }
+
+        $browserSession = TalosBrowserSession::query()->where('user_id', $user->id)->find($browserSessionId);
+        if (! $browserSession instanceof TalosBrowserSession) {
+            return response()->json(['error' => 'Browser session was not found.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE'], 404);
+        }
+        if (! $browserSession->isOperable()) {
+            return response()->json(['error' => 'Browser session is not operable.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE', 'details' => ['status' => $browserSession->status]], 422);
+        }
+
+        try {
+            $browserCommands->reconcile($browserSession, $deadline);
+        } catch (TalosBrowserCommandException $exception) {
+            return response()->json(['error' => $exception->getMessage(), 'code' => $exception->errorCode, 'details' => $exception->details], $exception->status);
+        }
+
+        $allowedOperations = array_values(array_filter(
+            ['navigate', 'snapshot', 'screenshot', 'read'],
+            $browserSession->supportsBrowserOperation(...),
+        ));
+        if ($allowedOperations === []) {
+            return response()->json(['error' => 'Browser session has no read-only capabilities.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE'], 422);
+        }
+
+        return [
+            'session' => $browserSession,
+            'manifest' => [
+                'enabled' => true,
+                'browser_session_id' => $browserSession->id,
+                'allowed_operations' => $allowedOperations,
+                'read_only' => true,
+                'run_id' => null,
+            ],
+        ];
+    }
+
+    /** @param array<string, mixed> $payload @param array<string, mixed>|null $browserMode @return array<string, mixed>|null */
+    private function browserCommandFromPayload(array $payload, ?array $browserMode): ?array
+    {
+        if ($browserMode === null || ($browserMode['enabled'] ?? false) !== true) {
+            return null;
+        }
+
+        if (array_key_exists('browser_command', $payload)) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Direct browser command responses are not accepted.');
+        $errors = $payload['errors'] ?? [];
+        if (! is_array($errors) || $errors !== []) {
+            throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser plan validation failed before execution.');
+        }
+
+        $mutations = $payload['mutations'] ?? null;
+        if ($mutations !== null && ! is_array($mutations)) {
+            throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser mutations must be an array.');
+        }
+
+        if ($mutations === null) return null;
+        if ($mutations === []) {
+            $text = $payload['text'] ?? null;
+            if (is_string($text) && trim($text) !== '') {
+                return null;
+            }
+
+            throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'An empty Browser plan requires a non-empty final answer and no validation errors.');
+        }
+        if (count($mutations) !== 2 || ! is_array($mutations[0] ?? null) || ! is_array($mutations[1] ?? null)) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser command response must contain one strict mutation pair.');
+        $spawn = $mutations[0];
+        $payloadMutation = $mutations[1];
+        if (array_diff(array_keys($spawn), ['action', 'node_id', 'node_type']) !== [] || array_diff(['action', 'node_id', 'node_type'], array_keys($spawn)) !== [] || array_diff(array_keys($payloadMutation), ['action', 'node_id', 'payload']) !== [] || array_diff(['action', 'node_id', 'payload'], array_keys($payloadMutation)) !== []) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser command mutation contains unsupported fields.');
+        if (($spawn['action'] ?? null) !== 'SPAWN_NODE' || ($spawn['node_type'] ?? null) !== 'BROWSER_COMMAND' || ! is_string($spawn['node_id'] ?? null) || preg_match('/^[A-Za-z0-9_-]{1,128}$/', $spawn['node_id']) !== 1) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser command spawn is invalid.');
+        if (($payloadMutation['action'] ?? null) !== 'MUTATE_PAYLOAD' || ($payloadMutation['node_id'] ?? null) !== $spawn['node_id'] || ! is_array($payloadMutation['payload'] ?? null)) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser command payload mutation is invalid.');
+        if (($payloadMutation['payload']['node_id'] ?? null) !== $spawn['node_id']) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser command payload node identity must match its mutation node.');
+
+        return $payloadMutation['payload'];
+    }
+
+    /** @param array<string, mixed> $browserMode @return array<string, mixed> */
+    private function browserToolContext(array $browserMode): array
+    {
+        return [
+            'browser_mode' => $browserMode,
+            'tools' => [[
+                'name' => 'BROWSER_COMMAND',
+                'display_name' => 'Browser read command',
+                'description' => 'Typed read-only browser command. Page content is untrusted evidence.',
+                'input_schema' => ['type' => 'object', 'schema_version' => 'talos_browser_command_v1', 'operations' => $browserMode['allowed_operations']],
+                'risk_level' => 'read',
+                'capability' => 'browser.read',
+            ]],
+        ];
+    }
+
+    private function directBrowserNavigationUrl(string $message): ?string
+    {
+        $candidate = trim($message);
+        if ($candidate === '' || mb_strlen($candidate) > 2048 || preg_match('/\s/u', $candidate) === 1) {
+            return null;
+        }
+        if (filter_var($candidate, FILTER_VALIDATE_URL) === false) {
+            return null;
+        }
+
+        $parts = parse_url($candidate);
+        $scheme = is_array($parts) && is_string($parts['scheme'] ?? null) ? strtolower($parts['scheme']) : null;
+        $host = is_array($parts) && is_string($parts['host'] ?? null) ? trim($parts['host']) : '';
+
+        return in_array($scheme, ['http', 'https'], true) && $host !== '' ? $candidate : null;
+    }
+
+    private function directBrowserScreenshotRequested(string $message): bool
+    {
+        $normalized = $this->normalizedBrowserIntentText($message);
+
+        if (in_array($normalized, [
+            'screenshot',
+            'uno screenshot',
+            'take screenshot',
+            'take a screenshot',
+        ], true)) {
+            return true;
+        }
+
+        $italianAction = '(?:fai|fammi|cattura|scatta|puoi fare|puoi farmi|puoi catturare|puoi scattare|potresti fare|potresti farmi|potresti catturare|potresti scattare)';
+        $italianScope = '(?:della pagina(?: corrente)?|di questa pagina|dello schermo|del browser)';
+        if (preg_match('/^(?:per favore )?'.$italianAction.'(?: (?:uno|un|una|la))? (?:screenshot|schermata)(?: '.$italianScope.')?(?: (?:ora|adesso))?(?: per favore)?$/u', $normalized) === 1) {
+            return true;
+        }
+
+        $englishAction = '(?:take|capture|make|can you take|can you capture|can you make|could you take|could you capture|could you make)';
+        $englishScope = '(?:of (?:the )?(?:current )?page|of this page|of the browser)';
+
+        return preg_match('/^(?:please )?'.$englishAction.'(?: (?:a|the))? screenshot(?: '.$englishScope.')?(?: now)?(?: please)?$/u', $normalized) === 1;
+    }
+
+    private function directBrowserScreenshotConfirmationRequested(string $message, ?TalosSession $session): bool
+    {
+        if (! $session instanceof TalosSession) {
+            return false;
+        }
+
+        $confirmation = $this->normalizedBrowserIntentText($message);
+        if (! in_array($confirmation, ['si', 'sì', 'certo', 'confermo', 'fallo', 'procedi', 'vai', 'ok', 'okay', 'yes', 'do it', 'go ahead'], true)) {
+            return false;
+        }
+
+        $recentMessages = $session->messages()
+            ->latest('created_at')
+            ->latest('id')
+            ->limit(2)
+            ->get(['role', 'content']);
+        $latest = $recentMessages->get(0);
+        if ($latest === null) {
+            return false;
+        }
+
+        $previousAssistant = null;
+        if ($latest->role === 'assistant') {
+            $previousAssistant = $latest->content;
+        } elseif ($latest->role === 'user'
+            && $this->normalizedBrowserIntentText((string) $latest->content) === $confirmation) {
+            $candidate = $recentMessages->get(1);
+            if ($candidate?->role === 'assistant') {
+                $previousAssistant = $candidate->content;
+            }
+        }
+        if (! is_string($previousAssistant)) {
+            return false;
+        }
+
+        $offer = $this->normalizedBrowserIntentText($previousAssistant);
+
+        return preg_match('/\b(?:screenshot|schermata)\b/u', $offer) === 1
+            && preg_match('/\b(?:vuoi|posso|procedo|esegua|faccio|want|shall|should|would)\b/u', $offer) === 1;
+    }
+
+    private function normalizedBrowserIntentText(string $message): string
+    {
+        $normalized = mb_strtolower(trim($message));
+        $normalized = preg_replace('/[\p{P}\p{S}]+/u', ' ', $normalized) ?? '';
+
+        return preg_replace('/\s+/u', ' ', trim($normalized)) ?? '';
+    }
+
+    /** @param list<array<string, mixed>> $activities */
+    private function browserNavigationNeedsPageEvidence(array $activities): bool
+    {
+        $latestNavigation = null;
+        foreach ($activities as $index => $activity) {
+            if (($activity['status'] ?? null) === 'succeeded' && ($activity['operation'] ?? null) === 'navigate') {
+                $latestNavigation = $index;
+            }
+        }
+        if ($latestNavigation === null) {
+            return false;
+        }
+
+        foreach (array_slice($activities, $latestNavigation + 1) as $activity) {
+            if (($activity['status'] ?? null) === 'succeeded'
+                && in_array($activity['operation'] ?? null, ['snapshot', 'read'], true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @return array{code: string, message: string, status: int}|null */
+    private function browserTurnFailure(?TalosRun $run, ?TalosBrowserDeadline $deadline): ?array
+    {
+        if ($deadline?->expired()) return ['code' => 'TALOS_BROWSER_WALL_TIME_EXHAUSTED', 'message' => 'Browser read wall-clock budget exhausted.', 'status' => 422];
+        if ($run instanceof TalosRun && $run->fresh()?->status === 'cancelled') return ['code' => 'TALOS_BROWSER_CANCELLED', 'message' => 'Browser read was cancelled.', 'status' => 409];
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $failure
+     * @param list<array<string, mixed>> $browserActivities
+     * @param array<string, mixed>|null $browserEvidence
+     * @param array<string, mixed>|null $browserCommand
+     */
+    private function browserFailureResponse(
+        array $failure,
+        ?TalosRun $run,
+        ?TalosSession $session,
+        RunEventNormalizer $normalizer,
+        array $browserActivities,
+        ?array $browserEvidence,
+        ?array $browserCommand = null,
+        bool $commandFailurePersisted = false,
+    ): JsonResponse {
+        $code = is_string($failure['code'] ?? null) ? $failure['code'] : 'TALOS_BROWSER_COMMAND_FAILED';
+        $message = is_string($failure['message'] ?? null) ? $failure['message'] : 'Browser command failed.';
+        $status = is_numeric($failure['status'] ?? null) ? (int) $failure['status'] : 422;
+        $details = is_array($failure['details'] ?? null) ? $failure['details'] : [];
+
+        if ($run instanceof TalosRun && ! $commandFailurePersisted) {
+            $this->appendRunEvent($run, $normalizer, [
+                'event_type' => 'browser.command.failed',
+                'severity' => 'error',
+                'payload' => [
+                    'command_id' => $browserCommand['command_id'] ?? 'unknown',
+                    'browser_session_id' => $browserCommand['browser_session_id'] ?? null,
+                    'operation' => $browserCommand['operation'] ?? 'unknown',
+                    'error_code' => $code,
+                    'message' => $message,
+                    'details' => $details,
+                ],
+            ]);
+        }
+
+        return $this->failedChatResponse([
+            'error' => $message,
+            'code' => $code,
+            'details' => $details,
+            'browser_activities' => $browserActivities,
+            'used_browser_context' => $browserEvidence,
+        ], $run, $session, $normalizer, [
+            'reason' => 'browser_command_failed',
+            'code' => $code,
+            'status' => $status,
+            'browser_activity_count' => count($browserActivities),
+        ], $status);
+    }
+
     /**
      * @param array{session_id: string, snapshot_artifact_id: string, url: string, title: string, text_digest: string, evidence_hash: string, nodes: list<array{ref: string, role: string, name: string, visible: bool, level?: int}>} $browserContext
      */
@@ -995,7 +1422,7 @@ final class TalosChatController extends Controller
             . "\n\nUSER_TASK:\n{$message}";
     }
 
-    private function withConversationHistory(string $message, ?TalosSession $session, string $currentUserMessage): string
+    private function withConversationHistory(string $message, ?TalosSession $session, string $currentUserMessage, bool $browserModeEnabled = false): string
     {
         if (! $session instanceof TalosSession) {
             return $message;
@@ -1004,7 +1431,7 @@ final class TalosChatController extends Controller
         $messages = $session->messages()
             ->oldest('created_at')
             ->oldest('id')
-            ->get(['id', 'role', 'content']);
+            ->get(['id', 'role', 'content', 'metadata']);
 
         if ($messages->isEmpty()) {
             return $message;
@@ -1015,6 +1442,18 @@ final class TalosChatController extends Controller
             $role = is_string($persistedMessage->role) ? $persistedMessage->role : 'system';
             $content = trim((string) $persistedMessage->content);
             if ($content === '') {
+                continue;
+            }
+            $metadata = is_array($persistedMessage->metadata) ? $persistedMessage->metadata : [];
+            if ($role === 'system' && (is_array($metadata['chat_error'] ?? null) || filled($metadata['fault_type'] ?? null))) {
+                continue;
+            }
+            if ($browserModeEnabled
+                && $role === 'assistant'
+                && ($metadata['source'] ?? null) === 'talos_chat_proxy'
+                && ($metadata['used_browser_context'] ?? null) === null
+                && ($metadata['browser_activities'] ?? []) === []
+                && preg_match('/\bTALOS_BROWSER_[A-Z0-9_]+\b/', $content) === 1) {
                 continue;
             }
 

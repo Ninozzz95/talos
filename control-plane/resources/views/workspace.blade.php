@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Talos Workspace</title>
-    <link rel="icon" type="image/svg+xml" href="/talos/brand/logo-short.svg">
+    <link rel="icon" type="image/svg+xml" href="/talos/brand/logo-short.svg" data-talos-dynamic-favicon="true">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body>

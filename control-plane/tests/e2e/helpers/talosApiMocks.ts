@@ -65,6 +65,27 @@ function browserScreenshotFixture() {
     return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0))])
 }
 
+function isExplicitScreenshotRequest(prompt: string) {
+    const normalized = prompt
+        .trim()
+        .toLocaleLowerCase('it')
+        .replace(/[\p{P}\p{S}]+/gu, ' ')
+        .replace(/\s+/gu, ' ')
+        .trim()
+
+    if (['screenshot', 'uno screenshot', 'take screenshot', 'take a screenshot'].includes(normalized)) return true
+
+    const italianAction = '(?:fai|fammi|cattura|scatta|puoi fare|puoi farmi|puoi catturare|puoi scattare|potresti fare|potresti farmi|potresti catturare|potresti scattare)'
+    const italianScope = '(?:della pagina(?: corrente)?|di questa pagina|dello schermo|del browser)'
+    const italianRequest = new RegExp(`^(?:per favore )?${italianAction}(?: (?:uno|un|una|la))? (?:screenshot|schermata)(?: ${italianScope})?(?: (?:ora|adesso))?(?: per favore)?$`, 'u')
+    if (italianRequest.test(normalized)) return true
+
+    const englishAction = '(?:take|capture|make|can you take|can you capture|can you make|could you take|could you capture|could you make)'
+    const englishScope = '(?:of (?:the )?(?:current )?page|of this page|of the browser)'
+
+    return new RegExp(`^(?:please )?${englishAction}(?: (?:a|the))? screenshot(?: ${englishScope})?(?: now)?(?: please)?$`, 'u').test(normalized)
+}
+
 function hasSecretPreferenceKey(value: unknown): boolean {
     if (!value || typeof value !== 'object') {
         return false
@@ -1240,6 +1261,7 @@ export type InstallTalosApiMocksOptions = {
         createStatuses?: string[]
         deny?: 'navigate' | 'screenshot' | 'snapshot'
     }
+    chatDelayMs?: number
 }
 
 export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}) {
@@ -1380,6 +1402,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             if (options.browser?.deny === 'screenshot') return json(route, { message: 'Screenshot denied by Browse policy.' }, 403)
             browserScreenshotCaptured = true
             browserSession = { ...browserSession, last_screenshot_artifact_id: 'browser-screenshot-e2e', updated_at: now }
+            browserEvents = [...browserEvents, { id: 'browser-event-e2e-screenshot', type: 'screenshot.created', actor: 'worker', created_at: now, payload: { artifact_id: 'browser-screenshot-e2e' } }]
             return json(route, { data: { id: 'browser-screenshot-e2e', preview_url: '/api/talos/browser/artifacts/browser-screenshot-e2e/preview' } }, 201)
         }
 
@@ -1388,6 +1411,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             if (options.browser?.deny === 'snapshot') return json(route, { message: 'Snapshot denied by Browse policy.' }, 403)
             browserSnapshotCaptured = true
             browserSession = { ...browserSession, last_snapshot_artifact_id: 'browser-snapshot-e2e', updated_at: now }
+            browserEvents = [...browserEvents, { id: 'browser-event-e2e-snapshot', type: 'snapshot.created', actor: 'worker', created_at: now, payload: { artifact_id: 'browser-snapshot-e2e' } }]
             return json(route, { data: { id: 'browser-snapshot-e2e' } }, 201)
         }
 
@@ -1524,6 +1548,16 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 return json(route, { error: 'SECRET_FIELDS_REJECTED' }, 422)
             }
 
+            const incomingPreferences = body.preferences && typeof body.preferences === 'object' && !Array.isArray(body.preferences)
+                ? body.preferences as Record<string, unknown>
+                : {}
+            const currentChatLayout = workspaceSettings.preferences.chat_layout && typeof workspaceSettings.preferences.chat_layout === 'object' && !Array.isArray(workspaceSettings.preferences.chat_layout)
+                ? workspaceSettings.preferences.chat_layout as Record<string, unknown>
+                : {}
+            const incomingChatLayout = incomingPreferences.chat_layout && typeof incomingPreferences.chat_layout === 'object' && !Array.isArray(incomingPreferences.chat_layout)
+                ? incomingPreferences.chat_layout as Record<string, unknown>
+                : null
+
             workspaceSettings = {
                 ...workspaceSettings,
                 default_model_profile_id: typeof body.default_model_profile_id === 'string' ? body.default_model_profile_id : workspaceSettings.default_model_profile_id,
@@ -1532,7 +1566,13 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                     : workspaceSettings.default_context_set_id,
                 preferences: {
                     ...workspaceSettings.preferences,
-                    ...(body.preferences && typeof body.preferences === 'object' && !Array.isArray(body.preferences) ? body.preferences : {}),
+                    ...incomingPreferences,
+                    ...(incomingChatLayout ? {
+                        chat_layout: {
+                            ...currentChatLayout,
+                            ...incomingChatLayout,
+                        },
+                    } : {}),
                 },
                 updated_at: now,
             }
@@ -1618,8 +1658,30 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         if (path === '/api/talos/chat' && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             const contextSetId = typeof body.context_set_id === 'string' ? body.context_set_id : null
-            const browserContext = body.browser_context as Record<string, unknown> | undefined
-            const browserSessionId = typeof browserContext?.browser_session_id === 'string' ? browserContext.browser_session_id : null
+            const prompt = typeof body.message === 'string' ? body.message : ''
+            const browserMode = body.browser_mode as Record<string, unknown> | undefined
+            const browserSessionId = browserMode?.enabled === true && typeof browserMode.browser_session_id === 'string'
+                ? browserMode.browser_session_id
+                : null
+            const screenshotRequested = Boolean(browserSessionId && isExplicitScreenshotRequest(prompt))
+            if (screenshotRequested) {
+                browserScreenshotCaptured = true
+                browserSession = {
+                    ...browserSession,
+                    last_screenshot_artifact_id: 'browser-screenshot-e2e',
+                    updated_at: now,
+                }
+                browserEvents = [...browserEvents, {
+                    id: 'browser-event-chat-screenshot-e2e',
+                    type: 'command.succeeded',
+                    actor: 'worker',
+                    payload: { operation: 'screenshot', artifact_id: 'browser-screenshot-e2e' },
+                    created_at: now,
+                }]
+            }
+            if (options.chatDelayMs) {
+                await new Promise((resolve) => setTimeout(resolve, options.chatDelayMs))
+            }
 
             return json(route, {
                 text: contextSetId
@@ -1645,6 +1707,37 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                     text_digest: 'fixture-snapshot-digest',
                     untrusted: true,
                 } : null,
+                browser_activities: screenshotRequested ? [{
+                    id: 'browser-activity-chat-screenshot-e2e',
+                    operation: 'screenshot',
+                    status: 'succeeded',
+                    label: 'Screenshot',
+                    run_id: 'run-e2e',
+                    browser_session_id: browserSessionId,
+                    artifact_ids: ['browser-screenshot-e2e'],
+                    occurred_at: now,
+                }] : browserSessionId ? [
+                    {
+                        id: 'browser-activity-chat-e2e',
+                        operation: 'read',
+                        status: 'succeeded',
+                        label: 'Chat browser read',
+                        run_id: 'run-e2e',
+                        browser_session_id: browserSessionId,
+                        artifact_ids: [],
+                        occurred_at: now,
+                    },
+                    {
+                        id: 'browser-activity-chat-e2e',
+                        operation: 'read',
+                        status: 'succeeded',
+                        label: 'Chat browser read',
+                        run_id: 'run-e2e',
+                        browser_session_id: browserSessionId,
+                        artifact_ids: [],
+                        occurred_at: now,
+                    },
+                ] : [],
                 run: {
                     id: 'run-e2e',
                     session_id: 'session-e2e',
