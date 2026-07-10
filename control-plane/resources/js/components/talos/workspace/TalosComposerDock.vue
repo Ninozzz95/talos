@@ -10,6 +10,8 @@ import type { TalosCommand, TalosContextSet, TalosModelProfile, TalosModelRoutin
 
 const props = defineProps<{
     prompt: string
+    browseSurface?: boolean
+    browserContext?: { host: string; title: string } | null
     commands: TalosCommand[]
     canSend: boolean
     sending: boolean
@@ -46,6 +48,7 @@ const emit = defineEmits<{
     toggleTemporary: []
     enhance: []
     slashCommand: [id: TalosCommand['id']]
+    browseOpen: [url: string | null]
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
     selectContextSet: [contextSetId: string]
@@ -55,6 +58,7 @@ const emit = defineEmits<{
     replacePromptWithEnhanced: []
     insertEnhancedPromptBelow: []
     clearPromptEnhancement: []
+    detachBrowserContext: []
 }>()
 
 const composerPrompt = computed({
@@ -64,8 +68,15 @@ const composerPrompt = computed({
 </script>
 
 <template>
-    <div class="pointer-events-none fixed inset-x-0 bottom-7 z-40 px-4 lg:left-[var(--talos-rail-width)] lg:px-6">
+    <div
+        class="pointer-events-none fixed inset-x-0 bottom-7 z-40 px-4 lg:px-6"
+        :class="browseSurface ? 'lg:left-[calc(var(--talos-rail-width)+22rem)]' : 'lg:left-[var(--talos-rail-width)]'"
+    >
         <div class="relative">
+            <div v-if="browserContext" data-testid="talos-browser-context-chip" class="pointer-events-auto mx-auto mb-2 flex w-full max-w-[820px] items-center justify-between gap-3 border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
+                <span class="min-w-0 truncate"><strong>Browse evidence</strong> <span class="text-[var(--talos-muted)]">{{ browserContext.host }} - {{ browserContext.title }}</span></span>
+                <Button size="sm" variant="ghost" aria-label="Detach browser evidence" @click="emit('detachBrowserContext')">Detach</Button>
+            </div>
             <div
                 v-if="modelPopoverOpen"
                 data-testid="talos-model-popover"
@@ -198,6 +209,7 @@ const composerPrompt = computed({
                 @toggle-temporary="emit('toggleTemporary')"
                 @enhance="emit('enhance')"
                 @slash-command="emit('slashCommand', $event)"
+                @browse-open="emit('browseOpen', $event)"
             />
         </div>
     </div>

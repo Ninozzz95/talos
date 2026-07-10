@@ -6,6 +6,7 @@ export type TalosSlashCommand = TalosCommand & {
 
 const slashCommandAliases: Partial<Record<TalosCommandId, string>> = {
     new_session: '/new',
+    open_browse: '/browse',
     attach_file: '/file',
     open_context_vault: '/context',
     run_avm_compare: '/compare',

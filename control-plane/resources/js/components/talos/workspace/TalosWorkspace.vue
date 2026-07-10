@@ -7,9 +7,11 @@ import TalosLeftRail from './TalosLeftRail.vue'
 import TalosMobileRail from './TalosMobileRail.vue'
 import TalosProceduralBackground from './TalosProceduralBackground.vue'
 import TalosWindowLayer from './TalosWindowLayer.vue'
+import TalosBrowsePanel from './panels/TalosBrowsePanel.vue'
 import TalosWorkspaceHeader from './TalosWorkspaceHeader.vue'
 import TalosCommandPalette from '../shell/TalosCommandPalette.vue'
 import { useTalosChat } from '../../../composables/useTalosChat'
+import { useTalosBrowse } from '../../../composables/useTalosBrowse'
 import { useTalosContextVault } from '../../../composables/useTalosContextVault'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
 import { useTalosModelRoutingProfiles } from '../../../composables/useTalosModelRoutingProfiles'
@@ -33,7 +35,7 @@ import { resolveTalosAppearanceVisibility } from '../../../lib/talosAppearancePr
 import { resolveTalosShortcuts } from '../../../lib/talosShortcuts'
 import { TALOS_WORKSPACE_COMMAND_TARGETS, TALOS_WORKSPACE_WINDOW_IDS, type TalosWorkspaceCommandRoute } from '../../../lib/talosWorkspaceCommandRoutes'
 import type { TalosCommand, TalosContextSet, TalosMessage, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload } from '../../../lib/talosTypes'
-type InitialSurface = 'workspace' | 'chat' | 'dashboard'
+type InitialSurface = 'workspace' | 'chat' | 'dashboard' | 'browse'
 const talosShortLogoUrl = '/talos/brand/logo-short.svg'
 const props = withDefaults(defineProps<{
     initialSurface?: InitialSurface
@@ -76,6 +78,7 @@ const selectedModelProfileId = ref('')
 const selectedModelRoutingProfileId = ref('')
 const selectedContextSetId = ref('')
 const sessionPersistenceMode = ref<TalosSessionPersistenceMode>('persistent')
+const browserEvidenceAttached = ref(true)
 const railCollapsed = ref(false)
 const railWidth = ref(236)
 const { startRailResize } = useTalosRailResize(railCollapsed, railWidth)
@@ -115,7 +118,30 @@ const {
     selectSession,
     createMessage,
     exportSession,
-} = useTalosSessions()
+} = useTalosSessions(props.initialSurface === 'browse' ? 'browse' : 'chat')
+const isBrowseSurface = computed(() => props.initialSurface === 'browse')
+const {
+    activeSession: activeBrowserSession,
+    latestSnapshot: latestBrowserSnapshot,
+    createSession: createBrowserSession,
+    navigate: navigateBrowser,
+} = useTalosBrowse()
+const browserContextEligible = computed(() => Boolean(
+    isBrowseSurface.value
+    && activeBrowserSession.value
+    && ['ready', 'active'].includes(activeBrowserSession.value.status)
+    && activeBrowserSession.value.last_snapshot_artifact_id
+    && latestBrowserSnapshot.value,
+))
+const browserContext = computed(() => {
+    if (!browserContextEligible.value || !activeBrowserSession.value) return null
+    try {
+        const url = new URL(activeBrowserSession.value.current_url ?? latestBrowserSnapshot.value?.snapshot.url ?? '')
+        return { host: url.host, title: activeBrowserSession.value.current_title || latestBrowserSnapshot.value?.snapshot.title || 'Captured page' }
+    } catch {
+        return { host: 'Captured page', title: activeBrowserSession.value.current_title || 'Browser evidence' }
+    }
+})
 const { sendPersistentChat } = useTalosChat()
 const {
     modelProfiles,
@@ -627,6 +653,7 @@ async function sendChatText(message: string, userMessageMetadata: Record<string,
             modelProfileId: selectedModelProfileId.value || null,
             modelRoutingProfileId: selectedModelRoutingProfileId.value || null,
             contextSetId: selectedContextSetId.value || null,
+            browserContextSessionId: browserEvidenceAttached.value && browserContextEligible.value ? activeBrowserSession.value?.id ?? null : null,
             chatEndpoint: '/api/talos/chat',
             userMessageMetadata,
             persistMessage: createMessage,
@@ -645,6 +672,10 @@ async function sendChatText(message: string, userMessageMetadata: Record<string,
 }
 async function sendChat() {
     await sendChatText(prompt.value, {}, true)
+}
+function openBrowseFromComposer(url: string | null) {
+    const query = url ? `?open=${encodeURIComponent(url)}` : ''
+    window.location.assign(`/browse${query}`)
 }
 async function resendMessage(message: TalosMessage) {
     if (message.role !== 'user') {
@@ -738,6 +769,12 @@ async function runSelectedBenchmarkScenario() {
     }
 }
 function openModule(id: string, event?: MouseEvent | PointerEvent) {
+    if (id === 'browse') {
+        if (!isBrowseSurface.value) {
+            window.location.assign('/browse')
+        }
+        return
+    }
     if (!isWindowId(id)) {
         return
     }
@@ -875,6 +912,11 @@ async function selectCommand(commandId: TalosCommand['id']) {
         closeCommandPalette()
         await sendChat()
         commandFeedback.value = uiError.value ? '' : 'Message sent through TALOS chat.'
+        return
+    }
+    if (commandId === 'open_browse') {
+        closeCommandPalette()
+        openBrowseFromComposer(null)
         return
     }
     if (commandId === 'run_avm_compare') {
@@ -1021,6 +1063,19 @@ onMounted(async () => {
     startReducedMotionWatcher()
     startColorSchemeWatcher()
     applyQueryModules()
+    if (isBrowseSurface.value) {
+        const requestedUrl = new URLSearchParams(window.location.search).get('open')
+        if (requestedUrl) {
+            try {
+                if (!activeBrowserSession.value) await createBrowserSession()
+                await navigateBrowser(requestedUrl)
+            } catch (error) {
+                uiError.value = error instanceof Error ? error.message : 'TALOS could not open the requested browser URL.'
+            } finally {
+                window.history.replaceState({}, '', '/browse')
+            }
+        }
+    }
     try {
         await refreshModelAndContext()
         await loadPersistedWorkspaceSettings()
@@ -1056,7 +1111,7 @@ onBeforeUnmount(() => {
         data-testid="talos-workspace"
     >
         <TalosLeftRail
-            :active-ids="openWindowIds"
+            :active-ids="isBrowseSurface ? ['browse'] : openWindowIds"
             :theme="theme"
             :creating-session="creatingSession"
             :collapsed="railCollapsed"
@@ -1109,6 +1164,22 @@ onBeforeUnmount(() => {
                 @new-chat="startNewChat"
                 @open-window="openModule"
             />
+            <div class="relative z-10 flex min-h-0 flex-1 overflow-hidden" :class="isBrowseSurface ? 'flex-col lg:flex-row' : ''">
+            <aside
+                v-if="isBrowseSurface"
+                data-testid="talos-browse-page-controls"
+                class="flex h-[38vh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-[var(--talos-border)] bg-[var(--talos-panel)]/95 p-3 lg:h-auto lg:max-h-none lg:w-[22rem] lg:border-b-0 lg:border-r"
+                aria-label="Browse controls and evidence"
+            >
+                <div class="mb-3 flex items-start justify-between gap-3 border-b border-[var(--talos-border)] pb-3">
+                    <div>
+                        <div class="talos-orbitron-brand text-sm font-semibold text-[var(--talos-text)]">TALOS BROWSE</div>
+                        <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Read-only browser evidence and its dedicated conversation.</p>
+                    </div>
+                    <a href="/" class="shrink-0 text-xs font-medium text-[var(--talos-accent)] underline-offset-4 hover:underline">General chat</a>
+                </div>
+                <TalosBrowsePanel />
+            </aside>
             <TalosChatSurface
                 ref="chatSurface"
                 :ui-error="uiError"
@@ -1142,7 +1213,9 @@ onBeforeUnmount(() => {
                 @toggle-message-evidence="toggleMessageEvidence"
                 @benchmark-message-run="benchmarkMessageRun"
             />
+            </div>
             <TalosWindowLayer
+                v-if="!isBrowseSurface"
                 :visible-window-ids="visibleWindowIds" :minimized-window-ids="minimizedWindowIds" :docked-window-ids="dockedWindowIds" :fullscreen-window-ids="fullscreenWindowIds"
                 :active-window-id="activeWindowId" :window-positions="windowPositions" :window-sizes="windowSizes" :window-z-indexes="windowZIndexes" :current-rail-width="currentRailWidth"
                 :runtime-requested-tab="runtimeRequestedTab" :runtime-requested-tab-revision="runtimeRequestedTabRevision" :selected-benchmark-group-id="selectedBenchmarkGroupId" :selected-benchmark-scenario-path="selectedBenchmarkScenarioPath"
@@ -1157,7 +1230,7 @@ onBeforeUnmount(() => {
                 @open-module="openModule" @settings-saved="handleWorkspaceSettingsSaved" @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate" @theme-draft-changed="handleThemeDraftChanged"
             />
             <TalosComposerDock
-                :prompt="prompt" :commands="workspaceCommands" :can-send="canSend" :sending="sending" :status-text="statusText" :model-label="modelLabel" :context-label="contextLabel"
+                :prompt="prompt" :browse-surface="isBrowseSurface" :browser-context="browserEvidenceAttached ? browserContext : null" :commands="workspaceCommands" :can-send="canSend" :sending="sending" :status-text="statusText" :model-label="modelLabel" :context-label="contextLabel"
                 :temporary-mode="sessionPersistenceMode === 'temporary'" :send-disabled-reason="sendMessageCommandDisabledReason" :enhancer-disabled-reason="assistantEnhancerDisabledReason"
                 :model-popover-open="modelPopoverOpen" :context-popover-open="contextPopoverOpen" :model-profiles="modelProfiles" :model-routing-profiles="modelRoutingProfiles" :context-sets="contextSets"
                 :selected-model-profile-id="selectedModelProfileId" :selected-model-routing-profile-id="selectedModelRoutingProfileId" :selected-context-set-id="selectedContextSetId" :selected-context-set="selectedContextSet"
@@ -1165,8 +1238,10 @@ onBeforeUnmount(() => {
                 :prompt-enhancement-result="promptEnhancementResult" :enhancing-prompt="enhancingPrompt" :prompt-enhancement-error="promptEnhancementError" :visibility="workspaceAppearanceVisibility.chat_bar"
                 @update-prompt="prompt = $event" @send="sendChat" @open-model="toggleModelPopover" @open-context="toggleContextPopover" @open-settings="openSettings()" @toggle-temporary="toggleTemporaryMode"
                 @enhance="enhanceCurrentPrompt" @slash-command="selectCommand" @select-model-profile="selectModelProfile" @select-model-routing-profile="selectModelRoutingProfile" @select-context-set="selectContextSet"
+                @browse-open="openBrowseFromComposer"
                 @refresh-model-and-context="refreshModelAndContext" @open-model-lab="openWindowFromSource('model_lab', undefined, 'command')" @open-library="openWindowFromSource('library', undefined, 'command')"
                 @replace-prompt-with-enhanced="replacePromptWithEnhanced" @insert-enhanced-prompt-below="insertEnhancedPromptBelow" @clear-prompt-enhancement="clearPromptEnhancement"
+                @detach-browser-context="browserEvidenceAttached = false"
             />
             <div
                 v-if="commandPaletteOpen"

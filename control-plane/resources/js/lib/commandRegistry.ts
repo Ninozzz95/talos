@@ -18,6 +18,14 @@ export const talosCommands: TalosCommand[] = [
         capability: 'talos.chat.message.create',
     },
     {
+        id: 'open_browse',
+        label: 'Open Browse',
+        description: 'Open the dedicated read-only Browser Chat surface.',
+        category: 'chat',
+        risk: 'low',
+        capability: 'talos.browser.read',
+    },
+    {
         id: 'attach_file',
         label: 'Attach file',
         description: 'Upload a local file into the dashboard Context Vault.',

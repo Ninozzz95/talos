@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { talosFetch } from '../lib/api'
-import type { TalosMessage, TalosMessageRole, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload } from '../lib/talosTypes'
+import type { TalosMessage, TalosMessageRole, TalosSession, TalosSessionExportFormat, TalosSessionExportPayload, TalosSessionSurface } from '../lib/talosTypes'
 
 type ApiEnvelope<T> = {
     data: T
@@ -50,7 +50,7 @@ export function sessionChatState(session: TalosSession): TalosSessionChatState {
     }
 }
 
-export function useTalosSessions() {
+export function useTalosSessions(surface: TalosSessionSurface = 'chat') {
     const sessions = ref<TalosSession[]>([])
     const activeSession = ref<TalosSession | null>(null)
     const messages = ref<TalosMessage[]>([])
@@ -100,7 +100,7 @@ export function useTalosSessions() {
         sessionError.value = null
 
         try {
-            const response = await talosFetch<ApiEnvelope<TalosSession[]>>('/api/talos/sessions')
+            const response = await talosFetch<ApiEnvelope<TalosSession[]>>(`/api/talos/sessions?${new URLSearchParams({ surface }).toString()}`)
             sessions.value = response.data
             return response.data
         } catch (error) {
@@ -121,8 +121,9 @@ export function useTalosSessions() {
                     title,
                     mode: 'verified_execution',
                     persistence_mode: persistenceMode,
+                    surface,
                     metadata: {
-                        surface: 'chat',
+                        surface,
                     },
                 }),
             })
@@ -246,9 +247,10 @@ export function useTalosSessions() {
                 title: `${session.title || 'Untitled chat'} copy`,
                 mode: session.mode,
                 persistence_mode: session.persistence_mode ?? 'persistent',
+                surface,
                 active_model_profile_id: session.active_model_profile_id ?? null,
                 metadata: {
-                    surface: 'chat',
+                    surface,
                     chat_state: {
                         favorite: false,
                         archived: false,

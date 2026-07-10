@@ -34,6 +34,7 @@ type SendPersistentChatOptions = {
     modelProfileId?: string | null
     modelRoutingProfileId?: string | null
     contextSetId?: string | null
+    browserContextSessionId?: string | null
     chatEndpoint?: string
     userMessageMetadata?: Record<string, unknown>
     persistMessage: PersistMessage
@@ -164,6 +165,7 @@ export function useTalosChat() {
                 validation_errors: errors,
                 run: response.run ?? null,
                 used_context: normalizeUsedContext(response.used_context),
+                used_browser_context: response.used_browser_context ?? null,
                 model_routing: response.model_routing ?? null,
             },
         })
@@ -196,7 +198,7 @@ export function useTalosChat() {
         )
 
         try {
-            const payload: Record<string, string> = {
+            const payload: Record<string, unknown> = {
                 message: options.prompt,
                 session_id: options.sessionId,
             }
@@ -211,6 +213,9 @@ export function useTalosChat() {
 
             if (options.contextSetId) {
                 payload.context_set_id = options.contextSetId
+            }
+            if (options.browserContextSessionId) {
+                payload.browser_context = { browser_session_id: options.browserContextSessionId }
             }
 
             const response = await talosFetch<TalosChatProxyResponse>(options.chatEndpoint ?? '/api/talos/chat', {

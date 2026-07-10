@@ -32,6 +32,7 @@ const emit = defineEmits<{
     enhance: []
     toggleTemporary: []
     slashCommand: [id: TalosCommand['id']]
+    browseOpen: [url: string | null]
 }>()
 
 const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve prompt')
@@ -75,6 +76,13 @@ function selectSlashCommand(command: TalosCommand) {
         return
     }
 
+    const rawInput = prompt.value.trim()
+    if (command.id === 'open_browse') {
+        const match = rawInput.match(/^\/browse\s+open\s+(https?:\/\/\S+)$/i)
+        prompt.value = ''
+        emit('browseOpen', match?.[1] ?? null)
+        return
+    }
     prompt.value = ''
     emit('slashCommand', command.id)
 }
@@ -87,7 +95,21 @@ function selectActiveSlashCommand() {
     }
 }
 
+function browseOpenUrl() {
+    const match = prompt.value.trim().match(/^\/browse\s+open\s+(https?:\/\/\S+)$/i)
+
+    return match?.[1] ?? null
+}
+
 function handleKeydown(event: KeyboardEvent) {
+    const url = browseOpenUrl()
+    if (url && event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        prompt.value = ''
+        emit('browseOpen', url)
+        return
+    }
+
     if (slashMenuOpen.value) {
         if (event.key === 'ArrowDown') {
             event.preventDefault()

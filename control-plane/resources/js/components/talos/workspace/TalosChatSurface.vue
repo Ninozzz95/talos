@@ -118,6 +118,14 @@ function messageSources(message: TalosMessage): MessageSource[] {
     })
 }
 
+function browserEvidence(message: TalosMessage) {
+    const evidence = message.metadata?.used_browser_context
+
+    return evidence && typeof evidence === 'object' && !Array.isArray(evidence)
+        ? evidence as { url?: string; title?: string; text_digest?: string; untrusted?: boolean }
+        : null
+}
+
 function messageHasEvidence(message: TalosMessage) {
     return message.role === 'assistant'
         && (Boolean(message.run_id) || messageMutations(message).length > 0 || messageSources(message).length > 0)
@@ -349,6 +357,11 @@ defineExpose({ scrollToBottom })
                                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ sourcePreview(source) }}</p>
                                 </article>
                             </div>
+                        </div>
+                        <div v-if="message.role === 'assistant' && browserEvidence(message)" data-testid="talos-browser-evidence-disclosure" class="mt-3 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3 text-xs">
+                            <div class="font-semibold text-[var(--talos-warning)]">Untrusted browser evidence</div>
+                            <div class="mt-1 truncate text-[var(--talos-text)]">{{ browserEvidence(message)?.title || browserEvidence(message)?.url || 'Captured browser page' }}</div>
+                            <div class="mt-1 text-[var(--talos-muted)]">{{ browserEvidence(message)?.text_digest }}</div>
                         </div>
                     </div>
                 </article>

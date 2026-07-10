@@ -30,9 +30,14 @@ final class TalosSessionController extends Controller
     {
         $userId = $request->user()?->id;
         abort_unless($userId !== null, 401);
+        $validated = $request->validate([
+            'surface' => ['sometimes', 'string', Rule::in(['chat', 'browse'])],
+        ]);
+        $surface = $validated['surface'] ?? 'chat';
 
         $sessions = TalosSession::query()
             ->where('user_id', $userId)
+            ->where('surface', $surface)
             ->latest('updated_at')
             ->latest('created_at')
             ->get();
@@ -49,6 +54,7 @@ final class TalosSessionController extends Controller
             'title' => ['required', 'string', 'min:1', 'max:255'],
             'mode' => ['sometimes', 'string', Rule::in(['answer_only', 'verified_execution'])],
             'persistence_mode' => ['sometimes', 'string', Rule::in(['persistent', 'temporary'])],
+            'surface' => ['sometimes', 'string', Rule::in(['chat', 'browse'])],
             'active_model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);
@@ -60,6 +66,7 @@ final class TalosSessionController extends Controller
             'user_id' => $userId,
             'mode' => $validated['mode'] ?? 'verified_execution',
             'persistence_mode' => $validated['persistence_mode'] ?? 'persistent',
+            'surface' => $validated['surface'] ?? 'chat',
         ]);
 
         return response()->json(['data' => $session], 201);

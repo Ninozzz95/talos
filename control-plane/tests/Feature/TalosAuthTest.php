@@ -42,6 +42,23 @@ final class TalosAuthTest extends TestCase
             ->assertRedirect('/login');
     }
 
+    public function test_guest_cannot_open_browse_before_authentication(): void
+    {
+        $this->withoutVite();
+        User::factory()->create();
+
+        $this->get('/browse')
+            ->assertRedirect('/login');
+    }
+
+    public function test_browse_preserves_the_first_run_setup_gate(): void
+    {
+        $this->withoutVite();
+
+        $this->get('/browse')
+            ->assertRedirect('/setup');
+    }
+
     public function test_authenticated_user_can_render_the_workspace(): void
     {
         $this->withoutVite();

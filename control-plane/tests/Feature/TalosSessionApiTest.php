@@ -71,6 +71,29 @@ final class TalosSessionApiTest extends TestCase
             ->assertJsonPath('data.mode', 'verified_execution');
     }
 
+    public function test_sessions_are_partitioned_by_their_product_surface(): void
+    {
+        $chat = $this->postJson('/api/talos/sessions', [
+            'title' => 'General chat',
+        ])->assertCreated()->assertJsonPath('data.surface', 'chat');
+        $browse = $this->postJson('/api/talos/sessions', [
+            'title' => 'Browse evidence chat',
+            'surface' => 'browse',
+        ])->assertCreated()->assertJsonPath('data.surface', 'browse');
+
+        $this->getJson('/api/talos/sessions?surface=chat')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $chat->json('data.id'))
+            ->assertJsonMissing(['id' => $browse->json('data.id')]);
+        $this->getJson('/api/talos/sessions?surface=browse')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $browse->json('data.id'))
+            ->assertJsonMissing(['id' => $chat->json('data.id')]);
+        $this->getJson('/api/talos/sessions?surface=invalid')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('surface');
+    }
+
     public function test_session_creation_assigns_stable_welcome_prompt_metadata(): void
     {
         $createResponse = $this->postJson('/api/talos/sessions', [

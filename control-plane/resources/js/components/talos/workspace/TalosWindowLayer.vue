@@ -480,7 +480,14 @@ function clampFloatingWindowPosition(position: TalosWindowPosition, size?: Talos
 }
 
 function floatingWindowPosition(id: TalosWindowId, index: number): TalosWindowPosition {
-    return props.windowPositions[id] ?? defaultFloatingWindowPosition(index)
+    const position = props.windowPositions[id] ?? defaultFloatingWindowPosition(index)
+    const size = clampFloatingWindowSize(
+        id,
+        props.windowSizes[id] ?? TALOS_WINDOW_DEFAULT_SIZES[id],
+        position,
+    )
+
+    return clampFloatingWindowPosition(position, size)
 }
 
 function floatingWindowSize(id: TalosWindowId, index: number): TalosWindowSize {
@@ -507,7 +514,7 @@ function floatingWindowStyle(id: TalosWindowId, index: number) {
     const launchMidDx = Math.round(launchDx * 0.55)
     const launchMidDy = Math.round(launchDy * 0.55)
 
-    return {
+    const style = {
         '--talos-window-x': `${position.x}px`,
         '--talos-window-y': `${position.y}px`,
         '--talos-window-width': `${size.width}px`,
@@ -522,6 +529,8 @@ function floatingWindowStyle(id: TalosWindowId, index: number) {
         '--talos-window-launch-mid-dy': `${launchMidDy}px`,
         zIndex: String(50 + (props.windowZIndexes[id] ?? index)),
     }
+
+    return style
 }
 
 function stopWindowDrag() {

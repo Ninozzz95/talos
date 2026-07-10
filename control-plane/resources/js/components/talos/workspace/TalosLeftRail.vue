@@ -5,6 +5,7 @@ import {
     Archive,
     BarChart3,
     BookOpen,
+    Globe2,
     Brain,
     CalendarDays,
     CheckSquare,
@@ -75,6 +76,7 @@ const primaryItems: RailItem[] = [
     { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },
     { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
     { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
+    { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', icon: Globe2 },
 ]
 
 const systemItems: RailItem[] = [

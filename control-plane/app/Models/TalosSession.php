@@ -21,6 +21,7 @@ final class TalosSession extends Model
         'title',
         'mode',
         'persistence_mode',
+        'surface',
         'active_model_profile_id',
         'metadata',
     ];
