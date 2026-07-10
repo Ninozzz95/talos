@@ -7,6 +7,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use Kadmos\Benchmark\BenchmarkComparisonRunner;
 use Kadmos\Benchmark\BenchmarkMode;
 use Kadmos\Benchmark\BenchmarkScenario;
+use Kadmos\Benchmark\ScenarioAwareValidator;
 use Kadmos\NodeStatus;
 
 function assertTrue(bool $condition, string $message): void
@@ -85,10 +86,33 @@ function testComparisonRunnerReportsEvidenceMetrics(): void
     assertArrayHasKey('avm_contract_advantage', $report['comparison'], 'Comparison should expose contract advantage.');
 }
 
+function testScenarioAwareValidatorAcceptsExpandedValidatorContract(): void
+{
+    $scenario = BenchmarkScenario::fromFile(__DIR__ . '/benchmarks/scenarios/01_simple_http.json');
+    $validator = new ScenarioAwareValidator($scenario);
+
+    $result = $validator->validate(
+        [['action' => 'SPAWN_NODE', 'node_id' => 'n1', 'node_type' => 'HTTP_REQUEST']],
+        [],
+        ['HTTP_REQUEST'],
+        ['navigate'],
+        true,
+    );
+
+    assertSame(true, $result->valid, 'Scenario validator should remain compatible with the expanded stateless validator contract.');
+
+    $legacyResult = $validator->validate(
+        [['action' => 'SPAWN_NODE', 'node_id' => 'n1', 'node_type' => 'HTTP_REQUEST']],
+        [],
+    );
+    assertSame(true, $legacyResult->valid, 'Scenario validator should preserve legacy two-argument benchmark validation.');
+}
+
 $tests = [
     'testComparisonRunnerReportsAllModesForSimpleScenario',
     'testAvmOnPreservesFailureCascadeOnDeepChainScenario',
     'testComparisonRunnerReportsEvidenceMetrics',
+    'testScenarioAwareValidatorAcceptsExpandedValidatorContract',
 ];
 
 foreach ($tests as $test) {

@@ -119,6 +119,9 @@ final class ASTOrchestrator
     {
         $context = [];
         foreach ($mutations as $mutation) {
+            if (($mutation['action'] ?? '') === 'SPAWN_NODE' && isset($mutation['node_id'], $mutation['node_type'])) {
+                $context[(string) $mutation['node_id']] = (string) $mutation['node_type'];
+            }
             if (($mutation['action'] ?? '') === 'MUTATE_PAYLOAD' && isset($mutation['node_id'])) {
                 $nodeId = (string) $mutation['node_id'];
                 if (isset($this->nodes[$nodeId])) {

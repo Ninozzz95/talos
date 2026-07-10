@@ -11,7 +11,7 @@ final class MockJmpValidator implements JmpValidatorInterface
 {
     public function __construct(private bool $valid = true) {}
 
-    public function validate(array $mutations, array $context): ValidationResult
+    public function validate(array $mutations, array $context, ?array $allowedNodeTypes = null, ?array $allowedBrowserOperations = null, bool $browserModeEnabled = false): ValidationResult
     {
         if ($this->valid) {
             return new ValidationResult(true);
@@ -27,4 +27,3 @@ final class MockJmpValidator implements JmpValidatorInterface
         ]);
     }
 }
-

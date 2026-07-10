@@ -21,6 +21,30 @@ export type RunStatus =
 
 export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosSessionSurface = 'chat' | 'browse'
+export type TalosChatBubbleScale = 'compact' | 'balanced' | 'expanded'
+export type TalosComposerMode = 'full' | 'minimal'
+export type TalosChatLayoutPreferences = {
+    bubble_scale: TalosChatBubbleScale
+    composer_mode: TalosComposerMode
+    advanced_rail_expanded: boolean
+}
+export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'failed'
+export type TalosBrowserMode = {
+    enabled: boolean
+    session_id: string | null
+    status: TalosBrowserModeStatus
+    capabilities: string[]
+}
+export type TalosBrowserActivity = {
+    id: string
+    operation: 'session_start' | 'navigate' | 'snapshot' | 'screenshot' | 'read' | string
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'denied' | string
+    label: string
+    run_id: string | null
+    browser_session_id: string
+    artifact_ids: string[]
+    occurred_at: string
+}
 export type TalosRunMode = 'avm_on' | 'avm_off_direct' | 'tool_agent'
     | 'avm_off'
     | 'verified_execution'

@@ -35,12 +35,30 @@ final class TalosSessionController extends Controller
         ]);
         $surface = $validated['surface'] ?? 'chat';
 
-        $sessions = TalosSession::query()
-            ->where('user_id', $userId)
-            ->where('surface', $surface)
+        $query = TalosSession::query()
+            ->where('user_id', $userId);
+
+        if ($surface === 'chat') {
+            $query->whereIn('surface', ['chat', 'browse']);
+        } else {
+            $query->where('surface', 'browse');
+        }
+
+        $sessions = $query
             ->latest('updated_at')
             ->latest('created_at')
-            ->get();
+            ->get()
+            ->each(function (TalosSession $session): void {
+                if ($session->surface !== 'browse') {
+                    return;
+                }
+
+                $metadata = is_array($session->metadata) ? $session->metadata : [];
+                $session->metadata = [
+                    ...$metadata,
+                    'legacy_browse' => true,
+                ];
+            });
 
         return response()->json(['data' => $sessions]);
     }
@@ -54,19 +72,22 @@ final class TalosSessionController extends Controller
             'title' => ['required', 'string', 'min:1', 'max:255'],
             'mode' => ['sometimes', 'string', Rule::in(['answer_only', 'verified_execution'])],
             'persistence_mode' => ['sometimes', 'string', Rule::in(['persistent', 'temporary'])],
-            'surface' => ['sometimes', 'string', Rule::in(['chat', 'browse'])],
+            'surface' => ['sometimes', 'string', Rule::in(['chat'])],
             'active_model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'metadata' => ['sometimes', 'nullable', 'array'],
         ]);
 
-        $validated['metadata'] = $this->sanitizeMetadata($validated['metadata'] ?? [], null);
+        $validated['metadata'] = [
+            ...$this->sanitizeMetadata($validated['metadata'] ?? [], null),
+            'surface' => 'chat',
+        ];
 
         $session = TalosSession::query()->create([
             ...$validated,
             'user_id' => $userId,
             'mode' => $validated['mode'] ?? 'verified_execution',
             'persistence_mode' => $validated['persistence_mode'] ?? 'persistent',
-            'surface' => $validated['surface'] ?? 'chat',
+            'surface' => 'chat',
         ]);
 
         return response()->json(['data' => $session], 201);

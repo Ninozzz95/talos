@@ -55,6 +55,8 @@ export function buildServer() {
       mutations?: unknown[];
       context?: Record<string, string>;
       allowed_node_types?: unknown;
+      allowed_browser_operations?: unknown;
+      browser_mode_enabled?: unknown;
     };
 
     if (!Array.isArray(mutations) || !context || typeof context !== 'object') {
@@ -65,11 +67,25 @@ export function buildServer() {
         message: 'Request body must contain mutations array and context object',
       }]};
     }
-    const allowedNodeTypes = Array.isArray((request.body as { allowed_node_types?: unknown }).allowed_node_types)
-      ? (request.body as { allowed_node_types: unknown[] }).allowed_node_types.filter((value): value is string => typeof value === 'string')
-      : undefined;
+    const body = request.body as Record<string, unknown>;
+    for (const policyKey of ['allowed_node_types', 'allowed_browser_operations'] as const) {
+      const policy = body[policyKey];
+      if (Object.prototype.hasOwnProperty.call(body, policyKey)
+        && policy !== null
+        && (!Array.isArray(policy) || policy.some((value) => typeof value !== 'string'))
+      ) {
+        return { valid: false, errors: [{
+          field: policyKey,
+          expected: 'null or an array of strings',
+          received: Array.isArray(policy) ? 'array with non-string values' : typeof policy,
+          message: `${policyKey} must be null or an array containing only strings.`,
+        }] };
+      }
+    }
+    const allowedNodeTypes = Array.isArray(body.allowed_node_types) ? body.allowed_node_types as string[] : undefined;
+    const allowedBrowserOperations = Array.isArray(body.allowed_browser_operations) ? body.allowed_browser_operations as string[] : undefined;
 
-    return validateMutations(mutations, context, allowedNodeTypes);
+    return validateMutations(mutations, context, allowedNodeTypes, allowedBrowserOperations, (request.body as { browser_mode_enabled?: unknown }).browser_mode_enabled === true);
   });
 
   // Get DAG state (polling fallback)
@@ -104,13 +120,14 @@ export function buildServer() {
 
   // Chat relay to PHP
   server.post('/chat', async (request) => {
-    const { message, api_key, provider, model, base_url, tool_context } = request.body as {
+    const { message, api_key, provider, model, base_url, tool_context, browser_mode } = request.body as {
       message?: string;
       api_key?: string;
       provider?: string;
       model?: string;
       base_url?: string | null;
       tool_context?: unknown;
+      browser_mode?: unknown;
     };
     if (!message) return { error: 'message required' };
 
@@ -159,7 +176,7 @@ export function buildServer() {
 
         resolve({ error: 'Core chat process returned no output.', code: 'CORE_CHAT_EMPTY_OUTPUT' });
       });
-      php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context }) + '\n');
+      php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode }) + '\n');
       php.stdin.end();
     });
   });

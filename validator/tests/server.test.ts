@@ -112,6 +112,120 @@ describe('POST /validate', () => {
     expect(body.valid).toBe(false);
     expect(body.errors[0].message).toContain('not available');
   });
+
+  it('preserves absent/null legacy node policy but treats an explicit empty list as deny-all', async () => {
+    const mutation = [{ action: 'SPAWN_NODE', node_id: 'n_http', node_type: 'HTTP_REQUEST' }];
+
+    for (const policy of ['omitted', 'null'] as const) {
+      const payload: Record<string, unknown> = { mutations: mutation, context: {} };
+      if (policy === 'null') payload.allowed_node_types = null;
+      const response = await server.inject({ method: 'POST', url: '/validate', payload });
+      expect(response.json().valid, policy).toBe(true);
+    }
+
+    const denied = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      payload: { mutations: mutation, context: {}, allowed_node_types: [] },
+    });
+    expect(denied.json().valid).toBe(false);
+  });
+
+  it('rejects explicitly malformed node policy instead of treating it as omitted', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      payload: {
+        mutations: [{ action: 'SPAWN_NODE', node_id: 'n_http', node_type: 'HTTP_REQUEST' }],
+        context: {},
+        allowed_node_types: 'HTTP_REQUEST',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().valid).toBe(false);
+    expect(response.json().errors[0].field).toContain('allowed_node_types');
+  });
+
+  it('fails closed for omitted and empty Browse operation allowlists, then accepts a populated manifest', async () => {
+    const mutations = [
+      { action: 'SPAWN_NODE', node_id: 'browser_1', node_type: 'BROWSER_COMMAND' },
+      {
+        action: 'MUTATE_PAYLOAD',
+        node_id: 'browser_1',
+        payload: {
+          schema_version: 'talos_browser_command_v1',
+          command_id: 'bc_1',
+          run_id: '0190f2f1-7a4b-7abc-8def-0123456789ab',
+          node_id: 'browser_1',
+          browser_session_id: '0190f2f1-7a4b-7abc-8def-0123456789ac',
+          operation: 'snapshot',
+          arguments: {},
+          observation_request: [],
+          risk: 'read',
+          expected_evidence_hash: null,
+          idempotency_key: `sha256:${'b'.repeat(64)}`,
+        },
+      },
+    ];
+    const base = {
+      mutations,
+      context: { browser_1: 'BROWSER_COMMAND' },
+      allowed_node_types: ['BROWSER_COMMAND'],
+      browser_mode_enabled: true,
+    };
+
+    const omitted = await server.inject({ method: 'POST', url: '/validate', payload: base });
+    expect(omitted.json().valid).toBe(false);
+    expect(omitted.json().errors.at(-1).message).toContain('allowlist');
+
+    const empty = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      payload: { ...base, allowed_browser_operations: [] },
+    });
+    expect(empty.json().valid).toBe(false);
+
+    const populated = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      payload: { ...base, allowed_browser_operations: ['snapshot'] },
+    });
+    expect(populated.json().valid).toBe(true);
+  });
+
+  it('requires an authoritative node allowlist for Browse mode', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      payload: {
+        mutations: [{ action: 'SPAWN_NODE', node_id: 'browser_1', node_type: 'BROWSER_COMMAND' }],
+        context: {},
+        browser_mode_enabled: true,
+        allowed_browser_operations: ['snapshot'],
+      },
+    });
+
+    expect(response.json().valid).toBe(false);
+    expect(response.json().errors[0].message).toContain('node allowlist');
+  });
+
+  it('denies a Browse spawn before payload validation when operation policy is absent or empty', async () => {
+    const base = {
+      mutations: [{ action: 'SPAWN_NODE', node_id: 'browser_1', node_type: 'BROWSER_COMMAND' }],
+      context: {},
+      browser_mode_enabled: true,
+      allowed_node_types: ['BROWSER_COMMAND'],
+    };
+
+    for (const operations of [undefined, []] as const) {
+      const payload: Record<string, unknown> = { ...base };
+      if (operations !== undefined) payload.allowed_browser_operations = operations;
+      const response = await server.inject({ method: 'POST', url: '/validate', payload });
+      expect(response.json().valid).toBe(false);
+      expect(response.json().errors[0].message).toContain('operation allowlist');
+    }
+  });
 });
 
 describe('POST /chat', () => {

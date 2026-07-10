@@ -24,8 +24,10 @@ export function createDevStackConfig({
     const php = quoted(executable(workspaceRoot, 'php', platform))
     const npm = quoted(executable(workspaceRoot, 'npm', platform))
     const browserWorker = path.join(workspaceRoot, 'browser-worker')
+    const validator = path.join(workspaceRoot, 'validator')
     const sharedEnv = {
         ...inheritedEnv,
+        AVM_VALIDATOR_URL: 'http://127.0.0.1:3000',
         TALOS_BROWSER_WORKER_URL: 'http://127.0.0.1:3100',
         TALOS_BROWSER_WORKER_TOKEN: token,
     }
@@ -33,6 +35,15 @@ export function createDevStackConfig({
     return {
         sharedEnv,
         commands: [
+            {
+                name: 'validator',
+                command: `${npm} --prefix ${quoted(validator)} run build && ${npm} --prefix ${quoted(validator)} run start`,
+                env: {
+                    ...sharedEnv,
+                    HOST: '127.0.0.1',
+                    PORT: '3000',
+                },
+            },
             {
                 name: 'server',
                 command: `${php} artisan serve --host=127.0.0.1 --port=8000`,
@@ -65,7 +76,7 @@ async function main() {
     const config = createDevStackConfig()
     const { result } = concurrently(config.commands, {
         prefix: 'name',
-        prefixColors: ['#93c5fd', '#c4b5fd', '#fdba74', '#67e8f9'],
+        prefixColors: ['#86efac', '#93c5fd', '#c4b5fd', '#fdba74', '#67e8f9'],
         killOthersOn: ['failure'],
         cwd: path.resolve(scriptDirectory, '..'),
     })

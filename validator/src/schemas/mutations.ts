@@ -7,7 +7,7 @@ export const JmpMutationSchema = z.discriminatedUnion('action', [
         action: z.literal('SPAWN_NODE'),
         node_id: NodeIdSchema,
         parent_id: NodeIdSchema.optional(),
-        node_type: z.enum(['HTTP_REQUEST', 'QUERY_DATABASE']),
+        node_type: z.enum(['HTTP_REQUEST', 'QUERY_DATABASE', 'BROWSER_COMMAND']),
         dependencies: z.array(NodeIdSchema).default([]),
     }).strict(),
     z.object({

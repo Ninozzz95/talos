@@ -63,6 +63,7 @@ final class TalosWorkspaceSetting extends Model
         'motion' => true,
         'ui_animation_profile' => true,
         'ui_animation_customization' => true,
+        'chat_layout' => true,
     ];
 
     private const THEME_MOTION_VALUES = [
@@ -207,6 +208,17 @@ final class TalosWorkspaceSetting extends Model
         'open_theme' => true,
     ];
 
+    private const CHAT_BUBBLE_SCALE_VALUES = [
+        'compact' => true,
+        'balanced' => true,
+        'expanded' => true,
+    ];
+
+    private const CHAT_COMPOSER_MODE_VALUES = [
+        'full' => true,
+        'minimal' => true,
+    ];
+
     public $incrementing = false;
 
     protected $keyType = 'string';
@@ -345,6 +357,15 @@ final class TalosWorkspaceSetting extends Model
                 $shortcuts = self::sanitizeKeyboardShortcuts($value);
                 if ($shortcuts !== []) {
                     $safe[$key] = $shortcuts;
+                }
+
+                continue;
+            }
+
+            if ($key === 'chat_layout') {
+                $layout = self::sanitizeChatLayout($value);
+                if ($layout !== []) {
+                    $safe[$key] = $layout;
                 }
 
                 continue;
@@ -505,6 +526,34 @@ final class TalosWorkspaceSetting extends Model
         return $safe;
     }
 
+    /**
+     * @param mixed $value
+     * @return array<string, bool|string>
+     */
+    private static function sanitizeChatLayout(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $safe = [];
+        $bubbleScale = $value['bubble_scale'] ?? null;
+        if (is_string($bubbleScale) && isset(self::CHAT_BUBBLE_SCALE_VALUES[$bubbleScale])) {
+            $safe['bubble_scale'] = $bubbleScale;
+        }
+
+        $composerMode = $value['composer_mode'] ?? null;
+        if (is_string($composerMode) && isset(self::CHAT_COMPOSER_MODE_VALUES[$composerMode])) {
+            $safe['composer_mode'] = $composerMode;
+        }
+
+        if (isset($value['advanced_rail_expanded']) && is_bool($value['advanced_rail_expanded'])) {
+            $safe['advanced_rail_expanded'] = $value['advanced_rail_expanded'];
+        }
+
+        return $safe;
+    }
+
     private static function normalizeKeyboardShortcut(string $binding): ?string
     {
         $trimmed = trim($binding);
@@ -642,6 +691,15 @@ final class TalosWorkspaceSetting extends Model
                     $animation = self::sanitizeUiAnimationCustomization($recordValue);
                     if ($animation !== []) {
                         $safeRecord[$key] = $animation;
+                    }
+
+                    continue;
+                }
+
+                if ($key === 'chat_layout') {
+                    $layout = self::sanitizeChatLayout($recordValue);
+                    if ($layout !== []) {
+                        $safeRecord[$key] = $layout;
                     }
 
                     continue;

@@ -10,11 +10,19 @@ use Illuminate\Support\Facades\Storage;
 
 final class TalosBrowserArtifactStore
 {
+    public const MAX_SCREENSHOT_BYTES = 5_000_000;
+
     /** @param array<string, mixed> $metadata */
     public function store(TalosBrowserSession $session, string $type, string $mime, string $contents, array $metadata = []): TalosBrowserArtifact
     {
         $id = (string) str()->uuid(); $path = "talos/browser/{$session->user_id}/{$session->id}/{$id}";
         Storage::disk('local')->put($path, $contents);
         return TalosBrowserArtifact::query()->create(['id' => $id, 'browser_session_id' => $session->id, 'user_id' => $session->user_id, 'type' => $type, 'mime' => $mime, 'storage_disk' => 'local', 'storage_path' => $path, 'sha256' => hash('sha256', $contents), 'metadata' => $metadata]);
+    }
+
+    public function discard(TalosBrowserArtifact $artifact): void
+    {
+        Storage::disk($artifact->storage_disk)->delete($artifact->storage_path);
+        $artifact->delete();
     }
 }

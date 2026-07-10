@@ -20,7 +20,7 @@ export const talosCommands: TalosCommand[] = [
     {
         id: 'open_browse',
         label: 'Open Browse',
-        description: 'Open the dedicated read-only Browser Chat surface.',
+        description: 'Enable read-only browser tools inside the current chat.',
         category: 'chat',
         risk: 'low',
         capability: 'talos.browser.read',

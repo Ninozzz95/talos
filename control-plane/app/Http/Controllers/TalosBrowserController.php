@@ -60,9 +60,9 @@ final class TalosBrowserController extends Controller
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) return $error;
         if (($error = $this->operable($browserSession)) instanceof JsonResponse) return $error;
         try { $worker = $this->client->screenshot($this->ownerRef((int) $browserSession->user_id), $browserSession->worker_session_id); } catch (BrowserWorkerException $exception) { return $this->workerError($exception); }
-        $base64 = $worker['base64'] ?? null; $bytes = is_string($base64) && $base64 !== '' ? base64_decode($base64, true) : false; if (! is_string($bytes) || $bytes === '') return $this->failure('Browser worker returned an invalid screenshot.');
+        $base64 = $worker['base64'] ?? null; $bytes = is_string($base64) && $base64 !== '' ? base64_decode($base64, true) : false; if (! is_string($bytes) || $bytes === '' || strlen($bytes) > TalosBrowserArtifactStore::MAX_SCREENSHOT_BYTES) return $this->failure('Browser worker returned an invalid screenshot.');
         $artifact = $this->artifacts->store($browserSession, 'screenshot', 'image/png', $bytes, ['width' => $worker['width'] ?? null, 'height' => $worker['height'] ?? null]);
-        $browserSession->update(['last_screenshot_artifact_id' => $artifact->id, 'last_seen_at' => now()]); $this->event($browserSession, 'screenshot.captured', 'worker', payload: ['artifact_id' => $artifact->id]);
+        $browserSession->update(['last_screenshot_artifact_id' => $artifact->id, 'last_seen_at' => now()]); $this->event($browserSession, 'screenshot.captured', 'worker', payload: ['operation' => 'screenshot', 'command_id' => (string) str()->uuid(), 'artifact_id' => $artifact->id, 'artifact_ids' => [$artifact->id]]);
         return response()->json(['data' => $artifact->toApiArray()], 201);
     }
     public function snapshot(Request $request, TalosBrowserSession $browserSession): JsonResponse

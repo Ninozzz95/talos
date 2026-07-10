@@ -15,11 +15,14 @@ class HttpJmpValidator implements JmpValidatorInterface
         private string $validatorUrl = 'http://127.0.0.1:3000/validate',
     ) {}
 
-    public function validate(array $mutations, array $context): ValidationResult
+    public function validate(array $mutations, array $context, ?array $allowedNodeTypes = null, ?array $allowedBrowserOperations = null, bool $browserModeEnabled = false): ValidationResult
     {
         $response = $this->http->postJson($this->validatorUrl, [
-            'mutations' => $mutations,
+            'mutations' => $this->transportMutations($mutations),
             'context' => $context,
+            'allowed_node_types' => $allowedNodeTypes,
+            'allowed_browser_operations' => $allowedBrowserOperations,
+            'browser_mode_enabled' => $browserModeEnabled,
         ]);
 
         if (!isset($response['valid']) || !\is_bool($response['valid'])) {
@@ -44,5 +47,24 @@ class HttpJmpValidator implements JmpValidatorInterface
             errors: $errors,
         );
     }
-}
 
+    /** @return list<array<string, mixed>> */
+    private function transportMutations(array $mutations): array
+    {
+        foreach ($mutations as $index => $mutation) {
+            if (! is_array($mutation) || ($mutation['action'] ?? null) !== 'MUTATE_PAYLOAD') {
+                continue;
+            }
+            $payload = $mutation['payload'] ?? null;
+            if (! is_array($payload)
+                || ! in_array($payload['operation'] ?? null, ['snapshot', 'screenshot'], true)
+                || ($payload['arguments'] ?? null) !== []) {
+                continue;
+            }
+
+            $mutations[$index]['payload']['arguments'] = new \stdClass();
+        }
+
+        return array_values($mutations);
+    }
+}

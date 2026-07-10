@@ -96,6 +96,20 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - Browser tests should prove user-visible flows: `/chat`, `/dashboard`, command palette, persisted-turn UI, file-context source provenance, replay fault filtering, benchmark compare/export, degraded readiness, responsive overflow, and screenshot evidence.
 - Generated Playwright reports and `test-results` are artifacts, not source.
 
+## Browser Command Contracts
+
+- Bare HTTP/HTTPS input may be normalized into server-owned `navigate` plus `snapshot` commands; model output never supplies run or session authority.
+- An unambiguous screenshot-only prompt must execute as a server-owned `screenshot` command and return persisted evidence without asking the model to decide whether the permitted capture is allowed. Keep the matcher narrow so capability questions, negations, and compound tasks still go through normal planning.
+- A short affirmative may confirm a screenshot only when the immediately preceding conversational turn is an explicit screenshot offer. Never reuse a stale offer across an intervening user turn.
+- PHP must encode empty `snapshot` and `screenshot` arguments as JSON objects (`{}`), not lists (`[]`), before calling the Node validator.
+- Snapshot observations returned to the planner must include the server-owned `evidence_hash` required by a later `read` command.
+- Screenshot storage has its own binary cap. Charge only the bounded observation inserted into the model prompt against the per-turn evidence budget, never the PNG byte length.
+- Successful durable Browser events must persist `operation`, `command_id`, and artifact IDs so activity type and evidence survive reload.
+- Button-driven and chat-planned screenshots must converge on the same owner-scoped artifact and authenticated preview endpoint.
+- Screenshot evidence is rendered by TALOS from owner-scoped artifact IDs. Model-authored Markdown images are inert and must never become clickable artifact URLs.
+- A navigation turn cannot return a grounded final answer until a later successful `snapshot` or `read` exists.
+- Exclude controlled operational Browser fault messages from future model history; retain them in run trace and replay instead.
+
 ## AVM Evidence Rules
 
 - AVM ON/OFF claims require the same prompt, model, context, evaluator, and stored logs.

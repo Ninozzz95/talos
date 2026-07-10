@@ -41,6 +41,21 @@ final class AlwaysValidHttpClient implements HttpClientInterface
     }
 }
 
+final class LegacyPolicyAwareHttpClient implements HttpClientInterface
+{
+    public bool $sawLegacyPolicy = false;
+
+    public function postJson(string $url, array $body): array
+    {
+        $this->sawLegacyPolicy = array_key_exists('allowed_node_types', $body)
+            && $body['allowed_node_types'] === null
+            && array_key_exists('allowed_browser_operations', $body)
+            && $body['allowed_browser_operations'] === null;
+
+        return ['valid' => $this->sawLegacyPolicy];
+    }
+}
+
 // Stub worker that always succeeds
 final class SuccessWorker implements NodeWorkerInterface
 {
@@ -152,11 +167,32 @@ function testDagSerializationContainsNodes(): void
     assertTrue(\str_contains($serialized, 'PENDING'), 'Serialization should contain node status.');
 }
 
+function testMainLoopLegacyTwoArgumentValidationRemainsCompatible(): void
+{
+    $registry = new WorkerRegistry();
+    $registry->register('HTTP_REQUEST', new SuccessWorker());
+    $orchestrator = new ASTOrchestrator($registry);
+    $llm = new MockLLM([
+        json_encode([
+            ['action' => 'SPAWN_NODE', 'node_id' => 'legacy_http', 'node_type' => 'HTTP_REQUEST'],
+            ['action' => 'MUTATE_PAYLOAD', 'node_id' => 'legacy_http', 'payload' => ['url' => 'https://example.com']],
+        ]),
+    ]);
+    $http = new LegacyPolicyAwareHttpClient();
+    $controller = new MainLoopController($orchestrator, $llm, new JmpValidatorClient($http), 1);
+
+    $controller->run();
+
+    assertTrue($http->sawLegacyPolicy, 'MainLoopController two-argument validation should preserve absent legacy policy.');
+    assertSameValue(NodeStatus::SUCCESS, $orchestrator->getNodeStatus('legacy_http'), 'Legacy main loop should still validate and execute allowed historical nodes.');
+}
+
 $tests = [
     'testMainLoopBuildsAndExecutesDag',
     'testMainLoopHandlesValidationFault',
     'testMainLoopStopsAtMaxCycles',
     'testDagSerializationContainsNodes',
+    'testMainLoopLegacyTwoArgumentValidationRemainsCompatible',
 ];
 
 foreach ($tests as $test) {

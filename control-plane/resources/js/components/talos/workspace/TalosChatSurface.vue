@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
-import { AlertCircle, BarChart3, Loader2, ShieldCheck } from '@lucide/vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { AlertCircle, ArrowDown, BarChart3, Loader2, ShieldCheck } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
+import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
+import TalosMessageContent from '../chat/TalosMessageContent.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosGuidedStart from './TalosGuidedStart.vue'
 import { resolveTalosWelcomePrompt } from '../../../lib/talosWelcomePrompts'
 import type { TalosMessage } from '../../../lib/talosTypes'
+import type { TalosBrowserActivity as TalosBrowserActivityItem, TalosChatBubbleScale } from '../../../lib/talosTypes'
+import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 
 type MessageSource = {
     context_set_id?: string
@@ -38,6 +42,9 @@ const props = defineProps<{
     showWelcomeMessage: boolean
     fullWidthChat: boolean
     sensitiveBlur: boolean
+    bubbleScale: TalosChatBubbleScale
+    browserActivities: TalosBrowserActivityItem[]
+    viewport: TalosChatViewportController
 }>()
 
 const emit = defineEmits<{
@@ -55,13 +62,23 @@ const emit = defineEmits<{
 
 const chatThreadEl = ref<HTMLElement | null>(null)
 const welcomePrompt = computed(() => resolveTalosWelcomePrompt(props.welcomePromptId, props.welcomePromptId ?? 'talos'))
+const unseenUpdates = computed(() => props.viewport.unseenCount.value)
 
 function scrollToBottom() {
-    const el = chatThreadEl.value
-    if (el) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    }
+    void props.viewport.followLatest()
 }
+
+onMounted(() => props.viewport.registerThread(chatThreadEl.value))
+onBeforeUnmount(() => props.viewport.registerThread(null))
+watch(() => [props.messages.length, props.browserActivities.length, props.expandedEvidenceMessageIds.length] as const, (counts, previousCounts) => {
+    const incoming = counts.some((count, index) => count > (previousCounts?.[index] ?? 0))
+    if (!incoming) return
+    if (props.viewport.atLiveEdge.value) {
+        void props.viewport.followLatest()
+    } else {
+        props.viewport.noteIncomingContent()
+    }
+})
 
 function formatTime(value: string) {
     return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -220,8 +237,21 @@ defineExpose({ scrollToBottom })
 </script>
 
 <template>
-    <section ref="chatThreadEl" class="talos-chat-thread relative z-10 min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-48 pt-7 md:px-6 lg:pb-52" aria-label="TALOS chat thread">
-        <div class="mx-auto flex min-h-full w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
+    <section ref="chatThreadEl" class="talos-chat-thread relative z-10 min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 md:px-6" aria-label="TALOS chat thread">
+        <Button
+            v-if="unseenUpdates > 0"
+            type="button"
+            size="sm"
+            class="fixed bottom-[calc(var(--talos-composer-height,168px)+2rem)] left-1/2 z-30 -translate-x-1/2 shadow-lg"
+            aria-label="Return to latest"
+            @click="viewport.followLatest()"
+        >
+            <ArrowDown class="h-4 w-4" />
+            Return to latest
+            <span class="rounded bg-black/15 px-1.5 py-0.5 text-[10px]">{{ unseenUpdates }}</span>
+        </Button>
+        <div class="mx-auto flex min-h-full min-w-0 w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
+            <TalosBrowserActivity :activities="browserActivities" />
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                 <span>{{ uiError || sessionError || messageError }}</span>
@@ -284,9 +314,11 @@ defineExpose({ scrollToBottom })
                     class="talos-chat-message flex"
                     :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
                     :data-message-role="message.role"
+                    :data-message-id="message.id"
                 >
                     <div
-                        class="max-w-[760px] rounded-md border px-4 py-3"
+                        class="talos-message-bubble min-w-0 max-w-full rounded-md border"
+                        :data-bubble-scale="bubbleScale"
                         :class="message.role === 'user'
                             ? 'border-[var(--talos-border-strong)] bg-[var(--talos-user)] text-[var(--talos-user-text)]'
                             : message.role === 'system'
@@ -298,9 +330,14 @@ defineExpose({ scrollToBottom })
                             <span>{{ messageMeta(message) }}</span>
                             <span>{{ formatTime(message.created_at) }}</span>
                         </div>
+                        <TalosMessageContent
+                            v-if="message.role === 'assistant'"
+                            :content="message.content"
+                            :sensitive="sensitiveBlur && messageContainsSensitiveText(message.content)"
+                        />
                         <p
-                            class="whitespace-pre-wrap text-sm leading-6"
-                            :class="sensitiveBlur && message.role === 'assistant' && messageContainsSensitiveText(message.content) ? 'talos-sensitive-output' : ''"
+                            v-else
+                            class="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]"
                         >
                             {{ message.content }}
                         </p>
@@ -345,13 +382,13 @@ defineExpose({ scrollToBottom })
                             v-if="message.role === 'assistant' && messageEvidenceOpen(message)"
                             :message="message"
                         />
-                        <div v-if="message.role === 'assistant' && messageSources(message).length" class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                        <div v-if="message.role === 'assistant' && messageSources(message).length" class="mt-3 min-w-0 max-w-full overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                             <div class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Source provenance</div>
                             <div class="mt-2 space-y-2">
                                 <article
                                     v-for="(source, index) in messageSources(message)"
                                     :key="`${source.context_set_id ?? 'context'}-${source.chunk_id ?? source.file_id ?? index}`"
-                                    class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2"
+                                    class="min-w-0 max-w-full overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2"
                                 >
                                     <div class="truncate text-xs font-semibold text-[var(--talos-text)]">{{ sourceLabel(source, index) }}</div>
                                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ sourcePreview(source) }}</p>
@@ -360,8 +397,8 @@ defineExpose({ scrollToBottom })
                         </div>
                         <div v-if="message.role === 'assistant' && browserEvidence(message)" data-testid="talos-browser-evidence-disclosure" class="mt-3 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3 text-xs">
                             <div class="font-semibold text-[var(--talos-warning)]">Untrusted browser evidence</div>
-                            <div class="mt-1 truncate text-[var(--talos-text)]">{{ browserEvidence(message)?.title || browserEvidence(message)?.url || 'Captured browser page' }}</div>
-                            <div class="mt-1 text-[var(--talos-muted)]">{{ browserEvidence(message)?.text_digest }}</div>
+                            <div class="mt-1 break-words text-[var(--talos-text)] [overflow-wrap:anywhere]">{{ browserEvidence(message)?.title || browserEvidence(message)?.url || 'Captured browser page' }}</div>
+                            <div class="mt-1 break-words [overflow-wrap:anywhere] text-[var(--talos-muted)]">{{ browserEvidence(message)?.text_digest }}</div>
                         </div>
                     </div>
                 </article>
@@ -369,7 +406,7 @@ defineExpose({ scrollToBottom })
                 <div v-if="sending" class="flex justify-start">
                     <div class="inline-flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 py-3 text-sm text-[var(--talos-muted)]">
                         <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
-                        Kadmos is processing
+                        Processing
                     </div>
                 </div>
             </div>
@@ -380,5 +417,15 @@ defineExpose({ scrollToBottom })
 <style scoped>
 .talos-chat-thread {
     scrollbar-gutter: stable;
+    padding-top: calc(1.75rem + var(--talos-chat-focus-top, 0px));
+    padding-bottom: calc(var(--talos-composer-height, 168px) + env(safe-area-inset-bottom) + 48px);
+}
+
+.talos-message-bubble {
+    max-width: var(--talos-message-max-width, 760px);
+    padding-inline: var(--talos-message-padding-inline, 1rem);
+    padding-block: var(--talos-message-padding-block, 0.75rem);
+    font-size: var(--talos-message-font-size, 0.875rem);
+    line-height: var(--talos-message-line-height, 1.5rem);
 }
 </style>

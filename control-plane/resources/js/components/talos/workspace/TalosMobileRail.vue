@@ -20,35 +20,42 @@ import {
     Wrench,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
 import type { TalosWindowId } from '../../../composables/useTalosWindows'
 
 const props = defineProps<{
     creatingSession: boolean
     visibility: Record<string, boolean>
+    advancedExpanded?: boolean
+    activeIds?: string[]
 }>()
 
 const emit = defineEmits<{
     newChat: []
     openWindow: [windowId: TalosWindowId]
+    toggleAdvanced: []
 }>()
 
 const mobileRailItems: Array<{ id: TalosWindowId; label: string; icon: unknown }> = [
     { id: 'runtime', label: 'Runtime', icon: Activity },
-    { id: 'search', label: 'Knowledge', icon: Search },
-    { id: 'brain', label: 'Brain', icon: Brain },
     { id: 'calendar', label: 'Calendar', icon: CalendarDays },
     { id: 'compare', label: 'Compare', icon: BarChart3 },
     { id: 'model_lab', label: 'Model Lab', icon: FlaskConical },
     { id: 'research', label: 'Deep Research', icon: BookOpen },
     { id: 'library', label: 'Library', icon: FileArchive },
     { id: 'gallery', label: 'Artifacts', icon: Image },
-    { id: 'notes', label: 'Notes', icon: NotebookPen },
-    { id: 'tasks', label: 'Tasks', icon: ListTodo },
     { id: 'browse', label: 'Browse', icon: Globe2 },
     { id: 'settings', label: 'Settings', icon: Settings },
     { id: 'theme', label: 'Theme', icon: Palette },
-    { id: 'doctor', label: 'Doctor', icon: Stethoscope },
-    { id: 'tools', label: 'Tools', icon: Wrench },
+]
+
+const advancedItems: TalosAdvancedRailItem[] = [
+    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
+    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
+    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
+    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
+    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
+    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
 ]
 
 const visibleMobileRailItems = computed(() => mobileRailItems.filter((item) => {
@@ -73,6 +80,10 @@ const visibleMobileRailItems = computed(() => mobileRailItems.filter((item) => {
 
     return props.visibility[item.id] !== false
 }))
+const visibleAdvancedItems = computed(() => advancedItems.filter((item) => item.id === 'search'
+    ? props.visibility.search !== false || props.visibility.library !== false
+    : props.visibility[item.id] !== false))
+const activeAdvanced = computed(() => visibleAdvancedItems.value.some((item) => (props.activeIds ?? []).includes(item.id)))
 </script>
 
 <template>
@@ -94,5 +105,15 @@ const visibleMobileRailItems = computed(() => mobileRailItems.filter((item) => {
         >
             <component :is="item.icon" class="h-4 w-4 text-[var(--talos-accent)]" />
         </Button>
+        <TalosAdvancedRailGroup
+            v-if="visibleAdvancedItems.length"
+            :items="visibleAdvancedItems"
+            :active-ids="activeIds ?? []"
+            :collapsed="false"
+            :expanded="Boolean(advancedExpanded) || activeAdvanced"
+            id="talos-advanced-items-mobile"
+            @toggle="emit('toggleAdvanced')"
+            @open="(id) => emit('openWindow', id as TalosWindowId)"
+        />
     </div>
 </template>

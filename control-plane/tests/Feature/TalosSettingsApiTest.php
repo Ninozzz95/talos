@@ -155,6 +155,90 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonMissing(['encrypted_secret' => 'provider-secret']);
     }
 
+    public function test_settings_sanitize_bounded_chat_layout_preferences(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'chat_layout' => [
+                    'bubble_scale' => 'expanded',
+                    'composer_mode' => 'minimal',
+                    'advanced_rail_expanded' => true,
+                    'unknown' => 'discard-me',
+                    'api_key' => 'discard-secret',
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.preferences.chat_layout.bubble_scale', 'expanded')
+            ->assertJsonPath('data.preferences.chat_layout.composer_mode', 'minimal')
+            ->assertJsonPath('data.preferences.chat_layout.advanced_rail_expanded', true);
+
+        $layout = $response->json('data.preferences.chat_layout');
+        $this->assertSame([
+            'bubble_scale' => 'expanded',
+            'composer_mode' => 'minimal',
+            'advanced_rail_expanded' => true,
+        ], $layout);
+
+        $invalid = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'chat_layout' => [
+                    'bubble_scale' => 'giant',
+                    'composer_mode' => 'hidden',
+                    'advanced_rail_expanded' => 'yes',
+                ],
+            ],
+        ])->assertOk();
+
+        $this->assertArrayNotHasKey('chat_layout', $invalid->json('data.preferences'));
+    }
+
+    public function test_theme_policy_lock_blocks_visual_chat_layout_writes_but_not_advanced_disclosure(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme_policy_locked' => true,
+                'theme' => 'forge',
+                'chat_layout' => [
+                    'bubble_scale' => 'balanced',
+                    'composer_mode' => 'full',
+                    'advanced_rail_expanded' => false,
+                ],
+            ],
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'chat_layout' => ['bubble_scale' => 'compact'],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Theme changes are locked by workspace policy.');
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_policy_locked' => true,
+                'chat_layout' => ['advanced_rail_expanded' => true],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.chat_layout.advanced_rail_expanded', true)
+            ->assertJsonPath('data.preferences.chat_layout.bubble_scale', 'balanced')
+            ->assertJsonPath('data.preferences.chat_layout.composer_mode', 'full')
+            ->assertJsonPath('data.preferences.theme', 'forge')
+            ->assertJsonPath('data.preferences.theme_policy_locked', true);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme_policy_locked' => false],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Theme changes are locked by workspace policy.');
+    }
+
     public function test_settings_validate_default_references(): void
     {
         $this->patchJson('/api/talos/settings', [
@@ -366,6 +450,12 @@ final class TalosSettingsApiTest extends TestCase
                             ],
                         ],
                         'motion' => 'subtle',
+                        'chat_layout' => [
+                            'bubble_scale' => 'expanded',
+                            'composer_mode' => 'minimal',
+                            'advanced_rail_expanded' => true,
+                            'unknown' => 'drop-me',
+                        ],
                         'script' => 'alert(1)',
                         'style' => '.x{}',
                         'api_key' => 'library-secret',
@@ -411,6 +501,9 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme_library.0.tokens.background', '#02080c')
             ->assertJsonPath('data.preferences.theme_library.0.area_tokens.chat.accent', '#31d6c8')
             ->assertJsonPath('data.preferences.theme_library.0.motion', 'subtle')
+            ->assertJsonPath('data.preferences.theme_library.0.chat_layout.bubble_scale', 'expanded')
+            ->assertJsonPath('data.preferences.theme_library.0.chat_layout.composer_mode', 'minimal')
+            ->assertJsonPath('data.preferences.theme_library.0.chat_layout.advanced_rail_expanded', true)
             ->assertJsonPath('data.preferences.theme', 'violet')
             ->assertJsonPath('data.preferences.workspace_default_theme', 'violet')
             ->assertJsonPath('data.preferences.theme_motion', 'cinematic')
@@ -429,6 +522,7 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertArrayNotHasKey('style', $preferences['theme_library'][0]['tokens']);
         $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]['area_tokens']['chat']);
         $this->assertArrayNotHasKey('unknown', $preferences['theme_library'][0]['area_tokens']);
+        $this->assertArrayNotHasKey('unknown', $preferences['theme_library'][0]['chat_layout']);
         $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]);
         $this->assertArrayNotHasKey('style', $preferences['theme_library'][0]);
         $this->assertArrayNotHasKey('api_key', $preferences['theme_library'][0]);

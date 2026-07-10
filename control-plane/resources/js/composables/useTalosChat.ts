@@ -1,5 +1,5 @@
 import { TalosApiError, talosFetch } from '../lib/api'
-import type { TalosMessage, TalosRun } from '../lib/talosTypes'
+import type { TalosBrowserActivity, TalosMessage, TalosRun } from '../lib/talosTypes'
 import type { CreateTalosMessagePayload } from './useTalosSessions'
 
 export type TalosChatError = {
@@ -22,6 +22,8 @@ export type TalosChatProxyResponse = {
     mutations?: unknown[]
     dag?: unknown
     run?: TalosRun
+    browser_activities?: unknown
+    used_browser_context?: unknown
     [key: string]: unknown
 }
 
@@ -34,7 +36,10 @@ type SendPersistentChatOptions = {
     modelProfileId?: string | null
     modelRoutingProfileId?: string | null
     contextSetId?: string | null
-    browserContextSessionId?: string | null
+    browserMode?: {
+        enabled: boolean
+        browserSessionId: string | null
+    }
     chatEndpoint?: string
     userMessageMetadata?: Record<string, unknown>
     persistMessage: PersistMessage
@@ -60,6 +65,45 @@ function summarizeJmp(mutations: unknown) {
 
 function normalizeUsedContext(value: unknown) {
     return Array.isArray(value) ? value : []
+}
+
+const browserOperations = new Set(['session_start', 'navigate', 'snapshot', 'screenshot', 'read'])
+const browserActivityStatuses = new Set(['queued', 'running', 'succeeded', 'failed', 'denied'])
+
+function normalizeBrowserActivities(value: unknown): TalosBrowserActivity[] {
+    if (!Array.isArray(value)) {
+        return []
+    }
+
+    return value.flatMap((candidate) => {
+        const data = record(candidate)
+        const id = stringValue(data?.id)
+        const operation = stringValue(data?.operation)
+        const status = stringValue(data?.status)
+        const label = stringValue(data?.label)
+        const browserSessionId = stringValue(data?.browser_session_id)
+        const occurredAt = stringValue(data?.occurred_at)
+
+        if (!id || !operation || !browserOperations.has(operation) || !status || !browserActivityStatuses.has(status)
+            || !label || !browserSessionId || !occurredAt) {
+            return []
+        }
+
+        const artifactIds = Array.isArray(data?.artifact_ids)
+            ? data.artifact_ids.flatMap((artifactId) => stringValue(artifactId) ?? [])
+            : []
+
+        return [{
+            id,
+            operation,
+            status,
+            label,
+            run_id: stringValue(data?.run_id),
+            browser_session_id: browserSessionId,
+            artifact_ids: artifactIds,
+            occurred_at: occurredAt,
+        } as TalosBrowserActivity]
+    })
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -166,6 +210,7 @@ export function useTalosChat() {
                 run: response.run ?? null,
                 used_context: normalizeUsedContext(response.used_context),
                 used_browser_context: response.used_browser_context ?? null,
+                browser_activities: normalizeBrowserActivities(response.browser_activities),
                 model_routing: response.model_routing ?? null,
             },
         })
@@ -214,8 +259,11 @@ export function useTalosChat() {
             if (options.contextSetId) {
                 payload.context_set_id = options.contextSetId
             }
-            if (options.browserContextSessionId) {
-                payload.browser_context = { browser_session_id: options.browserContextSessionId }
+            if (options.browserMode?.enabled && options.browserMode.browserSessionId) {
+                payload.browser_mode = {
+                    enabled: true,
+                    browser_session_id: options.browserMode.browserSessionId,
+                }
             }
 
             const response = await talosFetch<TalosChatProxyResponse>(options.chatEndpoint ?? '/api/talos/chat', {
