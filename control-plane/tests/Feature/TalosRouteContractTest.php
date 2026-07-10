@@ -29,6 +29,18 @@ final class TalosRouteContractTest extends TestCase
             ->assertSee('data-talos-surface="workspace"', false);
     }
 
+    public function test_browse_renders_an_authenticated_dedicated_browse_surface(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/browse')
+            ->assertOk()
+            ->assertSee('talos-workspace-root')
+            ->assertSee('data-talos-surface="browse"', false);
+    }
+
     public function test_root_removes_stale_local_vite_hot_file_before_rendering(): void
     {
         $this->withoutVite();

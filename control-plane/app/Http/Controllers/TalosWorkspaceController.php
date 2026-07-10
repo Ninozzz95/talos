@@ -13,6 +13,16 @@ final class TalosWorkspaceController extends Controller
 {
     public function __invoke(TalosFirstRunService $firstRun): View|RedirectResponse
     {
+        return $this->renderSurface($firstRun, 'workspace');
+    }
+
+    public function browse(TalosFirstRunService $firstRun): View|RedirectResponse
+    {
+        return $this->renderSurface($firstRun, 'browse');
+    }
+
+    private function renderSurface(TalosFirstRunService $firstRun, string $surface): View|RedirectResponse
+    {
         $this->removeStaleLocalViteHotFile();
 
         if ($firstRun->setupRequired()) {
@@ -23,7 +33,7 @@ final class TalosWorkspaceController extends Controller
             return redirect()->guest('/login');
         }
 
-        return view('workspace', ['surface' => 'workspace']);
+        return view('workspace', ['surface' => $surface]);
     }
 
     private function removeStaleLocalViteHotFile(): void

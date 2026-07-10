@@ -49,6 +49,10 @@ return [
     ],
 
     'talos' => [
+        'browser' => [
+            'worker_url' => env('TALOS_BROWSER_WORKER_URL'),
+            'worker_token' => env('TALOS_BROWSER_WORKER_TOKEN'),
+        ],
         'registry_write_token' => env('TALOS_REGISTRY_WRITE_TOKEN'),
         'validator_health_url' => env('TALOS_VALIDATOR_HEALTH_URL'),
         'model_provider_allowed_hosts' => array_values(array_filter(array_map(

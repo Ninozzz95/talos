@@ -11,6 +11,7 @@ use App\Http\Controllers\TalosAdminDoctorController;
 use App\Http\Controllers\TalosAdminPolicyController;
 use App\Http\Controllers\TalosAdminShellController;
 use App\Http\Controllers\TalosArtifactController;
+use App\Http\Controllers\TalosBrowserController;
 use App\Http\Controllers\TalosBenchmarkGroupController;
 use App\Http\Controllers\TalosCalendarDraftController;
 use App\Http\Controllers\TalosChatController;
@@ -43,11 +44,36 @@ use App\Http\Controllers\TalosTaskController;
 use App\Http\Controllers\TalosToolController;
 use App\Http\Controllers\TraceReplayController;
 use App\Http\Middleware\EnsureTalosApiAuthenticated;
+use App\Models\TalosBrowserArtifact;
+use App\Models\TalosBrowserSession;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Route;
+
+Route::bind('browserSession', function (string $value): TalosBrowserSession {
+    $session = TalosBrowserSession::query()->find($value);
+    if ($session instanceof TalosBrowserSession) return $session;
+    throw new HttpResponseException(response()->json(['code' => 'TALOS_BROWSER_NOT_FOUND', 'message' => 'Browser resource was not found.', 'details' => []], 404));
+});
+
+Route::bind('browserArtifact', function (string $value): TalosBrowserArtifact {
+    $artifact = TalosBrowserArtifact::query()->find($value);
+    if ($artifact instanceof TalosBrowserArtifact) return $artifact;
+    throw new HttpResponseException(response()->json(['code' => 'TALOS_BROWSER_NOT_FOUND', 'message' => 'Browser resource was not found.', 'details' => []], 404));
+});
 
 Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (): void {
     Route::post('/talos/chat', TalosChatController::class);
     Route::prefix('/talos')->group(function (): void {
+        Route::get('/browser/sessions', [TalosBrowserController::class, 'index']);
+        Route::post('/browser/sessions', [TalosBrowserController::class, 'store']);
+        Route::get('/browser/sessions/{browserSession}', [TalosBrowserController::class, 'show']);
+        Route::delete('/browser/sessions/{browserSession}', [TalosBrowserController::class, 'destroy']);
+        Route::post('/browser/sessions/{browserSession}/navigate', [TalosBrowserController::class, 'navigate']);
+        Route::post('/browser/sessions/{browserSession}/screenshot', [TalosBrowserController::class, 'screenshot']);
+        Route::post('/browser/sessions/{browserSession}/snapshot', [TalosBrowserController::class, 'snapshot']);
+        Route::get('/browser/sessions/{browserSession}/events', [TalosBrowserController::class, 'events']);
+        Route::get('/browser/artifacts/{browserArtifact}', [TalosBrowserController::class, 'artifact']);
+        Route::get('/browser/artifacts/{browserArtifact}/preview', [TalosBrowserController::class, 'preview']);
         Route::get('/model-profiles', [TalosModelProfileController::class, 'index']);
         Route::post('/model-profiles', [TalosModelProfileController::class, 'store']);
         Route::post('/model-profiles/probe-draft', [TalosModelProfileController::class, 'probeDraft']);

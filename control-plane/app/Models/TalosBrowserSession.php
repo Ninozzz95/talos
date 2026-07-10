@@ -1,0 +1,56 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+final class TalosBrowserSession extends Model
+{
+    use HasUuids;
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+    protected $fillable = ['user_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
+
+    protected function casts(): array
+    {
+        return ['capabilities' => 'array', 'policy' => 'array', 'expires_at' => 'datetime', 'last_seen_at' => 'datetime'];
+    }
+
+    /** @return HasMany<TalosBrowserEvent, $this> */
+    public function events(): HasMany { return $this->hasMany(TalosBrowserEvent::class, 'browser_session_id'); }
+    /** @return HasMany<TalosBrowserArtifact, $this> */
+    public function artifacts(): HasMany { return $this->hasMany(TalosBrowserArtifact::class, 'browser_session_id'); }
+
+    public function toApiArray(): array
+    {
+        return ['id' => $this->id, 'status' => $this->status, 'mode' => $this->mode, 'current_url' => $this->current_url, 'current_title' => $this->current_title, 'viewport' => ['width' => $this->viewport_width, 'height' => $this->viewport_height], 'capabilities' => $this->apiCapabilities(), 'policy' => $this->policy, 'last_snapshot_artifact_id' => $this->last_snapshot_artifact_id, 'last_screenshot_artifact_id' => $this->last_screenshot_artifact_id, 'expires_at' => $this->expires_at?->toJSON(), 'last_seen_at' => $this->last_seen_at?->toJSON(), 'created_at' => $this->created_at?->toJSON(), 'updated_at' => $this->updated_at?->toJSON()];
+    }
+
+    /** @return list<string> */
+    private function apiCapabilities(): array
+    {
+        $capabilities = is_array($this->capabilities) ? $this->capabilities : [];
+        if (array_is_list($capabilities)) {
+            $supported = ['navigate', 'screenshot', 'snapshot'];
+
+            return array_values(array_unique(array_filter(
+                $capabilities,
+                static fn (mixed $capability): bool => is_string($capability) && in_array($capability, $supported, true),
+            )));
+        }
+
+        $names = [];
+        foreach (['navigation' => 'navigate', 'screenshots' => 'screenshot', 'accessibilitySnapshot' => 'snapshot'] as $workerName => $apiName) {
+            if (($capabilities[$workerName] ?? false) === true) {
+                $names[] = $apiName;
+            }
+        }
+
+        return $names;
+    }
+}

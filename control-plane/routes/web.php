@@ -9,6 +9,7 @@ use App\Http\Controllers\TalosWorkspaceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', TalosWorkspaceController::class);
+Route::get('/browse', [TalosWorkspaceController::class, 'browse']);
 Route::get('/readyz', TalosReadinessController::class);
 
 Route::get('/setup', [TalosSetupController::class, 'show'])->name('setup');

@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test'
+import { deflateSync } from 'node:zlib'
 
 type Json = Record<string, unknown> | unknown[]
 type PersistenceMode = 'persistent' | 'temporary'
@@ -22,6 +23,46 @@ function json(route: Route, payload: Json, status = 200) {
 
 function emptyData(route: Route) {
     return json(route, { data: [] })
+}
+
+function pngChunk(type: string, data: Buffer) {
+    const typeBuffer = Buffer.from(type, 'ascii')
+    let crc = 0xffffffff
+    for (const byte of Buffer.concat([typeBuffer, data])) {
+        crc ^= byte
+        for (let bit = 0; bit < 8; bit += 1) {
+            crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0)
+        }
+    }
+
+    const length = Buffer.alloc(4)
+    const checksum = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    checksum.writeUInt32BE((crc ^ 0xffffffff) >>> 0)
+    return Buffer.concat([length, typeBuffer, data, checksum])
+}
+
+function browserScreenshotFixture() {
+    const width = 48
+    const height = 24
+    const rows = Buffer.alloc((width * 3 + 1) * height)
+    for (let y = 0; y < height; y += 1) {
+        const row = y * (width * 3 + 1)
+        rows[row] = 0
+        for (let x = 0; x < width; x += 1) {
+            const pixel = row + 1 + (x * 3)
+            rows[pixel] = x < 16 ? 28 : x < 32 ? 35 : 14
+            rows[pixel + 1] = y < 12 ? 116 : 55
+            rows[pixel + 2] = x < 32 ? 175 : 98
+        }
+    }
+
+    const header = Buffer.alloc(13)
+    header.writeUInt32BE(width, 0)
+    header.writeUInt32BE(height, 4)
+    header[8] = 8
+    header[9] = 2
+    return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0))])
 }
 
 function hasSecretPreferenceKey(value: unknown): boolean {
@@ -1194,6 +1235,11 @@ export type InstallTalosApiMocksOptions = {
         metadata?: Record<string, unknown>
         messages?: InitialSessionMessage[]
     }>
+    browser?: {
+        capabilities?: string[]
+        createStatuses?: string[]
+        deny?: 'navigate' | 'screenshot' | 'snapshot'
+    }
 }
 
 export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}) {
@@ -1220,6 +1266,11 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         }),
     ]
     let createdSessionCount = 0
+    let browserSession: Record<string, unknown> | null = null
+    let browserEvents: Record<string, unknown>[] = []
+    let browserScreenshotCaptured = false
+    let browserSnapshotCaptured = false
+    let browserCreateCount = 0
     const messagesBySession = new Map<string, Record<string, unknown>[]>()
     let sessions = (options.initialSessions ?? []).map((session) => sessionPayload(
         session.title,
@@ -1291,10 +1342,75 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         const path = url.pathname
         const method = request.method()
 
+        if (path === '/api/talos/browser/sessions' && method === 'GET') {
+            return json(route, { data: browserSession ? [browserSession] : [] })
+        }
+
+        if (path === '/api/talos/browser/sessions' && method === 'POST') {
+            if (request.postData() !== '{}') return json(route, { message: 'Browse session create body must be an empty object.' }, 422)
+            const status = options.browser?.createStatuses?.[browserCreateCount] ?? 'active'
+            browserCreateCount += 1
+            browserSession = {
+                id: 'browser-session-e2e', status, mode: 'read_only', capabilities: options.browser?.capabilities ?? ['navigate', 'screenshot', 'snapshot'],
+                current_url: null, current_title: null, created_at: now, updated_at: now,
+            }
+            browserEvents = [{ id: 'browser-event-e2e-1', type: 'session.created', actor: 'system', created_at: now }]
+            return json(route, { data: browserSession }, 201)
+        }
+
+        if (path === '/api/talos/browser/sessions/browser-session-e2e' && method === 'GET') {
+            return json(route, { data: browserSession })
+        }
+
+        if (path === '/api/talos/browser/sessions/browser-session-e2e/events' && method === 'GET') {
+            return json(route, { data: browserEvents })
+        }
+
+        if (path === '/api/talos/browser/sessions/browser-session-e2e/navigate' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            if (options.browser?.deny === 'navigate') return json(route, { message: 'Navigation denied by Browse policy.' }, 403)
+            if (body.url !== 'https://fixture.example.test/evidence') return json(route, { message: 'Unexpected Browse URL.' }, 422)
+            browserSession = { ...browserSession, current_url: body.url, current_title: 'Fixture evidence page', updated_at: now }
+            browserEvents = [...browserEvents, { id: 'browser-event-e2e-2', type: 'navigation.completed', actor: 'worker', created_at: now }]
+            return json(route, { data: browserSession })
+        }
+
+        if (path === '/api/talos/browser/sessions/browser-session-e2e/screenshot' && method === 'POST') {
+            if (request.postData() !== '{}') return json(route, { message: 'Browse screenshot body must be an empty object.' }, 422)
+            if (options.browser?.deny === 'screenshot') return json(route, { message: 'Screenshot denied by Browse policy.' }, 403)
+            browserScreenshotCaptured = true
+            browserSession = { ...browserSession, last_screenshot_artifact_id: 'browser-screenshot-e2e', updated_at: now }
+            return json(route, { data: { id: 'browser-screenshot-e2e', preview_url: '/api/talos/browser/artifacts/browser-screenshot-e2e/preview' } }, 201)
+        }
+
+        if (path === '/api/talos/browser/sessions/browser-session-e2e/snapshot' && method === 'POST') {
+            if (request.postData() !== '{}') return json(route, { message: 'Browse snapshot body must be an empty object.' }, 422)
+            if (options.browser?.deny === 'snapshot') return json(route, { message: 'Snapshot denied by Browse policy.' }, 403)
+            browserSnapshotCaptured = true
+            browserSession = { ...browserSession, last_snapshot_artifact_id: 'browser-snapshot-e2e', updated_at: now }
+            return json(route, { data: { id: 'browser-snapshot-e2e' } }, 201)
+        }
+
+        if (path === '/api/talos/browser/artifacts/browser-screenshot-e2e/preview' && method === 'GET' && browserScreenshotCaptured) {
+            return route.fulfill({ status: 200, contentType: 'image/png', body: browserScreenshotFixture() })
+        }
+
+        if (path === '/api/talos/browser/artifacts/browser-snapshot-e2e/preview' && method === 'GET' && browserSnapshotCaptured) {
+            return json(route, { data: { preview_available: true, snapshot: { untrusted: true, text_digest: 'fixture-snapshot-digest', nodes: [{ role: 'main', name: 'Fixture evidence', ref: 'node-1', level: 1 }] } } })
+        }
+
+        if (path.startsWith('/api/talos/browser/')) {
+            return json(route, { message: `Unhandled Browse mock request: ${method} ${path}` }, 405)
+        }
+
         if (path === '/api/talos/model-profiles' && method === 'GET') {
             return json(route, {
                 data: modelProfiles,
             })
+        }
+
+        if (path === '/api/talos/model-routing-profiles' && method === 'GET') {
+            return emptyData(route)
         }
 
         if (path === '/api/talos/model-profiles/probe-draft' && method === 'POST') {
@@ -1502,6 +1618,8 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         if (path === '/api/talos/chat' && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             const contextSetId = typeof body.context_set_id === 'string' ? body.context_set_id : null
+            const browserContext = body.browser_context as Record<string, unknown> | undefined
+            const browserSessionId = typeof browserContext?.browser_session_id === 'string' ? browserContext.browser_session_id : null
 
             return json(route, {
                 text: contextSetId
@@ -1520,6 +1638,13 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                         preview: 'Workflow file says approve the deployment checklist.',
                     },
                 ] : [],
+                used_browser_context: browserSessionId ? {
+                    session_id: browserSessionId,
+                    snapshot_artifact_id: 'browser-snapshot-e2e',
+                    title: 'Fixture evidence page',
+                    text_digest: 'fixture-snapshot-digest',
+                    untrusted: true,
+                } : null,
                 run: {
                     id: 'run-e2e',
                     session_id: 'session-e2e',

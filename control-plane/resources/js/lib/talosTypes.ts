@@ -20,6 +20,7 @@ export type RunStatus =
     | 'cancelled'
 
 export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
+export type TalosSessionSurface = 'chat' | 'browse'
 export type TalosRunMode = 'avm_on' | 'avm_off_direct' | 'tool_agent'
     | 'avm_off'
     | 'verified_execution'
@@ -39,6 +40,7 @@ export type TalosSession = {
     id: string
     user_id?: number | null
     title: string
+    surface: TalosSessionSurface
     mode: 'answer_only' | 'verified_execution'
     persistence_mode?: 'persistent' | 'temporary'
     active_model_profile_id?: string | null
@@ -768,6 +770,61 @@ export type TalosRunArtifact = {
     updated_at: string
 }
 
+export type TalosBrowserSession = {
+    id: string
+    status: 'ready' | 'active' | 'closed' | 'expired' | 'failed' | string
+    mode: 'read_only' | string
+    capabilities: string[]
+    current_url?: string | null
+    current_title?: string | null
+    last_screenshot_artifact_id?: string | null
+    last_snapshot_artifact_id?: string | null
+    expires_at?: string | null
+    created_at: string
+    updated_at: string
+}
+
+export type TalosBrowserArtifact = {
+    id: string
+    type: 'screenshot' | 'snapshot' | string
+    mime?: string | null
+    metadata?: Record<string, unknown> | null
+    created_at?: string
+}
+
+export type TalosBrowserEvent = {
+    id: string
+    type?: string
+    event_type?: string
+    actor?: string
+    severity?: string
+    url_before?: string | null
+    url_after?: string | null
+    payload?: Record<string, unknown>
+    created_at: string
+}
+
+export type TalosBrowserSnapshotNode = {
+    role: string
+    name: string
+    ref: string
+    level?: number
+    visible?: boolean
+}
+
+export type TalosBrowserSnapshotPreview = {
+    preview_available?: boolean
+    snapshot: {
+        untrusted: true
+        format?: string
+        url?: string
+        title?: string
+        text_digest?: string
+        truncated?: boolean
+        nodes: TalosBrowserSnapshotNode[]
+    }
+}
+
 export type TalosDocument = {
     id: string
     run_id?: string | null
@@ -975,6 +1032,7 @@ export type TalosRestoreValidation = {
 export type TalosCommandId =
     | 'new_session'
     | 'send_message'
+    | 'open_browse'
     | 'attach_file'
     | 'open_context_vault'
     | 'run_avm_compare'
