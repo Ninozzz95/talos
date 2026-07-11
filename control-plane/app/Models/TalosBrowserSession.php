@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class TalosBrowserSession extends Model
@@ -14,7 +15,7 @@ final class TalosBrowserSession extends Model
 
     public $incrementing = false;
     protected $keyType = 'string';
-    protected $fillable = ['user_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
+    protected $fillable = ['user_id', 'talos_session_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
 
     protected function casts(): array
     {
@@ -25,10 +26,12 @@ final class TalosBrowserSession extends Model
     public function events(): HasMany { return $this->hasMany(TalosBrowserEvent::class, 'browser_session_id'); }
     /** @return HasMany<TalosBrowserArtifact, $this> */
     public function artifacts(): HasMany { return $this->hasMany(TalosBrowserArtifact::class, 'browser_session_id'); }
+    /** @return BelongsTo<TalosSession, $this> */
+    public function talosSession(): BelongsTo { return $this->belongsTo(TalosSession::class, 'talos_session_id'); }
 
     public function toApiArray(): array
     {
-        return ['id' => $this->id, 'status' => $this->status, 'mode' => $this->mode, 'current_url' => $this->current_url, 'current_title' => $this->current_title, 'viewport' => ['width' => $this->viewport_width, 'height' => $this->viewport_height], 'capabilities' => $this->apiCapabilities(), 'policy' => $this->policy, 'last_snapshot_artifact_id' => $this->last_snapshot_artifact_id, 'last_screenshot_artifact_id' => $this->last_screenshot_artifact_id, 'expires_at' => $this->expires_at?->toJSON(), 'last_seen_at' => $this->last_seen_at?->toJSON(), 'created_at' => $this->created_at?->toJSON(), 'updated_at' => $this->updated_at?->toJSON()];
+        return ['id' => $this->id, 'talos_session_id' => $this->talos_session_id, 'status' => $this->status, 'mode' => $this->mode, 'current_url' => $this->current_url, 'current_title' => $this->current_title, 'viewport' => ['width' => $this->viewport_width, 'height' => $this->viewport_height], 'capabilities' => $this->apiCapabilities(), 'policy' => $this->policy, 'last_snapshot_artifact_id' => $this->last_snapshot_artifact_id, 'last_screenshot_artifact_id' => $this->last_screenshot_artifact_id, 'expires_at' => $this->expires_at?->toJSON(), 'last_seen_at' => $this->last_seen_at?->toJSON(), 'created_at' => $this->created_at?->toJSON(), 'updated_at' => $this->updated_at?->toJSON()];
     }
 
     /** @return list<string> */

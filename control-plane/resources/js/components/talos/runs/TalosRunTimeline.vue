@@ -827,7 +827,9 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                                     <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0">
                                             <h4 class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ artifactLabel(artifact) }}</h4>
-                                            <p class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ artifact.uri }}</p>
+                                            <p class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">
+                                                ref {{ shortHash(artifact.id) }} / run {{ shortHash(artifact.run_id) }}
+                                            </p>
                                         </div>
                                         <Badge tone="neutral">{{ humanize(artifact.artifact_type) }}</Badge>
                                     </div>

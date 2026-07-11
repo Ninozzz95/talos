@@ -24,9 +24,9 @@ button {
 }
 
 .talos-shell {
-    --talos-font-ui: Inter, Geist, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --talos-font-display: Inter, Geist, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-mono: "JetBrains Mono", "Cascadia Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-radius-card: 8px;
     --talos-radius-control: 6px;
     --talos-density: 1;
@@ -100,6 +100,21 @@ button {
     --talos-motion-surface-style: slide-fade;
     --talos-motion-feedback-style: pulse;
     --talos-motion-hover-style: edge-glow;
+    --talos-motion-duration-control: 83ms;
+    --talos-motion-duration-surface-enter: 167ms;
+    --talos-motion-duration-surface-exit: 83ms;
+    --talos-motion-duration-window-open: 250ms;
+    --talos-motion-duration-window-restore: 250ms;
+    --talos-motion-duration-window-minimize: 333ms;
+    --talos-motion-duration-window-focus: 83ms;
+    --talos-motion-duration-disclosure: 167ms;
+    --talos-motion-duration-popover: 167ms;
+    --talos-motion-duration-menu: 167ms;
+    --talos-motion-duration-message-insert: 167ms;
+    --talos-motion-duration-activity-progress: 333ms;
+    --talos-motion-duration-error-attention: 250ms;
+    --talos-motion-duration-success-confirm: 333ms;
+    --talos-motion-duration-theme-transition: 250ms;
     --talos-scrollbar-track: color-mix(in srgb, var(--talos-panel-soft) 88%, black);
     --talos-scrollbar-thumb: color-mix(in srgb, var(--talos-accent) 52%, var(--talos-border));
     --talos-scrollbar-thumb-hover: color-mix(in srgb, var(--talos-accent) 78%, var(--talos-text));
@@ -144,6 +159,9 @@ button {
 
 .talos-left-rail {
     will-change: width, background-color, border-color;
+    transition-property: width, background-color, border-color;
+    transition-duration: var(--talos-motion-duration-disclosure, 180ms);
+    transition-timing-function: var(--talos-motion-ease, ease);
 }
 
 .talos-orbitron-brand {
@@ -168,8 +186,8 @@ button {
     width: 92%;
     height: 92%;
     background: currentColor;
-    mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
-    -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+    mask: url('../images/logo-short.svg') center / contain no-repeat;
+    -webkit-mask: url('../images/logo-short.svg') center / contain no-repeat;
 }
 
 .talos-short-logo-compact {
@@ -228,23 +246,23 @@ button {
 }
 
 .talos-theme-forge {
-    --talos-font-ui: Inter, Geist, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Inter, Geist, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-mono: "JetBrains Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 .talos-theme-paper {
-    --talos-font-ui: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-    --talos-font-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-font-ui: "Source Serif 4", ui-serif, serif;
+    --talos-font-display: "Source Serif 4", ui-serif, serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-radius-card: 8px;
     --talos-radius-control: 6px;
 }
 
 .talos-theme-terminal {
-    --talos-font-ui: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
-    --talos-font-display: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
-    --talos-font-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-font-ui: "JetBrains Mono", ui-monospace, monospace;
+    --talos-font-display: "JetBrains Mono", ui-monospace, monospace;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-radius-card: 4px;
     --talos-radius-control: 3px;
     --talos-accent: #63f08e;
@@ -289,8 +307,8 @@ button {
 }
 
 .talos-theme-aurora {
-    --talos-font-ui: Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Manrope, Inter, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-ui: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: Manrope, ui-sans-serif, system-ui, sans-serif;
     --talos-accent: #42e7c7;
     --talos-accent-border: #2ab79d;
     --talos-accent-hover: #65f0d5;
@@ -320,8 +338,8 @@ button {
 }
 
 .talos-theme-glacier {
-    --talos-font-ui: "DM Sans", Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: "DM Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --talos-accent: #2367d1;
     --talos-accent-border: #1f56ae;
     --talos-accent-hover: #2f78ed;
@@ -354,8 +372,8 @@ button {
 }
 
 .talos-theme-ember {
-    --talos-font-ui: "Source Sans 3", Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: "Source Sans 3", Inter, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --talos-accent: #ff5c62;
     --talos-accent-border: #c53d43;
     --talos-accent-hover: #ff777c;
@@ -392,9 +410,9 @@ button {
 }
 
 .talos-theme-atlas {
-    --talos-font-ui: Aptos, "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Aptos, "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-mono: "Cascadia Mono", "JetBrains Mono", ui-monospace, monospace;
+    --talos-font-ui: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-accent: #d49a52;
     --talos-accent-border: #a9773d;
     --talos-accent-hover: #e0aa67;
@@ -425,8 +443,8 @@ button {
 }
 
 .talos-theme-noir {
-    --talos-font-ui: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Arial, Helvetica, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --talos-radius-card: 4px;
     --talos-radius-control: 3px;
     --talos-accent: #f2f2f2;
@@ -461,8 +479,8 @@ button {
 }
 
 .talos-theme-signal {
-    --talos-font-ui: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-ui: Manrope, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: Manrope, ui-sans-serif, system-ui, sans-serif;
     --talos-accent: #ff6f61;
     --talos-accent-border: #c84d42;
     --talos-accent-hover: #ff887c;
@@ -493,8 +511,8 @@ button {
 }
 
 .talos-theme-violet {
-    --talos-font-ui: Sora, Inter, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Sora, Inter, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-ui: Sora, ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: Sora, ui-sans-serif, system-ui, sans-serif;
     --talos-accent: #b794f6;
     --talos-accent-border: #8769c5;
     --talos-accent-hover: #c7a9ff;
@@ -525,9 +543,9 @@ button {
 }
 
 .talos-theme-claudius {
-    --talos-font-ui: Lora, Georgia, ui-serif, serif;
-    --talos-font-display: Poppins, Arial, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-mono: "IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-font-ui: "Source Serif 4", ui-serif, serif;
+    --talos-font-display: "Source Serif 4", ui-serif, serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-radius-card: 8px;
     --talos-radius-control: 7px;
     --talos-accent: #d97757;
@@ -569,9 +587,9 @@ button {
 }
 
 .talos-theme-basicus {
-    --talos-font-ui: Roboto, Arial, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-display: Roboto, Arial, ui-sans-serif, system-ui, sans-serif;
-    --talos-font-mono: "Roboto Mono", "Cascadia Mono", ui-monospace, monospace;
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
     --talos-radius-card: 4px;
     --talos-radius-control: 4px;
     --talos-accent: #1976d2;
@@ -623,10 +641,6 @@ button {
     border-color: var(--talos-composer-border);
     background: color-mix(in srgb, var(--talos-composer-bg) 95%, transparent);
     color: var(--talos-composer-text);
-    transition:
-        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        background-color var(--talos-motion-surface-duration) var(--talos-motion-ease);
 }
 
 .talos-chat-composer-shell textarea {
@@ -639,10 +653,7 @@ button {
 
 .talos-tool-window {
     background: var(--talos-window-bg);
-    transition:
-        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        opacity var(--talos-motion-open-duration) var(--talos-motion-ease);
+    transition: opacity var(--talos-motion-open-duration) var(--talos-motion-ease);
 }
 
 .talos-shell code,
@@ -684,8 +695,105 @@ button {
 }
 
 .talos-shell.talos-radius-soft {
-    --talos-radius-card: 12px;
-    --talos-radius-control: 10px;
+    --talos-radius-card: 8px;
+    --talos-radius-control: 8px;
+}
+
+.talos-area-sidebar-customized :is(.talos-left-rail, .talos-mobile-rail) {
+    --talos-sidebar: var(--talos-area-sidebar-background, var(--talos-effective-sidebar));
+    --talos-panel: var(--talos-area-sidebar-surface, var(--talos-effective-panel));
+    --talos-panel-soft: var(--talos-area-sidebar-surface, var(--talos-effective-panel-soft));
+    --talos-card: var(--talos-area-sidebar-surface, var(--talos-effective-card));
+    --talos-text: var(--talos-area-sidebar-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-sidebar-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-sidebar-border, var(--talos-effective-border));
+    --talos-border-strong: var(--talos-area-sidebar-border, var(--talos-effective-border-strong));
+    --talos-accent: var(--talos-area-sidebar-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-sidebar-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-chat-customized .talos-chat-scroll-root {
+    --talos-background: var(--talos-area-chat-background, var(--talos-effective-background));
+    --talos-chat-bg: var(--talos-area-chat-background, var(--talos-effective-chat-background));
+    --talos-panel: var(--talos-area-chat-surface, var(--talos-effective-panel));
+    --talos-panel-soft: var(--talos-area-chat-surface, var(--talos-effective-panel-soft));
+    --talos-text: var(--talos-area-chat-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-chat-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-chat-border, var(--talos-effective-border));
+    --talos-border-strong: var(--talos-area-chat-border, var(--talos-effective-border-strong));
+    --talos-accent: var(--talos-area-chat-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-chat-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-composer-customized .talos-composer-area {
+    --talos-composer-bg: var(--talos-area-composer-background, var(--talos-effective-composer-background));
+    --talos-composer-surface: var(--talos-area-composer-surface, var(--talos-effective-composer-surface));
+    --talos-composer-text: var(--talos-area-composer-text, var(--talos-effective-composer-text));
+    --talos-card: var(--talos-area-composer-surface, var(--talos-effective-card));
+    --talos-panel: var(--talos-area-composer-surface, var(--talos-effective-panel));
+    --talos-text: var(--talos-area-composer-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-composer-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-composer-border, var(--talos-effective-border));
+    --talos-composer-border: var(--talos-area-composer-border, var(--talos-effective-border-strong));
+    --talos-accent: var(--talos-area-composer-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-composer-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-window-customized .talos-tool-window {
+    --talos-window-bg: var(--talos-area-window-background, var(--talos-effective-window-background));
+    --talos-header: var(--talos-area-window-background, var(--talos-effective-header));
+    --talos-card: var(--talos-area-window-surface, var(--talos-effective-card));
+    --talos-panel: var(--talos-area-window-surface, var(--talos-effective-panel));
+    --talos-panel-soft: var(--talos-area-window-surface, var(--talos-effective-panel-soft));
+    --talos-text: var(--talos-area-window-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-window-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-window-border, var(--talos-effective-border));
+    --talos-border-strong: var(--talos-area-window-border, var(--talos-effective-border-strong));
+    --talos-accent: var(--talos-area-window-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-window-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-header-customized .talos-workspace-header {
+    --talos-header: var(--talos-area-header-background, var(--talos-effective-header));
+    --talos-panel: var(--talos-area-header-surface, var(--talos-effective-panel));
+    --talos-panel-soft: var(--talos-area-header-surface, var(--talos-effective-panel-soft));
+    --talos-text: var(--talos-area-header-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-header-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-header-border, var(--talos-effective-border));
+    --talos-border-strong: var(--talos-area-header-border, var(--talos-effective-border-strong));
+    --talos-accent: var(--talos-area-header-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-header-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-button-customized .talos-ui-button {
+    --talos-secondary: var(--talos-area-button-background, var(--talos-effective-secondary));
+    --talos-active: var(--talos-area-button-surface, var(--talos-effective-active));
+    --talos-panel-soft: var(--talos-area-button-surface, var(--talos-effective-panel-soft));
+    --talos-text: var(--talos-area-button-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-button-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-button-border, var(--talos-effective-border));
+    --talos-accent: var(--talos-area-button-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-button-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-card-customized .talos-ui-card {
+    --talos-card: var(--talos-area-card-background, var(--talos-effective-card));
+    --talos-panel: var(--talos-area-card-surface, var(--talos-effective-panel));
+    --talos-panel-soft: var(--talos-area-card-surface, var(--talos-effective-panel-soft));
+    --talos-text: var(--talos-area-card-text, var(--talos-effective-text));
+    --talos-muted: var(--talos-area-card-muted, var(--talos-effective-muted));
+    --talos-border: var(--talos-area-card-border, var(--talos-effective-border));
+    --talos-accent: var(--talos-area-card-accent, var(--talos-effective-accent));
+    --talos-accent-text: var(--talos-area-card-accent-text, var(--talos-effective-accent-text));
+}
+
+.talos-area-code-customized .talos-code-block {
+    --talos-code-bg: var(--talos-area-code-background, var(--talos-effective-code-background));
+    --talos-code-surface: var(--talos-area-code-surface, var(--talos-effective-code-surface));
+    --talos-code-text: var(--talos-area-code-text, var(--talos-effective-code-text));
+    --talos-muted: var(--talos-area-code-muted, var(--talos-effective-muted));
+    --talos-code-border: var(--talos-area-code-border, var(--talos-effective-code-border));
+    --talos-code-accent: var(--talos-area-code-accent, var(--talos-effective-accent));
 }
 
 .talos-workspace {
@@ -941,21 +1049,11 @@ button {
 @media (min-width: 1024px) {
     .talos-floating-window {
         position: absolute;
-        width: min(var(--talos-window-width, 760px), calc(100vw - var(--talos-rail-width) - 48px));
-        height: min(var(--talos-window-height, 520px), calc(100vh - var(--talos-window-y, 24px) - 10rem));
-        max-height: calc(100vh - var(--talos-window-y, 24px) - 10rem);
+        width: var(--talos-window-width, 760px);
+        height: var(--talos-window-height, 520px);
+        max-height: none;
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0);
     }
-}
-
-.talos-shell .talos-floating-window-fullscreen {
-    position: fixed !important;
-    inset: 0.75rem !important;
-    width: auto !important;
-    height: calc(100dvh - 1.5rem) !important;
-    max-height: none !important;
-    min-height: 0 !important;
-    transform: none !important;
 }
 
 .talos-shell .talos-tool-window-fullscreen {
@@ -965,13 +1063,6 @@ button {
 
 .talos-shell .talos-tool-window-fullscreen .talos-tool-window-body {
     padding-bottom: 1rem;
-}
-
-@media (min-width: 1024px) {
-    .talos-shell .talos-floating-window-fullscreen {
-        inset: 1rem 1rem 1rem calc(var(--talos-rail-width) + 1rem) !important;
-        height: calc(100dvh - 2rem) !important;
-    }
 }
 
 .talos-tool-window-interacting {
@@ -988,32 +1079,54 @@ button {
     will-change: opacity, transform;
 }
 
+.talos-motion-control,
+.talos-motion-feedback {
+    transition-property: opacity, transform;
+    transition-duration: var(--talos-motion-duration-control);
+    transition-timing-function: var(--talos-motion-ease);
+}
+
+.talos-motion-control::before {
+    transition-property: opacity, transform;
+    transition-duration: var(--talos-motion-duration-control);
+    transition-timing-function: var(--talos-motion-ease);
+}
+
+.talos-action-surface[data-motion-intent="surface-enter"],
+.talos-motion-feedback[data-motion-intent="surface-enter"] {
+    animation: talos-action-surface-in var(--talos-motion-duration-surface-enter) var(--talos-motion-ease) both;
+}
+
+.talos-motion-feedback[data-motion-intent="success-confirm"] {
+    animation: talos-feedback-pulse var(--talos-motion-duration-success-confirm) var(--talos-motion-ease) both;
+}
+
+.talos-motion-feedback[data-motion-intent="error-attention"] {
+    animation: talos-feedback-edge-flash var(--talos-motion-duration-error-attention) var(--talos-motion-ease) both;
+}
+
+.talos-motion-loader {
+    animation-duration: var(--talos-motion-duration-activity-progress);
+}
+
 .talos-command-palette {
-    animation: talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-action-surface-in var(--talos-motion-duration-menu) var(--talos-motion-ease) both;
 }
 
 .talos-command-palette-overlay {
-    animation: talos-action-fade-in var(--talos-motion-close-duration) linear both;
+    animation: talos-action-fade-in var(--talos-motion-duration-surface-exit) linear both;
 }
 
 .talos-composer-popover {
     transform-origin: bottom center;
 }
 
-.talos-model-popover,
-.talos-context-popover,
-.talos-composer-popover[data-testid="talos-enhancement-popover"],
-.talos-composer-popover[data-testid="talos-enhancement-status-popover"] {
-    --talos-popover-x: -50%;
-}
-
 .talos-chat-message {
-    animation: talos-message-enter var(--talos-motion-surface-duration) var(--talos-motion-ease) both;
+    animation: talos-message-enter var(--talos-motion-duration-message-insert) var(--talos-motion-ease) both;
 }
 
 .talos-sensitive-output {
     filter: blur(5px);
-    transition: filter var(--talos-motion-surface-duration) var(--talos-motion-ease);
 }
 
 .talos-chat-message:hover .talos-sensitive-output,
@@ -1030,16 +1143,14 @@ button {
 }
 
 .talos-evidence-drawer {
-    animation: talos-action-surface-in var(--talos-motion-surface-duration) var(--talos-motion-ease) both;
+    animation: talos-action-surface-in var(--talos-motion-duration-surface-enter) var(--talos-motion-ease) both;
 }
 
 .talos-motion-preview-surface {
     opacity: 0.74;
     transition:
-        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        opacity var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        transform var(--talos-motion-surface-duration) var(--talos-motion-ease);
+        opacity var(--talos-motion-duration-surface-exit) var(--talos-motion-ease),
+        transform var(--talos-motion-duration-surface-exit) var(--talos-motion-ease);
 }
 
 .talos-motion-preview-surface[data-preview-state="closed"] {
@@ -1048,7 +1159,7 @@ button {
 }
 
 .talos-motion-preview-surface[data-preview-state="open"] {
-    animation: talos-action-surface-in var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-action-surface-in var(--talos-motion-duration-surface-enter) var(--talos-motion-ease) both;
     border-color: color-mix(in srgb, var(--talos-accent) calc(42% * var(--talos-motion-intensity)), var(--talos-border));
     box-shadow: 0 0 calc(34px * var(--talos-motion-intensity)) color-mix(in srgb, var(--talos-accent) 28%, transparent);
     opacity: 1;
@@ -1059,28 +1170,17 @@ button {
     box-shadow: 0 0 calc(42px * var(--talos-motion-intensity)) var(--talos-ring-soft);
 }
 
-.talos-shell:not(.talos-ui-motion-disabled) .talos-left-rail {
-    transition:
-        width var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        padding var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        background-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease);
-}
-
 .talos-shell:not(.talos-ui-motion-disabled) .talos-left-rail[data-sidebar-state="expanded"] [data-testid="talos-rail-brand"],
 .talos-shell:not(.talos-ui-motion-disabled) .talos-left-rail[data-sidebar-state="expanded"] [data-testid="talos-session-history"] {
-    animation: talos-sidebar-content-in var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-sidebar-content-in var(--talos-motion-duration-disclosure) var(--talos-motion-ease) both;
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-command-row,
 .talos-shell:not(.talos-ui-motion-disabled) .talos-theme-preset-card,
 .talos-shell:not(.talos-ui-motion-disabled) .talos-motion-preview-surface {
     transition:
-        border-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        box-shadow var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        background-color var(--talos-motion-surface-duration) var(--talos-motion-ease),
-        transform var(--talos-motion-surface-duration) var(--talos-motion-ease);
+        opacity var(--talos-motion-duration-control) var(--talos-motion-ease),
+        transform var(--talos-motion-duration-control) var(--talos-motion-ease);
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-command-row:hover,
@@ -1091,20 +1191,20 @@ button {
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="opening"] {
-    animation: talos-window-open-from-sidebar var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-window-open-from-sidebar var(--talos-motion-duration-window-open) var(--talos-motion-ease) both;
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="restoring"] {
-    animation: talos-window-restore-from-dock var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-window-restore-from-dock var(--talos-motion-duration-window-restore) var(--talos-motion-ease) both;
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="minimizing"] {
-    animation: talos-window-minimize-to-dock var(--talos-window-minimize-duration) var(--talos-motion-ease) both;
+    animation: talos-window-minimize-to-dock var(--talos-motion-duration-window-minimize) var(--talos-motion-ease) both;
     pointer-events: none;
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="expanding"] {
-    animation: talos-window-expand var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-window-expand var(--talos-motion-duration-window-open) var(--talos-motion-ease) both;
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window-fullscreen[data-window-transition="expanding"] {
@@ -1116,7 +1216,7 @@ button {
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-composer-popover {
-    animation: talos-composer-popover-in var(--talos-motion-open-duration) var(--talos-motion-ease) both;
+    animation: talos-composer-popover-in var(--talos-motion-duration-popover) var(--talos-motion-ease) both;
 }
 
 .talos-shell[style*="--talos-motion-hover-style: lift"]:not(.talos-ui-motion-disabled) .talos-command-row:hover,
@@ -1192,17 +1292,130 @@ button {
         talos-feedback-status-lock var(--talos-motion-feedback-duration) steps(2, end) both !important;
 }
 
+.talos-ui-motion-disabled *,
+.talos-ui-motion-disabled *::before,
+.talos-ui-motion-disabled *::after {
+    animation: none !important;
+    scroll-behavior: auto !important;
+    transition: none !important;
+}
+
+.talos-ui-motion-disabled .talos-chat-composer-shell,
+.talos-ui-motion-disabled .talos-action-composer,
 .talos-ui-motion-disabled .talos-action-surface,
 .talos-ui-motion-disabled .talos-command-palette,
 .talos-ui-motion-disabled .talos-command-palette-overlay,
 .talos-ui-motion-disabled .talos-composer-popover,
 .talos-ui-motion-disabled .talos-chat-message,
 .talos-ui-motion-disabled .talos-evidence-drawer,
+.talos-ui-motion-disabled .talos-command-row,
+.talos-ui-motion-disabled .talos-theme-preset-card,
 .talos-ui-motion-disabled .talos-motion-preview-surface,
 .talos-ui-motion-disabled .talos-tool-window,
-.talos-ui-motion-disabled .talos-left-rail {
+.talos-ui-motion-disabled .talos-floating-window,
+.talos-ui-motion-disabled .talos-left-rail,
+.talos-ui-motion-disabled .talos-motion-control,
+.talos-ui-motion-disabled .talos-motion-control::before,
+.talos-ui-motion-disabled .talos-motion-feedback,
+.talos-ui-motion-disabled .talos-motion-loader {
     animation: none !important;
-    transition-duration: 0ms !important;
+    transition: none !important;
+}
+
+.talos-motion-paused .talos-chat-composer-shell,
+.talos-motion-paused .talos-action-composer,
+.talos-motion-paused .talos-action-surface,
+.talos-motion-paused .talos-command-palette,
+.talos-motion-paused .talos-command-palette-overlay,
+.talos-motion-paused .talos-composer-popover,
+.talos-motion-paused .talos-chat-message,
+.talos-motion-paused .talos-evidence-drawer,
+.talos-motion-paused .talos-command-row,
+.talos-motion-paused .talos-theme-preset-card,
+.talos-motion-paused .talos-motion-preview-surface,
+.talos-motion-paused .talos-tool-window,
+.talos-motion-paused .talos-floating-window,
+.talos-motion-paused .talos-left-rail,
+.talos-motion-paused .talos-motion-control,
+.talos-motion-paused .talos-motion-control::before,
+.talos-motion-paused .talos-motion-feedback,
+.talos-motion-paused .talos-motion-loader,
+.talos-motion-paused .talos-procedural-canvas,
+.talos-motion-paused .talos-dag-grid,
+.talos-motion-paused .talos-dag-line,
+.talos-motion-paused .talos-dag-node,
+.talos-motion-paused .talos-effect-layer,
+.talos-motion-paused .talos-trace-stream {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .talos-shell *,
+    .talos-shell *::before,
+    .talos-shell *::after {
+        animation: none !important;
+        scroll-behavior: auto !important;
+        transition: none !important;
+    }
+
+    .talos-shell .talos-chat-composer-shell,
+    .talos-shell .talos-action-composer,
+    .talos-shell .talos-motion-control,
+    .talos-shell .talos-motion-control::before,
+    .talos-shell .talos-motion-feedback,
+    .talos-shell .talos-motion-loader,
+    .talos-shell .talos-action-surface,
+    .talos-shell .talos-command-palette,
+    .talos-shell .talos-command-palette-overlay,
+    .talos-shell .talos-composer-popover,
+    .talos-shell .talos-chat-message,
+    .talos-shell .talos-evidence-drawer,
+    .talos-shell .talos-command-row,
+    .talos-shell .talos-theme-preset-card,
+    .talos-shell .talos-motion-preview-surface,
+    .talos-shell .talos-left-rail,
+    .talos-shell .talos-tool-window,
+    .talos-shell .talos-floating-window,
+    .talos-shell .talos-procedural-canvas,
+    .talos-shell .talos-dag-grid,
+    .talos-shell .talos-dag-line,
+    .talos-shell .talos-dag-node,
+    .talos-shell .talos-effect-layer,
+    .talos-shell .talos-trace-stream {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+@media (prefers-reduced-data: reduce) {
+    .talos-shell .talos-chat-composer-shell,
+    .talos-shell .talos-action-composer,
+    .talos-shell .talos-action-surface,
+    .talos-shell .talos-command-palette,
+    .talos-shell .talos-command-palette-overlay,
+    .talos-shell .talos-composer-popover,
+    .talos-shell .talos-chat-message,
+    .talos-shell .talos-evidence-drawer,
+    .talos-shell .talos-command-row,
+    .talos-shell .talos-theme-preset-card,
+    .talos-shell .talos-motion-preview-surface,
+    .talos-shell .talos-left-rail,
+    .talos-shell .talos-motion-control,
+    .talos-shell .talos-motion-control::before,
+    .talos-shell .talos-motion-feedback,
+    .talos-shell .talos-motion-loader,
+    .talos-shell .talos-tool-window,
+    .talos-shell .talos-floating-window,
+    .talos-shell .talos-procedural-canvas,
+    .talos-shell .talos-dag-grid,
+    .talos-shell .talos-dag-line,
+    .talos-shell .talos-dag-node,
+    .talos-shell .talos-effect-layer,
+    .talos-shell .talos-trace-stream {
+        animation-play-state: paused !important;
+        transition: none !important;
+    }
 }
 
 .talos-window-resize-handle {
@@ -1398,52 +1611,43 @@ button {
 @keyframes talos-composer-popover-in {
     0% {
         opacity: 0;
-        filter: blur(1px) saturate(0.9);
-        transform: translate(var(--talos-popover-x, 0), 10px) scale(0.982);
+        transform: translateY(10px) scale(0.982);
     }
 
     68% {
         opacity: 1;
-        filter: blur(0) saturate(1);
     }
 
     100% {
         opacity: 1;
-        filter: none;
-        transform: translate(var(--talos-popover-x, 0), 0) scale(1);
+        transform: translateY(0) scale(1);
     }
 }
 
 @keyframes talos-window-activate {
     from {
         opacity: 0.76;
-        box-shadow: 0 12px 42px rgba(0, 0, 0, 0.2);
+        transform: scale(0.995);
     }
 
     to {
         opacity: 1;
+        transform: scale(1);
     }
 }
 
 @keyframes talos-window-open-from-sidebar {
     0% {
         opacity: 0;
-        filter: blur(2px) saturate(0.82);
         transform: translate3d(
             calc(var(--talos-window-x, 24px) + var(--talos-window-launch-dx, -180px)),
             calc(var(--talos-window-y, 24px) + var(--talos-window-launch-dy, 0px)),
             0
-        ) scale(0.78);
-    }
-
-    62% {
-        opacity: 1;
-        filter: blur(0) saturate(1);
+        ) scale(0.985);
     }
 
     100% {
         opacity: 1;
-        filter: none;
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
     }
 }
@@ -1451,27 +1655,15 @@ button {
 @keyframes talos-window-restore-from-dock {
     0% {
         opacity: 0;
-        filter: blur(1.5px) saturate(0.88);
         transform: translate3d(
             calc(var(--talos-window-x, 24px) + var(--talos-window-launch-dx, -120px)),
             calc(var(--talos-window-y, 24px) + var(--talos-window-launch-dy, 420px)),
             0
-        ) scale(0.7);
-    }
-
-    72% {
-        opacity: 1;
-        filter: blur(0) saturate(1);
-        transform: translate3d(
-            calc(var(--talos-window-x, 24px) - 6px),
-            calc(var(--talos-window-y, 24px) - 4px),
-            0
-        ) scale(1.012);
+        ) scale(0.985);
     }
 
     100% {
         opacity: 1;
-        filter: none;
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
     }
 }
@@ -1479,46 +1671,31 @@ button {
 @keyframes talos-window-minimize-to-dock {
     0% {
         opacity: 1;
-        filter: none;
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
     }
 
-    58% {
-        opacity: 0.72;
-        filter: blur(0.4px) saturate(0.94);
-        transform: translate3d(
-            calc(var(--talos-window-x, 24px) + var(--talos-window-launch-mid-dx, -88px)),
-            calc(var(--talos-window-y, 24px) + var(--talos-window-launch-mid-dy, 231px)),
-            0
-        ) scale(0.62);
+    98% {
+        opacity: 0.2;
     }
 
     100% {
         opacity: 0;
-        filter: blur(2px) saturate(0.82);
         transform: translate3d(
             calc(var(--talos-window-x, 24px) + var(--talos-window-launch-dx, -160px)),
             calc(var(--talos-window-y, 24px) + var(--talos-window-launch-dy, 420px)),
             0
-        ) scale(0.2);
+        ) scale(0.985);
     }
 }
 
 @keyframes talos-window-expand {
     0% {
         opacity: 0.88;
-        filter: saturate(0.92);
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(0.96);
-    }
-
-    55% {
-        opacity: 1;
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1.018);
+        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(0.985);
     }
 
     100% {
         opacity: 1;
-        filter: none;
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
     }
 }
@@ -1526,82 +1703,76 @@ button {
 @keyframes talos-window-expand-fullscreen {
     0% {
         opacity: 0.88;
-        clip-path: inset(8% 9% 10% 9% round var(--talos-radius-card));
-        filter: saturate(0.92);
     }
 
     100% {
         opacity: 1;
-        clip-path: inset(0 round var(--talos-radius-card));
-        filter: none;
     }
 }
 
 @keyframes talos-window-minimize-to-dock-fullscreen {
     0% {
         opacity: 1;
-        clip-path: inset(0 round var(--talos-radius-card));
-        filter: none;
-    }
-
-    58% {
-        opacity: 0.72;
-        clip-path: inset(42% 50% 10% 0 round var(--talos-radius-card));
-        filter: blur(0.4px) saturate(0.94);
     }
 
     100% {
         opacity: 0;
-        clip-path: inset(78% 88% 12% 0 round var(--talos-radius-card));
-        filter: blur(2px) saturate(0.82);
     }
 }
 
 @keyframes talos-feedback-pulse {
     0%,
     100% {
-        box-shadow: none;
+        opacity: 1;
+        transform: scale(1);
     }
 
     38% {
-        box-shadow: 0 0 calc(34px * var(--talos-motion-intensity)) color-mix(in srgb, var(--talos-accent) 32%, transparent);
+        opacity: 0.9;
+        transform: scale(0.99);
     }
 }
 
 @keyframes talos-feedback-trace {
     0% {
-        box-shadow: inset -4px 0 0 color-mix(in srgb, var(--talos-accent) 76%, transparent);
+        opacity: 0.72;
+        transform: translateX(-2px);
     }
 
     50% {
-        box-shadow: inset 4px 0 0 color-mix(in srgb, var(--talos-node) 70%, transparent);
+        opacity: 1;
+        transform: translateX(2px);
     }
 
     100% {
-        box-shadow: inset 0 0 0 color-mix(in srgb, var(--talos-accent) 0%, transparent);
+        opacity: 1;
+        transform: translateX(0);
     }
 }
 
 @keyframes talos-feedback-edge-flash {
     0%,
     100% {
-        border-color: var(--talos-border);
+        opacity: 1;
+        transform: translateX(0);
     }
 
     35% {
-        border-color: color-mix(in srgb, var(--talos-warning) 60%, var(--talos-accent));
+        opacity: 0.86;
+        transform: translateX(2px);
     }
 }
 
 @keyframes talos-feedback-status-lock {
     0%,
     100% {
-        outline: 0 solid transparent;
+        opacity: 1;
+        transform: scale(1);
     }
 
     50% {
-        outline: 2px solid color-mix(in srgb, var(--talos-success) 56%, transparent);
-        outline-offset: -2px;
+        opacity: 0.88;
+        transform: scale(0.995);
     }
 }
 

@@ -14,6 +14,7 @@ use App\Models\TalosRun;
 use App\Models\TalosSession;
 use App\Models\User;
 use App\Services\Memory\TalosMemoryRetrievalService;
+use App\Services\Models\TalosModelProviderCatalog;
 use App\Services\Models\TalosModelRoutingService;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\Security\PublicHttpUrlPolicy;
@@ -22,6 +23,7 @@ use App\Services\Talos\Browser\TalosBrowserCommandService;
 use App\Services\Talos\Browser\TalosBrowserCommandException;
 use App\Services\Talos\Browser\TalosBrowserCommand;
 use App\Services\Talos\Browser\TalosBrowserDeadline;
+use App\Services\Talos\Browser\TalosBrowserRedactor;
 use App\Services\Tools\TalosToolPlanningContextService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -40,6 +42,8 @@ final class TalosChatController extends Controller
     private const MAX_HISTORY_MESSAGES = 16;
     private const MAX_BROWSER_CONTEXT_NODES = 40;
     private const MAX_BROWSER_CONTEXT_CHARS = 6000;
+    private const MAX_BROWSER_PROMPT_NODES = 8;
+    private const MAX_BROWSER_PROMPT_DIGEST_CHARS = 3200;
     private const MAX_BROWSER_COMMANDS = 8;
     private const MAX_BROWSER_NAVIGATIONS = 2;
     private const MAX_BROWSER_SCREENSHOTS = 3;
@@ -149,28 +153,15 @@ final class TalosChatController extends Controller
                 ], 422);
             }
 
-            if (! filled($profile->encrypted_secret)) {
-                return response()->json([
-                    'error' => 'Model profile has no provider secret.',
-                ], 422);
+            $credential = $this->profileCredential(
+                $profile,
+                'Model profile has no provider secret.',
+                'Model profile secret could not be decrypted.',
+            );
+            if ($credential instanceof JsonResponse) {
+                return $credential;
             }
-
-            if (filled($profile->base_url)) {
-                $policyDecision = PublicHttpUrlPolicy::fromConfig()->inspect((string) $profile->base_url);
-                if (! $policyDecision['allowed']) {
-                    return response()->json([
-                        'error' => "Provider base URL blocked by TALOS policy: {$policyDecision['reason']}",
-                    ], 422);
-                }
-            }
-
-            try {
-                $apiKey = Crypt::decryptString((string) $profile->encrypted_secret);
-            } catch (Throwable) {
-                return response()->json([
-                    'error' => 'Model profile secret could not be decrypted.',
-                ], 422);
-            }
+            $apiKey = $credential;
         }
 
         if (filled($validated['model_routing_profile_id'] ?? null)) {
@@ -185,13 +176,15 @@ final class TalosChatController extends Controller
             $profile = $primaryLane['profile'];
             $routingContext = $modelRouting->routingContext($routingProfile);
 
-            try {
-                $apiKey = Crypt::decryptString((string) $profile->encrypted_secret);
-            } catch (Throwable) {
-                return response()->json([
-                    'error' => 'Primary routing model secret could not be decrypted.',
-                ], 422);
+            $credential = $this->profileCredential(
+                $profile,
+                'Primary routing model has no provider secret.',
+                'Primary routing model secret could not be decrypted.',
+            );
+            if ($credential instanceof JsonResponse) {
+                return $credential;
             }
+            $apiKey = $credential;
         }
 
         if (filled($validated['context_set_id'] ?? null)) {
@@ -228,6 +221,7 @@ final class TalosChatController extends Controller
 
             $resolvedBrowserContext = $this->browserContextFor(
                 $user,
+                $session,
                 (string) $validated['browser_context']['browser_session_id'],
             );
             if ($resolvedBrowserContext instanceof JsonResponse) {
@@ -365,6 +359,8 @@ final class TalosChatController extends Controller
         $browserScreenshotCount = 0;
         $browserEvidenceBytes = 0;
         $browserCommandFingerprints = [];
+        $browserObservationBlocks = [];
+        $forceBrowserFinalization = false;
         $validatorMessage = $message;
         $payload = null;
         $validatorBase = [
@@ -391,7 +387,8 @@ final class TalosChatController extends Controller
         $directNavigationUrl = $this->directBrowserNavigationUrl($originalMessage);
         $directScreenshotRequested = is_array($browserMode)
             && ($this->directBrowserScreenshotRequested($originalMessage)
-                || $this->directBrowserScreenshotConfirmationRequested($originalMessage, $session));
+                || $this->directBrowserScreenshotConfirmationRequested($originalMessage, $session)
+                || $this->directBrowserScreenshotRetryRequested($originalMessage, $session));
         if (is_array($browserMode)
             && $run instanceof TalosRun
             && $browserSession instanceof TalosBrowserSession
@@ -432,12 +429,26 @@ final class TalosChatController extends Controller
                 $validatorTimeoutSeconds = is_array($browserMode)
                     ? $browserDeadline?->remainingSeconds() ?? 0.001
                     : 120;
+                $finalizeBrowserAnswer = is_array($browserMode)
+                    && $this->browserHasPageEvidence($browserActivities)
+                    && ($forceBrowserFinalization || $directNavigationUrl !== null || count($browserActivities) >= self::MAX_BROWSER_COMMANDS);
+                $validatorRequest = [
+                    ...$validatorBase,
+                    'message' => $validatorMessage,
+                ];
+                if ($finalizeBrowserAnswer) {
+                    $validatorRequest['tool_context'] = [
+                        'source' => 'talos_browser_finalizer',
+                        'tools' => [],
+                    ];
+                    $validatorRequest['browser_mode'] = [
+                        ...$browserMode,
+                        'phase' => 'final_answer',
+                    ];
+                }
 
                 try {
-                    $response = Http::timeout($validatorTimeoutSeconds)->acceptJson()->post($validatorUrl . '/chat', [
-                        ...$validatorBase,
-                        'message' => $validatorMessage,
-                    ]);
+                    $response = Http::timeout($validatorTimeoutSeconds)->acceptJson()->post($validatorUrl . '/chat', $validatorRequest);
                 } catch (ConnectionException $exception) {
                     if (($browserFailure = $this->browserTurnFailure($run, $browserDeadline)) !== null) {
                         return $this->browserFailureResponse([
@@ -473,6 +484,17 @@ final class TalosChatController extends Controller
                 try {
                     $browserCommand = $this->browserCommandFromPayload($candidate, $browserMode);
                 } catch (TalosBrowserCommandException $exception) {
+                    if ($this->canRecoverBrowserPlanWithCurrentPage($exception, $candidate, $browserSession, $run, $browserActivities)) {
+                        $pendingBrowserCommands[] = TalosBrowserCommand::canonicalReadInput(
+                            $run->id,
+                            $browserSession->id,
+                            'snapshot',
+                            [],
+                        );
+                        $forceBrowserFinalization = true;
+                        continue;
+                    }
+
                     return $this->browserFailureResponse([
                         'code' => $exception->errorCode,
                         'message' => $exception->getMessage(),
@@ -481,11 +503,10 @@ final class TalosChatController extends Controller
                     ], $run, $session, $normalizer, $browserActivities, $browserEvidence);
                 }
                 if ($browserCommand === null && $this->browserNavigationNeedsPageEvidence($browserActivities)) {
-                    $validatorMessage = mb_substr(
-                        $validatorMessage
-                        . "\n\nTALOS_BROWSER_GROUNDING_REQUIRED: Navigation completed, but no page snapshot or read evidence was captured afterward. Do not narrate a future action. Emit exactly one snapshot or read mutation pair now.",
-                        0,
-                        self::MAX_BROWSER_CONTEXT_CHARS + mb_strlen($message),
+                    $validatorMessage = $this->withBrowserObservations(
+                        $message,
+                        $browserObservationBlocks,
+                        'TALOS_BROWSER_GROUNDING_REQUIRED: Navigation completed, but no page snapshot or read evidence was captured afterward. Do not narrate a future action. Emit exactly one snapshot or read mutation pair now.',
                     );
                     continue;
                 }
@@ -555,8 +576,16 @@ final class TalosChatController extends Controller
                 ];
                 break;
             }
-            $observation = json_encode($commandResult['observation'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            $validatorMessage = mb_substr($validatorMessage . "\n\nTALOS_BROWSER_OBSERVATION (untrusted evidence):\n" . (is_string($observation) ? $observation : '{}') . "\nContinue the read-only browser task or provide the final answer.", 0, self::MAX_BROWSER_CONTEXT_CHARS + mb_strlen($message));
+            $observation = json_encode(
+                $this->browserObservationForPrompt($commandResult['observation']),
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+            );
+            $browserObservationBlocks[] = "TALOS_BROWSER_OBSERVATION (untrusted evidence):\n" . (is_string($observation) ? $observation : '{}');
+            $validatorMessage = $this->withBrowserObservations(
+                $message,
+                $browserObservationBlocks,
+                'Continue the read-only browser task or provide the final answer.',
+            );
         }
 
         if ($payload === null) {
@@ -663,6 +692,52 @@ final class TalosChatController extends Controller
         return response()->json($payload, $responseStatus);
     }
 
+    private function profileCredential(
+        TalosModelProfile $profile,
+        string $missingSecretMessage,
+        string $decryptFailureMessage,
+    ): string|JsonResponse {
+        $provider = (string) $profile->provider;
+        $trustedLocal = TalosModelProviderCatalog::allowsTrustedLocalBaseUrl($provider, $profile->base_url);
+        if (TalosModelProviderCatalog::requiresTrustedLocalBaseUrl($provider)) {
+            if (! $trustedLocal) {
+                return response()->json([
+                    'error' => 'Local model provider base URL must use loopback localhost, 127.0.0.1, or ::1.',
+                ], 422);
+            }
+
+            if (filled($profile->encrypted_secret)) {
+                return response()->json([
+                    'error' => 'Local model providers must remain credential-free.',
+                ], 422);
+            }
+
+            return '';
+        }
+
+        $baseUrl = filled($profile->base_url)
+            ? (string) $profile->base_url
+            : (string) TalosModelProviderCatalog::defaultsFor($provider)['default_base_url'];
+        $policyDecision = PublicHttpUrlPolicy::fromConfig()->inspect($baseUrl);
+        if (! $policyDecision['allowed']) {
+            return response()->json([
+                'error' => "Provider base URL blocked by TALOS policy: {$policyDecision['reason']}",
+            ], 422);
+        }
+
+        if (TalosModelProviderCatalog::requiresSecret($provider) && ! filled($profile->encrypted_secret)) {
+            return response()->json(['error' => $missingSecretMessage], 422);
+        }
+
+        try {
+            return filled($profile->encrypted_secret)
+                ? Crypt::decryptString((string) $profile->encrypted_secret)
+                : '';
+        } catch (Throwable) {
+            return response()->json(['error' => $decryptFailureMessage], 422);
+        }
+    }
+
     /**
      * @param array<string, mixed> $payload
      * @param array<string, mixed> $eventPayload
@@ -717,6 +792,41 @@ final class TalosChatController extends Controller
                 message: 'The validator returned a response TALOS could not parse.',
                 nextAction: 'Open Doctor and check the validator build/version before retrying.',
                 retryable: true,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'browser_command_failed' && $rawCode === 'TALOS_BROWSER_INTERACTION_UNAVAILABLE') {
+            return $this->typedChatError(
+                layer: 'browser_capability',
+                code: $rawCode,
+                message: 'This Browse session is read-only; page interactions are not enabled.',
+                nextAction: 'You can navigate, inspect, read, or capture the page. Clicking, typing, scrolling, and dismissing controls require the future Browser interaction capability.',
+                retryable: false,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'browser_worker_failure' && $rawCode !== null) {
+            $workerConfigurationFault = in_array($rawCode, [
+                'TALOS_BROWSER_WORKER_TOKEN_REQUIRED',
+                'TALOS_BROWSER_WORKER_TOKEN_INVALID',
+            ], true);
+
+            return $this->typedChatError(
+                layer: 'browser_worker',
+                code: $rawCode,
+                message: $rawCode === 'TALOS_BROWSER_WORKER_UNAVAILABLE'
+                    ? 'TALOS could not reach the browser worker.'
+                    : 'The browser worker could not complete the page capture.',
+                nextAction: $workerConfigurationFault
+                    ? 'Open Doctor and verify the browser-worker token and service configuration before retrying.'
+                    : 'Retry the Browse turn. If it fails again, open Doctor and inspect the browser-worker health and logs.',
+                retryable: ! $workerConfigurationFault && ($status === null || $status >= 500),
                 status: $status,
                 provider: $provider,
                 model: $model,
@@ -977,10 +1087,11 @@ final class TalosChatController extends Controller
     /**
      * @return array{session_id: string, snapshot_artifact_id: string, url: string, title: string, text_digest: string, evidence_hash: string, nodes: list<array{ref: string, role: string, name: string, visible: bool, level?: int}>}|JsonResponse
      */
-    private function browserContextFor(User $user, string $browserSessionId): array|JsonResponse
+    private function browserContextFor(User $user, TalosSession $chatSession, string $browserSessionId): array|JsonResponse
     {
         $session = TalosBrowserSession::query()
             ->where('user_id', $user->id)
+            ->where('talos_session_id', $chatSession->id)
             ->find($browserSessionId);
         if (! $session instanceof TalosBrowserSession) {
             return $this->browserContextError('Browser session was not found.', 404);
@@ -1040,9 +1151,9 @@ final class TalosChatController extends Controller
         $evidence = [
             'session_id' => $session->id,
             'snapshot_artifact_id' => $artifact->id,
-            'url' => mb_substr($raw['url'], 0, 2048),
+            'url' => TalosBrowserRedactor::url(mb_substr($raw['url'], 0, 2048)) ?? '[redacted-url]',
             'title' => mb_substr($raw['title'], 0, 512),
-            'text_digest' => mb_substr($raw['textDigest'], 0, 128),
+            'text_digest' => mb_substr($raw['textDigest'], 0, 4000),
             'nodes' => $nodes,
         ];
 
@@ -1062,6 +1173,9 @@ final class TalosChatController extends Controller
         $browserSession = TalosBrowserSession::query()->where('user_id', $user->id)->find($browserSessionId);
         if (! $browserSession instanceof TalosBrowserSession) {
             return response()->json(['error' => 'Browser session was not found.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE'], 404);
+        }
+        if ($browserSession->talos_session_id !== $chatSession->id) {
+            return response()->json(['error' => 'Browser session does not belong to this chat.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE'], 404);
         }
         if (! $browserSession->isOperable()) {
             return response()->json(['error' => 'Browser session is not operable.', 'code' => 'TALOS_BROWSER_MODE_UNAVAILABLE', 'details' => ['status' => $browserSession->status]], 422);
@@ -1102,6 +1216,19 @@ final class TalosChatController extends Controller
 
         if (array_key_exists('browser_command', $payload)) throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Direct browser command responses are not accepted.');
         $errors = $payload['errors'] ?? [];
+        if (is_array($errors) && $this->browserErrorsIndicateUnavailableInteraction($errors)) {
+            throw new TalosBrowserCommandException(
+                'TALOS_BROWSER_INTERACTION_UNAVAILABLE',
+                'This Browse session is read-only and cannot click, type, scroll, or dismiss page controls.',
+                [
+                    'mode' => 'read_only',
+                    'allowed_operations' => array_values(array_filter(
+                        $browserMode['allowed_operations'] ?? [],
+                        static fn (mixed $operation): bool => is_string($operation),
+                    )),
+                ],
+            );
+        }
         if (! is_array($errors) || $errors !== []) {
             throw new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser plan validation failed before execution.');
         }
@@ -1131,6 +1258,51 @@ final class TalosChatController extends Controller
         return $payloadMutation['payload'];
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param list<array<string, mixed>> $browserActivities
+     */
+    private function canRecoverBrowserPlanWithCurrentPage(
+        TalosBrowserCommandException $exception,
+        array $payload,
+        ?TalosBrowserSession $browserSession,
+        ?TalosRun $run,
+        array $browserActivities,
+    ): bool {
+        return $exception->errorCode === 'TALOS_BROWSER_COMMAND_MALFORMED'
+            && $browserSession instanceof TalosBrowserSession
+            && $run instanceof TalosRun
+            && is_string($browserSession->current_url)
+            && trim($browserSession->current_url) !== ''
+            && ($payload['mutations'] ?? null) === []
+            && is_array($payload['errors'] ?? null)
+            && $payload['errors'] !== []
+            && ! $this->browserHasPageEvidence($browserActivities);
+    }
+
+    /** @param array<int|string, mixed> $errors */
+    private function browserErrorsIndicateUnavailableInteraction(array $errors): bool
+    {
+        foreach ($errors as $error) {
+            if (is_array($error) && ($error['code'] ?? null) === 'TALOS_BROWSER_INTERACTION_UNAVAILABLE') {
+                return true;
+            }
+            $message = is_string($error)
+                ? $error
+                : (is_array($error) && is_string($error['message'] ?? null) ? $error['message'] : '');
+            $normalized = mb_strtolower($message);
+
+            if (str_contains($normalized, 'unknown or state-changing browser operation')
+                || str_contains($normalized, 'unsupported browser interaction')
+                || (str_contains($normalized, 'browser operation')
+                    && str_contains($normalized, 'not available in the server capability manifest'))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @param array<string, mixed> $browserMode @return array<string, mixed> */
     private function browserToolContext(array $browserMode): array
     {
@@ -1149,19 +1321,54 @@ final class TalosChatController extends Controller
 
     private function directBrowserNavigationUrl(string $message): ?string
     {
-        $candidate = trim($message);
-        if ($candidate === '' || mb_strlen($candidate) > 2048 || preg_match('/\s/u', $candidate) === 1) {
-            return null;
-        }
-        if (filter_var($candidate, FILTER_VALIDATE_URL) === false) {
+        if (trim($message) === '') {
             return null;
         }
 
-        $parts = parse_url($candidate);
-        $scheme = is_array($parts) && is_string($parts['scheme'] ?? null) ? strtolower($parts['scheme']) : null;
-        $host = is_array($parts) && is_string($parts['host'] ?? null) ? trim($parts['host']) : '';
+        $matched = preg_match_all('~https?://[^\s<>"\'`]+~iu', $message, $matches);
+        if ($matched === false || $matched === 0 || ! is_array($matches[0] ?? null)) {
+            return null;
+        }
 
-        return in_array($scheme, ['http', 'https'], true) && $host !== '' ? $candidate : null;
+        $candidates = [];
+        foreach ($matches[0] as $rawCandidate) {
+            if (! is_string($rawCandidate)) {
+                continue;
+            }
+
+            $candidate = $this->trimBrowserUrlCandidate($rawCandidate);
+            if ($candidate === '' || mb_strlen($candidate) > 2048 || filter_var($candidate, FILTER_VALIDATE_URL) === false) {
+                continue;
+            }
+
+            $parts = parse_url($candidate);
+            $scheme = is_array($parts) && is_string($parts['scheme'] ?? null) ? strtolower($parts['scheme']) : null;
+            $host = is_array($parts) && is_string($parts['host'] ?? null) ? trim($parts['host']) : '';
+            if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+                continue;
+            }
+
+            $candidates[$candidate] = true;
+        }
+
+        if (count($candidates) !== 1) {
+            return null;
+        }
+
+        return array_key_first($candidates);
+    }
+
+    private function trimBrowserUrlCandidate(string $candidate): string
+    {
+        $candidate = rtrim($candidate, '.,;:!?');
+        foreach ([['(', ')'], ['[', ']'], ['{', '}']] as [$open, $close]) {
+            while (str_ends_with($candidate, $close)
+                && substr_count($candidate, $close) > substr_count($candidate, $open)) {
+                $candidate = substr($candidate, 0, -1);
+            }
+        }
+
+        return rtrim($candidate, '.,;:!?');
     }
 
     private function directBrowserScreenshotRequested(string $message): bool
@@ -1177,13 +1384,13 @@ final class TalosChatController extends Controller
             return true;
         }
 
-        $italianAction = '(?:fai|fammi|cattura|scatta|puoi fare|puoi farmi|puoi catturare|puoi scattare|potresti fare|potresti farmi|potresti catturare|potresti scattare)';
+        $italianAction = '(?:fai|fammi|mi fai|cattura|scatta|puoi fare|puoi farmi|puoi catturare|puoi scattare|potresti fare|potresti farmi|potresti catturare|potresti scattare|riesci a fare|riesci a farmi|riesci a catturare|riesci a scattare)';
         $italianScope = '(?:della pagina(?: corrente)?|di questa pagina|dello schermo|del browser)';
         if (preg_match('/^(?:per favore )?'.$italianAction.'(?: (?:uno|un|una|la))? (?:screenshot|schermata)(?: '.$italianScope.')?(?: (?:ora|adesso))?(?: per favore)?$/u', $normalized) === 1) {
             return true;
         }
 
-        $englishAction = '(?:take|capture|make|can you take|can you capture|can you make|could you take|could you capture|could you make)';
+        $englishAction = '(?:take|capture|make|can you take|can you capture|can you make|could you take|could you capture|could you make|are you able to take|are you able to capture)';
         $englishScope = '(?:of (?:the )?(?:current )?page|of this page|of the browser)';
 
         return preg_match('/^(?:please )?'.$englishAction.'(?: (?:a|the))? screenshot(?: '.$englishScope.')?(?: now)?(?: please)?$/u', $normalized) === 1;
@@ -1230,6 +1437,39 @@ final class TalosChatController extends Controller
             && preg_match('/\b(?:vuoi|posso|procedo|esegua|faccio|want|shall|should|would)\b/u', $offer) === 1;
     }
 
+    private function directBrowserScreenshotRetryRequested(string $message, ?TalosSession $session): bool
+    {
+        if (! $session instanceof TalosSession) {
+            return false;
+        }
+
+        $retry = $this->normalizedBrowserIntentText($message);
+        if (! in_array($retry, ['prova ora', 'riprova', 'prova di nuovo', 'ritenta', 'try now', 'try again', 'retry now'], true)) {
+            return false;
+        }
+
+        $recentMessages = $session->messages()
+            ->latest('created_at')
+            ->latest('id')
+            ->limit(4)
+            ->get(['role', 'content'])
+            ->values();
+        $cursor = 0;
+        $latest = $recentMessages->get($cursor);
+        if ($latest?->role === 'user'
+            && $this->normalizedBrowserIntentText((string) $latest->content) === $retry) {
+            $cursor++;
+        }
+        if ($recentMessages->get($cursor)?->role !== 'assistant') {
+            return false;
+        }
+        $cursor++;
+        $priorUser = $recentMessages->get($cursor);
+
+        return $priorUser?->role === 'user'
+            && $this->directBrowserScreenshotRequested((string) $priorUser->content);
+    }
+
     private function normalizedBrowserIntentText(string $message): string
     {
         $normalized = mb_strtolower(trim($message));
@@ -1261,6 +1501,103 @@ final class TalosChatController extends Controller
         return true;
     }
 
+    /** @param list<array<string, mixed>> $activities */
+    private function browserHasPageEvidence(array $activities): bool
+    {
+        foreach ($activities as $activity) {
+            if (($activity['status'] ?? null) === 'succeeded'
+                && in_array($activity['operation'] ?? null, ['snapshot', 'read'], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param array<string, mixed> $observation @return array<string, mixed> */
+    private function browserObservationForPrompt(array $observation): array
+    {
+        $operation = is_string($observation['operation'] ?? null) ? $observation['operation'] : 'unknown';
+        $base = ['operation' => $operation, 'untrusted' => true];
+        if ($operation === 'snapshot') {
+            return [
+                ...$base,
+                'url' => mb_substr((string) ($observation['url'] ?? ''), 0, 2048),
+                'title' => mb_substr((string) ($observation['title'] ?? ''), 0, 512),
+                'evidence_hash' => mb_substr((string) ($observation['evidence_hash'] ?? ''), 0, 80),
+                'nodes' => $this->boundedBrowserPromptNodes($observation['nodes'] ?? []),
+                'text_digest' => mb_substr((string) ($observation['text_digest'] ?? ''), 0, self::MAX_BROWSER_PROMPT_DIGEST_CHARS),
+            ];
+        }
+        if ($operation === 'read') {
+            return [...$base, 'matches' => $this->boundedBrowserPromptNodes($observation['matches'] ?? [])];
+        }
+        if ($operation === 'navigate') {
+            return [
+                ...$base,
+                'url' => mb_substr((string) ($observation['url'] ?? ''), 0, 2048),
+                'title' => mb_substr((string) ($observation['title'] ?? ''), 0, 512),
+            ];
+        }
+        if ($operation === 'screenshot') {
+            return [...$base, 'artifact_id' => mb_substr((string) ($observation['artifact_id'] ?? ''), 0, 128)];
+        }
+
+        return $base;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function boundedBrowserPromptNodes(mixed $nodes): array
+    {
+        if (! is_array($nodes)) {
+            return [];
+        }
+
+        $bounded = [];
+        foreach (array_slice($nodes, 0, self::MAX_BROWSER_PROMPT_NODES) as $node) {
+            if (! is_array($node)) {
+                continue;
+            }
+            $bounded[] = [
+                'ref' => mb_substr((string) ($node['ref'] ?? ''), 0, 64),
+                'role' => mb_substr((string) ($node['role'] ?? ''), 0, 64),
+                'name' => mb_substr((string) ($node['name'] ?? ''), 0, 160),
+                'visible' => ($node['visible'] ?? false) === true,
+            ];
+        }
+
+        return $bounded;
+    }
+
+    /** @param list<string> $observationBlocks */
+    private function withBrowserObservations(string $message, array $observationBlocks, string $instruction): string
+    {
+        $instruction = mb_substr(trim($instruction), 0, self::MAX_BROWSER_CONTEXT_CHARS);
+        $remaining = max(0, self::MAX_BROWSER_CONTEXT_CHARS - mb_strlen($instruction) - 2);
+        $selected = [];
+
+        foreach (array_reverse($observationBlocks) as $block) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $separatorCost = $selected === [] ? 0 : 2;
+            if ($remaining <= $separatorCost) {
+                break;
+            }
+            $remaining -= $separatorCost;
+            $boundedBlock = mb_strlen($block) <= $remaining ? $block : mb_substr($block, 0, $remaining);
+            array_unshift($selected, $boundedBlock);
+            $remaining -= mb_strlen($boundedBlock);
+        }
+
+        $browserContext = implode("\n\n", $selected);
+
+        return $message
+            . ($browserContext === '' ? '' : "\n\n{$browserContext}")
+            . ($instruction === '' ? '' : "\n\n{$instruction}");
+    }
+
     /** @return array{code: string, message: string, status: int}|null */
     private function browserTurnFailure(?TalosRun $run, ?TalosBrowserDeadline $deadline): ?array
     {
@@ -1290,6 +1627,7 @@ final class TalosChatController extends Controller
         $message = is_string($failure['message'] ?? null) ? $failure['message'] : 'Browser command failed.';
         $status = is_numeric($failure['status'] ?? null) ? (int) $failure['status'] : 422;
         $details = is_array($failure['details'] ?? null) ? $failure['details'] : [];
+        $origin = is_string($failure['origin'] ?? null) ? $failure['origin'] : 'control_plane';
 
         if ($run instanceof TalosRun && ! $commandFailurePersisted) {
             $this->appendRunEvent($run, $normalizer, [
@@ -1302,6 +1640,7 @@ final class TalosChatController extends Controller
                     'error_code' => $code,
                     'message' => $message,
                     'details' => $details,
+                    'origin' => $origin,
                 ],
             ]);
         }
@@ -1313,9 +1652,10 @@ final class TalosChatController extends Controller
             'browser_activities' => $browserActivities,
             'used_browser_context' => $browserEvidence,
         ], $run, $session, $normalizer, [
-            'reason' => 'browser_command_failed',
+            'reason' => $origin === 'browser_worker' ? 'browser_worker_failure' : 'browser_command_failed',
             'code' => $code,
             'status' => $status,
+            'operation' => is_string($browserCommand['operation'] ?? null) ? $browserCommand['operation'] : 'unknown',
             'browser_activity_count' => count($browserActivities),
         ], $status);
     }
@@ -1339,11 +1679,8 @@ final class TalosChatController extends Controller
             . "ACCESSIBILITY_NODES:\n"
             . implode("\n", $nodeLines);
 
-        return mb_substr(
-            "{$evidence}\n\nUSER_TASK:\n{$message}",
-            0,
-            self::MAX_BROWSER_CONTEXT_CHARS + mb_strlen($message),
-        );
+        return mb_substr($evidence, 0, self::MAX_BROWSER_CONTEXT_CHARS)
+            . "\n\nUSER_TASK:\n{$message}";
     }
 
     private function browserContextError(string $message, int $status): JsonResponse

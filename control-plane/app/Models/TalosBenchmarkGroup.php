@@ -59,7 +59,9 @@ final class TalosBenchmarkGroup extends Model
             'session_id' => $this->session_id,
             'source_run_id' => $this->source_run_id,
             'name' => $this->name,
-            'scenario_path' => $this->scenario_path,
+            'scenario_ref' => is_string(($this->metadata ?? [])['scenario_ref'] ?? null)
+                ? $this->metadata['scenario_ref']
+                : null,
             'scenario_hash' => $this->scenario_hash,
             'prompt_hash' => $this->prompt_hash,
             'context_hash' => $this->context_hash,

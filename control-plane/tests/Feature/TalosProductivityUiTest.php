@@ -11,7 +11,10 @@ final class TalosProductivityUiTest extends TestCase
     public function test_dashboard_mounts_productivity_and_email_panels_without_active_send_controls(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
-        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
+        $notesModulePath = base_path('resources/js/components/talos/window/modules/TalosNotesWindow.vue');
+        $tasksModulePath = base_path('resources/js/components/talos/window/modules/TalosTasksWindow.vue');
+        $calendarModulePath = base_path('resources/js/components/talos/window/modules/TalosCalendarWindow.vue');
+        $registry = file_get_contents(base_path('resources/js/lib/talosWindowRegistry.ts'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $productivityComposablePath = base_path('resources/js/composables/useTalosProductivity.ts');
         $emailComposablePath = base_path('resources/js/composables/useTalosEmail.ts');
@@ -29,7 +32,7 @@ final class TalosProductivityUiTest extends TestCase
         $commandRegistryPath = base_path('resources/js/lib/commandRegistry.ts');
 
         $this->assertIsString($shell);
-        $this->assertIsString($windowLayer);
+        $this->assertIsString($registry);
         $this->assertIsString($chat);
         $this->assertFileExists($productivityComposablePath);
         $this->assertFileExists($emailComposablePath);
@@ -42,6 +45,9 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertFileExists($calendarQuickAddPath);
         $this->assertFileExists($calendarEventListPath);
         $this->assertFileExists($calendarEventEditorPath);
+        $this->assertFileExists($notesModulePath);
+        $this->assertFileExists($tasksModulePath);
+        $this->assertFileExists($calendarModulePath);
         $this->assertFileExists($emailTriagePath);
         $this->assertFileExists($draftReviewPath);
 
@@ -59,6 +65,9 @@ final class TalosProductivityUiTest extends TestCase
         $emailTriage = file_get_contents($emailTriagePath);
         $draftReview = file_get_contents($draftReviewPath);
         $commandRegistry = file_get_contents($commandRegistryPath);
+        $notesModule = file_get_contents($notesModulePath);
+        $tasksModule = file_get_contents($tasksModulePath);
+        $calendarModule = file_get_contents($calendarModulePath);
 
         $this->assertIsString($productivityComposable);
         $this->assertIsString($emailComposable);
@@ -74,6 +83,9 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertIsString($emailTriage);
         $this->assertIsString($draftReview);
         $this->assertIsString($commandRegistry);
+        $this->assertIsString($notesModule);
+        $this->assertIsString($tasksModule);
+        $this->assertIsString($calendarModule);
         $this->assertStringContainsString('/api/talos/notes', $productivityComposable);
         $this->assertStringContainsString('/api/talos/tasks', $productivityComposable);
         $this->assertStringContainsString('/api/talos/calendar-drafts', $productivityComposable);
@@ -81,10 +93,13 @@ final class TalosProductivityUiTest extends TestCase
         $this->assertStringContainsString('/api/talos/email/drafts', $emailComposable);
         $this->assertStringContainsString('/api/talos/email/connector-status', $emailComposable);
         $this->assertStringContainsString('TalosWindowLayer', $shell);
-        $this->assertStringContainsString('TalosNotes', $windowLayer);
-        $this->assertStringContainsString('TalosTasks', $windowLayer);
-        $this->assertStringContainsString('TalosCalendar', $windowLayer);
-        $this->assertStringContainsString('TalosEmailTriage', $windowLayer);
+        $this->assertStringContainsString('TalosNotes', $notesModule);
+        $this->assertStringContainsString('TalosTasks', $tasksModule);
+        $this->assertStringContainsString('TalosCalendar', $calendarModule);
+        $this->assertStringContainsString('TalosEmailTriage', $tasksModule);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosNotesWindow.vue')", $registry);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosTasksWindow.vue')", $registry);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosCalendarWindow.vue')", $registry);
         $this->assertStringContainsString('TalosEmailDraftReview', $emailTriage);
         $this->assertStringContainsString('trust_level', $notes);
         $this->assertStringContainsString('run_id', $tasks);

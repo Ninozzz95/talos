@@ -28,6 +28,7 @@ export function createDevStackConfig({
     const sharedEnv = {
         ...inheritedEnv,
         AVM_VALIDATOR_URL: 'http://127.0.0.1:3000',
+        TALOS_VALIDATOR_HEALTH_URL: 'http://127.0.0.1:3000/health',
         TALOS_BROWSER_WORKER_URL: 'http://127.0.0.1:3100',
         TALOS_BROWSER_WORKER_TOKEN: token,
     }

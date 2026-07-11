@@ -1,4 +1,6 @@
 import { resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import type { Browser, BrowserContext, Page } from "playwright";
 import { BrowserSessionManager } from "../src/BrowserSessionManager.js";
@@ -7,6 +9,7 @@ import { buildServer } from "../src/server.js";
 import { startBrowserWorker } from "../src/startBrowserWorker.js";
 
 const fixtureUrl = `file://${resolve("tests/fixtures/read-only-page.html").replaceAll("\\", "/")}`;
+const execFileAsync = promisify(execFile);
 const createPayload = {
   ownerRef: "user:1",
   mode: "read_only",
@@ -143,7 +146,13 @@ describe("TALOS browser worker", () => {
     expect(data.format).toBe("accessibility_refs_v1");
     expect(data.nodes.length).toBeGreaterThan(0);
     expect(data.nodes.every((node: { ref: string }) => /^r\d+$/.test(node.ref))).toBe(true);
+    expect(data.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "p", name: "This page is available for read-only browser worker tests." }),
+    ]));
+    expect(data.nodes.filter((node: { name: string }) => node.name === "Open vehicle")).toHaveLength(2);
+    expect(data.nodes.find((node: { name: string }) => node.name === "Bounded custom role")?.role.length).toBeLessThanOrEqual(64);
     expect(data.textDigest).toContain("TALOS Browse Fixture");
+    expect(data.textDigest).toContain("Dynamically loaded vehicle detail");
     await ownedInject({ method: "DELETE", url: `/sessions/${sessionId}` });
   });
 
@@ -195,6 +204,31 @@ describe("TALOS browser worker", () => {
 });
 
 describe("TALOS browser worker process entrypoint", () => {
+  it("serializes snapshot capture through the production tsx loader", async () => {
+    const snapshotModule = new URL("../src/BrowserSnapshot.ts", import.meta.url).href;
+    const script = `
+      import { chromium } from "playwright";
+      import { captureSnapshot } from ${JSON.stringify(snapshotModule)};
+      const browser = await chromium.launch({ headless: true });
+      try {
+        const page = await browser.newPage();
+        await page.goto(${JSON.stringify(fixtureUrl)}, { waitUntil: "domcontentloaded" });
+        const snapshot = await captureSnapshot(page);
+        process.stdout.write(JSON.stringify({ nodes: snapshot.nodes.length, digest: snapshot.textDigest.length }));
+      } finally {
+        await browser.close();
+      }
+    `;
+
+    const result = await execFileAsync(process.execPath, ["--import", "tsx/esm", "--input-type=module", "--eval", script], {
+      cwd: process.cwd(),
+      timeout: 30_000,
+    });
+
+    expect(JSON.parse(result.stdout)).toMatchObject({ nodes: expect.any(Number), digest: expect.any(Number) });
+    expect(JSON.parse(result.stdout).nodes).toBeGreaterThan(0);
+  }, 35_000);
+
   it("listens until explicitly closed and exposes health", async () => {
     const app = await startBrowserWorker({
       host: "127.0.0.1",

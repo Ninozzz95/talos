@@ -11,6 +11,7 @@ import {
     type TalosThemeMotionMode,
 } from '../../../lib/talosThemes'
 import Button from '../../ui/Button.vue'
+import Tabs from '../../ui/Tabs.vue'
 import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
@@ -76,24 +77,21 @@ function selectThemeMotion(value: unknown) {
 </script>
 
 <template>
-    <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2">
-        <div role="tablist" aria-label="Appearance sections" class="grid grid-cols-3 gap-1">
-            <button
-                v-for="pane in panes"
-                :key="pane.id"
-                type="button"
-                role="tab"
-                class="rounded-md px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :class="activePane === pane.id ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-text)]' : 'text-[var(--talos-muted)] hover:bg-[var(--talos-panel)] hover:text-[var(--talos-text)]'"
-                :aria-selected="activePane === pane.id"
-                @click="activePane = pane.id"
-            >
-                {{ pane.label }}
-            </button>
-        </div>
-    </div>
+    <Tabs
+        v-model="activePane"
+        :items="panes"
+        label="Appearance sections"
+        tab-id-prefix="talos-appearance-tab"
+        panel-id-prefix="talos-appearance-panel"
+    />
 
-    <div v-if="activePane === 'design'" class="grid gap-3 md:grid-cols-2">
+    <div
+        v-if="activePane === 'design'"
+        id="talos-appearance-panel-design"
+        role="tabpanel"
+        aria-labelledby="talos-appearance-tab-design"
+        class="grid gap-3 md:grid-cols-2"
+    >
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Theme preset</span>
             <Select :model-value="theme" class="mt-2" aria-label="Theme preset" @update:model-value="selectTheme">
@@ -160,7 +158,13 @@ function selectThemeMotion(value: unknown) {
         </div>
     </div>
 
-    <div v-else-if="activePane === 'motion'" class="space-y-3">
+    <div
+        v-else-if="activePane === 'motion'"
+        id="talos-appearance-panel-motion"
+        role="tabpanel"
+        aria-labelledby="talos-appearance-tab-motion"
+        class="space-y-3"
+    >
         <div class="grid gap-3 md:grid-cols-2">
             <label class="block">
                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Motion mode</span>
@@ -202,7 +206,13 @@ function selectThemeMotion(value: unknown) {
         </div>
     </div>
 
-    <div v-else class="space-y-3">
+    <div
+        v-else
+        id="talos-appearance-panel-visibility"
+        role="tabpanel"
+        aria-labelledby="talos-appearance-tab-visibility"
+        class="space-y-3"
+    >
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
                 <h4 class="text-sm font-semibold text-[var(--talos-text)]">Interface visibility</h4>

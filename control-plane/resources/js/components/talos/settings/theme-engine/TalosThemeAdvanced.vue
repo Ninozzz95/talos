@@ -1,0 +1,62 @@
+<script setup lang="ts">
+import Button from '../../../ui/Button.vue'
+import Input from '../../../ui/Input.vue'
+import Select from '../../../ui/Select.vue'
+import {
+    TALOS_THEME_AREA_OPTIONS,
+    TALOS_THEME_AREA_TOKEN_OPTIONS,
+    type TalosThemeAreaId,
+    type TalosThemeAreaTokenKey,
+} from '../../../../lib/talosThemes'
+import type { AreaTokenForm } from './themeEngineTypes'
+
+const props = defineProps<{
+    selectedArea: TalosThemeAreaId
+    form: AreaTokenForm
+    disabled: boolean
+    saving: boolean
+    hasDraft: boolean
+}>()
+
+const emit = defineEmits<{
+    'update:selectedArea': [value: TalosThemeAreaId]
+    'update:form': [value: AreaTokenForm]
+    save: []
+    reset: []
+}>()
+
+function updateToken(key: TalosThemeAreaTokenKey, value: unknown) {
+    emit('update:form', { ...props.form, [key]: String(value ?? '') })
+}
+</script>
+
+<template>
+    <section
+        id="talos-theme-control-panel-advanced"
+        role="tabpanel"
+        aria-labelledby="talos-theme-control-tab-advanced"
+        aria-label="Advanced theme tokens"
+        class="space-y-4"
+    >
+        <div>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Advanced area tokens</h4>
+            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Override specific interface zones through explicit, safe CSS variables.</p>
+        </div>
+        <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+            <span>Area</span>
+            <Select :model-value="selectedArea" aria-label="Area" :disabled="disabled" @update:model-value="emit('update:selectedArea', $event as TalosThemeAreaId)">
+                <option v-for="area in TALOS_THEME_AREA_OPTIONS" :key="area.value" :value="area.value">{{ area.label }}</option>
+            </Select>
+        </label>
+        <div class="grid gap-3 sm:grid-cols-2">
+            <label v-for="token in TALOS_THEME_AREA_TOKEN_OPTIONS" :key="token.value" class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
+                <span>{{ token.label }}</span>
+                <Input :model-value="form[token.value]" :aria-label="`Area ${token.value}`" :disabled="disabled" @update:model-value="updateToken(token.value, $event)" />
+            </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <Button type="button" :disabled="saving || !hasDraft || disabled" @click="emit('save')">Save area tokens</Button>
+            <Button type="button" variant="outline" :disabled="saving || disabled" @click="emit('reset')">Reset area</Button>
+        </div>
+    </section>
+</template>

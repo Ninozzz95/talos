@@ -18,12 +18,17 @@ final class TalosResearchJobController extends Controller
         private readonly TalosResearchJobService $jobs,
     ) {}
 
+    public function capability(): JsonResponse
+    {
+        return response()->json(['data' => $this->jobs->executionCapability()]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'query' => ['required', 'string', 'min:1', 'max:20000'],
             'settings' => ['sometimes', 'nullable', 'array'],
-            'settings.mode' => ['sometimes', 'string', Rule::in(['deterministic_fixture'])],
+            'settings.mode' => ['sometimes', 'string', Rule::in(['live', 'deterministic_fixture'])],
             'settings.rounds' => ['sometimes', 'integer', 'min:1', 'max:5'],
             'settings.source_budget' => ['sometimes', 'integer', 'min:1', 'max:25'],
         ]);
@@ -31,6 +36,11 @@ final class TalosResearchJobController extends Controller
         $user = Auth::user();
         abort_unless($user !== null, 401);
         assert($user instanceof User);
+
+        $mode = $validated['settings']['mode'] ?? 'live';
+        if ($mode !== 'deterministic_fixture') {
+            return response()->json($this->jobs->executionCapability(), 503);
+        }
 
         $job = $this->jobs->start($validated, $user);
 
@@ -54,6 +64,14 @@ final class TalosResearchJobController extends Controller
     public function fixtures(Request $request, TalosResearchJob $job): JsonResponse
     {
         $this->authorizeJob($job);
+
+        if (($job->settings['mode'] ?? null) !== 'deterministic_fixture') {
+            return response()->json([
+                'code' => 'TALOS_RESEARCH_FIXTURE_MODE_REQUIRED',
+                'message' => 'Fixture advancement is available only for deterministic fixture jobs.',
+                'details' => [],
+            ], 409);
+        }
 
         $validated = $request->validate([
             'sources' => ['required', 'array', 'min:1', 'max:25'],

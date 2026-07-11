@@ -21,6 +21,7 @@ export type TalosSessionChatState = {
     archived: boolean
     selected: boolean
     folder: string
+    browse_enabled: boolean
     copied_from_session_id?: string
 }
 
@@ -46,6 +47,7 @@ export function sessionChatState(session: TalosSession): TalosSessionChatState {
         archived: chatState.archived === true,
         selected: chatState.selected === true,
         folder: asString(chatState.folder),
+        browse_enabled: chatState.browse_enabled === true,
         ...(copiedFromSessionId ? { copied_from_session_id: copiedFromSessionId } : {}),
     }
 }

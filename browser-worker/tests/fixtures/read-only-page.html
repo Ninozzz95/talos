@@ -6,6 +6,16 @@
       <h1>TALOS Browse Fixture</h1>
       <p>This page is available for read-only browser worker tests.</p>
       <a href="https://example.com">Example link</a>
+      <button>Open vehicle</button>
+      <button>Open vehicle</button>
+      <div role="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" aria-label="Bounded custom role">Role boundary fixture</div>
     </main>
+    <script>
+      setTimeout(() => {
+        const detail = document.createElement('p');
+        detail.textContent = 'Dynamically loaded vehicle detail';
+        document.querySelector('main').appendChild(detail);
+      }, 250);
+    </script>
   </body>
 </html>

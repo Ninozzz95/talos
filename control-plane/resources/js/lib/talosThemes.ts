@@ -1,5 +1,13 @@
 import type { TalosChatLayoutPreferences } from './talosTypes'
 import { sanitizeTalosChatLayout } from './talosChatLayout'
+import {
+    talosContrastRatio,
+    talosNormalTextPairsFromStyle,
+    talosReadableForeground,
+    validateTalosNormalTextPairs,
+    type TalosContrastValidationResult,
+} from './talosContrast'
+import { talosMotionDurationStyle } from './talosMotion'
 
 export const TALOS_THEME_IDS = [
     'forge',
@@ -25,6 +33,9 @@ export type TalosThemePreset = {
     description: string
     mood: string
     motion: string
+    defaultDensity: TalosThemeDensity
+    defaultRadius: TalosThemeRadius
+    defaultMotion: Exclude<TalosThemeMotionMode, 'system' | 'off'>
     isLight: boolean
     fontUi: string
     fontMono: string
@@ -39,7 +50,7 @@ export type TalosThemePreset = {
 }
 
 export type TalosBackgroundEffect = 'dag-flow' | 'kahn-grid' | 'trace-rain' | 'signal-mesh' | 'none'
-export type TalosThemeFont = 'inter' | 'mono' | 'system' | 'display'
+export type TalosThemeFont = 'inter' | 'manrope' | 'mono' | 'system' | 'display' | 'serif'
 export type TalosThemeDensity = 'compact' | 'comfortable' | 'spacious'
 export type TalosThemeRadius = 'sharp' | 'balanced' | 'soft'
 export type TalosThemeMode = 'system' | 'light' | 'dark'
@@ -199,10 +210,12 @@ export const TALOS_THEME_AREA_TOKEN_OPTIONS: Array<{ value: TalosThemeAreaTokenK
 ]
 
 export const TALOS_THEME_FONT_OPTIONS: Array<{ value: TalosThemeFont; label: string }> = [
-    { value: 'inter', label: 'Inter / Geist' },
+    { value: 'inter', label: 'Instrument Sans' },
+    { value: 'manrope', label: 'Manrope' },
     { value: 'mono', label: 'Operator mono' },
     { value: 'system', label: 'System UI' },
-    { value: 'display', label: 'Display' },
+    { value: 'display', label: 'Sora Display' },
+    { value: 'serif', label: 'Source Serif 4' },
 ]
 
 export const TALOS_THEME_DENSITY_OPTIONS: Array<{ value: TalosThemeDensity; label: string }> = [
@@ -229,8 +242,11 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Industrial control surface for execution, traces and recovery.',
         mood: 'Graphite, amber, cyan',
         motion: 'DAG pulse',
+        defaultDensity: 'compact',
+        defaultRadius: 'balanced',
+        defaultMotion: 'normal',
         isLight: false,
-        fontUi: 'Inter',
+        fontUi: 'Instrument Sans',
         fontMono: 'JetBrains Mono',
         preview: { background: '#080b11', accent: '#c98b32', secondary: '#6ad4d4', line: '#27313e' },
         poster: themePoster('forge'),
@@ -243,9 +259,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Bright review mode for reports, audit trails and long reading.',
         mood: 'Ivory, ink, copper',
         motion: 'Calm grid',
+        defaultDensity: 'spacious',
+        defaultRadius: 'balanced',
+        defaultMotion: 'subtle',
         isLight: true,
-        fontUi: 'Inter',
-        fontMono: 'IBM Plex Mono',
+        fontUi: 'Source Serif 4',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#f8fafc', accent: '#a96617', secondary: '#2f6f7d', line: '#d7dee8' },
         poster: themePoster('paper'),
         defaultEffect: 'kahn-grid',
@@ -257,9 +276,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Shell-first mode with mono typography and low-noise scanlines.',
         mood: 'Black, green, phosphor',
         motion: 'Scanline drift',
+        defaultDensity: 'compact',
+        defaultRadius: 'sharp',
+        defaultMotion: 'cinematic',
         isLight: false,
-        fontUi: 'IBM Plex Mono',
-        fontMono: 'IBM Plex Mono',
+        fontUi: 'JetBrains Mono',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#020403', accent: '#63f08e', secondary: '#d6ff72', line: '#163821' },
         poster: themePoster('terminal'),
         defaultEffect: 'trace-rain',
@@ -271,6 +293,9 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Exploratory workspace for research, synthesis and creative branching.',
         mood: 'Teal, magenta, midnight',
         motion: 'Soft ribbons',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'soft',
+        defaultMotion: 'normal',
         isLight: false,
         fontUi: 'Manrope',
         fontMono: 'JetBrains Mono',
@@ -285,8 +310,11 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Cold-light enterprise theme with sharp contrast and spacious review.',
         mood: 'Ice, cobalt, orange',
         motion: 'Minimal mist',
+        defaultDensity: 'spacious',
+        defaultRadius: 'sharp',
+        defaultMotion: 'subtle',
         isLight: true,
-        fontUi: 'DM Sans',
+        fontUi: 'Instrument Sans',
         fontMono: 'JetBrains Mono',
         preview: { background: '#f4f9fb', accent: '#2367d1', secondary: '#ef7d30', line: '#c9d7e3' },
         poster: themePoster('glacier'),
@@ -299,9 +327,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Incident-response mode for failures, risks and high-signal alerts.',
         mood: 'Carbon, red, gold',
         motion: 'Heat markers',
+        defaultDensity: 'compact',
+        defaultRadius: 'sharp',
+        defaultMotion: 'cinematic',
         isLight: false,
-        fontUi: 'Source Sans 3',
-        fontMono: 'IBM Plex Mono',
+        fontUi: 'Instrument Sans',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#10090a', accent: '#ff5c62', secondary: '#ffbd5c', line: '#3b2224' },
         poster: themePoster('ember'),
         defaultEffect: 'trace-rain',
@@ -313,9 +344,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Boardroom-grade cockpit with measured color and calm density.',
         mood: 'Navy, copper, emerald',
         motion: 'Map grid',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'balanced',
+        defaultMotion: 'subtle',
         isLight: false,
-        fontUi: 'Aptos',
-        fontMono: 'Cascadia Mono',
+        fontUi: 'Manrope',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#07101f', accent: '#d49a52', secondary: '#57d49c', line: '#243146' },
         poster: themePoster('atlas'),
         defaultEffect: 'signal-mesh',
@@ -327,9 +361,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'High-contrast inspection surface for dense operational review.',
         mood: 'Black, white, red',
         motion: 'Hard edges',
+        defaultDensity: 'compact',
+        defaultRadius: 'sharp',
+        defaultMotion: 'subtle',
         isLight: false,
-        fontUi: 'Arial',
-        fontMono: 'Cascadia Mono',
+        fontUi: 'Instrument Sans',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#050505', accent: '#f2f2f2', secondary: '#ff405a', line: '#333333' },
         poster: themePoster('noir'),
         defaultEffect: 'trace-rain',
@@ -341,8 +378,11 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Command-center theme for fast triage, live status and action.',
         mood: 'Charcoal, coral, lime',
         motion: 'Telemetry lines',
+        defaultDensity: 'compact',
+        defaultRadius: 'balanced',
+        defaultMotion: 'cinematic',
         isLight: false,
-        fontUi: 'Geist',
+        fontUi: 'Manrope',
         fontMono: 'JetBrains Mono',
         preview: { background: '#091011', accent: '#ff6f61', secondary: '#b4f06f', line: '#213236' },
         poster: themePoster('signal'),
@@ -355,6 +395,9 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Deep-research lab mode with softer focus and experimental tone.',
         mood: 'Indigo, violet, mint',
         motion: 'Particle field',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'soft',
+        defaultMotion: 'normal',
         isLight: false,
         fontUi: 'Sora',
         fontMono: 'JetBrains Mono',
@@ -369,9 +412,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Warm document-first assistant surface inspired by Claude-style review flows.',
         mood: 'Cod gray, pampas, clay',
         motion: 'Soft proof grid',
+        defaultDensity: 'spacious',
+        defaultRadius: 'soft',
+        defaultMotion: 'subtle',
         isLight: true,
-        fontUi: 'Lora',
-        fontMono: 'IBM Plex Mono',
+        fontUi: 'Source Serif 4',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#faf9f5', accent: '#d97757', secondary: '#6a9bcc', line: '#e8e6dc' },
         poster: themePoster('claudius'),
         defaultEffect: 'kahn-grid',
@@ -383,9 +429,12 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         description: 'Generic Material-style baseline for familiar enterprise forms and predictable controls.',
         mood: 'Paper, Roboto, blue',
         motion: 'System grid',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'sharp',
+        defaultMotion: 'normal',
         isLight: true,
-        fontUi: 'Roboto',
-        fontMono: 'Roboto Mono',
+        fontUi: 'Instrument Sans',
+        fontMono: 'JetBrains Mono',
         preview: { background: '#fafafa', accent: '#1976d2', secondary: '#9c27b0', line: '#e0e0e0' },
         poster: themePoster('basicus'),
         defaultEffect: 'kahn-grid',
@@ -446,6 +495,106 @@ function mixColor(color: string, amount: number, target: string) {
     return `color-mix(in srgb, ${color} ${amount}%, ${target})`
 }
 
+function accessibleAccentHover(accent: string) {
+    const foreground = talosReadableForeground(accent)
+    const target = foreground === '#ffffff' ? '#000000' : '#ffffff'
+
+    for (const amount of [90, 84, 78]) {
+        const candidate = mixColor(accent, amount, target)
+        if (talosContrastRatio(candidate, foreground) >= 4.5) return candidate
+    }
+
+    return accent
+}
+
+function accessibleFocusRing(accent: string, surface: string) {
+    if (talosContrastRatio(accent, surface) >= 3) return accent
+
+    const darkRatio = talosContrastRatio('#000000', surface)
+    const lightRatio = talosContrastRatio('#ffffff', surface)
+    return darkRatio >= lightRatio ? '#000000' : '#ffffff'
+}
+
+function fontFamily(value: string, fallback: string) {
+    const name = value.includes(' ') ? `"${value}"` : value
+    return `${name}, ${fallback}`
+}
+
+function talosThemeFontStyle(preset: TalosThemePreset): Record<string, string> {
+    return {
+        '--talos-font-ui': fontFamily(preset.fontUi, 'ui-sans-serif, system-ui, sans-serif'),
+        '--talos-font-display': fontFamily(preset.fontUi, 'ui-sans-serif, system-ui, sans-serif'),
+        '--talos-font-mono': fontFamily(preset.fontMono, 'ui-monospace, monospace'),
+    }
+}
+
+function talosStatusStyle(mode: TalosResolvedThemeMode, background: string): Record<string, string> {
+    const light = mode === 'light'
+    const surfaceTarget = light ? '#ffffff' : background
+    const successSoft = mixColor(light ? '#16a34a' : '#22c55e', light ? 10 : 15, surfaceTarget)
+    const warningSoft = mixColor('#f59e0b', light ? 12 : 16, surfaceTarget)
+    const dangerSoft = mixColor(light ? '#dc2626' : '#ef4444', light ? 10 : 15, surfaceTarget)
+    const infoSoft = mixColor(light ? '#2563eb' : '#60a5fa', light ? 10 : 15, surfaceTarget)
+    const borderTarget = light ? '#d7dee8' : '#111827'
+    const borderWeight = light ? 44 : 45
+    const success = talosReadableForeground(successSoft, '#14532d', '#dcfce7')
+    const warning = talosReadableForeground(warningSoft, '#713f12', '#fef3c7')
+    const danger = talosReadableForeground(dangerSoft, '#7f1d1d', '#fee2e2')
+    const info = talosReadableForeground(infoSoft, '#1e3a8a', '#dbeafe')
+
+    return {
+        '--talos-success': success,
+        '--talos-success-soft': successSoft,
+        '--talos-success-border': mixColor(light ? '#16a34a' : '#22c55e', borderWeight, borderTarget),
+        '--talos-warning': warning,
+        '--talos-warning-soft': warningSoft,
+        '--talos-warning-border': mixColor('#f59e0b', light ? 46 : 48, borderTarget),
+        '--talos-danger': danger,
+        '--talos-danger-soft': dangerSoft,
+        '--talos-danger-border': mixColor(light ? '#dc2626' : '#ef4444', borderWeight, borderTarget),
+        '--talos-info': info,
+        '--talos-info-soft': infoSoft,
+        '--talos-info-border': mixColor(light ? '#2563eb' : '#60a5fa', borderWeight, borderTarget),
+        '--talos-system': warningSoft,
+        '--talos-system-text': warning,
+        '--talos-chat-error': dangerSoft,
+        '--talos-chat-error-text': danger,
+    }
+}
+
+function talosEffectiveAreaFallbackStyle(style: Record<string, string>) {
+    const tokenMap: Record<string, string> = {
+        background: '--talos-background',
+        sidebar: '--talos-sidebar',
+        header: '--talos-header',
+        panel: '--talos-panel',
+        'panel-soft': '--talos-panel-soft',
+        card: '--talos-card',
+        'window-background': '--talos-window-bg',
+        'chat-background': '--talos-chat-bg',
+        'composer-background': '--talos-composer-bg',
+        'composer-surface': '--talos-composer-surface',
+        'composer-text': '--talos-composer-text',
+        text: '--talos-text',
+        muted: '--talos-muted',
+        border: '--talos-border',
+        'border-strong': '--talos-border-strong',
+        accent: '--talos-accent',
+        'accent-text': '--talos-accent-text',
+        secondary: '--talos-secondary',
+        active: '--talos-active',
+        'code-background': '--talos-code-bg',
+        'code-surface': '--talos-code-surface',
+        'code-text': '--talos-code-text',
+        'code-border': '--talos-code-border',
+    }
+    const fallbacks = Object.fromEntries(Object.entries(tokenMap).flatMap(([name, token]) => (
+        style[token] ? [[`--talos-effective-${name}`, style[token]]] : []
+    )))
+
+    return { ...style, ...fallbacks }
+}
+
 export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResolvedThemeMode): Record<string, string> {
     const preset = talosThemePreset(theme)
     const accent = preset.preview.accent
@@ -456,9 +605,12 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
         const background = preset.isLight ? preset.preview.background : mixColor(accent, 5, '#f8fafc')
         const panel = mixColor(background, 92, '#ffffff')
         const text = '#111827'
-        const muted = mixColor(text, 58, 'transparent')
+        const muted = mixColor(text, 68, background)
+        const user = mixColor(accent, 88, '#ffffff')
 
-        return {
+        return talosEffectiveAreaFallbackStyle({
+            ...talosThemeFontStyle(preset),
+            ...talosStatusStyle(mode, background),
             '--talos-background': background,
             '--talos-sidebar': mixColor(background, 92, '#ffffff'),
             '--talos-header': mixColor(background, 88, '#ffffff'),
@@ -479,23 +631,15 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
             '--talos-secondary': mixColor(secondary, 16, '#ffffff'),
             '--talos-accent': accent,
             '--talos-accent-border': mixColor(accent, 74, '#1f2937'),
-            '--talos-accent-hover': mixColor(accent, 78, '#ffffff'),
+            '--talos-accent-hover': accessibleAccentHover(accent),
             '--talos-accent-soft': mixColor(accent, 13, background),
-            '--talos-accent-text': '#111827',
-            '--talos-user': mixColor(accent, 88, '#ffffff'),
-            '--talos-user-text': '#101827',
+            '--talos-accent-text': talosReadableForeground(accent),
+            '--talos-ring': accessibleFocusRing(accent, panel),
+            '--talos-ring-soft': mixColor(accessibleFocusRing(accent, panel), 22, 'transparent'),
+            '--talos-user': user,
+            '--talos-user-text': talosReadableForeground(user, '#000000'),
             '--talos-assistant': mixColor(panel, 96, '#ffffff'),
             '--talos-assistant-text': text,
-            '--talos-system': mixColor('#f59e0b', 13, '#ffffff'),
-            '--talos-system-text': '#3f2d0a',
-            '--talos-chat-error': mixColor('#dc2626', 12, '#ffffff'),
-            '--talos-chat-error-text': '#4c0519',
-            '--talos-warning-soft': mixColor('#f59e0b', 12, '#ffffff'),
-            '--talos-warning-border': mixColor('#f59e0b', 46, '#d7dee8'),
-            '--talos-danger-soft': mixColor('#dc2626', 10, '#ffffff'),
-            '--talos-danger-border': mixColor('#dc2626', 44, '#d7dee8'),
-            '--talos-success-soft': mixColor('#16a34a', 10, '#ffffff'),
-            '--talos-success-border': mixColor('#16a34a', 44, '#d7dee8'),
             '--talos-code-bg': mixColor(background, 74, '#ffffff'),
             '--talos-code-surface': mixColor(panel, 92, '#ffffff'),
             '--talos-code-text': text,
@@ -506,14 +650,17 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
             '--talos-line-a': mixColor(secondary, 34, 'transparent'),
             '--talos-line-b': mixColor(accent, 32, 'transparent'),
             '--talos-node': mixColor(secondary, 54, 'transparent'),
-        }
+        })
     }
 
     const background = preset.isLight ? mixColor(accent, 10, '#06080d') : preset.preview.background
     const panel = mixColor(background, 86, '#141a24')
     const text = '#edf2f7'
+    const user = mixColor(accent, 84, '#f8fbff')
 
-    return {
+    return talosEffectiveAreaFallbackStyle({
+        ...talosThemeFontStyle(preset),
+        ...talosStatusStyle(mode, background),
         '--talos-background': background,
         '--talos-sidebar': mixColor(background, 92, '#02060b'),
         '--talos-header': mixColor(background, 90, '#02060b'),
@@ -526,7 +673,7 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
         '--talos-composer-surface': panel,
         '--talos-composer-text': text,
         '--talos-text': text,
-        '--talos-muted': mixColor(text, 62, 'transparent'),
+        '--talos-muted': mixColor(text, 68, background),
         '--talos-border': mixColor(line, 74, '#111827'),
         '--talos-border-strong': mixColor(line, 82, '#dce7f5'),
         '--talos-input': mixColor(line, 76, '#111827'),
@@ -534,23 +681,15 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
         '--talos-secondary': mixColor(secondary, 16, background),
         '--talos-accent': accent,
         '--talos-accent-border': mixColor(accent, 78, '#05070b'),
-        '--talos-accent-hover': mixColor(accent, 84, '#ffffff'),
+        '--talos-accent-hover': accessibleAccentHover(accent),
         '--talos-accent-soft': mixColor(accent, 18, background),
-        '--talos-accent-text': '#111827',
-        '--talos-user': mixColor(accent, 84, '#f8fbff'),
-        '--talos-user-text': '#0b111d',
+        '--talos-accent-text': talosReadableForeground(accent),
+        '--talos-ring': accessibleFocusRing(accent, panel),
+        '--talos-ring-soft': mixColor(accessibleFocusRing(accent, panel), 22, 'transparent'),
+        '--talos-user': user,
+        '--talos-user-text': talosReadableForeground(user, '#000000'),
         '--talos-assistant': mixColor(panel, 94, '#05070b'),
         '--talos-assistant-text': text,
-        '--talos-system': mixColor('#f59e0b', 18, background),
-        '--talos-system-text': text,
-        '--talos-chat-error': mixColor('#ef4444', 16, background),
-        '--talos-chat-error-text': text,
-        '--talos-warning-soft': mixColor('#f59e0b', 16, background),
-        '--talos-warning-border': mixColor('#f59e0b', 48, '#111827'),
-        '--talos-danger-soft': mixColor('#ef4444', 15, background),
-        '--talos-danger-border': mixColor('#ef4444', 45, '#111827'),
-        '--talos-success-soft': mixColor('#22c55e', 15, background),
-        '--talos-success-border': mixColor('#22c55e', 45, '#111827'),
         '--talos-code-bg': mixColor(background, 84, '#05070b'),
         '--talos-code-surface': mixColor(panel, 92, '#05070b'),
         '--talos-code-text': text,
@@ -561,7 +700,15 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
         '--talos-line-a': mixColor(secondary, 34, 'transparent'),
         '--talos-line-b': mixColor(accent, 36, 'transparent'),
         '--talos-node': mixColor(secondary, 58, 'transparent'),
-    }
+    })
+}
+
+export function talosThemeNormalTextContrast(
+    theme: TalosThemeId,
+    mode: TalosResolvedThemeMode,
+): TalosContrastValidationResult {
+    const style = talosThemeModeVariantStyle(theme, mode)
+    return validateTalosNormalTextPairs(talosNormalTextPairsFromStyle(style), style)
 }
 
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i
@@ -1007,11 +1154,31 @@ export function sanitizeTalosThemeLibrary(value: unknown): TalosNamedTheme[] {
 }
 
 export function parseTalosThemeExport(value: unknown): TalosNamedTheme | null {
-    if (!isRecord(value) || value.schema !== 'talos_theme_export_v1') {
+    if (
+        !isRecord(value)
+        || !Object.hasOwn(value, 'schema')
+        || value.schema !== 'talos_theme_export_v1'
+        || !Object.hasOwn(value, 'theme')
+        || !isRecord(value.theme)
+    ) {
         return null
     }
 
-    return sanitizeTalosNamedTheme(value.theme)
+    if (
+        !Object.hasOwn(value.theme, 'base_theme')
+        || !isTalosThemeId(value.theme.base_theme)
+        || !Object.hasOwn(value.theme, 'tokens')
+        || !isRecord(value.theme.tokens)
+    ) {
+        return null
+    }
+
+    const theme = sanitizeTalosNamedTheme(value.theme)
+    if (!theme || !validateTalosThemeCustomizationContrast(theme.tokens, theme.base_theme).valid) {
+        return null
+    }
+
+    return theme
 }
 
 export function buildTalosThemeExport(theme: TalosNamedTheme): TalosThemeExportV1 {
@@ -1180,6 +1347,7 @@ export function talosUiAnimationStyle(
 ): Record<string, string> {
     if (uiMotionDisabled || profile === 'off') {
         return {
+            ...talosMotionDurationStyle(100, false),
             '--talos-motion-open-duration': '0ms',
             '--talos-motion-close-duration': '0ms',
             '--talos-window-minimize-duration': '0ms',
@@ -1200,6 +1368,7 @@ export function talosUiAnimationStyle(
     const resolved = resolvedTalosUiAnimation(theme, profile, customization)
 
     return {
+        ...talosMotionDurationStyle(resolved.duration_scale),
         '--talos-motion-open-duration': scaledMs(160, resolved.duration_scale),
         '--talos-motion-close-duration': scaledMs(120, resolved.duration_scale),
         '--talos-window-minimize-duration': scaledMs(420, resolved.duration_scale),
@@ -1217,87 +1386,13 @@ export function talosUiAnimationStyle(
     }
 }
 
-const AREA_STYLE_MAP: Record<TalosThemeAreaId, Partial<Record<TalosThemeAreaTokenKey, string[]>>> = {
-    sidebar: {
-        background: ['--talos-sidebar'],
-        surface: ['--talos-panel-soft'],
-        text: ['--talos-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-border'],
-        accent: ['--talos-accent'],
-    },
-    chat: {
-        background: ['--talos-chat-bg'],
-        surface: ['--talos-panel'],
-        text: ['--talos-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-border'],
-        accent: ['--talos-accent'],
-    },
-    composer: {
-        background: ['--talos-composer-bg'],
-        surface: ['--talos-composer-surface'],
-        text: ['--talos-composer-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-composer-border'],
-        accent: ['--talos-accent'],
-    },
-    window: {
-        background: ['--talos-window-bg'],
-        surface: ['--talos-card'],
-        text: ['--talos-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-border'],
-        accent: ['--talos-accent'],
-    },
-    header: {
-        background: ['--talos-header'],
-        surface: ['--talos-panel'],
-        text: ['--talos-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-border'],
-        accent: ['--talos-accent'],
-    },
-    button: {
-        background: ['--talos-secondary'],
-        surface: ['--talos-active'],
-        text: ['--talos-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-border'],
-        accent: ['--talos-accent'],
-    },
-    card: {
-        background: ['--talos-card'],
-        surface: ['--talos-panel'],
-        text: ['--talos-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-border'],
-        accent: ['--talos-accent'],
-    },
-    code: {
-        background: ['--talos-code-bg'],
-        surface: ['--talos-code-surface'],
-        text: ['--talos-code-text'],
-        muted: ['--talos-muted'],
-        border: ['--talos-code-border'],
-        accent: ['--talos-code-accent'],
-    },
-}
-
 export function talosThemeAreaTokenStyle(areaTokens: TalosThemeAreaTokens): Record<string, string> {
     const style: Record<string, string> = {}
 
     for (const [area, tokens] of Object.entries(areaTokens) as Array<[TalosThemeAreaId, Partial<Record<TalosThemeAreaTokenKey, string>>]>) {
-        const mapping = AREA_STYLE_MAP[area]
-        if (!mapping) {
-            continue
-        }
-
         for (const [key, value] of Object.entries(tokens) as Array<[TalosThemeAreaTokenKey, string]>) {
-            const variables = mapping[key] ?? []
-            for (const variable of variables) {
-                style[variable] = value
-            }
+            style[`--talos-area-${area}-${key}`] = value
+            if (key === 'accent') style[`--talos-area-${area}-accent-text`] = talosReadableForeground(value)
         }
     }
 
@@ -1311,6 +1406,9 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
         style['--talos-background'] = customization.background
         style['--talos-sidebar'] = customization.background
         style['--talos-header'] = `color-mix(in srgb, ${customization.background} 88%, black)`
+        style['--talos-effective-background'] = style['--talos-background']
+        style['--talos-effective-sidebar'] = style['--talos-sidebar']
+        style['--talos-effective-header'] = style['--talos-header']
     }
 
     if (customization.panel) {
@@ -1320,21 +1418,30 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
             ? `color-mix(in srgb, ${customization.panel} 72%, ${customization.background})`
             : `color-mix(in srgb, ${customization.panel} 84%, black)`
         style['--talos-secondary'] = `color-mix(in srgb, ${customization.panel} 78%, ${customization.accent ?? '#c98b32'})`
+        style['--talos-effective-panel'] = style['--talos-panel']
+        style['--talos-effective-card'] = style['--talos-card']
+        style['--talos-effective-panel-soft'] = style['--talos-panel-soft']
+        style['--talos-effective-secondary'] = style['--talos-secondary']
     }
 
     if (customization.text) {
         style['--talos-text'] = customization.text
-        style['--talos-muted'] = `color-mix(in srgb, ${customization.text} 62%, transparent)`
+        style['--talos-muted'] = `color-mix(in srgb, ${customization.text} 68%, ${customization.background ?? 'var(--talos-background)'})`
+        style['--talos-effective-text'] = style['--talos-text']
+        style['--talos-effective-muted'] = style['--talos-muted']
     }
 
     if (customization.accent) {
         style['--talos-accent'] = customization.accent
+        style['--talos-accent-text'] = talosReadableForeground(customization.accent)
         style['--talos-accent-border'] = `color-mix(in srgb, ${customization.accent} 78%, black)`
-        style['--talos-accent-hover'] = `color-mix(in srgb, ${customization.accent} 82%, white)`
+        style['--talos-accent-hover'] = accessibleAccentHover(customization.accent)
         style['--talos-accent-soft'] = `color-mix(in srgb, ${customization.accent} 18%, ${customization.background ?? 'var(--talos-background)'})`
         style['--talos-ring'] = customization.accent
         style['--talos-ring-soft'] = `color-mix(in srgb, ${customization.accent} 22%, transparent)`
         style['--talos-line-b'] = `color-mix(in srgb, ${customization.accent} 42%, transparent)`
+        style['--talos-effective-accent'] = style['--talos-accent']
+        style['--talos-effective-accent-text'] = style['--talos-accent-text']
     }
 
     if (customization.secondary) {
@@ -1348,20 +1455,28 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
         style['--talos-border'] = customization.border
         style['--talos-border-strong'] = `color-mix(in srgb, ${customization.border} 72%, ${customization.text ?? 'white'})`
         style['--talos-input'] = customization.border
+        style['--talos-effective-border'] = style['--talos-border']
+        style['--talos-effective-border-strong'] = style['--talos-border-strong']
     }
 
     if (customization.font === 'inter') {
-        style['--talos-font-ui'] = 'Inter, Geist, ui-sans-serif, system-ui, sans-serif'
-        style['--talos-font-display'] = 'Inter, Geist, ui-sans-serif, system-ui, sans-serif'
+        style['--talos-font-ui'] = '"Instrument Sans", ui-sans-serif, system-ui, sans-serif'
+        style['--talos-font-display'] = '"Instrument Sans", ui-sans-serif, system-ui, sans-serif'
+    } else if (customization.font === 'manrope') {
+        style['--talos-font-ui'] = 'Manrope, "Instrument Sans", ui-sans-serif, sans-serif'
+        style['--talos-font-display'] = 'Manrope, "Instrument Sans", ui-sans-serif, sans-serif'
     } else if (customization.font === 'mono') {
-        style['--talos-font-ui'] = '"IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace'
-        style['--talos-font-display'] = '"IBM Plex Mono", "Cascadia Mono", ui-monospace, monospace'
+        style['--talos-font-ui'] = '"JetBrains Mono", ui-monospace, monospace'
+        style['--talos-font-display'] = '"JetBrains Mono", ui-monospace, monospace'
     } else if (customization.font === 'system') {
         style['--talos-font-ui'] = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
         style['--talos-font-display'] = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
     } else if (customization.font === 'display') {
-        style['--talos-font-ui'] = 'Orbitron, Inter, ui-sans-serif, system-ui, sans-serif'
-        style['--talos-font-display'] = 'Orbitron, Inter, ui-sans-serif, system-ui, sans-serif'
+        style['--talos-font-ui'] = 'Sora, ui-sans-serif, system-ui, sans-serif'
+        style['--talos-font-display'] = 'Sora, ui-sans-serif, system-ui, sans-serif'
+    } else if (customization.font === 'serif') {
+        style['--talos-font-ui'] = '"Source Serif 4", "Instrument Sans", ui-serif, serif'
+        style['--talos-font-display'] = '"Source Serif 4", "Instrument Sans", ui-serif, serif'
     }
 
     if (customization.radius === 'sharp') {
@@ -1371,8 +1486,8 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
         style['--talos-radius-card'] = '8px'
         style['--talos-radius-control'] = '6px'
     } else if (customization.radius === 'soft') {
-        style['--talos-radius-card'] = '12px'
-        style['--talos-radius-control'] = '10px'
+        style['--talos-radius-card'] = '8px'
+        style['--talos-radius-control'] = '8px'
     }
 
     if (customization.effect_intensity !== undefined) {
@@ -1396,4 +1511,40 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
     }
 
     return style
+}
+
+export function validateTalosThemeCustomizationContrast(
+    value: unknown,
+    baseTheme: TalosThemeId = TALOS_DEFAULT_THEME,
+): TalosContrastValidationResult {
+    const customization = sanitizeTalosThemeCustomization(value)
+    const errors = (['light', 'dark'] as const).flatMap((mode) => {
+        const style = {
+            ...talosThemeModeVariantStyle(baseTheme, mode),
+            ...talosThemeCustomizationStyle(customization),
+        }
+
+        const pairs = [
+            ...talosNormalTextPairsFromStyle(style),
+            {
+                field: 'accent-hover-text',
+                foreground: style['--talos-accent-text'],
+                background: style['--talos-accent-hover'],
+            },
+            {
+                field: 'focus-ring-on-composer',
+                foreground: style['--talos-ring'],
+                background: style['--talos-composer-surface'],
+                minimum: 3,
+            },
+        ]
+
+        return validateTalosNormalTextPairs(pairs, style).errors.map((error) => ({
+            ...error,
+            field: `${mode}/${error.field}`,
+            message: `${mode}: ${error.message}`,
+        }))
+    })
+
+    return { valid: errors.length === 0, errors }
 }

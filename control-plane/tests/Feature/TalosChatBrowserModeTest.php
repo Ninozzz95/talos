@@ -23,6 +23,7 @@ final class TalosChatBrowserModeTest extends TestCase
 
     private User $user;
     private FakeBrowserSessionClient $client;
+    private ?TalosSession $currentChatSession = null;
 
     protected function setUp(): void
     {
@@ -70,6 +71,29 @@ final class TalosChatBrowserModeTest extends TestCase
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $foreign->id],
         ])->assertNotFound()->assertJsonPath('code', 'TALOS_BROWSER_MODE_UNAVAILABLE');
 
+        Http::assertNothingSent();
+    }
+
+    public function test_browser_mode_rejects_a_browser_session_bound_to_another_owned_chat(): void
+    {
+        $firstChat = $this->chatSession();
+        $browser = $this->browserSession();
+        $secondChat = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Second chat',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        Http::fake(['validator.test/chat' => Http::response(['text' => 'Should not run'])]);
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $secondChat->id,
+            'message' => 'Reuse the first chat browser session.',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertNotFound()->assertJsonPath('code', 'TALOS_BROWSER_MODE_UNAVAILABLE');
+
+        $this->assertSame($firstChat->id, $browser->talos_session_id);
         Http::assertNothingSent();
     }
 
@@ -510,6 +534,36 @@ final class TalosChatBrowserModeTest extends TestCase
         ]);
     }
 
+    public function test_conversational_screenshot_request_executes_server_owned_capture_without_model_output(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        Http::fake(fn () => Http::response([
+            'mutations' => [],
+            'text' => '![Screenshot inventato](https://i.ibb.co/fabricated/screenshot.png)',
+            'dag' => "DAG State:\n(empty)",
+        ]));
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'Riesci a farmi uno screenshot?',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()
+            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('browser_activities.0.operation', 'screenshot')
+            ->assertJsonPath('browser_activities.0.status', 'succeeded');
+
+        Http::assertNothingSent();
+        $this->assertStringNotContainsString('http', (string) $response->json('text'));
+        $this->assertDatabaseHas('talos_browser_artifacts', [
+            'id' => $response->json('browser_activities.0.artifact_ids.0'),
+            'browser_session_id' => $browser->id,
+            'type' => 'screenshot',
+            'mime' => 'image/png',
+        ]);
+    }
+
     public function test_affirmative_reply_to_a_screenshot_offer_executes_capture_without_a_model_generated_url(): void
     {
         $chat = $this->chatSession();
@@ -572,6 +626,44 @@ final class TalosChatBrowserModeTest extends TestCase
             $this->client->requests,
             fn (array $request): bool => $request['method'] !== 'inspect',
         )));
+    }
+
+    public function test_retry_phrase_after_a_screenshot_refusal_executes_server_owned_capture(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $chat->messages()->create([
+            'role' => 'user',
+            'content' => 'puoi fare uno screenshot?',
+            'metadata' => ['source' => 'talos_chat_page'],
+        ]);
+        $chat->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Non posso fare screenshot in questo momento.',
+            'metadata' => ['source' => 'talos_chat_proxy', 'browser_activities' => []],
+        ]);
+        Http::fake(fn () => Http::response([
+            'mutations' => [],
+            'errors' => ['unsupported browser action'],
+            'text' => '',
+        ]));
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'prova ora',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()
+            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('browser_activities.0.operation', 'screenshot')
+            ->assertJsonPath('browser_activities.0.status', 'succeeded');
+
+        Http::assertNothingSent();
+        $this->assertDatabaseHas('talos_browser_artifacts', [
+            'id' => $response->json('browser_activities.0.artifact_ids.0'),
+            'browser_session_id' => $browser->id,
+            'type' => 'screenshot',
+        ]);
     }
 
     public function test_screenshot_capability_question_does_not_trigger_an_implicit_capture(): void
@@ -675,6 +767,241 @@ final class TalosChatBrowserModeTest extends TestCase
         $response->assertJsonPath('browser_activities.1.operation', 'snapshot');
         $browserRequests = array_values(array_filter($this->client->requests, fn (array $request): bool => $request['method'] !== 'inspect'));
         $this->assertSame('https://tanteauto.it/home', $browserRequests[0]['url'] ?? null);
+    }
+
+    public function test_browser_follow_up_recovers_a_current_page_after_a_non_executable_plan(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $url = 'https://autosupermarket.it/';
+        $browser->update([
+            'status' => 'active',
+            'current_url' => $url,
+            'current_title' => 'Just a moment...',
+        ]);
+        $this->client->snapshotResponse = [
+            'format' => 'accessibility_refs_v1',
+            'textDigest' => 'Browser verification challenge detected.',
+            'nodes' => [['ref' => 'r1', 'role' => 'heading', 'name' => 'Just a moment...', 'visible' => true]],
+            'url' => $url,
+            'title' => 'Just a moment...',
+        ];
+        $calls = 0;
+
+        Http::fake(function ($request) use (&$calls, $url) {
+            $calls++;
+            if ($calls === 1) {
+                $this->assertNotSame('final_answer', data_get($request->data(), 'browser_mode.phase'));
+
+                return Http::response([
+                    'mutations' => [],
+                    'text' => '',
+                    'errors' => ['browser_plan_channel: model_plan: incomplete Browser output.'],
+                ]);
+            }
+
+            $this->assertSame('final_answer', data_get($request->data(), 'browser_mode.phase'));
+            $this->assertSame([], data_get($request->data(), 'tool_context.tools'));
+            $this->assertStringContainsString('TALOS_BROWSER_OBSERVATION', (string) $request['message']);
+            $this->assertStringContainsString($url, (string) $request['message']);
+
+            return Http::response([
+                'mutations' => [],
+                'text' => 'La pagina mostra una verifica del browser e non espone ancora il contenuto del sito.',
+                'dag' => "DAG State:\n(empty)",
+            ]);
+        });
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'rispondi',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()
+            ->assertJsonPath('text', 'La pagina mostra una verifica del browser e non espone ancora il contenuto del sito.')
+            ->assertJsonPath('browser_activities.0.operation', 'snapshot')
+            ->assertJsonPath('used_browser_context.url', $url);
+
+        $this->assertSame(2, $calls);
+        $this->assertSame(
+            ['snapshot'],
+            array_values(array_column(array_filter($this->client->requests, fn (array $request): bool => $request['method'] !== 'inspect'), 'method')),
+        );
+    }
+
+    public function test_browser_worker_failure_is_not_reported_as_a_validator_fault(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $this->client->afterRequest = function (string $method): void {
+            if ($method === 'inspect') {
+                $this->client->failure = new BrowserWorkerException(
+                    'TALOS_BROWSER_NAVIGATION_FAILED',
+                    'Browser navigation failed in the worker.',
+                );
+            }
+        };
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'naviga su https://example.com e dimmi cosa vedi',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertStatus(502)
+            ->assertJsonPath('code', 'TALOS_BROWSER_NAVIGATION_FAILED')
+            ->assertJsonPath('error', 'Browser navigation failed in the worker.')
+            ->assertJsonPath('chat_error.layer', 'browser_worker')
+            ->assertJsonPath('chat_error.code', 'TALOS_BROWSER_NAVIGATION_FAILED')
+            ->assertJsonPath('chat_error.retryable', true);
+
+        Http::assertNothingSent();
+        $this->assertDatabaseHas('talos_run_events', [
+            'event_type' => 'browser.command.failed',
+        ]);
+        $this->assertRunFailed();
+    }
+
+    public function test_url_embedded_in_a_natural_language_request_navigates_and_snapshots_before_planning(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $url = 'https://caradero-web.vercel.app/vehicles/hyundai-i20-10-t-gdi-connectline-exterior-pack-90cv-mt-AJBVXK7F';
+        $evidenceTail = 'VEHICLE_DETAIL_AT_END_OF_SNAPSHOT';
+        $this->client->snapshotResponse = [
+            'format' => 'accessibility_refs_v1',
+            'textDigest' => str_repeat('page evidence ', 220).$evidenceTail,
+            'nodes' => [['ref' => 'r1', 'role' => 'heading', 'name' => 'Hyundai i20', 'visible' => true]],
+            'url' => $url,
+            'title' => 'Hyundai i20 - Caradero',
+        ];
+        $calls = 0;
+
+        Http::fake(function ($request) use (&$calls, $url, $evidenceTail) {
+            $calls++;
+            $message = (string) $request['message'];
+
+            if (! str_contains($message, '"operation":"snapshot"')) {
+                return Http::response([
+                    'mutations' => $this->browserMutation(
+                        $request->data(),
+                        'navigate',
+                        ['url' => $url],
+                        'bc_repeated_navigation',
+                        'sha256:'.str_repeat('a', 64),
+                    ),
+                    'text' => '',
+                ]);
+            }
+
+            $this->assertStringContainsString($url, $message);
+            $this->assertStringContainsString('TALOS_BROWSER_OBSERVATION', $message);
+            $this->assertStringContainsString($evidenceTail, $message);
+            $this->assertSame('final_answer', data_get($request->data(), 'browser_mode.phase'));
+            $this->assertSame([], data_get($request->data(), 'tool_context.tools'));
+
+            return Http::response([
+                'mutations' => [],
+                'text' => 'La pagina mostra una Hyundai i20 con i dettagli del veicolo.',
+                'dag' => "DAG State:\n(empty)",
+            ]);
+        });
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => $url.' analizza questa pagina e dimmi cosa vedi',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()->assertJsonPath('text', 'La pagina mostra una Hyundai i20 con i dettagli del veicolo.');
+
+        $this->assertSame(1, $calls);
+        $response->assertJsonCount(2, 'browser_activities')
+            ->assertJsonPath('browser_activities.0.operation', 'navigate')
+            ->assertJsonPath('browser_activities.1.operation', 'snapshot');
+
+        $browserRequests = array_values(array_filter(
+            $this->client->requests,
+            fn (array $request): bool => $request['method'] !== 'inspect',
+        ));
+        $this->assertSame(['navigate', 'snapshot'], array_column($browserRequests, 'method'));
+        $this->assertSame($url, $browserRequests[0]['url'] ?? null);
+    }
+
+    public function test_markdown_url_uses_the_exact_balanced_navigation_target(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $url = 'https://example.com/vehicles/hyundai-i20';
+        Http::fake(function ($request) {
+            $this->assertSame('final_answer', data_get($request->data(), 'browser_mode.phase'));
+
+            return Http::response(['mutations' => [], 'text' => 'Grounded Markdown URL answer.']);
+        });
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => "Analizza [questa pagina]({$url}) e dimmi cosa vedi.",
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()->assertJsonPath('text', 'Grounded Markdown URL answer.');
+
+        $response->assertJsonPath('browser_activities.0.operation', 'navigate')
+            ->assertJsonPath('browser_activities.1.operation', 'snapshot');
+        $browserRequests = array_values(array_filter(
+            $this->client->requests,
+            fn (array $request): bool => $request['method'] !== 'inspect',
+        ));
+        $this->assertSame($url, $browserRequests[0]['url'] ?? null);
+    }
+
+    public function test_latest_browser_observation_survives_a_full_context_budget(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $this->client->snapshotResponse = [
+            'format' => 'accessibility_refs_v1',
+            'textDigest' => str_repeat('initial page evidence ', 250),
+            'nodes' => [
+                ...array_map(
+                    static fn (int $index): array => ['ref' => 'r'.$index, 'role' => 'text', 'name' => str_repeat('x', 450), 'visible' => true],
+                    range(1, 20),
+                ),
+                ['ref' => 'r21', 'role' => 'text', 'name' => 'needle LATEST_EVIDENCE_MARKER', 'visible' => true],
+            ],
+            'url' => 'https://example.com/large-page',
+            'title' => 'Large evidence page',
+        ];
+        $calls = 0;
+
+        Http::fake(function ($request) use (&$calls) {
+            $calls++;
+            $message = (string) $request['message'];
+            if ($calls === 1) {
+                return Http::response(['mutations' => $this->browserMutation($request->data(), 'snapshot', []), 'text' => '']);
+            }
+            if ($calls === 2) {
+                preg_match('/"evidence_hash":"(sha256:[a-f0-9]{64})"/', $message, $matches);
+                $this->assertNotEmpty($matches[1] ?? null);
+
+                return Http::response([
+                    'mutations' => $this->browserMutation($request->data(), 'read', ['query' => 'needle'], null, null, $matches[1]),
+                    'text' => '',
+                ]);
+            }
+
+            $this->assertStringContainsString('"operation":"read"', $message);
+            $this->assertStringContainsString('LATEST_EVIDENCE_MARKER', $message);
+
+            return Http::response(['mutations' => [], 'text' => 'Latest evidence retained.']);
+        });
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'Inspect the large current page and answer from the latest evidence.',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()->assertJsonPath('text', 'Latest evidence retained.');
+
+        $this->assertSame(3, $calls);
     }
 
     public function test_navigation_invalidates_prior_snapshot_before_read(): void
@@ -792,7 +1119,7 @@ final class TalosChatBrowserModeTest extends TestCase
 
         $response = $this->postJson('/api/talos/chat', [
             'session_id' => $chat->id,
-            'message' => 'Open https://example.com and tell me what you see.',
+            'message' => 'Open the configured example page and tell me what you see.',
             'api_key' => 'sk-test',
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
         ])->assertOk()->assertJsonPath('text', 'Grounded page summary.');
@@ -937,6 +1264,59 @@ final class TalosChatBrowserModeTest extends TestCase
         $this->assertRunFailed();
     }
 
+    public function test_browser_mode_reports_an_unsupported_interaction_as_a_capability_fault(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        Http::fake(fn () => Http::response([
+            'mutations' => [],
+            'text' => '',
+            'errors' => ['browser_plan: Unknown or state-changing browser operation.'],
+        ]));
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => "C'e la modale cookie di mezzo, puoi levarla?",
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'TALOS_BROWSER_INTERACTION_UNAVAILABLE')
+            ->assertJsonPath('chat_error.layer', 'browser_capability')
+            ->assertJsonPath('chat_error.code', 'TALOS_BROWSER_INTERACTION_UNAVAILABLE')
+            ->assertJsonPath('chat_error.retryable', false);
+
+        $this->assertSame([], array_filter($this->client->requests, fn (array $request): bool => $request['method'] !== 'inspect'));
+        $this->assertDatabaseHas('talos_run_events', [
+            'event_type' => 'browser.command.failed',
+        ]);
+        $this->assertRunFailed();
+    }
+
+    public function test_browser_mode_preserves_a_typed_interaction_capability_fault(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        Http::fake(fn () => Http::response([
+            'mutations' => [],
+            'text' => '',
+            'errors' => [[
+                'code' => 'TALOS_BROWSER_INTERACTION_UNAVAILABLE',
+                'message' => 'Interaction capability is unavailable.',
+            ]],
+        ]));
+
+        $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'Click the page control.',
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'TALOS_BROWSER_INTERACTION_UNAVAILABLE')
+            ->assertJsonPath('chat_error.layer', 'browser_capability');
+
+        $this->assertSame([], array_filter($this->client->requests, fn (array $request): bool => $request['method'] !== 'inspect'));
+    }
+
     public function test_browser_mode_stops_after_sixty_seconds_without_leaving_the_run_running(): void
     {
         $chat = $this->chatSession();
@@ -996,12 +1376,14 @@ final class TalosChatBrowserModeTest extends TestCase
 
     private function chatSession(): TalosSession
     {
-        return TalosSession::query()->create(['user_id' => $this->user->id, 'title' => 'Browser mode', 'mode' => 'verified_execution', 'surface' => 'chat']);
+        return $this->currentChatSession = TalosSession::query()->create(['user_id' => $this->user->id, 'title' => 'Browser mode', 'mode' => 'verified_execution', 'surface' => 'chat']);
     }
 
     private function browserSession(): TalosBrowserSession
     {
-        return TalosBrowserSession::query()->create(['user_id' => $this->user->id, 'worker_session_id' => 'worker-chat-mode', 'status' => 'ready', 'mode' => 'read_only', 'viewport_width' => 1280, 'viewport_height' => 800, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true], 'policy' => [], 'expires_at' => now()->addHour()]);
+        $chatSession = $this->currentChatSession ?? $this->chatSession();
+
+        return TalosBrowserSession::query()->create(['user_id' => $this->user->id, 'talos_session_id' => $chatSession->id, 'worker_session_id' => 'worker-chat-mode', 'status' => 'ready', 'mode' => 'read_only', 'viewport_width' => 1280, 'viewport_height' => 800, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true], 'policy' => [], 'expires_at' => now()->addHour()]);
     }
 
     /** @param array<string, mixed> $data @param array<string, mixed> $arguments @return list<array<string, mixed>> */

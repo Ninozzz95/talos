@@ -7,7 +7,7 @@ const props = defineProps({
 })
 
 const classes = computed(() => cn(
-    'rounded-lg border border-[var(--talos-border)] bg-[var(--talos-card)] text-[var(--talos-text)] shadow-sm',
+    'talos-ui-card rounded-lg border border-[var(--talos-border)] bg-[var(--talos-card)] text-[var(--talos-text)] shadow-sm',
     props.padded && 'p-4',
 ))
 </script>

@@ -15,7 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const {
-    usableModelProfiles,
+    callableModelProfiles,
     loadingModelProfiles,
     modelProfileError,
     loadModelProfiles,
@@ -218,21 +218,21 @@ onMounted(() => {
                         <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model slot A</span>
                         <select v-model="slotA" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 text-sm text-[var(--talos-text)]" aria-label="Model slot A">
                             <option value="">Select profile</option>
-                            <option v-for="profile in usableModelProfiles" :key="profile.id" :value="profile.id">{{ profile.display_name }}</option>
+                            <option v-for="profile in callableModelProfiles" :key="profile.id" :value="profile.id">{{ profile.display_name }}</option>
                         </select>
                     </label>
                     <label class="grid gap-1">
                         <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model slot B</span>
                         <select v-model="slotB" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 text-sm text-[var(--talos-text)]" aria-label="Model slot B">
                             <option value="">Select profile</option>
-                            <option v-for="profile in usableModelProfiles" :key="profile.id" :value="profile.id">{{ profile.display_name }}</option>
+                            <option v-for="profile in callableModelProfiles" :key="profile.id" :value="profile.id">{{ profile.display_name }}</option>
                         </select>
                     </label>
                     <label class="grid gap-1">
                         <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model slot C</span>
                         <select v-model="slotC" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 text-sm text-[var(--talos-text)]" aria-label="Model slot C">
                             <option value="">Optional</option>
-                            <option v-for="profile in usableModelProfiles" :key="profile.id" :value="profile.id">{{ profile.display_name }}</option>
+                            <option v-for="profile in callableModelProfiles" :key="profile.id" :value="profile.id">{{ profile.display_name }}</option>
                         </select>
                     </label>
                 </div>

@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\TalosContextSet;
 use App\Models\TalosContextSource;
+use App\Models\TalosBenchmarkGroup;
 use App\Models\TalosFile;
 use App\Models\TalosFileChunk;
 use App\Models\TalosModelProfile;
@@ -125,9 +126,12 @@ final class TalosGuidedStartEvidenceLoopTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('benchmark_group.source_run_id', $runId)
             ->assertJsonPath('benchmark_group.prompt_hash', hash('sha256', 'Summarize the deployment control.'))
+            ->assertJsonMissingPath('benchmark_group.scenario_path')
             ->assertJsonCount(3, 'benchmark_results');
 
-        $scenarioPath = $benchmarkResponse->json('benchmark_group.scenario_path');
+        $benchmarkGroupId = $benchmarkResponse->json('benchmark_group.id');
+        $this->assertIsString($benchmarkGroupId);
+        $scenarioPath = TalosBenchmarkGroup::query()->findOrFail($benchmarkGroupId)->scenario_path;
         $this->assertIsString($scenarioPath);
         Storage::disk('local')->assertExists($scenarioPath);
 

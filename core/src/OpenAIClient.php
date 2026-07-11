@@ -4,22 +4,44 @@ declare(strict_types=1);
 
 namespace Kadmos;
 
+use Kadmos\Provider\ProviderRequestException;
 use Kadmos\Security\ExecutionPolicy;
+use Kadmos\Security\PolicyDecision;
 
 /**
  * LLM client for OpenAI-compatible APIs (OpenAI, Groq, vLLM, etc.)
  */
 final class OpenAIClient implements LLMClientInterface
 {
+    /** @var list<string> */
+    private const DEFAULT_PROVIDER_HOSTS = [
+        'api.openai.com',
+        'api.deepseek.com',
+        'api.anthropic.com',
+        'generativelanguage.googleapis.com',
+        'openrouter.ai',
+    ];
+
     private string $apiKey;
+    private string $provider;
     private string $model;
     private string $baseUrl;
     private string $systemPrompt;
     private int $timeoutMs;
     private ?\Closure $transport;
+    private ?\Closure $curlTransport;
+    private ExecutionPolicy $executionPolicy;
 
     /** @var list<array{role: string, content: string}> */
     private array $conversation = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $tools = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $lastToolCalls = [];
+
+    private bool $nativeToolsUnsupported = false;
 
     private int $lastTotalTokens = 0;
     private int $lastPromptTokens = 0;
@@ -34,13 +56,23 @@ final class OpenAIClient implements LLMClientInterface
         string $baseUrl = 'https://api.openai.com/v1',
         int $timeoutMs = 30000,
         ?callable $transport = null,
+        string $provider = 'openai',
+        ?ExecutionPolicy $executionPolicy = null,
+        ?callable $curlTransport = null,
     ) {
         $this->apiKey = $apiKey;
+        $this->provider = strtolower(trim($provider));
         $this->model = $model;
         $this->baseUrl = rtrim($baseUrl, '/');
         $this->timeoutMs = $timeoutMs;
         $this->transport = $transport !== null ? \Closure::fromCallable($transport) : null;
-        $this->assertProviderBaseUrlAllowed($baseUrl, $timeoutMs);
+        $this->curlTransport = $curlTransport !== null ? \Closure::fromCallable($curlTransport) : null;
+        $this->executionPolicy = $executionPolicy ?? new ExecutionPolicy(
+            allowedHosts: self::configuredProviderHosts(),
+            maxTimeoutMs: max(1, $timeoutMs),
+        );
+        $this->assertProviderContract($baseUrl);
+        $this->assertProviderBaseUrlAllowed($baseUrl, $timeoutMs, requireResolution: false);
         $this->systemPrompt = SystemPromptBuilder::build();
     }
 
@@ -50,21 +82,55 @@ final class OpenAIClient implements LLMClientInterface
         return $this;
     }
 
+    /** @param list<array<string, mixed>> $tools */
+    public function withTools(array $tools): self
+    {
+        foreach ($tools as $tool) {
+            if (! is_array($tool)) throw new \InvalidArgumentException('Provider tools must be structured arrays.');
+        }
+        $this->tools = $this->nativeToolsUnsupported && $tools !== [] ? [] : array_values($tools);
+        return $this;
+    }
+
+    public function generateWithToolFallback(string $prompt): string
+    {
+        try {
+            return $this->generate($prompt);
+        } catch (ProviderRequestException $exception) {
+            if ($this->tools === [] || ! self::isNativeToolContractRejection($exception)) {
+                throw $exception;
+            }
+
+            $this->nativeToolsUnsupported = true;
+            $this->tools = [];
+
+            return $this->generate($prompt);
+        }
+    }
+
     public function generate(string $prompt): string
     {
+        $this->lastToolCalls = [];
         // Build conversation
         $messages = $this->buildMessages($prompt);
 
-        $body = \json_encode([
+        $request = [
             'model' => $this->model,
             'messages' => $messages,
             'temperature' => 0.0,
             'max_tokens' => 4096,
-        ]);
+        ];
+        if ($this->tools !== []) {
+            $request['tools'] = $this->tools;
+            $request['tool_choice'] = 'auto';
+        }
+        $body = \json_encode($request, \JSON_THROW_ON_ERROR);
 
         $response = $this->callApi(self::chatCompletionsEndpoint($this->baseUrl), $body);
-
-        $content = $response['choices'][0]['message']['content'] ?? '';
+        $message = $response['choices'][0]['message'] ?? [];
+        $content = is_array($message) && is_string($message['content'] ?? null) ? $message['content'] : '';
+        $providerToolCalls = is_array($message) && is_array($message['tool_calls'] ?? null) ? $message['tool_calls'] : [];
+        $this->lastToolCalls = array_values(array_filter($providerToolCalls, 'is_array'));
 
         // Capture exact token usage
         $usage = $response['usage'] ?? [];
@@ -131,10 +197,10 @@ final class OpenAIClient implements LLMClientInterface
             fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
         }
 
-        $headers = [
-            'Content-Type: application/json',
-            "Authorization: Bearer {$this->apiKey}",
-        ];
+        $headers = ['Content-Type: application/json'];
+        if ($this->provider !== 'ollama') {
+            $headers[] = "Authorization: Bearer {$this->apiKey}";
+        }
 
         if ($this->transport !== null) {
             /** @var array<string, mixed> $response */
@@ -143,14 +209,26 @@ final class OpenAIClient implements LLMClientInterface
             return $response;
         }
 
-        $ch = \curl_init($url);
+        $decision = $this->assertProviderBaseUrlAllowed(
+            $url,
+            $this->timeoutMs,
+            requireResolution: true,
+        );
         $options = [
             \CURLOPT_RETURNTRANSFER => true,
             \CURLOPT_POST => true,
             \CURLOPT_POSTFIELDS => $body,
             \CURLOPT_HTTPHEADER => $headers,
             \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
+            \CURLOPT_FOLLOWLOCATION => false,
+            \CURLOPT_MAXREDIRS => 0,
         ];
+
+        $resolveEntries = $this->curlResolveEntries($url, $decision);
+        if ($resolveEntries === []) {
+            throw new \RuntimeException('Provider connection could not be pinned to an approved IP address.');
+        }
+        $options[\CURLOPT_RESOLVE] = $resolveEntries;
 
         if ($insecureSsl) {
             $options[\CURLOPT_SSL_VERIFYPEER] = false;
@@ -160,35 +238,197 @@ final class OpenAIClient implements LLMClientInterface
             $options[\CURLOPT_SSL_VERIFYHOST] = 2;
         }
 
-        \curl_setopt_array($ch, $options);
+        if ($this->curlTransport !== null) {
+            $result = ($this->curlTransport)($url, $options);
+            if (!is_array($result)) {
+                throw new \RuntimeException('Provider transport returned an invalid result.');
+            }
+            $response = $result['raw_response'] ?? false;
+            $error = is_string($result['curl_error'] ?? null) ? $result['curl_error'] : '';
+            $httpCode = is_int($result['http_code'] ?? null) ? $result['http_code'] : 0;
+            $primaryIp = is_string($result['primary_ip'] ?? null) && $result['primary_ip'] !== ''
+                ? $result['primary_ip']
+                : null;
+        } else {
+            $ch = \curl_init($url);
+            if ($ch === false) {
+                throw new \RuntimeException('Provider transport could not be initialized.');
+            }
 
-        $response = \curl_exec($ch);
-        $error = \curl_error($ch);
-        $httpCode = \curl_getinfo($ch, \CURLINFO_HTTP_CODE);
+            \curl_setopt_array($ch, $options);
+            $response = \curl_exec($ch);
+            $error = \curl_error($ch);
+            $httpCode = (int) \curl_getinfo($ch, \CURLINFO_HTTP_CODE);
+            $connectedIp = \curl_getinfo($ch, \CURLINFO_PRIMARY_IP);
+            $primaryIp = is_string($connectedIp) && $connectedIp !== '' ? $connectedIp : null;
+        }
 
         if ($response === false) {
             throw new \RuntimeException("OpenAI API unreachable: {$error}");
         }
 
-        if ($httpCode >= 400) {
-            throw new \RuntimeException("OpenAI API error HTTP {$httpCode}: {$response}");
+        if (!$this->connectedToApprovedIp($primaryIp, $decision)) {
+            throw new \RuntimeException('Provider connection did not use an approved IP address.');
+        }
+
+        if ($httpCode >= 300) {
+            throw new ProviderRequestException($httpCode, (string) $response);
         }
 
         return \json_decode($response, true, flags: \JSON_THROW_ON_ERROR);
     }
 
-    private function assertProviderBaseUrlAllowed(string $baseUrl, int $timeoutMs): void
+    private function assertProviderBaseUrlAllowed(
+        string $baseUrl,
+        int $timeoutMs,
+        bool $requireResolution,
+    ): PolicyDecision
     {
-        $allowedHosts = \array_values(\array_filter(\array_map(
-            'trim',
-            \explode(',', \getenv('KADMOS_ALLOWED_PROVIDER_HOSTS') ?: 'api.openai.com,api.deepseek.com'),
-        )));
-        $policy = new ExecutionPolicy(allowedHosts: $allowedHosts);
-        $decision = $policy->inspectUrl(self::chatCompletionsEndpoint($baseUrl), $timeoutMs);
+        if ($this->provider === 'ollama') {
+            $host = self::normalizeHost((string) parse_url($baseUrl, PHP_URL_HOST));
+            $resolvedIps = match ($host) {
+                'localhost' => ['127.0.0.1', '::1'],
+                '127.0.0.1', '::1' => [$host],
+                default => [],
+            };
+
+            return new PolicyDecision(true, 'trusted local provider', max(1, $timeoutMs), [
+                'host' => $host,
+                'resolved_ips' => $resolvedIps,
+            ]);
+        }
+
+        $decision = $this->executionPolicy->inspectUrl(
+            self::chatCompletionsEndpoint($baseUrl),
+            $timeoutMs,
+            requireResolution: $requireResolution,
+            rejectQueryAndFragment: true,
+        );
 
         if (!$decision->allowed) {
             throw new \RuntimeException("Provider base URL blocked by execution policy: {$decision->reason}");
         }
+
+        return $decision;
+    }
+
+    private function assertProviderContract(string $baseUrl): void
+    {
+        $parts = parse_url($baseUrl);
+        $host = is_array($parts) ? self::normalizeHost((string) ($parts['host'] ?? '')) : '';
+        $safeUrl = is_array($parts)
+            && !isset($parts['user'])
+            && !isset($parts['pass'])
+            && !isset($parts['query'])
+            && !isset($parts['fragment'])
+            && in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
+            && $host !== '';
+
+        if (!$safeUrl) {
+            throw new \RuntimeException('Provider base URL blocked by execution policy: invalid or unsupported URL');
+        }
+
+        if ($this->provider === 'ollama') {
+            if (!in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
+                throw new \RuntimeException('Ollama provider base URL must use a loopback host.');
+            }
+            if ($this->apiKey !== '') {
+                throw new \RuntimeException('Ollama provider must remain credential-free.');
+            }
+            return;
+        }
+
+        if (trim($this->apiKey) === '') {
+            throw new \RuntimeException('Remote model provider requires an API key.');
+        }
+    }
+
+    /** @return list<string> */
+    private static function configuredProviderHosts(): array
+    {
+        $configured = getenv('KADMOS_ALLOWED_PROVIDER_HOSTS');
+        if ($configured === false || trim($configured) === '') {
+            $configured = getenv('TALOS_MODEL_PROVIDER_ALLOWED_HOSTS');
+        }
+
+        $hosts = $configured !== false && trim($configured) !== ''
+            ? explode(',', $configured)
+            : self::DEFAULT_PROVIDER_HOSTS;
+
+        return array_values(array_unique(array_filter(array_map(
+            static fn(string $host): string => self::normalizeHost($host),
+            $hosts,
+        ))));
+    }
+
+    /** @return list<string> */
+    private function curlResolveEntries(string $url, PolicyDecision $decision): array
+    {
+        $host = self::normalizeHost((string) parse_url($url, PHP_URL_HOST));
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        $port = parse_url($url, PHP_URL_PORT) ?: ($scheme === 'https' ? 443 : 80);
+        $resolvedIps = is_array($decision->audit['resolved_ips'] ?? null)
+            ? array_values(array_filter($decision->audit['resolved_ips'], 'is_string'))
+            : [];
+
+        if ($host === '' || !is_int($port) && !is_numeric($port)) {
+            return [];
+        }
+
+        return array_map(
+            static fn(string $ip): string => sprintf(
+                '%s:%d:%s',
+                $host,
+                (int) $port,
+                str_contains($ip, ':') ? "[{$ip}]" : $ip,
+            ),
+            $resolvedIps,
+        );
+    }
+
+    private function connectedToApprovedIp(?string $primaryIp, PolicyDecision $decision): bool
+    {
+        if ($primaryIp === null || filter_var($primaryIp, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+
+        $resolvedIps = is_array($decision->audit['resolved_ips'] ?? null)
+            ? array_filter($decision->audit['resolved_ips'], 'is_string')
+            : [];
+
+        foreach ($resolvedIps as $resolvedIp) {
+            $primaryBytes = inet_pton($primaryIp);
+            $resolvedBytes = inet_pton($resolvedIp);
+            if ($primaryBytes !== false && $resolvedBytes !== false && hash_equals($resolvedBytes, $primaryBytes)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function normalizeHost(string $host): string
+    {
+        return strtolower(rtrim(trim($host, "[] \t\n\r\0\x0B"), '.'));
+    }
+
+    private static function isNativeToolContractRejection(ProviderRequestException $exception): bool
+    {
+        if (! in_array($exception->status, [400, 404, 422], true)) {
+            return false;
+        }
+
+        $body = strtolower($exception->responseBody);
+        $mentionsToolContract = str_contains($body, 'tool') || str_contains($body, 'function');
+        $isUnsupported = str_contains($body, 'unsupported')
+            || str_contains($body, 'not support')
+            || str_contains($body, 'unknown')
+            || str_contains($body, 'unrecognized')
+            || str_contains($body, 'invalid')
+            || str_contains($body, 'not allowed')
+            || str_contains($body, 'extra');
+
+        return $mentionsToolContract && $isUnsupported;
     }
 
     /**
@@ -208,4 +448,6 @@ final class OpenAIClient implements LLMClientInterface
     public function getLastTotalTokens(): int { return $this->lastTotalTokens; }
     public function getLastPromptTokens(): int { return $this->lastPromptTokens; }
     public function getLastCompletionTokens(): int { return $this->lastCompletionTokens; }
+    /** @return list<array<string, mixed>> */
+    public function getLastToolCalls(): array { return $this->lastToolCalls; }
 }

@@ -121,15 +121,17 @@ final class FileIngestionService
             $contextSet->load(['sources.file', 'sources.fileChunk']);
             $ingested = $this->buildIngestionResponse($talosFile, $extension, $extractedText, $contextSet);
             $ingested['benchmark_scenario'] = $this->scenarioFactory->create($ingested);
+            $ingested['benchmark_scenario']['ref'] = $talosFile->id;
 
             $talosFile->update([
                 'metadata' => [
                     ...($talosFile->metadata ?? []),
+                    'benchmark_scenario_ref' => $talosFile->id,
                     'benchmark_scenario_storage_path' => $ingested['benchmark_scenario']['storage_path'] ?? null,
                 ],
             ]);
 
-            return $ingested;
+            return $this->toPublicResponse($ingested);
         } catch (Throwable) {
             $failureReason = 'File could not be parsed for Context Vault ingestion.';
 
@@ -143,7 +145,9 @@ final class FileIngestionService
                 ],
             ]);
 
-            return $this->buildIngestionResponse($talosFile->refresh(), $extension, '', null);
+            return $this->toPublicResponse(
+                $this->buildIngestionResponse($talosFile->refresh(), $extension, '', null),
+            );
         }
     }
 
@@ -335,5 +339,27 @@ final class FileIngestionService
                 'task_context' => $extractedText,
             ],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function toPublicResponse(array $payload): array
+    {
+        $public = [];
+
+        foreach ($payload as $key => $value) {
+            $normalizedKey = strtolower((string) $key);
+            if ($normalizedKey === 'storage_disk' || str_ends_with($normalizedKey, 'storage_path')) {
+                continue;
+            }
+
+            $public[$key] = is_array($value)
+                ? $this->toPublicResponse($value)
+                : $value;
+        }
+
+        return $public;
     }
 }

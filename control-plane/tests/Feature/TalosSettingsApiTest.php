@@ -163,8 +163,6 @@ final class TalosSettingsApiTest extends TestCase
                     'bubble_scale' => 'expanded',
                     'composer_mode' => 'minimal',
                     'advanced_rail_expanded' => true,
-                    'unknown' => 'discard-me',
-                    'api_key' => 'discard-secret',
                 ],
             ],
         ]);
@@ -182,7 +180,7 @@ final class TalosSettingsApiTest extends TestCase
             'advanced_rail_expanded' => true,
         ], $layout);
 
-        $invalid = $this->patchJson('/api/talos/settings', [
+        $this->patchJson('/api/talos/settings', [
             'preferences' => [
                 'chat_layout' => [
                     'bubble_scale' => 'giant',
@@ -190,9 +188,13 @@ final class TalosSettingsApiTest extends TestCase
                     'advanced_rail_expanded' => 'yes',
                 ],
             ],
-        ])->assertOk();
-
-        $this->assertArrayNotHasKey('chat_layout', $invalid->json('data.preferences'));
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.chat_layout.bubble_scale',
+                'preferences.chat_layout.composer_mode',
+                'preferences.chat_layout.advanced_rail_expanded',
+            ]);
     }
 
     public function test_theme_policy_lock_blocks_visual_chat_layout_writes_but_not_advanced_disclosure(): void
@@ -393,10 +395,10 @@ final class TalosSettingsApiTest extends TestCase
                 'theme_mode' => 'solarized-secret',
             ],
         ])
-            ->assertOk()
-            ->assertJsonPath('data.preferences.theme', 'terminal');
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_mode']);
 
-        $this->assertArrayNotHasKey('theme_mode', $this->getJson('/api/talos/settings')->json('data.preferences'));
+        $this->assertSame('dark', $this->getJson('/api/talos/settings')->json('data.preferences.theme_mode'));
     }
 
     public function test_settings_sanitize_theme_engine_preferences(): void
@@ -407,26 +409,18 @@ final class TalosSettingsApiTest extends TestCase
                     'background' => '#02080c',
                     'panel' => '#08121a',
                     'text' => '#e8fbff',
-                    'accent' => '#31d6c8',
+                    'accent' => ' #31D6C8 ',
                     'secondary' => '#b4f06f',
                     'border' => '#1f3540',
                     'font' => 'mono',
                     'density' => 'compact',
                     'radius' => 'balanced',
                     'effect' => 'signal-mesh',
-                    'effect_intensity' => 72,
+                    'effect_intensity' => '72',
                     'scrollbar_track' => '#071017',
                     'scrollbar_thumb' => '#31d6c8',
                     'scrollbar_thumb_hover' => '#b4f06f',
                     'scrollbar_width' => 11,
-                    'api_key' => 'theme-secret',
-                    'style' => 'body { display: none; }',
-                    'script' => 'alert(1)',
-                    'background_url' => 'javascript:alert(1)',
-                    'nested' => [
-                        'accent' => '#ffffff',
-                        'password' => 'nested-theme-secret',
-                    ],
                 ],
                 'theme_library' => [
                     [
@@ -436,17 +430,14 @@ final class TalosSettingsApiTest extends TestCase
                         'theme_mode' => 'dark',
                         'tokens' => [
                             'background' => '#02080c',
+                            'panel' => '#08121a',
+                            'text' => '#e8fbff',
                             'accent' => '#31d6c8',
-                            'style' => 'display:none',
                         ],
                         'area_tokens' => [
                             'chat' => [
                                 'background' => '#041016',
                                 'accent' => '#31d6c8',
-                                'script' => 'alert(1)',
-                            ],
-                            'unknown' => [
-                                'background' => '#ffffff',
                             ],
                         ],
                         'motion' => 'subtle',
@@ -454,11 +445,7 @@ final class TalosSettingsApiTest extends TestCase
                             'bubble_scale' => 'expanded',
                             'composer_mode' => 'minimal',
                             'advanced_rail_expanded' => true,
-                            'unknown' => 'drop-me',
                         ],
-                        'script' => 'alert(1)',
-                        'style' => '.x{}',
-                        'api_key' => 'library-secret',
                     ],
                 ],
                 'theme' => 'violet',
@@ -470,17 +457,13 @@ final class TalosSettingsApiTest extends TestCase
                 'theme_area_tokens' => [
                     'chat' => [
                         'background' => '#02080c',
-                        'panel' => '#08121a',
+                        'surface' => '#08121a',
                         'accent' => '#31d6c8',
-                        'onclick' => 'alert(1)',
-                        'url' => 'javascript:alert(1)',
                     ],
-                    'dashboard' => [
+                    'header' => [
                         'text' => '#e8fbff',
+                        'muted' => '#b8cbd0',
                         'border' => '#1f3540',
-                    ],
-                    'admin' => [
-                        'background' => '#ffffff',
                     ],
                 ],
             ],
@@ -511,34 +494,13 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme_simple_animation', false)
             ->assertJsonPath('data.preferences.theme_background_disabled', false)
             ->assertJsonPath('data.preferences.theme_area_tokens.chat.background', '#02080c')
-            ->assertJsonPath('data.preferences.theme_area_tokens.dashboard.text', '#e8fbff');
-
-        $preferences = $response->json('data.preferences');
-        $this->assertArrayNotHasKey('api_key', $preferences['theme_customization']);
-        $this->assertArrayNotHasKey('style', $preferences['theme_customization']);
-        $this->assertArrayNotHasKey('script', $preferences['theme_customization']);
-        $this->assertArrayNotHasKey('background_url', $preferences['theme_customization']);
-        $this->assertArrayNotHasKey('nested', $preferences['theme_customization']);
-        $this->assertArrayNotHasKey('style', $preferences['theme_library'][0]['tokens']);
-        $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]['area_tokens']['chat']);
-        $this->assertArrayNotHasKey('unknown', $preferences['theme_library'][0]['area_tokens']);
-        $this->assertArrayNotHasKey('unknown', $preferences['theme_library'][0]['chat_layout']);
-        $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]);
-        $this->assertArrayNotHasKey('style', $preferences['theme_library'][0]);
-        $this->assertArrayNotHasKey('api_key', $preferences['theme_library'][0]);
-        $this->assertArrayNotHasKey('onclick', $preferences['theme_area_tokens']['chat']);
-        $this->assertArrayNotHasKey('url', $preferences['theme_area_tokens']['chat']);
-        $this->assertArrayNotHasKey('admin', $preferences['theme_area_tokens']);
+            ->assertJsonPath('data.preferences.theme_area_tokens.chat.surface', '#08121a')
+            ->assertJsonPath('data.preferences.theme_area_tokens.header.text', '#e8fbff')
+            ->assertJsonPath('data.preferences.theme_area_tokens.header.muted', '#b8cbd0');
 
         $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringContainsString('operator', $storedPreferences);
-        $this->assertStringNotContainsString('theme-secret', $storedPreferences);
-        $this->assertStringNotContainsString('nested-theme-secret', $storedPreferences);
-        $this->assertStringNotContainsString('library-secret', $storedPreferences);
-        $this->assertStringNotContainsString('javascript:alert', $storedPreferences);
-        $this->assertStringNotContainsString('display: none', $storedPreferences);
-        $this->assertStringNotContainsString('alert(1)', $storedPreferences);
     }
 
     public function test_settings_sanitize_appearance_visibility_preferences(): void
@@ -649,10 +611,11 @@ final class TalosSettingsApiTest extends TestCase
             ],
         ]);
 
-        $response->assertOk();
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_motion']);
 
-        $this->assertArrayNotHasKey('theme_motion', $response->json('data.preferences'));
-        $this->assertSame([], json_decode((string) $this->storedPreferencesForCurrentUser(), true));
+        $this->assertNull($this->storedPreferencesForCurrentUser());
     }
 
     public function test_settings_sanitize_ui_animation_preferences(): void
@@ -665,17 +628,10 @@ final class TalosSettingsApiTest extends TestCase
                     'surface_transition' => 'axis-shift',
                     'feedback' => 'trace',
                     'hover' => 'node-glow',
-                    'duration_scale' => 180,
-                    'intensity' => -20,
+                    'duration_scale' => 150,
+                    'intensity' => 0,
                     'easing' => 'cinematic',
-                    'stagger' => 600,
-                    'script' => 'alert(1)',
-                    'style' => 'body { display: none; }',
-                    'url' => 'javascript:alert(1)',
-                    'api_key' => 'animation-secret',
-                    'nested' => [
-                        'open_close' => 'depth',
-                    ],
+                    'stagger' => 120,
                 ],
                 'theme_library' => [
                     [
@@ -695,7 +651,6 @@ final class TalosSettingsApiTest extends TestCase
                             'intensity' => 88,
                             'easing' => 'soft',
                             'stagger' => 22,
-                            'script' => 'alert(1)',
                         ],
                     ],
                 ],
@@ -719,20 +674,547 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme_library.0.ui_animation_customization.intensity', 88)
             ->assertJsonPath('data.preferences.theme_library.0.ui_animation_customization.stagger', 22);
 
-        $preferences = $response->json('data.preferences');
-        $this->assertArrayNotHasKey('script', $preferences['ui_animation_customization']);
-        $this->assertArrayNotHasKey('style', $preferences['ui_animation_customization']);
-        $this->assertArrayNotHasKey('url', $preferences['ui_animation_customization']);
-        $this->assertArrayNotHasKey('api_key', $preferences['ui_animation_customization']);
-        $this->assertArrayNotHasKey('nested', $preferences['ui_animation_customization']);
-        $this->assertArrayNotHasKey('script', $preferences['theme_library'][0]['ui_animation_customization']);
-
         $storedPreferences = $this->storedPreferencesForCurrentUser();
         $this->assertIsString($storedPreferences);
         $this->assertStringContainsString('terminal-snap', $storedPreferences);
-        $this->assertStringNotContainsString('animation-secret', $storedPreferences);
-        $this->assertStringNotContainsString('javascript:alert', $storedPreferences);
-        $this->assertStringNotContainsString('alert(1)', $storedPreferences);
+    }
+
+    public function test_settings_rejects_invalid_theme_writes_atomically(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'theme' => 'forge',
+                'theme_customization' => ['accent' => '#112233'],
+            ],
+        ]);
+
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'density' => 'compact',
+                'theme' => 'terminal',
+                'theme_customization' => [
+                    'accent' => 'rgb(1, 2, 3)',
+                    'font' => 'comic',
+                    'density' => 'dense',
+                    'radius' => 'round',
+                    'effect' => 'video',
+                    'effect_intensity' => 101,
+                    'unknown' => '#ffffff',
+                ],
+                'theme_motion' => 'hyperdrive',
+                'theme_mode' => 'solarized',
+                'theme_area_tokens' => [
+                    'sidebar' => [
+                        'accent' => '#ffffff',
+                        'unknown' => '#ffffff',
+                    ],
+                    'admin' => ['background' => '#ffffff'],
+                ],
+                'ui_animation_profile' => 'hyperdrive',
+                'ui_animation_customization' => [
+                    'open_close' => 'spring',
+                    'duration_scale' => 151,
+                    'intensity' => -1,
+                    'stagger' => 121,
+                ],
+                'theme_unknown' => true,
+            ],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.theme_customization.accent',
+                'preferences.theme_customization.font',
+                'preferences.theme_customization.density',
+                'preferences.theme_customization.radius',
+                'preferences.theme_customization.effect',
+                'preferences.theme_customization.effect_intensity',
+                'preferences.theme_customization.unknown',
+                'preferences.theme_motion',
+                'preferences.theme_mode',
+                'preferences.theme_area_tokens.sidebar.unknown',
+                'preferences.theme_area_tokens.admin',
+                'preferences.ui_animation_profile',
+                'preferences.ui_animation_customization.open_close',
+                'preferences.ui_animation_customization.duration_scale',
+                'preferences.ui_animation_customization.intensity',
+                'preferences.ui_animation_customization.stagger',
+                'preferences.theme_unknown',
+            ]);
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_read_sanitizes_invalid_legacy_theme_values(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'compact',
+                'theme' => 'forge',
+                'theme_customization' => [
+                    'accent' => 'not-a-color',
+                    'panel' => '#112233',
+                    'font' => 'unknown-font',
+                ],
+                'theme_area_tokens' => [
+                    'chat' => [
+                        'accent' => '#445566',
+                        'text' => 'transparent',
+                    ],
+                    'unknown' => ['accent' => '#ffffff'],
+                ],
+                'ui_animation_customization' => [
+                    'intensity' => 101,
+                    'easing' => 'precise',
+                ],
+                'theme_unknown' => 'legacy-value',
+            ],
+        ]);
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.theme', 'forge')
+            ->assertJsonPath('data.preferences.theme_customization.panel', '#112233')
+            ->assertJsonPath('data.preferences.theme_area_tokens.chat.accent', '#445566')
+            ->assertJsonPath('data.preferences.ui_animation_customization.easing', 'precise')
+            ->assertJsonMissingPath('data.preferences.theme_customization.accent')
+            ->assertJsonMissingPath('data.preferences.theme_customization.font')
+            ->assertJsonMissingPath('data.preferences.theme_area_tokens.chat.text')
+            ->assertJsonMissingPath('data.preferences.theme_area_tokens.unknown')
+            ->assertJsonMissingPath('data.preferences.ui_animation_customization.intensity')
+            ->assertJsonMissingPath('data.preferences.theme_unknown');
+    }
+
+    public function test_settings_read_normalizes_legacy_light_and_dark_theme_ids(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme' => 'dark',
+                'workspace_default_theme' => 'light',
+                'theme_library' => [[
+                    'id' => 'legacy-dark-theme',
+                    'name' => 'Legacy Dark Theme',
+                    'base_theme' => 'dark',
+                    'tokens' => [],
+                ]],
+            ],
+        ]);
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme', 'forge')
+            ->assertJsonPath('data.preferences.workspace_default_theme', 'paper')
+            ->assertJsonPath('data.preferences.theme_library.0.base_theme', 'forge');
+    }
+
+    public function test_named_theme_writes_require_complete_records_atomically(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'theme_library' => [$this->namedThemeRecord('existing-theme')],
+            ],
+        ]);
+
+        $missingId = $this->namedThemeRecord('missing-id');
+        $missingName = $this->namedThemeRecord('missing-name');
+        $missingBaseTheme = $this->namedThemeRecord('missing-base-theme');
+        $missingTokens = $this->namedThemeRecord('missing-tokens');
+        unset($missingId['id'], $missingName['name'], $missingBaseTheme['base_theme'], $missingTokens['tokens']);
+
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'density' => 'compact',
+                'theme_library' => [$missingId, $missingName, $missingBaseTheme, $missingTokens],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.theme_library.0.id',
+                'preferences.theme_library.1.name',
+                'preferences.theme_library.2.base_theme',
+                'preferences.theme_library.3.tokens',
+            ]);
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_active_custom_theme_id_resolves_against_the_effective_library_atomically(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'theme_library' => [$this->namedThemeRecord('persisted-theme')],
+            ],
+        ]);
+
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'density' => 'compact',
+                'active_custom_theme_id' => 'missing-theme',
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.active_custom_theme_id']);
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_library' => [$this->namedThemeRecord('submitted-theme')],
+                'active_custom_theme_id' => 'persisted-theme',
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.active_custom_theme_id']);
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'density' => 'compact',
+                'active_custom_theme_id' => 'persisted-theme',
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.active_custom_theme_id', 'persisted-theme')
+            ->assertJsonPath('data.preferences.theme_library.0.id', 'persisted-theme');
+    }
+
+    public function test_valid_partial_preference_patch_merges_over_all_stored_preferences(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'theme_mode' => 'dark',
+                'theme_library' => [$this->namedThemeRecord('merge-theme')],
+                'theme_customization' => [
+                    'accent' => '#112233',
+                    'radius' => 'soft',
+                ],
+                'search' => [
+                    'provider' => 'searxng',
+                    'results_per_query' => 7,
+                ],
+                'agent_tools' => [
+                    'tool_call_limit' => 12,
+                ],
+            ],
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'density' => 'compact',
+                'theme_library' => [$this->namedThemeRecord('replacement-theme')],
+                'theme_customization' => ['accent' => '#aabbcc'],
+                'search' => ['results_per_query' => 12],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.theme_mode', 'dark')
+            ->assertJsonCount(1, 'data.preferences.theme_library')
+            ->assertJsonPath('data.preferences.theme_library.0.id', 'replacement-theme')
+            ->assertJsonPath('data.preferences.theme_customization.accent', '#aabbcc')
+            ->assertJsonPath('data.preferences.theme_customization.radius', 'soft')
+            ->assertJsonPath('data.preferences.search.provider', 'searxng')
+            ->assertJsonPath('data.preferences.search.results_per_query', 12)
+            ->assertJsonPath('data.preferences.agent_tools.tool_call_limit', 12);
+    }
+
+    public function test_omitted_preferences_and_empty_root_values_are_no_ops(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'theme_mode' => 'dark',
+                'search' => ['provider' => 'searxng'],
+                'active_custom_theme_id' => 'legacy-missing-theme',
+            ],
+        ]);
+
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $this->patchJson('/api/talos/settings', [])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'comfortable')
+            ->assertJsonPath('data.preferences.theme_mode', 'dark');
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+
+        foreach ([(object) [], []] as $emptyRoot) {
+            $this->patchJson('/api/talos/settings', ['preferences' => $emptyRoot])
+                ->assertOk()
+                ->assertJsonPath('data.preferences.density', 'comfortable')
+                ->assertJsonPath('data.preferences.theme_mode', 'dark')
+                ->assertJsonPath('data.preferences.search.provider', 'searxng');
+
+            $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+        }
+    }
+
+    public function test_null_preferences_clear_all_stored_preferences(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'theme_mode' => 'dark',
+                'search' => ['provider' => 'searxng'],
+            ],
+        ]);
+
+        $this->patchJson('/api/talos/settings', ['preferences' => null])
+            ->assertOk()
+            ->assertJsonPath('data.preferences', []);
+
+        $this->assertSame([], json_decode((string) $this->storedPreferencesForCurrentUser(), true));
+    }
+
+    public function test_explicit_empty_theme_values_and_null_active_id_clear_stored_settings(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'comfortable',
+                'search' => ['provider' => 'searxng'],
+                'theme_library' => [$this->namedThemeRecord('clear-theme')],
+                'active_custom_theme_id' => 'clear-theme',
+                'theme_customization' => ['accent' => '#112233'],
+                'theme_area_tokens' => ['chat' => ['accent' => '#445566']],
+                'ui_animation_customization' => ['intensity' => 50],
+                'chat_layout' => [
+                    'bubble_scale' => 'expanded',
+                    'composer_mode' => 'minimal',
+                ],
+            ],
+        ]);
+
+        $before = $this->storedPreferencesForCurrentUser();
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme_library' => []],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.active_custom_theme_id']);
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_library' => [],
+                'active_custom_theme_id' => null,
+                'theme_customization' => (object) [],
+                'theme_area_tokens' => (object) [],
+                'ui_animation_customization' => [],
+                'chat_layout' => (object) [],
+            ],
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'comfortable')
+            ->assertJsonPath('data.preferences.search.provider', 'searxng')
+            ->assertJsonPath('data.preferences.theme_library', [])
+            ->assertJsonPath('data.preferences.active_custom_theme_id', null)
+            ->assertJsonPath('data.preferences.theme_customization', [])
+            ->assertJsonPath('data.preferences.theme_area_tokens', [])
+            ->assertJsonPath('data.preferences.ui_animation_customization', [])
+            ->assertJsonPath('data.preferences.chat_layout', []);
+
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true);
+        $this->assertIsArray($stored);
+        foreach (['theme_library', 'theme_customization', 'theme_area_tokens', 'ui_animation_customization', 'chat_layout'] as $key) {
+            $this->assertSame([], $stored[$key] ?? null);
+        }
+        $this->assertArrayHasKey('active_custom_theme_id', $stored);
+        $this->assertNull($stored['active_custom_theme_id']);
+    }
+
+    public function test_named_theme_library_write_is_capped_at_fifty_records(): void
+    {
+        $library = [];
+        for ($index = 1; $index <= 51; $index++) {
+            $library[] = $this->namedThemeRecord("theme-{$index}");
+        }
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme_library' => $library],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_library']);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_named_theme_timestamps_are_bounded_and_iso_8601_parseable(): void
+    {
+        $theme = $this->namedThemeRecord('timestamp-theme', [
+            'created_at' => str_repeat('2', 65),
+            'updated_at' => '2026-02-30T12:00:00Z',
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme_library' => [$theme]],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.theme_library.0.created_at',
+                'preferences.theme_library.0.updated_at',
+            ]);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+
+        $validTimestamp = '2026-07-08T12:00:00.000Z';
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_library' => [$this->namedThemeRecord('timestamp-theme', [
+                    'created_at' => $validTimestamp,
+                    'updated_at' => $validTimestamp,
+                ])],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_library.0.created_at', $validTimestamp)
+            ->assertJsonPath('data.preferences.theme_library.0.updated_at', $validTimestamp);
+    }
+
+    public function test_named_theme_timestamp_timezone_ranges_are_strict(): void
+    {
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_library' => [$this->namedThemeRecord('invalid-offset-theme', [
+                    'created_at' => '2026-07-08T12:00:00+24:00',
+                    'updated_at' => '2026-07-08T12:00:00-23:60',
+                ])],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.theme_library.0.created_at',
+                'preferences.theme_library.0.updated_at',
+            ]);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_library' => [$this->namedThemeRecord('valid-offset-theme', [
+                    'created_at' => '2026-07-08T12:00:00+23:59',
+                    'updated_at' => '2026-07-08T12:00:00-23:59',
+                ])],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_library.0.created_at', '2026-07-08T12:00:00+23:59')
+            ->assertJsonPath('data.preferences.theme_library.0.updated_at', '2026-07-08T12:00:00-23:59');
+    }
+
+    public function test_integer_theme_fields_reject_fractional_values_and_accept_integer_strings(): void
+    {
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_customization' => [
+                    'effect_intensity' => 72.5,
+                    'scrollbar_width' => '11.5',
+                ],
+                'ui_animation_customization' => [
+                    'duration_scale' => '100.0',
+                    'intensity' => 42.25,
+                    'stagger' => '1e1',
+                ],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.theme_customization.effect_intensity',
+                'preferences.theme_customization.scrollbar_width',
+                'preferences.ui_animation_customization.duration_scale',
+                'preferences.ui_animation_customization.intensity',
+                'preferences.ui_animation_customization.stagger',
+            ]);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_customization' => [
+                    'effect_intensity' => '072',
+                    'scrollbar_width' => '11',
+                ],
+                'ui_animation_customization' => [
+                    'duration_scale' => '125',
+                    'intensity' => '86',
+                    'stagger' => '64',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_customization.effect_intensity', 72)
+            ->assertJsonPath('data.preferences.theme_customization.scrollbar_width', 11)
+            ->assertJsonPath('data.preferences.ui_animation_customization.duration_scale', 125)
+            ->assertJsonPath('data.preferences.ui_animation_customization.intensity', 86)
+            ->assertJsonPath('data.preferences.ui_animation_customization.stagger', 64);
+    }
+
+    public function test_legacy_theme_library_read_drops_malformed_and_duplicate_records_and_caps_fifty(): void
+    {
+        $partial = $this->namedThemeRecord('partial-theme');
+        unset($partial['tokens']);
+
+        $library = [
+            $this->namedThemeRecord('keep-1'),
+            $partial,
+            $this->namedThemeRecord('malformed-theme', ['updated_at' => 'not-a-timestamp']),
+            $this->namedThemeRecord('keep-1', ['name' => 'Duplicate']),
+        ];
+        for ($index = 2; $index <= 60; $index++) {
+            $library[] = $this->namedThemeRecord("keep-{$index}");
+        }
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => ['theme_library' => $library],
+        ]);
+
+        $response = $this->getJson('/api/talos/settings')->assertOk();
+        $sanitizedLibrary = $response->json('data.preferences.theme_library');
+
+        $this->assertIsArray($sanitizedLibrary);
+        $this->assertCount(50, $sanitizedLibrary);
+        $this->assertSame('keep-1', $sanitizedLibrary[0]['id']);
+        $this->assertSame('keep-50', $sanitizedLibrary[49]['id']);
+        $this->assertNotContains('partial-theme', array_column($sanitizedLibrary, 'id'));
+        $this->assertNotContains('malformed-theme', array_column($sanitizedLibrary, 'id'));
+        $this->assertSame(1, count(array_filter(
+            array_column($sanitizedLibrary, 'id'),
+            static fn (string $id): bool => $id === 'keep-1',
+        )));
     }
 
     public function test_settings_reject_unsafe_ui_animation_values(): void
@@ -753,11 +1235,220 @@ final class TalosSettingsApiTest extends TestCase
             ],
         ]);
 
-        $response->assertOk();
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'preferences.ui_animation_profile',
+                'preferences.ui_animation_customization.open_close',
+                'preferences.ui_animation_customization.surface_transition',
+                'preferences.ui_animation_customization.feedback',
+                'preferences.ui_animation_customization.hover',
+                'preferences.ui_animation_customization.duration_scale',
+                'preferences.ui_animation_customization.intensity',
+                'preferences.ui_animation_customization.easing',
+                'preferences.ui_animation_customization.stagger',
+            ]);
 
-        $preferences = $response->json('data.preferences');
-        $this->assertArrayNotHasKey('ui_animation_profile', $preferences);
-        $this->assertArrayNotHasKey('ui_animation_customization', $preferences);
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_reject_low_contrast_theme_customization_before_persistence(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'forge',
+                'theme_customization' => [
+                    'background' => '#111111',
+                    'panel' => '#111111',
+                    'text' => '#121212',
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_customization']);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_reject_a_customization_that_makes_existing_area_tokens_unreadable(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme' => 'forge',
+                'theme_customization' => [
+                    'background' => '#ffffff',
+                    'panel' => '#ffffff',
+                    'text' => '#111827',
+                ],
+                'theme_area_tokens' => [
+                    'composer' => [
+                        'background' => '#ffffff',
+                        'surface' => '#ffffff',
+                    ],
+                ],
+            ],
+        ]);
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_customization' => [
+                    'background' => '#111827',
+                    'panel' => '#1f2937',
+                    'text' => '#f9fafb',
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_area_tokens.composer']);
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_reject_low_contrast_area_tokens_in_named_themes(): void
+    {
+        $unsafeTheme = $this->namedThemeRecord('unsafe-area-theme', [
+            'base_theme' => 'paper',
+            'area_tokens' => [
+                'composer' => [
+                    'background' => '#000000',
+                    'surface' => '#000000',
+                    'text' => '#111111',
+                    'muted' => '#222222',
+                ],
+            ],
+        ]);
+
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme_library' => [$unsafeTheme],
+            ],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_library.0.area_tokens.composer']);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_persist_every_client_supported_theme_font_without_silent_loss(): void
+    {
+        foreach (['manrope', 'serif'] as $font) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => [
+                    'theme_customization' => ['font' => $font],
+                    'theme_library' => [
+                        $this->namedThemeRecord("{$font}-theme", [
+                            'tokens' => ['font' => $font],
+                        ]),
+                    ],
+                ],
+            ])
+                ->assertOk()
+                ->assertJsonPath('data.preferences.theme_customization.font', $font)
+                ->assertJsonPath('data.preferences.theme_library.0.tokens.font', $font);
+        }
+    }
+
+    public function test_settings_reject_button_text_that_fails_on_transparent_variants(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'paper',
+                'theme_area_tokens' => [
+                    'button' => [
+                        'background' => '#000000',
+                        'surface' => '#000000',
+                        'text' => '#ffffff',
+                        'muted' => '#cccccc',
+                    ],
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_area_tokens.button']);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_reject_cross_area_transparent_button_contrast(): void
+    {
+        $response = $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'forge',
+                'theme_customization' => [
+                    'background' => '#000000',
+                    'panel' => '#000000',
+                    'text' => '#ffffff',
+                ],
+                'theme_area_tokens' => [
+                    'window' => [
+                        'background' => '#ffffff',
+                        'surface' => '#ffffff',
+                        'text' => '#000000',
+                        'muted' => '#333333',
+                    ],
+                    'button' => [
+                        'background' => '#000000',
+                        'surface' => '#000000',
+                        'text' => '#ffffff',
+                        'muted' => '#cccccc',
+                    ],
+                ],
+            ],
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_area_tokens.button']);
+
+        $this->assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_settings_accept_partial_button_override_with_panel_derived_background(): void
+    {
+        $darkArea = [
+            'background' => '#000000',
+            'surface' => '#000000',
+            'text' => '#ffffff',
+            'muted' => '#cccccc',
+        ];
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'forge',
+                'theme_customization' => [
+                    'background' => '#000000',
+                    'panel' => '#000000',
+                    'text' => '#ffffff',
+                ],
+                'theme_area_tokens' => [
+                    'sidebar' => $darkArea,
+                    'chat' => $darkArea,
+                    'composer' => $darkArea,
+                    'window' => $darkArea,
+                    'header' => $darkArea,
+                    'card' => $darkArea,
+                    'button' => [
+                        'surface' => '#000000',
+                        'text' => '#ffffff',
+                        'muted' => '#cccccc',
+                    ],
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_area_tokens.button.background', null)
+            ->assertJsonPath('data.preferences.theme_area_tokens.button.surface', '#000000');
     }
 
     public function test_theme_policy_lock_blocks_theme_writes(): void
@@ -798,10 +1489,52 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme_policy_locked', true);
     }
 
+    public function test_theme_policy_lock_allows_empty_root_noop_and_blocks_null_clear(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme' => 'forge',
+                'theme_policy_locked' => true,
+                'density' => 'comfortable',
+            ],
+        ]);
+
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $this->patchJson('/api/talos/settings', ['preferences' => (object) []])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme', 'forge')
+            ->assertJsonPath('data.preferences.theme_policy_locked', true)
+            ->assertJsonPath('data.preferences.density', 'comfortable');
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', ['preferences' => null])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Theme changes are locked by workspace policy.');
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
     private function storedPreferencesForCurrentUser(): ?string
     {
         return DB::table('talos_workspace_settings')
             ->where('user_id', $this->user->id)
             ->value('preferences');
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function namedThemeRecord(string $id, array $overrides = []): array
+    {
+        return array_replace([
+            'id' => $id,
+            'name' => ucwords(str_replace('-', ' ', $id)),
+            'base_theme' => 'forge',
+            'tokens' => [],
+        ], $overrides);
     }
 }

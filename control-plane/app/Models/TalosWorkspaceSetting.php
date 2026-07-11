@@ -20,6 +20,15 @@ final class TalosWorkspaceSetting extends Model
         'border' => true,
     ];
 
+    private const THEME_AREA_COLOR_KEYS = [
+        'background' => true,
+        'surface' => true,
+        'text' => true,
+        'muted' => true,
+        'border' => true,
+        'accent' => true,
+    ];
+
     private const THEME_VALUES = [
         'forge' => true,
         'paper' => true,
@@ -33,6 +42,11 @@ final class TalosWorkspaceSetting extends Model
         'violet' => true,
         'claudius' => true,
         'basicus' => true,
+    ];
+
+    private const LEGACY_THEME_VALUES = [
+        'dark' => 'forge',
+        'light' => 'paper',
     ];
 
     private const THEME_CUSTOMIZATION_KEYS = [
@@ -64,7 +78,31 @@ final class TalosWorkspaceSetting extends Model
         'ui_animation_profile' => true,
         'ui_animation_customization' => true,
         'chat_layout' => true,
+        'created_at' => true,
+        'updated_at' => true,
     ];
+
+    private const THEME_PREFERENCE_KEYS = [
+        'theme' => true,
+        'workspace_default_theme' => true,
+        'theme_customization' => true,
+        'theme_library' => true,
+        'active_custom_theme_id' => true,
+        'theme_motion' => true,
+        'theme_mode' => true,
+        'theme_motion_disabled' => true,
+        'theme_simple_animation' => true,
+        'theme_background_disabled' => true,
+        'theme_policy_locked' => true,
+        'ui_animation_profile' => true,
+        'ui_animation_customization' => true,
+        'theme_area_tokens' => true,
+        'chat_layout' => true,
+    ];
+
+    private const THEME_LIBRARY_MAX_RECORDS = 50;
+
+    private const THEME_TIMESTAMP_MAX_LENGTH = 64;
 
     private const THEME_MOTION_VALUES = [
         'system' => true,
@@ -129,21 +167,14 @@ final class TalosWorkspaceSetting extends Model
     ];
 
     private const THEME_AREAS = [
-        'chat' => true,
-        'dashboard' => true,
         'sidebar' => true,
-        'header' => true,
+        'chat' => true,
         'composer' => true,
         'window' => true,
+        'header' => true,
         'button' => true,
-        'code' => true,
-        'workspace' => true,
-        'panel' => true,
         'card' => true,
-        'settings' => true,
-        'benchmark' => true,
-        'trace' => true,
-        'replay' => true,
+        'code' => true,
     ];
 
     private const APPEARANCE_VISIBILITY_GROUPS = [
@@ -277,8 +308,9 @@ final class TalosWorkspaceSetting extends Model
             }
 
             if ($key === 'theme' || $key === 'workspace_default_theme') {
-                if (is_string($value) && isset(self::THEME_VALUES[$value])) {
-                    $safe[$key] = $value;
+                $theme = self::normalizeThemeValue($value);
+                if ($theme !== null) {
+                    $safe[$key] = $theme;
                 }
 
                 continue;
@@ -286,7 +318,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'theme_customization') {
                 $customization = self::sanitizeThemeCustomization($value);
-                if ($customization !== []) {
+                if ($customization !== [] || $value === []) {
                     $safe[$key] = $customization;
                 }
 
@@ -295,7 +327,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'theme_library') {
                 $library = self::sanitizeThemeLibrary($value);
-                if ($library !== []) {
+                if ($library !== [] || $value === []) {
                     $safe[$key] = $library;
                 }
 
@@ -318,6 +350,29 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'active_custom_theme_id') {
+                if ($value === null) {
+                    $safe[$key] = null;
+                } elseif (is_string($value) && self::normalizeThemeId($value) !== null) {
+                    $safe[$key] = self::normalizeThemeId($value);
+                }
+
+                continue;
+            }
+
+            if (in_array($key, [
+                'theme_motion_disabled',
+                'theme_simple_animation',
+                'theme_background_disabled',
+                'theme_policy_locked',
+            ], true)) {
+                if (is_bool($value)) {
+                    $safe[$key] = $value;
+                }
+
+                continue;
+            }
+
             if ($key === 'ui_animation_profile') {
                 if (is_string($value) && isset(self::UI_ANIMATION_PROFILE_VALUES[$value])) {
                     $safe[$key] = $value;
@@ -328,7 +383,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'ui_animation_customization') {
                 $customization = self::sanitizeUiAnimationCustomization($value);
-                if ($customization !== []) {
+                if ($customization !== [] || $value === []) {
                     $safe[$key] = $customization;
                 }
 
@@ -337,7 +392,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'theme_area_tokens') {
                 $areaTokens = self::sanitizeThemeAreaTokens($value);
-                if ($areaTokens !== []) {
+                if ($areaTokens !== [] || $value === []) {
                     $safe[$key] = $areaTokens;
                 }
 
@@ -346,7 +401,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'appearance_visibility') {
                 $visibility = self::sanitizeAppearanceVisibility($value);
-                if ($visibility !== []) {
+                if ($visibility !== [] || $value === []) {
                     $safe[$key] = $visibility;
                 }
 
@@ -355,7 +410,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'keyboard_shortcuts') {
                 $shortcuts = self::sanitizeKeyboardShortcuts($value);
-                if ($shortcuts !== []) {
+                if ($shortcuts !== [] || $value === []) {
                     $safe[$key] = $shortcuts;
                 }
 
@@ -364,10 +419,14 @@ final class TalosWorkspaceSetting extends Model
 
             if ($key === 'chat_layout') {
                 $layout = self::sanitizeChatLayout($value);
-                if ($layout !== []) {
+                if ($layout !== [] || $value === []) {
                     $safe[$key] = $layout;
                 }
 
+                continue;
+            }
+
+            if (is_string($key) && self::isThemePreferenceKeyCandidate($key)) {
                 continue;
             }
 
@@ -375,6 +434,494 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return $safe;
+    }
+
+    /**
+     * @param mixed $preferences
+     * @return array<string, array<int, string>>
+     */
+    public static function validateThemePreferencesForWrite(mixed $preferences, mixed $storedPreferences = []): array
+    {
+        if ($preferences === null) {
+            return [];
+        }
+
+        if (! is_array($preferences)) {
+            return ['preferences' => ['Preferences must be an object.']];
+        }
+
+        if ($preferences === []) {
+            return [];
+        }
+
+        $errors = [];
+        foreach ($preferences as $key => $value) {
+            if (! is_string($key)) {
+                self::addThemeWriteError($errors, 'preferences', 'Preference keys must be strings.');
+                continue;
+            }
+
+            if (isset(self::THEME_PREFERENCE_KEYS[$key])) {
+                self::validateThemePreference($key, $value, $errors);
+                continue;
+            }
+
+            if (self::isThemePreferenceKeyCandidate($key)) {
+                self::addThemeWriteError($errors, "preferences.{$key}", 'Unknown theme preference key.');
+            }
+        }
+
+        self::validateActiveCustomThemeIdForWrite($preferences, $storedPreferences, $errors);
+
+        return $errors;
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemePreference(string $key, mixed $value, array &$errors): void
+    {
+        $path = "preferences.{$key}";
+
+        if (in_array($key, ['theme', 'workspace_default_theme'], true)) {
+            self::validateThemeEnum($value, self::THEME_VALUES, $path, 'Theme must be a supported preset.', $errors);
+            return;
+        }
+
+        if (in_array($key, ['theme_motion'], true)) {
+            self::validateThemeEnum($value, self::THEME_MOTION_VALUES, $path, 'Theme motion must be a supported mode.', $errors);
+            return;
+        }
+
+        if ($key === 'theme_mode') {
+            self::validateThemeEnum($value, self::THEME_MODE_VALUES, $path, 'Theme mode must be system, light, or dark.', $errors);
+            return;
+        }
+
+        if ($key === 'ui_animation_profile') {
+            self::validateThemeEnum($value, self::UI_ANIMATION_PROFILE_VALUES, $path, 'UI animation profile is invalid.', $errors);
+            return;
+        }
+
+        if (in_array($key, [
+            'theme_motion_disabled',
+            'theme_simple_animation',
+            'theme_background_disabled',
+            'theme_policy_locked',
+        ], true)) {
+            if (! is_bool($value)) {
+                self::addThemeWriteError($errors, $path, 'Theme setting must be a boolean.');
+            }
+            return;
+        }
+
+        if ($key === 'active_custom_theme_id') {
+            if ($value !== null && (! is_string($value) || self::normalizeThemeId($value) === null)) {
+                self::addThemeWriteError($errors, $path, 'Active custom theme ID must be a safe string or null.');
+            }
+            return;
+        }
+
+        if ($key === 'theme_customization') {
+            self::validateThemeCustomizationForWrite($value, $path, $errors);
+            return;
+        }
+
+        if ($key === 'theme_library') {
+            self::validateThemeLibraryForWrite($value, $path, $errors);
+            return;
+        }
+
+        if ($key === 'theme_area_tokens') {
+            self::validateThemeAreaTokensForWrite($value, $path, $errors);
+            return;
+        }
+
+        if ($key === 'ui_animation_customization') {
+            self::validateUiAnimationCustomizationForWrite($value, $path, $errors);
+            return;
+        }
+
+        if ($key === 'chat_layout') {
+            self::validateChatLayoutForWrite($value, $path, $errors);
+        }
+    }
+
+    /**
+     * @param array<string, bool> $allowed
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemeEnum(mixed $value, array $allowed, string $path, string $message, array &$errors): void
+    {
+        if (! is_string($value) || ! isset($allowed[$value])) {
+            self::addThemeWriteError($errors, $path, $message);
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemeCustomizationForWrite(mixed $value, string $path, array &$errors): void
+    {
+        if (! is_array($value)) {
+            self::addThemeWriteError($errors, $path, 'Theme customization must be an object.');
+            return;
+        }
+
+        foreach ($value as $key => $tokenValue) {
+            $tokenPath = "{$path}.{$key}";
+            if (! is_string($key) || ! isset(self::THEME_CUSTOMIZATION_KEYS[$key])) {
+                self::addThemeWriteError($errors, $tokenPath, 'Unknown theme customization key.');
+                continue;
+            }
+
+            if (isset(self::THEME_COLOR_KEYS[$key]) || in_array($key, ['scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover'], true)) {
+                self::validateThemeColor($tokenValue, $tokenPath, $errors);
+                continue;
+            }
+
+            if ($key === 'font') {
+                self::validateThemeEnum($tokenValue, [
+                    'inter' => true,
+                    'manrope' => true,
+                    'mono' => true,
+                    'system' => true,
+                    'display' => true,
+                    'serif' => true,
+                ], $tokenPath, 'Theme font is invalid.', $errors);
+                continue;
+            }
+
+            if ($key === 'density') {
+                self::validateThemeEnum($tokenValue, [
+                    'compact' => true,
+                    'comfortable' => true,
+                    'spacious' => true,
+                ], $tokenPath, 'Theme density is invalid.', $errors);
+                continue;
+            }
+
+            if ($key === 'radius') {
+                self::validateThemeEnum($tokenValue, [
+                    'sharp' => true,
+                    'balanced' => true,
+                    'soft' => true,
+                ], $tokenPath, 'Theme radius is invalid.', $errors);
+                continue;
+            }
+
+            if ($key === 'effect') {
+                self::validateThemeEnum($tokenValue, [
+                    'dag-flow' => true,
+                    'kahn-grid' => true,
+                    'trace-rain' => true,
+                    'signal-mesh' => true,
+                    'none' => true,
+                ], $tokenPath, 'Theme background effect is invalid.', $errors);
+                continue;
+            }
+
+            if ($key === 'effect_intensity') {
+                self::validateThemeNumber($tokenValue, 0, 100, $tokenPath, 'Theme effect intensity must be between 0 and 100.', $errors);
+                continue;
+            }
+
+            if ($key === 'scrollbar_width') {
+                self::validateThemeNumber($tokenValue, 6, 18, $tokenPath, 'Scrollbar width must be between 6 and 18.', $errors);
+            }
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemeLibraryForWrite(mixed $value, string $path, array &$errors): void
+    {
+        if (! is_array($value) || ! array_is_list($value)) {
+            self::addThemeWriteError($errors, $path, 'Theme library must be a list.');
+            return;
+        }
+
+        if (count($value) > self::THEME_LIBRARY_MAX_RECORDS) {
+            self::addThemeWriteError($errors, $path, 'Theme library cannot contain more than 50 records.');
+        }
+
+        $seenIds = [];
+        foreach ($value as $index => $record) {
+            $recordPath = "{$path}.{$index}";
+            if (! is_array($record)) {
+                self::addThemeWriteError($errors, $recordPath, 'Theme library records must be objects.');
+                continue;
+            }
+
+            foreach ($record as $key => $recordValue) {
+                $fieldPath = "{$recordPath}.{$key}";
+                if (! is_string($key) || ! isset(self::THEME_LIBRARY_RECORD_KEYS[$key])) {
+                    self::addThemeWriteError($errors, $fieldPath, 'Unknown named theme key.');
+                    continue;
+                }
+
+                switch ($key) {
+                    case 'id':
+                        $id = is_string($recordValue) ? self::normalizeThemeId($recordValue) : null;
+                        if ($id === null) {
+                            self::addThemeWriteError($errors, $fieldPath, 'Named theme ID is invalid.');
+                        } elseif (isset($seenIds[$id])) {
+                            self::addThemeWriteError($errors, $fieldPath, 'Named theme IDs must be unique.');
+                        } else {
+                            $seenIds[$id] = true;
+                        }
+                        break;
+                    case 'name':
+                        if (! is_string($recordValue) || trim($recordValue) === '' || strlen(trim($recordValue)) > 80) {
+                            self::addThemeWriteError($errors, $fieldPath, 'Named theme name must be 1 to 80 characters.');
+                        }
+                        break;
+                    case 'base_theme':
+                        self::validateThemeEnum($recordValue, self::THEME_VALUES, $fieldPath, 'Named theme base preset is invalid.', $errors);
+                        break;
+                    case 'tokens':
+                        self::validateThemeCustomizationForWrite($recordValue, $fieldPath, $errors);
+                        break;
+                    case 'area_tokens':
+                        self::validateThemeAreaTokensForWrite($recordValue, $fieldPath, $errors);
+                        break;
+                    case 'motion':
+                        self::validateThemeEnum($recordValue, self::THEME_MOTION_VALUES, $fieldPath, 'Named theme motion is invalid.', $errors);
+                        break;
+                    case 'ui_animation_profile':
+                        self::validateThemeEnum($recordValue, self::UI_ANIMATION_PROFILE_VALUES, $fieldPath, 'Named theme UI animation profile is invalid.', $errors);
+                        break;
+                    case 'ui_animation_customization':
+                        self::validateUiAnimationCustomizationForWrite($recordValue, $fieldPath, $errors);
+                        break;
+                    case 'chat_layout':
+                        self::validateChatLayoutForWrite($recordValue, $fieldPath, $errors);
+                        break;
+                    case 'theme_mode':
+                        self::validateThemeEnum($recordValue, self::THEME_MODE_VALUES, $fieldPath, 'Named theme mode is invalid.', $errors);
+                        break;
+                    case 'created_at':
+                    case 'updated_at':
+                        if (! self::isValidThemeTimestamp($recordValue)) {
+                            self::addThemeWriteError($errors, $fieldPath, 'Named theme timestamps must be ISO-8601 strings of at most 64 characters.');
+                        }
+                        break;
+                }
+            }
+
+            foreach (['id', 'name', 'base_theme', 'tokens'] as $requiredKey) {
+                if (! array_key_exists($requiredKey, $record)) {
+                    self::addThemeWriteError($errors, "{$recordPath}.{$requiredKey}", "Named theme {$requiredKey} is required.");
+                }
+            }
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemeAreaTokensForWrite(mixed $value, string $path, array &$errors): void
+    {
+        if (! is_array($value)) {
+            self::addThemeWriteError($errors, $path, 'Theme area tokens must be an object.');
+            return;
+        }
+
+        foreach ($value as $area => $tokens) {
+            $areaPath = "{$path}.{$area}";
+            if (! is_string($area) || ! isset(self::THEME_AREAS[$area])) {
+                self::addThemeWriteError($errors, $areaPath, 'Unknown theme area.');
+                continue;
+            }
+            if (! is_array($tokens)) {
+                self::addThemeWriteError($errors, $areaPath, 'Theme area tokens must be an object.');
+                continue;
+            }
+
+            foreach ($tokens as $key => $tokenValue) {
+                $tokenPath = "{$areaPath}.{$key}";
+                if (! is_string($key) || ! isset(self::THEME_AREA_COLOR_KEYS[$key])) {
+                    self::addThemeWriteError($errors, $tokenPath, 'Unknown theme area token.');
+                    continue;
+                }
+                self::validateThemeColor($tokenValue, $tokenPath, $errors);
+            }
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateUiAnimationCustomizationForWrite(mixed $value, string $path, array &$errors): void
+    {
+        if (! is_array($value)) {
+            self::addThemeWriteError($errors, $path, 'UI animation customization must be an object.');
+            return;
+        }
+
+        $enumRules = [
+            'open_close' => [self::UI_ANIMATION_OPEN_CLOSE_VALUES, 'UI animation open/close style is invalid.'],
+            'surface_transition' => [self::UI_ANIMATION_SURFACE_TRANSITION_VALUES, 'UI animation surface transition is invalid.'],
+            'feedback' => [self::UI_ANIMATION_FEEDBACK_VALUES, 'UI animation feedback style is invalid.'],
+            'hover' => [self::UI_ANIMATION_HOVER_VALUES, 'UI animation hover style is invalid.'],
+            'easing' => [self::UI_ANIMATION_EASING_VALUES, 'UI animation easing is invalid.'],
+        ];
+        $numberRules = [
+            'duration_scale' => [50, 150, 'UI animation duration scale must be between 50 and 150.'],
+            'intensity' => [0, 100, 'UI animation intensity must be between 0 and 100.'],
+            'stagger' => [0, 120, 'UI animation stagger must be between 0 and 120.'],
+        ];
+
+        foreach ($value as $key => $animationValue) {
+            $animationPath = "{$path}.{$key}";
+            if (! is_string($key) || (! isset($enumRules[$key]) && ! isset($numberRules[$key]))) {
+                self::addThemeWriteError($errors, $animationPath, 'Unknown UI animation customization key.');
+                continue;
+            }
+
+            if (isset($enumRules[$key])) {
+                self::validateThemeEnum($animationValue, $enumRules[$key][0], $animationPath, $enumRules[$key][1], $errors);
+                continue;
+            }
+
+            self::validateThemeNumber($animationValue, $numberRules[$key][0], $numberRules[$key][1], $animationPath, $numberRules[$key][2], $errors);
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateChatLayoutForWrite(mixed $value, string $path, array &$errors): void
+    {
+        if (! is_array($value)) {
+            self::addThemeWriteError($errors, $path, 'Chat layout must be an object.');
+            return;
+        }
+
+        foreach ($value as $key => $layoutValue) {
+            $layoutPath = "{$path}.{$key}";
+            if ($key === 'bubble_scale') {
+                self::validateThemeEnum($layoutValue, self::CHAT_BUBBLE_SCALE_VALUES, $layoutPath, 'Chat bubble scale is invalid.', $errors);
+            } elseif ($key === 'composer_mode') {
+                self::validateThemeEnum($layoutValue, self::CHAT_COMPOSER_MODE_VALUES, $layoutPath, 'Chat composer mode is invalid.', $errors);
+            } elseif ($key === 'advanced_rail_expanded') {
+                if (! is_bool($layoutValue)) {
+                    self::addThemeWriteError($errors, $layoutPath, 'Advanced rail setting must be a boolean.');
+                }
+            } else {
+                self::addThemeWriteError($errors, $layoutPath, 'Unknown chat layout key.');
+            }
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemeColor(mixed $value, string $path, array &$errors): void
+    {
+        if (! is_string($value) || preg_match('/^#[0-9a-f]{6}$/i', trim($value)) !== 1) {
+            self::addThemeWriteError($errors, $path, 'Theme colors must be six-digit hexadecimal values.');
+        }
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateThemeNumber(mixed $value, int $min, int $max, string $path, string $message, array &$errors): void
+    {
+        $integer = self::parseThemeInteger($value);
+        if ($integer === null || $integer < $min || $integer > $max) {
+            self::addThemeWriteError($errors, $path, $message);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $preferences
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function validateActiveCustomThemeIdForWrite(array $preferences, mixed $storedPreferences, array &$errors): void
+    {
+        $stored = self::sanitizePreferences($storedPreferences);
+        $activeValue = array_key_exists('active_custom_theme_id', $preferences)
+            ? $preferences['active_custom_theme_id']
+            : ($stored['active_custom_theme_id'] ?? null);
+        if ($activeValue === null) {
+            return;
+        }
+
+        $activeId = is_string($activeValue)
+            ? self::normalizeThemeId($activeValue)
+            : null;
+        if ($activeId === null) {
+            return;
+        }
+
+        $effectiveLibrary = array_key_exists('theme_library', $preferences)
+            ? $preferences['theme_library']
+            : ($stored['theme_library'] ?? []);
+        $library = self::sanitizeThemeLibrary($effectiveLibrary);
+        foreach ($library as $theme) {
+            if (($theme['id'] ?? null) === $activeId) {
+                return;
+            }
+        }
+
+        self::addThemeWriteError(
+            $errors,
+            'preferences.active_custom_theme_id',
+            'Active custom theme ID must reference the effective theme library.',
+        );
+    }
+
+    private static function isValidThemeTimestamp(mixed $value): bool
+    {
+        if (! is_string($value)
+            || $value === ''
+            || strlen($value) > self::THEME_TIMESTAMP_MAX_LENGTH
+            || preg_match(
+                '~\A(?<year>\d{4})-(?<month>0[1-9]|1[0-2])-(?<day>0[1-9]|[12]\d|3[01])T(?<hour>[01]\d|2[0-3]):(?<minute>[0-5]\d):(?<second>[0-5]\d)(?:\.(?<fraction>\d{1,6}))?(?<timezone>Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)\z~',
+                $value,
+                $matches,
+            ) !== 1
+        ) {
+            return false;
+        }
+
+        if (! checkdate((int) $matches['month'], (int) $matches['day'], (int) $matches['year'])) {
+            return false;
+        }
+
+        try {
+            $parsed = new \DateTimeImmutable($value);
+        } catch (\Exception) {
+            return false;
+        }
+
+        $dateTime = "{$matches['year']}-{$matches['month']}-{$matches['day']}T{$matches['hour']}:{$matches['minute']}:{$matches['second']}";
+        $expectedOffset = in_array($matches['timezone'], ['Z', '+00:00', '-00:00'], true)
+            ? '+00:00'
+            : $matches['timezone'];
+
+        return $parsed->format('Y-m-d\TH:i:s') === $dateTime
+            && $parsed->format('P') === $expectedOffset;
+    }
+
+    /**
+     * @param array<string, array<int, string>> $errors
+     */
+    private static function addThemeWriteError(array &$errors, string $path, string $message): void
+    {
+        $errors[$path] ??= [];
+        $errors[$path][] = $message;
+    }
+
+    private static function isThemePreferenceKeyCandidate(string $key): bool
+    {
+        return str_starts_with($key, 'theme')
+            || str_starts_with($key, 'ui_animation_')
+            || str_starts_with($key, 'active_custom_theme')
+            || str_starts_with($key, 'workspace_default_theme');
     }
 
     /**
@@ -427,12 +974,79 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
-            if (is_array($tokenValue)) {
+            if (isset(self::THEME_COLOR_KEYS[$key]) || in_array($key, ['scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover'], true)) {
+                $color = self::normalizeThemeColor($tokenValue);
+                if ($color !== null) {
+                    $safe[$key] = $color;
+                }
+
+                continue;
+            }
+
+            if ($key === 'font') {
+                if (is_string($tokenValue) && isset([
+                    'inter' => true,
+                    'manrope' => true,
+                    'mono' => true,
+                    'system' => true,
+                    'display' => true,
+                    'serif' => true,
+                ][$tokenValue])) {
+                    $safe[$key] = $tokenValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'density') {
+                if (is_string($tokenValue) && isset([
+                    'compact' => true,
+                    'comfortable' => true,
+                    'spacious' => true,
+                ][$tokenValue])) {
+                    $safe[$key] = $tokenValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'radius') {
+                if (is_string($tokenValue) && isset([
+                    'sharp' => true,
+                    'balanced' => true,
+                    'soft' => true,
+                ][$tokenValue])) {
+                    $safe[$key] = $tokenValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'effect') {
+                if (is_string($tokenValue) && isset([
+                    'dag-flow' => true,
+                    'kahn-grid' => true,
+                    'trace-rain' => true,
+                    'signal-mesh' => true,
+                    'none' => true,
+                ][$tokenValue])) {
+                    $safe[$key] = $tokenValue;
+                }
+
+                continue;
+            }
+
+            if ($key === 'effect_intensity') {
+                $intensity = self::boundedInteger($tokenValue, 0, 100);
+                if ($intensity !== null) {
+                    $safe[$key] = $intensity;
+                }
+
                 continue;
             }
 
             if ($key === 'scrollbar_width') {
-                $width = self::clampInteger($tokenValue, 6, 18);
+                $width = self::boundedInteger($tokenValue, 6, 18);
                 if ($width !== null) {
                     $safe[$key] = $width;
                 }
@@ -625,13 +1239,27 @@ final class TalosWorkspaceSetting extends Model
      */
     private static function sanitizeThemeLibrary(mixed $value): array
     {
-        if (! is_array($value)) {
+        if (! is_array($value) || ! array_is_list($value)) {
             return [];
         }
 
         $safe = [];
+        $seenIds = [];
         foreach ($value as $record) {
-            if (! is_array($record)) {
+            if (count($safe) >= self::THEME_LIBRARY_MAX_RECORDS) {
+                break;
+            }
+
+            if (is_array($record) && array_key_exists('base_theme', $record)) {
+                $theme = self::normalizeThemeValue($record['base_theme']);
+                if ($theme !== null) {
+                    $record['base_theme'] = $theme;
+                }
+            }
+
+            $recordErrors = [];
+            self::validateThemeLibraryForWrite([$record], 'theme_library', $recordErrors);
+            if ($recordErrors !== [] || ! is_array($record)) {
                 continue;
             }
 
@@ -646,10 +1274,7 @@ final class TalosWorkspaceSetting extends Model
                 }
 
                 if ($key === 'tokens') {
-                    $tokens = self::sanitizeThemeCustomization($recordValue);
-                    if ($tokens !== []) {
-                        $safeRecord[$key] = $tokens;
-                    }
+                    $safeRecord[$key] = self::sanitizeThemeCustomization($recordValue);
 
                     continue;
                 }
@@ -705,19 +1330,68 @@ final class TalosWorkspaceSetting extends Model
                     continue;
                 }
 
-                if (is_array($recordValue)) {
+                if ($key === 'id') {
+                    $id = is_string($recordValue) ? self::normalizeThemeId($recordValue) : null;
+                    if ($id !== null) {
+                        $safeRecord[$key] = $id;
+                    }
+
                     continue;
                 }
 
-                $safeRecord[$key] = $recordValue;
+                if ($key === 'name') {
+                    if (is_string($recordValue) && trim($recordValue) !== '') {
+                        $safeRecord[$key] = substr(trim($recordValue), 0, 80);
+                    }
+
+                    continue;
+                }
+
+                if ($key === 'base_theme') {
+                    $theme = self::normalizeThemeValue($recordValue);
+                    if ($theme !== null) {
+                        $safeRecord[$key] = $theme;
+                    }
+
+                    continue;
+                }
+
+                if (in_array($key, ['created_at', 'updated_at'], true)) {
+                    if (self::isValidThemeTimestamp($recordValue)) {
+                        $safeRecord[$key] = $recordValue;
+                    }
+
+                    continue;
+                }
+
+                if (is_array($recordValue)) {
+                    continue;
+                }
             }
 
-            if ($safeRecord !== []) {
-                $safe[] = $safeRecord;
+            $id = $safeRecord['id'] ?? null;
+            if (! is_string($id) || isset($seenIds[$id])) {
+                continue;
             }
+
+            $seenIds[$id] = true;
+            $safe[] = $safeRecord;
         }
 
         return $safe;
+    }
+
+    private static function normalizeThemeValue(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        if (isset(self::THEME_VALUES[$value])) {
+            return $value;
+        }
+
+        return self::LEGACY_THEME_VALUES[$value] ?? null;
     }
 
     /**
@@ -739,7 +1413,7 @@ final class TalosWorkspaceSetting extends Model
             $safeTokens = [];
             foreach ($tokens as $key => $tokenValue) {
                 if (! is_string($key)
-                    || ! isset(self::THEME_COLOR_KEYS[$key])
+                    || ! isset(self::THEME_AREA_COLOR_KEYS[$key])
                     || self::isSecretPreferenceKey($key)
                     || self::isUnsafeThemeKey($key)
                     || is_array($tokenValue)
@@ -747,7 +1421,10 @@ final class TalosWorkspaceSetting extends Model
                     continue;
                 }
 
-                $safeTokens[$key] = $tokenValue;
+                $color = self::normalizeThemeColor($tokenValue);
+                if ($color !== null) {
+                    $safeTokens[$key] = $color;
+                }
             }
 
             if ($safeTokens !== []) {
@@ -820,7 +1497,7 @@ final class TalosWorkspaceSetting extends Model
             }
 
             if ($key === 'duration_scale') {
-                $durationScale = self::clampInteger($animationValue, 50, 150);
+                $durationScale = self::boundedInteger($animationValue, 50, 150);
                 if ($durationScale !== null) {
                     $safe[$key] = $durationScale;
                 }
@@ -829,7 +1506,7 @@ final class TalosWorkspaceSetting extends Model
             }
 
             if ($key === 'intensity') {
-                $intensity = self::clampInteger($animationValue, 0, 100);
+                $intensity = self::boundedInteger($animationValue, 0, 100);
                 if ($intensity !== null) {
                     $safe[$key] = $intensity;
                 }
@@ -838,7 +1515,7 @@ final class TalosWorkspaceSetting extends Model
             }
 
             if ($key === 'stagger') {
-                $stagger = self::clampInteger($animationValue, 0, 120);
+                $stagger = self::boundedInteger($animationValue, 0, 120);
                 if ($stagger !== null) {
                     $safe[$key] = $stagger;
                 }
@@ -848,23 +1525,52 @@ final class TalosWorkspaceSetting extends Model
         return $safe;
     }
 
-    private static function clampInteger(mixed $value, int $min, int $max): ?int
+    private static function parseThemeInteger(mixed $value): ?int
     {
-        if (! is_int($value) && ! is_float($value) && ! is_string($value)) {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (! is_string($value)) {
             return null;
         }
 
-        if (is_string($value) && trim($value) === '') {
+        $normalized = trim($value);
+        if (preg_match('/^[+-]?\d+$/', $normalized) !== 1) {
             return null;
         }
 
-        if (! is_numeric($value)) {
+        return (int) $normalized;
+    }
+
+    private static function boundedInteger(mixed $value, int $min, int $max): ?int
+    {
+        $integer = self::parseThemeInteger($value);
+        if ($integer === null || $integer < $min || $integer > $max) {
             return null;
         }
 
-        $numeric = (int) round((float) $value);
+        return $integer;
+    }
 
-        return min($max, max($min, $numeric));
+    private static function normalizeThemeColor(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($value));
+
+        return preg_match('/^#[0-9a-f]{6}$/', $normalized) === 1 ? $normalized : null;
+    }
+
+    private static function normalizeThemeId(string $value): ?string
+    {
+        $normalized = strtolower(trim($value));
+        $normalized = (string) preg_replace('/[^a-z0-9_-]+/', '-', $normalized);
+        $normalized = trim(substr($normalized, 0, 80), '-');
+
+        return $normalized === '' ? null : $normalized;
     }
 
     private static function isUnsafeThemeKey(string $key): bool

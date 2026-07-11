@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     Activity,
     Archive,
@@ -33,6 +33,7 @@ import {
     Sun,
     Trash2,
     Wrench,
+    X,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
@@ -64,6 +65,7 @@ const emit = defineEmits<{
     deleteSession: [session: TalosSession]
     copySession: [session: TalosSession]
     toggleAdvanced: []
+    closeMobile: []
 }>()
 
 const primaryItems: RailItem[] = [
@@ -101,14 +103,18 @@ const props = defineProps<{
     sessions: TalosSession[]
     activeSessionId?: string | null
     advancedExpanded?: boolean
+    mobileOpen?: boolean
 }>()
 
+const effectiveCollapsed = computed(() => props.mobileOpen ? false : Boolean(props.collapsed))
 const railStyle = computed(() => ({
-    width: `${props.collapsed ? 64 : props.width}px`,
+    width: `${effectiveCollapsed.value ? 64 : props.width}px`,
+    maxWidth: props.mobileOpen ? '88vw' : undefined,
 }))
 const openMenuRowKey = ref<string | null>(null)
 const openMenuSession = ref<TalosSession | null>(null)
 const menuElement = ref<HTMLElement | null>(null)
+const railElement = ref<HTMLElement | null>(null)
 const menuPosition = ref({ left: 8, top: 8 })
 const menuThemeStyle = ref<Record<string, string>>({})
 const renamingRowKey = ref<string | null>(null)
@@ -117,6 +123,8 @@ const renameValue = ref('')
 const folderValue = ref('')
 const collapsedGroups = ref<Record<string, boolean>>({})
 const lightThemeActive = computed(() => talosThemeIsLight(props.theme))
+let returnFocusTarget: HTMLElement | null = null
+let backgroundIsolation: { element: HTMLElement; ariaHidden: string | null; hadInert: boolean } | null = null
 const visiblePrimaryItems = computed(() => primaryItems.filter((item) => {
     if (item.id === 'search') {
         return props.visibility.search !== false || props.visibility.library !== false
@@ -305,10 +313,83 @@ function handleGlobalPointerDown(event: PointerEvent) {
 }
 
 function handleGlobalKeyDown(event: KeyboardEvent) {
+    if (!props.mobileOpen) {
+        if (event.key === 'Escape') closeSessionMenu()
+        return
+    }
+
     if (event.key === 'Escape') {
+        event.preventDefault()
         closeSessionMenu()
+        emit('closeMobile')
+        return
+    }
+
+    if (event.key !== 'Tab') return
+
+    const focusable = focusableElements()
+    if (!focusable.length) {
+        event.preventDefault()
+        railElement.value?.focus()
+        return
+    }
+
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
     }
 }
+
+function focusableElements() {
+    if (!railElement.value) return []
+
+    return Array.from(railElement.value.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
+}
+
+function isolateMobileHistoryBackground() {
+    const background = document.querySelector<HTMLElement>('.talos-chat-scroll-root')
+    if (!background || backgroundIsolation) return
+
+    backgroundIsolation = {
+        element: background,
+        ariaHidden: background.getAttribute('aria-hidden'),
+        hadInert: background.hasAttribute('inert'),
+    }
+    background.setAttribute('inert', '')
+    background.setAttribute('aria-hidden', 'true')
+}
+
+function restoreMobileHistoryBackground() {
+    if (!backgroundIsolation) return
+
+    const { element, ariaHidden, hadInert } = backgroundIsolation
+    if (!hadInert) element.removeAttribute('inert')
+    if (ariaHidden === null) element.removeAttribute('aria-hidden')
+    else element.setAttribute('aria-hidden', ariaHidden)
+    backgroundIsolation = null
+}
+
+watch(() => props.mobileOpen, async (open) => {
+    if (open) {
+        returnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        await nextTick()
+        isolateMobileHistoryBackground()
+        railElement.value?.querySelector<HTMLElement>('[aria-label="Close chat history"]')?.focus()
+        return
+    }
+
+    restoreMobileHistoryBackground()
+    await nextTick()
+    if (returnFocusTarget?.isConnected) returnFocusTarget.focus()
+    returnFocusTarget = null
+})
 
 function handleViewportChange() {
     closeSessionMenu()
@@ -322,6 +403,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+    restoreMobileHistoryBackground()
     document.removeEventListener('pointerdown', handleGlobalPointerDown)
     document.removeEventListener('keydown', handleGlobalKeyDown)
     window.removeEventListener('scroll', handleViewportChange, true)
@@ -354,37 +436,64 @@ function submitMove(session: TalosSession) {
 
 function deleteWithConfirmation(session: TalosSession) {
     closeSessionMenu()
-    if (window.confirm(`Delete "${session.title || 'Untitled chat'}"? This cannot be undone.`)) {
-        emit('deleteSession', session)
-    }
+    emit('deleteSession', session)
+}
+
+function selectChatSession(session: TalosSession) {
+    emit('selectSession', session)
+    if (props.mobileOpen) emit('closeMobile')
+}
+
+function openRailItem(id: string, event?: PointerEvent) {
+    emit('open', id, event)
+    if (props.mobileOpen) emit('closeMobile')
+}
+
+function startNewChat() {
+    emit('newChat')
+    if (props.mobileOpen) emit('closeMobile')
 }
 </script>
 
 <template>
+    <div
+        v-if="mobileOpen"
+        class="fixed inset-0 z-[65] bg-black/45 backdrop-blur-[1px] lg:hidden"
+        aria-hidden="true"
+        @click="emit('closeMobile')"
+    ></div>
     <aside
-        class="talos-left-rail relative z-30 hidden h-screen shrink-0 border-r border-[var(--talos-border)] bg-[var(--talos-sidebar)] py-2 lg:flex lg:flex-col"
-        :class="collapsed ? 'px-2' : 'px-2.5'"
+        ref="railElement"
+        class="talos-left-rail h-[100dvh] shrink-0 border-r border-[var(--talos-border)] bg-[var(--talos-sidebar)] py-2 lg:relative lg:z-30 lg:flex lg:h-screen lg:flex-col"
+        :class="[mobileOpen ? 'fixed inset-y-0 left-0 z-[70] flex flex-col shadow-2xl' : 'hidden', effectiveCollapsed ? 'px-2' : 'px-2.5']"
         :style="railStyle"
-        :data-sidebar-state="collapsed ? 'collapsed' : 'expanded'"
+        :data-sidebar-state="effectiveCollapsed ? 'collapsed' : 'expanded'"
+        :role="mobileOpen ? 'dialog' : undefined"
+        :aria-modal="mobileOpen ? 'true' : undefined"
+        :aria-labelledby="mobileOpen ? 'talos-mobile-history-title' : undefined"
+        :tabindex="mobileOpen ? -1 : undefined"
+        data-testid="talos-mobile-history-dialog"
         aria-label="TALOS workspace rail"
     >
-        <div class="flex items-center gap-2 px-1" :class="collapsed ? 'justify-center' : 'justify-between'">
-            <div v-if="!collapsed && visibility.brand_name !== false" data-testid="talos-rail-brand" class="flex min-w-0 flex-1 items-center gap-2">
+        <h2 v-if="mobileOpen" id="talos-mobile-history-title" class="sr-only">Chat history</h2>
+        <div class="flex items-center gap-2 px-1" :class="effectiveCollapsed ? 'justify-center' : 'justify-between'">
+            <div v-if="!effectiveCollapsed && visibility.brand_name !== false" data-testid="talos-rail-brand" class="flex min-w-0 flex-1 items-center gap-2">
                 <span data-testid="talos-rail-brand-logo" class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
                     <span class="talos-short-logo-mark"></span>
                 </span>
                 <div data-testid="talos-rail-brand-copy" class="min-w-0">
-                    <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-accent)]">AVM</div>
+                    <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">AVM</div>
                     <div class="talos-orbitron-brand truncate text-base font-semibold leading-5 text-[var(--talos-text)]">TALOS</div>
                 </div>
             </div>
             <button
                 type="button"
                 class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] transition hover:border-[var(--talos-accent-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-                @click="collapsed ? emit('expand') : emit('collapse')"
+                :aria-label="mobileOpen ? 'Close chat history' : effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                @click="mobileOpen ? emit('closeMobile') : effectiveCollapsed ? emit('expand') : emit('collapse')"
             >
-                <ChevronRight v-if="collapsed" class="h-4 w-4" />
+                <X v-if="mobileOpen" class="h-4 w-4" />
+                <ChevronRight v-else-if="effectiveCollapsed" class="h-4 w-4" />
                 <ChevronLeft v-else class="h-4 w-4" />
             </button>
         </div>
@@ -392,18 +501,18 @@ function deleteWithConfirmation(session: TalosSession) {
         <Button
             v-if="visibility.new_chat !== false"
             class="mt-3 w-full"
-            :class="collapsed ? 'cursor-pointer justify-center px-0' : 'cursor-pointer justify-start'"
+            :class="effectiveCollapsed ? 'cursor-pointer justify-center px-0' : 'cursor-pointer justify-start'"
             size="sm"
             :disabled="creatingSession"
             aria-label="New Chat"
-            @click="emit('newChat')"
+            @click="startNewChat"
         >
             <MessageSquarePlus class="h-4 w-4" />
-            <span v-if="!collapsed">New Chat</span>
+            <span v-if="!effectiveCollapsed">New Chat</span>
         </Button>
 
         <section
-            v-if="!collapsed && visibility.chats !== false"
+            v-if="!effectiveCollapsed && visibility.chats !== false"
             data-testid="talos-session-history"
             class="mt-3 border-t border-[var(--talos-border)] pt-3"
             aria-label="Chat history"
@@ -447,7 +556,7 @@ function deleteWithConfirmation(session: TalosSession) {
                                     class="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                                     :aria-current="activeSessionId === session.id ? 'page' : undefined"
                                     :aria-label="`Open chat ${session.title || 'Untitled chat'}`"
-                                    @click="emit('selectSession', session)"
+                                    @click="selectChatSession(session)"
                                 >
                                     <span class="min-w-0">
                                         <span class="flex min-w-0 items-center gap-1">
@@ -486,7 +595,7 @@ function deleteWithConfirmation(session: TalosSession) {
                                 />
                                 <div class="mt-2 flex justify-end gap-1">
                                     <button type="button" class="rounded px-2 py-1 text-[11px] text-[var(--talos-muted)] hover:bg-[var(--talos-panel-soft)]" @click="renamingRowKey = null">Cancel</button>
-                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-contrast)]">Save name</button>
+                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-text)]">Save name</button>
                                 </div>
                             </form>
                             <form
@@ -504,7 +613,7 @@ function deleteWithConfirmation(session: TalosSession) {
                                 />
                                 <div class="mt-2 flex justify-end gap-1">
                                     <button type="button" class="rounded px-2 py-1 text-[11px] text-[var(--talos-muted)] hover:bg-[var(--talos-panel-soft)]" @click="movingRowKey = null">Cancel</button>
-                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-contrast)]">Move chat</button>
+                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-text)]">Move chat</button>
                                 </div>
                             </form>
                         </div>
@@ -541,7 +650,7 @@ function deleteWithConfirmation(session: TalosSession) {
                 <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('archiveSession', openMenuSession); closeSessionMenu()">
                     <Archive class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Archive
                 </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-red-300 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400" @click="deleteWithConfirmation(openMenuSession)">
+                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[var(--talos-danger)] hover:bg-[var(--talos-danger-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-danger)]" @click="deleteWithConfirmation(openMenuSession)">
                     <Trash2 class="h-3.5 w-3.5" /> Delete
                 </button>
             </div>
@@ -554,7 +663,7 @@ function deleteWithConfirmation(session: TalosSession) {
                 type="button"
                 class="group flex w-full cursor-pointer items-center rounded-md border text-left transition hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-60"
                 :class="[
-                    collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5',
+                    effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5',
                     activeIds.includes(item.id)
                         ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]'
                         : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]',
@@ -563,10 +672,10 @@ function deleteWithConfirmation(session: TalosSession) {
                 :aria-label="item.label"
                 :title="item.disabledReason || item.description"
                 :disabled="Boolean(item.disabledReason)"
-                @click="emit('open', item.id, $event)"
+                @click="openRailItem(item.id, $event)"
             >
                 <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-                <span v-if="!collapsed" class="min-w-0">
+                <span v-if="!effectiveCollapsed" class="min-w-0">
                     <span class="block truncate text-[13px] font-medium">{{ item.label }}</span>
                     <span class="sr-only">{{ item.description }}</span>
                 </span>
@@ -575,11 +684,11 @@ function deleteWithConfirmation(session: TalosSession) {
                 v-if="visibleAdvancedItems.length"
                 :items="visibleAdvancedItems"
                 :active-ids="activeIds"
-                :collapsed="collapsed"
+                :collapsed="effectiveCollapsed"
                 :expanded="Boolean(advancedExpanded || activeAdvanced)"
                 id="talos-advanced-items-desktop"
                 @toggle="emit('toggleAdvanced')"
-                @open="(id, event) => emit('open', id, event)"
+                @open="openRailItem"
             />
         </nav>
 
@@ -590,14 +699,14 @@ function deleteWithConfirmation(session: TalosSession) {
                     :key="item.id"
                     type="button"
                     class="flex w-full cursor-pointer items-center rounded-md border border-transparent text-left text-[13px] text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                    :class="collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5'"
+                    :class="effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5'"
                     :aria-pressed="activeIds.includes(item.id)"
                     :aria-label="item.label"
                     :title="item.description"
-                    @click="emit('open', item.id, $event)"
+                    @click="openRailItem(item.id, $event)"
                 >
                     <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-                    <span v-if="!collapsed" class="truncate">{{ item.label }}</span>
+                    <span v-if="!effectiveCollapsed" class="truncate">{{ item.label }}</span>
                 </button>
             </div>
 
@@ -605,17 +714,17 @@ function deleteWithConfirmation(session: TalosSession) {
                 v-if="visibility.theme !== false"
                 type="button"
                 class="mt-2 flex w-full cursor-pointer items-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] py-2 text-[13px] text-[var(--talos-text)] transition hover:border-[var(--talos-accent)] hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :class="collapsed ? 'justify-center px-0' : 'justify-between px-2.5'"
+                :class="effectiveCollapsed ? 'justify-center px-0' : 'justify-between px-2.5'"
                 aria-label="Toggle theme"
                 @click="emit('toggleTheme')"
             >
-                <span v-if="!collapsed">Theme</span>
+                <span v-if="!effectiveCollapsed">Theme</span>
                 <Moon v-if="lightThemeActive" class="h-4 w-4" />
                 <Sun v-else class="h-4 w-4" />
             </button>
         </div>
         <button
-            v-if="!collapsed"
+            v-if="!effectiveCollapsed"
             type="button"
             class="absolute -right-1 top-0 hidden h-full w-2 cursor-col-resize rounded-full border-0 bg-transparent outline-none transition hover:bg-[var(--talos-accent)]/30 focus-visible:bg-[var(--talos-accent)]/30 lg:block"
             aria-label="Resize sidebar"

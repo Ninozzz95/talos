@@ -104,10 +104,20 @@ export class BrowserSessionManager {
     if (!session.capabilities.navigation) {
       throw new BrowserError("Navigation is not enabled for this session.", "TALOS_BROWSER_CAPABILITY_DENIED", 403);
     }
+    const startedAt = Date.now();
     try {
       await session.page.goto(input.url, { waitUntil: input.waitUntil, timeout: input.timeoutMs });
     } catch (error) {
       throw new BrowserError("Browser navigation failed.", "TALOS_BROWSER_NAVIGATION_FAILED", 502, { reason: error instanceof Error ? error.message : "unknown" });
+    }
+
+    if (input.waitUntil !== "networkidle") {
+      const remainingMilliseconds = input.timeoutMs - (Date.now() - startedAt) - 250;
+      if (remainingMilliseconds > 0) {
+        await session.page.waitForLoadState("networkidle", {
+          timeout: Math.min(4_000, remainingMilliseconds),
+        }).catch(() => undefined);
+      }
     }
     session.status = "active";
     return this.summary(session);

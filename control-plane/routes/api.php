@@ -167,6 +167,7 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::post('/research-reports/{researchReport}/follow-up-session', [TalosResearchReportController::class, 'followUpSession']);
         Route::get('/research-reports/{researchReport}', [TalosResearchReportController::class, 'show']);
         Route::post('/research-jobs', [TalosResearchJobController::class, 'store']);
+        Route::get('/research-jobs/capability', [TalosResearchJobController::class, 'capability']);
         Route::get('/research-jobs/{job}', [TalosResearchJobController::class, 'show']);
         Route::post('/research-jobs/{job}/cancel', [TalosResearchJobController::class, 'cancel']);
         Route::post('/research-jobs/{job}/fixtures', [TalosResearchJobController::class, 'fixtures']);

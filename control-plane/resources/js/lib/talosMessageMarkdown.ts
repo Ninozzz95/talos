@@ -51,7 +51,7 @@ function isExternalHttpLink(href: string, origin: string) {
 function normalizeSource(source: string) {
     return source
         .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
-        .replace(/[\u202A-\u202E\u2066-\u2069]/g, '')
+        .replace(/[\u061C\u200B\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
 }
 
 function languageClass(info: string) {

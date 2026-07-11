@@ -14,6 +14,7 @@ test('development stack config starts the browser worker with shared ephemeral c
         'browser',
     ])
     assert.equal(config.sharedEnv.AVM_VALIDATOR_URL, 'http://127.0.0.1:3000')
+    assert.equal(config.sharedEnv.TALOS_VALIDATOR_HEALTH_URL, 'http://127.0.0.1:3000/health')
     assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_URL, 'http://127.0.0.1:3100')
     assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_TOKEN, token)
 

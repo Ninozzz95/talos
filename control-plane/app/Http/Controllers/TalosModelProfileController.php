@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 final class TalosModelProfileController extends Controller
 {
@@ -58,8 +59,9 @@ final class TalosModelProfileController extends Controller
         ]);
 
         $validated = TalosModelProviderCatalog::applyCreateDefaults($validated);
-        $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
         $this->assertSafeBaseUrl((string) $validated['provider'], $validated['base_url'] ?? null);
+        $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
+        $requestedCapabilities = $validated['capabilities'] ?? null;
 
         $profile = TalosModelProfile::query()->create([
             'user_id' => $userId,
@@ -69,14 +71,15 @@ final class TalosModelProfileController extends Controller
             'encrypted_secret' => filled($validated['secret'] ?? null) ? Crypt::encryptString((string) $validated['secret']) : null,
             'base_url' => $validated['base_url'] ?? null,
             'timeout_seconds' => $validated['timeout_seconds'],
-            'status' => $validated['status'] ?? 'untested',
-            'capabilities' => $validated['capabilities'] ?? null,
-            'probe_result' => $validated['probe_result'] ?? null,
+            'status' => 'untested',
+            'capabilities' => null,
+            'probe_result' => null,
         ]);
 
         TalosAuditEvent::record('model_profile.created', 'model_profile', $profile->id, [
             ...$validated,
             'secret' => array_key_exists('secret', $validated) ? $validated['secret'] : null,
+            'requested_capabilities' => $requestedCapabilities,
         ]);
 
         return response()->json(['data' => $profile->toApiArray()], 201);
@@ -95,8 +98,8 @@ final class TalosModelProfileController extends Controller
         ]);
 
         $validated = TalosModelProviderCatalog::applyCreateDefaults($validated);
-        $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
         $this->assertSafeBaseUrl((string) $validated['provider'], $validated['base_url'] ?? null);
+        $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
 
         return response()->json(['data' => $probeService->probeDraft($validated)]);
     }
@@ -126,14 +129,23 @@ final class TalosModelProfileController extends Controller
 
         $provider = (string) ($validated['provider'] ?? $profile->provider);
         $baseUrl = array_key_exists('base_url', $validated) ? $validated['base_url'] : $profile->base_url;
+        $this->assertSafeBaseUrl($provider, $baseUrl);
+        $requestedCapabilities = $validated['capabilities'] ?? null;
+        $secretChanged = array_key_exists('secret', $validated)
+            && $this->submittedSecretChanges($profile, $validated['secret']);
+        $connectionIdentityChanged = (array_key_exists('provider', $validated) && $validated['provider'] !== $profile->provider)
+            || (array_key_exists('model', $validated) && $validated['model'] !== $profile->model)
+            || (array_key_exists('base_url', $validated) && $validated['base_url'] !== $profile->base_url)
+            || $secretChanged;
 
         $this->assertSecretPolicy($provider, $validated['secret'] ?? null, filled($profile->encrypted_secret));
-        $this->assertSafeBaseUrl($provider, $baseUrl);
 
         if (array_key_exists('secret', $validated)) {
-            $validated['encrypted_secret'] = filled($validated['secret'])
-                ? Crypt::encryptString((string) $validated['secret'])
-                : null;
+            if ($secretChanged) {
+                $validated['encrypted_secret'] = filled($validated['secret'])
+                    ? Crypt::encryptString((string) $validated['secret'])
+                    : null;
+            }
             unset($validated['secret']);
         }
 
@@ -141,11 +153,46 @@ final class TalosModelProfileController extends Controller
             $validated['encrypted_secret'] = null;
         }
 
+        $requestedStatus = $validated['status'] ?? null;
+        unset($validated['status'], $validated['capabilities'], $validated['probe_result']);
+
+        if ($connectionIdentityChanged) {
+            $validated['status'] = 'untested';
+            $validated['capabilities'] = null;
+            $validated['probe_result'] = null;
+        } elseif (is_string($requestedStatus) && $requestedStatus !== 'healthy') {
+            // Healthy status requires a server probe; other operational status changes are valid updates.
+            $validated['status'] = $requestedStatus;
+        }
+
         $profile->update($validated);
 
-        TalosAuditEvent::record('model_profile.updated', 'model_profile', $profile->id, $validated);
+        TalosAuditEvent::record('model_profile.updated', 'model_profile', $profile->id, [
+            ...$validated,
+            'requested_capabilities' => $requestedCapabilities,
+        ]);
 
         return response()->json(['data' => $profile->refresh()->toApiArray()]);
+    }
+
+    private function submittedSecretChanges(TalosModelProfile $profile, mixed $submittedSecret): bool
+    {
+        if (! filled($profile->encrypted_secret)) {
+            return filled($submittedSecret);
+        }
+
+        if (! filled($submittedSecret)) {
+            return true;
+        }
+
+        try {
+            return ! hash_equals(
+                Crypt::decryptString((string) $profile->encrypted_secret),
+                (string) $submittedSecret,
+            );
+        } catch (Throwable) {
+            return true;
+        }
     }
 
     public function destroy(Request $request, TalosModelProfile $profile): JsonResponse
@@ -165,6 +212,7 @@ final class TalosModelProfileController extends Controller
 
         $profile->update([
             'status' => $probe['status'],
+            'capabilities' => $probe['capabilities'],
             'probe_result' => $probe['result'],
         ]);
 
@@ -173,11 +221,17 @@ final class TalosModelProfileController extends Controller
 
     private function assertSafeBaseUrl(string $provider, ?string $baseUrl): void
     {
-        if (! filled($baseUrl)) {
-            return;
+        if (TalosModelProviderCatalog::requiresTrustedLocalBaseUrl($provider)) {
+            if (TalosModelProviderCatalog::allowsTrustedLocalBaseUrl($provider, $baseUrl)) {
+                return;
+            }
+
+            throw ValidationException::withMessages([
+                'base_url' => 'Local provider base URL must use loopback localhost, 127.0.0.1, or ::1 without userinfo, query, or fragment.',
+            ]);
         }
 
-        if (TalosModelProviderCatalog::allowsTrustedLocalBaseUrl($provider, $baseUrl)) {
+        if (! filled($baseUrl)) {
             return;
         }
 

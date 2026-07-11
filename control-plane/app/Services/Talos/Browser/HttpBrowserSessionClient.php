@@ -32,7 +32,22 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is unavailable.');
         }
         if ($response->status() === 204) return [];
-        if (! $response->successful() || ! is_array($response->json('data'))) throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker failed to complete the request.');
+        if (! $response->successful()) {
+            $body = $response->json();
+            $code = is_array($body) && is_string($body['code'] ?? null)
+                && preg_match('/^TALOS_BROWSER_[A-Z0-9_]{1,96}$/', $body['code']) === 1
+                    ? $body['code']
+                    : 'TALOS_BROWSER_WORKER_FAILURE';
+            $message = is_array($body) && is_string($body['message'] ?? null)
+                ? trim((string) preg_replace('/[\x00-\x1F\x7F]+/u', ' ', $body['message']))
+                : '';
+            if ($code === 'TALOS_BROWSER_WORKER_FAILURE' || $message === '') {
+                $message = 'Browser worker failed to complete the request.';
+            }
+
+            throw new BrowserWorkerException($code, mb_substr($message, 0, 512));
+        }
+        if (! is_array($response->json('data'))) throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid response.');
         /** @var array<string, mixed> $data */ $data = $response->json('data');
         return $data;
     }

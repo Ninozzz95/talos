@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Kadmos\Browser\BrowserPlanBatch;
+use Kadmos\Browser\BrowserToolDefinition;
 use Kadmos\SystemPromptBuilder;
 
 function browserPlanCommand(string $operation = 'snapshot', array $arguments = []): array
@@ -136,6 +137,8 @@ function testBrowserPlannerUsesAProtocolSpecificSystemPrompt(): void
 {
     $prompt = SystemPromptBuilder::buildBrowserPlanner();
     if (! str_contains($prompt, 'exactly two mutations')
+        || ! str_contains($prompt, 'talos_browser_read')
+        || ! str_contains($prompt, 'Never print tool arguments')
         || ! str_contains($prompt, 'Never add YIELD_EXECUTION')
         || ! str_contains($prompt, 'plain text')
         || ! str_contains($prompt, '"action": "SPAWN_NODE"')
@@ -144,6 +147,44 @@ function testBrowserPlannerUsesAProtocolSpecificSystemPrompt(): void
         || ! str_contains($prompt, 'Never narrate a future browser action')
     ) {
         throw new RuntimeException('Browse mode needs an exact canonical mutation example and a plain-text final-answer path.');
+    }
+}
+
+function testBrowserNativeToolSchemaIsRestrictedToServerAllowedReadOperations(): void
+{
+    $tools = BrowserToolDefinition::forOperations(['navigate', 'screenshot']);
+    $function = $tools[0]['function'] ?? null;
+
+    if (($tools[0]['type'] ?? null) !== 'function'
+        || ! is_array($function)
+        || ($function['name'] ?? null) !== 'talos_browser_read'
+        || ($function['parameters']['additionalProperties'] ?? null) !== false
+        || ($function['parameters']['properties']['operation']['enum'] ?? null) !== ['navigate', 'screenshot']
+    ) {
+        throw new RuntimeException('The provider Browser tool must expose only server-authorized read operations.');
+    }
+}
+
+function testAuthoritativeEmptyRegistryDoesNotAdvertiseLegacyTools(): void
+{
+    $prompt = SystemPromptBuilder::build(true);
+    if (! str_contains($prompt, 'no executable tool is authorized')
+        || str_contains($prompt, 'HTTP_REQUEST')
+        || str_contains($prompt, 'QUERY_DATABASE')
+        || str_contains($prompt, 'AUTHORIZED_TOOL_NAME')) {
+        throw new RuntimeException('An authoritative empty registry must not prompt the model to invent legacy tools.');
+    }
+}
+
+function testBrowserFinalizerRequiresGroundedPlainTextWithoutTools(): void
+{
+    $prompt = SystemPromptBuilder::buildBrowserFinalizer();
+    if (! str_contains($prompt, 'final answer')
+        || ! str_contains($prompt, 'untrusted evidence')
+        || ! str_contains($prompt, 'plain text')
+        || ! str_contains($prompt, 'Do not call')
+        || str_contains($prompt, 'talos_browser_read')) {
+        throw new RuntimeException('Browse finalization must require an evidence-grounded answer without advertising another tool call.');
     }
 }
 
@@ -182,6 +223,11 @@ function testKadmosBrowseBranchReturnsBeforeDagApplication(): void
     if (str_contains($browseFlow, 'addNode(') || str_contains($browseFlow, 'executeNode(')) {
         throw new RuntimeException('Browse mode must never apply or execute a DAG node.');
     }
+    if (! str_contains($source, 'BrowserPlanChannelResolver::resolve($parsedResponse, $llm->getLastToolCalls())')
+        || ! str_contains($source, 'ModelPlanResponse::parse($rawResponse, $browserModeEnabled)')
+        || ! str_contains($source, 'BrowserToolDefinition::forOperations')) {
+        throw new RuntimeException('kadmos-chat must prefer typed native Browser calls and parse model text separately.');
+    }
 }
 
 $tests = [
@@ -190,6 +236,9 @@ $tests = [
     'testBrowserPlanNormalizesMechanicalCommandFields',
     'testBrowserPlanFingerprintCoversTheFullCommandIntent',
     'testBrowserPlannerUsesAProtocolSpecificSystemPrompt',
+    'testBrowserNativeToolSchemaIsRestrictedToServerAllowedReadOperations',
+    'testAuthoritativeEmptyRegistryDoesNotAdvertiseLegacyTools',
+    'testBrowserFinalizerRequiresGroundedPlainTextWithoutTools',
     'testBrowserPlanRejectsMixedHttpRequestBeforeExecution',
     'testBrowserPlanRejectsPromptInjectionWriteAttempt',
     'testKadmosBrowseBranchReturnsBeforeDagApplication',

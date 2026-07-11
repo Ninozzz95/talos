@@ -6,19 +6,22 @@ import type { TalosBackgroundEffect, TalosThemeMotionMode } from '../../../lib/t
 const props = defineProps<{
     effect: TalosBackgroundEffect
     motion: TalosThemeMotionMode
-    motionDisabled: boolean
+    backgroundMotionEnabled: boolean
     simpleAnimation: boolean
+    paletteKey: string
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
 const canvasEnabled = computed(() => props.effect !== 'none')
+const motionDisabled = computed(() => !props.backgroundMotionEnabled)
 
 const { performanceState } = useTalosProceduralCanvas(
     canvas,
     toRef(props, 'effect'),
     toRef(props, 'motion'),
-    toRef(props, 'motionDisabled'),
+    toRef(props, 'backgroundMotionEnabled'),
     toRef(props, 'simpleAnimation'),
+    toRef(props, 'paletteKey'),
 )
 </script>
 
@@ -28,6 +31,7 @@ const { performanceState } = useTalosProceduralCanvas(
         class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden opacity-80"
         :class="[`talos-effect-${effect}`, { 'talos-motion-disabled': motionDisabled }]"
         :data-effect="effect"
+        :data-motion-profile="motion"
         :data-motion-disabled="motionDisabled ? 'true' : 'false'"
         :data-performance-mode="performanceState.mode"
         :data-performance-fps-cap="String(performanceState.fpsCap)"

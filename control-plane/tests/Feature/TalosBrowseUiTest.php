@@ -49,6 +49,13 @@ final class TalosBrowseUiTest extends TestCase
         $this->assertStringContainsString('/api/talos/browser/artifacts/', $composable);
         $this->assertStringContainsString('encodeURIComponent', $composable);
         $this->assertStringContainsString('latestSnapshot', $composable);
+        $this->assertStringContainsString('talos_session_id', $composable);
+        $this->assertStringContainsString('bindTalosSession', $composable);
+        $this->assertStringContainsString('activeTalosSessionId', $workspaceBrowse);
+        $this->assertStringContainsString('chatActivities.value = []', $workspaceBrowse);
+        $this->assertStringContainsString('latestBrowserSnapshot', $workspaceBrowse);
+        $this->assertStringContainsString(':snapshot="browserSnapshot"', file_get_contents(base_path('resources/js/components/talos/workspace/TalosChatSurface.vue')));
+        $this->assertStringContainsString('talos-browser-snapshot-viewer', file_get_contents(base_path('resources/js/components/talos/chat/TalosBrowserActivity.vue')));
     }
 
     public function test_browse_chat_bridge_sends_only_typed_browser_mode_identity(): void

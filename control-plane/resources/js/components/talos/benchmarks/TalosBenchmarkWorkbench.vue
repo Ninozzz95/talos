@@ -18,7 +18,7 @@ const props = withDefaults(defineProps<{
     exportEndpoint?: string | null
     defaultRuns?: number
     initialBenchmarkGroupId?: string | null
-    initialScenarioPath?: string | null
+    initialScenarioRef?: string | null
 }>(), {
     compact: false,
     compareEndpoint: '/api/benchmarks/compare',
@@ -26,7 +26,7 @@ const props = withDefaults(defineProps<{
     exportEndpoint: null,
     defaultRuns: 1,
     initialBenchmarkGroupId: null,
-    initialScenarioPath: null,
+    initialScenarioRef: null,
 })
 
 const {
@@ -41,7 +41,7 @@ const {
     benchmarkGroupById,
 } = useTalosBenchmarks()
 
-const scenarioPath = ref(props.initialScenarioPath ?? '')
+const scenarioRef = ref(props.initialScenarioRef ?? '')
 const runs = ref(props.defaultRuns)
 const selectedGroupId = ref<string | null>(props.initialBenchmarkGroupId)
 const activeWorkbenchTab = ref<'avm' | 'model'>('avm')
@@ -52,14 +52,12 @@ const exportingBenchmark = ref(false)
 const selectedGroup = computed(() => benchmarkGroupById(selectedGroupId.value))
 const visibleError = computed(() => actionError.value || benchmarkError.value)
 const canRun = computed(() => {
-    return scenarioPath.value.trim().startsWith('benchmark-scenarios/')
-        && scenarioPath.value.trim().endsWith('.json')
-        && !runningBenchmarkComparison.value
+    return Boolean(scenarioRef.value.trim()) && !runningBenchmarkComparison.value
 })
 const selectedResults = computed<TalosBenchmarkResult[]>(() => selectedGroup.value?.results ?? [])
 const hasToolAgentLane = computed(() => selectedResults.value.some((result) => result.mode === 'tool_agent'))
 const isModelComparisonGroup = computed(() => selectedGroup.value?.metadata?.comparison_type === 'model_profile_blind_compare')
-const canExport = computed(() => Boolean(props.exportEndpoint && selectedGroup.value && !isModelComparisonGroup.value))
+const canExport = computed(() => Boolean(props.exportEndpoint && selectedGroup.value))
 const visibleResults = computed(() => {
     let orderedModes = ['avm_on', 'avm_off_direct']
 
@@ -76,9 +74,9 @@ const visibleResults = computed(() => {
     })
 })
 const proofSourceLabel = computed(() => {
-    const path = scenarioPath.value.trim()
+    const scenarioReference = scenarioRef.value.trim()
 
-    if (props.initialScenarioPath && path === props.initialScenarioPath) {
+    if (props.initialScenarioRef && scenarioReference === props.initialScenarioRef) {
         return 'File handoff'
     }
 
@@ -86,17 +84,17 @@ const proofSourceLabel = computed(() => {
         return 'Persisted benchmark group'
     }
 
-    if (path) {
-        return 'Private scenario path'
+    if (scenarioReference) {
+        return 'Private scenario ref'
     }
 
     return 'No scenario selected'
 })
 const proofSourceDetail = computed(() => {
-    const path = scenarioPath.value.trim()
+    const scenarioReference = scenarioRef.value.trim()
 
-    if (path) {
-        return path
+    if (scenarioReference) {
+        return scenarioReference
     }
 
     if (selectedGroup.value?.source_run_id) {
@@ -113,11 +111,9 @@ const proofLaneLabel = computed(() => {
 const proofExportLabel = computed(() => canExport.value ? 'Export ready' : 'Export gated')
 const proofExportDetail = computed(() => {
     if (canExport.value) {
-        return 'Selected group can use the benchmark export endpoint.'
-    }
-
-    if (isModelComparisonGroup.value) {
-        return 'Model-comparison evidence is not an AVM ON/OFF export contract.'
+        return isModelComparisonGroup.value
+            ? 'Selected group can use the model-comparison export contract.'
+            : 'Selected group can use the AVM ON/OFF export contract.'
     }
 
     return 'Select a persisted benchmark group before exporting.'
@@ -193,7 +189,7 @@ async function selectGroup(group: TalosBenchmarkGroup) {
 
 async function runComparison() {
     if (!canRun.value) {
-        actionError.value = 'Benchmark scenario path must be a private benchmark-scenarios/*.json path.'
+        actionError.value = 'Benchmark scenario ref must be a valid uploaded scenario reference.'
         return
     }
 
@@ -201,7 +197,7 @@ async function runComparison() {
 
     try {
         const response = await runBenchmarkComparison({
-            scenario_path: scenarioPath.value.trim(),
+            scenario_ref: scenarioRef.value.trim(),
             runs: Math.max(1, Math.min(50, runs.value || 1)),
         })
         selectedGroupId.value = response.benchmark_group.id
@@ -270,9 +266,9 @@ watch(() => props.initialBenchmarkGroupId, (groupId) => {
     void loadInitialBenchmarkGroup(groupId)
 })
 
-watch(() => props.initialScenarioPath, (path) => {
-    if (path) {
-        scenarioPath.value = path
+watch(() => props.initialScenarioRef, (scenarioReference) => {
+    if (scenarioReference) {
+        scenarioRef.value = scenarioReference
         actionMessage.value = 'File benchmark scenario loaded.'
     }
 })
@@ -366,10 +362,10 @@ watch(() => props.initialScenarioPath, (path) => {
 
             <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_86px_104px]">
                 <input
-                    v-model="scenarioPath"
+                    v-model="scenarioRef"
                     class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
-                    placeholder="benchmark-scenarios/YYYY/MM/DD/file_x.json"
-                    aria-label="Benchmark scenario path"
+                    placeholder="File scenario reference"
+                    aria-label="Benchmark scenario reference"
                     :disabled="runningBenchmarkComparison"
                 >
                 <input

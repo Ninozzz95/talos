@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosAuditEvent;
 use App\Models\TalosModelProfile;
 use App\Models\User;
+use App\Services\Models\TalosModelProbeService;
+use App\Services\Security\PublicHttpRequestPinning;
+use App\Services\Security\PublicHttpUrlPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -22,17 +26,31 @@ final class TalosModelProfileApiTest extends TestCase
         parent::setUp();
         $this->user = $this->authenticateTalosUser();
 
+        $allowedHosts = [
+            'api.openai.test',
+            'api.deepseek.test',
+            'api.openai.com',
+            'api.deepseek.com',
+            'api.anthropic.com',
+            'generativelanguage.googleapis.com',
+            'openrouter.ai',
+            'approved.example',
+            'ollama.example',
+        ];
         config([
-            'services.talos.model_provider_allowed_hosts' => [
-                'api.openai.test',
-                'api.deepseek.test',
-                'api.openai.com',
-                'api.deepseek.com',
-                'api.anthropic.com',
-                'generativelanguage.googleapis.com',
-                'openrouter.ai',
-            ],
+            'services.talos.model_provider_allowed_hosts' => $allowedHosts,
         ]);
+        $this->app->instance(PublicHttpRequestPinning::class, new PublicHttpRequestPinning(
+            PublicHttpUrlPolicy::forProviderHosts(
+                $allowedHosts,
+                static fn (string $host): array => ['93.184.216.34'],
+            ),
+            curlResolveAvailable: true,
+            requirePrimaryIpEvidence: false,
+        ));
+        $this->app->bind(TalosModelProbeService::class, fn ($app) => new TalosModelProbeService(
+            $app->make(PublicHttpRequestPinning::class),
+        ));
     }
 
     public function test_create_profile_stores_secret_and_response_omits_it(): void
@@ -58,6 +76,24 @@ final class TalosModelProfileApiTest extends TestCase
         $this->assertNotSame('sk-secret-value', $profile->encrypted_secret);
         $this->assertSame('sk-secret-value', Crypt::decryptString((string) $profile->encrypted_secret));
         $this->assertSame($this->user->id, $profile->user_id);
+    }
+
+    public function test_create_cannot_establish_readiness_or_verified_capabilities_from_client_input(): void
+    {
+        $this->postJson('/api/talos/model-profiles', [
+            'provider' => 'openai',
+            'model' => 'gpt-4.1',
+            'display_name' => 'Claimed ready',
+            'secret' => 'sk-client-claim',
+            'base_url' => 'https://api.openai.test/v1',
+            'status' => 'healthy',
+            'capabilities' => ['json' => true, 'tools' => true, 'remote' => true],
+            'probe_result' => ['ok' => true, 'code' => 'CLIENT_CLAIMED_READY'],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'untested')
+            ->assertJsonPath('data.capabilities', null)
+            ->assertJsonPath('data.probe_result', null);
     }
 
     public function test_list_and_show_omit_secret_fields(): void
@@ -162,6 +198,107 @@ final class TalosModelProfileApiTest extends TestCase
         $profile->refresh();
 
         $this->assertSame('original-secret', Crypt::decryptString((string) $profile->encrypted_secret));
+    }
+
+    public function test_update_cannot_establish_readiness_or_verified_capabilities_from_client_input(): void
+    {
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-4.1',
+            'display_name' => 'Not probed',
+            'encrypted_secret' => Crypt::encryptString('original-secret'),
+            'status' => 'untested',
+        ]);
+
+        $this->patchJson("/api/talos/model-profiles/{$profile->id}", [
+            'status' => 'healthy',
+            'capabilities' => ['json' => true, 'tools' => true, 'remote' => true],
+            'probe_result' => ['ok' => true, 'code' => 'CLIENT_CLAIMED_READY'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'untested')
+            ->assertJsonPath('data.capabilities', null)
+            ->assertJsonPath('data.probe_result', null);
+    }
+
+    public function test_update_applies_disabled_status_when_connection_identity_is_unchanged(): void
+    {
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-4.1',
+            'display_name' => 'Disable me',
+            'encrypted_secret' => Crypt::encryptString('original-secret'),
+            'base_url' => 'https://api.openai.test/v1',
+            'status' => 'healthy',
+            'capabilities' => ['chat' => true],
+            'probe_result' => ['ok' => true],
+        ]);
+
+        $this->patchJson("/api/talos/model-profiles/{$profile->id}", [
+            'status' => 'disabled',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'disabled')
+            ->assertJsonPath('data.capabilities.chat', true)
+            ->assertJsonPath('data.probe_result.ok', true);
+    }
+
+    public function test_update_with_unchanged_secret_preserves_probe_evidence(): void
+    {
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-4.1',
+            'display_name' => 'Keep probe',
+            'encrypted_secret' => Crypt::encryptString('original-secret'),
+            'base_url' => 'https://api.openai.test/v1',
+            'status' => 'healthy',
+            'capabilities' => ['chat' => true],
+            'probe_result' => ['ok' => true, 'probe_id' => 'existing'],
+        ]);
+
+        $this->patchJson("/api/talos/model-profiles/{$profile->id}", [
+            'secret' => 'original-secret',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'healthy')
+            ->assertJsonPath('data.capabilities.chat', true)
+            ->assertJsonPath('data.probe_result.probe_id', 'existing');
+    }
+
+    public function test_connection_identity_changes_invalidate_prior_probe_evidence(): void
+    {
+        foreach ([
+            'provider' => ['provider' => 'deepseek'],
+            'model' => ['model' => 'gpt-4.1-mini'],
+            'base_url' => ['base_url' => 'https://api.openai.test/v2'],
+            'secret' => ['secret' => 'rotated-secret'],
+        ] as $field => $payload) {
+            $profile = TalosModelProfile::query()->create([
+                'user_id' => $this->user->id,
+                'provider' => 'openai',
+                'model' => 'gpt-4.1',
+                'display_name' => "Probed {$field}",
+                'encrypted_secret' => Crypt::encryptString('original-secret'),
+                'base_url' => 'https://api.openai.test/v1',
+                'status' => 'healthy',
+                'capabilities' => ['chat' => true, 'tools' => true],
+                'probe_result' => ['ok' => true, 'url' => 'https://api.openai.test/v1/chat/completions'],
+            ]);
+
+            $this->patchJson("/api/talos/model-profiles/{$profile->id}", $payload)
+                ->assertOk()
+                ->assertJsonPath('data.status', 'untested')
+                ->assertJsonPath('data.capabilities', null)
+                ->assertJsonPath('data.probe_result', null);
+
+            $profile->refresh();
+            $this->assertSame('untested', $profile->status, $field);
+            $this->assertNull($profile->capabilities, $field);
+            $this->assertNull($profile->probe_result, $field);
+        }
     }
 
     public function test_update_with_secret_rotates_secret_without_returning_it(): void
@@ -395,6 +532,65 @@ final class TalosModelProfileApiTest extends TestCase
         $this->assertNull($profile->encrypted_secret);
     }
 
+    public function test_public_provider_host_outside_allowlist_is_rejected_without_storage_or_audit(): void
+    {
+        $auditCount = TalosAuditEvent::query()->count();
+
+        $response = $this->postJson('/api/talos/model-profiles', [
+            'provider' => 'openai',
+            'model' => 'gpt-unlisted',
+            'secret' => 'never-store-this-secret',
+            'base_url' => 'https://public-but-unlisted.example/v1',
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['base_url']);
+        $this->assertStringNotContainsString('never-store-this-secret', $response->getContent());
+        $this->assertDatabaseCount('talos_model_profiles', 0);
+        $this->assertSame($auditCount, TalosAuditEvent::query()->count());
+    }
+
+    public function test_model_profile_base_url_rejects_userinfo_query_and_fragment_without_token_leakage(): void
+    {
+        $urls = [
+            'https://user:url-token@api.openai.com/v1',
+            'https://api.openai.com/v1?api_key=url-token',
+            'https://api.openai.com/v1#url-token',
+        ];
+        $auditCount = TalosAuditEvent::query()->count();
+
+        foreach ($urls as $url) {
+            $response = $this->postJson('/api/talos/model-profiles', [
+                'provider' => 'openai',
+                'model' => 'gpt-unsafe-url',
+                'secret' => 'profile-secret',
+                'base_url' => $url,
+            ]);
+
+            $response
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['base_url']);
+            $this->assertStringNotContainsString('url-token', $response->getContent());
+        }
+
+        $this->assertDatabaseCount('talos_model_profiles', 0);
+        $this->assertSame($auditCount, TalosAuditEvent::query()->count());
+    }
+
+    public function test_ollama_non_loopback_url_is_rejected_even_when_public_and_allowlisted(): void
+    {
+        $this->postJson('/api/talos/model-profiles', [
+            'provider' => 'ollama',
+            'model' => 'llama3.1',
+            'base_url' => 'https://ollama.example/v1',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['base_url']);
+
+        $this->assertDatabaseCount('talos_model_profiles', 0);
+    }
+
     public function test_ollama_draft_probe_uses_local_endpoint_without_bearer_token(): void
     {
         Http::fake([
@@ -413,6 +609,44 @@ final class TalosModelProfileApiTest extends TestCase
         $this->assertSame(0, TalosModelProfile::query()->count());
         Http::assertSent(fn ($request): bool => $request->url() === 'http://127.0.0.1:11434/v1/chat/completions'
             && ! $request->hasHeader('Authorization'));
+    }
+
+    public function test_draft_probe_rejects_url_query_tokens_without_sending_or_echoing_them(): void
+    {
+        Http::fake();
+
+        $response = $this->postJson('/api/talos/model-profiles/probe-draft', [
+            'provider' => 'openai',
+            'model' => 'gpt-query-token',
+            'secret' => 'profile-secret',
+            'base_url' => 'https://api.openai.com/v1?api_key=probe-url-token',
+        ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['base_url']);
+        $this->assertStringNotContainsString('probe-url-token', $response->getContent());
+        Http::assertNothingSent();
+    }
+
+    public function test_probe_rejects_database_injected_remote_ollama_without_sending_a_request(): void
+    {
+        Http::fake();
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'ollama',
+            'model' => 'llama3.1',
+            'display_name' => 'Remote Ollama',
+            'base_url' => 'https://ollama.example/v1',
+            'status' => 'untested',
+        ]);
+
+        $this->postJson("/api/talos/model-profiles/{$profile->id}/probe")
+            ->assertOk()
+            ->assertJsonPath('data.probe_result.ok', false)
+            ->assertJsonPath('data.probe_result.code', 'BASE_URL_POLICY_BLOCKED');
+
+        Http::assertNothingSent();
     }
 
     public function test_private_provider_base_url_is_rejected_without_storing_profile(): void
@@ -475,10 +709,85 @@ final class TalosModelProfileApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.status', 'healthy')
             ->assertJsonPath('data.probe_result.ok', true)
+            ->assertJsonPath('data.capabilities.json', true)
+            ->assertJsonPath('data.capabilities.remote', true)
+            ->assertJsonPath('data.capabilities.tools', false)
             ->assertJsonMissingPath('data.encrypted_secret');
 
         Http::assertSent(fn ($request): bool => $request->url() === 'https://api.openai.test/v1/chat/completions'
             && $request->hasHeader('Authorization', 'Bearer probe-secret'));
+    }
+
+    public function test_probe_pins_dns_approved_public_ip_for_the_transport_connection(): void
+    {
+        $this->app->instance(PublicHttpRequestPinning::class, new PublicHttpRequestPinning(
+            PublicHttpUrlPolicy::forProviderHosts(
+                ['approved.example'],
+                static fn (string $host): array => ['93.184.216.34'],
+            ),
+            curlResolveAvailable: true,
+            requirePrimaryIpEvidence: false,
+        ));
+        $this->app->bind(TalosModelProbeService::class, fn ($app) => new TalosModelProbeService(
+            $app->make(PublicHttpRequestPinning::class),
+        ));
+
+        $connectionOptions = [];
+        Http::fake(function ($request, array $options) use (&$connectionOptions) {
+            $connectionOptions = $options;
+
+            return Http::response(['id' => 'pinned-probe'], 200);
+        });
+
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-4.1-mini',
+            'display_name' => 'Pinned probe',
+            'encrypted_secret' => Crypt::encryptString('pinned-secret'),
+            'base_url' => 'https://approved.example/v1',
+        ]);
+
+        $this->postJson("/api/talos/model-profiles/{$profile->id}/probe")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'healthy');
+
+        $this->assertSame(
+            ['approved.example:443:93.184.216.34'],
+            $connectionOptions['curl'][CURLOPT_RESOLVE] ?? null,
+        );
+    }
+
+    public function test_probe_does_not_send_credentials_when_connection_pinning_is_unavailable(): void
+    {
+        $this->app->instance(PublicHttpRequestPinning::class, new PublicHttpRequestPinning(
+            PublicHttpUrlPolicy::forProviderHosts(
+                ['approved.example'],
+                static fn (string $host): array => ['93.184.216.34'],
+            ),
+            curlResolveAvailable: false,
+        ));
+        $this->app->bind(TalosModelProbeService::class, fn ($app) => new TalosModelProbeService(
+            $app->make(PublicHttpRequestPinning::class),
+        ));
+        Http::fake();
+
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-4.1-mini',
+            'display_name' => 'Unpinnable probe',
+            'encrypted_secret' => Crypt::encryptString('do-not-send-this-secret'),
+            'base_url' => 'https://approved.example/v1',
+        ]);
+
+        $this->postJson("/api/talos/model-profiles/{$profile->id}/probe")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'failed')
+            ->assertJsonPath('data.probe_result.code', 'CONNECTION_PINNING_UNAVAILABLE')
+            ->assertJsonMissing(['do-not-send-this-secret']);
+
+        Http::assertNothingSent();
     }
 
     public function test_probe_marks_profile_degraded_for_non_success_response(): void
@@ -502,5 +811,30 @@ final class TalosModelProfileApiTest extends TestCase
             ->assertJsonPath('data.probe_result.ok', false)
             ->assertJsonPath('data.probe_result.http_status', 401)
             ->assertJsonMissingPath('data.encrypted_secret');
+    }
+
+    public function test_probe_returns_a_controlled_failure_for_provider_redirects(): void
+    {
+        Http::fake([
+            'api.openai.com/v1/chat/completions' => Http::response(null, 302, [
+                'Location' => 'https://attacker.example/collect',
+            ]),
+        ]);
+
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-4.1-mini',
+            'display_name' => 'Redirecting probe',
+            'encrypted_secret' => Crypt::encryptString('probe-secret'),
+            'base_url' => 'https://api.openai.com/v1',
+        ]);
+
+        $this->postJson("/api/talos/model-profiles/{$profile->id}/probe")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'failed')
+            ->assertJsonPath('data.probe_result.code', 'PROVIDER_REDIRECT_BLOCKED')
+            ->assertJsonPath('data.probe_result.http_status', 302)
+            ->assertJsonMissing(['probe-secret']);
     }
 }

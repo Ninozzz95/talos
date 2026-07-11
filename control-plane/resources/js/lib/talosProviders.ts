@@ -1,10 +1,16 @@
 import type { TalosModelProfile } from './talosTypes'
+import anthropicLogo from '../../images/providers/anthropic.svg'
+import deepseekLogo from '../../images/providers/deepseek.svg'
+import geminiLogo from '../../images/providers/gemini.svg'
+import ollamaLogo from '../../images/providers/ollama.svg'
+import openaiLogo from '../../images/providers/openai.svg'
+import openrouterLogo from '../../images/providers/openrouter.svg'
 
 export type TalosProviderId = TalosModelProfile['provider']
 export type TalosProviderTone = 'blue' | 'green' | 'purple' | 'amber' | 'cyan' | 'neutral'
 
 export type TalosProviderDefinition = {
-    id: TalosProviderId
+    id: TalosProviderId | 'unknown'
     label: string
     shortLabel: string
     description: string
@@ -17,6 +23,8 @@ export type TalosProviderDefinition = {
     policyNote: string
     tone: TalosProviderTone
     capabilities: Record<string, boolean>
+    logo: string | null
+    logoAlt: string
 }
 
 export const talosProviderCatalog: TalosProviderDefinition[] = [
@@ -34,6 +42,8 @@ export const talosProviderCatalog: TalosProviderDefinition[] = [
         policyNote: 'Remote provider endpoint must pass TALOS public URL policy before secrets are sent.',
         tone: 'green',
         capabilities: { json: true, tools: true, vision: true, embeddings: true, remote: true, local: false },
+        logo: openaiLogo,
+        logoAlt: 'OpenAI logo',
     },
     {
         id: 'deepseek',
@@ -49,6 +59,8 @@ export const talosProviderCatalog: TalosProviderDefinition[] = [
         policyNote: 'Remote provider endpoint must pass TALOS public URL policy before secrets are sent.',
         tone: 'blue',
         capabilities: { json: true, tools: true, vision: false, embeddings: false, remote: true, local: false },
+        logo: deepseekLogo,
+        logoAlt: 'DeepSeek logo',
     },
     {
         id: 'anthropic',
@@ -64,6 +76,8 @@ export const talosProviderCatalog: TalosProviderDefinition[] = [
         policyNote: 'TALOS uses the Anthropic message endpoint through a server-side adapter.',
         tone: 'purple',
         capabilities: { json: true, tools: true, vision: true, embeddings: false, remote: true, local: false },
+        logo: anthropicLogo,
+        logoAlt: 'Anthropic logo',
     },
     {
         id: 'gemini',
@@ -79,6 +93,8 @@ export const talosProviderCatalog: TalosProviderDefinition[] = [
         policyNote: 'The OpenAI-compatible Gemini endpoint is used so TALOS keeps one probe contract.',
         tone: 'amber',
         capabilities: { json: true, tools: true, vision: true, embeddings: true, remote: true, local: false },
+        logo: geminiLogo,
+        logoAlt: 'Google Gemini logo',
     },
     {
         id: 'openrouter',
@@ -94,6 +110,8 @@ export const talosProviderCatalog: TalosProviderDefinition[] = [
         policyNote: 'Router endpoints still pass the same public URL and secret redaction policy.',
         tone: 'cyan',
         capabilities: { json: true, tools: true, vision: true, embeddings: false, remote: true, local: false },
+        logo: openrouterLogo,
+        logoAlt: 'OpenRouter logo',
     },
     {
         id: 'ollama',
@@ -109,9 +127,38 @@ export const talosProviderCatalog: TalosProviderDefinition[] = [
         policyNote: 'Local providers are allowed only without bearer tokens.',
         tone: 'neutral',
         capabilities: { json: true, tools: false, vision: false, embeddings: true, remote: false, local: true },
+        logo: ollamaLogo,
+        logoAlt: 'Ollama Local logo',
     },
 ]
 
+const talosUnknownProvider: TalosProviderDefinition = {
+    id: 'unknown',
+    label: 'Unknown provider',
+    shortLabel: 'Unknown',
+    description: 'Provider identity is not recognized by this TALOS build.',
+    requiresSecret: true,
+    localOnly: false,
+    defaultBaseUrl: null,
+    defaultModel: '',
+    secretLabel: 'Provider credential',
+    secretPlaceholder: '',
+    baseUrlLabel: 'Provider endpoint',
+    policyNote: 'Unknown providers remain unavailable until an explicit trusted adapter is installed.',
+    tone: 'neutral',
+    capabilities: { json: false, tools: false, vision: false, embeddings: false, remote: false, local: false },
+    logo: null,
+    logoAlt: '',
+}
+
 export function talosProviderById(providerId: TalosProviderId | string | null | undefined): TalosProviderDefinition {
-    return talosProviderCatalog.find((provider) => provider.id === providerId) ?? talosProviderCatalog[0]
+    return talosProviderCatalog.find((provider) => provider.id === providerId) ?? talosUnknownProvider
+}
+
+export function talosModelProfileIsCallable(profile: TalosModelProfile | null | undefined): boolean {
+    if (!profile || profile.status === 'disabled' || profile.status === 'failed') {
+        return false
+    }
+
+    return !talosProviderById(profile.provider).requiresSecret || profile.has_secret
 }

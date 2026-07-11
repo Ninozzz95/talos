@@ -60,11 +60,9 @@ final class TalosFile extends Model
             'size_bytes' => $this->size_bytes,
             'checksum' => $this->checksum,
             'status' => $this->status,
-            'storage_disk' => $this->storage_disk,
-            'storage_path' => $this->storage_path,
             'parser' => $this->parser,
             'failure_reason' => $this->failure_reason,
-            'metadata' => $this->metadata,
+            'metadata' => $this->redactStorageMetadata(is_array($this->metadata) ? $this->metadata : []),
             'chunks_count' => $this->chunksCount(),
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
@@ -89,6 +87,27 @@ final class TalosFile extends Model
             'metadata' => 'array',
             'size_bytes' => 'integer',
         ];
+    }
+
+    /**
+     * @param array<string|int, mixed> $metadata
+     * @return array<string|int, mixed>
+     */
+    private function redactStorageMetadata(array $metadata): array
+    {
+        foreach ($metadata as $key => $value) {
+            $normalizedKey = strtolower((string) $key);
+            if ($normalizedKey === 'storage_disk' || str_ends_with($normalizedKey, 'storage_path')) {
+                unset($metadata[$key]);
+                continue;
+            }
+
+            if (is_array($value)) {
+                $metadata[$key] = $this->redactStorageMetadata($value);
+            }
+        }
+
+        return $metadata;
     }
 
     private function chunksCount(): int

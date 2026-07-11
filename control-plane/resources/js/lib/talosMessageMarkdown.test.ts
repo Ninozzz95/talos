@@ -92,4 +92,64 @@ echo "<safe>";
         expect(result.html).not.toContain('<script>')
         expect(result.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
     })
+
+    it('keeps nested lists semantic and task markers read-only', () => {
+        const result = renderTalosMarkdown(`- parent
+  - [ ] child
+    - grandchild
+  - [x] complete`)
+        const container = document.createElement('div')
+        container.innerHTML = result.html
+
+        expect(container.querySelectorAll(':scope > ul > li')).toHaveLength(1)
+        expect(container.querySelector('ul ul li')).not.toBeNull()
+        expect(container.querySelectorAll('input, button')).toHaveLength(0)
+        expect(container.querySelectorAll('.talos-task-marker')).toHaveLength(2)
+        expect(container.querySelector('[aria-label="Open task"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Completed task"]')).not.toBeNull()
+    })
+
+    it('keeps long URLs and hashes in the bounded message output', () => {
+        const value = `https://example.com/${'a'.repeat(4096)}#${'b'.repeat(4096)}`
+        const result = renderTalosMarkdown(value)
+
+        expect(result.html).toContain('href="https://example.com/')
+        expect(result.html).toContain('#' + 'b'.repeat(4096))
+        expect(result.html).not.toContain('style=')
+    })
+
+    it('removes bidi formatting and additional control characters', () => {
+        const result = renderTalosMarkdown('safe\u061c\u200e\u200f\u200b\u0000name')
+
+        expect(result.html).toContain('safename')
+        expect(result.html.replace(/\n/g, '')).not.toMatch(/[\u0000-\u001f\u007f\u061c\u200e\u200f\u200b]/u)
+    })
+
+    it('rejects every executable HTML surface without a new HTML boundary', () => {
+        const result = renderTalosMarkdown(`
+<iframe src="https://evil.example"></iframe>
+<object data="https://evil.example"></object>
+<form action="https://evil.example"><input></form>
+<style>body { background: url(https://evil.example) }</style>
+<div onclick="alert(1)" onmouseover="alert(2)">unsafe</div>
+<a href="javascript:alert(1)">bad</a>
+<a href="data:text/html,alert(1)">data</a>
+`)
+
+        const container = document.createElement('div')
+        container.innerHTML = result.html
+        expect(container.querySelector('iframe, object, form, input, style')).toBeNull()
+        expect(container.querySelector('[onclick], [onmouseover]')).toBeNull()
+        expect(container.querySelector('a[href^="javascript:"], a[href^="data:"]')).toBeNull()
+    })
+
+    it('bounds an unbroken 100k-plus input before markdown rendering', () => {
+        const source = 'x'.repeat(MAX_TALOS_MARKDOWN_SOURCE_LENGTH + 1)
+        const result = renderTalosMarkdown(source)
+
+        expect(result.sourceLength).toBe(MAX_TALOS_MARKDOWN_SOURCE_LENGTH + 1)
+        expect(result.truncated).toBe(true)
+        expect(result.html.length).toBeLessThan(MAX_TALOS_MARKDOWN_SOURCE_LENGTH + 1000)
+        expect(result.html).toContain('Message truncated for safe rendering.')
+    })
 })

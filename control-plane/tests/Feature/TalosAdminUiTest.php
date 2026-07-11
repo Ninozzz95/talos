@@ -11,7 +11,8 @@ final class TalosAdminUiTest extends TestCase
     public function test_dashboard_mounts_admin_doctor_audit_policy_and_backup_panels(): void
     {
         $shell = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
-        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
+        $modulePath = base_path('resources/js/components/talos/window/modules/TalosDoctorWindow.vue');
+        $registry = file_get_contents(base_path('resources/js/lib/talosWindowRegistry.ts'));
         $chat = file_get_contents(base_path('resources/js/components/TalosChatPage.vue'));
         $composablePath = base_path('resources/js/composables/useTalosAdmin.ts');
         $doctorPath = base_path('resources/js/components/talos/admin/TalosDoctorPanel.vue');
@@ -21,7 +22,8 @@ final class TalosAdminUiTest extends TestCase
         $backupPath = base_path('resources/js/components/talos/admin/TalosBackupPanel.vue');
 
         $this->assertIsString($shell);
-        $this->assertIsString($windowLayer);
+        $this->assertIsString($registry);
+        $this->assertFileExists($modulePath);
         $this->assertIsString($chat);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($doctorPath);
@@ -36,6 +38,7 @@ final class TalosAdminUiTest extends TestCase
         $policy = file_get_contents($policyPath);
         $shellPanel = file_get_contents($shellPath);
         $backup = file_get_contents($backupPath);
+        $module = file_get_contents($modulePath);
 
         $this->assertIsString($composable);
         $this->assertIsString($doctor);
@@ -43,6 +46,7 @@ final class TalosAdminUiTest extends TestCase
         $this->assertIsString($policy);
         $this->assertIsString($shellPanel);
         $this->assertIsString($backup);
+        $this->assertIsString($module);
         $this->assertStringContainsString('/api/talos/admin/doctor', $composable);
         $this->assertStringContainsString('/api/talos/admin/audit-events', $composable);
         $this->assertStringContainsString('/api/talos/admin/policy', $composable);
@@ -51,11 +55,12 @@ final class TalosAdminUiTest extends TestCase
         $this->assertStringContainsString('/api/talos/admin/backup/manifest', $composable);
         $this->assertStringContainsString('/api/talos/admin/backup/validate-restore', $composable);
         $this->assertStringContainsString('TalosWindowLayer', $shell);
-        $this->assertStringContainsString('TalosDoctorPanel', $windowLayer);
-        $this->assertStringContainsString('TalosAuditLog', $windowLayer);
-        $this->assertStringContainsString('TalosPolicyPanel', $windowLayer);
-        $this->assertStringContainsString('TalosShellPolicyPanel', $windowLayer);
-        $this->assertStringContainsString('TalosBackupPanel', $windowLayer);
+        $this->assertStringContainsString('TalosDoctorPanel', $module);
+        $this->assertStringContainsString('TalosAuditLog', $module);
+        $this->assertStringContainsString('TalosPolicyPanel', $module);
+        $this->assertStringContainsString('TalosShellPolicyPanel', $module);
+        $this->assertStringContainsString('TalosBackupPanel', $module);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosDoctorWindow.vue')", $registry);
         $this->assertStringContainsString('validator_health', $doctor);
         $this->assertStringContainsString('event_type', $audit);
         $this->assertStringContainsString('default_decision', $policy);

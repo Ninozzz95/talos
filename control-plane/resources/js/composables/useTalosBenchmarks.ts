@@ -7,7 +7,7 @@ type ApiEnvelope<T> = {
 }
 
 export type RunBenchmarkComparisonPayload = {
-    scenario_path: string
+    scenario_ref: string
     runs?: number
 }
 
