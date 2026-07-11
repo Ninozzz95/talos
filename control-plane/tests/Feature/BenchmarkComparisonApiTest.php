@@ -9,6 +9,7 @@ use App\Models\TalosBenchmarkResult;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosRun;
 use App\Models\TalosSession;
+use App\Models\TalosFile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -61,7 +62,7 @@ final class BenchmarkComparisonApiTest extends TestCase
         Storage::disk('local')->put('benchmark-scenarios/test/uploaded_file_summary.json', $scenarioJson);
 
         $response = $this->postJson('/api/benchmarks/compare', [
-            'scenario_path' => 'benchmark-scenarios/test/uploaded_file_summary.json',
+            'scenario_ref' => $this->scenarioRefForPath('benchmark-scenarios/test/uploaded_file_summary.json'),
             'runs' => 1,
         ]);
 
@@ -103,12 +104,80 @@ final class BenchmarkComparisonApiTest extends TestCase
         $this->assertSame(0, $results->firstWhere('mode', 'avm_on')?->metrics['trace_replayability']);
     }
 
+    public function test_ingested_file_reference_can_be_compared_without_exposing_a_path(): void
+    {
+        $this->useIsolatedLocalStorage();
+        $upload = $this->postJson('/api/files/ingest', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->createWithContent('workflow.md', 'Summarize this workflow.'),
+        ])->assertCreated();
+
+        $ref = $upload->json('data.benchmark_scenario.ref');
+        $this->assertIsString($ref);
+        $upload->assertJsonMissingPath('data.benchmark_scenario.storage_path');
+
+        $this->postJson('/api/benchmarks/compare', ['scenario_ref' => $ref, 'runs' => 1])
+            ->assertOk()
+            ->assertJsonPath('report_type', 'benchmark_evidence')
+            ->assertJsonPath('benchmark_group.name', 'File ingestion: workflow.md');
+    }
+
+    public function test_compare_response_recursively_redacts_nested_paths_but_retains_scenario_ref(): void
+    {
+        $this->useIsolatedLocalStorage();
+        $scenarioPath = 'benchmark-scenarios/test/nested_path_redaction.json';
+        Storage::disk('local')->put($scenarioPath, json_encode([
+            'name' => 'nested_path_redaction',
+            'difficulty' => 1,
+            'task' => 'Exercise path redaction in a persisted scenario snapshot.',
+            'scenario' => [
+                'path' => 'C:\\Users\\ninox\\Desktop\\AVM\\private\\scenario.json',
+                'nested' => ['artifact' => '/var/lib/talos/private-report.json'],
+            ],
+            'steps' => [
+                ['cycle' => 1, 'mutations' => [
+                    ['action' => 'SPAWN_NODE', 'node_id' => 'read_file', 'node_type' => 'READ_FILE'],
+                ]],
+                ['cycle' => 2, 'mutations' => [
+                    ['action' => 'YIELD_EXECUTION'],
+                ]],
+            ],
+            'expected_nodes' => 1,
+            'expected_all_success' => true,
+        ]));
+        $scenarioRef = $this->scenarioRefForPath($scenarioPath);
+
+        $this->postJson('/api/benchmarks/compare', ['scenario_ref' => $scenarioRef])
+            ->assertOk()
+            ->assertJsonPath('benchmark_group.scenario_ref', $scenarioRef)
+            ->assertJsonMissingPath('benchmark_group.metadata.scenario_snapshot.scenario.path')
+            ->assertJsonMissing([
+                'C:\\Users\\ninox\\Desktop\\AVM\\private\\scenario.json',
+                '/var/lib/talos/private-report.json',
+            ]);
+    }
+
+    public function test_ingested_file_reference_is_scoped_to_its_owner(): void
+    {
+        $this->useIsolatedLocalStorage();
+        $foreign = User::factory()->create();
+        $file = TalosFile::query()->create([
+            'user_id' => $foreign->id, 'original_name' => 'foreign.md', 'mime_type' => 'text/markdown',
+            'size_bytes' => 1, 'checksum' => hash('sha256', 'x'), 'status' => 'available',
+            'storage_disk' => 'local', 'storage_path' => 'ingested/foreign.md', 'parser' => 'markdown',
+            'metadata' => ['benchmark_scenario_storage_path' => 'benchmark-scenarios/foreign.json'],
+        ]);
+        Storage::disk('local')->put('benchmark-scenarios/foreign.json', '{}');
+
+        $this->postJson('/api/benchmarks/compare', ['scenario_ref' => $file->id])
+            ->assertNotFound();
+    }
+
     public function test_missing_private_benchmark_scenario_returns_not_found(): void
     {
         $this->useIsolatedLocalStorage();
 
         $response = $this->postJson('/api/benchmarks/compare', [
-            'scenario_path' => 'benchmark-scenarios/missing.json',
+            'scenario_ref' => $this->scenarioRefForPath('benchmark-scenarios/missing.json'),
         ]);
 
         $response
@@ -116,17 +185,17 @@ final class BenchmarkComparisonApiTest extends TestCase
             ->assertJsonPath('message', 'Benchmark scenario not found.');
     }
 
-    public function test_path_traversal_is_rejected_before_storage_access(): void
+    public function test_invalid_scenario_reference_is_rejected_before_storage_access(): void
     {
         $this->useIsolatedLocalStorage();
 
         $response = $this->postJson('/api/benchmarks/compare', [
-            'scenario_path' => '../core/tests/benchmarks/scenarios/01_simple_http.json',
+            'scenario_ref' => '../core/tests/benchmarks/scenarios/01_simple_http.json',
         ]);
 
         $response
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'The scenario path must be a private benchmark scenario path.');
+            ->assertJsonValidationErrors(['scenario_ref']);
     }
 
     public function test_persisted_benchmark_groups_can_be_listed_and_shown(): void
@@ -153,7 +222,7 @@ final class BenchmarkComparisonApiTest extends TestCase
         Storage::disk('local')->put('benchmark-scenarios/test/listable_benchmark.json', json_encode($scenario));
 
         $groupId = $this->postJson('/api/benchmarks/compare', [
-            'scenario_path' => 'benchmark-scenarios/test/listable_benchmark.json',
+            'scenario_ref' => $this->scenarioRefForPath('benchmark-scenarios/test/listable_benchmark.json'),
             'runs' => 1,
         ])->json('benchmark_group.id');
 
@@ -325,7 +394,7 @@ final class BenchmarkComparisonApiTest extends TestCase
         Storage::disk('local')->put('benchmark-scenarios/test/minimal_benchmark.json', json_encode($scenario));
 
         $groupId = $this->postJson('/api/benchmarks/compare', [
-            'scenario_path' => 'benchmark-scenarios/test/minimal_benchmark.json',
+            'scenario_ref' => $this->scenarioRefForPath('benchmark-scenarios/test/minimal_benchmark.json'),
             'runs' => 1,
         ])->json('benchmark_group.id');
 
@@ -365,10 +434,13 @@ final class BenchmarkComparisonApiTest extends TestCase
             ->assertJsonPath('benchmark_group.model', 'gpt-test')
             ->assertJsonCount(3, 'benchmark_results');
 
-        $scenarioPath = $response->json('benchmark_group.scenario_path');
-        $this->assertIsString($scenarioPath);
-        $this->assertStringStartsWith('benchmark-scenarios/runs/', $scenarioPath);
-        Storage::disk('local')->assertExists($scenarioPath);
+        $response
+            ->assertJsonPath('benchmark_group.scenario_ref', null)
+            ->assertJsonMissingPath('benchmark_group.scenario_path');
+        $group = TalosBenchmarkGroup::query()->where('source_run_id', $run->id)->firstOrFail();
+        $this->assertIsString($group->scenario_path);
+        $this->assertStringStartsWith('benchmark-scenarios/runs/', $group->scenario_path);
+        Storage::disk('local')->assertExists($group->scenario_path);
 
         $this->assertDatabaseHas('talos_benchmark_groups', [
             'source_run_id' => $run->id,
@@ -434,5 +506,30 @@ final class BenchmarkComparisonApiTest extends TestCase
             ->where('event_type', 'benchmark_report.exported')
             ->where('subject_id', $foreignGroup->id)
             ->count());
+    }
+
+    private function scenarioRefForPath(string $path): string
+    {
+        $file = TalosFile::query()->create([
+            'user_id' => $this->user->id,
+            'original_name' => basename($path),
+            'mime_type' => 'application/json',
+            'size_bytes' => Storage::disk('local')->exists($path) ? Storage::disk('local')->size($path) : 0,
+            'checksum' => hash('sha256', $path),
+            'status' => 'available',
+            'storage_disk' => 'local',
+            'storage_path' => 'ingested/tests/'.basename($path),
+            'parser' => 'json',
+            'metadata' => [
+                'benchmark_scenario_ref' => null,
+                'benchmark_scenario_storage_path' => $path,
+            ],
+        ]);
+        $file->update(['metadata' => [
+            ...($file->metadata ?? []),
+            'benchmark_scenario_ref' => $file->id,
+        ]]);
+
+        return $file->id;
     }
 }

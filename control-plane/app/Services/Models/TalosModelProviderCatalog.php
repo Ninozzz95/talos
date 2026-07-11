@@ -95,14 +95,31 @@ final class TalosModelProviderCatalog
         return (bool) self::defaultsFor($provider)['requires_secret'];
     }
 
+    public static function requiresTrustedLocalBaseUrl(string $provider): bool
+    {
+        return (bool) self::defaultsFor($provider)['allows_trusted_local_base_url'];
+    }
+
     public static function allowsTrustedLocalBaseUrl(string $provider, ?string $baseUrl): bool
     {
-        if (! (bool) self::defaultsFor($provider)['allows_trusted_local_base_url'] || ! filled($baseUrl)) {
+        if (! self::requiresTrustedLocalBaseUrl($provider)) {
             return false;
         }
 
-        $scheme = strtolower((string) parse_url((string) $baseUrl, PHP_URL_SCHEME));
-        $host = self::normalizeHost((string) parse_url((string) $baseUrl, PHP_URL_HOST));
+        $url = filled($baseUrl)
+            ? (string) $baseUrl
+            : (string) self::defaultsFor($provider)['default_base_url'];
+        $parts = parse_url($url);
+        if (! is_array($parts)
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || isset($parts['query'])
+            || isset($parts['fragment'])) {
+            return false;
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = self::normalizeHost((string) ($parts['host'] ?? ''));
 
         return in_array($scheme, ['http', 'https'], true)
             && in_array($host, ['localhost', '127.0.0.1', '::1'], true);

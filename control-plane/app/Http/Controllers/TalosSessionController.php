@@ -5,12 +5,20 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\TalosSession;
+use App\Services\Talos\Browser\TalosBrowserArtifactReconciler;
+use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 final class TalosSessionController extends Controller
 {
+    public function __construct(
+        private readonly TalosBrowserArtifactStore $browserArtifacts,
+        private readonly TalosBrowserArtifactReconciler $browserArtifactReconciler,
+    ) {}
+
     private const WELCOME_PROMPT_IDS = [
         'workflow-handle',
         'evidence-not-vibes',
@@ -125,9 +133,84 @@ final class TalosSessionController extends Controller
     {
         $this->abortUnlessOwnedByCurrentUser($request, $session);
 
-        $session->delete();
+        try {
+            $this->browserArtifactReconciler->reconcileForSession((string) $session->id, (int) $session->user_id);
+            $this->browserArtifactReconciler->persistPending((string) $session->id, (int) $session->user_id);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return $this->deleteFailureResponse();
+        }
+
+        $receipt = [];
+
+        try {
+            DB::transaction(function () use ($session, &$receipt): void {
+                $lockedSession = TalosSession::query()
+                    ->whereKey($session->id)
+                    ->where('user_id', $session->user_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedSession instanceof TalosSession) {
+                    throw new \RuntimeException('Talos session deletion failed.');
+                }
+
+                $this->browserArtifacts->deleteForChat($lockedSession, $receipt);
+
+                if ($lockedSession->delete() !== true) {
+                    throw new \RuntimeException('Talos session deletion failed.');
+                }
+            });
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $restored = $receipt === [];
+            if ($receipt !== []) {
+                try {
+                    $this->browserArtifacts->restore($receipt);
+                    $restored = true;
+                } catch (\Throwable $restoreException) {
+                    report($restoreException);
+
+                    try {
+                        $this->browserArtifactReconciler->persistPending((string) $session->id, (int) $session->user_id);
+                    } catch (\Throwable $pendingException) {
+                        report($pendingException);
+                    }
+
+                    $this->browserArtifactReconciler->auditDeferred((string) $session->id, $receipt, 'rollback_compensation');
+                }
+            }
+
+            if ($restored) {
+                try {
+                    $this->browserArtifactReconciler->reconcileForSession((string) $session->id, (int) $session->user_id);
+                } catch (\Throwable $releaseException) {
+                    report($releaseException);
+                }
+            }
+
+            return $this->deleteFailureResponse();
+        }
+
+        try {
+            $this->browserArtifacts->finalize($receipt);
+        } catch (\Throwable $finalizeException) {
+            report($finalizeException);
+            $this->browserArtifactReconciler->auditDeferred((string) $session->id, $receipt, 'post_commit_finalize');
+        }
 
         return response()->json(null, 204);
+    }
+
+    private function deleteFailureResponse(): JsonResponse
+    {
+        return response()->json([
+            'code' => 'TALOS_SESSION_DELETE_FAILED',
+            'message' => 'Chat session could not be deleted.',
+            'details' => [],
+        ], 500);
     }
 
     /**
@@ -178,7 +261,7 @@ final class TalosSessionController extends Controller
         $safe = [];
 
         foreach ($metadata as $key => $value) {
-            if (!is_string($key) || $this->isSecretLikeMetadataKey($key)) {
+            if (!is_string($key) || $this->isSecretLikeMetadataKey($key) || $key === TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY) {
                 continue;
             }
 
@@ -211,7 +294,7 @@ final class TalosSessionController extends Controller
 
         $safe = [];
 
-        foreach (['favorite', 'archived', 'selected'] as $key) {
+        foreach (['favorite', 'archived', 'selected', 'browse_enabled'] as $key) {
             if (array_key_exists($key, $value)) {
                 $safe[$key] = filter_var($value[$key], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
             }

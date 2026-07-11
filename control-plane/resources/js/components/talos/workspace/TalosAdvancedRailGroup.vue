@@ -30,6 +30,10 @@ function handleKeydown(event: KeyboardEvent) {
         disclosureButton.value?.focus()
     }
 }
+function focusDisclosure() {
+    disclosureButton.value?.focus()
+}
+defineExpose({ focusDisclosure })
 onMounted(() => document.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
 </script>

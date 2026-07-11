@@ -4,6 +4,9 @@ import { AlertCircle, CheckSquare, Loader2, Plus, RefreshCw } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import Field from '../../ui/Field.vue'
+import Input from '../../ui/Input.vue'
+import Textarea from '../../ui/Textarea.vue'
 import { useTalosProductivity } from '../../../composables/useTalosProductivity'
 
 const {
@@ -16,6 +19,7 @@ const {
 } = useTalosProductivity()
 
 const title = ref('')
+const description = ref('')
 const runId = ref('')
 const actionError = ref<string | null>(null)
 const visibleError = computed(() => actionError.value || productivityError.value)
@@ -41,10 +45,12 @@ async function submitTask() {
     try {
         await createTask({
             title: title.value.trim(),
+            description: description.value.trim() || null,
             run_id: runId.value.trim() || null,
             priority: 'normal',
         })
         title.value = ''
+        description.value = ''
         runId.value = ''
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not create this task.'
@@ -86,8 +92,21 @@ onMounted(() => {
             </div>
 
             <div class="grid gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                <input v-model="title" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none" placeholder="Task title">
-                <input v-model="runId" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 font-mono text-xs text-[var(--talos-text)] outline-none" placeholder="Optional run_id">
+                <Field id="talos-task-title" label="Task title" required>
+                    <template #default="{ describedBy, invalid, required }">
+                        <Input id="talos-task-title" v-model="title" :aria-describedby="describedBy" :aria-invalid="invalid" :required="required" placeholder="Task title" />
+                    </template>
+                </Field>
+                <Field id="talos-task-description" label="Task description">
+                    <template #default="{ describedBy, invalid }">
+                        <Textarea id="talos-task-description" v-model="description" :aria-describedby="describedBy" :aria-invalid="invalid" class="min-h-[60px]" placeholder="Task description" />
+                    </template>
+                </Field>
+                <Field id="talos-task-run-id" label="Optional run ID">
+                    <template #default="{ describedBy, invalid }">
+                        <Input id="talos-task-run-id" v-model="runId" :aria-describedby="describedBy" :aria-invalid="invalid" class="font-mono text-xs" placeholder="run_id" />
+                    </template>
+                </Field>
                 <Button type="button" size="sm" :disabled="!canCreate" @click="submitTask">
                     <Loader2 v-if="creatingTask" class="h-4 w-4 animate-spin" />
                     <Plus v-else class="h-4 w-4" />

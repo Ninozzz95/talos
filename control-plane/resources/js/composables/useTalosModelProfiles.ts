@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { talosFetch } from '../lib/api'
 import type { TalosModelProfile } from '../lib/talosTypes'
+import { talosProviderById } from '../lib/talosProviders'
 
 type ApiEnvelope<T> = {
     data: T
@@ -13,9 +14,7 @@ export type CreateTalosModelProfilePayload = {
     secret?: string | null
     base_url?: string | null
     timeout_seconds?: number | null
-    status?: TalosModelProfile['status']
     capabilities?: Record<string, unknown> | null
-    probe_result?: Record<string, unknown> | null
     user_id?: number | null
 }
 
@@ -33,9 +32,19 @@ export function useTalosModelProfiles() {
     const loadingModelProfiles = ref(false)
     const modelProfileError = ref<string | null>(null)
 
-    const usableModelProfiles = computed(() => modelProfiles.value.filter((profile) => {
-        return profile.status !== 'disabled' && profile.has_secret
+    const callableModelProfiles = computed(() => modelProfiles.value.filter((profile) => {
+        const probeResult = profile.probe_result
+        const probeSucceeded = probeResult?.ok === true
+
+        return profile.status === 'healthy'
+            && probeSucceeded
+            && (!profileNeedsSecret(profile) || profile.has_secret)
     }))
+    const usableModelProfiles = computed(() => callableModelProfiles.value)
+
+    function profileNeedsSecret(profile: TalosModelProfile): boolean {
+        return talosProviderById(profile.provider).requiresSecret
+    }
 
     async function loadModelProfiles() {
         loadingModelProfiles.value = true
@@ -154,6 +163,7 @@ export function useTalosModelProfiles() {
     return {
         modelProfiles,
         usableModelProfiles,
+        callableModelProfiles,
         loadingModelProfiles,
         modelProfileError,
         loadModelProfiles,

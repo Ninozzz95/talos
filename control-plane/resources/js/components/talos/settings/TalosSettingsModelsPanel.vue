@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import Button from '../../ui/Button.vue'
 import Select from '../../ui/Select.vue'
+import TalosProviderIcon from '../models/TalosProviderIcon.vue'
+import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 
 defineProps<{
@@ -36,7 +38,7 @@ const emit = defineEmits<{
                     v-for="profile in modelProfiles"
                     :key="profile.id"
                     :value="profile.id"
-                    :disabled="profile.status === 'disabled' || !profile.has_secret"
+                    :disabled="!talosModelProfileIsCallable(profile)"
                 >
                     {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
                 </option>
@@ -65,7 +67,10 @@ const emit = defineEmits<{
     </div>
     <div class="grid gap-3 md:grid-cols-2">
         <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-            <div class="text-sm font-semibold text-[var(--talos-text)]">Active model</div>
+            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
+                <TalosProviderIcon v-if="activeModelProfile" :provider="activeModelProfile.provider" class="h-7 w-7" />
+                <span>Active model</span>
+            </div>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                 {{ activeModelProfile ? `${activeModelProfile.display_name} - ${activeModelProfile.model}` : 'No default model selected.' }}
             </p>

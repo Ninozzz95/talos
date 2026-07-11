@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\TalosBrowserArtifact;
 use App\Models\TalosBrowserEvent;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosSession;
 use App\Models\User;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserWorkerException;
@@ -21,14 +22,39 @@ final class TalosBrowserController extends Controller
 {
     public function __construct(private readonly BrowserSessionClient $client, private readonly TalosBrowserPolicy $policy, private readonly TalosBrowserArtifactStore $artifacts) {}
 
-    public function index(Request $request): JsonResponse { return response()->json(['data' => TalosBrowserSession::query()->where('user_id', $this->userId($request))->latest()->get()->map->toApiArray()->values()]); }
+    public function index(Request $request): JsonResponse
+    {
+        $payload = $this->validated($request, ['talos_session_id' => ['required', 'string', 'max:64']]);
+        if ($payload instanceof JsonResponse) return $payload;
+        $chatSession = $this->ownedChatSession($request, (string) $payload['talos_session_id']);
+        if ($chatSession instanceof JsonResponse) return $chatSession;
+        if ($request->header('X-Talos-Session-Id') !== $chatSession->id) return $this->chatUnavailable();
+
+        return response()->json([
+            'data' => TalosBrowserSession::query()
+                ->where('user_id', $this->userId($request))
+                ->where('talos_session_id', $chatSession->id)
+                ->latest()
+                ->get()
+                ->map->toApiArray()
+                ->values(),
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
-        $payload = $this->validated($request, ['viewport.width' => ['nullable', 'integer', 'min:320', 'max:3840'], 'viewport.height' => ['nullable', 'integer', 'min:240', 'max:2160']]);
+        $payload = $this->validated($request, [
+            'talos_session_id' => ['required', 'string', 'max:64'],
+            'viewport.width' => ['nullable', 'integer', 'min:320', 'max:3840'],
+            'viewport.height' => ['nullable', 'integer', 'min:240', 'max:2160'],
+        ]);
         if ($payload instanceof JsonResponse) return $payload;
+        $chatSession = $this->ownedChatSession($request, (string) $payload['talos_session_id']);
+        if ($chatSession instanceof JsonResponse) return $chatSession;
+        if ($request->header('X-Talos-Session-Id') !== $chatSession->id) return $this->chatUnavailable();
         $width = (int) data_get($payload, 'viewport.width', 1280); $height = (int) data_get($payload, 'viewport.height', 800); $userId = $this->userId($request);
         try { $worker = $this->client->create($this->ownerRef($userId), $width, $height); } catch (BrowserWorkerException $exception) { return $this->workerError($exception); }
-        $session = TalosBrowserSession::query()->create(['user_id' => $userId, 'worker_session_id' => (string) $worker['sessionId'], 'status' => (string) ($worker['status'] ?? 'ready'), 'mode' => 'read_only', 'viewport_width' => $width, 'viewport_height' => $height, 'capabilities' => $worker['capabilities'] ?? [], 'policy' => [], 'expires_at' => $worker['expiresAt'] ?? null, 'last_seen_at' => now()]);
+        $session = TalosBrowserSession::query()->create(['user_id' => $userId, 'talos_session_id' => $chatSession->id, 'worker_session_id' => (string) $worker['sessionId'], 'status' => (string) ($worker['status'] ?? 'ready'), 'mode' => 'read_only', 'viewport_width' => $width, 'viewport_height' => $height, 'capabilities' => $worker['capabilities'] ?? [], 'policy' => [], 'expires_at' => $worker['expiresAt'] ?? null, 'last_seen_at' => now()]);
         $this->event($session, 'session.created', 'system', payload: ['mode' => 'read_only']);
         return response()->json(['data' => $session->toApiArray()], 201);
     }
@@ -86,8 +112,43 @@ final class TalosBrowserController extends Controller
     }
     private function userId(Request $request): int { $user = $request->user(); return $user instanceof User ? (int) $user->id : 0; }
     private function ownerRef(int $userId): string { return "talos-user:{$userId}"; }
-    private function owned(Request $request, TalosBrowserSession $session): ?JsonResponse { return (int) $session->user_id === $this->userId($request) ? null : $this->notFound(); }
-    private function ownedArtifact(Request $request, TalosBrowserArtifact $artifact): ?JsonResponse { $session = $artifact->session; return (int) $artifact->user_id === $this->userId($request) && $session instanceof TalosBrowserSession && (int) $session->user_id === $this->userId($request) ? null : $this->notFound(); }
+    private function ownedChatSession(Request $request, string $sessionId): TalosSession|JsonResponse
+    {
+        $session = TalosSession::query()
+            ->where('user_id', $this->userId($request))
+            ->find($sessionId);
+
+        return $session instanceof TalosSession
+            ? $session
+            : $this->chatUnavailable();
+    }
+    private function owned(Request $request, TalosBrowserSession $session): ?JsonResponse
+    {
+        $talosSessionId = $this->requestedTalosSessionId($request);
+        $ownedChatExists = $talosSessionId !== null
+            && TalosSession::query()->where('user_id', $this->userId($request))->whereKey($talosSessionId)->exists();
+
+        return (int) $session->user_id === $this->userId($request)
+            && is_string($session->talos_session_id)
+            && $session->talos_session_id === $talosSessionId
+            && $ownedChatExists
+                ? null
+                : $this->notFound();
+    }
+    private function ownedArtifact(Request $request, TalosBrowserArtifact $artifact): ?JsonResponse
+    {
+        $session = $artifact->session;
+        return (int) $artifact->user_id === $this->userId($request)
+            && $session instanceof TalosBrowserSession
+            && $this->owned($request, $session) === null
+                ? null
+                : $this->notFound();
+    }
+    private function requestedTalosSessionId(Request $request): ?string
+    {
+        $value = $request->header('X-Talos-Session-Id', $request->query('talos_session_id'));
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
     /** @param array<string,mixed> $payload @param array<string,mixed>|null $policy */
     private function event(TalosBrowserSession $session, string $type, string $actor, ?string $before = null, ?string $after = null, array $payload = [], ?array $policy = null): void { TalosBrowserEvent::query()->create(['browser_session_id' => $session->id, 'user_id' => $session->user_id, 'type' => $type, 'actor' => $actor, 'url_before' => $before, 'url_after' => $after, 'payload' => $payload, 'policy_decision' => $policy]); }
     private function workerError(BrowserWorkerException $exception): JsonResponse { return response()->json(['code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => []], $exception->errorCode === 'TALOS_BROWSER_WORKER_UNAVAILABLE' ? 503 : 502); }
@@ -98,6 +159,7 @@ final class TalosBrowserController extends Controller
     /** @param array{allowed: bool, reason: string, host: string, resolved_ips: list<string>} $decision */
     private function policyDenied(array $decision): JsonResponse { return response()->json(['code' => 'TALOS_BROWSER_POLICY_DENIED', 'message' => 'Browser navigation was blocked by policy.', 'details' => ['reason' => $decision['reason']]], 422); }
     private function notFound(): JsonResponse { return response()->json(['code' => 'TALOS_BROWSER_NOT_FOUND', 'message' => 'Browser resource was not found.', 'details' => []], 404); }
+    private function chatUnavailable(): JsonResponse { return response()->json(['code' => 'TALOS_BROWSER_CHAT_UNAVAILABLE', 'message' => 'The chat session for this browser session was not found.', 'details' => []], 404); }
     private function artifactInvalid(): JsonResponse { return response()->json(['code' => 'TALOS_BROWSER_ARTIFACT_INVALID', 'message' => 'Browser snapshot artifact is missing or invalid.', 'details' => []], 502); }
 
     private function snapshotPreview(TalosBrowserArtifact $artifact): JsonResponse

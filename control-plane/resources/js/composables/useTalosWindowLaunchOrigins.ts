@@ -1,5 +1,5 @@
-import { ref, type ComputedRef } from 'vue'
-import type { TalosWindowId } from './useTalosWindows'
+import { ref, type Readonly, type Ref } from 'vue'
+import type { TalosWindowId } from '../lib/talosWindowRegistry'
 
 export type TalosWindowLaunchOrigin = {
     x: number
@@ -8,7 +8,7 @@ export type TalosWindowLaunchOrigin = {
 }
 
 export function useTalosWindowLaunchOrigins(
-    currentRailWidth: ComputedRef<number>,
+    currentRailWidth: Readonly<Ref<number>>,
     openWindow: (id: TalosWindowId) => void,
 ) {
     const windowLaunchOrigins = ref<Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>>({})

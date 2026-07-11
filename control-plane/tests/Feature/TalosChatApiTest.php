@@ -34,6 +34,7 @@ final class TalosChatApiTest extends TestCase
                 'api.openai.test',
                 'api.openai.com',
                 'api.deepseek.com',
+                'ollama.example',
             ],
         ]);
     }
@@ -212,6 +213,103 @@ final class TalosChatApiTest extends TestCase
             && $request['provider'] === 'openai'
             && $request['model'] === 'gpt-4.1-mini'
             && $request['base_url'] === 'https://api.openai.test/v1');
+    }
+
+    public function test_talos_chat_forwards_credential_free_loopback_ollama_profile_to_validator(): void
+    {
+        config(['services.avm_validator.url' => 'http://validator.test']);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'ollama',
+            'model' => 'llama3.1',
+            'display_name' => 'Local Ollama',
+            'status' => 'healthy',
+            'encrypted_secret' => null,
+            'base_url' => 'http://127.0.0.1:11434/v1',
+        ]);
+        Http::fake([
+            'validator.test/chat' => Http::response(['text' => 'Local model response']),
+        ]);
+
+        $this->postJson('/api/talos/chat', [
+            'message' => 'Use local Ollama.',
+            'model_profile_id' => $profile->id,
+        ])
+            ->assertOk()
+            ->assertJsonPath('text', 'Local model response');
+
+        Http::assertSent(fn ($request): bool => $request->url() === 'http://validator.test/chat'
+            && $request['provider'] === 'ollama'
+            && $request['api_key'] === ''
+            && $request['base_url'] === 'http://127.0.0.1:11434/v1');
+    }
+
+    public function test_talos_chat_rejects_remote_ollama_even_when_public_host_is_allowlisted(): void
+    {
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'ollama',
+            'model' => 'llama3.1',
+            'display_name' => 'Remote Ollama',
+            'status' => 'healthy',
+            'encrypted_secret' => null,
+            'base_url' => 'https://ollama.example/v1',
+        ]);
+        Http::fake();
+
+        $response = $this->postJson('/api/talos/chat', [
+            'message' => 'Do not use remote Ollama.',
+            'model_profile_id' => $profile->id,
+        ])->assertUnprocessable();
+
+        $this->assertStringContainsString('loopback', strtolower($response->json('error')));
+        Http::assertNothingSent();
+    }
+
+    public function test_talos_chat_rejects_unallowlisted_public_host_before_decrypting_profile_secret(): void
+    {
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-unlisted',
+            'display_name' => 'Unlisted remote',
+            'status' => 'healthy',
+            'encrypted_secret' => 'malformed-ciphertext',
+            'base_url' => 'https://public-but-unlisted.example/v1',
+        ]);
+        Http::fake();
+
+        $response = $this->postJson('/api/talos/chat', [
+            'message' => 'Reject before decrypt.',
+            'model_profile_id' => $profile->id,
+        ])->assertUnprocessable();
+
+        $this->assertStringContainsString('not allowlisted', strtolower($response->json('error')));
+        $this->assertStringNotContainsString('malformed-ciphertext', $response->getContent());
+        Http::assertNothingSent();
+    }
+
+    public function test_talos_chat_rejects_query_token_base_url_before_decrypt_or_validator_forwarding(): void
+    {
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-query-token',
+            'display_name' => 'Query token profile',
+            'status' => 'healthy',
+            'encrypted_secret' => 'malformed-ciphertext',
+            'base_url' => 'https://api.openai.com/v1?api_key=chat-url-token',
+        ]);
+        Http::fake();
+
+        $response = $this->postJson('/api/talos/chat', [
+            'message' => 'Reject unsafe URL.',
+            'model_profile_id' => $profile->id,
+        ])->assertUnprocessable();
+
+        $this->assertStringContainsString('blocked by talos policy', strtolower($response->json('error')));
+        $this->assertStringNotContainsString('chat-url-token', $response->getContent());
+        Http::assertNothingSent();
     }
 
     public function test_talos_chat_marks_validator_payload_errors_as_failed_runs(): void

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Loader2 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Select from '../../ui/Select.vue'
@@ -7,12 +7,14 @@ import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
-import type { TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
+import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
 const props = defineProps<{
     prompt: string
     browserContext?: { host: string; title: string } | null
     browserMode: TalosBrowserMode
+    browserCurrentPage?: TalosBrowserCurrentPage | null
     composerMode: TalosComposerMode
     chatLayoutLocked: boolean
     viewport: TalosChatViewportController
@@ -21,6 +23,7 @@ const props = defineProps<{
     sending: boolean
     statusText: string
     modelLabel: string
+    modelProvider?: string | null
     contextLabel: string
     temporaryMode: boolean
     sendDisabledReason: string
@@ -66,9 +69,11 @@ const emit = defineEmits<{
     toggleComposerMode: []
     enableBrowse: []
     disableBrowse: []
+    stopBrowse: []
     restartBrowse: []
     captureScreenshot: []
     captureSnapshot: []
+    closePopovers: []
 }>()
 
 const composerPrompt = computed({
@@ -76,12 +81,53 @@ const composerPrompt = computed({
     set: (value: string) => emit('updatePrompt', value),
 })
 const composerRoot = ref<HTMLElement | null>(null)
-onMounted(() => props.viewport.registerComposer(composerRoot.value))
-onBeforeUnmount(() => props.viewport.registerComposer(null))
+
+function enhancementOverlayOpen() {
+    return Boolean(props.promptEnhancementResult || props.enhancingPrompt || props.promptEnhancementError)
+}
+
+function closeComposerOverlays(restoreFocus = false) {
+    let focusLabel: string | null = null
+    if (props.modelPopoverOpen) focusLabel = 'Choose model profile'
+    else if (props.contextPopoverOpen) focusLabel = 'Choose grounding context'
+    else if (enhancementOverlayOpen()) focusLabel = 'Improve prompt'
+
+    emit('closePopovers')
+    if (enhancementOverlayOpen()) emit('clearPromptEnhancement')
+
+    if (restoreFocus && focusLabel) {
+        void nextTick(() => composerRoot.value?.querySelector<HTMLButtonElement>(`[aria-label="${focusLabel}"]`)?.focus())
+    }
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+    if (!props.modelPopoverOpen && !props.contextPopoverOpen && !enhancementOverlayOpen()) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('.talos-chat-composer-shell, [data-talos-composer-overlay]')) return
+    closeComposerOverlays(false)
+}
+
+function handleDocumentKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || (!props.modelPopoverOpen && !props.contextPopoverOpen && !enhancementOverlayOpen())) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    closeComposerOverlays(true)
+}
+
+onMounted(() => {
+    props.viewport.registerComposer(composerRoot.value)
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeydown)
+})
+onBeforeUnmount(() => {
+    props.viewport.registerComposer(null)
+    document.removeEventListener('pointerdown', handleDocumentPointerDown)
+    document.removeEventListener('keydown', handleDocumentKeydown)
+})
 </script>
 
 <template>
-    <div ref="composerRoot" class="pointer-events-none fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 px-4 lg:left-[var(--talos-rail-width)] lg:px-6">
+    <div ref="composerRoot" class="talos-composer-area pointer-events-none fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 px-4 lg:left-[var(--talos-rail-width)] lg:px-6">
         <div class="relative">
             <div v-if="browserContext" data-testid="talos-browser-context-chip" class="pointer-events-auto mx-auto mb-2 flex w-full max-w-[820px] items-center justify-between gap-3 border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
                 <span class="min-w-0 truncate"><strong>Browse evidence</strong> <span class="text-[var(--talos-muted)]">{{ browserContext.host }} - {{ browserContext.title }}</span></span>
@@ -90,7 +136,10 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
             <div
                 v-if="modelPopoverOpen"
                 data-testid="talos-model-popover"
-                class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[420px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+                data-talos-composer-overlay
+                role="dialog"
+                aria-label="Model selection"
+                class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
             >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model profile</div>
                 <label class="sr-only" for="talos-workspace-model-profile">Server-side model profile</label>
@@ -107,7 +156,7 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
                         v-for="profile in modelProfiles"
                         :key="profile.id"
                         :value="profile.id"
-                        :disabled="profile.status === 'disabled' || !profile.has_secret"
+                        :disabled="!talosModelProfileIsCallable(profile)"
                     >
                         {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
                     </option>
@@ -141,7 +190,10 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
             <div
                 v-if="contextPopoverOpen"
                 data-testid="talos-context-popover"
-                class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[420px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+                data-talos-composer-overlay
+                role="dialog"
+                aria-label="Grounding context selection"
+                class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
             >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Grounding context</div>
                 <label class="sr-only" for="talos-workspace-context-set">Grounding context set</label>
@@ -175,7 +227,10 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
             <div
                 v-if="promptEnhancementResult"
                 data-testid="talos-enhancement-popover"
-                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[560px] -translate-x-1/2"
+                data-talos-composer-overlay
+                role="dialog"
+                aria-label="Prompt enhancement preview"
+                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2"
             >
                 <TalosPromptEnhancerPopover
                     :result="promptEnhancementResult"
@@ -188,7 +243,10 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
             <div
                 v-else-if="enhancingPrompt || promptEnhancementError"
                 data-testid="talos-enhancement-status-popover"
-                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[560px] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl"
+                data-talos-composer-overlay
+                role="status"
+                aria-live="polite"
+                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl"
             >
                 <div v-if="enhancingPrompt" class="flex items-center gap-2 text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
@@ -207,9 +265,11 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
                 :sending="sending"
                 :status-text="statusText"
                 :model-label="modelLabel"
+                :model-provider="modelProvider"
                 :context-label="contextLabel"
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
+                :browser-current-page="browserCurrentPage"
                 :composer-mode="composerMode"
                 :chat-layout-locked="chatLayoutLocked"
                 :send-disabled-reason="sendDisabledReason"
@@ -226,6 +286,7 @@ onBeforeUnmount(() => props.viewport.registerComposer(null))
                 @toggle-composer-mode="emit('toggleComposerMode')"
                 @enable-browse="emit('enableBrowse')"
                 @disable-browse="emit('disableBrowse')"
+                @stop-browse="emit('stopBrowse')"
                 @restart-browse="emit('restartBrowse')"
                 @capture-screenshot="emit('captureScreenshot')"
                 @capture-snapshot="emit('captureSnapshot')"

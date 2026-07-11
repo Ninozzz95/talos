@@ -13,7 +13,7 @@ import { useTalosResearch } from '../../../composables/useTalosResearch'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
 import type { TalosResearchReport } from '../../../lib/talosTypes'
 
-type SubmitMode = 'queued' | 'started'
+type SubmitMode = 'queued'
 
 const emit = defineEmits<{
     'open-library': []
@@ -24,17 +24,24 @@ const {
     loadingResearchReports,
     loadingResearchReportId,
     creatingResearchReport,
+    activeResearchJob,
+    researchJobPolling,
+    researchJobPollingTimedOut,
+    researchExecutionCapability,
+    loadingResearchExecutionCapability,
     researchError,
     loadResearchReports,
     loadResearchReport,
     createResearchReport,
+    startResearchJob,
+    cancelResearchJob,
+    loadResearchCapability,
     exportResearchReport,
-    createFollowUpSession,
     researchReportById,
 } = useTalosResearch()
 
 const {
-    usableModelProfiles,
+    callableModelProfiles,
     loadModelProfiles,
 } = useTalosModelProfiles()
 
@@ -49,7 +56,6 @@ const actionError = ref<string | null>(null)
 const actionMessage = ref('')
 const submitMode = ref<SubmitMode | null>(null)
 const exportingReportId = ref<string | null>(null)
-const creatingFollowUpReportId = ref<string | null>(null)
 const historyRef = ref<HTMLElement | null>(null)
 const settings = ref<TalosResearchSettings>({
     rounds: 1,
@@ -61,21 +67,44 @@ const settings = ref<TalosResearchSettings>({
 
 const selectedReport = computed(() => researchReportById(selectedReportId.value))
 const visibleError = computed(() => actionError.value || researchError.value)
-const canCreate = computed(() => {
+const canQueue = computed(() => {
     return title.value.trim().length > 0
         && query.value.trim().length > 0
         && sourceUrl.value.trim().startsWith('https://')
         && claimText.value.trim().length > 0
         && !creatingResearchReport.value
 })
-const selectedArtifact = computed(() => selectedReport.value?.artifact ?? null)
-const chatWithReportDisabledReason = computed(() => {
-    if (!selectedReport.value) {
-        return 'Select a report before opening report chat.'
+const researchExecutionUnavailable = computed(() => researchExecutionCapability.value !== null && !researchExecutionCapability.value.available)
+const canStart = computed(() => query.value.trim().length > 0
+    && researchExecutionCapability.value?.available === true
+    && !creatingResearchReport.value
+    && !researchJobPolling.value)
+const researchJobMessage = computed(() => {
+    const job = activeResearchJob.value
+    if (!job) {
+        return null
     }
 
-    return null
+    if (job.status === 'failed') {
+        return `Research failed${job.failure_message ? `: ${job.failure_message}` : '.'}`
+    }
+
+    if (job.status === 'cancelled') {
+        return 'Research was cancelled before a report was produced.'
+    }
+
+    if (researchJobPollingTimedOut.value) {
+        return 'Research is still running, but client polling stopped after the time limit. Sync later or cancel the job.'
+    }
+
+    if (job.status === 'completed' || job.status === 'succeeded') {
+        return 'Research completed. Sync reports to inspect the API-backed result.'
+    }
+
+    return `Research ${job.status}. TALOS is tracking the job until it reaches a terminal state.`
 })
+const selectedArtifact = computed(() => selectedReport.value?.artifact ?? null)
+const chatWithReportDisabledReason = 'Report chat navigation is unavailable from this window.'
 const benchmarkDisabledReason = computed(() => {
     if (!selectedReport.value) {
         return 'Select a report before creating a benchmark scenario.'
@@ -114,7 +143,7 @@ async function selectReport(report: TalosResearchReport) {
 }
 
 async function submitResearchReport(mode: SubmitMode) {
-    if (!canCreate.value) {
+    if (!canQueue.value) {
         return
     }
 
@@ -167,6 +196,45 @@ async function submitResearchReport(mode: SubmitMode) {
     }
 }
 
+async function startResearch() {
+    if (!canStart.value) {
+        return
+    }
+
+    actionError.value = null
+    actionMessage.value = ''
+
+    try {
+        const job = await startResearchJob({
+            query: query.value.trim(),
+            settings: {
+                mode: 'live',
+                rounds: settings.value.rounds,
+                source_budget: 25,
+            },
+        })
+
+        if (job?.status === 'completed' || job?.status === 'succeeded') {
+            await refreshReports()
+        }
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not start this research job.'
+    }
+}
+
+async function cancelResearch() {
+    const jobId = activeResearchJob.value?.id
+    if (!jobId) {
+        return
+    }
+
+    try {
+        await cancelResearchJob(jobId)
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not cancel this research job.'
+    }
+}
+
 async function exportSelectedReport() {
     const report = selectedReport.value
     if (!report) {
@@ -200,27 +268,6 @@ async function exportSelectedReport() {
     }
 }
 
-async function openFollowUpSession() {
-    const report = selectedReport.value
-    if (!report) {
-        actionError.value = 'Select a report before creating a follow-up session.'
-        return
-    }
-
-    creatingFollowUpReportId.value = report.id
-    actionError.value = null
-    actionMessage.value = ''
-
-    try {
-        const session = await createFollowUpSession(report.id, `Continue from ${report.title}.`)
-        actionMessage.value = `Follow-up session created: ${session.title}`
-    } catch (error) {
-        actionError.value = error instanceof Error ? error.message : 'TALOS could not create a follow-up session.'
-    } finally {
-        creatingFollowUpReportId.value = null
-    }
-}
-
 function shortHash(value: string | null | undefined) {
     if (!value) {
         return 'unknown'
@@ -238,6 +285,7 @@ onMounted(() => {
     void Promise.allSettled([
         refreshReports(),
         loadModelProfiles(),
+        loadResearchCapability(),
     ])
 })
 </script>
@@ -274,6 +322,19 @@ onMounted(() => {
             </div>
             <div v-if="actionMessage" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-muted)]">
                 {{ actionMessage }}
+            </div>
+            <div v-if="researchJobMessage" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]" aria-live="polite">
+                <Loader2 v-if="researchJobPolling" class="mr-2 inline h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                {{ researchJobMessage }}
+                <Button v-if="researchJobPolling" type="button" variant="ghost" size="sm" class="ml-2" @click="cancelResearch">
+                    Cancel research
+                </Button>
+            </div>
+            <div v-if="researchExecutionUnavailable" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm leading-6 text-[var(--talos-text)]">
+                {{ researchExecutionCapability?.message }} <span class="font-mono text-[11px]">{{ researchExecutionCapability?.code || 'TALOS_RESEARCH_EXECUTOR_UNAVAILABLE' }}</span>
+            </div>
+            <div v-else-if="loadingResearchExecutionCapability" class="text-xs text-[var(--talos-muted)]" aria-live="polite">
+                Checking live research readiness.
             </div>
 
             <section class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
@@ -352,19 +413,19 @@ onMounted(() => {
                 <TalosResearchSettingsPanel
                     v-if="settingsOpen"
                     :settings="settings"
-                    :model-profiles="usableModelProfiles"
+                    :model-profiles="callableModelProfiles"
                     :disabled="creatingResearchReport"
                     @update="settings = $event"
                 />
 
                 <div class="grid gap-2 sm:grid-cols-2">
-                    <Button type="button" variant="secondary" size="sm" :disabled="!canCreate" @click="submitResearchReport('queued')">
+                     <Button type="button" variant="secondary" size="sm" :disabled="!canQueue" @click="submitResearchReport('queued')">
                         <Loader2 v-if="creatingResearchReport && submitMode === 'queued'" class="h-4 w-4 animate-spin" />
                         <Plus v-else class="h-4 w-4" />
                         Queue report
                     </Button>
-                    <Button type="button" size="sm" :disabled="!canCreate" @click="submitResearchReport('started')">
-                        <Loader2 v-if="creatingResearchReport && submitMode === 'started'" class="h-4 w-4 animate-spin" />
+                     <Button type="button" size="sm" :disabled="!canStart" @click="startResearch">
+                         <Loader2 v-if="researchJobPolling" class="h-4 w-4 animate-spin" />
                         <Play v-else class="h-4 w-4" />
                         Start research
                     </Button>
@@ -400,12 +461,14 @@ onMounted(() => {
                                         <Badge tone="neutral">run {{ shortHash(selectedReport.run_id) }}</Badge>
                                     </div>
                                     <p class="mt-2 text-sm leading-6 text-[var(--talos-muted)]">{{ selectedReport.summary || selectedReport.query }}</p>
-                                    <p v-if="selectedArtifact" class="mt-2 truncate font-mono text-[11px] text-[var(--talos-accent)]">{{ selectedArtifact.uri }}</p>
+                                    <p v-if="selectedArtifact" class="mt-2 truncate font-mono text-[11px] text-[var(--talos-accent)]">
+                                        ref {{ shortHash(selectedArtifact.id) }} / run {{ shortHash(selectedReport.run_id) }}
+                                    </p>
                                 </div>
                                 <div class="flex flex-wrap gap-2">
-                                    <Button type="button" size="sm" :disabled="Boolean(chatWithReportDisabledReason) || creatingFollowUpReportId === selectedReport.id" @click="openFollowUpSession">
-                                        <Loader2 v-if="creatingFollowUpReportId === selectedReport.id" class="h-4 w-4 animate-spin" />
-                                        Chat with report
+                                     <Button type="button" size="sm" disabled :title="chatWithReportDisabledReason">
+                                         <BookOpen class="h-4 w-4" />
+                                         Chat with report unavailable
                                     </Button>
                                     <Button type="button" variant="secondary" size="sm" :disabled="exportingReportId === selectedReport.id" @click="exportSelectedReport">
                                         <Loader2 v-if="exportingReportId === selectedReport.id" class="h-4 w-4 animate-spin" />

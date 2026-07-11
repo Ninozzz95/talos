@@ -195,6 +195,7 @@ final class TalosSessionApiTest extends TestCase
                     'favorite' => true,
                     'archived' => true,
                     'selected' => true,
+                    'browse_enabled' => true,
                     'folder' => 'Ops / Incidents',
                     'copied_from_session_id' => 'source-session',
                     'unsafe_html' => '<script>alert(1)</script>',
@@ -210,6 +211,7 @@ final class TalosSessionApiTest extends TestCase
             ->assertJsonPath('data.metadata.chat_state.favorite', true)
             ->assertJsonPath('data.metadata.chat_state.archived', true)
             ->assertJsonPath('data.metadata.chat_state.selected', true)
+            ->assertJsonPath('data.metadata.chat_state.browse_enabled', true)
             ->assertJsonPath('data.metadata.chat_state.folder', 'Ops / Incidents')
             ->assertJsonPath('data.metadata.chat_state.copied_from_session_id', 'source-session')
             ->assertJsonMissing(['should-not-survive'])

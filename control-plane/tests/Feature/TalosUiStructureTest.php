@@ -90,4 +90,16 @@ final class TalosUiStructureTest extends TestCase
         $this->assertFileExists(base_path('public/talos/brand/logo-short.svg'));
         $this->assertStringContainsString('--talos-scrollbar-thumb', $css);
     }
+
+    public function test_chat_deletion_uses_a_themable_application_dialog_instead_of_browser_confirm(): void
+    {
+        $leftRail = file_get_contents(base_path('resources/js/components/talos/workspace/TalosLeftRail.vue'));
+        $workspace = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
+
+        $this->assertIsString($leftRail);
+        $this->assertIsString($workspace);
+        $this->assertStringNotContainsString('window.confirm', $leftRail);
+        $this->assertFileExists(base_path('resources/js/components/talos/chat/TalosDeleteSessionDialog.vue'));
+        $this->assertStringContainsString('TalosDeleteSessionDialog', $workspace);
+    }
 }

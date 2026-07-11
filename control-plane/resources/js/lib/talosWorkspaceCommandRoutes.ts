@@ -1,7 +1,7 @@
-import type { TalosWindowId } from '../composables/useTalosWindows'
 import type { TalosCommand } from './talosTypes'
+import { TALOS_WINDOW_IDS, type TalosWindowId } from './talosWindowRegistry'
 
-export const TALOS_WORKSPACE_WINDOW_IDS: TalosWindowId[] = ['runtime', 'search', 'brain', 'calendar', 'compare', 'model_lab', 'research', 'gallery', 'library', 'notes', 'tasks', 'settings', 'theme', 'doctor', 'tools']
+export const TALOS_WORKSPACE_WINDOW_IDS: readonly TalosWindowId[] = TALOS_WINDOW_IDS
 
 export type TalosWorkspaceCommandRoute = {
     windowId: TalosWindowId

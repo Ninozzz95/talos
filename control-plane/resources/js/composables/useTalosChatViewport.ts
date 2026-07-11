@@ -3,6 +3,7 @@ import { nextTick, ref, type Readonly, type Ref } from 'vue'
 export type TalosChatViewportController = {
     atLiveEdge: Readonly<Ref<boolean>>
     unseenCount: Readonly<Ref<number>>
+    composerHeight: Readonly<Ref<number>>
     registerThread: (element: HTMLElement | null) => void
     registerComposer: (element: HTMLElement | null) => void
     centerMessage: (messageId: string, behavior?: ScrollBehavior) => Promise<void>
@@ -30,8 +31,10 @@ export function useTalosChatViewport(): TalosChatViewportController {
     const composer = ref<HTMLElement | null>(null)
     const atLiveEdge = ref(true)
     const unseenCount = ref(0)
+    const composerHeight = ref(0)
     let resizeObserver: ResizeObserver | null = null
     let observedThread: HTMLElement | null = null
+    let geometryTarget: HTMLElement | null = null
     let ignoreScroll = false
 
     function updateLiveEdge() {
@@ -60,27 +63,34 @@ export function useTalosChatViewport(): TalosChatViewportController {
         updateLiveEdge()
     }
 
-    function setComposerHeight(element: HTMLElement, height: number) {
+    function setComposerHeight(element: HTMLElement) {
         const workspace = element.closest<HTMLElement>('.talos-workspace')
         const target = workspace ?? document.documentElement
-        const measuredHeight = element.getBoundingClientRect().height || height
-        target.style.setProperty('--talos-composer-height', `${Math.ceil(measuredHeight)}px`)
+        const measuredHeight = element.getBoundingClientRect().height || FALLBACK_COMPOSER_HEIGHT
+        const roundedHeight = Math.ceil(measuredHeight)
+        composerHeight.value = roundedHeight
+        geometryTarget = target
+        target.style.setProperty('--talos-composer-height', `${roundedHeight}px`)
     }
 
     function registerComposer(element: HTMLElement | null) {
         resizeObserver?.disconnect()
         resizeObserver = null
         composer.value = element
-        if (!element) return
+        if (!element) {
+            geometryTarget?.style.removeProperty('--talos-composer-height')
+            geometryTarget = null
+            composerHeight.value = 0
+            return
+        }
 
-        setComposerHeight(element, FALLBACK_COMPOSER_HEIGHT)
+        setComposerHeight(element)
         if (typeof ResizeObserver === 'undefined') {
-            setComposerHeight(element, element.getBoundingClientRect().height || FALLBACK_COMPOSER_HEIGHT)
             return
         }
 
         resizeObserver = new ResizeObserver(([entry]) => {
-            if (entry) setComposerHeight(element, entry.contentRect.height)
+            if (entry) setComposerHeight(element)
         })
         resizeObserver.observe(element)
     }
@@ -140,6 +150,7 @@ export function useTalosChatViewport(): TalosChatViewportController {
     return {
         atLiveEdge,
         unseenCount,
+        composerHeight,
         registerThread,
         registerComposer,
         centerMessage,

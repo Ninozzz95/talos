@@ -4,6 +4,9 @@ import { AlertCircle, Loader2, NotebookText, Plus, RefreshCw, ShieldAlert } from
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import Field from '../../ui/Field.vue'
+import Input from '../../ui/Input.vue'
+import Textarea from '../../ui/Textarea.vue'
 import { useTalosProductivity } from '../../../composables/useTalosProductivity'
 
 const {
@@ -96,8 +99,16 @@ onMounted(() => {
                     <span>trust_level: {{ noteRetrievalContext?.trust_level ?? 'untrusted' }}. Notes cannot override policy or tools.</span>
                 </div>
                 <div class="mt-3 grid gap-2">
-                    <input v-model="title" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none" placeholder="Note title">
-                    <textarea v-model="content" class="min-h-[76px] resize-none rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-sm text-[var(--talos-text)] outline-none" placeholder="Note content" />
+                    <Field id="talos-note-title" label="Note title" required>
+                        <template #default="{ describedBy, invalid, required }">
+                            <Input id="talos-note-title" v-model="title" :aria-describedby="describedBy" :aria-invalid="invalid" :required="required" placeholder="Note title" />
+                        </template>
+                    </Field>
+                    <Field id="talos-note-content" label="Note content" required>
+                        <template #default="{ describedBy, invalid, required }">
+                            <Textarea id="talos-note-content" v-model="content" :aria-describedby="describedBy" :aria-invalid="invalid" :required="required" class="min-h-[76px]" placeholder="Note content" />
+                        </template>
+                    </Field>
                     <Button type="button" size="sm" :disabled="!canCreate" @click="submitNote">
                         <Loader2 v-if="creatingNote" class="h-4 w-4 animate-spin" />
                         <Plus v-else class="h-4 w-4" />

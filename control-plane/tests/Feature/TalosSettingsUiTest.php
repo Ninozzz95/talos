@@ -12,9 +12,13 @@ final class TalosSettingsUiTest extends TestCase
     {
         $settingsCenter = file_get_contents(base_path('resources/js/components/talos/settings/TalosSettingsCenter.vue'));
         $themeEngine = file_get_contents(base_path('resources/js/components/talos/settings/TalosThemeEngine.vue'));
+        $searchPanel = file_get_contents(base_path('resources/js/components/talos/settings/TalosSettingsSearchPanel.vue'));
+        $toolsPanel = file_get_contents(base_path('resources/js/components/talos/settings/TalosSettingsToolsPanel.vue'));
 
         $this->assertIsString($settingsCenter);
         $this->assertIsString($themeEngine);
+        $this->assertIsString($searchPanel);
+        $this->assertIsString($toolsPanel);
 
         foreach ([
             'Models',
@@ -33,6 +37,10 @@ final class TalosSettingsUiTest extends TestCase
         }
 
         $this->assertStringContainsString('/api/talos/settings', $settingsCenter);
+        $this->assertStringContainsString("openModule('doctor', 'backup')", $settingsCenter);
+        $this->assertStringContainsString(':disabled="!editable"', $searchPanel);
+        $this->assertStringContainsString(':disabled="!editable"', $toolsPanel);
+        $this->assertStringContainsString(':disabled="!reminderExecutionAvailable"', $settingsCenter);
         $this->assertStringContainsString('TALOS_THEME_PRESETS', $themeEngine);
         $this->assertStringContainsString('data-testid="talos-theme-preset"', $themeEngine);
 

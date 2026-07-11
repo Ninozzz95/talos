@@ -19,7 +19,7 @@ export type CreateTalosContextSetPayload = {
 
 export type TalosFileIngestionResponse = TalosFile & {
     benchmark_scenario?: {
-        storage_path?: string | null
+        ref: string
         [key: string]: unknown
     } | null
 }

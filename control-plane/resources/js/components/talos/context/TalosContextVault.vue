@@ -15,7 +15,7 @@ type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
 const emit = defineEmits<{
     contextSetCreated: [contextSet: TalosContextSet]
-    benchmarkScenarioSelected: [scenarioPath: string]
+    benchmarkScenarioSelected: [scenarioRef: string]
 }>()
 
 const {
@@ -60,7 +60,7 @@ const driveImportOpen = ref(false)
 const importingDriveFileId = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
-const latestBenchmarkScenarioPath = ref<string | null>(null)
+const latestBenchmarkScenarioRef = ref<string | null>(null)
 const latestBenchmarkFileName = ref<string | null>(null)
 
 const selectedFiles = computed(() => {
@@ -121,14 +121,13 @@ function formatDate(value: string) {
     })
 }
 
-function benchmarkScenarioPath(file: TalosFile) {
+function benchmarkScenarioRef(file: TalosFile) {
     const scenario = (file as TalosFile & {
-        benchmark_scenario?: { storage_path?: unknown } | null
+        benchmark_scenario?: { ref?: unknown } | null
     }).benchmark_scenario
-    const path = scenario?.storage_path
-
-    return typeof path === 'string' && path.trim().startsWith('benchmark-scenarios/')
-        ? path.trim()
+    const ref = scenario?.ref
+    return typeof ref === 'string' && ref.trim()
+        ? ref.trim()
         : null
 }
 
@@ -206,7 +205,7 @@ async function refreshGoogleDrive() {
 async function handleUpload(file: File) {
     actionError.value = null
     actionMessage.value = null
-    latestBenchmarkScenarioPath.value = null
+    latestBenchmarkScenarioRef.value = null
     latestBenchmarkFileName.value = null
 
     try {
@@ -217,7 +216,7 @@ async function handleUpload(file: File) {
             return
         }
 
-        latestBenchmarkScenarioPath.value = benchmarkScenarioPath(uploaded)
+        latestBenchmarkScenarioRef.value = benchmarkScenarioRef(uploaded)
         latestBenchmarkFileName.value = uploaded.original_name
         actionMessage.value = `${uploaded.original_name} uploaded through /api/files/ingest.`
         await loadFiles()
@@ -261,11 +260,11 @@ async function handleDriveImport(file: TalosGoogleDriveFile) {
 }
 
 function openLatestBenchmarkScenario() {
-    if (!latestBenchmarkScenarioPath.value) {
+    if (!latestBenchmarkScenarioRef.value) {
         return
     }
 
-    emit('benchmarkScenarioSelected', latestBenchmarkScenarioPath.value)
+    emit('benchmarkScenarioSelected', latestBenchmarkScenarioRef.value)
 }
 
 async function inspectFile(file: TalosFile) {
@@ -372,11 +371,11 @@ onMounted(() => {
                 <CheckCircle2 class="mt-1 h-4 w-4 shrink-0 text-[var(--talos-success)]" />
                 <span>{{ visibleActionMessage }}</span>
             </div>
-            <div v-if="latestBenchmarkScenarioPath" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+            <div v-if="latestBenchmarkScenarioRef" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                 <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div class="min-w-0">
                         <div class="text-sm font-semibold text-[var(--talos-text)]">File benchmark scenario ready</div>
-                        <div class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ latestBenchmarkScenarioPath }}</div>
+                        <div class="mt-1 truncate text-[11px] text-[var(--talos-muted)]">{{ latestBenchmarkFileName }} · {{ latestBenchmarkScenarioRef }}</div>
                     </div>
                     <Button type="button" size="sm" @click="openLatestBenchmarkScenario">
                         <ShieldCheck class="h-4 w-4" />

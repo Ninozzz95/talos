@@ -119,7 +119,12 @@ final class TalosBrowserCommandService
         } catch (\InvalidArgumentException $exception) {
             return $this->failed($session, $run, $normalizer, $rawCommand, new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_MALFORMED', 'Browser command payload is malformed.', status: 422));
         } catch (BrowserWorkerException $exception) {
-            return $this->failed($session, $run, $normalizer, $rawCommand, new TalosBrowserCommandException($exception->errorCode, $exception->getMessage(), status: $exception->errorCode === 'TALOS_BROWSER_WORKER_UNAVAILABLE' ? 503 : 502));
+            return $this->failed($session, $run, $normalizer, $rawCommand, new TalosBrowserCommandException(
+                $exception->errorCode,
+                $exception->getMessage(),
+                status: $exception->errorCode === 'TALOS_BROWSER_WORKER_UNAVAILABLE' ? 503 : 502,
+                origin: 'browser_worker',
+            ));
         } catch (Throwable) {
             return $this->failed($session, $run, $normalizer, $rawCommand, new TalosBrowserCommandException('TALOS_BROWSER_COMMAND_FAILED', 'Browser command failed.', status: 502));
         }
@@ -182,7 +187,7 @@ final class TalosBrowserCommandService
         $this->assertActive($run, $deadline);
         $bytes = is_string($worker['base64'] ?? null) ? base64_decode($worker['base64'], true) : false;
         if (! is_string($bytes) || $bytes === '' || strlen($bytes) > TalosBrowserArtifactStore::MAX_SCREENSHOT_BYTES) {
-            throw new TalosBrowserCommandException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid screenshot.', status: 502);
+            throw new TalosBrowserCommandException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid screenshot.', status: 502, origin: 'browser_worker');
         }
         $observationBytes = strlen(json_encode([
             'operation' => 'screenshot',
@@ -231,7 +236,7 @@ final class TalosBrowserCommandService
     private function safeSnapshot(array $raw): array
     {
         if (($raw['format'] ?? null) !== 'accessibility_refs_v1' || ! is_string($raw['url'] ?? null) || ! is_string($raw['title'] ?? null) || ! is_string($raw['textDigest'] ?? null) || ! is_array($raw['nodes'] ?? null)) {
-            throw new TalosBrowserCommandException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid snapshot.', status: 502);
+            throw new TalosBrowserCommandException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid snapshot.', status: 502, origin: 'browser_worker');
         }
         $nodes = [];
         foreach (array_slice($raw['nodes'], 0, self::MAX_SNAPSHOT_NODES) as $node) {
@@ -239,7 +244,7 @@ final class TalosBrowserCommandService
             $nodes[] = ['ref' => mb_substr($node['ref'], 0, 128), 'role' => mb_substr($node['role'], 0, 128), 'name' => mb_substr($node['name'], 0, 512), 'visible' => $node['visible']];
         }
         $snapshotUrl = TalosBrowserRedactor::url(mb_substr($raw['url'], 0, 2048)) ?? '[redacted-url]';
-        $safe = ['format' => 'accessibility_refs_v1', 'url' => $snapshotUrl, 'title' => mb_substr($raw['title'], 0, 512), 'textDigest' => mb_substr($raw['textDigest'], 0, 128), 'nodes' => $nodes];
+        $safe = ['format' => 'accessibility_refs_v1', 'url' => $snapshotUrl, 'title' => mb_substr($raw['title'], 0, 512), 'textDigest' => mb_substr($raw['textDigest'], 0, 4000), 'nodes' => $nodes];
         if (strlen(json_encode($safe, JSON_THROW_ON_ERROR)) > self::MAX_SNAPSHOT_BYTES) throw new TalosBrowserCommandException('TALOS_BROWSER_EVIDENCE_BUDGET', 'Browser snapshot exceeded the evidence budget.');
         return $safe;
     }
@@ -323,8 +328,8 @@ final class TalosBrowserCommandService
         $commandId = is_string($rawCommand['command_id'] ?? null) ? $rawCommand['command_id'] : 'unknown';
         $operation = is_string($rawCommand['operation'] ?? null) ? $rawCommand['operation'] : 'unknown';
         $this->browserEvent($session, $exception->errorCode === 'TALOS_BROWSER_POLICY_DENIED' ? 'policy.denied' : 'command.failed', 'policy', ['operation' => $operation, 'command_id' => $commandId, 'reason' => $exception->getMessage()]);
-        $this->runEvent($run, $normalizer, 'browser.command.failed', ['command_id' => $commandId, 'browser_session_id' => $session->id, 'operation' => $operation, 'error_code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details]);
-        return ['error' => ['code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details, 'status' => $exception->status], 'activity' => ['id' => $commandId, 'operation' => $operation, 'status' => 'failed', 'label' => ucfirst($operation), 'run_id' => $run->id, 'browser_session_id' => $session->id, 'artifact_ids' => [], 'occurred_at' => now()->toJSON()]];
+        $this->runEvent($run, $normalizer, 'browser.command.failed', ['command_id' => $commandId, 'browser_session_id' => $session->id, 'operation' => $operation, 'error_code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details, 'origin' => $exception->origin]);
+        return ['error' => ['code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details, 'status' => $exception->status, 'origin' => $exception->origin], 'activity' => ['id' => $commandId, 'operation' => $operation, 'status' => 'failed', 'label' => ucfirst($operation), 'run_id' => $run->id, 'browser_session_id' => $session->id, 'artifact_ids' => [], 'occurred_at' => now()->toJSON()]];
     }
 
     private function ownerRef(TalosBrowserSession $session): string

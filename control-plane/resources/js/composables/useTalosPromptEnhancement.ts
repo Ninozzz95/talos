@@ -16,9 +16,13 @@ export type TalosPromptEnhancementPayload = {
 
 export type TalosPromptEnhancementResult = {
     model_profile_id: string
-    enhancement_mode: 'deterministic_template' | string
+    provider: string
+    model: string
+    enhancement_mode: 'model'
     original_prompt: string
     enhanced_prompt: string
+    summary: string
+    applied_principles: string[]
 }
 
 export function useTalosPromptEnhancement() {

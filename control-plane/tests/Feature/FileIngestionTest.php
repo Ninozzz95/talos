@@ -38,19 +38,17 @@ final class FileIngestionTest extends TestCase
             ->assertJsonPath('data.original_name', 'workflow.md')
             ->assertJsonPath('data.extension', 'md')
             ->assertJsonPath('data.status', 'available')
-            ->assertJsonPath('data.storage_disk', 'local')
+            ->assertJsonMissingPath('data.storage_disk')
+            ->assertJsonMissingPath('data.storage_path')
             ->assertJsonPath('data.extracted_chars', 73)
             ->assertJsonPath('data.chunks_count', 1)
             ->assertJsonPath('data.extracted_text', "# Workflow\nCall https://api.example.com/data and summarize the response.\n");
-
-        $path = $response->json('data.storage_path');
-        $this->assertIsString($path);
-        Storage::disk('local')->assertExists($path);
 
         $expectedHash = hash('sha256', "# Workflow\nCall https://api.example.com/data and summarize the response.\n");
         $this->assertSame($expectedHash, $response->json('data.sha256'));
         $this->assertSame($expectedHash, $response->json('data.checksum'));
         $this->assertArrayHasKey('scenario_seed', $response->json('data'));
+        $this->assertStorageKeysAreAbsent($response->json('data'));
 
         $fileId = $response->json('data.id');
         $this->assertIsString($fileId);
@@ -73,8 +71,14 @@ final class FileIngestionTest extends TestCase
             'source_type' => 'uploaded_file',
         ]);
 
+        $storedFile = TalosFile::query()->findOrFail($fileId);
+        $this->assertSame('local', $storedFile->storage_disk);
+        $this->assertIsString($storedFile->storage_path);
+        Storage::disk('local')->assertExists($storedFile->storage_path);
+
         $response
             ->assertJsonPath('data.benchmark_scenario.category', 'file_ingestion')
+            ->assertJsonPath('data.benchmark_scenario.ref', $fileId)
             ->assertJsonPath('data.benchmark_scenario.input_files.0.name', 'workflow.md')
             ->assertJsonPath('data.benchmark_scenario.input_files.0.sha256', $expectedHash)
             ->assertJsonPath('data.benchmark_scenario.allowed_node_types.0', 'READ_FILE')
@@ -91,7 +95,7 @@ final class FileIngestionTest extends TestCase
             ->assertJsonPath('data.benchmark_scenario.success_criteria.1', 'extract_fields reaches SUCCESS')
             ->assertJsonPath('data.benchmark_scenario.success_criteria.2', 'no facts outside uploaded file are introduced');
 
-        $scenarioPath = $response->json('data.benchmark_scenario.storage_path');
+        $scenarioPath = $storedFile->fresh()->metadata['benchmark_scenario_storage_path'] ?? null;
         $this->assertIsString($scenarioPath);
         Storage::disk('local')->assertExists($scenarioPath);
 
@@ -100,6 +104,22 @@ final class FileIngestionTest extends TestCase
         $this->assertStringContainsString('workflow.md', $storedScenario['task']);
         $this->assertSame('YIELD_EXECUTION', $storedScenario['steps'][1]['mutations'][2]['action']);
         $this->assertSame('uploaded_file_only', $storedScenario['evidence_contract']['grounding']);
+    }
+
+    /** @param array<string|int, mixed> $payload */
+    private function assertStorageKeysAreAbsent(array $payload): void
+    {
+        foreach ($payload as $key => $value) {
+            $normalizedKey = strtolower((string) $key);
+            $this->assertFalse(
+                $normalizedKey === 'storage_disk' || str_ends_with($normalizedKey, 'storage_path'),
+                "Public ingestion payload exposed internal storage key [{$normalizedKey}].",
+            );
+
+            if (is_array($value)) {
+                $this->assertStorageKeysAreAbsent($value);
+            }
+        }
     }
 
     public function test_ingested_files_can_be_listed_without_exposing_storage_contents(): void
@@ -112,18 +132,24 @@ final class FileIngestionTest extends TestCase
 
         $file = TalosFile::query()->firstOrFail();
 
-        $this->getJson('/api/talos/files')
+        $list = $this->getJson('/api/talos/files')
             ->assertOk()
             ->assertJsonPath('data.0.id', $file->id)
             ->assertJsonPath('data.0.original_name', 'notes.txt')
             ->assertJsonPath('data.0.status', 'available')
-            ->assertJsonMissingPath('data.0.extracted_text');
+            ->assertJsonMissingPath('data.0.extracted_text')
+            ->assertJsonMissingPath('data.0.storage_disk')
+            ->assertJsonMissingPath('data.0.storage_path');
+        $this->assertStorageKeysAreAbsent($list->json('data'));
 
-        $this->getJson("/api/talos/files/{$file->id}")
+        $detail = $this->getJson("/api/talos/files/{$file->id}")
             ->assertOk()
             ->assertJsonPath('data.id', $file->id)
             ->assertJsonPath('data.chunks.0.sequence', 1)
-            ->assertJsonPath('data.chunks.0.preview', 'TALOS should treat this text as data, not instructions.');
+            ->assertJsonPath('data.chunks.0.preview', 'TALOS should treat this text as data, not instructions.')
+            ->assertJsonMissingPath('data.storage_disk')
+            ->assertJsonMissingPath('data.storage_path');
+        $this->assertStorageKeysAreAbsent($detail->json('data'));
     }
 
     public function test_unsupported_file_type_is_rejected(): void

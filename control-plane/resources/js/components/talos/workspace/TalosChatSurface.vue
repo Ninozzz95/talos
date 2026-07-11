@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { AlertCircle, ArrowDown, BarChart3, Loader2, ShieldCheck } from '@lucide/vue'
+import { AlertCircle, Loader2 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
-import Button from '../../ui/Button.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
+import TalosBrowserScreenshotEvidence from '../chat/TalosBrowserScreenshotEvidence.vue'
 import TalosMessageContent from '../chat/TalosMessageContent.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
+import TalosRunActivity from '../chat/TalosRunActivity.vue'
+import TalosStatusMessage from '../chat/TalosStatusMessage.vue'
 import TalosGuidedStart from './TalosGuidedStart.vue'
+import TalosLiveEdgeControl from './TalosLiveEdgeControl.vue'
 import { resolveTalosWelcomePrompt } from '../../../lib/talosWelcomePrompts'
 import type { TalosMessage } from '../../../lib/talosTypes'
-import type { TalosBrowserActivity as TalosBrowserActivityItem, TalosChatBubbleScale } from '../../../lib/talosTypes'
+import type { TalosBrowserActivity as TalosBrowserActivityItem, TalosBrowserSnapshotPreview, TalosChatBubbleScale } from '../../../lib/talosTypes'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 
 type MessageSource = {
@@ -44,6 +47,8 @@ const props = defineProps<{
     sensitiveBlur: boolean
     bubbleScale: TalosChatBubbleScale
     browserActivities: TalosBrowserActivityItem[]
+    browserSnapshot: TalosBrowserSnapshotPreview | null
+    activeTalosSessionId: string | null
     viewport: TalosChatViewportController
 }>()
 
@@ -63,6 +68,40 @@ const emit = defineEmits<{
 const chatThreadEl = ref<HTMLElement | null>(null)
 const welcomePrompt = computed(() => resolveTalosWelcomePrompt(props.welcomePromptId, props.welcomePromptId ?? 'talos'))
 const unseenUpdates = computed(() => props.viewport.unseenCount.value)
+
+function messageBrowserActivities(message: TalosMessage): TalosBrowserActivityItem[] {
+    const activities = message.metadata?.browser_activities
+    if (!Array.isArray(activities)) return []
+
+    return activities.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
+        const activity = candidate as Record<string, unknown>
+        if (activity.operation !== 'screenshot' || activity.status !== 'succeeded') return []
+        if (typeof activity.id !== 'string'
+            || typeof activity.label !== 'string'
+            || typeof activity.browser_session_id !== 'string'
+            || typeof activity.occurred_at !== 'string'
+            || !Array.isArray(activity.artifact_ids)) return []
+
+        const artifactIds = activity.artifact_ids.filter((artifactId): artifactId is string => typeof artifactId === 'string' && artifactId.trim() !== '')
+        if (!artifactIds.length) return []
+
+        return [{
+            id: activity.id,
+            operation: 'screenshot',
+            status: 'succeeded',
+            label: activity.label,
+            run_id: typeof activity.run_id === 'string' ? activity.run_id : null,
+            browser_session_id: activity.browser_session_id,
+            artifact_ids: artifactIds,
+            occurred_at: activity.occurred_at,
+        }]
+    })
+}
+
+const messageScreenshotArtifactIds = computed(() => [...new Set(
+    props.messages.flatMap((message) => messageBrowserActivities(message).flatMap((activity) => activity.artifact_ids)),
+)])
 
 function scrollToBottom() {
     void props.viewport.followLatest()
@@ -238,20 +277,21 @@ defineExpose({ scrollToBottom })
 
 <template>
     <section ref="chatThreadEl" class="talos-chat-thread relative z-10 min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 md:px-6" aria-label="TALOS chat thread">
-        <Button
-            v-if="unseenUpdates > 0"
-            type="button"
-            size="sm"
-            class="fixed bottom-[calc(var(--talos-composer-height,168px)+2rem)] left-1/2 z-30 -translate-x-1/2 shadow-lg"
-            aria-label="Return to latest"
-            @click="viewport.followLatest()"
-        >
-            <ArrowDown class="h-4 w-4" />
-            Return to latest
-            <span class="rounded bg-black/15 px-1.5 py-0.5 text-[10px]">{{ unseenUpdates }}</span>
-        </Button>
+        <Teleport to="body">
+            <TalosLiveEdgeControl
+                v-if="unseenUpdates > 0"
+                :unseen-updates="unseenUpdates"
+                :composer-height="viewport.composerHeight.value"
+                @return-to-latest="viewport.followLatest()"
+            />
+        </Teleport>
         <div class="mx-auto flex min-h-full min-w-0 w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
-            <TalosBrowserActivity :activities="browserActivities" />
+            <TalosBrowserActivity
+                :activities="browserActivities"
+                :snapshot="browserSnapshot"
+                :talos-session-id="activeTalosSessionId"
+                :excluded-screenshot-artifact-ids="messageScreenshotArtifactIds"
+            />
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                 <span>{{ uiError || sessionError || messageError }}</span>
@@ -318,6 +358,7 @@ defineExpose({ scrollToBottom })
                 >
                     <div
                         class="talos-message-bubble min-w-0 max-w-full rounded-md border"
+                        :data-message-kind="message.role"
                         :data-bubble-scale="bubbleScale"
                         :class="message.role === 'user'
                             ? 'border-[var(--talos-border-strong)] bg-[var(--talos-user)] text-[var(--talos-user-text)]'
@@ -330,53 +371,51 @@ defineExpose({ scrollToBottom })
                             <span>{{ messageMeta(message) }}</span>
                             <span>{{ formatTime(message.created_at) }}</span>
                         </div>
+                        <TalosStatusMessage
+                            v-if="message.role === 'system'"
+                            :message="message"
+                        />
                         <TalosMessageContent
-                            v-if="message.role === 'assistant'"
+                            v-else-if="message.role === 'assistant'"
                             :content="message.content"
                             :sensitive="sensitiveBlur && messageContainsSensitiveText(message.content)"
                         />
+                        <TalosBrowserScreenshotEvidence
+                            v-if="message.role === 'assistant'"
+                            :activities="messageBrowserActivities(message)"
+                            :talos-session-id="activeTalosSessionId"
+                            loading-strategy="eager"
+                        />
+                        <TalosRunActivity
+                            v-if="message.role === 'assistant'"
+                            :message="message"
+                        />
                         <p
-                            v-else
+                            v-if="message.role !== 'assistant' && message.role !== 'system'"
                             class="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]"
                         >
                             {{ message.content }}
                         </p>
                         <TalosMessageActions
+                            v-if="message.role !== 'system'"
                             class="mt-3"
                             :message="message"
                             :busy="sending"
                             :can-retry="canRetryAssistantMessage(message)"
+                            :has-evidence="messageHasEvidence(message)"
+                            :evidence-open="messageEvidenceOpen(message)"
+                            :has-benchmark="Boolean(message.run_id)"
+                            :benchmarking="benchmarkingRunId === message.run_id"
                             @copy="copyMessage"
                             @edit="editMessage"
                             @resend="emit('resendMessage', $event)"
                             @retry="emit('retryAssistantMessage', $event)"
+                            @toggle-evidence="emit('toggleMessageEvidence', $event)"
+                            @benchmark="emit('benchmarkMessageRun', $event)"
                         />
                         <div v-if="message.role === 'assistant'" class="mt-3 flex flex-wrap gap-2">
                             <Badge v-if="messageMutations(message).length" tone="success">{{ messageMutations(message).length }} JMP</Badge>
                             <Badge tone="neutral">Persisted</Badge>
-                            <Button
-                                v-if="messageHasEvidence(message)"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                :aria-expanded="messageEvidenceOpen(message)"
-                                @click="emit('toggleMessageEvidence', message)"
-                            >
-                                <ShieldCheck class="h-4 w-4" />
-                                Evidence
-                            </Button>
-                            <Button
-                                v-if="message.run_id"
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                :disabled="benchmarkingRunId === message.run_id"
-                                @click="emit('benchmarkMessageRun', message)"
-                            >
-                                <Loader2 v-if="benchmarkingRunId === message.run_id" class="h-4 w-4 animate-spin" />
-                                <BarChart3 v-else class="h-4 w-4" />
-                                Compare AVM ON/OFF
-                            </Button>
                         </div>
                         <TalosEvidenceDrawer
                             v-if="message.role === 'assistant' && messageEvidenceOpen(message)"
@@ -427,5 +466,17 @@ defineExpose({ scrollToBottom })
     padding-block: var(--talos-message-padding-block, 0.75rem);
     font-size: var(--talos-message-font-size, 0.875rem);
     line-height: var(--talos-message-line-height, 1.5rem);
+}
+
+.talos-message-bubble[data-message-kind='system'] {
+    border: 0;
+    background: transparent;
+    padding: 0;
+}
+
+.talos-chat-message:focus-within,
+.talos-chat-message:has([aria-expanded='true']) {
+    position: relative;
+    z-index: 40;
 }
 </style>

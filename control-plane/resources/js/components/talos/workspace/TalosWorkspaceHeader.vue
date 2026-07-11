@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Command, Download } from '@lucide/vue'
+import { Command, Download, UserRound } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
+import Tooltip from '../../ui/Tooltip.vue'
 
 const props = defineProps<{
     logoUrl: string
@@ -25,8 +26,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <header class="relative z-20 flex min-h-14 items-center justify-between gap-3 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-4 backdrop-blur md:px-5">
-        <div class="min-w-0">
+    <header class="talos-workspace-header relative z-20 flex min-h-14 items-center justify-between gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-2 backdrop-blur sm:gap-2 sm:px-3 md:px-5">
+        <div class="min-w-0 flex-1">
             <div data-testid="talos-header-brand" class="flex min-w-0 items-center gap-2">
                 <span class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
                     <span class="talos-short-logo-mark"></span>
@@ -37,19 +38,42 @@ const emit = defineEmits<{
                 {{ workspaceSubtitle }}
             </div>
         </div>
-        <div class="flex min-w-0 items-center gap-2">
+        <div class="flex shrink-0 items-center gap-1 sm:gap-2">
             <div class="hidden max-w-[360px] truncate rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-1.5 text-xs text-[var(--talos-muted)] md:block">
                 {{ statusText }}
             </div>
-            <Badge v-if="temporarySession" tone="warning">Temporary session</Badge>
-            <Button type="button" variant="secondary" size="sm" aria-label="Open command palette" @click="emit('openCommands')">
-                <Command class="h-4 w-4" />
-                Commands
-            </Button>
-            <Button type="button" variant="ghost" size="sm" aria-label="Export session" :disabled="!hasActiveSession || exportingSession" @click="emit('openExport')">
-                <Download class="h-4 w-4" />
-                Export
-            </Button>
+            <Badge v-if="temporarySession" class="hidden sm:inline-flex" tone="warning">Temporary session</Badge>
+            <Tooltip content="Commands" align="end">
+                <template #default="{ describedBy }">
+                    <Button type="button" variant="secondary" size="sm" class="w-11 px-0 md:h-8 md:min-h-8 md:w-auto md:px-3" aria-label="Open command palette" :aria-describedby="describedBy" @click="emit('openCommands')">
+                        <Command class="h-4 w-4" />
+                        <span class="hidden md:inline">Commands</span>
+                    </Button>
+                </template>
+            </Tooltip>
+            <Tooltip content="Export session" align="end">
+                <template #default="{ describedBy }">
+                    <Button type="button" variant="ghost" size="sm" class="w-11 px-0 md:h-8 md:min-h-8 md:w-auto md:px-3" aria-label="Export session" :aria-describedby="describedBy" :disabled="!hasActiveSession || exportingSession" @click="emit('openExport')">
+                        <Download class="h-4 w-4" />
+                        <span class="hidden md:inline">Export</span>
+                    </Button>
+                </template>
+            </Tooltip>
+            <Tooltip v-if="authenticated" content="Account settings" align="end">
+                <template #default="{ describedBy }">
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        class="md:hidden"
+                        :aria-label="`Open account settings for ${authLabel}`"
+                        :aria-describedby="describedBy"
+                        @click="emit('openAccount')"
+                    >
+                        <UserRound class="h-4 w-4" />
+                    </Button>
+                </template>
+            </Tooltip>
             <form v-if="authenticated" :action="logoutUrl" method="post" class="hidden items-center gap-2 md:flex" aria-label="TALOS account">
                 <input type="hidden" name="_token" :value="csrfToken">
                 <button

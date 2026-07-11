@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\TalosContextSet;
 use App\Models\TalosModelProfile;
 use App\Models\TalosWorkspaceSetting;
+use App\Support\TalosThemeContrast;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -33,7 +34,28 @@ final class TalosSettingsController extends Controller
             'preferences' => ['sometimes', 'nullable', 'array'],
         ]);
 
-        $settings = $this->settings((int) $userId);
+        $settings = $this->settingsForUpdate((int) $userId);
+        $storedPreferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
+        $effectivePreferences = $storedPreferences;
+
+        if (array_key_exists('preferences', $validated)) {
+            $themeErrors = TalosWorkspaceSetting::validateThemePreferencesForWrite(
+                $validated['preferences'],
+                $storedPreferences,
+            );
+            $effectivePreferences = $this->mergePreferences(
+                $storedPreferences,
+                $validated['preferences'],
+            );
+            $themeErrors = array_replace_recursive(
+                $themeErrors,
+                TalosThemeContrast::validatePreferences($effectivePreferences),
+            );
+            if ($themeErrors !== []) {
+                throw ValidationException::withMessages($themeErrors);
+            }
+        }
+
         $defaultErrors = [];
 
         if (array_key_exists('default_model_profile_id', $validated)) {
@@ -61,10 +83,8 @@ final class TalosSettingsController extends Controller
         }
 
         if (array_key_exists('preferences', $validated)) {
-            $storedPreferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
-            $incomingPreferences = TalosWorkspaceSetting::sanitizePreferences($validated['preferences'] ?? []);
             $themePolicyLocked = $this->themePolicyLocked($settings);
-            if ($themePolicyLocked && $this->containsLockedThemeChange($incomingPreferences, $storedPreferences)) {
+            if ($themePolicyLocked && $this->containsLockedThemeChange($effectivePreferences, $storedPreferences)) {
                 return response()->json([
                     'message' => 'Theme changes are locked by workspace policy.',
                     'errors' => [
@@ -73,9 +93,7 @@ final class TalosSettingsController extends Controller
                 ], 422);
             }
 
-            $settings->preferences = $themePolicyLocked
-                ? array_replace_recursive($storedPreferences, $incomingPreferences)
-                : $incomingPreferences;
+            $settings->preferences = $effectivePreferences;
         }
 
         $settings->save();
@@ -91,6 +109,58 @@ final class TalosSettingsController extends Controller
             'id' => TalosWorkspaceSetting::idForUser($userId),
             'preferences' => [],
         ]);
+    }
+
+    private function settingsForUpdate(int $userId): TalosWorkspaceSetting
+    {
+        return TalosWorkspaceSetting::query()->firstOrNew([
+            'user_id' => $userId,
+        ], [
+            'id' => TalosWorkspaceSetting::idForUser($userId),
+            'preferences' => [],
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $storedPreferences
+     * @return array<string, mixed>
+     */
+    private function mergePreferences(array $storedPreferences, mixed $rawPreferences): array
+    {
+        if ($rawPreferences === null) {
+            return [];
+        }
+
+        if (! is_array($rawPreferences) || $rawPreferences === []) {
+            return $storedPreferences;
+        }
+
+        return $this->mergePreferenceObjects(
+            $storedPreferences,
+            TalosWorkspaceSetting::sanitizePreferences($rawPreferences),
+        );
+    }
+
+    /**
+     * @param array<mixed> $stored
+     * @param array<mixed> $incoming
+     * @return array<mixed>
+     */
+    private function mergePreferenceObjects(array $stored, array $incoming): array
+    {
+        $merged = $stored;
+        foreach ($incoming as $key => $value) {
+            $storedValue = $stored[$key] ?? null;
+            $merged[$key] = is_array($value)
+                && $value !== []
+                && ! array_is_list($value)
+                && is_array($storedValue)
+                && ! array_is_list($storedValue)
+                    ? $this->mergePreferenceObjects($storedValue, $value)
+                    : $value;
+        }
+
+        return $merged;
     }
 
     private function themePolicyLocked(TalosWorkspaceSetting $settings): bool
@@ -173,9 +243,7 @@ final class TalosSettingsController extends Controller
         ];
 
         foreach ($lockedKeys as $key => $_locked) {
-            if (array_key_exists($key, $preferences)
-                && ($preferences[$key] ?? null) !== ($storedPreferences[$key] ?? null)
-            ) {
+            if (($preferences[$key] ?? null) !== ($storedPreferences[$key] ?? null)) {
                 return true;
             }
         }
@@ -184,13 +252,10 @@ final class TalosSettingsController extends Controller
         $storedLayout = is_array($storedPreferences['chat_layout'] ?? null)
             ? $storedPreferences['chat_layout']
             : [];
-        if (is_array($incomingLayout)) {
-            foreach (['bubble_scale', 'composer_mode'] as $key) {
-                if (array_key_exists($key, $incomingLayout)
-                    && ($incomingLayout[$key] ?? null) !== ($storedLayout[$key] ?? null)
-                ) {
-                    return true;
-                }
+        $effectiveLayout = is_array($incomingLayout) ? $incomingLayout : [];
+        foreach (['bubble_scale', 'composer_mode'] as $key) {
+            if (($effectiveLayout[$key] ?? null) !== ($storedLayout[$key] ?? null)) {
+                return true;
             }
         }
 

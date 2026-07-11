@@ -21,6 +21,7 @@ import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
 import Switch from '../../ui/Switch.vue'
+import Tabs from '../../ui/Tabs.vue'
 import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
 import TalosSettingsIntegrationsPanel from './TalosSettingsIntegrationsPanel.vue'
 import TalosSettingsModelsPanel from './TalosSettingsModelsPanel.vue'
@@ -132,7 +133,7 @@ const emit = defineEmits<{
     selectModel: [id: string]
     selectContext: [id: string]
     changeTheme: [theme: TalosThemeId, persist?: boolean]
-    openModule: [id: string]
+    openModule: [id: string, section?: string]
     saved: []
 }>()
 
@@ -158,6 +159,7 @@ const agentToolOptions: Array<{ key: keyof Omit<SettingsPreferences['agent_tools
     { key: 'knowledge_enabled', label: 'Knowledge tools' },
     { key: 'system_enabled', label: 'System tools' },
 ]
+const reminderExecutionAvailable = false
 
 const activeTab = ref<SettingsTab>('models')
 
@@ -359,8 +361,8 @@ async function saveWorkspaceDefaults() {
     emit('saved')
 }
 
-function openModule(id: string) {
-    emit('openModule', id)
+function openModule(id: string, section?: string) {
+    emit('openModule', id, section)
 }
 
 function updateSearchPreferences(nextPreferences: Partial<Omit<SettingsPreferences['search'], 'deep_research'>>) {
@@ -444,26 +446,21 @@ watch(
                         Workspace defaults, model behavior and operator preferences from /api/talos/settings.
                     </p>
                 </div>
-                <div role="tablist" aria-label="TALOS settings categories" class="space-y-1">
-                    <template v-for="tab in tabs" :key="tab.id">
-                        <div v-if="tab.group && tabs.findIndex((item) => item.group === tab.group) === tabs.findIndex((item) => item.id === tab.id)" class="px-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-muted)]">
-                            {{ tab.group }}
-                        </div>
-                        <button
-                            :id="`talos-settings-tab-${tab.id}`"
-                            type="button"
-                            role="tab"
-                            class="flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                            :class="activeTab === tab.id ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]' : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]'"
-                            :aria-selected="activeTab === tab.id"
-                            :aria-controls="`talos-settings-panel-${tab.id}`"
-                            @click="activeTab = tab.id"
-                        >
-                            <component :is="tab.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-                            <span>{{ tab.label }}</span>
-                        </button>
+                <Tabs
+                    :model-value="activeTab"
+                    :items="tabs"
+                    label="TALOS settings categories"
+                    tab-id-prefix="talos-settings-tab"
+                    panel-id-prefix="talos-settings-panel"
+                    orientation="vertical"
+                    variant="settings"
+                    @update:model-value="activeTab = $event as SettingsTab"
+                >
+                    <template #tab="{ item }">
+                        <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
+                        <span>{{ item.label }}</span>
                     </template>
-                </div>
+                </Tabs>
             </aside>
 
             <section
@@ -565,10 +562,13 @@ watch(
                     </template>
 
                     <template v-else-if="activeTab === 'reminders'">
+                        <p class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]" role="status">
+                            Reminder delivery settings are read-only until a delivery worker advertises readiness.
+                        </p>
                         <div class="grid gap-3 md:grid-cols-2">
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Channel</span>
-                                <Select v-model="preferences.reminders.channel" class="mt-2" aria-label="Reminder channel">
+                                <Select v-model="preferences.reminders.channel" class="mt-2" aria-label="Reminder channel" :disabled="!reminderExecutionAvailable">
                                     <option value="browser">Browser notification</option>
                                     <option value="task">Task queue</option>
                                     <option value="disabled">Disabled</option>
@@ -576,15 +576,15 @@ watch(
                             </label>
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Public app URL</span>
-                                <Input v-model="preferences.reminders.public_app_url" class="mt-2" placeholder="https://talos.example.test" aria-label="Public app URL" />
+                                <Input v-model="preferences.reminders.public_app_url" class="mt-2" placeholder="https://talos.example.test" aria-label="Public app URL" :disabled="!reminderExecutionAvailable" />
                             </label>
                         </div>
                         <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                             <span>
                                 <span class="block text-sm font-semibold text-[var(--talos-text)]">AI synthesis for reminder text</span>
-                                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Saved as preference; generated text still comes through model/profile policy.</span>
+                                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Available only when the reminder delivery worker is ready.</span>
                             </span>
-                            <Switch v-model="preferences.reminders.ai_synthesis" class="mt-1" aria-label="AI synthesis for reminder text" />
+                            <Switch v-model="preferences.reminders.ai_synthesis" class="mt-1" aria-label="AI synthesis for reminder text" :disabled="!reminderExecutionAvailable" />
                         </label>
                     </template>
 
@@ -655,7 +655,7 @@ watch(
                             <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                                 <div class="text-sm font-semibold text-[var(--talos-text)]">Backup validation</div>
                                 <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Backup manifest and restore validation are exposed in the Doctor window.</p>
-                                <Button class="mt-3" size="sm" variant="secondary" @click="openModule('doctor')">Open Backup</Button>
+                                <Button class="mt-3" size="sm" variant="secondary" @click="openModule('doctor', 'backup')">Open Backup</Button>
                             </div>
                         </div>
                     </template>

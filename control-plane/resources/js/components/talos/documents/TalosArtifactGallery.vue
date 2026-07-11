@@ -91,7 +91,9 @@ onMounted(() => {
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div class="min-w-0">
                         <div class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ artifact.artifact_type }}</div>
-                        <div class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ artifact.uri }}</div>
+                        <div class="mt-1 truncate font-mono text-[11px] text-[var(--talos-muted)]">
+                            ref {{ shortHash(artifact.id) }} / run {{ shortHash(artifact.run?.id ?? artifact.run_id) }}
+                        </div>
                         <div class="mt-2 flex flex-wrap gap-2">
                             <Badge tone="neutral">{{ artifact.mime_type ?? 'mime unknown' }}</Badge>
                             <Badge tone="neutral">run {{ shortHash(artifact.run?.id ?? artifact.run_id) }}</Badge>

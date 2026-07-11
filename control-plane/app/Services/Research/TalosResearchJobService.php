@@ -16,6 +16,27 @@ use Illuminate\Support\Facades\DB;
 final class TalosResearchJobService
 {
     /**
+     * The production executor is intentionally unavailable until a real worker
+     * can own live research execution and terminal state transitions.
+     *
+     * @return array<string, mixed>
+     */
+    public function executionCapability(): array
+    {
+        return [
+            'available' => false,
+            'mode' => 'live',
+            'code' => 'TALOS_RESEARCH_EXECUTOR_UNAVAILABLE',
+            'message' => 'Live research is unavailable because no production executor is configured.',
+            'fixture_mode' => [
+                'available' => true,
+                'mode' => 'deterministic_fixture',
+                'test_only' => true,
+            ],
+        ];
+    }
+
+    /**
      * @param array<string, mixed> $payload
      */
     public function start(array $payload, User $user): TalosResearchJob
@@ -24,6 +45,11 @@ final class TalosResearchJobService
             $query = (string) $payload['query'];
             /** @var array<string, mixed> $settings */
             $settings = $payload['settings'] ?? [];
+            $mode = $settings['mode'] ?? 'live';
+
+            if ($mode !== 'deterministic_fixture') {
+                throw new \LogicException($this->executionCapability()['message'], 503);
+            }
 
             $run = TalosRun::query()->create([
                 'user_id' => $user->id,

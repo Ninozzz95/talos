@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { AlertCircle, CheckCircle2, KeyRound, Loader2, PlugZap, RefreshCw, Save, Trash2 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
@@ -35,14 +35,6 @@ const providerOptions: Array<{ value: TalosModelProfile['provider']; label: stri
     label: provider.label,
 }))
 
-const statusOptions: TalosModelProfile['status'][] = [
-    'untested',
-    'healthy',
-    'degraded',
-    'failed',
-    'disabled',
-]
-
 const capabilityDefinitions: Array<{
     key: CapabilityKey
     label: string
@@ -72,7 +64,6 @@ const editForm = reactive({
     model: '',
     base_url: '',
     timeout_seconds: 60,
-    status: 'untested' as TalosModelProfile['status'],
     secret: '',
 })
 
@@ -80,8 +71,11 @@ const selectedProfileId = ref<string | null>(null)
 const savingProfileId = ref<string | null>(null)
 const probingProfileId = ref<string | null>(null)
 const deletingProfileId = ref<string | null>(null)
+const pendingDeleteProfile = ref<TalosModelProfile | null>(null)
+const deleteDialog = ref<HTMLElement | null>(null)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
+let deleteReturnFocusTarget: HTMLElement | null = null
 
 const selectedProfile = computed(() => {
     return modelProfiles.value.find((profile) => profile.id === selectedProfileId.value) ?? null
@@ -118,7 +112,6 @@ function populateEditForm(profile: TalosModelProfile) {
     editForm.model = profile.model
     editForm.base_url = profile.base_url ?? ''
     editForm.timeout_seconds = profile.timeout_seconds
-    editForm.status = profile.status
     editForm.secret = ''
 }
 
@@ -180,55 +173,19 @@ function booleanFromRecord(record: Record<string, unknown>, aliases: string[]): 
     return null
 }
 
-function baseUrlIsLocal(profile: TalosModelProfile): boolean {
-    const baseUrl = profile.base_url
-
-    if (!baseUrl) {
-        return false
-    }
-
-    try {
-        const host = new URL(baseUrl).hostname.toLowerCase()
-
-        return host === 'localhost'
-            || host === '127.0.0.1'
-            || host === '::1'
-            || host.endsWith('.local')
-    } catch {
-        return false
-    }
+function hasSuccessfulProbe(profile: TalosModelProfile): boolean {
+    return profile.status === 'healthy' && profile.probe_result?.ok === true
 }
 
 function capabilityAvailable(profile: TalosModelProfile, definition: typeof capabilityDefinitions[number]): boolean {
+    if (!hasSuccessfulProbe(profile)) {
+        return false
+    }
+
     const capabilities = asRecord(profile.capabilities)
-    const probeResult = asRecord(profile.probe_result)
-    const probedPolicy = asRecord(probeResult.policy)
-    const directValue = booleanFromRecord(capabilities, definition.aliases)
-    const probeValue = booleanFromRecord(probeResult, definition.aliases)
+    const verifiedValue = booleanFromRecord(capabilities, definition.aliases)
 
-    if (directValue !== null) {
-        return directValue
-    }
-
-    if (probeValue !== null) {
-        return probeValue
-    }
-
-    if (definition.key === 'local') {
-        return baseUrlIsLocal(profile)
-    }
-
-    if (definition.key === 'remote') {
-        const publicPolicy = booleanFromRecord(probedPolicy, ['public_url', 'public_network'])
-
-        if (publicPolicy !== null) {
-            return publicPolicy
-        }
-
-        return !baseUrlIsLocal(profile)
-    }
-
-    return false
+    return verifiedValue === true
 }
 
 function capabilityChips(profile: TalosModelProfile): CapabilityChip[] {
@@ -276,7 +233,7 @@ function avmCompatibility(profile: TalosModelProfile): AvmCompatibility {
         }
     }
 
-    if (profile.status === 'healthy' && hasJson && hasTools && hasRemoteOrLocalRuntime) {
+    if (hasSuccessfulProbe(profile) && hasJson && hasTools && hasRemoteOrLocalRuntime) {
         return {
             grade: 'A',
             tone: 'success',
@@ -284,7 +241,7 @@ function avmCompatibility(profile: TalosModelProfile): AvmCompatibility {
         }
     }
 
-    if ((profile.status === 'healthy' || profile.status === 'degraded') && hasJson && hasRemoteOrLocalRuntime) {
+    if (hasSuccessfulProbe(profile) && hasJson && hasRemoteOrLocalRuntime) {
         return {
             grade: 'B',
             tone: profile.status === 'healthy' ? 'success' : 'warning',
@@ -381,7 +338,6 @@ async function submitUpdate() {
         model: editForm.model.trim(),
         base_url: normalizeOptionalUrl(editForm.base_url),
         timeout_seconds: Math.min(300, Math.max(5, Number(editForm.timeout_seconds) || 60)),
-        status: editForm.status,
     }
 
     if (selectedProviderDefinition.value.requiresSecret && editForm.secret.trim()) {
@@ -419,16 +375,61 @@ async function runProbe(profile: TalosModelProfile) {
     }
 }
 
-async function removeProfile(profile: TalosModelProfile) {
+function requestProfileDeletion(profile: TalosModelProfile) {
     if (profileIsBusy(profile.id)) {
         return
     }
 
-    const confirmed = window.confirm(`Delete model profile "${profile.display_name}"?`)
+    deleteReturnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    pendingDeleteProfile.value = profile
+    void nextTick(() => deleteDialog.value?.querySelector<HTMLElement>('[data-talos-delete-cancel]')?.focus())
+}
 
-    if (!confirmed) {
+function closeProfileDeleteDialog() {
+    if (deletingProfileId.value) return
+
+    pendingDeleteProfile.value = null
+    void nextTick(() => {
+        if (deleteReturnFocusTarget?.isConnected) deleteReturnFocusTarget.focus()
+        deleteReturnFocusTarget = null
+    })
+}
+
+function deleteDialogFocusableElements() {
+    if (!deleteDialog.value) return []
+
+    return Array.from(deleteDialog.value.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
+}
+
+function handleDeleteDialogKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        event.preventDefault()
+        closeProfileDeleteDialog()
         return
     }
+
+    if (event.key !== 'Tab') return
+
+    const focusable = deleteDialogFocusableElements()
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (!first || !last) return
+
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+    }
+}
+
+async function removeProfile() {
+    const profile = pendingDeleteProfile.value
+
+    if (!profile || profileIsBusy(profile.id)) return
 
     deletingProfileId.value = profile.id
     actionError.value = null
@@ -451,6 +452,7 @@ async function removeProfile(profile: TalosModelProfile) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not delete this model profile.'
     } finally {
         deletingProfileId.value = null
+        closeProfileDeleteDialog()
     }
 }
 
@@ -557,7 +559,7 @@ onMounted(() => {
                             <PlugZap v-else class="h-4 w-4" />
                             Probe
                         </Button>
-                        <Button variant="ghost" size="sm" :disabled="profileIsBusy(profile.id)" @click="removeProfile(profile)">
+                        <Button variant="ghost" size="sm" :disabled="profileIsBusy(profile.id)" @click="requestProfileDeletion(profile)">
                             <Loader2 v-if="deletingProfileId === profile.id" class="h-4 w-4 animate-spin" />
                             <Trash2 v-else class="h-4 w-4" />
                             Delete
@@ -572,7 +574,7 @@ onMounted(() => {
                     <Badge :tone="secretTone(selectedProfile)">has_secret={{ selectedProfile.has_secret ? 'true' : 'false' }}</Badge>
                 </div>
 
-                <div class="grid gap-2 md:grid-cols-2">
+                <div class="grid gap-2">
                     <label class="space-y-1">
                         <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider</span>
                         <select
@@ -582,18 +584,6 @@ onMounted(() => {
                         >
                             <option v-for="provider in providerOptions" :key="provider.value" :value="provider.value">
                                 {{ provider.label }}
-                            </option>
-                        </select>
-                    </label>
-                    <label class="space-y-1">
-                        <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Status</span>
-                        <select
-                            v-model="editForm.status"
-                            class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                            :disabled="selectedProfileIsBusy"
-                        >
-                            <option v-for="status in statusOptions" :key="status" :value="status">
-                                {{ status }}
                             </option>
                         </select>
                     </label>
@@ -664,6 +654,27 @@ onMounted(() => {
                     Save profile
                 </Button>
             </form>
+
+            <div v-if="pendingDeleteProfile" class="fixed inset-0 z-[110] grid place-items-center bg-black/45 p-4 backdrop-blur-[1px]" @click.self="closeProfileDeleteDialog">
+                <section
+                    ref="deleteDialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="talos-delete-model-profile-title"
+                    aria-describedby="talos-delete-model-profile-description"
+                    class="w-full max-w-md rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-card)] p-4 shadow-xl"
+                    @keydown="handleDeleteDialogKeydown"
+                >
+                    <h4 id="talos-delete-model-profile-title" class="text-base font-semibold text-[var(--talos-text)]">Delete model profile</h4>
+                    <p id="talos-delete-model-profile-description" class="mt-2 text-sm leading-6 text-[var(--talos-muted)]">
+                        Delete {{ pendingDeleteProfile.display_name }}? This removes its stored provider configuration.
+                    </p>
+                    <div class="mt-4 flex justify-end gap-2">
+                        <Button data-talos-delete-cancel variant="ghost" :disabled="Boolean(deletingProfileId)" @click="closeProfileDeleteDialog">Cancel</Button>
+                        <Button variant="destructive" :loading="Boolean(deletingProfileId)" @click="removeProfile">Confirm delete</Button>
+                    </div>
+                </section>
+            </div>
         </div>
     </Surface>
 </template>

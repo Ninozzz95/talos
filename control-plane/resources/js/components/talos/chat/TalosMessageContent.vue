@@ -87,12 +87,12 @@ async function handleContentClick(event: MouseEvent) {
 .talos-message-content a { color: var(--talos-accent); text-decoration: underline; text-underline-offset: 3px; }
 .talos-message-content a:focus-visible { border-radius: 3px; outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-message-content :not(pre) > code { border: 1px solid var(--talos-border); border-radius: 4px; background: var(--talos-panel); padding: 0.08rem 0.3rem; font-size: 0.84em; }
-.talos-message-content .talos-code-block { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--talos-border); border-radius: 6px; background: var(--talos-panel); }
-.talos-message-content .talos-code-block-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--talos-border); padding: 0 0.65rem; color: var(--talos-muted); font-size: 0.7rem; text-transform: uppercase; }
-.talos-message-content [data-talos-copy-code] { min-height: 1.75rem; border-radius: 4px; padding: 0 0.5rem; color: var(--talos-text); text-transform: none; }
-.talos-message-content [data-talos-copy-code]:hover { background: var(--talos-panel-soft); }
+.talos-message-content .talos-code-block { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--talos-code-border); border-radius: 6px; background: var(--talos-code-bg); color: var(--talos-code-text); }
+.talos-message-content .talos-code-block-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--talos-code-border); border-left: 2px solid var(--talos-code-accent); background: var(--talos-code-surface); padding: 0 0.65rem; color: var(--talos-muted); font-size: 0.7rem; text-transform: uppercase; }
+.talos-message-content [data-talos-copy-code] { min-height: 1.75rem; border-radius: 4px; padding: 0 0.5rem; color: var(--talos-code-text); text-transform: none; }
+.talos-message-content [data-talos-copy-code]:hover { background: var(--talos-code-surface); }
 .talos-message-content [data-talos-copy-code]:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
-.talos-message-content pre { max-width: 100%; overflow-x: auto; padding: 0.8rem; font-size: 0.78rem; line-height: 1.6; }
+.talos-message-content pre { max-width: 100%; max-height: 24rem; overflow: auto; padding: 0.8rem; font-size: 0.78rem; line-height: 1.6; }
 .talos-message-content pre:focus-visible,
 .talos-message-content .talos-message-table-scroll:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
 .talos-message-content .talos-message-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--talos-border); border-radius: 6px; }

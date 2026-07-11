@@ -76,6 +76,67 @@ function testExecutionPolicyFailsClosedOnAmbiguousDnsResolution(): void
     assertTrue(str_contains($decision->reason, 'invalid DNS resolution'), 'Decision should explain ambiguous DNS resolution.');
 }
 
+function testExecutionPolicyRejectsIanaNonPublicSpecialPurposeRanges(): void
+{
+    $ranges = [
+        'RFC6598 shared space' => '100.64.0.1',
+        'IPv4 benchmark range' => '198.18.0.1',
+        'IPv4 documentation range' => '192.0.2.1',
+        'IPv6 benchmark range' => '2001:2::1',
+        'IPv6 documentation range' => '2001:db8::1',
+        'IPv6 local-use translation prefix' => '64:ff9b:1::1',
+        'IPv6 dummy prefix' => '100:0:0:1::1',
+        'IPv6 segment routing SIDs prefix' => '5f00::1',
+    ];
+
+    foreach ($ranges as $label => $ip) {
+        $host = str_contains($ip, ':') ? "[{$ip}]" : $ip;
+        $decision = (new ExecutionPolicy())->inspectUrl("https://{$host}/v1", 5000);
+
+        assertTrue(!$decision->allowed, "{$label} should be blocked.");
+    }
+}
+
+function testExecutionPolicyCanRejectProviderUrlUserinfoQueryAndFragment(): void
+{
+    $policy = new ExecutionPolicy(
+        allowedHosts: ['api.openai.com'],
+        hostResolver: static fn(string $host): array => ['93.184.216.34'],
+    );
+    $urls = [
+        'https://token@api.openai.com/v1',
+        'https://api.openai.com/v1?api_key=token',
+        'https://api.openai.com/v1#token',
+    ];
+
+    foreach ($urls as $url) {
+        $decision = $policy->inspectUrl($url, 5000, rejectQueryAndFragment: true);
+        assertTrue(!$decision->allowed, "Provider URL should reject unsafe components: {$url}");
+    }
+}
+
+function testExecutionPolicyCanValidateAllowlistWithoutResolvingForNonNetworkTransport(): void
+{
+    $resolutionAttempts = 0;
+    $policy = new ExecutionPolicy(
+        allowedHosts: ['api.openai.com'],
+        hostResolver: static function (string $host) use (&$resolutionAttempts): array {
+            $resolutionAttempts++;
+            return ['93.184.216.34'];
+        },
+    );
+
+    $decision = $policy->inspectUrl(
+        'https://api.openai.com/v1/chat/completions',
+        5000,
+        requireResolution: false,
+        rejectQueryAndFragment: true,
+    );
+
+    assertTrue($decision->allowed, 'An allowlisted provider URL should pass structural validation.');
+    assertSameValue(0, $resolutionAttempts, 'Non-network validation must not resolve DNS.');
+}
+
 function testExecutionPolicyCapsTimeout(): void
 {
     $policy = new ExecutionPolicy(maxTimeoutMs: 10000, hostResolver: static fn(string $host): array => ['93.184.216.34']);
@@ -155,6 +216,9 @@ $tests = [
     'testExecutionPolicyBlocksHostnameResolvingToMetadataIp',
     'testExecutionPolicyBlocksHostnameResolvingToPrivateIp',
     'testExecutionPolicyFailsClosedOnAmbiguousDnsResolution',
+    'testExecutionPolicyRejectsIanaNonPublicSpecialPurposeRanges',
+    'testExecutionPolicyCanRejectProviderUrlUserinfoQueryAndFragment',
+    'testExecutionPolicyCanValidateAllowlistWithoutResolvingForNonNetworkTransport',
     'testExecutionPolicyCapsTimeout',
     'testExecutionPolicyIncludesAuditRecord',
     'testHttpWorkerReturnsPolicyFailureWithoutNetworkCall',

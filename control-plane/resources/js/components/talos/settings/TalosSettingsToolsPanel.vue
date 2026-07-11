@@ -16,10 +16,11 @@ type AgentToolsPreferences = {
 
 type AgentToolToggleKey = keyof Omit<AgentToolsPreferences, 'tool_call_limit' | 'max_steps_per_message'>
 
-defineProps<{
+withDefaults(defineProps<{
     agentTools: AgentToolsPreferences
     agentToolOptions: Array<{ key: AgentToolToggleKey; label: string }>
-}>()
+    editable?: boolean
+}>(), { editable: false })
 
 const emit = defineEmits<{
     updateToolCallLimit: [limit: number]
@@ -30,20 +31,23 @@ const emit = defineEmits<{
 </script>
 
 <template>
+    <p class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]" role="status">
+        Runtime tool policy is read-only until the planner consumes these limits.
+    </p>
     <div class="grid gap-3 md:grid-cols-2">
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Tool call limit</span>
-            <Input :model-value="agentTools.tool_call_limit" class="mt-2" type="number" min="0" aria-label="Tool call limit" @update:model-value="(value) => emit('updateToolCallLimit', Number(value))" />
+            <Input :model-value="agentTools.tool_call_limit" class="mt-2" type="number" min="0" aria-label="Tool call limit" :disabled="!editable" @update:model-value="(value) => emit('updateToolCallLimit', Number(value))" />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Max steps per message</span>
-            <Input :model-value="agentTools.max_steps_per_message" class="mt-2" type="number" min="1" aria-label="Max steps per message" @update:model-value="(value) => emit('updateMaxStepsPerMessage', Number(value))" />
+            <Input :model-value="agentTools.max_steps_per_message" class="mt-2" type="number" min="1" aria-label="Max steps per message" :disabled="!editable" @update:model-value="(value) => emit('updateMaxStepsPerMessage', Number(value))" />
         </label>
     </div>
     <div class="grid gap-2 md:grid-cols-2">
         <label v-for="item in agentToolOptions" :key="item.key" class="flex cursor-pointer items-center justify-between rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
             <span>{{ item.label }}</span>
-            <Switch :model-value="agentTools[item.key]" :aria-label="item.label" @update:model-value="(value) => emit('updateAgentTool', item.key, Boolean(value))" />
+            <Switch :model-value="agentTools[item.key]" :aria-label="item.label" :disabled="!editable" @update:model-value="(value) => emit('updateAgentTool', item.key, Boolean(value))" />
         </label>
     </div>
     <Button size="sm" variant="secondary" @click="emit('openModule', 'tools')">Open Tool Registry</Button>

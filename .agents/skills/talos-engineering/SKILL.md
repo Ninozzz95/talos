@@ -66,6 +66,13 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - Prefer shadcn-vue style primitives with owned Vue components.
 - A visual must clarify state, evidence, execution, or user action.
 - Theme presets are product behavior, not decorative skins. Keep preset IDs centralized in `resources/js/lib/talosThemes.ts`, normalize legacy `dark/light`, persist through `/api/talos/settings`, and make presets change palette, typography, radius, density, and motion tokens.
+- Theme import is a fail-closed boundary. Validate the raw versioned envelope and every nested key/value before any permissive sanitizer; sanitizers are for legacy reads, not for accepting imported data.
+- Validate theme contrast against rendered surfaces, including window chrome and transparent/outline button parent backgrounds. Advanced area variables must remain scoped to their owned surface and every persisted token must be consumed by production UI.
+- Treat `motion off`, background motion off, procedural background off, and OS reduced motion as separate tested contracts. Animation code uses semantic intents and transform/opacity only; recurring canvas work caches geometry/palette outside the frame loop.
+- A theme slice is not complete until all presets pass forced light/dark desktop/mobile checks, persistence/reload, 320px reachability, and a headless visual matrix. Keep generated Playwright evidence out of source control.
+- Theme edit forms may display preset fallback values, but persistence and live workspace preview must emit only the delta from the active preset. Never turn display defaults into color overrides when a user changes an unrelated field such as font.
+- Optimistic theme/motion controls must roll back to the last server-backed snapshot on a failed PATCH. Browser gates must verify switch state, persisted payload, canvas telemetry, changing frame pixels, and reload behavior together.
+- `Reset customization` is narrow; `Reset to preset` is destructive across area, mode, motion, animation, and layout overrides. Keep the commands and confirmation copy distinct.
 - Settings Center must map Odysseus-like categories to TALOS-owned behavior: model profiles, context sets, connectors/tools, email/tasks, reminders, appearance, account, agent tools, doctor/backup/audit. If a category has no endpoint, store only safe non-secret preferences or open a real module; do not show active controls for missing backend actions.
 - TALOS settings preferences must never store provider secrets, registry/admin tokens, passwords, OAuth material, or API keys. Keys that look secret-like must be stripped on both client and server, but legitimate budget fields such as `max_tokens` are not secrets.
 - Floating tool windows must stay reachable above the fixed composer on mobile and desktop. Large panels must scroll internally rather than extending behind the composer.
@@ -93,6 +100,7 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - Start Laravel E2E with the repo-local `.tools` PHP binary; global PHP may be incompatible with Composer platform requirements.
 - On Windows, avoid `php artisan serve` as a long-running Playwright web server: Laravel's ServeCommand can crash while parsing built-in server output. Use repo-local PHP with `php -S 127.0.0.1:<port> -t public tests/e2e/php-router.php` or an equivalent stable router.
 - Playwright must wait for both Laravel and Vite. Use the real Vite app entry (`resources/js/app.js`) as the Vite readiness URL so tests do not start before TALOS modules are transformed.
+- When direct Playwright reuse targets Laravel without `public/hot`, run a fresh production build after the latest UI edit; otherwise the browser may validate an older bundle. Prefer `npm run test:e2e`, which builds before Playwright.
 - Browser tests should prove user-visible flows: `/chat`, `/dashboard`, command palette, persisted-turn UI, file-context source provenance, replay fault filtering, benchmark compare/export, degraded readiness, responsive overflow, and screenshot evidence.
 - Generated Playwright reports and `test-results` are artifacts, not source.
 

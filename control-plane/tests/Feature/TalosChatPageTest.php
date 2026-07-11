@@ -30,6 +30,7 @@ final class TalosChatPageTest extends TestCase
         $modelProfilesPath = base_path('resources/js/composables/useTalosModelProfiles.ts');
         $modelRoutingProfilesPath = base_path('resources/js/composables/useTalosModelRoutingProfiles.ts');
         $contextVaultPath = base_path('resources/js/composables/useTalosContextVault.ts');
+        $workspaceChatActionsPath = base_path('resources/js/composables/useTalosWorkspaceChatActions.ts');
 
         $this->assertIsString($component);
         $this->assertIsString($workspace);
@@ -41,16 +42,19 @@ final class TalosChatPageTest extends TestCase
         $this->assertFileExists($modelProfilesPath);
         $this->assertFileExists($modelRoutingProfilesPath);
         $this->assertFileExists($contextVaultPath);
+        $this->assertFileExists($workspaceChatActionsPath);
 
         $exportDialog = file_get_contents($exportDialogPath);
         $modelProfilesComposable = file_get_contents($modelProfilesPath);
         $modelRoutingProfilesComposable = file_get_contents($modelRoutingProfilesPath);
         $contextVaultComposable = file_get_contents($contextVaultPath);
+        $workspaceChatActions = file_get_contents($workspaceChatActionsPath);
 
         $this->assertIsString($exportDialog);
         $this->assertIsString($modelProfilesComposable);
         $this->assertIsString($modelRoutingProfilesComposable);
         $this->assertIsString($contextVaultComposable);
+        $this->assertIsString($workspaceChatActions);
         $this->assertStringContainsString('/api/talos/sessions', $sessionsComposable);
         $this->assertStringContainsString('/api/talos/sessions/${sessionId}/messages', $sessionsComposable);
         $this->assertStringContainsString('/api/talos/sessions/${sessionId}/export', $sessionsComposable);
@@ -76,9 +80,9 @@ final class TalosChatPageTest extends TestCase
         $this->assertStringContainsString('Markdown transcript', $exportDialog);
         $this->assertStringContainsString('Context manifest', $exportDialog);
         $this->assertStringContainsString('Benchmark scenario', $exportDialog);
-        $this->assertStringContainsString('/api/talos/runs/${message.run_id}/benchmark', $workspace);
-        $this->assertStringContainsString('Benchmark run', $workspace);
-        $this->assertStringContainsString('/api/talos/chat', $workspace);
+        $this->assertStringContainsString('/api/talos/runs/${message.run_id}/benchmark', $workspaceChatActions);
+        $this->assertStringContainsString('Benchmark run', $workspaceChatActions);
+        $this->assertStringContainsString("chatEndpoint: '/api/talos/chat'", $workspaceChatActions);
         $this->assertStringContainsString('selectedModelProfileId', $workspace);
         $this->assertStringContainsString('selectedModelRoutingProfileId', $workspace);
         $this->assertStringContainsString('selectedContextSetId', $workspace);

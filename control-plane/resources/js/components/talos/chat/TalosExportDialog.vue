@@ -104,7 +104,7 @@ const benchmarkReady = computed(() => props.result?.benchmark_readiness?.ready =
 
 <template>
     <div class="fixed inset-0 z-50 bg-black/45 px-4 py-10 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Export session evidence" @click.self="emit('close')">
-        <section class="mx-auto flex max-h-[calc(100vh-5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] shadow-2xl">
+        <section class="talos-action-surface mx-auto flex max-h-[calc(100vh-5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] shadow-2xl" data-motion-intent="surface-enter">
             <header class="flex items-start justify-between gap-3 border-b border-[var(--talos-border)] p-4">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">

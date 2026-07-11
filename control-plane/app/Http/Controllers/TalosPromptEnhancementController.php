@@ -7,43 +7,78 @@ namespace App\Http\Controllers;
 use App\Models\TalosModelProfile;
 use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
+use App\Services\Models\TalosModelProviderCatalog;
+use App\Services\Prompts\TalosPromptEnhancementException;
+use App\Services\Prompts\TalosPromptEnhancementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 final class TalosPromptEnhancementController extends Controller
 {
+    public function __construct(private readonly TalosPromptEnhancementService $enhancementService)
+    {
+    }
+
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
         $validated = $request->validate([
             'prompt' => ['required', 'string', 'min:1', 'max:12000'],
             'model_profile_id' => ['sometimes', 'nullable', 'string', 'exists:talos_model_profiles,id'],
-            'session_id' => ['sometimes', 'nullable', 'string', 'exists:talos_sessions,id'],
+            'session_id' => [
+                'sometimes',
+                'nullable',
+                'string',
+                Rule::exists('talos_sessions', 'id')->where(
+                    fn ($query) => $query->where('user_id', $user->id),
+                ),
+            ],
             'api_key' => ['prohibited'],
             'secret' => ['prohibited'],
             'encrypted_secret' => ['prohibited'],
         ]);
 
-        $user = $request->user();
-        abort_unless($user instanceof User, 401);
-
         $profile = $this->usableProfile($validated['model_profile_id'] ?? null, $user);
         if (! $profile instanceof TalosModelProfile) {
+            $message = 'Prompt enhancement requires a configured server-side model profile.';
+
             return response()->json([
+                'message' => $message,
                 'error' => [
                     'code' => 'PROMPT_ENHANCER_UNAVAILABLE',
-                    'message' => 'Prompt enhancement requires a configured server-side model profile.',
+                    'message' => $message,
+                    'retryable' => false,
                 ],
             ], 409);
         }
 
         $prompt = trim((string) $validated['prompt']);
+        try {
+            $enhancement = $this->enhancementService->enhance($profile, $prompt);
+        } catch (TalosPromptEnhancementException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'error' => [
+                    'code' => $exception->codeName(),
+                    'message' => $exception->getMessage(),
+                    'retryable' => $exception->retryable(),
+                ],
+            ], $exception->httpStatus());
+        }
 
         return response()->json([
             'data' => [
                 'model_profile_id' => $profile->id,
-                'enhancement_mode' => 'deterministic_template',
+                'provider' => $enhancement['provider'],
+                'model' => $enhancement['model'],
+                'enhancement_mode' => 'model',
                 'original_prompt' => $prompt,
-                'enhanced_prompt' => $this->enhancePrompt($prompt),
+                'enhanced_prompt' => $enhancement['enhanced_prompt'],
+                'summary' => $enhancement['summary'],
+                'applied_principles' => $enhancement['applied_principles'],
             ],
         ]);
     }
@@ -67,7 +102,8 @@ final class TalosPromptEnhancementController extends Controller
             return null;
         }
 
-        if (! filled($profile->encrypted_secret)) {
+        if (TalosModelProviderCatalog::requiresSecret((string) $profile->provider)
+            && ! filled($profile->encrypted_secret)) {
             return null;
         }
 
@@ -76,14 +112,5 @@ final class TalosPromptEnhancementController extends Controller
         }
 
         return $profile;
-    }
-
-    private function enhancePrompt(string $prompt): string
-    {
-        return implode("\n\n", [
-            'Objective:',
-            $prompt,
-            'Clarify the expected output, relevant constraints, available context, and acceptance checks before execution.',
-        ]);
     }
 }

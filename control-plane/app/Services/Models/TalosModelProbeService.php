@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Models;
 
 use App\Models\TalosModelProfile;
-use App\Services\Security\PublicHttpUrlPolicy;
+use App\Services\Security\PublicHttpRequestPinning;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -13,47 +13,69 @@ use Throwable;
 
 final class TalosModelProbeService
 {
-    private PublicHttpUrlPolicy $urlPolicy;
+    private readonly PublicHttpRequestPinning $connectionPinning;
 
-    public function __construct()
+    public function __construct(?PublicHttpRequestPinning $connectionPinning = null)
     {
-        $this->urlPolicy = PublicHttpUrlPolicy::fromConfig();
+        $this->connectionPinning = $connectionPinning ?? new PublicHttpRequestPinning;
     }
 
     /**
-     * @return array{status: string, result: array<string, mixed>}
+     * @return array{status: string, capabilities: array<string, bool>, result: array<string, mixed>}
      */
     public function probe(TalosModelProfile $profile): array
     {
         $provider = (string) $profile->provider;
         $url = TalosModelProviderCatalog::chatEndpointUrl($provider, $profile->base_url);
-        $policyDecision = $this->urlPolicy->inspect($url);
         $trustedLocalProvider = TalosModelProviderCatalog::allowsTrustedLocalBaseUrl($provider, $profile->base_url);
-        if (! $policyDecision['allowed'] && ! $trustedLocalProvider) {
+        if (TalosModelProviderCatalog::requiresTrustedLocalBaseUrl($provider) && ! $trustedLocalProvider) {
+            $policyDecision = $this->localOnlyPolicyDecision($url);
+
             return [
                 'status' => 'failed',
+                'capabilities' => $this->unverifiedCapabilities(),
                 'result' => [
                     'ok' => false,
                     'code' => 'BASE_URL_POLICY_BLOCKED',
-                    'message' => "Provider base URL blocked by TALOS policy: {$policyDecision['reason']}",
+                    'message' => 'Local provider base URL must use an approved loopback host.',
                     'provider' => $provider,
-                    'url' => $url,
+                    'url' => $this->safeUrlForResult($url),
                     'url_host' => $policyDecision['host'],
                     'base_url_policy' => $policyDecision,
-                    'error' => "Provider base URL blocked by TALOS policy: {$policyDecision['reason']}",
+                    'error' => 'Local provider base URL must use an approved loopback host.',
                 ],
             ];
         }
 
-        if (TalosModelProviderCatalog::requiresSecret($provider) && ! filled($profile->encrypted_secret)) {
+        $connectionPin = $this->connectionPinning->pin($url, $trustedLocalProvider);
+        $policyDecision = $connectionPin['policy'];
+        if (! $connectionPin['allowed']) {
             return [
                 'status' => 'failed',
+                'capabilities' => $this->unverifiedCapabilities(),
+                'result' => [
+                    'ok' => false,
+                    'code' => $connectionPin['code'],
+                    'message' => "Provider base URL blocked by TALOS policy: {$connectionPin['reason']}",
+                    'provider' => $provider,
+                    'url' => $this->safeUrlForResult($url),
+                    'url_host' => $policyDecision['host'],
+                    'base_url_policy' => $policyDecision,
+                    'error' => "Provider base URL blocked by TALOS policy: {$connectionPin['reason']}",
+                ],
+            ];
+        }
+
+        if (! $trustedLocalProvider && TalosModelProviderCatalog::requiresSecret($provider) && ! filled($profile->encrypted_secret)) {
+            return [
+                'status' => 'failed',
+                'capabilities' => $this->unverifiedCapabilities(),
                 'result' => [
                     'ok' => false,
                     'code' => 'PROVIDER_SECRET_MISSING',
                     'message' => 'Profile has no provider secret.',
                     'provider' => $provider,
-                    'url' => $url,
+                    'url' => $this->safeUrlForResult($url),
                     'base_url_policy' => $policyDecision,
                     'error' => 'Profile has no provider secret.',
                 ],
@@ -62,42 +84,30 @@ final class TalosModelProbeService
 
         $secret = null;
         try {
-            if (filled($profile->encrypted_secret)) {
+            if (! $trustedLocalProvider && filled($profile->encrypted_secret)) {
                 $secret = Crypt::decryptString((string) $profile->encrypted_secret);
             }
         } catch (Throwable) {
             return [
                 'status' => 'failed',
+                'capabilities' => $this->unverifiedCapabilities(),
                 'result' => [
                     'ok' => false,
                     'code' => 'PROVIDER_SECRET_DECRYPT_FAILED',
                     'message' => 'Profile secret could not be decrypted.',
                     'provider' => $provider,
-                    'url' => $url,
+                    'url' => $this->safeUrlForResult($url),
                     'base_url_policy' => $policyDecision,
                     'error' => 'Profile secret could not be decrypted.',
                 ],
             ];
         }
 
-        if (filled($secret) && ! $policyDecision['allowed']) {
-            return [
-                'status' => 'failed',
-                'result' => [
-                    'ok' => false,
-                    'code' => 'BEARER_TOKEN_POLICY_BLOCKED',
-                    'message' => 'Bearer token blocked for non-public provider endpoint.',
-                    'provider' => $provider,
-                    'url' => $url,
-                    'url_host' => $policyDecision['host'],
-                    'base_url_policy' => $policyDecision,
-                    'error' => 'Bearer token blocked for non-public provider endpoint.',
-                ],
-            ];
-        }
-
         try {
-            $request = Http::timeout((int) ($profile->timeout_seconds ?? 60))->acceptJson();
+            $request = $this->connectionPinning->apply(
+                Http::timeout((int) ($profile->timeout_seconds ?? 60))->acceptJson(),
+                $connectionPin,
+            );
             if ($provider === 'anthropic' && filled($secret)) {
                 $request = $request->withHeaders([
                     'x-api-key' => (string) $secret,
@@ -111,14 +121,31 @@ final class TalosModelProbeService
         } catch (ConnectionException $exception) {
             return [
                 'status' => 'failed',
+                'capabilities' => $this->unverifiedCapabilities(),
                 'result' => [
                     'ok' => false,
                     'code' => 'PROVIDER_CONNECTION_FAILED',
                     'message' => 'Provider connection failed during probe.',
                     'provider' => $provider,
-                    'url' => $url,
+                    'url' => $this->safeUrlForResult($url),
                     'base_url_policy' => $policyDecision,
                     'error' => $this->redactSensitiveText($exception->getMessage(), [$secret]),
+                ],
+            ];
+        }
+
+        if (! $this->connectionPinning->connectedToPinnedIp($response, $connectionPin)) {
+            return [
+                'status' => 'failed',
+                'capabilities' => $this->unverifiedCapabilities(),
+                'result' => [
+                    'ok' => false,
+                    'code' => 'PROVIDER_CONNECTED_IP_MISMATCH',
+                    'message' => 'Provider connection did not use an approved IP address.',
+                    'provider' => $provider,
+                    'url' => $this->safeUrlForResult($url),
+                    'base_url_policy' => $policyDecision,
+                    'error' => 'Provider connection did not use an approved IP address.',
                 ],
             ];
         }
@@ -126,15 +153,17 @@ final class TalosModelProbeService
         $json = $response->json();
         $hasJson = is_array($json);
         $ok = $response->successful() && $hasJson;
+        $redirectBlocked = $this->isRedirectStatus($response->status());
 
         return [
-            'status' => $ok ? 'healthy' : 'degraded',
+            'status' => $redirectBlocked ? 'failed' : ($ok ? 'healthy' : 'degraded'),
+            'capabilities' => $this->observedCapabilities($ok, ! $trustedLocalProvider, $trustedLocalProvider),
             'result' => [
                 'ok' => $ok,
                 'code' => $this->probeResultCode($response->status(), $hasJson),
                 'message' => $this->probeResultMessage($response->status(), $hasJson),
                 'provider' => $provider,
-                'url' => $url,
+                'url' => $this->safeUrlForResult($url),
                 'base_url_policy' => $policyDecision,
                 'http_status' => $response->status(),
                 'json' => $hasJson,
@@ -146,8 +175,8 @@ final class TalosModelProbeService
     }
 
     /**
-     * @param array<string, mixed> $data
-     * @return array{status: string, result: array<string, mixed>}
+     * @param  array<string, mixed>  $data
+     * @return array{status: string, capabilities: array<string, bool>, result: array<string, mixed>}
      */
     public function probeDraft(array $data): array
     {
@@ -193,6 +222,10 @@ final class TalosModelProbeService
 
     private function probeResultCode(int $status, bool $hasJson): string
     {
+        if ($this->isRedirectStatus($status)) {
+            return 'PROVIDER_REDIRECT_BLOCKED';
+        }
+
         if ($status >= 200 && $status < 300 && $hasJson) {
             return 'PROVIDER_OK';
         }
@@ -206,6 +239,10 @@ final class TalosModelProbeService
 
     private function probeResultMessage(int $status, bool $hasJson): string
     {
+        if ($this->isRedirectStatus($status)) {
+            return 'Provider redirect was blocked; credentials were not forwarded.';
+        }
+
         if ($status >= 200 && $status < 300 && $hasJson) {
             return 'Provider probe succeeded.';
         }
@@ -217,8 +254,36 @@ final class TalosModelProbeService
         return "Provider returned HTTP {$status} during probe.";
     }
 
+    private function isRedirectStatus(int $status): bool
+    {
+        return $status >= 300 && $status < 400;
+    }
+
     /**
-     * @param list<string|null> $knownSensitiveValues
+     * @return array<string, bool>
+     */
+    private function observedCapabilities(bool $successfulJsonResponse, bool $publicEndpointAllowed, bool $trustedLocalProvider): array
+    {
+        return [
+            'json' => $successfulJsonResponse,
+            'tools' => false,
+            'vision' => false,
+            'embeddings' => false,
+            'local' => $successfulJsonResponse && $trustedLocalProvider,
+            'remote' => $successfulJsonResponse && $publicEndpointAllowed,
+        ];
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function unverifiedCapabilities(): array
+    {
+        return $this->observedCapabilities(false, false, false);
+    }
+
+    /**
+     * @param  list<string|null>  $knownSensitiveValues
      */
     private function responseExcerpt(string $body, array $knownSensitiveValues = []): string
     {
@@ -226,7 +291,7 @@ final class TalosModelProbeService
     }
 
     /**
-     * @param list<string|null> $knownSensitiveValues
+     * @param  list<string|null>  $knownSensitiveValues
      */
     private function redactSensitiveText(string $message, array $knownSensitiveValues = []): string
     {
@@ -245,5 +310,38 @@ final class TalosModelProbeService
         $redacted = preg_replace('/([?&](?:api_key|key|token|secret)=)[^&\s]+/i', '$1[redacted]', $redacted) ?? $redacted;
 
         return substr($redacted, 0, 500);
+    }
+
+    /**
+     * @return array{allowed: bool, reason: string, host: string, resolved_ips: list<string>}
+     */
+    private function localOnlyPolicyDecision(string $url): array
+    {
+        return [
+            'allowed' => false,
+            'reason' => 'local provider requires loopback base URL',
+            'host' => strtolower(rtrim((string) parse_url($url, PHP_URL_HOST), '.')),
+            'resolved_ips' => [],
+        ];
+    }
+
+    private function safeUrlForResult(string $url): string
+    {
+        $parts = parse_url($url);
+        if (! is_array($parts)) {
+            return '[invalid provider URL]';
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = (string) ($parts['host'] ?? '');
+        if ($scheme === '' || $host === '') {
+            return '[invalid provider URL]';
+        }
+
+        $displayHost = str_contains($host, ':') ? "[{$host}]" : $host;
+        $port = isset($parts['port']) ? ':'.(int) $parts['port'] : '';
+        $path = (string) ($parts['path'] ?? '');
+
+        return "{$scheme}://{$displayHost}{$port}{$path}";
     }
 }

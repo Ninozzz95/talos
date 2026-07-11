@@ -79,14 +79,14 @@ final class TalosShellTest extends TestCase
         $this->assertStringNotContainsString('Provider key dev-only', $shell);
         $this->assertStringNotContainsString('DAG from chat', $shell);
         $workspace = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWorkspace.vue'));
-        $windowLayer = file_get_contents(base_path('resources/js/components/talos/workspace/TalosWindowLayer.vue'));
+        $registry = file_get_contents(base_path('resources/js/lib/talosWindowRegistry.ts'));
 
         $this->assertIsString($workspace);
-        $this->assertIsString($windowLayer);
+        $this->assertIsString($registry);
         $this->assertStringContainsString('TalosWindowLayer', $workspace);
-        $this->assertStringContainsString('TalosRunTimeline', $windowLayer);
-        $this->assertStringContainsString('TalosBenchmarkWorkbench', $windowLayer);
-        $this->assertStringContainsString('TalosToolRegistry', $windowLayer);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosRuntimeWindow.vue')", $registry);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosCompareWindow.vue')", $registry);
+        $this->assertStringContainsString("loader: () => import('../components/talos/window/modules/TalosToolsWindow.vue')", $registry);
         $this->assertStringNotContainsString('Run events unavailable', $shell);
         $this->assertStringNotContainsString('Benchmark data unavailable', $shell);
     }

@@ -18,17 +18,13 @@ export type TalosBackgroundPerformanceState = TalosBackgroundPerformanceProfile 
     simpleAnimation: boolean
 }
 
-function cssVariable(element: HTMLElement, name: string, fallback: string) {
-    return window.getComputedStyle(element).getPropertyValue(name).trim() || fallback
-}
-
 function motionScale(mode: TalosThemeMotionMode) {
     if (mode === 'cinematic') {
         return 1.7
     }
 
     if (mode === 'subtle') {
-        return 0.72
+        return 0.82
     }
 
     return 1
@@ -38,24 +34,45 @@ function boundedAlpha(value: number) {
     return Math.min(0.92, Math.max(0.04, value))
 }
 
-function resizeCanvas(canvas: HTMLCanvasElement, dprCap: number) {
-    const rect = canvas.getBoundingClientRect()
-    const dpr = Math.min(window.devicePixelRatio || 1, dprCap, 2)
-    const width = Math.max(1, Math.floor(rect.width * dpr))
-    const height = Math.max(1, Math.floor(rect.height * dpr))
+type TalosCanvasRect = {
+    width: number
+    height: number
+}
 
-    if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width
-        canvas.height = height
+type TalosCanvasDimensions = TalosCanvasRect & {
+    dpr: number
+    pixelWidth: number
+    pixelHeight: number
+}
+
+type TalosCanvasPalette = {
+    accent: string
+    secondary: string
+}
+
+function resizeCanvas(canvas: HTMLCanvasElement, dprCap: number, rect: TalosCanvasRect): TalosCanvasDimensions {
+    const dpr = Math.min(window.devicePixelRatio || 1, dprCap, 2)
+    const pixelWidth = Math.max(1, Math.floor(rect.width * dpr))
+    const pixelHeight = Math.max(1, Math.floor(rect.height * dpr))
+
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        canvas.width = pixelWidth
+        canvas.height = pixelHeight
     }
 
-    return { width, height, dpr }
+    return {
+        width: rect.width,
+        height: rect.height,
+        dpr,
+        pixelWidth,
+        pixelHeight,
+    }
 }
 
 export function talosBackgroundPerformanceProfile(options: {
     effect: TalosBackgroundEffect
     motion: TalosThemeMotionMode
-    motionDisabled: boolean
+    backgroundMotionEnabled: boolean
     hidden?: boolean
     simpleAnimation?: boolean
     viewportWidth?: number
@@ -82,7 +99,7 @@ export function talosBackgroundPerformanceProfile(options: {
         }
     }
 
-    if (visibilityPaused || options.motionDisabled || options.motion === 'off') {
+    if (visibilityPaused || !options.backgroundMotionEnabled || options.motion === 'off') {
         return {
             mode: 'static',
             fpsCap: 0,
@@ -106,7 +123,7 @@ export function talosBackgroundPerformanceProfile(options: {
 function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, accent: string, scale: number, time: number) {
     const gap = Math.max(20, 32 / scale)
     ctx.save()
-    ctx.globalAlpha = boundedAlpha(0.2 * scale)
+    ctx.globalAlpha = boundedAlpha(0.22 * scale)
     ctx.strokeStyle = accent
     ctx.lineWidth = Math.max(1.2, 1.45 * scale)
     const offset = (time * 0.018 * scale) % gap
@@ -294,13 +311,21 @@ export function useTalosProceduralCanvas(
     canvas: Ref<HTMLCanvasElement | null>,
     effect: Ref<TalosBackgroundEffect>,
     motion: Ref<TalosThemeMotionMode>,
-    motionDisabled: Ref<boolean>,
+    backgroundMotionEnabled: Ref<boolean>,
     simpleAnimation: Ref<boolean>,
+    paletteKey?: Ref<string>,
 ) {
     let frame = 0
     let frameTimer = 0
     let resizeTimer = 0
     let renderedFrameCount = 0
+    let loopGeneration = 0
+    let resizeObserver: ResizeObserver | null = null
+    let resizeObserverGeneration = 0
+    let observedCanvas: HTMLCanvasElement | null = null
+    let pendingResizeRect: TalosCanvasRect | null = null
+    let cachedDimensions: TalosCanvasDimensions | null = null
+    let cachedPalette: TalosCanvasPalette | null = null
     const performanceState = ref<TalosBackgroundPerformanceState>({
         mode: 'static',
         fpsCap: 0,
@@ -314,6 +339,7 @@ export function useTalosProceduralCanvas(
     })
 
     function stop() {
+        loopGeneration += 1
         if (frameTimer) {
             window.clearTimeout(frameTimer)
             frameTimer = 0
@@ -330,11 +356,93 @@ export function useTalosProceduralCanvas(
         }
     }
 
+    function measureRect(element: HTMLCanvasElement): TalosCanvasRect {
+        const rect = element.getBoundingClientRect()
+
+        return {
+            width: rect.width,
+            height: rect.height,
+        }
+    }
+
+    function refreshCanvasDimensions(element: HTMLCanvasElement, dprCap: number, rect?: TalosCanvasRect | null) {
+        cachedDimensions = resizeCanvas(element, dprCap, rect ?? measureRect(element))
+        pendingResizeRect = null
+        return cachedDimensions
+    }
+
+    function refreshCanvasPalette(element: HTMLCanvasElement) {
+        const style = window.getComputedStyle(element)
+        cachedPalette = {
+            accent: style.getPropertyValue('--talos-accent').trim() || '#c98b32',
+            secondary: style.getPropertyValue('--talos-node').trim() || '#6ad4d4',
+        }
+    }
+
+    function installResizeObserver(element: HTMLCanvasElement | null) {
+        resizeObserverGeneration += 1
+        resizeObserver?.disconnect()
+        resizeObserver = null
+        observedCanvas = element
+        pendingResizeRect = null
+        if (resizeTimer) {
+            window.clearTimeout(resizeTimer)
+            resizeTimer = 0
+        }
+
+        if (!element || typeof ResizeObserver === 'undefined') {
+            return
+        }
+
+        const observerGeneration = resizeObserverGeneration
+        resizeObserver = new ResizeObserver((entries) => {
+            const entry = entries.find((item) => item.target === element)
+            if (
+                !entry
+                || observerGeneration !== resizeObserverGeneration
+                || observedCanvas !== element
+                || canvas.value !== element
+            ) {
+                return
+            }
+
+            queueResizeRefresh({
+                width: entry.contentRect.width,
+                height: entry.contentRect.height,
+            })
+        })
+        resizeObserver.observe(element)
+    }
+
+    function queueResizeRefresh(rect?: TalosCanvasRect | null) {
+        if (rect !== undefined) {
+            pendingResizeRect = rect && rect.width > 0 && rect.height > 0 ? rect : null
+        }
+        if (resizeTimer) {
+            window.clearTimeout(resizeTimer)
+        }
+
+        resizeTimer = window.setTimeout(() => {
+            resizeTimer = 0
+            const element = canvas.value
+            if (!element) {
+                return
+            }
+
+            performanceState.value = {
+                ...performanceState.value,
+                resizeCount: performanceState.value.resizeCount + 1,
+            }
+            refreshCanvasDimensions(element, currentProfile().dprCap, pendingResizeRect)
+            restart()
+        }, 120)
+    }
+
     function currentProfile(): TalosBackgroundPerformanceProfile {
         return talosBackgroundPerformanceProfile({
             effect: effect.value,
             motion: motion.value,
-            motionDisabled: motionDisabled.value,
+            backgroundMotionEnabled: backgroundMotionEnabled.value,
             hidden: document.hidden,
             simpleAnimation: simpleAnimation.value !== false,
             viewportWidth: window.innerWidth,
@@ -344,12 +452,13 @@ export function useTalosProceduralCanvas(
     }
 
     function publishFrameTelemetry(profile: TalosBackgroundPerformanceProfile, rafActive: boolean, force = false) {
+        performance.clearMarks?.('talos-background-frame')
+        performance.mark?.('talos-background-frame')
+
         if (!force && renderedFrameCount > 1 && renderedFrameCount % 4 !== 0) {
             return
         }
 
-        performance.clearMarks?.('talos-background-frame')
-        performance.mark?.('talos-background-frame')
         performanceState.value = {
             ...performanceState.value,
             ...profile,
@@ -359,7 +468,11 @@ export function useTalosProceduralCanvas(
         }
     }
 
-    function draw(time = 0) {
+    function draw(time = 0, generation = loopGeneration) {
+        if (generation !== loopGeneration) {
+            return
+        }
+
         const element = canvas.value
         const profile = currentProfile()
 
@@ -368,8 +481,8 @@ export function useTalosProceduralCanvas(
             return
         }
 
-        const bounds = element.getBoundingClientRect()
-        if (bounds.width <= 0 || bounds.height <= 0) {
+        const dimensions = cachedDimensions
+        if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) {
             stop()
             performanceState.value = {
                 ...performanceState.value,
@@ -385,12 +498,13 @@ export function useTalosProceduralCanvas(
             return
         }
 
-        const { width, height } = resizeCanvas(element, profile.dprCap)
         const frozen = profile.mode !== 'motion'
         const renderTime = frozen ? 0 : time
         const scale = frozen ? 1 : motionScale(motion.value) * profile.viewportScale
-        const accent = cssVariable(element, '--talos-accent', '#c98b32')
-        const secondary = cssVariable(element, '--talos-node', '#6ad4d4')
+        const accent = cachedPalette?.accent ?? '#c98b32'
+        const secondary = cachedPalette?.secondary ?? '#6ad4d4'
+        const width = dimensions.pixelWidth
+        const height = dimensions.pixelHeight
 
         context.clearRect(0, 0, width, height)
         context.save()
@@ -425,14 +539,29 @@ export function useTalosProceduralCanvas(
 
         frame = 0
         frameTimer = window.setTimeout(() => {
-            frame = window.requestAnimationFrame(draw)
+            if (generation !== loopGeneration) {
+                return
+            }
+            frame = window.requestAnimationFrame((nextTime) => draw(nextTime, generation))
         }, Math.max(16, Math.round(1000 / Math.max(1, profile.fpsCap))))
     }
 
     function restart() {
         stop()
         const profile = currentProfile()
+        const element = canvas.value
         renderedFrameCount = 0
+        if (element) {
+            refreshCanvasPalette(element)
+            const dpr = Math.min(window.devicePixelRatio || 1, profile.dprCap, 2)
+            const requiresMeasurement = !cachedDimensions
+                || pendingResizeRect !== null
+                || cachedDimensions.dpr !== dpr
+
+            if (requiresMeasurement) {
+                refreshCanvasDimensions(element, profile.dprCap, pendingResizeRect)
+            }
+        }
         performanceState.value = {
             ...performanceState.value,
             ...profile,
@@ -444,17 +573,7 @@ export function useTalosProceduralCanvas(
     }
 
     function onResize() {
-        if (resizeTimer) {
-            window.clearTimeout(resizeTimer)
-        }
-
-        resizeTimer = window.setTimeout(() => {
-            performanceState.value = {
-                ...performanceState.value,
-                resizeCount: performanceState.value.resizeCount + 1,
-            }
-            restart()
-        }, 120)
+        queueResizeRefresh()
     }
 
     function onVisibilityChange() {
@@ -472,8 +591,9 @@ export function useTalosProceduralCanvas(
     }
 
     onMounted(() => {
-        restart()
+        installResizeObserver(canvas.value)
         window.addEventListener('resize', onResize)
+        restart()
         document.addEventListener('visibilitychange', onVisibilityChange)
     })
 
@@ -483,14 +603,29 @@ export function useTalosProceduralCanvas(
             window.clearTimeout(resizeTimer)
             resizeTimer = 0
         }
+        resizeObserver?.disconnect()
+        resizeObserver = null
         window.removeEventListener('resize', onResize)
         document.removeEventListener('visibilitychange', onVisibilityChange)
     })
 
-    watch([effect, motion, motionDisabled, simpleAnimation], restart, { flush: 'post' })
+    watch(
+        () => [effect.value, motion.value, backgroundMotionEnabled.value, simpleAnimation.value, paletteKey?.value],
+        restart,
+        { flush: 'post' },
+    )
     watch(canvas, (element) => {
         if (element) {
+            if (element !== observedCanvas) {
+                cachedDimensions = null
+                cachedPalette = null
+                installResizeObserver(element)
+            }
             restart()
+        } else {
+            installResizeObserver(null)
+            cachedDimensions = null
+            cachedPalette = null
         }
     }, { flush: 'post' })
 

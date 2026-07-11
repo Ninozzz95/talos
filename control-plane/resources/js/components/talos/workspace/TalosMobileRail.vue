@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
     Activity,
     BarChart3,
@@ -11,6 +11,7 @@ import {
     Globe2,
     Image,
     ListTodo,
+    MessageSquare,
     MessageSquarePlus,
     NotebookPen,
     Palette,
@@ -21,17 +22,19 @@ import {
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
-import type { TalosWindowId } from '../../../composables/useTalosWindows'
+import type { TalosWindowId } from '../../../lib/talosWindowRegistry'
 
 const props = defineProps<{
     creatingSession: boolean
     visibility: Record<string, boolean>
     advancedExpanded?: boolean
     activeIds?: string[]
+    historyOpen?: boolean
 }>()
 
 const emit = defineEmits<{
     newChat: []
+    openHistory: []
     openWindow: [windowId: TalosWindowId]
     toggleAdvanced: []
 }>()
@@ -83,37 +86,87 @@ const visibleMobileRailItems = computed(() => mobileRailItems.filter((item) => {
 const visibleAdvancedItems = computed(() => advancedItems.filter((item) => item.id === 'search'
     ? props.visibility.search !== false || props.visibility.library !== false
     : props.visibility[item.id] !== false))
-const activeAdvanced = computed(() => visibleAdvancedItems.value.some((item) => (props.activeIds ?? []).includes(item.id)))
+const railScroll = ref<HTMLElement | null>(null)
+const advancedGroup = ref<{ focusDisclosure: () => void } | null>(null)
+
+function openAdvancedItem(id: string) {
+    advancedGroup.value?.focusDisclosure()
+    emit('openWindow', id as TalosWindowId)
+    if (props.advancedExpanded) {
+        emit('toggleAdvanced')
+    }
+}
+
+watch(
+    () => (props.activeIds ?? []).join('|'),
+    async () => {
+        await nextTick()
+        const activeItem = railScroll.value?.querySelector<HTMLElement>('[data-mobile-rail-item][aria-pressed="true"]')
+
+        if (typeof activeItem?.scrollIntoView === 'function') {
+            activeItem.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        }
+    },
+)
 </script>
 
 <template>
-    <div
-        class="relative z-10 flex gap-2 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/82 px-3 py-2 lg:hidden"
+    <nav
+        class="talos-mobile-rail relative z-10 border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/82 lg:hidden"
         aria-label="TALOS workspace rail"
+        data-overflow-affordance="true"
     >
-        <Button v-if="visibility.new_chat !== false" size="icon" :disabled="creatingSession" aria-label="New Chat" title="New Chat" @click="emit('newChat')">
-            <MessageSquarePlus class="h-4 w-4" />
-        </Button>
-        <Button
-            v-for="item in visibleMobileRailItems"
-            :key="item.id"
-            size="icon"
-            variant="ghost"
-            :aria-label="item.label"
-            :title="item.label"
-            @click="emit('openWindow', item.id)"
-        >
-            <component :is="item.icon" class="h-4 w-4 text-[var(--talos-accent)]" />
-        </Button>
-        <TalosAdvancedRailGroup
-            v-if="visibleAdvancedItems.length"
-            :items="visibleAdvancedItems"
-            :active-ids="activeIds ?? []"
-            :collapsed="false"
-            :expanded="Boolean(advancedExpanded) || activeAdvanced"
-            id="talos-advanced-items-mobile"
-            @toggle="emit('toggleAdvanced')"
-            @open="(id) => emit('openWindow', id as TalosWindowId)"
-        />
-    </div>
+        <span
+            data-testid="talos-mobile-rail-edge-start"
+            class="pointer-events-none absolute inset-y-0 left-0 z-10 w-5 bg-gradient-to-r from-[var(--talos-sidebar)] to-transparent"
+            aria-hidden="true"
+        ></span>
+        <div ref="railScroll" class="talos-mobile-rail-scroll flex gap-2 overflow-x-auto px-3 py-2">
+            <Button v-if="visibility.new_chat !== false" size="icon" class="min-h-11 min-w-11" :disabled="creatingSession" aria-label="New Chat" title="New Chat" @click="emit('newChat')">
+                <MessageSquarePlus class="h-4 w-4" />
+            </Button>
+            <Button
+                v-if="visibility.chats !== false"
+                size="icon"
+                variant="ghost"
+                class="min-h-11 min-w-11"
+                aria-label="Open chat history"
+                :aria-pressed="Boolean(historyOpen)"
+                title="Chat history"
+                @click="emit('openHistory')"
+            >
+                <MessageSquare class="h-4 w-4 text-[var(--talos-accent)]" />
+            </Button>
+            <Button
+                v-for="item in visibleMobileRailItems"
+                :key="item.id"
+                data-mobile-rail-item
+                size="icon"
+                variant="ghost"
+                class="min-h-11 min-w-11"
+                :aria-label="item.label"
+                :aria-pressed="(activeIds ?? []).includes(item.id)"
+                :title="item.label"
+                @click="emit('openWindow', item.id)"
+            >
+                <component :is="item.icon" class="h-4 w-4 text-[var(--talos-accent)]" />
+            </Button>
+            <TalosAdvancedRailGroup
+                v-if="visibleAdvancedItems.length"
+                ref="advancedGroup"
+                :items="visibleAdvancedItems"
+                :active-ids="activeIds ?? []"
+                :collapsed="false"
+                :expanded="Boolean(advancedExpanded)"
+                id="talos-advanced-items-mobile"
+                @toggle="emit('toggleAdvanced')"
+                @open="openAdvancedItem"
+            />
+        </div>
+        <span
+            data-testid="talos-mobile-rail-edge-end"
+            class="pointer-events-none absolute inset-y-0 right-0 z-10 w-5 bg-gradient-to-l from-[var(--talos-sidebar)] to-transparent"
+            aria-hidden="true"
+        ></span>
+    </nav>
 </template>

@@ -28,12 +28,17 @@ export type TalosChatLayoutPreferences = {
     composer_mode: TalosComposerMode
     advanced_rail_expanded: boolean
 }
-export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'failed'
+export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'stopped' | 'failed'
 export type TalosBrowserMode = {
     enabled: boolean
     session_id: string | null
     status: TalosBrowserModeStatus
     capabilities: string[]
+}
+export type TalosBrowserCurrentPage = {
+    host: string
+    title: string
+    url: string
 }
 export type TalosBrowserActivity = {
     id: string
@@ -452,7 +457,6 @@ export type TalosFile = {
     size_bytes: number
     checksum: string
     status: TalosFileStatus
-    storage_path?: string | null
     parser?: string | null
     failure_reason?: string | null
     metadata?: Record<string, unknown> | null
@@ -514,7 +518,7 @@ export type TalosBenchmarkGroup = {
     session_id?: string | null
     source_run_id?: string | null
     name: string
-    scenario_path?: string | null
+    scenario_ref?: string | null
     scenario_hash?: string | null
     prompt_hash: string
     context_hash?: string | null
@@ -796,6 +800,7 @@ export type TalosRunArtifact = {
 
 export type TalosBrowserSession = {
     id: string
+    talos_session_id: string | null
     status: 'ready' | 'active' | 'closed' | 'expired' | 'failed' | string
     mode: 'read_only' | string
     capabilities: string[]

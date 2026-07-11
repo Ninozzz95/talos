@@ -7,9 +7,11 @@
         "dev": "vite",
         "test:dev-stack": "node --test scripts/dev-stack.test.mjs",
         "test:unit": "vitest run",
-        "test:e2e": "npm run build && playwright test"
+        "test:window-chunks": "npm run build && node --test scripts/window-chunk-contract.test.mjs",
+        "test:e2e": "npm run build && node --test scripts/window-chunk-contract.test.mjs && playwright test"
     },
     "devDependencies": {
+        "@axe-core/playwright": "^4.11.3",
         "@playwright/test": "^1.61.1",
         "@tailwindcss/vite": "^4.0.0",
         "@types/markdown-it": "^14.1.2",
@@ -21,7 +23,12 @@
         "vitest": "^4.1.10"
     },
     "dependencies": {
+        "@fontsource/instrument-sans": "^5.2.8",
+        "@fontsource/jetbrains-mono": "^5.2.8",
+        "@fontsource/manrope": "^5.2.8",
         "@fontsource/orbitron": "^5.2.8",
+        "@fontsource/sora": "^5.2.8",
+        "@fontsource/source-serif-4": "^5.2.9",
         "@lucide/vue": "^1.23.0",
         "@vitejs/plugin-vue": "^6.0.7",
         "class-variance-authority": "^0.7.1",

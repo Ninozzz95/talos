@@ -7,13 +7,17 @@ namespace Tests\Feature;
 use App\Models\TalosBrowserArtifact;
 use App\Models\TalosBrowserEvent;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosSession;
 use App\Models\User;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserArtifactReconciler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -23,12 +27,20 @@ final class TalosBrowserApiTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+    private TalosSession $chatSession;
     private FakeBrowserSessionClient $client;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->user = $this->authenticateTalosUser();
+        $this->chatSession = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Browser API chat',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $this->withHeader('X-Talos-Session-Id', $this->chatSession->id);
         $this->useIsolatedLocalStorage();
         $this->client = new FakeBrowserSessionClient();
         $this->app->instance(BrowserSessionClient::class, $this->client);
@@ -45,6 +57,7 @@ final class TalosBrowserApiTest extends TestCase
     public function test_authenticated_user_can_create_an_owned_read_only_browser_session(): void
     {
         $response = $this->postJson('/api/talos/browser/sessions', [
+            'talos_session_id' => $this->chatSession->id,
             'viewport' => ['width' => 1280, 'height' => 800],
         ]);
 
@@ -52,11 +65,105 @@ final class TalosBrowserApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.mode', 'read_only')
             ->assertJsonPath('data.status', 'ready')
+            ->assertJsonPath('data.talos_session_id', $this->chatSession->id)
             ->assertJsonPath('data.capabilities', ['navigate', 'screenshot', 'snapshot']);
         $sessionId = $response->json('data.id');
-        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $sessionId, 'user_id' => $this->user->id, 'mode' => 'read_only']);
+        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $sessionId, 'user_id' => $this->user->id, 'talos_session_id' => $this->chatSession->id, 'mode' => 'read_only']);
         $this->assertDatabaseHas('talos_browser_events', ['browser_session_id' => $sessionId, 'type' => 'session.created']);
         $this->assertSame('talos-user:'.$this->user->id, $this->client->requests[0]['ownerRef']);
+    }
+
+    public function test_browser_session_listing_is_scoped_to_the_requested_owned_chat(): void
+    {
+        $first = $this->createSession();
+        $otherChat = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Other browser chat',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $secondId = $this->withHeader('X-Talos-Session-Id', $otherChat->id)->postJson('/api/talos/browser/sessions', [
+            'talos_session_id' => $otherChat->id,
+        ])->assertCreated()->json('data.id');
+
+        $this->withHeader('X-Talos-Session-Id', $this->chatSession->id)
+            ->getJson('/api/talos/browser/sessions?talos_session_id='.$this->chatSession->id)
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $first->id)
+            ->assertJsonMissing(['id' => $secondId]);
+    }
+
+    public function test_browser_session_creation_rejects_a_foreign_chat_before_worker_dispatch(): void
+    {
+        $foreignChat = TalosSession::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'title' => 'Foreign chat',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+
+        $this->postJson('/api/talos/browser/sessions', [
+            'talos_session_id' => $foreignChat->id,
+        ])->assertNotFound()->assertJsonPath('code', 'TALOS_BROWSER_CHAT_UNAVAILABLE');
+
+        $this->assertSame([], $this->client->requests);
+        $this->assertDatabaseCount('talos_browser_sessions', 0);
+    }
+
+    public function test_browser_session_creation_rejects_a_mismatched_chat_scope_header_before_worker_dispatch(): void
+    {
+        $otherChat = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Other request scope',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $this->withHeader('X-Talos-Session-Id', $otherChat->id);
+
+        $this->postJson('/api/talos/browser/sessions', [
+            'talos_session_id' => $this->chatSession->id,
+        ])->assertNotFound()->assertJsonPath('code', 'TALOS_BROWSER_CHAT_UNAVAILABLE');
+
+        $this->assertSame([], $this->client->requests);
+        $this->assertDatabaseCount('talos_browser_sessions', 0);
+    }
+
+    public function test_same_user_cannot_access_browser_resources_through_another_chat_scope(): void
+    {
+        $session = $this->createSession();
+        $artifact = TalosBrowserArtifact::query()->create([
+            'browser_session_id' => $session->id,
+            'user_id' => $this->user->id,
+            'type' => 'snapshot',
+            'mime' => 'application/json',
+            'storage_disk' => 'local',
+            'storage_path' => 'browser/cross-chat.json',
+            'metadata' => [],
+        ]);
+        $otherChat = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Other chat scope',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $this->withHeader('X-Talos-Session-Id', $otherChat->id);
+
+        foreach ([
+            "/api/talos/browser/sessions/{$session->id}",
+            "/api/talos/browser/sessions/{$session->id}/events",
+            "/api/talos/browser/artifacts/{$artifact->id}",
+            "/api/talos/browser/artifacts/{$artifact->id}/preview",
+        ] as $route) {
+            $this->getJson($route)->assertNotFound()->assertJsonPath('code', 'TALOS_BROWSER_NOT_FOUND');
+        }
+        $this->postJson("/api/talos/browser/sessions/{$session->id}/navigate", ['url' => 'https://example.com'])->assertNotFound();
+        $this->postJson("/api/talos/browser/sessions/{$session->id}/screenshot")->assertNotFound();
+        $this->postJson("/api/talos/browser/sessions/{$session->id}/snapshot")->assertNotFound();
+        $this->deleteJson("/api/talos/browser/sessions/{$session->id}")->assertNotFound();
+
+        $this->assertCount(1, $this->client->requests);
+        $this->assertSame('ready', $session->fresh()->status);
     }
 
     public function test_foreign_users_get_not_found_for_every_browser_session_event_and_artifact_route(): void
@@ -142,12 +249,988 @@ final class TalosBrowserApiTest extends TestCase
             ->assertJsonMissingPath('data.snapshot.sessionId');
     }
 
+    public function test_deleting_an_owned_chat_removes_browser_artifact_rows_and_files(): void
+    {
+        $browserSession = $this->createSession();
+        $screenshotId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $snapshotId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/snapshot")
+            ->assertCreated()
+            ->json('data.id');
+
+        $screenshot = TalosBrowserArtifact::query()->findOrFail($screenshotId);
+        $snapshot = TalosBrowserArtifact::query()->findOrFail($snapshotId);
+        $this->assertTrue(Storage::disk('local')->exists($screenshot->storage_path));
+        $this->assertTrue(Storage::disk('local')->exists($snapshot->storage_path));
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseMissing('talos_browser_sessions', ['id' => $browserSession->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $screenshot->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $snapshot->id]);
+        $this->assertFalse(Storage::disk('local')->exists($screenshot->storage_path));
+        $this->assertFalse(Storage::disk('local')->exists($snapshot->storage_path));
+    }
+
+    public function test_owned_chat_cleanup_preserves_same_users_other_chat_artifacts(): void
+    {
+        $otherChat = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Other owned chat',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $otherBrowserSession = TalosBrowserSession::query()->create([
+            'user_id' => $this->user->id,
+            'talos_session_id' => $otherChat->id,
+            'worker_session_id' => 'other-owned-worker',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['snapshot'],
+            'policy' => [],
+        ]);
+        $artifact = TalosBrowserArtifact::query()->create([
+            'browser_session_id' => $otherBrowserSession->id,
+            'user_id' => $this->user->id,
+            'type' => 'snapshot',
+            'mime' => 'application/json',
+            'storage_disk' => 'local',
+            'storage_path' => 'talos/browser/other-chat/snapshot.json',
+            'metadata' => [],
+        ]);
+        Storage::disk('local')->put($artifact->storage_path, '{}');
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $otherChat->id]);
+        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $otherBrowserSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+    }
+
+    public function test_missing_owned_artifact_file_is_idempotent_during_chat_cleanup(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        Storage::disk('local')->delete($artifact->storage_path);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $artifact->id]);
+    }
+
+    public function test_foreign_chat_deletion_is_denied_without_removing_its_browser_artifact(): void
+    {
+        $foreignUser = User::factory()->create();
+        $foreignChat = TalosSession::query()->create([
+            'user_id' => $foreignUser->id,
+            'title' => 'Foreign chat with browser evidence',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $foreignBrowserSession = TalosBrowserSession::query()->create([
+            'user_id' => $foreignUser->id,
+            'talos_session_id' => $foreignChat->id,
+            'worker_session_id' => 'foreign-worker',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['snapshot'],
+            'policy' => [],
+        ]);
+        $artifact = TalosBrowserArtifact::query()->create([
+            'browser_session_id' => $foreignBrowserSession->id,
+            'user_id' => $foreignUser->id,
+            'type' => 'snapshot',
+            'mime' => 'application/json',
+            'storage_disk' => 'local',
+            'storage_path' => 'talos/browser/foreign/chat-snapshot.json',
+            'metadata' => [],
+        ]);
+        Storage::disk('local')->put($artifact->storage_path, '{}');
+
+        $this->deleteJson("/api/talos/sessions/{$foreignChat->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $foreignChat->id, 'user_id' => $foreignUser->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+    }
+
+    public function test_artifact_cleanup_failure_returns_a_generic_error_and_preserves_rows_and_files(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $disk = \Mockery::mock(Storage::disk('local'))->makePartial();
+        $disk->shouldReceive('move')->once()->andThrow(new \RuntimeException('quarantine move failed'));
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJson([
+                'code' => 'TALOS_SESSION_DELETE_FAILED',
+                'message' => 'Chat session could not be deleted.',
+                'details' => [],
+            ])
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $browserSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+    }
+
+    public function test_partial_artifact_cleanup_failure_restores_files_and_preserves_rows(): void
+    {
+        $browserSession = $this->createSession();
+        $firstId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $secondId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/snapshot")
+            ->assertCreated()
+            ->json('data.id');
+        $first = TalosBrowserArtifact::query()->findOrFail($firstId);
+        $second = TalosBrowserArtifact::query()->findOrFail($secondId);
+        $realDisk = Storage::disk('local');
+        $deleteCalls = 0;
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->times(3)->andReturnUsing(function (string $from, string $to) use ($realDisk, &$deleteCalls): bool {
+            $deleteCalls++;
+
+            if ($deleteCalls === 2) {
+                throw new \RuntimeException('quarantine move failed');
+            }
+
+            return $realDisk->move($from, $to);
+        });
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJson([
+                'code' => 'TALOS_SESSION_DELETE_FAILED',
+                'message' => 'Chat session could not be deleted.',
+                'details' => [],
+            ])
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertSame(3, $deleteCalls);
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $browserSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $first->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $second->id]);
+        $this->assertTrue(Storage::disk('local')->exists($first->storage_path));
+        $this->assertTrue(Storage::disk('local')->exists($second->storage_path));
+    }
+
+    public function test_false_quarantine_move_with_an_existing_source_fails_closed_and_compensates(): void
+    {
+        $browserSession = $this->createSession();
+        $firstId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $secondId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/snapshot")
+            ->assertCreated()
+            ->json('data.id');
+        $first = TalosBrowserArtifact::query()->findOrFail($firstId);
+        $second = TalosBrowserArtifact::query()->findOrFail($secondId);
+        $realDisk = Storage::disk('local');
+        $moveCalls = 0;
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->times(3)->andReturnUsing(function (string $from, string $to) use ($realDisk, &$moveCalls): bool {
+            $moveCalls++;
+
+            if ($moveCalls === 2) {
+                return false;
+            }
+
+            return $realDisk->move($from, $to);
+        });
+        $disk->shouldReceive('exists')->andReturnUsing(fn (string $path): bool => $realDisk->exists($path));
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJsonPath('code', 'TALOS_SESSION_DELETE_FAILED')
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertSame(3, $moveCalls);
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $first->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $second->id]);
+        $this->assertTrue($realDisk->exists($first->storage_path));
+        $this->assertTrue($realDisk->exists($second->storage_path));
+    }
+
+    public function test_false_quarantine_move_with_a_missing_source_is_idempotent(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $realDisk = Storage::disk('local');
+        $realDisk->delete($artifact->storage_path);
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->once()->andReturn(false);
+        $disk->shouldReceive('exists')->twice()->andReturn(false);
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertFalse($realDisk->exists($artifact->storage_path));
+    }
+
+    public function test_false_quarantine_move_with_destination_present_is_finalized_as_moved(): void
+    {
+        $browserSession = $this->createSession();
+        $artifact = $this->createStoredArtifact($browserSession, 1);
+        $realDisk = Storage::disk('local');
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->once()->andReturnUsing(function (string $from, string $to) use ($realDisk): bool {
+            $this->assertTrue($realDisk->move($from, $to));
+
+            return false;
+        });
+        $disk->shouldReceive('exists')->andReturnUsing(fn (string $path): bool => $realDisk->exists($path));
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertSame([], array_values(array_filter($realDisk->allFiles(), static fn (string $path): bool => str_contains($path, '.quarantine/'))));
+    }
+
+    public function test_false_quarantine_delete_after_commit_returns_no_content_and_persists_an_audit_fault(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $realDisk = Storage::disk('local');
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->once()->andReturnUsing(fn (string $from, string $to): bool => $realDisk->move($from, $to));
+        $disk->shouldReceive('delete')->andReturn(false);
+        $disk->shouldReceive('exists')->andReturnUsing(fn (string $path): bool => $realDisk->exists($path));
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertNoContent();
+
+        $quarantineFiles = array_values(array_filter($realDisk->allFiles(), static fn (string $path): bool => str_contains($path, '.quarantine/')));
+        $this->assertGreaterThanOrEqual(2, count($quarantineFiles));
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertDatabaseHas('talos_audit_events', [
+            'event_type' => 'browser_artifact_cleanup.deferred',
+            'subject_type' => 'talos_session',
+            'subject_id' => $this->chatSession->id,
+        ]);
+        $this->assertFalse($realDisk->exists($artifact->storage_path));
+    }
+
+    public function test_false_delete_with_a_missing_file_is_idempotent(): void
+    {
+        $disk = \Mockery::mock(Storage::disk('local'))->makePartial();
+        $disk->shouldReceive('delete')->twice()->andReturn(false);
+        $disk->shouldReceive('exists')->twice()->andReturn(false);
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        app(TalosBrowserArtifactStore::class)->finalize([[
+            'disk' => 'local',
+            'path' => 'artifact',
+            'quarantine_path' => 'missing-quarantine',
+            'manifest_path' => 'missing-manifest',
+            'moved' => true,
+        ]]);
+
+        $this->assertTrue(true);
+    }
+
+    public function test_restore_attempts_every_receipt_entry_and_reports_aggregate_failure(): void
+    {
+        $attempts = 0;
+        $disk = \Mockery::mock(Storage::disk('local'))->makePartial();
+        $disk->shouldReceive('move')->times(3)->andReturnUsing(function () use (&$attempts): bool {
+            $attempts++;
+
+            if ($attempts === 2) {
+                throw new \RuntimeException('second restore move failed');
+            }
+
+            return true;
+        });
+        $disk->shouldReceive('delete')->andReturn(true);
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        $receipt = [
+            ['disk' => 'local', 'path' => 'artifact-1', 'quarantine_path' => 'quarantine-1', 'manifest_path' => 'manifest'],
+            ['disk' => 'local', 'path' => 'artifact-2', 'quarantine_path' => 'quarantine-2', 'manifest_path' => 'manifest'],
+            ['disk' => 'local', 'path' => 'artifact-3', 'quarantine_path' => 'quarantine-3', 'manifest_path' => 'manifest'],
+        ];
+
+        try {
+            app(TalosBrowserArtifactStore::class)->restore($receipt);
+            $this->fail('A failed restore must report an aggregate failure.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('1 entr', $exception->getMessage());
+        }
+
+        $this->assertSame(3, $attempts);
+    }
+
+    public function test_restore_is_idempotent_when_quarantine_is_missing_but_destination_exists(): void
+    {
+        $disk = Storage::disk('local');
+        $destination = 'talos/browser/restored-artifact';
+        $manifest = 'talos/browser/restored-manifest.json';
+        $disk->put($destination, 'restored');
+        $disk->put($manifest, '{}');
+
+        app(TalosBrowserArtifactStore::class)->restore([[
+            'disk' => 'local',
+            'path' => $destination,
+            'quarantine_path' => 'talos/browser/missing-quarantine',
+            'manifest_path' => $manifest,
+            'moved' => true,
+        ]]);
+
+        $this->assertSame('restored', $disk->get($destination));
+        $this->assertFalse($disk->exists($manifest));
+    }
+
+    public function test_restore_faults_when_both_quarantine_and_destination_are_missing(): void
+    {
+        $disk = Storage::disk('local');
+        $manifest = 'talos/browser/missing-restore-manifest.json';
+        $disk->put($manifest, '{}');
+
+        try {
+            app(TalosBrowserArtifactStore::class)->restore([[
+                'disk' => 'local',
+                'path' => 'talos/browser/missing-destination',
+                'quarantine_path' => 'talos/browser/missing-quarantine',
+                'manifest_path' => $manifest,
+                'moved' => true,
+            ]]);
+            $this->fail('Restoring two missing files must report a fault.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('both quarantine and destination are missing', $exception->getPrevious()?->getMessage() ?? $exception->getMessage());
+        }
+
+        $this->assertTrue($disk->exists($manifest));
+    }
+
+    public function test_cleanup_receipt_contains_bounded_metadata_without_artifact_contents(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $largeContents = str_repeat('x', 5_000_000);
+        Storage::disk('local')->put($artifact->storage_path, $largeContents);
+
+        $receipt = DB::transaction(function () use ($artifact, $largeContents): array {
+            $session = TalosSession::query()->whereKey($this->chatSession->id)->lockForUpdate()->firstOrFail();
+            $metadata = is_array($session->metadata) ? $session->metadata : [];
+            $metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] = true;
+            $session->update(['metadata' => $metadata]);
+
+            $receipt = app(TalosBrowserArtifactStore::class)->deleteForChat($session);
+            $this->assertNotSame('', $largeContents);
+            app(TalosBrowserArtifactStore::class)->restore($receipt);
+            unset($metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY]);
+            $session->update(['metadata' => $metadata]);
+
+            return $receipt;
+        });
+
+        $this->assertCount(1, $receipt);
+        $this->assertArrayNotHasKey('contents', $receipt[0]);
+        $this->assertLessThan(10_000, strlen(json_encode($receipt, JSON_THROW_ON_ERROR)));
+    }
+
+    public function test_cleanup_uses_bounded_batch_manifests(): void
+    {
+        $browserSession = $this->createSession();
+        for ($index = 0; $index < 26; $index++) {
+            $this->createStoredArtifact($browserSession, $index);
+        }
+
+        $receipt = DB::transaction(function (): array {
+            $session = TalosSession::query()->whereKey($this->chatSession->id)->lockForUpdate()->firstOrFail();
+            $receipt = app(TalosBrowserArtifactStore::class)->deleteForChat($session);
+            app(TalosBrowserArtifactStore::class)->restore($receipt);
+            $metadata = is_array($session->metadata) ? $session->metadata : [];
+            unset($metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY]);
+            $session->update(['metadata' => $metadata]);
+
+            return $receipt;
+        });
+
+        $batchSizes = array_count_values(array_column($receipt, 'manifest_path'));
+        $this->assertCount(2, $batchSizes);
+        $this->assertLessThanOrEqual(25, max($batchSizes));
+        $this->assertCount(26, $receipt);
+    }
+
+    public function test_cleanup_faults_before_any_move_when_artifact_limit_is_exceeded(): void
+    {
+        $browserSession = $this->createSession();
+        for ($index = 0; $index < 101; $index++) {
+            $this->createStoredArtifact($browserSession, $index);
+        }
+        $filesBefore = Storage::disk('local')->allFiles();
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJsonPath('code', 'TALOS_SESSION_DELETE_FAILED')
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseCount('talos_browser_artifacts', 101);
+        $this->assertSame($filesBefore, Storage::disk('local')->allFiles());
+    }
+
+    public function test_artifact_store_prevents_a_chat_from_exceeding_the_cleanup_limit(): void
+    {
+        $browserSession = $this->createSession();
+        for ($index = 0; $index < TalosBrowserArtifactStore::MAX_CLEANUP_ARTIFACTS; $index++) {
+            $this->createStoredArtifact($browserSession, $index);
+        }
+        $filesBefore = Storage::disk('local')->allFiles();
+
+        try {
+            app(TalosBrowserArtifactStore::class)->store(
+                $browserSession,
+                'snapshot',
+                'application/json',
+                '{"over_limit":true}',
+            );
+            $this->fail('Artifact creation must stop before a chat becomes impossible to clean up.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('limit', strtolower($exception->getMessage()));
+        }
+
+        $this->assertDatabaseCount('talos_browser_artifacts', TalosBrowserArtifactStore::MAX_CLEANUP_ARTIFACTS);
+        $this->assertSame($filesBefore, Storage::disk('local')->allFiles());
+    }
+
+    public function test_reconciler_releases_a_preflight_marker_when_no_journal_was_created(): void
+    {
+        $metadata = is_array($this->chatSession->metadata) ? $this->chatSession->metadata : [];
+        $metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] = true;
+        $this->chatSession->update(['metadata' => $metadata]);
+
+        $result = app(TalosBrowserArtifactReconciler::class)->reconcileForSession(
+            (string) $this->chatSession->id,
+            (int) $this->chatSession->user_id,
+        );
+
+        $this->assertSame('released', $result['outcome']);
+        $freshMetadata = TalosSession::query()->findOrFail($this->chatSession->id)->metadata;
+        $this->assertFalse($freshMetadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] ?? false);
+    }
+
+    public function test_reconciler_recovers_a_partial_pre_move_manifest_when_unjournaled_files_are_intact(): void
+    {
+        $browserSession = $this->createSession();
+        $journaled = $this->createStoredArtifact($browserSession, 1);
+        $unjournaled = $this->createStoredArtifact($browserSession, 2);
+        $operationId = (string) str()->uuid();
+        $manifestPath = TalosBrowserArtifactStore::manifestPath(
+            (int) $this->user->id,
+            (string) $this->chatSession->id,
+            $operationId,
+            1,
+        );
+        $quarantinePath = TalosBrowserArtifactStore::quarantinePath(
+            (int) $this->user->id,
+            (string) $this->chatSession->id,
+            $operationId,
+            1,
+            (string) $journaled->id,
+        );
+        Storage::disk('local')->put($manifestPath, json_encode([
+            'schema' => 'talos_browser_artifact_cleanup',
+            'version' => TalosBrowserArtifactStore::JOURNAL_VERSION,
+            'operation_id' => $operationId,
+            'batch' => 1,
+            'session_id' => (string) $this->chatSession->id,
+            'user_id' => (int) $this->user->id,
+            'entry_count' => 1,
+            'entries' => [[
+                'artifact_id' => (string) $journaled->id,
+                'browser_session_id' => (string) $browserSession->id,
+                'disk' => TalosBrowserArtifactStore::LOCAL_DISK,
+                'path' => (string) $journaled->storage_path,
+                'quarantine_path' => $quarantinePath,
+            ]],
+        ], JSON_THROW_ON_ERROR));
+        $metadata = is_array($this->chatSession->metadata) ? $this->chatSession->metadata : [];
+        $metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] = true;
+        $this->chatSession->update(['metadata' => $metadata]);
+
+        $result = app(TalosBrowserArtifactReconciler::class)->reconcileForSession(
+            (string) $this->chatSession->id,
+            (int) $this->user->id,
+        );
+
+        $this->assertSame('restored', $result['outcome']);
+        $this->assertTrue(Storage::disk('local')->exists((string) $journaled->storage_path));
+        $this->assertTrue(Storage::disk('local')->exists((string) $unjournaled->storage_path));
+        $this->assertFalse(Storage::disk('local')->exists($manifestPath));
+        $freshMetadata = TalosSession::query()->findOrFail($this->chatSession->id)->metadata;
+        $this->assertFalse($freshMetadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] ?? false);
+    }
+
+    public function test_reconciler_fails_closed_when_partial_manifest_has_a_missing_unjournaled_file(): void
+    {
+        $browserSession = $this->createSession();
+        $journaled = $this->createStoredArtifact($browserSession, 1);
+        $unjournaled = $this->createStoredArtifact($browserSession, 2);
+        $operationId = (string) str()->uuid();
+        $manifestPath = TalosBrowserArtifactStore::manifestPath(
+            (int) $this->user->id,
+            (string) $this->chatSession->id,
+            $operationId,
+            1,
+        );
+        $quarantinePath = TalosBrowserArtifactStore::quarantinePath(
+            (int) $this->user->id,
+            (string) $this->chatSession->id,
+            $operationId,
+            1,
+            (string) $journaled->id,
+        );
+        Storage::disk('local')->put($manifestPath, json_encode([
+            'schema' => 'talos_browser_artifact_cleanup',
+            'version' => TalosBrowserArtifactStore::JOURNAL_VERSION,
+            'operation_id' => $operationId,
+            'batch' => 1,
+            'session_id' => (string) $this->chatSession->id,
+            'user_id' => (int) $this->user->id,
+            'entry_count' => 1,
+            'entries' => [[
+                'artifact_id' => (string) $journaled->id,
+                'browser_session_id' => (string) $browserSession->id,
+                'disk' => TalosBrowserArtifactStore::LOCAL_DISK,
+                'path' => (string) $journaled->storage_path,
+                'quarantine_path' => $quarantinePath,
+            ]],
+        ], JSON_THROW_ON_ERROR));
+        Storage::disk('local')->delete((string) $unjournaled->storage_path);
+
+        $metadata = is_array($this->chatSession->metadata) ? $this->chatSession->metadata : [];
+        $metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] = true;
+        $this->chatSession->update(['metadata' => $metadata]);
+
+        try {
+            app(TalosBrowserArtifactReconciler::class)->reconcileForSession(
+                (string) $this->chatSession->id,
+                (int) $this->user->id,
+            );
+            $this->fail('A partial journal cannot be reconciled when unjournaled content is missing.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('Unjournaled browser artifact content is missing', $exception->getMessage());
+        }
+
+        $this->assertTrue(Storage::disk('local')->exists($manifestPath));
+        $this->assertTrue(Storage::disk('local')->exists((string) $journaled->storage_path));
+        $freshMetadata = TalosSession::query()->findOrFail($this->chatSession->id)->metadata;
+        $this->assertTrue($freshMetadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] ?? false);
+        $this->assertDatabaseHas('talos_audit_events', [
+            'event_type' => 'browser_artifact_cleanup.reconcile_failed',
+            'subject_id' => (string) $this->chatSession->id,
+        ]);
+    }
+
+    public function test_reconciler_restores_valid_batches_and_preserves_unreferenced_quarantine(): void
+    {
+        $browserSession = $this->createSession();
+        $artifact = $this->createStoredArtifact($browserSession, 1);
+        $receipt = DB::transaction(function (): array {
+            $session = TalosSession::query()->whereKey($this->chatSession->id)->lockForUpdate()->firstOrFail();
+
+            return app(TalosBrowserArtifactStore::class)->deleteForChat($session);
+        });
+        $orphanPath = dirname($receipt[0]['quarantine_path']).'/unreferenced-orphan';
+        Storage::disk('local')->put($orphanPath, 'orphan');
+
+        $result = app(TalosBrowserArtifactReconciler::class)->reconcileForSession(
+            (string) $this->chatSession->id,
+            (int) $this->user->id,
+        );
+
+        $this->assertSame('restored', $result['outcome']);
+        $this->assertSame(1, $result['entries']);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+        $this->assertTrue(Storage::disk('local')->exists($orphanPath));
+        $this->assertFalse(Storage::disk('local')->exists($receipt[0]['manifest_path']));
+        $metadata = TalosSession::query()->findOrFail($this->chatSession->id)->metadata;
+        $this->assertFalse($metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] ?? false);
+        $this->assertDatabaseHas('talos_audit_events', [
+            'event_type' => 'browser_artifact_cleanup.reconciled',
+            'subject_id' => $this->chatSession->id,
+        ]);
+    }
+
+    public function test_reconcile_command_finalizes_valid_batches_for_a_deleted_chat(): void
+    {
+        $browserSession = $this->createSession();
+        $artifact = $this->createStoredArtifact($browserSession, 1);
+        $receipt = DB::transaction(function (): array {
+            $session = TalosSession::query()->whereKey($this->chatSession->id)->lockForUpdate()->firstOrFail();
+            $receipt = app(TalosBrowserArtifactStore::class)->deleteForChat($session);
+            $this->assertTrue($session->delete());
+
+            return $receipt;
+        });
+
+        $this->artisan('talos:browser-artifacts:reconcile')
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertFalse(Storage::disk('local')->exists($receipt[0]['path']));
+        $this->assertFalse(Storage::disk('local')->exists($receipt[0]['quarantine_path']));
+        $this->assertFalse(Storage::disk('local')->exists($receipt[0]['manifest_path']));
+        $this->assertDatabaseHas('talos_audit_events', [
+            'event_type' => 'browser_artifact_cleanup.reconciled',
+            'subject_id' => $this->chatSession->id,
+        ]);
+    }
+
+    public function test_browser_artifact_reconciliation_is_registered_in_the_scheduler(): void
+    {
+        $this->artisan('schedule:list')
+            ->expectsOutputToContain('talos:browser-artifacts:reconcile')
+            ->assertSuccessful();
+    }
+
+    public function test_reconcile_command_fails_closed_and_preserves_invalid_manifest_and_orphan(): void
+    {
+        $operationId = (string) str()->uuid();
+        $root = "talos/browser/.quarantine/{$this->user->id}/{$this->chatSession->id}/{$operationId}";
+        $manifestPath = "{$root}/batch-0001.json";
+        $orphanPath = "{$root}/unreferenced-orphan";
+        Storage::disk('local')->put($manifestPath, '{invalid-json');
+        Storage::disk('local')->put($orphanPath, 'orphan');
+        $metadata = is_array($this->chatSession->metadata) ? $this->chatSession->metadata : [];
+        $metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] = true;
+        $this->chatSession->update(['metadata' => $metadata]);
+
+        $this->artisan('talos:browser-artifacts:reconcile')
+            ->assertFailed();
+
+        $this->assertTrue(Storage::disk('local')->exists($manifestPath));
+        $this->assertTrue(Storage::disk('local')->exists($orphanPath));
+        $freshMetadata = TalosSession::query()->findOrFail($this->chatSession->id)->metadata;
+        $this->assertTrue($freshMetadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] ?? false);
+        $this->assertDatabaseHas('talos_audit_events', [
+            'event_type' => 'browser_artifact_cleanup.reconcile_failed',
+            'subject_id' => $this->chatSession->id,
+        ]);
+    }
+
+    public function test_artifact_creation_during_chat_cleanup_is_rejected_before_file_write(): void
+    {
+        $browserSession = $this->createSession();
+        $existingArtifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $filesBefore = Storage::disk('local')->allFiles();
+        $artifactCountBefore = TalosBrowserArtifact::query()->count();
+        $store = app(TalosBrowserArtifactStore::class);
+
+        DB::transaction(function () use ($browserSession, $store): void {
+            $session = TalosSession::query()->whereKey($this->chatSession->id)->lockForUpdate()->firstOrFail();
+            $receipt = $store->deleteForChat($session);
+
+            try {
+                $store->store($browserSession, 'snapshot', 'application/json', '{"created_after_cleanup_snapshot":true}');
+                $this->fail('Artifact creation must be rejected while chat cleanup is pending.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('cleanup', strtolower($exception->getMessage()));
+            }
+
+            $store->restore($receipt);
+        });
+
+        $this->assertSame($artifactCountBefore, TalosBrowserArtifact::query()->count());
+        $this->assertSame($filesBefore, Storage::disk('local')->allFiles());
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $existingArtifactId]);
+    }
+
+    public function test_database_delete_failure_restores_all_quarantined_artifacts(): void
+    {
+        $browserSession = $this->createSession();
+        $firstId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $secondId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/snapshot")
+            ->assertCreated()
+            ->json('data.id');
+        $first = TalosBrowserArtifact::query()->findOrFail($firstId);
+        $second = TalosBrowserArtifact::query()->findOrFail($secondId);
+        $sessionId = $this->chatSession->id;
+
+        TalosSession::deleting(static function (TalosSession $candidate) use ($sessionId): ?bool {
+            return $candidate->id === $sessionId ? false : null;
+        });
+
+        $this->deleteJson("/api/talos/sessions/{$sessionId}")
+            ->assertStatus(500)
+            ->assertJson([
+                'code' => 'TALOS_SESSION_DELETE_FAILED',
+                'message' => 'Chat session could not be deleted.',
+                'details' => [],
+            ])
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $sessionId]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $first->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $second->id]);
+        $this->assertTrue(Storage::disk('local')->exists($first->storage_path));
+        $this->assertTrue(Storage::disk('local')->exists($second->storage_path));
+        $this->assertSame([], array_values(array_filter(Storage::disk('local')->allFiles(), static fn (string $path): bool => str_contains($path, '.quarantine/'))));
+    }
+
+    public function test_compensation_failure_persists_cleanup_pending_and_blocks_new_artifacts(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $sessionId = $this->chatSession->id;
+        $realDisk = Storage::disk('local');
+        $moveCalls = 0;
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->twice()->andReturnUsing(function (string $from, string $to) use ($realDisk, &$moveCalls): bool {
+            $moveCalls++;
+
+            if ($moveCalls === 2) {
+                throw new \RuntimeException('restore move failed');
+            }
+
+            return $realDisk->move($from, $to);
+        });
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+
+        TalosSession::deleting(static function (TalosSession $candidate) use ($sessionId): ?bool {
+            return $candidate->id === $sessionId ? false : null;
+        });
+
+        $this->deleteJson("/api/talos/sessions/{$sessionId}")
+            ->assertStatus(500)
+            ->assertJson([
+                'code' => 'TALOS_SESSION_DELETE_FAILED',
+                'message' => 'Chat session could not be deleted.',
+                'details' => [],
+            ])
+            ->assertJsonMissing(['storage_path']);
+
+        $quarantineFiles = array_values(array_filter($realDisk->allFiles(), static fn (string $path): bool => str_contains($path, '.quarantine/')));
+        $this->assertGreaterThanOrEqual(2, count($quarantineFiles));
+        $this->assertDatabaseHas('talos_sessions', ['id' => $sessionId]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertFalse($realDisk->exists($artifact->storage_path));
+        $metadata = TalosSession::query()->findOrFail($sessionId)->metadata;
+        $this->assertTrue($metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] ?? false);
+
+        try {
+            app(TalosBrowserArtifactStore::class)->store($browserSession, 'snapshot', 'application/json', '{}');
+            $this->fail('Artifact writes must remain blocked until cleanup reconciliation succeeds.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('cleanup', strtolower($exception->getMessage()));
+        }
+
+        $this->assertDatabaseCount('talos_browser_artifacts', 1);
+    }
+
+    public function test_delete_retry_reconciles_pending_journal_before_starting_new_cleanup(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $sessionId = $this->chatSession->id;
+        $realDisk = Storage::disk('local');
+        $moveCalls = 0;
+        $disk = \Mockery::mock($realDisk)->makePartial();
+        $disk->shouldReceive('move')->times(4)->andReturnUsing(function (string $from, string $to) use ($realDisk, &$moveCalls): bool {
+            $moveCalls++;
+
+            if ($moveCalls === 2) {
+                throw new \RuntimeException('first compensation move failed');
+            }
+
+            return $realDisk->move($from, $to);
+        });
+        $disk->shouldReceive('exists')->andReturnUsing(fn (string $path): bool => $realDisk->exists($path));
+        Storage::shouldReceive('disk')->with('local')->andReturn($disk);
+        $deleteAttempts = 0;
+
+        TalosSession::deleting(static function (TalosSession $candidate) use ($sessionId, &$deleteAttempts): ?bool {
+            if ($candidate->id !== $sessionId) {
+                return null;
+            }
+
+            $deleteAttempts++;
+
+            return $deleteAttempts === 1 ? false : null;
+        });
+
+        $this->deleteJson("/api/talos/sessions/{$sessionId}")
+            ->assertStatus(500)
+            ->assertJsonPath('code', 'TALOS_SESSION_DELETE_FAILED');
+
+        $this->deleteJson("/api/talos/sessions/{$sessionId}")
+            ->assertNoContent();
+
+        $this->assertSame(4, $moveCalls);
+        $this->assertDatabaseMissing('talos_sessions', ['id' => $sessionId]);
+        $this->assertDatabaseMissing('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertSame([], array_values(array_filter($realDisk->allFiles(), static fn (string $path): bool => str_contains($path, '.quarantine/'))));
+        $this->assertDatabaseHas('talos_audit_events', [
+            'event_type' => 'browser_artifact_cleanup.reconciled',
+            'subject_type' => 'talos_session',
+            'subject_id' => $sessionId,
+        ]);
+    }
+
+    public function test_chat_cleanup_fails_closed_for_an_unexpected_artifact_disk(): void
+    {
+        $browserSession = $this->createSession();
+        $localArtifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $unexpected = TalosBrowserArtifact::query()->create([
+            'browser_session_id' => $browserSession->id,
+            'user_id' => $this->user->id,
+            'type' => 'snapshot',
+            'mime' => 'application/json',
+            'storage_disk' => 's3',
+            'storage_path' => 'talos/browser/unexpected.json',
+            'metadata' => [],
+        ]);
+        $local = TalosBrowserArtifact::query()->findOrFail($localArtifactId);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJsonPath('code', 'TALOS_SESSION_DELETE_FAILED')
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $unexpected->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $local->id]);
+        $this->assertTrue(Storage::disk('local')->exists($local->storage_path));
+    }
+
+    public function test_chat_cleanup_fails_before_moves_for_an_inconsistent_artifact_owner(): void
+    {
+        $browserSession = $this->createSession();
+        $foreignUser = User::factory()->create();
+        $artifact = $this->createStoredArtifact($browserSession, 1, (int) $foreignUser->id);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJsonPath('code', 'TALOS_SESSION_DELETE_FAILED')
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+        $this->assertSame([], array_values(array_filter(Storage::disk('local')->allFiles(), static fn (string $path): bool => str_contains($path, '.quarantine/'))));
+    }
+
+    public function test_chat_cleanup_fails_before_moves_for_an_inconsistent_browser_session_owner(): void
+    {
+        $foreignUser = User::factory()->create();
+        $browserSession = TalosBrowserSession::query()->create([
+            'user_id' => $foreignUser->id,
+            'talos_session_id' => $this->chatSession->id,
+            'worker_session_id' => 'inconsistent-owner-worker',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['snapshot'],
+            'policy' => [],
+        ]);
+        $artifact = $this->createStoredArtifact($browserSession, 1, (int) $foreignUser->id);
+
+        $this->deleteJson("/api/talos/sessions/{$this->chatSession->id}")
+            ->assertStatus(500)
+            ->assertJsonPath('code', 'TALOS_SESSION_DELETE_FAILED')
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $this->chatSession->id]);
+        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $browserSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+    }
+
+    public function test_session_delete_veto_returns_a_generic_error_and_restores_artifacts(): void
+    {
+        $browserSession = $this->createSession();
+        $artifactId = $this->postJson("/api/talos/browser/sessions/{$browserSession->id}/screenshot")
+            ->assertCreated()
+            ->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $sessionId = $this->chatSession->id;
+
+        TalosSession::deleting(static function (TalosSession $candidate) use ($sessionId) {
+            if ($candidate->id === $sessionId) {
+                return false;
+            }
+        });
+
+        $this->deleteJson("/api/talos/sessions/{$sessionId}")
+            ->assertStatus(500)
+            ->assertJson([
+                'code' => 'TALOS_SESSION_DELETE_FAILED',
+                'message' => 'Chat session could not be deleted.',
+                'details' => [],
+            ])
+            ->assertJsonMissing(['storage_path']);
+
+        $this->assertDatabaseHas('talos_sessions', ['id' => $sessionId]);
+        $this->assertDatabaseHas('talos_browser_sessions', ['id' => $browserSession->id]);
+        $this->assertDatabaseHas('talos_browser_artifacts', ['id' => $artifact->id]);
+        $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
+    }
+
     public function test_worker_errors_are_controlled_and_no_destructive_browser_route_exists(): void
     {
         $this->client->failure = new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is unavailable.');
-        $this->postJson('/api/talos/browser/sessions')->assertStatus(503)->assertJsonPath('code', 'TALOS_BROWSER_WORKER_UNAVAILABLE');
+        $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertStatus(503)->assertJsonPath('code', 'TALOS_BROWSER_WORKER_UNAVAILABLE');
         $this->client->failure = new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker failed.');
-        $this->postJson('/api/talos/browser/sessions')->assertStatus(502)->assertJsonPath('code', 'TALOS_BROWSER_WORKER_FAILURE');
+        $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertStatus(502)->assertJsonPath('code', 'TALOS_BROWSER_WORKER_FAILURE');
         $this->postJson('/api/talos/browser/sessions/actions')->assertMethodNotAllowed();
     }
 
@@ -196,7 +1279,7 @@ final class TalosBrowserApiTest extends TestCase
 
     public function test_browser_validation_and_missing_resources_have_stable_error_envelopes(): void
     {
-        $this->postJson('/api/talos/browser/sessions', ['viewport' => ['width' => 1]])
+        $this->postJson('/api/talos/browser/sessions', $this->sessionPayload(['viewport' => ['width' => 1]]))
             ->assertUnprocessable()
             ->assertJsonPath('code', 'TALOS_BROWSER_VALIDATION_FAILED')
             ->assertJsonStructure(['code', 'message', 'details']);
@@ -222,8 +1305,8 @@ final class TalosBrowserApiTest extends TestCase
 
     public function test_fake_browser_client_sequences_worker_ids_deterministically(): void
     {
-        $first = $this->postJson('/api/talos/browser/sessions')->assertCreated();
-        $second = $this->postJson('/api/talos/browser/sessions')->assertCreated();
+        $first = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertCreated();
+        $second = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertCreated();
 
         $this->assertSame('worker-1', TalosBrowserSession::query()->findOrFail($first->json('data.id'))->worker_session_id);
         $this->assertSame('worker-2', TalosBrowserSession::query()->findOrFail($second->json('data.id'))->worker_session_id);
@@ -233,6 +1316,7 @@ final class TalosBrowserApiTest extends TestCase
     {
         $session = TalosBrowserSession::query()->create([
             'user_id' => $this->user->id,
+            'talos_session_id' => $this->chatSession->id,
             'worker_session_id' => 'legacy-worker-capabilities',
             'status' => 'ready',
             'mode' => 'read_only',
@@ -266,7 +1350,27 @@ final class TalosBrowserApiTest extends TestCase
         Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
             && $request->url() === 'http://browser-worker.test/sessions/worker-1'
             && $request->hasHeader('X-Talos-Worker-Token', 'worker-token')
-            && $request->hasHeader('X-Talos-Owner-Ref', 'talos-user:1'));
+             && $request->hasHeader('X-Talos-Owner-Ref', 'talos-user:1'));
+    }
+
+    public function test_http_browser_client_preserves_a_controlled_worker_fault(): void
+    {
+        Http::fake([
+            'http://browser-worker.test/sessions/worker-1/snapshot' => Http::response([
+                'message' => 'Browser snapshot execution failed.',
+                'code' => 'TALOS_BROWSER_WORKER_ERROR',
+                'details' => ['internal' => 'must not cross the client boundary'],
+            ], 500),
+        ]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        try {
+            $client->snapshot('talos-user:1', 'worker-1');
+            $this->fail('A failed worker response must throw a typed BrowserWorkerException.');
+        } catch (BrowserWorkerException $exception) {
+            $this->assertSame('TALOS_BROWSER_WORKER_ERROR', $exception->errorCode);
+            $this->assertSame('Browser snapshot execution failed.', $exception->getMessage());
+        }
     }
 
     public function test_deleting_browser_session_cascades_to_events_and_artifacts(): void
@@ -342,7 +1446,37 @@ final class TalosBrowserApiTest extends TestCase
 
     private function createSession(): TalosBrowserSession
     {
-        $id = $this->postJson('/api/talos/browser/sessions')->assertCreated()->json('data.id');
+        $id = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertCreated()->json('data.id');
         return TalosBrowserSession::query()->findOrFail($id);
+    }
+
+    private function createStoredArtifact(TalosBrowserSession $session, int $index, ?int $artifactUserId = null): TalosBrowserArtifact
+    {
+        $id = (string) str()->uuid();
+        $path = "talos/browser/{$session->user_id}/{$session->id}/{$id}";
+        $contents = "artifact-{$index}";
+        $artifact = TalosBrowserArtifact::query()->create([
+            'id' => $id,
+            'browser_session_id' => $session->id,
+            'user_id' => $artifactUserId ?? $session->user_id,
+            'type' => 'snapshot',
+            'mime' => 'application/json',
+            'storage_disk' => 'local',
+            'storage_path' => $path,
+            'sha256' => hash('sha256', $contents),
+            'metadata' => ['index' => $index],
+        ]);
+        Storage::disk('local')->put($path, $contents);
+
+        return $artifact;
+    }
+
+    /** @param array<string, mixed> $overrides @return array<string, mixed> */
+    private function sessionPayload(array $overrides = []): array
+    {
+        return [
+            'talos_session_id' => $this->chatSession->id,
+            ...$overrides,
+        ];
     }
 }

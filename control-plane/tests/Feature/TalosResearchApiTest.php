@@ -10,6 +10,7 @@ use App\Models\TalosResearchJob;
 use App\Models\TalosRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 final class TalosResearchApiTest extends TestCase
@@ -360,6 +361,37 @@ final class TalosResearchApiTest extends TestCase
             'event_type' => 'research.started',
             'payload->status' => 'RUNNING',
         ]);
+    }
+
+    public function test_research_job_capability_is_authenticated_and_fails_closed_without_executor(): void
+    {
+        Auth::logout();
+        $this->getJson('/api/talos/research-jobs/capability')
+            ->assertUnauthorized();
+
+        $this->authenticateTalosUser();
+        $this->getJson('/api/talos/research-jobs/capability')
+            ->assertOk()
+            ->assertJsonPath('data.available', false)
+            ->assertJsonPath('data.code', 'TALOS_RESEARCH_EXECUTOR_UNAVAILABLE')
+            ->assertJsonPath('data.fixture_mode.available', true);
+
+        $this->actingAs(User::factory()->create())
+            ->getJson('/api/talos/research-jobs/capability')
+            ->assertOk();
+    }
+
+    public function test_live_research_job_is_rejected_without_persisting_a_running_job(): void
+    {
+        $this->postJson('/api/talos/research-jobs', [
+            'query' => 'Run live research without an executor.',
+            'settings' => ['mode' => 'live'],
+        ])
+            ->assertStatus(503)
+            ->assertJsonPath('code', 'TALOS_RESEARCH_EXECUTOR_UNAVAILABLE');
+
+        $this->assertDatabaseCount('talos_research_jobs', 0);
+        $this->assertDatabaseCount('talos_runs', 0);
     }
 
     public function test_research_job_advances_with_fixture_sources_to_report_and_events(): void

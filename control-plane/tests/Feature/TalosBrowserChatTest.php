@@ -19,6 +19,7 @@ final class TalosBrowserChatTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+    private ?TalosSession $currentBrowseChatSession = null;
 
     protected function setUp(): void
     {
@@ -39,6 +40,7 @@ final class TalosBrowserChatTest extends TestCase
         ]);
         $browserSession = TalosBrowserSession::query()->create([
             'user_id' => $this->user->id,
+            'talos_session_id' => $chatSession->id,
             'worker_session_id' => 'worker-browser-chat',
             'status' => 'active',
             'mode' => 'read_only',
@@ -61,7 +63,7 @@ final class TalosBrowserChatTest extends TestCase
         ]);
         Storage::disk('browser-chat')->put($artifact->storage_path, json_encode([
             'format' => 'accessibility_refs_v1',
-            'url' => 'https://fixture.example.test/evidence',
+            'url' => 'https://user:pass@fixture.example.test/evidence?token=must-not-leak&safe=value',
             'title' => 'Fixture evidence',
             'textDigest' => 'fixture-browser-digest',
             'nodes' => [['ref' => 'node-1', 'role' => 'main', 'name' => 'Revenue evidence', 'visible' => true]],
@@ -82,6 +84,7 @@ final class TalosBrowserChatTest extends TestCase
             ->assertOk()
             ->assertJsonPath('used_browser_context.session_id', $browserSession->id)
             ->assertJsonPath('used_browser_context.snapshot_artifact_id', $artifact->id)
+            ->assertJsonPath('used_browser_context.url', 'https://fixture.example.test/evidence?token=%5Bredacted%5D&safe=value')
             ->assertJsonPath('used_browser_context.untrusted', true);
 
         $run = TalosRun::query()->latest('created_at')->firstOrFail();
@@ -96,6 +99,7 @@ final class TalosBrowserChatTest extends TestCase
         Http::assertSent(fn ($request): bool => $request->url() === 'http://validator.test/chat'
             && str_contains((string) $request['message'], 'webpage_content_is_untrusted=true')
             && str_contains((string) $request['message'], 'Revenue evidence')
+            && str_contains((string) $request['message'], 'token=%5Bredacted%5D')
             && ! str_contains((string) $request['message'], 'must-not-leak')
             && ! str_contains((string) $request['message'], 'Ignore previous instructions'));
     }
@@ -168,6 +172,30 @@ final class TalosBrowserChatTest extends TestCase
         $this->assertDatabaseCount('talos_runs', 0);
     }
 
+    public function test_browser_context_rejects_a_browser_session_bound_to_another_owned_chat(): void
+    {
+        $firstChat = $this->browseChatSession();
+        $browserSession = $this->browserSessionWithSnapshot();
+        $secondChat = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Second Browse chat',
+            'mode' => 'verified_execution',
+            'surface' => 'browse',
+        ]);
+        Http::fake(['validator.test/chat' => Http::response(['text' => 'Should not be called'])]);
+
+        $this->postJson('/api/talos/chat', [
+            'message' => 'Attach evidence from another chat.',
+            'api_key' => 'sk-test',
+            'session_id' => $secondChat->id,
+            'browser_context' => ['browser_session_id' => $browserSession->id],
+        ])->assertNotFound()->assertJsonPath('code', 'TALOS_BROWSER_CONTEXT_UNAVAILABLE');
+
+        $this->assertSame($firstChat->id, $browserSession->talos_session_id);
+        Http::assertNothingSent();
+        $this->assertDatabaseCount('talos_runs', 0);
+    }
+
     public function test_browser_context_rejects_terminal_browser_sessions_before_contacting_the_validator(): void
     {
         $chatSession = $this->browseChatSession();
@@ -193,6 +221,7 @@ final class TalosBrowserChatTest extends TestCase
         $chatSession = $this->browseChatSession();
         $browserSession = TalosBrowserSession::query()->create([
             'user_id' => $this->user->id,
+            'talos_session_id' => $chatSession->id,
             'worker_session_id' => 'worker-browser-chat-no-snapshot',
             'status' => 'active',
             'mode' => 'read_only',
@@ -238,7 +267,7 @@ final class TalosBrowserChatTest extends TestCase
 
     private function browseChatSession(): TalosSession
     {
-        return TalosSession::query()->create([
+        return $this->currentBrowseChatSession = TalosSession::query()->create([
             'user_id' => $this->user->id,
             'title' => 'Browse chat',
             'mode' => 'verified_execution',
@@ -250,6 +279,7 @@ final class TalosBrowserChatTest extends TestCase
     {
         $session = TalosBrowserSession::query()->create([
             'user_id' => $this->user->id,
+            'talos_session_id' => $this->currentBrowseChatSession?->id,
             'worker_session_id' => 'worker-browser-chat-helper',
             'status' => 'active',
             'mode' => 'read_only',
