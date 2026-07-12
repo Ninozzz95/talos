@@ -6,6 +6,7 @@ import type { TalosThemeCustomization, TalosThemeId } from '../lib/talosThemes'
 import type { TalosChatBubbleScale } from '../lib/talosTypes'
 import type { TalosWorkspaceSettings } from './useTalosSettings'
 import { useTalosWorkspaceTheme } from './useTalosWorkspaceTheme'
+import { createDefaultTalosMotionV6Preferences } from '../motion-v6/defaults'
 
 const mounted: Array<ReturnType<typeof createApp>> = []
 const originalMatchMedia = window.matchMedia
@@ -22,6 +23,10 @@ afterEach(() => {
 })
 
 function installMotionPreference(reducedMotion: boolean) {
+    Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        value: false,
+    })
     window.matchMedia = vi.fn((query: string) => ({
         matches: query === '(prefers-reduced-motion: reduce)' && reducedMotion,
         media: query,
@@ -78,18 +83,37 @@ async function mountWorkspaceTheme(
 }
 
 describe('useTalosWorkspaceTheme motion precedence', () => {
+    it('makes canonical V6 settings authoritative over legacy renderer preferences', async () => {
+        installMotionPreference(false)
+        const v6 = createDefaultTalosMotionV6Preferences()
+        v6.mode = 'complex'
+        v6.scene_override = 'signal'
+        const motion = await mountWorkspaceTheme('normal', {
+            theme_simple_animation: true,
+            theme_motion_disabled: true,
+            theme_motion_v6: v6,
+        })
+        expect(motion.motionV6Source.value).toBe('v6')
+        expect(motion.motionV6Decision.value.effectiveMode).toBe('complex')
+        expect(motion.motionV6SceneId.value).toBe('signal')
+        expect(motion.simpleAnimation.value).toBe(false)
+        expect(motion.backgroundMotionEnabled.value).toBe(true)
+    })
+
     it('uses each preset bounded density radius and motion profile when no override exists', async () => {
         installMotionPreference(false)
 
         const paper = await mountWorkspaceTheme('system', {}, 'paper')
         expect(paper.shellClass.value).toContain('talos-density-spacious')
         expect(paper.shellClass.value).toContain('talos-radius-balanced')
-        expect(paper.motionMode.value).toBe('subtle')
+        expect(paper.motionV6SceneId.value).toBe('paper')
+        expect(paper.workspaceStyle.value['--talos-motion-duration-window-open']).toBe('365ms')
 
         const terminal = await mountWorkspaceTheme('system', {}, 'terminal')
         expect(terminal.shellClass.value).toContain('talos-density-compact')
         expect(terminal.shellClass.value).toContain('talos-radius-sharp')
-        expect(terminal.motionMode.value).toBe('cinematic')
+        expect(terminal.motionV6SceneId.value).toBe('terminal')
+        expect(terminal.workspaceStyle.value['--talos-motion-duration-window-open']).toBe('320ms')
     })
 
     it.each(['normal', 'cinematic'] as const)('treats OS reduced motion as a hard override for %s', async (themeMotion) => {
@@ -120,7 +144,7 @@ describe('useTalosWorkspaceTheme motion precedence', () => {
         expect(motion.backgroundMotionEnabled.value).toBe(false)
     })
 
-    it('pauses workspace UI and background motion under a low-power signal', async () => {
+    it('reduces background complexity and disables interface motion under a low-power signal', async () => {
         installMotionPreference(false)
         Object.defineProperty(navigator, 'connection', {
             configurable: true,
@@ -135,7 +159,52 @@ describe('useTalosWorkspaceTheme motion precedence', () => {
         const motion = await mountWorkspaceTheme('normal')
 
         expect(motion.uiMotionDisabled.value).toBe(true)
-        expect(motion.backgroundMotionEnabled.value).toBe(false)
+        expect(motion.motionV6Decision.value).toMatchObject({ effectiveMode: 'simple', reason: 'data_saver' })
+        expect(motion.backgroundMotionEnabled.value).toBe(true)
+    })
+
+    it('feeds real renderer samples into Adaptive degradation and stable recovery', async () => {
+        installMotionPreference(false)
+        const v6 = createDefaultTalosMotionV6Preferences()
+        v6.mode = 'adaptive'
+        v6.quality = 'balanced'
+        const motion = await mountWorkspaceTheme('normal', { theme_motion_v6: v6 })
+        let timestampMs = 0
+
+        for (let window = 0; window < 3; window += 1) {
+            for (let frame = 0; frame < 30; frame += 1) {
+                motion.recordMotionFrame({ timestampMs, frameCostMs: 13, primitiveCount: 120 })
+                timestampMs += 1
+            }
+            await nextTick()
+        }
+        expect(motion.motionV6Decision.value).toMatchObject({
+            degradationStage: 1,
+            reason: 'performance_degraded',
+        })
+
+        for (let window = 0; window < 8; window += 1) motion.recordMotionStableWindow({ eventLoopDelayMs: 2 })
+        await nextTick()
+        expect(motion.motionV6Decision.value.degradationStage).toBe(0)
+    })
+
+    it('fails a renderer closed through the workspace callback instead of retrying in a loop', async () => {
+        installMotionPreference(false)
+        const v6 = createDefaultTalosMotionV6Preferences()
+        v6.mode = 'adaptive'
+        const motion = await mountWorkspaceTheme('normal', { theme_motion_v6: v6 })
+
+        motion.recordMotionRendererFault({ effectiveMode: 'complex', reason: 'render_failed' })
+        await nextTick()
+
+        expect(motion.motionV6Decision.value).toMatchObject({
+            effectiveMode: 'simple',
+            reason: 'renderer_fault',
+        })
+        expect(motion.motionV6GovernorSnapshot.value).toMatchObject({
+            rendererFault: true,
+            failedEffectiveMode: 'complex',
+        })
     })
 
     it('ignores unsafe persisted customization instead of rendering unreadable legacy state', async () => {

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "windows_x64": {
+    "php": {
+      "version": "8.5.8",
+      "url": "https://downloads.php.net/~windows/releases/php-8.5.8-Win32-vs17-x64.zip",
+      "sha256": "a7323e50a1e29fddc278d9297ca9a4ec134bd1cca5396af39115284a125cab2f",
+      "bytes": 35931602,
+      "archive": "php-8.5.8-Win32-vs17-x64.zip"
+    },
+    "node": {
+      "version": "24.18.0",
+      "url": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip",
+      "sha256": "0ae68406b42d7725661da979b1403ec9926da205c6770827f33aac9d8f26e821",
+      "bytes": 37176245,
+      "archive": "node-v24.18.0-win-x64.zip",
+      "archive_root": "node-v24.18.0-win-x64"
+    },
+    "composer": {
+      "version": "2.10.2",
+      "url": "https://getcomposer.org/download/2.10.2/composer.phar",
+      "sha256": "5ee7125f8a30a34d246cefdc0bc85b8a783b28f2aec968994118512350d28027",
+      "bytes": 3639279,
+      "archive": "composer-2.10.2.phar"
+    },
+    "cacert": {
+      "version": "2026-05-14",
+      "url": "https://curl.se/ca/cacert-2026-05-14.pem",
+      "sha256": "86a1f3366afac7c6f8ae9f3c779ac221129328c43f0ab2b8817eb2f362a5025c",
+      "bytes": 189462,
+      "archive": "cacert-2026-05-14.pem"
+    },
+    "required_php_extensions": [
+      "curl",
+      "fileinfo",
+      "mbstring",
+      "openssl",
+      "pdo_sqlite",
+      "sqlite3",
+      "zip"
+    ]
+  }
+}

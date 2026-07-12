@@ -13,10 +13,12 @@ usage() {
 talos - AVM/TALOS deployment helper
 
 Usage:
-  talos up              Create .env if needed and start TALOS, queue, and validator
+  talos up              Start the complete Docker stack from a clean checkout
+  talos dev             Bootstrap native tools/dependencies and start all dev services
   talos down            Stop the Docker Compose stack
   talos logs            Follow stack logs
-  talos doctor          Check Docker, env, compose config, and service readiness
+  talos doctor          Check Docker and native development readiness
+  talos doctor --repair Repair the repo-local native toolchain and dependencies
   talos open            Open the TALOS URL in the default browser
   talos fresh           Development-only reset of Compose volumes, then start
   talos help            Show this help
@@ -108,20 +110,6 @@ maybe_boot() {
   fi
 }
 
-php_bin() {
-  if [ -x "$ROOT_DIR/.tools/php/php.exe" ]; then
-    printf '%s\n' "$ROOT_DIR/.tools/php/php.exe"
-    return
-  fi
-
-  if command -v php >/dev/null 2>&1; then
-    command -v php
-    return
-  fi
-
-  printf '%s\n' ""
-}
-
 compose() {
   docker compose "$@"
 }
@@ -134,33 +122,186 @@ env_value() {
   grep -E "^${key}=" .env | tail -n 1 | cut -d= -f2- || true
 }
 
+set_env_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if grep -qE "^${key}=" "$file"; then
+    sed -i.bak "s|^${key}=.*|${key}=${value}|" "$file"
+    rm -f "${file}.bak"
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
+
+random_hex_32() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+    return
+  fi
+  if [ -r /dev/urandom ] && command -v od >/dev/null 2>&1; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \r\n'
+    return
+  fi
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoLogo -NoProfile -Command \
+      "[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)).ToLowerInvariant()"
+    return
+  fi
+  echo "A cryptographically secure random generator is required." >&2
+  return 1
+}
+
+random_base64_32() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -base64 32 | tr -d '\r\n'
+    return
+  fi
+  if [ -r /dev/urandom ] && command -v dd >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1; then
+    dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\r\n'
+    return
+  fi
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoLogo -NoProfile -Command \
+      "[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))"
+    return
+  fi
+  echo "A cryptographically secure random generator is required." >&2
+  return 1
+}
+
 ensure_env() {
   if [ ! -f .env ]; then
-    cp .env.example .env
+    (umask 077 && cp .env.example .env)
     echo "Created .env from .env.example"
   fi
 
-  local app_key
-  app_key="$(env_value APP_KEY)"
-  if [[ ! "$app_key" =~ ^base64:.+ ]]; then
-    local php
-    php="$(php_bin)"
-    if [ -z "$php" ]; then
-      echo "APP_KEY is missing and PHP is not available to generate it." >&2
-      echo "Set APP_KEY manually in .env, then rerun: talos up" >&2
-      exit 1
-    fi
-
-    local generated
-    generated="$("$php" -r "echo 'base64:'.base64_encode(random_bytes(32));")"
-    if grep -q '^APP_KEY=' .env; then
-      sed -i.bak "s|^APP_KEY=.*|APP_KEY=${generated}|" .env
-      rm -f .env.bak
-    else
-      printf '\nAPP_KEY=%s\n' "$generated" >> .env
-    fi
-    echo "Generated APP_KEY in .env"
+  local browser_token
+  browser_token="$(env_value TALOS_BROWSER_WORKER_TOKEN || true)"
+  if [[ ! "$browser_token" =~ ^[a-f0-9]{64}$ ]]; then
+    set_env_value .env TALOS_BROWSER_WORKER_TOKEN "$(random_hex_32)"
+    echo "Generated the internal browser-worker credential in .env"
   fi
+
+  local app_key
+  app_key="$(env_value APP_KEY || true)"
+  if [[ ! "$app_key" =~ ^base64:[A-Za-z0-9+/]{43}=$ ]]; then
+    set_env_value .env APP_KEY "base64:$(random_base64_32)"
+    echo "Generated the Laravel application key in .env"
+  fi
+  chmod 600 .env
+}
+
+require_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is required for 'talos up'. Install Docker or run 'talos dev'." >&2
+    return 1
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    echo "The Docker Compose plugin is required for 'talos up'." >&2
+    return 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "The Docker daemon is not reachable. Start Docker and retry." >&2
+    return 1
+  fi
+}
+
+native_bootstrap() {
+  local mode="${1:-install}"
+  local args=()
+  if [ "$mode" = "repair" ]; then
+    args+=(--repair)
+  fi
+  bash "$ROOT_DIR/scripts/bootstrap-tools.sh" "${args[@]}"
+}
+
+acquire_native_setup_lock() {
+  local lock_dir="$ROOT_DIR/.tools/.native-setup.lock"
+  local owner_file="$lock_dir/owner"
+  mkdir -p "$ROOT_DIR/.tools"
+  if ! mkdir "$lock_dir" 2>/dev/null; then
+    local owner=""
+    if [ -f "$owner_file" ]; then
+      owner="$(cat "$owner_file" 2>/dev/null || true)"
+    fi
+    if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+      echo "Another TALOS native setup/dev process is active (PID $owner)." >&2
+      return 1
+    fi
+    rm -f "$owner_file"
+    rmdir "$lock_dir" 2>/dev/null || {
+      echo "The native setup lock is stale but cannot be cleared: $lock_dir" >&2
+      return 1
+    }
+    mkdir "$lock_dir"
+  fi
+  printf '%s\n' "$$" > "$owner_file"
+  trap 'rm -f "$ROOT_DIR/.tools/.native-setup.lock/owner"; rmdir "$ROOT_DIR/.tools/.native-setup.lock" 2>/dev/null || true' EXIT INT TERM
+}
+
+dependency_needs_install() {
+  local lock_file="$1"
+  local required_file="$2"
+  local marker="$3"
+  [ ! -f "$required_file" ] || [ ! -f "$marker" ] || [ "$lock_file" -nt "$marker" ]
+}
+
+ensure_native_dependencies() {
+  local composer="$ROOT_DIR/.tools/bin/composer.cmd"
+  local npm="$ROOT_DIR/.tools/bin/npm.cmd"
+  local markers="$ROOT_DIR/.tools/state/dependencies"
+  mkdir -p "$markers"
+
+  if dependency_needs_install "$ROOT_DIR/core/composer.lock" "$ROOT_DIR/core/vendor/autoload.php" "$markers/core-composer"; then
+    print_step "Installing locked KADMOS dependencies"
+    (cd "$ROOT_DIR/core" && "$composer" install --no-interaction --prefer-dist)
+    touch "$markers/core-composer"
+  fi
+  if dependency_needs_install "$ROOT_DIR/control-plane/composer.lock" "$ROOT_DIR/control-plane/vendor/autoload.php" "$markers/control-plane-composer"; then
+    print_step "Installing locked control-plane dependencies"
+    (cd "$ROOT_DIR/control-plane" && "$composer" install --no-interaction --prefer-dist)
+    touch "$markers/control-plane-composer"
+  fi
+
+  local package
+  for package in validator browser-worker control-plane; do
+    if dependency_needs_install "$ROOT_DIR/$package/package-lock.json" "$ROOT_DIR/$package/node_modules/.package-lock.json" "$markers/$package-npm"; then
+      print_step "Installing locked $package dependencies"
+      "$npm" --prefix "$ROOT_DIR/$package" ci
+      touch "$markers/$package-npm"
+    fi
+  done
+
+  if ! "$npm" --prefix "$ROOT_DIR/browser-worker" run doctor:runtime >/dev/null 2>&1; then
+    print_step "Installing the pinned Chromium browser runtime"
+    "$npm" --prefix "$ROOT_DIR/browser-worker" exec playwright install chromium
+  fi
+  "$npm" --prefix "$ROOT_DIR/browser-worker" run doctor:runtime >/dev/null
+  touch "$markers/browser-worker-playwright"
+}
+
+ensure_native_application() {
+  local php="$ROOT_DIR/.tools/bin/php.cmd"
+  local env_file="$ROOT_DIR/control-plane/.env"
+  if [ ! -f "$env_file" ]; then
+    cp "$ROOT_DIR/control-plane/.env.example" "$env_file"
+    echo "Created control-plane/.env from its template"
+  fi
+  mkdir -p "$ROOT_DIR/control-plane/database"
+  touch "$ROOT_DIR/control-plane/database/database.sqlite"
+  if ! grep -Eq '^APP_KEY=base64:.+' "$env_file"; then
+    (cd "$ROOT_DIR/control-plane" && "$php" artisan key:generate --force)
+  fi
+  (cd "$ROOT_DIR/control-plane" && "$php" artisan migrate --force && "$php" artisan config:clear)
+}
+
+native_setup() {
+  local mode="${1:-install}"
+  acquire_native_setup_lock
+  native_bootstrap "$mode"
+  ensure_native_dependencies
+  ensure_native_application
 }
 
 talos_url() {
@@ -174,6 +315,15 @@ talos_url() {
   local port
   port="$(env_value APP_PORT)"
   printf 'http://localhost:%s\n' "${port:-8088}"
+}
+
+active_talos_url() {
+  local native_url="http://127.0.0.1:8000"
+  if command -v curl >/dev/null 2>&1 && curl -fsS "${native_url}/readyz" >/dev/null 2>&1; then
+    printf '%s\n' "$native_url"
+    return
+  fi
+  talos_url
 }
 
 open_url() {
@@ -194,29 +344,34 @@ wait_for_ready() {
   url="$(talos_url)"
   local ready_url="${url%/}/readyz"
 
-  if ! command -v curl >/dev/null 2>&1; then
-    echo "Readiness probe skipped; curl is not available."
-    return 0
-  fi
-
   local attempt
   for attempt in $(seq 1 30); do
-    if curl -fsS "$ready_url" >/dev/null 2>&1; then
+    if command -v curl >/dev/null 2>&1 && curl -fsS "$ready_url" >/dev/null 2>&1; then
+      echo "Readiness OK: $ready_url"
+      return 0
+    fi
+    if ! command -v curl >/dev/null 2>&1 \
+      && docker compose exec -T talos php -r \
+        "exit(@file_get_contents('http://127.0.0.1:8088/readyz') === false ? 1 : 0);" >/dev/null 2>&1; then
       echo "Readiness OK: $ready_url"
       return 0
     fi
     sleep 2
   done
 
-  echo "Readiness still warming up: $ready_url"
-  echo "Run: talos doctor"
-  return 0
+  echo "Readiness failed: $ready_url" >&2
+  docker compose ps || true
+  docker compose logs --tail=120 talos validator browser-worker || true
+  echo "Run: ./talos doctor" >&2
+  return 1
 }
 
 doctor() {
-  local ok=0
+  local repair="${1:-}"
   local docker_available=0
   local compose_available=0
+  local docker_ready=0
+  local native_ready=0
   echo "TALOS Doctor"
   echo "------------"
 
@@ -224,16 +379,14 @@ doctor() {
     echo "docker              OK   $(docker --version)"
     docker_available=1
   else
-    echo "docker              FAIL Docker CLI is not available"
-    ok=1
+    echo "docker              WARN Docker CLI is not available"
   fi
 
-  if docker compose version >/dev/null 2>&1; then
+  if [ "$docker_available" -eq 1 ] && docker compose version >/dev/null 2>&1; then
     echo "docker compose      OK   $(docker compose version)"
     compose_available=1
   else
-    echo "docker compose      FAIL Docker Compose plugin is not available"
-    ok=1
+    echo "docker compose      WARN Docker Compose plugin is not available"
   fi
 
   if [ -f .env ]; then
@@ -246,18 +399,50 @@ doctor() {
     echo "compose file        OK   docker-compose.yml"
   else
     echo "compose file        FAIL docker-compose.yml missing"
-    ok=1
   fi
 
   if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ]; then
-    if docker compose config >/dev/null 2>&1; then
+    if ! docker info >/dev/null 2>&1; then
+      echo "docker daemon       WARN unavailable"
+    elif docker compose config >/dev/null 2>&1; then
+      echo "docker daemon       OK   reachable"
       echo "compose config      OK   valid"
+      docker_ready=1
     else
       echo "compose config      FAIL invalid"
-      ok=1
     fi
   else
     echo "compose config      SKIP Docker Compose unavailable"
+  fi
+
+  if [ "$repair" = "--repair" ]; then
+    print_step "Repairing native toolchain and application state"
+    native_setup repair
+    native_ready=1
+  elif bash "$ROOT_DIR/scripts/bootstrap-tools.sh" --verify-only >/dev/null 2>&1; then
+    native_ready=1
+  fi
+
+  if [ "$native_ready" -eq 1 ]; then
+    echo "native toolchain    OK   pinned and relocatable"
+    if [ -f "$ROOT_DIR/core/vendor/autoload.php" ] \
+      && [ -f "$ROOT_DIR/control-plane/vendor/autoload.php" ] \
+      && [ -f "$ROOT_DIR/validator/node_modules/.package-lock.json" ] \
+      && [ -f "$ROOT_DIR/browser-worker/node_modules/.package-lock.json" ] \
+      && [ -f "$ROOT_DIR/control-plane/node_modules/.package-lock.json" ]; then
+      if "$ROOT_DIR/.tools/bin/npm.cmd" --prefix "$ROOT_DIR/browser-worker" run doctor:runtime >/dev/null 2>&1; then
+        echo "native dependencies OK   installed"
+        echo "browser runtime     OK   Chromium executable is installed"
+      else
+        echo "browser runtime     WARN run ./talos doctor --repair"
+        native_ready=0
+      fi
+    else
+      echo "native dependencies WARN run ./talos dev or ./talos doctor --repair"
+      native_ready=0
+    fi
+  else
+    echo "native toolchain    WARN run ./talos dev or ./talos doctor --repair"
   fi
 
   if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ] && docker compose ps >/dev/null 2>&1; then
@@ -268,13 +453,21 @@ doctor() {
   url="$(talos_url)"
   if command -v curl >/dev/null 2>&1; then
     if curl -fsS "${url%/}/readyz" >/dev/null 2>&1; then
-      echo "readyz              OK   ${url%/}/readyz"
+      echo "docker readyz       OK   ${url%/}/readyz"
     else
-      echo "readyz              WARN ${url%/}/readyz is not healthy or not running"
+      echo "docker readyz       WARN ${url%/}/readyz is not healthy or not running"
+    fi
+    if curl -fsS "http://127.0.0.1:8000/readyz" >/dev/null 2>&1; then
+      echo "native readyz       OK   http://127.0.0.1:8000/readyz"
+    else
+      echo "native readyz       WARN http://127.0.0.1:8000/readyz is not healthy or not running"
     fi
   fi
 
-  return "$ok"
+  if [ "$docker_ready" -eq 1 ] || [ "$native_ready" -eq 1 ]; then
+    return 0
+  fi
+  return 1
 }
 
 args=()
@@ -295,13 +488,20 @@ maybe_boot "$cmd"
 
 case "$cmd" in
   up)
+    require_docker
     print_step "Preparing environment"
     ensure_env
-    print_step "Building and starting TALOS, queue, and validator"
+    print_step "Building and starting TALOS, queue, validator, and browser worker"
     docker compose up -d --build
     print_step "Checking readiness"
     wait_for_ready
     echo "TALOS is starting at $(talos_url)"
+    ;;
+  dev)
+    print_step "Preparing the native development workspace"
+    native_setup
+    print_step "Starting TALOS at http://127.0.0.1:8000"
+    (cd "$ROOT_DIR/control-plane" && "$ROOT_DIR/.tools/bin/composer.cmd" run dev)
     ;;
   down)
     print_step "Stopping TALOS stack"
@@ -311,14 +511,14 @@ case "$cmd" in
     docker compose logs -f
     ;;
   doctor)
-    doctor
+    doctor "${2:-}"
     ;;
   open)
     print_step "Opening TALOS workspace"
-    ensure_env
-    open_url "$(talos_url)"
+    open_url "$(active_talos_url)"
     ;;
   fresh)
+    require_docker
     echo "This removes local TALOS Docker volumes. Use only for development."
     read -r -p "Type RESET to continue: " confirm
     if [ "$confirm" != "RESET" ]; then

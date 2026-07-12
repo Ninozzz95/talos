@@ -9,4 +9,10 @@ describe('TalosWorkspace initialization order', () => {
         expect(stateIndex).toBeGreaterThan(-1)
         expect(availabilityIndex).toBeGreaterThan(stateIndex)
     })
+
+    it('keeps renderer and window runtimes gated until persisted workspace settings finish bootstrapping', () => {
+        expect(workspaceSource).toContain('const workspaceRuntimeReady = ref(false)')
+        expect(workspaceSource).toMatch(/try\s*{\s*await workspaceBootstrap\.initialize\(\)\s*}\s*finally\s*{\s*workspaceRuntimeReady\.value = true/)
+        expect(workspaceSource).toContain('<TalosProceduralBackground v-if="workspaceRuntimeReady"')
+    })
 })

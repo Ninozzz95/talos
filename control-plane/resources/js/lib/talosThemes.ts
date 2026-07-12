@@ -7,7 +7,8 @@ import {
     validateTalosNormalTextPairs,
     type TalosContrastValidationResult,
 } from './talosContrast'
-import { talosMotionDurationStyle } from './talosMotion'
+import { parseTalosMotionV6Preferences, type TalosMotionV6Preferences } from '../motion-v6/contracts'
+import { createDefaultTalosMotionV6Preferences } from '../motion-v6/defaults'
 
 export const TALOS_THEME_IDS = [
     'forge',
@@ -104,6 +105,7 @@ export type TalosNamedTheme = {
     tokens: TalosThemeCustomization
     area_tokens?: TalosThemeAreaTokens
     motion?: TalosThemeMotionMode
+    motion_v6?: TalosMotionV6Preferences
     ui_animation_profile?: TalosUiAnimationProfile
     ui_animation_customization?: TalosUiAnimationCustomization
     chat_layout?: TalosChatLayoutPreferences
@@ -115,6 +117,14 @@ export type TalosThemeExportV1 = {
     schema: 'talos_theme_export_v1'
     exported_at: string
     theme: TalosNamedTheme
+}
+
+export type TalosThemeExportV2 = {
+    schema: 'talos_theme_export_v2'
+    exported_at: string
+    theme: Omit<TalosNamedTheme, 'motion' | 'ui_animation_profile' | 'ui_animation_customization'> & {
+        motion_v6: TalosMotionV6Preferences
+    }
 }
 
 export const TALOS_DEFAULT_THEME: TalosThemeId = 'forge'
@@ -727,151 +737,6 @@ const UI_ANIMATION_EASING_VALUES = new Set(TALOS_UI_ANIMATION_EASING_OPTIONS.map
 const AREA_VALUES = new Set(TALOS_THEME_AREA_OPTIONS.map((area) => area.value))
 const AREA_TOKEN_VALUES = new Set(TALOS_THEME_AREA_TOKEN_OPTIONS.map((token) => token.value))
 
-const TALOS_THEME_UI_ANIMATION_PRESETS: Record<TalosThemeId, Required<TalosUiAnimationCustomization>> = {
-    forge: {
-        open_close: 'standard',
-        surface_transition: 'slide-fade',
-        feedback: 'status-lock',
-        hover: 'edge-glow',
-        duration_scale: 100,
-        intensity: 70,
-        easing: 'precise',
-        stagger: 40,
-    },
-    paper: {
-        open_close: 'soft-fade',
-        surface_transition: 'fade',
-        feedback: 'none',
-        hover: 'underline',
-        duration_scale: 85,
-        intensity: 25,
-        easing: 'soft',
-        stagger: 12,
-    },
-    terminal: {
-        open_close: 'terminal-snap',
-        surface_transition: 'scanline',
-        feedback: 'trace',
-        hover: 'underline',
-        duration_scale: 70,
-        intensity: 55,
-        easing: 'linear',
-        stagger: 16,
-    },
-    aurora: {
-        open_close: 'depth',
-        surface_transition: 'scale-fade',
-        feedback: 'pulse',
-        hover: 'node-glow',
-        duration_scale: 115,
-        intensity: 80,
-        easing: 'soft',
-        stagger: 56,
-    },
-    glacier: {
-        open_close: 'standard',
-        surface_transition: 'slide-fade',
-        feedback: 'edge-flash',
-        hover: 'edge-glow',
-        duration_scale: 95,
-        intensity: 45,
-        easing: 'precise',
-        stagger: 28,
-    },
-    ember: {
-        open_close: 'standard',
-        surface_transition: 'scale-fade',
-        feedback: 'edge-flash',
-        hover: 'edge-glow',
-        duration_scale: 90,
-        intensity: 75,
-        easing: 'elastic-light',
-        stagger: 24,
-    },
-    atlas: {
-        open_close: 'standard',
-        surface_transition: 'axis-shift',
-        feedback: 'trace',
-        hover: 'node-glow',
-        duration_scale: 100,
-        intensity: 65,
-        easing: 'precise',
-        stagger: 48,
-    },
-    noir: {
-        open_close: 'soft-fade',
-        surface_transition: 'fade',
-        feedback: 'status-lock',
-        hover: 'underline',
-        duration_scale: 95,
-        intensity: 40,
-        easing: 'cinematic',
-        stagger: 20,
-    },
-    signal: {
-        open_close: 'depth',
-        surface_transition: 'slide-fade',
-        feedback: 'trace',
-        hover: 'node-glow',
-        duration_scale: 90,
-        intensity: 85,
-        easing: 'precise',
-        stagger: 36,
-    },
-    violet: {
-        open_close: 'depth',
-        surface_transition: 'scale-fade',
-        feedback: 'pulse',
-        hover: 'edge-glow',
-        duration_scale: 120,
-        intensity: 90,
-        easing: 'cinematic',
-        stagger: 60,
-    },
-    claudius: {
-        open_close: 'soft-fade',
-        surface_transition: 'fade',
-        feedback: 'none',
-        hover: 'underline',
-        duration_scale: 90,
-        intensity: 28,
-        easing: 'soft',
-        stagger: 10,
-    },
-    basicus: {
-        open_close: 'standard',
-        surface_transition: 'fade',
-        feedback: 'edge-flash',
-        hover: 'lift',
-        duration_scale: 80,
-        intensity: 34,
-        easing: 'precise',
-        stagger: 8,
-    },
-}
-
-const TALOS_UI_ANIMATION_MINIMAL: Required<TalosUiAnimationCustomization> = {
-    open_close: 'soft-fade',
-    surface_transition: 'fade',
-    feedback: 'none',
-    hover: 'underline',
-    duration_scale: 70,
-    intensity: 18,
-    easing: 'soft',
-    stagger: 0,
-}
-
-const TALOS_UI_ANIMATION_EXPRESSIVE: Required<TalosUiAnimationCustomization> = {
-    open_close: 'depth',
-    surface_transition: 'scale-fade',
-    feedback: 'pulse',
-    hover: 'node-glow',
-    duration_scale: 120,
-    intensity: 88,
-    easing: 'cinematic',
-    stagger: 68,
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -1107,6 +972,12 @@ export function sanitizeTalosNamedTheme(value: unknown): TalosNamedTheme | null 
         theme.motion = motion
     }
 
+    if (Object.hasOwn(value, 'motion_v6')) {
+        const parsedMotion = parseTalosMotionV6Preferences(value.motion_v6)
+        if (!parsedMotion.success) return null
+        theme.motion_v6 = parsedMotion.value
+    }
+
     const uiAnimationProfile = enumValue(value.ui_animation_profile, UI_ANIMATION_PROFILE_VALUES)
     if (uiAnimationProfile) {
         theme.ui_animation_profile = uiAnimationProfile
@@ -1157,12 +1028,14 @@ export function parseTalosThemeExport(value: unknown): TalosNamedTheme | null {
     if (
         !isRecord(value)
         || !Object.hasOwn(value, 'schema')
-        || value.schema !== 'talos_theme_export_v1'
+        || (value.schema !== 'talos_theme_export_v1' && value.schema !== 'talos_theme_export_v2')
         || !Object.hasOwn(value, 'theme')
         || !isRecord(value.theme)
     ) {
         return null
     }
+
+    if (value.schema === 'talos_theme_export_v2' && !Object.hasOwn(value.theme, 'motion_v6')) return null
 
     if (
         !Object.hasOwn(value.theme, 'base_theme')
@@ -1181,208 +1054,21 @@ export function parseTalosThemeExport(value: unknown): TalosNamedTheme | null {
     return theme
 }
 
-export function buildTalosThemeExport(theme: TalosNamedTheme): TalosThemeExportV1 {
+export function buildTalosThemeExport(theme: TalosNamedTheme): TalosThemeExportV2 {
+    const motionV6 = theme.motion_v6
+        ? parseTalosMotionV6Preferences(theme.motion_v6)
+        : { success: true as const, value: createDefaultTalosMotionV6Preferences() }
+    if (!motionV6.success) throw new TypeError('Cannot export an invalid Motion V6 theme payload.')
+    const {
+        motion: _legacyMotion,
+        ui_animation_profile: _legacyUiProfile,
+        ui_animation_customization: _legacyUiCustomization,
+        ...portableTheme
+    } = theme
     return {
-        schema: 'talos_theme_export_v1',
+        schema: 'talos_theme_export_v2',
         exported_at: new Date().toISOString(),
-        theme,
-    }
-}
-
-export function talosBackgroundEffectFromCustomization(
-    customization: TalosThemeCustomization,
-    preset: TalosThemePreset,
-    backgroundDisabled = false,
-): TalosBackgroundEffect {
-    if (backgroundDisabled) {
-        return 'none'
-    }
-
-    return customization.effect ?? preset.defaultEffect
-}
-
-export function talosThemeMotionStyle(motionMode: TalosThemeMotionMode): Record<string, string> {
-    if (motionMode === 'off') {
-        return {
-            '--talos-effect-opacity': '0.64',
-            '--talos-trace-duration-a': '1s',
-            '--talos-trace-duration-b': '1s',
-            '--talos-trace-duration-c': '1s',
-            '--talos-grid-duration': '1s',
-            '--talos-node-duration-a': '1s',
-            '--talos-node-duration-b': '1s',
-        }
-    }
-
-    if (motionMode === 'subtle') {
-        return {
-            '--talos-effect-opacity': '0.42',
-            '--talos-trace-duration-a': '9.8s',
-            '--talos-trace-duration-b': '12s',
-            '--talos-trace-duration-c': '11s',
-            '--talos-grid-duration': '20s',
-            '--talos-node-duration-a': '9s',
-            '--talos-node-duration-b': '10s',
-        }
-    }
-
-    if (motionMode === 'cinematic') {
-        return {
-            '--talos-effect-opacity': '0.94',
-            '--talos-trace-duration-a': '3.8s',
-            '--talos-trace-duration-b': '4.6s',
-            '--talos-trace-duration-c': '4.2s',
-            '--talos-grid-duration': '8s',
-            '--talos-node-duration-a': '3.9s',
-            '--talos-node-duration-b': '4.4s',
-        }
-    }
-
-    return {
-        '--talos-effect-opacity': '0.72',
-        '--talos-trace-duration-a': '5.8s',
-        '--talos-trace-duration-b': '7.4s',
-        '--talos-trace-duration-c': '6.6s',
-        '--talos-grid-duration': '12s',
-        '--talos-node-duration-a': '5.8s',
-        '--talos-node-duration-b': '6.4s',
-    }
-}
-
-function resolvedTalosUiAnimation(
-    theme: TalosThemeId,
-    profile: TalosUiAnimationProfile,
-    customization: TalosUiAnimationCustomization = {},
-): Required<TalosUiAnimationCustomization> {
-    if (profile === 'minimal') {
-        return TALOS_UI_ANIMATION_MINIMAL
-    }
-
-    if (profile === 'expressive') {
-        return TALOS_UI_ANIMATION_EXPRESSIVE
-    }
-
-    const preset = TALOS_THEME_UI_ANIMATION_PRESETS[theme] ?? TALOS_THEME_UI_ANIMATION_PRESETS[TALOS_DEFAULT_THEME]
-
-    if (profile === 'custom') {
-        return {
-            ...preset,
-            ...sanitizeTalosUiAnimationCustomization(customization),
-        }
-    }
-
-    return preset
-}
-
-function easingValue(easing: TalosUiAnimationEasing) {
-    if (easing === 'soft') {
-        return 'cubic-bezier(0.16, 1, 0.3, 1)'
-    }
-
-    if (easing === 'elastic-light') {
-        return 'cubic-bezier(0.2, 0.9, 0.24, 1.16)'
-    }
-
-    if (easing === 'linear') {
-        return 'linear'
-    }
-
-    if (easing === 'cinematic') {
-        return 'cubic-bezier(0.19, 1, 0.22, 1)'
-    }
-
-    return 'cubic-bezier(0.2, 0.8, 0.2, 1)'
-}
-
-function openTransform(openClose: TalosUiAnimationOpenClose) {
-    if (openClose === 'instant') {
-        return 'none'
-    }
-
-    if (openClose === 'depth') {
-        return 'translateY(12px) scale(0.965)'
-    }
-
-    if (openClose === 'terminal-snap') {
-        return 'translateY(-2px) scale(0.995)'
-    }
-
-    if (openClose === 'soft-fade') {
-        return 'translateY(4px) scale(1)'
-    }
-
-    return 'translateY(8px) scale(0.985)'
-}
-
-function surfaceTransform(surface: TalosUiAnimationSurfaceTransition) {
-    if (surface === 'scale-fade') {
-        return 'scale(0.985)'
-    }
-
-    if (surface === 'scanline') {
-        return 'translateY(-4px)'
-    }
-
-    if (surface === 'axis-shift') {
-        return 'translateX(-8px)'
-    }
-
-    if (surface === 'slide-fade') {
-        return 'translateY(6px)'
-    }
-
-    return 'none'
-}
-
-function scaledMs(base: number, scale: number) {
-    return `${Math.round(base * (scale / 100))}ms`
-}
-
-export function talosUiAnimationStyle(
-    theme: TalosThemeId,
-    profile: TalosUiAnimationProfile,
-    _motionMode: TalosThemeMotionMode,
-    uiMotionDisabled: boolean,
-    customization: TalosUiAnimationCustomization = {},
-): Record<string, string> {
-    if (uiMotionDisabled || profile === 'off') {
-        return {
-            ...talosMotionDurationStyle(100, false),
-            '--talos-motion-open-duration': '0ms',
-            '--talos-motion-close-duration': '0ms',
-            '--talos-window-minimize-duration': '0ms',
-            '--talos-motion-surface-duration': '0ms',
-            '--talos-motion-feedback-duration': '0ms',
-            '--talos-motion-stagger': '0ms',
-            '--talos-motion-intensity': '0',
-            '--talos-motion-ease': 'linear',
-            '--talos-motion-open-transform': 'none',
-            '--talos-motion-surface-transform': 'none',
-            '--talos-motion-open-style': 'off',
-            '--talos-motion-surface-style': 'off',
-            '--talos-motion-feedback-style': 'none',
-            '--talos-motion-hover-style': 'none',
-        }
-    }
-
-    const resolved = resolvedTalosUiAnimation(theme, profile, customization)
-
-    return {
-        ...talosMotionDurationStyle(resolved.duration_scale),
-        '--talos-motion-open-duration': scaledMs(160, resolved.duration_scale),
-        '--talos-motion-close-duration': scaledMs(120, resolved.duration_scale),
-        '--talos-window-minimize-duration': scaledMs(420, resolved.duration_scale),
-        '--talos-motion-surface-duration': scaledMs(180, resolved.duration_scale),
-        '--talos-motion-feedback-duration': scaledMs(700, resolved.duration_scale),
-        '--talos-motion-stagger': `${resolved.stagger}ms`,
-        '--talos-motion-intensity': String(resolved.intensity / 100),
-        '--talos-motion-ease': easingValue(resolved.easing),
-        '--talos-motion-open-transform': openTransform(resolved.open_close),
-        '--talos-motion-surface-transform': surfaceTransform(resolved.surface_transition),
-        '--talos-motion-open-style': resolved.open_close,
-        '--talos-motion-surface-style': resolved.surface_transition,
-        '--talos-motion-feedback-style': resolved.feedback,
-        '--talos-motion-hover-style': resolved.hover,
+        theme: { ...portableTheme, motion_v6: motionV6.value },
     }
 }
 
@@ -1488,10 +1174,6 @@ export function talosThemeCustomizationStyle(customization: TalosThemeCustomizat
     } else if (customization.radius === 'soft') {
         style['--talos-radius-card'] = '8px'
         style['--talos-radius-control'] = '8px'
-    }
-
-    if (customization.effect_intensity !== undefined) {
-        style['--talos-effect-opacity'] = String(customization.effect_intensity / 100)
     }
 
     if (customization.scrollbar_track) {

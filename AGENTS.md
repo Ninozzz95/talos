@@ -24,6 +24,23 @@ This file defines how agentic coding work must be done in this repository. It is
 4. Prefer existing project patterns over new abstractions.
 5. Keep the edit aligned with the subsystem boundary above.
 
+## Standards-First Engineering
+
+- Before designing a protocol, tool contract, transport, state format, or agent loop, inspect current official standards and mature primary-source implementations that solve the same problem.
+- Prefer adopting or adapting established, versioned contracts over reproducing their semantics from scratch. Preserve AVM's differentiation in deterministic orchestration, policy, recovery, evidence, and benchmarking.
+- Keep provider-specific wire formats behind adapters and normalize them into an AVM-owned canonical contract. Do not make one vendor protocol the internal domain model.
+- When no suitable standard exists, document the gap, evaluated alternatives, and reason for a custom design before implementation.
+- Pin protocol versions and add conformance fixtures so upstream changes fail visibly instead of silently degrading behavior.
+
+## Regression Prevention
+
+- Treat every established, working user flow as a compatibility contract. Before changing adjacent behavior, identify the affected contracts and the tests that prove them.
+- Add or strengthen characterization tests before refactoring behavior that already works. A new feature is not complete if it regresses an existing flow, even when its focused tests pass.
+- Run focused tests during each TDD cycle, then the complete affected subsystem suite and cross-cutting smoke/E2E gates before closing a slice.
+- For UI work, verify the full human-visible path at representative desktop and mobile viewports, including reload, persistence, reduced-motion, keyboard, and failure states where relevant.
+- Record every discovered regression as a permanent automated test. Do not repeatedly rely on manual rediscovery of the same failure class.
+- If a regression is found, stop feature progression, reproduce it with a failing test, fix the root cause, and rerun both the regression test and the previously passing feature gates.
+
 ## Tool Routing
 
 - Use filesystem inspection before assumptions.

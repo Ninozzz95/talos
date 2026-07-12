@@ -4,11 +4,9 @@ import Select from '../../ui/Select.vue'
 import Switch from '../../ui/Switch.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
-    TALOS_THEME_MOTION_OPTIONS,
     TALOS_THEME_PRESETS,
     type TalosThemeId,
     type TalosThemeMode,
-    type TalosThemeMotionMode,
 } from '../../../lib/talosThemes'
 import Button from '../../ui/Button.vue'
 import Tabs from '../../ui/Tabs.vue'
@@ -26,10 +24,7 @@ import type {
 const emit = defineEmits<{
     updateTheme: [theme: TalosThemeId]
     updateThemeMode: [mode: TalosThemeMode]
-    updateThemeMotion: [mode: TalosThemeMotionMode]
-    updateThemeMotionDisabled: [disabled: boolean]
-    updateThemeSimpleAnimation: [enabled: boolean]
-    updateThemeBackgroundDisabled: [disabled: boolean]
+    openThemeEngine: []
     updateChatBubbleScale: [scale: TalosChatBubbleScale]
     updateChatComposerMode: [mode: TalosComposerMode]
     updateAdvancedRailExpanded: [expanded: boolean]
@@ -47,10 +42,6 @@ const panes = [
 const props = defineProps<{
     theme: TalosThemeId
     themeMode: TalosThemeMode
-    themeMotion: TalosThemeMotionMode
-    themeMotionDisabled: boolean
-    themeSimpleAnimation: boolean
-    themeBackgroundDisabled: boolean
     chatLayout: TalosChatLayoutPreferences
     themePolicyLocked: boolean
     appearanceVisibility: TalosAppearanceVisibility
@@ -71,9 +62,6 @@ function selectThemeMode(value: unknown) {
     emit('updateThemeMode', value as TalosThemeMode)
 }
 
-function selectThemeMotion(value: unknown) {
-    emit('updateThemeMotion', value as TalosThemeMotionMode)
-}
 </script>
 
 <template>
@@ -165,44 +153,14 @@ function selectThemeMotion(value: unknown) {
         aria-labelledby="talos-appearance-tab-motion"
         class="space-y-3"
     >
-        <div class="grid gap-3 md:grid-cols-2">
-            <label class="block">
-                <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Motion mode</span>
-                <Select :model-value="themeMotion" class="mt-2" aria-label="Settings theme motion" @update:model-value="selectThemeMotion">
-                    <option v-for="mode in TALOS_THEME_MOTION_OPTIONS" :key="mode.value" :value="mode.value">
-                        {{ mode.label }}
-                    </option>
-                </Select>
-            </label>
-            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
-                Motion mode controls procedural effects only; TALOS does not load theme videos.
+        <div class="flex flex-col gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <div class="text-sm font-semibold text-[var(--talos-text)]">Theme Motion Engine V6</div>
+                <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                    Background, interface motion, performance policy and preview are managed from one canonical editor.
+                </p>
             </div>
-        </div>
-        <div class="grid gap-2 md:grid-cols-2">
-            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                <span>
-                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Use simple animation</span>
-                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Default optimized canvas profile for slower devices.</span>
-                </span>
-                <Switch :model-value="themeSimpleAnimation" class="mt-1" aria-label="Settings use simple animation" @update:model-value="(value) => emit('updateThemeSimpleAnimation', Boolean(value))" />
-            </label>
-            <div v-if="!themeSimpleAnimation" class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3 text-xs leading-5 text-[var(--talos-text)]">
-                Rich animation raises frame rate, DPR and effect complexity. It can slow lower-end devices during long sessions.
-            </div>
-            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                <span>
-                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable background motion</span>
-                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Freeze the selected procedural background without removing it.</span>
-                </span>
-                <Switch :model-value="themeMotionDisabled" class="mt-1" aria-label="Settings disable background motion" @update:model-value="(value) => emit('updateThemeMotionDisabled', Boolean(value))" />
-            </label>
-            <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
-                <span>
-                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Disable procedural background</span>
-                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Remove the animated and static procedural background layers.</span>
-                </span>
-                <Switch :model-value="themeBackgroundDisabled" class="mt-1" aria-label="Settings disable procedural background" @update:model-value="(value) => emit('updateThemeBackgroundDisabled', Boolean(value))" />
-            </label>
+            <Button type="button" size="sm" variant="secondary" @click="emit('openThemeEngine')">Open Theme Engine</Button>
         </div>
     </div>
 

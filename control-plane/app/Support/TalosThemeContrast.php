@@ -36,6 +36,16 @@ final class TalosThemeContrast
         'code' => ['background' => 'code_background', 'surface' => 'code_surface', 'text' => 'code_text', 'muted' => 'muted'],
     ];
 
+    /** @param array<string, mixed> $preferences */
+    public static function resolveAccent(array $preferences): string
+    {
+        $theme = self::themeId($preferences['theme'] ?? $preferences['workspace_default_theme'] ?? null);
+        $customization = self::record($preferences['theme_customization'] ?? null);
+        $customAccent = self::hexColor($customization['accent'] ?? null);
+
+        return $customAccent ?? self::PRESETS[$theme]['accent'];
+    }
+
     /**
      * @param array<string, mixed> $preferences
      * @return array<string, array<int, string>>
@@ -367,8 +377,15 @@ final class TalosThemeContrast
     /** @return array{0: float, 1: float, 2: float}|null */
     private static function color(mixed $value): ?array
     {
+        $hex = self::hexColor($value);
+
+        return $hex !== null ? self::rgb($hex) : null;
+    }
+
+    private static function hexColor(mixed $value): ?string
+    {
         return is_string($value) && preg_match('/^#[0-9a-f]{6}$/i', trim($value)) === 1
-            ? self::rgb(strtolower(trim($value)))
+            ? strtolower(trim($value))
             : null;
     }
 

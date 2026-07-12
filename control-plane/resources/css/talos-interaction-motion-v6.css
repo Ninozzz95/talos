@@ -1,0 +1,12 @@
+[data-talos-motion-intent] {
+    backface-visibility: hidden;
+    transform-origin: var(--talos-v6-motion-origin, center);
+    will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-talos-motion-intent] {
+        animation: none !important;
+        transition: none !important;
+    }
+}

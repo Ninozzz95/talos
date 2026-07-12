@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import path from 'node:path'
 import test from 'node:test'
 import { createDevStackConfig } from './dev-stack.mjs'
 
@@ -35,4 +36,30 @@ test('development stack config starts the browser worker with shared ephemeral c
     assert.match(validator.command, /validator/)
     assert.match(validator.command, /run build/)
     assert.match(validator.command, /run start/)
+    assert.equal(validator.env.PHP_BIN, path.resolve('..', '.tools', 'php', 'php.exe'))
+    assert.equal(validator.env.TALOS_PHP_ROOT, path.resolve('..', '.tools', 'php'))
+    assert.equal(validator.env.CURL_CA_BUNDLE, path.resolve('..', '.tools', 'php', 'extras', 'ssl', 'cacert.pem'))
+    assert.equal(validator.env.SSL_CERT_FILE, path.resolve('..', '.tools', 'php', 'extras', 'ssl', 'cacert.pem'))
+})
+
+test('development stack falls back to PATH runtimes when repo-local tools are absent', () => {
+    const config = createDevStackConfig({
+        token: 'b'.repeat(64),
+        inheritedEnv: {},
+        platform: 'win32',
+        workspaceRoot: 'C:\\fresh clone\\agent-virtual-machine',
+        fileExists: () => false,
+    })
+
+    const server = config.commands.find((command) => command.name === 'server')
+    const vite = config.commands.find((command) => command.name === 'vite')
+    const validator = config.commands.find((command) => command.name === 'validator')
+
+    assert.match(server.command, /^"php" artisan serve/)
+    assert.match(vite.command, /^"npm\.cmd" run dev/)
+    assert.doesNotMatch(server.command, /\.tools/)
+    assert.doesNotMatch(vite.command, /\.tools/)
+    assert.equal(validator.env.PHP_BIN, 'php')
+    assert.equal(validator.env.TALOS_PHP_ROOT, undefined)
+    assert.equal(validator.env.CURL_CA_BUNDLE, undefined)
 })

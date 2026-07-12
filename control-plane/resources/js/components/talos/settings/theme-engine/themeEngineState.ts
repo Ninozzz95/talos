@@ -29,16 +29,15 @@ import {
     type TalosNamedTheme,
     type TalosThemeId,
     type TalosThemeMode,
-    type TalosThemeMotionMode,
-    type TalosUiAnimationProfile,
 } from '../../../../lib/talosThemes'
+import { parseTalosMotionV6Preferences } from '../../../../motion-v6/contracts'
+import { createDefaultTalosMotionV6Preferences } from '../../../../motion-v6/defaults'
+import { resolveTalosThemeMotionV6Migration } from '../../../../motion-v6/migration'
 
 export type ThemePreferences = Record<string, unknown>
 
 type NamedThemePreferenceOptions = {
     themeMode?: TalosThemeMode
-    motionMode?: TalosThemeMotionMode
-    uiAnimationProfile?: TalosUiAnimationProfile
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -180,6 +179,7 @@ function strictThemePayload(value: Record<string, unknown>) {
         && strictAreaTokens(value.area_tokens)
         && (value.theme_mode === undefined || (typeof value.theme_mode === 'string' && MODE_VALUES.has(value.theme_mode)))
         && (value.motion === undefined || (typeof value.motion === 'string' && MOTION_VALUES.has(value.motion)))
+        && (value.motion_v6 === undefined || parseTalosMotionV6Preferences(value.motion_v6).success)
         && (value.ui_animation_profile === undefined || (typeof value.ui_animation_profile === 'string' && UI_PROFILE_VALUES.has(value.ui_animation_profile)))
         && strictUiAnimationCustomization(value.ui_animation_customization)
         && strictChatLayout(value.chat_layout)
@@ -192,15 +192,24 @@ export function applyTalosNamedThemePreferences(
     theme: TalosNamedTheme,
     options: NamedThemePreferenceOptions = {},
 ): ThemePreferences {
+    const migratedMotion = theme.motion_v6
+        ? parseTalosMotionV6Preferences(theme.motion_v6)
+        : resolveTalosThemeMotionV6Migration({
+            theme_motion: theme.motion,
+            ui_animation_profile: theme.ui_animation_profile,
+            ui_animation_customization: theme.ui_animation_customization,
+        })
+    const motionV6 = migratedMotion.success
+        ? migratedMotion.value
+        : createDefaultTalosMotionV6Preferences()
+
     return {
         ...preferences,
         theme: theme.base_theme,
         theme_mode: theme.theme_mode ?? options.themeMode ?? preferences.theme_mode ?? 'system',
         theme_customization: theme.tokens,
         theme_area_tokens: theme.area_tokens ?? {},
-        theme_motion: theme.motion ?? options.motionMode ?? preferences.theme_motion ?? 'system',
-        ui_animation_profile: theme.ui_animation_profile ?? options.uiAnimationProfile ?? preferences.ui_animation_profile ?? 'preset',
-        ui_animation_customization: theme.ui_animation_customization ?? {},
+        theme_motion_v6: motionV6,
         chat_layout: sanitizeTalosChatLayout(theme.chat_layout ?? preferences.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT),
         active_custom_theme_id: theme.id,
     }
@@ -212,12 +221,7 @@ export function resetTalosThemePreferences(preferences: ThemePreferences): Theme
         theme_customization: {},
         theme_area_tokens: {},
         theme_mode: 'system',
-        theme_motion: 'system',
-        theme_motion_disabled: false,
-        theme_simple_animation: true,
-        theme_background_disabled: false,
-        ui_animation_profile: 'preset',
-        ui_animation_customization: {},
+        theme_motion_v6: createDefaultTalosMotionV6Preferences(),
         active_custom_theme_id: null,
         chat_layout: { ...TALOS_DEFAULT_CHAT_LAYOUT },
     }
@@ -256,7 +260,8 @@ export function inspectStrictTalosThemeImport(value: unknown): StrictTalosThemeI
         return rejectedImport()
     }
 
-    if (value.schema !== 'talos_theme_export_v1'
+    const schema = value.schema
+    if ((schema !== 'talos_theme_export_v1' && schema !== 'talos_theme_export_v2')
         || typeof value.exported_at !== 'string'
         || !strictTimestamp(value.exported_at)
         || !isRecord(value.theme)
@@ -267,14 +272,18 @@ export function inspectStrictTalosThemeImport(value: unknown): StrictTalosThemeI
             'theme_mode',
             'tokens',
             'area_tokens',
-            'motion',
-            'ui_animation_profile',
-            'ui_animation_customization',
+            ...(schema === 'talos_theme_export_v2'
+                ? ['motion_v6']
+                : ['motion', 'ui_animation_profile', 'ui_animation_customization']),
             'chat_layout',
             'created_at',
             'updated_at',
         ])) {
         return rejectedImport()
+    }
+
+    if (schema === 'talos_theme_export_v2' && !Object.hasOwn(value.theme, 'motion_v6')) {
+        return rejectedImport('Theme V2 import requires theme.motion_v6.')
     }
 
     if (typeof value.theme.id !== 'string'
@@ -311,6 +320,17 @@ export function inspectStrictTalosThemeImport(value: unknown): StrictTalosThemeI
     const theme = parseTalosThemeExport(value)
     if (!theme) {
         return rejectedImport()
+    }
+
+
+    if (schema === 'talos_theme_export_v1') {
+        const migration = resolveTalosThemeMotionV6Migration({
+            theme_motion: theme.motion,
+            ui_animation_profile: theme.ui_animation_profile,
+            ui_animation_customization: theme.ui_animation_customization,
+        })
+        if (!migration.success) return rejectedImport()
+        theme.motion_v6 = migration.value
     }
 
     const contrast = validateTalosThemeStateForSave({

@@ -162,6 +162,24 @@ function testBrowserPlanChannelsRejectProseMixedWithATextPlan(): void
     throw new RuntimeException('Browser text plans mixed with prose must fail closed.');
 }
 
+function testBrowserPlanChannelsAcceptProviderPreambleWithANativeToolCall(): void
+{
+    $providerResponse = ModelPlanResponse::parse('I will inspect the requested sources now.', true);
+    $nativeCall = [[
+        'id' => 'call_browser_1',
+        'type' => 'function',
+        'function' => [
+            'name' => 'talos_browser_read',
+            'arguments' => '{"operation":"snapshot","arguments":{},"expected_evidence_hash":null}',
+        ],
+    ]];
+
+    $mutations = BrowserPlanChannelResolver::resolve($providerResponse, $nativeCall);
+
+    assertModelPlan(count($mutations ?? []) === 2, 'A native tool call must remain authoritative when the provider also emits a preamble.');
+    assertModelPlan(($mutations[1]['payload']['operation'] ?? null) === 'snapshot', 'The native operation must survive provider preamble normalization.');
+}
+
 function testNativeBrowserToolCallBecomesTheExistingTypedMutationPair(): void
 {
     $mutations = BrowserToolCallParser::toMutations([[
@@ -215,6 +233,7 @@ $tests = [
     'testBrowserPlanChannelsFailClosedWhenNativeAndTextPlansAreBothPresent',
     'testBrowserPlanChannelsFailClosedWhenMalformedTextAccompaniesANativeCall',
     'testBrowserPlanChannelsRejectProseMixedWithATextPlan',
+    'testBrowserPlanChannelsAcceptProviderPreambleWithANativeToolCall',
     'testNativeBrowserToolCallBecomesTheExistingTypedMutationPair',
     'testNativeBrowserToolCallsFailClosedOnAmbiguousOrMalformedArguments',
 ];

@@ -123,6 +123,13 @@ export class BrowserSessionManager {
     return this.summary(session);
   }
 
+  async assertRuntimeReady(): Promise<void> {
+    const browser = await this.getBrowser();
+    if (!browser.isConnected()) {
+      throw new Error("Chromium runtime is not connected.");
+    }
+  }
+
   async delete(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) return;

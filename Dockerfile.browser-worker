@@ -1,0 +1,21 @@
+FROM node:24-bookworm
+
+WORKDIR /app/browser-worker
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+COPY browser-worker/package*.json ./
+RUN npm ci \
+    && npx playwright install --with-deps chromium \
+    && chown -R node:node /app/browser-worker /ms-playwright
+
+COPY --chown=node:node browser-worker ./
+
+ENV HOST=0.0.0.0
+ENV PORT=3100
+ENV TALOS_BROWSER_WORKER_TOKEN=
+
+EXPOSE 3100
+
+USER node
+
+CMD ["npm", "run", "start"]

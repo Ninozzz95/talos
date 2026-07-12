@@ -26,6 +26,16 @@ async function flushAnimationFrame() {
 }
 
 describe('useTalosThemeEditorState', () => {
+    it('starts on the requested Theme Engine tab', () => {
+        const editor = useTalosThemeEditorState({
+            theme: ref<TalosThemeId>('forge'),
+            settings: ref(settings()),
+            initialTab: 'motion',
+        })
+
+        expect(editor.activeTab.value).toBe('motion')
+    })
+
     it('keeps preset fallback values display-only while synchronizing a draft delta', async () => {
         const settingsRef = ref(settings())
         const drafts: Array<TalosThemeCustomization | null> = []

@@ -6,32 +6,41 @@ RUN npm ci --ignore-scripts
 COPY control-plane ./
 RUN npm run build
 
-FROM php:8.5-cli-bookworm AS talos_runtime
+FROM php:8.5-fpm-bookworm AS talos_runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         git \
+        libcurl4-openssl-dev \
         libonig-dev \
         libsqlite3-dev \
         libzip-dev \
+        nginx \
         unzip \
-    && docker-php-ext-install mbstring pcntl pdo pdo_sqlite zip \
+    && docker-php-ext-install curl mbstring pcntl pdo pdo_sqlite zip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
+COPY core/composer.json core/composer.lock ./core/
+RUN cd core && composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+COPY core ./core
 COPY control-plane ./control-plane
 COPY --from=talos_assets /app/control-plane/public/build ./control-plane/public/build
 COPY docker/talos-entrypoint.sh /usr/local/bin/talos-entrypoint
+COPY docker/talos-server.sh /usr/local/bin/talos-server
+COPY docker/nginx/talos.conf /etc/nginx/conf.d/default.conf
 
-RUN chmod +x /usr/local/bin/talos-entrypoint \
+RUN rm -f /etc/nginx/sites-enabled/default \
+    && chmod +x /usr/local/bin/talos-entrypoint /usr/local/bin/talos-server \
     && cd control-plane \
     && composer install --no-dev --optimize-autoloader --no-interaction \
     && mkdir -p database storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && touch database/database.sqlite \
+    && chown -R www-data:www-data database storage bootstrap/cache \
     && chmod -R ug+rw database storage bootstrap/cache
 
 WORKDIR /app/control-plane
@@ -39,4 +48,4 @@ WORKDIR /app/control-plane
 EXPOSE 8088
 
 ENTRYPOINT ["talos-entrypoint"]
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8088"]
+CMD ["talos-server"]

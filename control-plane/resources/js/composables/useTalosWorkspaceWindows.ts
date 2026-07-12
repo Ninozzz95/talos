@@ -14,15 +14,15 @@ export function useTalosWorkspaceWindows(options: {
         viewportWidth.value < 1024 ? 'mobile' : viewportWidth.value < 1280 ? 'tablet' : 'desktop'
     ))
     const area = computed(() => {
-        const mobile = breakpoint.value === 'mobile'
-        const left = mobile ? 0 : 16
-        const top = mobile ? 96 : 24
-        // Desktop bounds are stage-local: 56px stage top + 12px composer inset + 8px clearance.
-        const composerExclusion = mobile ? 20 : 76
+        const sheet = breakpoint.value !== 'desktop'
+        const left = 0
+        const top = sheet ? 96 : 0
+        // Desktop bounds are local to the stage: 56px header + 48px composer clearance.
+        const composerExclusion = sheet ? 20 : 104
         return {
             left,
             top,
-            right: Math.max(left + 1, mobile ? viewportWidth.value : viewportWidth.value - options.currentRailWidth.value - 32),
+            right: Math.max(left + 1, sheet ? viewportWidth.value : viewportWidth.value - options.currentRailWidth.value),
             bottom: Math.max(top + 1, viewportHeight.value - (options.composerHeight.value || 168) - composerExclusion),
         }
     })

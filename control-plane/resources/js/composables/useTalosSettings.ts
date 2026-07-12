@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { talosFetch } from '../lib/api'
+import { TalosApiError, talosFetch } from '../lib/api'
 
 type ApiEnvelope<T> = {
     data: T
@@ -7,6 +7,7 @@ type ApiEnvelope<T> = {
 
 export type TalosWorkspaceSettings = {
     id: string
+    revision: number
     default_model_profile_id?: string | null
     default_context_set_id?: string | null
     preferences: Record<string, unknown>
@@ -15,9 +16,31 @@ export type TalosWorkspaceSettings = {
 }
 
 export type UpdateTalosSettingsPayload = {
+    expected_revision?: number
     default_model_profile_id?: string | null
     default_context_set_id?: string | null
     preferences?: Record<string, unknown>
+}
+
+function isWorkspaceSettings(value: unknown): value is TalosWorkspaceSettings {
+    return Boolean(value)
+        && typeof value === 'object'
+        && !Array.isArray(value)
+        && typeof (value as TalosWorkspaceSettings).id === 'string'
+        && Number.isSafeInteger((value as TalosWorkspaceSettings).revision)
+        && (value as TalosWorkspaceSettings).revision >= 0
+        && Boolean((value as TalosWorkspaceSettings).preferences)
+        && typeof (value as TalosWorkspaceSettings).preferences === 'object'
+        && !Array.isArray((value as TalosWorkspaceSettings).preferences)
+}
+
+function conflictSnapshot(error: unknown): TalosWorkspaceSettings | null {
+    if (!(error instanceof TalosApiError) || error.status !== 409) return null
+    const details = error.details
+    if (!details || typeof details !== 'object' || Array.isArray(details) || !('data' in details)) return null
+    return isWorkspaceSettings((details as { data?: unknown }).data)
+        ? (details as { data: TalosWorkspaceSettings }).data
+        : null
 }
 
 function isSecretPreferenceKey(key: string) {
@@ -82,6 +105,7 @@ export function useTalosSettings() {
 
         const body: UpdateTalosSettingsPayload = {
             ...payload,
+            expected_revision: payload.expected_revision ?? settings.value?.revision,
             preferences: payload.preferences ? sanitizePreferences(payload.preferences) : undefined,
         }
 
@@ -101,6 +125,8 @@ export function useTalosSettings() {
             }, 15000)
             return response.data
         } catch (error) {
+            const snapshot = conflictSnapshot(error)
+            if (snapshot) settings.value = snapshot
             settingsError.value = error instanceof Error ? error.message : 'TALOS could not save workspace settings.'
             throw error
         } finally {

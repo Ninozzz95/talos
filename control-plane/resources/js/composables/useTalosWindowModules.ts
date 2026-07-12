@@ -7,6 +7,12 @@ import {
     type TalosWindowId,
 } from '../lib/talosWindowRegistry'
 
+const TALOS_THEME_EDITOR_SECTION_IDS = ['presets', 'customize', 'library', 'motion', 'advanced'] as const
+
+function internalSectionIdsFor(id: TalosWindowId): readonly string[] {
+    return id === 'theme' ? TALOS_THEME_EDITOR_SECTION_IDS : []
+}
+
 export function useTalosWindowModules(
     registry: Record<TalosWindowId, TalosWindowDescriptor> = TALOS_WINDOW_REGISTRY,
 ) {
@@ -31,6 +37,7 @@ export function useTalosWindowModules(
 
     function isWindowSectionId(id: TalosWindowId, sectionId: string) {
         return sectionTabsFor(id).some((tab) => tab.id === sectionId)
+            || internalSectionIdsFor(id).some((tabId) => tabId === sectionId)
     }
 
     function activeSectionFor(id: TalosWindowId) {
@@ -38,6 +45,7 @@ export function useTalosWindowModules(
         const activeSection = activeWindowSections.value[id]
             ?? registry[id].defaultSection
             ?? tabs[0]?.id
+            ?? internalSectionIdsFor(id)[0]
             ?? ''
 
         return isWindowSectionId(id, activeSection) ? activeSection : (tabs[0]?.id ?? '')

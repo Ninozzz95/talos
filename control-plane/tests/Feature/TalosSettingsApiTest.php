@@ -12,6 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 final class TalosSettingsApiTest extends TestCase
@@ -180,7 +181,7 @@ final class TalosSettingsApiTest extends TestCase
             'advanced_rail_expanded' => true,
         ], $layout);
 
-        $this->patchJson('/api/talos/settings', [
+        $response = $this->patchJson('/api/talos/settings', [
             'preferences' => [
                 'chat_layout' => [
                     'bubble_scale' => 'giant',
@@ -1517,6 +1518,595 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertSame($before, $this->storedPreferencesForCurrentUser());
     }
 
+    public function test_theme_motion_v6_raw_json_distinguishes_scalar_list_and_empty_object_atomically(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => ['density' => 'compact'],
+        ]);
+        $before = $this->storedPreferencesForCurrentUser();
+
+        foreach ([
+            ['42', 'TALOS_THEME_MOTION_V6_INVALID_TYPE', 'field=preferences.theme_motion_v6'],
+            ['[]', 'TALOS_THEME_MOTION_V6_INVALID_TYPE', 'field=preferences.theme_motion_v6'],
+            ['{}', 'TALOS_THEME_MOTION_V6_MISSING_KEY', 'field=preferences.theme_motion_v6.schema_version'],
+        ] as [$rawValue, $code, $path]) {
+            $response = $this->patchRawThemeMotionV6Json($rawValue);
+
+            $this->assertThemeMotionV6Error($response, $code, $path);
+            self::assertSame($before, $this->storedPreferencesForCurrentUser());
+        }
+    }
+
+    public function test_theme_motion_v6_truncated_json_fails_without_creating_or_touching_settings(): void
+    {
+        $truncated = '{"preferences":{"theme_motion_v6":{"schema_version":1';
+
+        $this->assertThemeMotionV6Error(
+            $this->patchRawSettingsJson($truncated),
+            'TALOS_THEME_MOTION_V6_SERIALIZATION_ERROR',
+            'field=preferences.theme_motion_v6',
+        );
+        self::assertSame(
+            0,
+            TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->count(),
+        );
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => ['density' => 'compact'],
+        ]);
+        DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->update([
+                'created_at' => '2026-01-01 00:00:00',
+                'updated_at' => '2026-01-01 00:00:00',
+            ]);
+        $before = (array) DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->first();
+
+        $this->assertThemeMotionV6Error(
+            $this->patchRawSettingsJson($truncated),
+            'TALOS_THEME_MOTION_V6_SERIALIZATION_ERROR',
+            'field=preferences.theme_motion_v6',
+        );
+
+        self::assertSame(
+            $before,
+            (array) DB::table('talos_workspace_settings')
+                ->where('user_id', $this->user->id)
+                ->first(),
+        );
+    }
+
+    public function test_empty_and_whitespace_json_bodies_are_storage_noops(): void
+    {
+        $emptyBodies = ['', " \r\n\t"];
+
+        foreach ($emptyBodies as $body) {
+            $this->patchRawSettingsJson($body)
+                ->assertOk()
+                ->assertJsonPath('data.user_id', $this->user->id)
+                ->assertJsonPath('data.preferences', []);
+            self::assertSame(
+                0,
+                TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->count(),
+            );
+        }
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => ['density' => 'compact'],
+        ]);
+        DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->update([
+                'created_at' => '2026-01-01 00:00:00',
+                'updated_at' => '2026-01-01 00:00:00',
+            ]);
+        $before = (array) DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->first();
+
+        foreach ($emptyBodies as $body) {
+            $this->patchRawSettingsJson($body)
+                ->assertOk()
+                ->assertJsonPath('data.preferences.density', 'compact');
+            self::assertSame(
+                $before,
+                (array) DB::table('talos_workspace_settings')
+                    ->where('user_id', $this->user->id)
+                    ->first(),
+            );
+        }
+    }
+
+    public function test_non_json_whitespace_byte_remains_malformed_and_atomic(): void
+    {
+        $this->assertThemeMotionV6Error(
+            $this->patchRawSettingsJson("\0"),
+            'TALOS_THEME_MOTION_V6_SERIALIZATION_ERROR',
+            'field=preferences.theme_motion_v6',
+        );
+
+        self::assertSame(
+            0,
+            TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->count(),
+        );
+    }
+
+    public function test_theme_motion_v6_rejects_mode_with_its_exact_path_atomically(): void
+    {
+        $before = $this->seedAtomicMotionBaseline();
+        $invalid = $this->motionV6Defaults();
+        $invalid['mode'] = 'unsupported';
+
+        $response = $this->patchRawThemeMotionV6($invalid);
+
+        $this->assertThemeMotionV6Error(
+            $response,
+            'TALOS_THEME_MOTION_V6_INVALID_VALUE',
+            'field=preferences.theme_motion_v6.mode',
+        );
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_motion_v6_rejects_speed_with_its_exact_path_atomically(): void
+    {
+        $before = $this->seedAtomicMotionBaseline();
+        $invalid = $this->motionV6Defaults();
+        $invalid['speed'] = 201;
+
+        $response = $this->patchRawThemeMotionV6($invalid);
+
+        $this->assertThemeMotionV6Error(
+            $response,
+            'TALOS_THEME_MOTION_V6_OUT_OF_RANGE',
+            'field=preferences.theme_motion_v6.speed',
+        );
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_motion_v6_raw_json_reports_non_finite_speed_at_exact_path_atomically(): void
+    {
+        $before = $this->seedAtomicMotionBaseline();
+        $rawMotion = json_encode(
+            $this->motionV6Defaults(),
+            JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+        $rawMotion = str_replace('"speed":100', '"speed":1e10000', $rawMotion, $replacements);
+        self::assertSame(1, $replacements);
+
+        $response = $this->patchRawThemeMotionV6Json($rawMotion);
+
+        $this->assertThemeMotionV6Error(
+            $response,
+            'TALOS_THEME_MOTION_V6_NOT_FINITE',
+            'field=preferences.theme_motion_v6.speed',
+        );
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_motion_v6_rejects_interface_easing_with_its_exact_path_atomically(): void
+    {
+        $before = $this->seedAtomicMotionBaseline();
+        $invalid = $this->motionV6Defaults();
+        $invalid['interface']['easing'] = 'spring';
+
+        $response = $this->patchRawThemeMotionV6($invalid);
+
+        $this->assertThemeMotionV6Error(
+            $response,
+            'TALOS_THEME_MOTION_V6_INVALID_VALUE',
+            'field=preferences.theme_motion_v6.interface.easing',
+        );
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_motion_v6_rejects_unknown_key_with_field_path(): void
+    {
+        $invalid = $this->motionV6Defaults();
+        $invalid['unexpected'] = true;
+
+        $response = $this->patchRawThemeMotionV6($invalid);
+
+        $this->assertThemeMotionV6Error(
+            $response,
+            'TALOS_THEME_MOTION_V6_UNKNOWN_KEY',
+            'field=preferences.theme_motion_v6.unexpected',
+        );
+        self::assertNull($this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_motion_v6_rejects_oversized_payload_with_stable_actionable_error(): void
+    {
+        $before = $this->storedPreferencesForCurrentUser();
+        $oversized = $this->motionV6Defaults();
+        $oversized['interface']['categories']['feedback'] = str_repeat('x', 16_384);
+
+        $response = $this->patchRawThemeMotionV6($oversized);
+
+        $this->assertThemeMotionV6Error(
+            $response,
+            'TALOS_THEME_MOTION_V6_PAYLOAD_TOO_LARGE',
+            'field=preferences.theme_motion_v6',
+        );
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_motion_v6_accepts_large_editor_envelope_with_fifty_named_themes(): void
+    {
+        $library = [];
+        for ($index = 1; $index <= 50; $index++) {
+            $library[] = $this->editorThemeRecord($index);
+        }
+
+        $motion = $this->motionV6Defaults();
+        $payload = [
+            'preferences' => [
+                'theme_library' => $library,
+                'theme_motion_v6' => $motion,
+            ],
+        ];
+        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        self::assertGreaterThan(65_536, strlen($json));
+        self::assertLessThan(8 * 1024 * 1024, strlen($json));
+
+        $response = $this->patchRawSettingsJson($json)->assertOk();
+
+        self::assertSame($library, $response->json('data.preferences.theme_library'));
+        self::assertSame($motion, $response->json('data.preferences.theme_motion_v6'));
+
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame($library, $stored['theme_library']);
+        self::assertSame($motion, $stored['theme_motion_v6']);
+    }
+
+    public function test_theme_motion_v6_accepts_generic_preference_nested_beyond_sixteen_levels(): void
+    {
+        $nested = ['leaf' => 'preserved'];
+        for ($level = 24; $level >= 1; $level--) {
+            $nested = ["level_{$level}" => $nested];
+        }
+
+        $motion = $this->motionV6Defaults();
+        $payload = [
+            'preferences' => [
+                'advanced_generic_preference' => $nested,
+                'theme_motion_v6' => $motion,
+            ],
+        ];
+        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        $response = $this->patchRawSettingsJson($json)->assertOk();
+
+        self::assertSame($nested, $response->json('data.preferences.advanced_generic_preference'));
+        self::assertSame($motion, $response->json('data.preferences.theme_motion_v6'));
+    }
+
+    public function test_theme_motion_v6_non_json_request_keeps_existing_validation_path(): void
+    {
+        $motion = $this->motionV6Defaults();
+
+        $response = $this->call(
+            'PATCH',
+            '/api/talos/settings',
+            ['preferences' => ['theme_motion_v6' => $motion]],
+            [],
+            [],
+            ['HTTP_ACCEPT' => 'application/json'],
+        )->assertOk();
+
+        self::assertSame($motion, $response->json('data.preferences.theme_motion_v6'));
+    }
+
+    public function test_theme_motion_v6_only_delta_preserves_legacy_bytes_and_persists_exact_canonical_value(): void
+    {
+        $legacy = [
+            'theme' => 'terminal',
+            'theme_customization' => [
+                'background' => '#02080c',
+                'panel' => '#08121a',
+                'text' => '#e8fbff',
+                'accent' => '#31d6c8',
+                'font' => 'serif',
+            ],
+            'chat_layout' => [
+                'bubble_scale' => 'expanded',
+                'composer_mode' => 'minimal',
+                'advanced_rail_expanded' => true,
+            ],
+            'density' => 'comfortable',
+        ];
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => $legacy,
+        ]);
+        $legacyBytes = json_encode($legacy, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $motion = array_replace($this->motionV6Defaults(), [
+            'mode' => 'complex',
+            'speed' => 125,
+            'scene_override' => 'signal',
+        ]);
+
+        $response = $this->patchRawThemeMotionV6($motion)->assertOk();
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 32, JSON_THROW_ON_ERROR);
+        $storedMotion = $stored['theme_motion_v6'];
+        unset($stored['theme_motion_v6']);
+
+        self::assertSame($motion, $storedMotion);
+        self::assertSame($legacy, $stored);
+        self::assertSame($legacyBytes, json_encode($stored, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        self::assertSame($motion, $response->json('data.preferences.theme_motion_v6'));
+        self::assertSame($legacy['theme_customization'], $response->json('data.preferences.theme_customization'));
+        self::assertSame($legacy['chat_layout'], $response->json('data.preferences.chat_layout'));
+    }
+
+    public function test_invalid_stored_theme_motion_v6_is_omitted_fail_closed_without_mutating_storage(): void
+    {
+        $invalid = $this->motionV6Defaults();
+        unset($invalid['interface']['categories']['feedback']);
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'compact',
+                'theme_motion_v6' => $invalid,
+            ],
+        ]);
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonMissingPath('data.preferences.theme_motion_v6');
+
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_policy_lock_blocks_theme_motion_v6_but_keeps_storage_unchanged(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme' => 'forge',
+                'theme_policy_locked' => true,
+                'theme_motion_v6' => $this->motionV6Defaults(),
+            ],
+        ]);
+        $before = $this->storedPreferencesForCurrentUser();
+        $changed = $this->motionV6Defaults();
+        $changed['mode'] = 'off';
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme_motion_v6' => $changed],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Theme changes are locked by workspace policy.');
+
+        self::assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_theme_policy_lock_accepts_semantically_equal_float_numeric_motion_v6(): void
+    {
+        $canonical = $this->motionV6Defaults();
+        $canonical['dpr_cap'] = 1;
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme_policy_locked' => true,
+                'theme_motion_v6' => $canonical,
+            ],
+        ]);
+
+        $floatMotion = $canonical;
+        foreach ([
+            'schema_version',
+            'speed',
+            'intensity',
+            'density',
+            'depth',
+            'trails',
+            'contrast',
+            'parallax',
+            'fps_cap',
+            'dpr_cap',
+        ] as $key) {
+            $floatMotion[$key] = (float) $floatMotion[$key];
+        }
+        foreach (['duration_scale', 'intensity', 'stagger'] as $key) {
+            $floatMotion['interface'][$key] = (float) $floatMotion['interface'][$key];
+        }
+        $rawMotion = json_encode(
+            $floatMotion,
+            JSON_PRESERVE_ZERO_FRACTION | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+        self::assertStringContainsString('"speed":100.0', $rawMotion);
+        self::assertStringContainsString('"dpr_cap":1.0', $rawMotion);
+
+        $response = $this->patchRawThemeMotionV6Json($rawMotion)->assertOk();
+
+        self::assertSame($canonical, $response->json('data.preferences.theme_motion_v6'));
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 32, JSON_THROW_ON_ERROR);
+        self::assertSame($canonical, $stored['theme_motion_v6']);
+        self::assertTrue($stored['theme_policy_locked']);
+    }
+
+    public function test_theme_motion_v6_is_user_scoped_on_read_and_write(): void
+    {
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme_motion_v6' => $this->motionV6Defaults()],
+        ])->assertOk();
+
+        $otherUser = User::factory()->create();
+        $this->actingAs($otherUser);
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.user_id', $otherUser->id)
+            ->assertJsonMissingPath('data.preferences.theme_motion_v6');
+    }
+
+    public function test_named_theme_motion_v6_is_validated_persisted_and_returned_without_data_loss(): void
+    {
+        $motion = array_replace($this->motionV6Defaults(), [
+            'mode' => 'complex',
+            'scene_override' => 'violet',
+            'speed' => 135,
+        ]);
+        $theme = [
+            'id' => 'v6-library-theme',
+            'name' => 'V6 Library Theme',
+            'base_theme' => 'violet',
+            'tokens' => ['font' => 'display'],
+            'motion_v6' => $motion,
+        ];
+
+        $response = $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => ['theme_library' => [$theme]],
+        ])->assertOk();
+
+        self::assertSame(1, $response->json('data.revision'));
+        self::assertSame($motion, $response->json('data.preferences.theme_library.0.motion_v6'));
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_library.0.motion_v6.scene_override', 'violet');
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 1,
+            'preferences' => ['unrelated_preference' => 'preserved'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.revision', 2)
+            ->assertJsonPath('data.preferences.theme_library.0.motion_v6.speed', 135);
+    }
+
+    public function test_named_theme_rejects_invalid_motion_v6_at_the_real_api_boundary(): void
+    {
+        $invalid = $this->motionV6Defaults();
+        $invalid['speed'] = 999;
+
+        $response = $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => [
+                'theme_library' => [[
+                    'id' => 'invalid-motion-theme',
+                    'name' => 'Invalid Motion Theme',
+                    'base_theme' => 'forge',
+                    'tokens' => [],
+                    'motion_v6' => $invalid,
+                ]],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preferences.theme_library.0.motion_v6');
+
+        self::assertSame(
+            ['TALOS_THEME_MOTION_V6_OUT_OF_RANGE field=preferences.theme_library.0.motion_v6.speed: Value must be an integer from 25 through 200.'],
+            $response->json('errors')['preferences.theme_library.0.motion_v6'],
+        );
+
+        self::assertSame(0, TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->count());
+    }
+
+    public function test_settings_revision_conflict_returns_authoritative_snapshot_and_preserves_storage(): void
+    {
+        $first = $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => ['theme' => 'paper'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.revision', 1);
+        self::assertSame('paper', $first->json('data.preferences.theme'));
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => ['theme' => 'terminal'],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'TALOS_SETTINGS_REVISION_CONFLICT')
+            ->assertJsonPath('data.revision', 1)
+            ->assertJsonPath('data.preferences.theme', 'paper');
+
+        $stored = TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->firstOrFail();
+        self::assertSame(1, (int) $stored->revision);
+        self::assertSame('paper', $stored->preferences['theme']);
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 1,
+            'preferences' => ['theme' => 'terminal'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.revision', 2)
+            ->assertJsonPath('data.preferences.theme', 'terminal');
+    }
+
+    private function seedAtomicMotionBaseline(): string
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme' => 'forge',
+                'density' => 'compact',
+                'theme_motion_v6' => $this->motionV6Defaults(),
+            ],
+        ]);
+
+        return (string) $this->storedPreferencesForCurrentUser();
+    }
+
+    /** @param array<string, mixed> $motion */
+    private function patchRawThemeMotionV6(array $motion): TestResponse
+    {
+        return $this->patchRawThemeMotionV6Json(json_encode($motion, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
+
+    private function patchRawThemeMotionV6Json(string $rawValue): TestResponse
+    {
+        return $this->patchRawSettingsJson('{"preferences":{"theme_motion_v6":'.$rawValue.'}}');
+    }
+
+    private function patchRawSettingsJson(string $json): TestResponse
+    {
+        return $this->call(
+            'PATCH',
+            '/api/talos/settings',
+            [],
+            [],
+            [],
+            [
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_ACCEPT' => 'application/json',
+            ],
+            $json,
+        );
+    }
+
+    private function assertThemeMotionV6Error(TestResponse $response, string $code, string $path): void
+    {
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['preferences.theme_motion_v6']);
+
+        $errors = $response->json('errors');
+        self::assertIsArray($errors);
+        $messages = $errors['preferences.theme_motion_v6'] ?? null;
+        self::assertIsArray($messages);
+        $joined = implode("\n", $messages);
+        self::assertStringContainsString($code, $joined);
+        self::assertStringContainsString($path, $joined);
+    }
+
     private function storedPreferencesForCurrentUser(): ?string
     {
         return DB::table('talos_workspace_settings')
@@ -1525,7 +2115,48 @@ final class TalosSettingsApiTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function motionV6Defaults(): array
+    {
+        return [
+            'schema_version' => 1,
+            'mode' => 'adaptive',
+            'background_enabled' => true,
+            'interface_enabled' => true,
+            'scene_override' => null,
+            'speed' => 100,
+            'intensity' => 65,
+            'density' => 100,
+            'depth' => 50,
+            'trails' => 35,
+            'contrast' => 60,
+            'parallax' => 20,
+            'quality' => 'adaptive',
+            'fps_cap' => 30,
+            'dpr_cap' => 1.25,
+            'pause_when_hidden' => true,
+            'respect_data_saver' => true,
+            'interface' => [
+                'profile' => 'preset',
+                'duration_scale' => 100,
+                'intensity' => 65,
+                'easing' => 'precise',
+                'stagger' => 40,
+                'categories' => [
+                    'windows' => true,
+                    'surfaces' => true,
+                    'navigation' => true,
+                    'composer' => true,
+                    'messages' => true,
+                    'feedback' => true,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
      */
     private function namedThemeRecord(string $id, array $overrides = []): array
@@ -1536,5 +2167,66 @@ final class TalosSettingsApiTest extends TestCase
             'base_theme' => 'forge',
             'tokens' => [],
         ], $overrides);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function editorThemeRecord(int $index): array
+    {
+        $area = [
+            'background' => '#02080c',
+            'surface' => '#08121a',
+            'text' => '#e8fbff',
+            'muted' => '#b8cbd0',
+            'border' => '#1f3540',
+            'accent' => '#31d6c8',
+        ];
+        $areaTokens = [];
+        foreach (['sidebar', 'chat', 'composer', 'window', 'header', 'button', 'card', 'code'] as $areaName) {
+            $areaTokens[$areaName] = $area;
+        }
+
+        return $this->namedThemeRecord(sprintf('editor-theme-%02d', $index), [
+            'name' => sprintf('Editor Theme %02d %s', $index, str_repeat('X', 48)),
+            'theme_mode' => 'dark',
+            'tokens' => [
+                'background' => '#02080c',
+                'panel' => '#08121a',
+                'text' => '#e8fbff',
+                'accent' => '#31d6c8',
+                'secondary' => '#b4f06f',
+                'border' => '#1f3540',
+                'font' => 'mono',
+                'density' => 'compact',
+                'radius' => 'balanced',
+                'effect' => 'signal-mesh',
+                'effect_intensity' => 72,
+                'scrollbar_track' => '#071017',
+                'scrollbar_thumb' => '#31d6c8',
+                'scrollbar_thumb_hover' => '#b4f06f',
+                'scrollbar_width' => 11,
+            ],
+            'area_tokens' => $areaTokens,
+            'motion' => 'subtle',
+            'ui_animation_profile' => 'custom',
+            'ui_animation_customization' => [
+                'open_close' => 'depth',
+                'surface_transition' => 'axis-shift',
+                'feedback' => 'trace',
+                'hover' => 'node-glow',
+                'duration_scale' => 100,
+                'intensity' => 65,
+                'easing' => 'precise',
+                'stagger' => 40,
+            ],
+            'chat_layout' => [
+                'bubble_scale' => 'expanded',
+                'composer_mode' => 'minimal',
+                'advanced_rail_expanded' => true,
+            ],
+            'created_at' => '2026-07-11T12:00:00Z',
+            'updated_at' => '2026-07-11T12:00:00Z',
+        ]);
     }
 }

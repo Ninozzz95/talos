@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Support\TalosThemeMotionV6;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -75,6 +76,7 @@ final class TalosWorkspaceSetting extends Model
         'tokens' => true,
         'area_tokens' => true,
         'motion' => true,
+        'motion_v6' => true,
         'ui_animation_profile' => true,
         'ui_animation_customization' => true,
         'chat_layout' => true,
@@ -94,6 +96,7 @@ final class TalosWorkspaceSetting extends Model
         'theme_simple_animation' => true,
         'theme_background_disabled' => true,
         'theme_policy_locked' => true,
+        'theme_motion_v6' => true,
         'ui_animation_profile' => true,
         'ui_animation_customization' => true,
         'theme_area_tokens' => true,
@@ -260,6 +263,7 @@ final class TalosWorkspaceSetting extends Model
         'default_model_profile_id',
         'default_context_set_id',
         'preferences',
+        'revision',
     ];
 
     public static function idForUser(int $userId): string
@@ -286,13 +290,13 @@ final class TalosWorkspaceSetting extends Model
             'default_model_profile_id' => $this->default_model_profile_id,
             'default_context_set_id' => $this->default_context_set_id,
             'preferences' => self::sanitizePreferences($this->preferences ?? []),
+            'revision' => (int) ($this->revision ?? 0),
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
         ];
     }
 
     /**
-     * @param mixed $preferences
      * @return array<mixed>
      */
     public static function sanitizePreferences(mixed $preferences): array
@@ -337,6 +341,15 @@ final class TalosWorkspaceSetting extends Model
             if ($key === 'theme_motion') {
                 if (is_string($value) && isset(self::THEME_MOTION_VALUES[$value])) {
                     $safe[$key] = $value;
+                }
+
+                continue;
+            }
+
+            if ($key === 'theme_motion_v6') {
+                $parsed = TalosThemeMotionV6::parse($value);
+                if ($parsed['success']) {
+                    $safe[$key] = $parsed['value'];
                 }
 
                 continue;
@@ -437,7 +450,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $preferences
      * @return array<string, array<int, string>>
      */
     public static function validateThemePreferencesForWrite(mixed $preferences, mixed $storedPreferences = []): array
@@ -458,11 +470,13 @@ final class TalosWorkspaceSetting extends Model
         foreach ($preferences as $key => $value) {
             if (! is_string($key)) {
                 self::addThemeWriteError($errors, 'preferences', 'Preference keys must be strings.');
+
                 continue;
             }
 
             if (isset(self::THEME_PREFERENCE_KEYS[$key])) {
                 self::validateThemePreference($key, $value, $errors);
+
                 continue;
             }
 
@@ -477,7 +491,7 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemePreference(string $key, mixed $value, array &$errors): void
     {
@@ -485,21 +499,31 @@ final class TalosWorkspaceSetting extends Model
 
         if (in_array($key, ['theme', 'workspace_default_theme'], true)) {
             self::validateThemeEnum($value, self::THEME_VALUES, $path, 'Theme must be a supported preset.', $errors);
+
             return;
         }
 
         if (in_array($key, ['theme_motion'], true)) {
             self::validateThemeEnum($value, self::THEME_MOTION_VALUES, $path, 'Theme motion must be a supported mode.', $errors);
+
+            return;
+        }
+
+        if ($key === 'theme_motion_v6') {
+            $errors = array_replace_recursive($errors, TalosThemeMotionV6::validationErrors($value));
+
             return;
         }
 
         if ($key === 'theme_mode') {
             self::validateThemeEnum($value, self::THEME_MODE_VALUES, $path, 'Theme mode must be system, light, or dark.', $errors);
+
             return;
         }
 
         if ($key === 'ui_animation_profile') {
             self::validateThemeEnum($value, self::UI_ANIMATION_PROFILE_VALUES, $path, 'UI animation profile is invalid.', $errors);
+
             return;
         }
 
@@ -512,6 +536,7 @@ final class TalosWorkspaceSetting extends Model
             if (! is_bool($value)) {
                 self::addThemeWriteError($errors, $path, 'Theme setting must be a boolean.');
             }
+
             return;
         }
 
@@ -519,26 +544,31 @@ final class TalosWorkspaceSetting extends Model
             if ($value !== null && (! is_string($value) || self::normalizeThemeId($value) === null)) {
                 self::addThemeWriteError($errors, $path, 'Active custom theme ID must be a safe string or null.');
             }
+
             return;
         }
 
         if ($key === 'theme_customization') {
             self::validateThemeCustomizationForWrite($value, $path, $errors);
+
             return;
         }
 
         if ($key === 'theme_library') {
             self::validateThemeLibraryForWrite($value, $path, $errors);
+
             return;
         }
 
         if ($key === 'theme_area_tokens') {
             self::validateThemeAreaTokensForWrite($value, $path, $errors);
+
             return;
         }
 
         if ($key === 'ui_animation_customization') {
             self::validateUiAnimationCustomizationForWrite($value, $path, $errors);
+
             return;
         }
 
@@ -548,8 +578,8 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, bool> $allowed
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, bool>  $allowed
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemeEnum(mixed $value, array $allowed, string $path, string $message, array &$errors): void
     {
@@ -559,12 +589,13 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemeCustomizationForWrite(mixed $value, string $path, array &$errors): void
     {
         if (! is_array($value)) {
             self::addThemeWriteError($errors, $path, 'Theme customization must be an object.');
+
             return;
         }
 
@@ -572,11 +603,13 @@ final class TalosWorkspaceSetting extends Model
             $tokenPath = "{$path}.{$key}";
             if (! is_string($key) || ! isset(self::THEME_CUSTOMIZATION_KEYS[$key])) {
                 self::addThemeWriteError($errors, $tokenPath, 'Unknown theme customization key.');
+
                 continue;
             }
 
             if (isset(self::THEME_COLOR_KEYS[$key]) || in_array($key, ['scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover'], true)) {
                 self::validateThemeColor($tokenValue, $tokenPath, $errors);
+
                 continue;
             }
 
@@ -589,6 +622,7 @@ final class TalosWorkspaceSetting extends Model
                     'display' => true,
                     'serif' => true,
                 ], $tokenPath, 'Theme font is invalid.', $errors);
+
                 continue;
             }
 
@@ -598,6 +632,7 @@ final class TalosWorkspaceSetting extends Model
                     'comfortable' => true,
                     'spacious' => true,
                 ], $tokenPath, 'Theme density is invalid.', $errors);
+
                 continue;
             }
 
@@ -607,6 +642,7 @@ final class TalosWorkspaceSetting extends Model
                     'balanced' => true,
                     'soft' => true,
                 ], $tokenPath, 'Theme radius is invalid.', $errors);
+
                 continue;
             }
 
@@ -618,11 +654,13 @@ final class TalosWorkspaceSetting extends Model
                     'signal-mesh' => true,
                     'none' => true,
                 ], $tokenPath, 'Theme background effect is invalid.', $errors);
+
                 continue;
             }
 
             if ($key === 'effect_intensity') {
                 self::validateThemeNumber($tokenValue, 0, 100, $tokenPath, 'Theme effect intensity must be between 0 and 100.', $errors);
+
                 continue;
             }
 
@@ -633,12 +671,13 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemeLibraryForWrite(mixed $value, string $path, array &$errors): void
     {
         if (! is_array($value) || ! array_is_list($value)) {
             self::addThemeWriteError($errors, $path, 'Theme library must be a list.');
+
             return;
         }
 
@@ -651,6 +690,7 @@ final class TalosWorkspaceSetting extends Model
             $recordPath = "{$path}.{$index}";
             if (! is_array($record)) {
                 self::addThemeWriteError($errors, $recordPath, 'Theme library records must be objects.');
+
                 continue;
             }
 
@@ -658,6 +698,7 @@ final class TalosWorkspaceSetting extends Model
                 $fieldPath = "{$recordPath}.{$key}";
                 if (! is_string($key) || ! isset(self::THEME_LIBRARY_RECORD_KEYS[$key])) {
                     self::addThemeWriteError($errors, $fieldPath, 'Unknown named theme key.');
+
                     continue;
                 }
 
@@ -689,6 +730,12 @@ final class TalosWorkspaceSetting extends Model
                     case 'motion':
                         self::validateThemeEnum($recordValue, self::THEME_MOTION_VALUES, $fieldPath, 'Named theme motion is invalid.', $errors);
                         break;
+                    case 'motion_v6':
+                        $errors = array_replace_recursive(
+                            $errors,
+                            TalosThemeMotionV6::validationErrors($recordValue, $fieldPath),
+                        );
+                        break;
                     case 'ui_animation_profile':
                         self::validateThemeEnum($recordValue, self::UI_ANIMATION_PROFILE_VALUES, $fieldPath, 'Named theme UI animation profile is invalid.', $errors);
                         break;
@@ -719,12 +766,13 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemeAreaTokensForWrite(mixed $value, string $path, array &$errors): void
     {
         if (! is_array($value)) {
             self::addThemeWriteError($errors, $path, 'Theme area tokens must be an object.');
+
             return;
         }
 
@@ -732,10 +780,12 @@ final class TalosWorkspaceSetting extends Model
             $areaPath = "{$path}.{$area}";
             if (! is_string($area) || ! isset(self::THEME_AREAS[$area])) {
                 self::addThemeWriteError($errors, $areaPath, 'Unknown theme area.');
+
                 continue;
             }
             if (! is_array($tokens)) {
                 self::addThemeWriteError($errors, $areaPath, 'Theme area tokens must be an object.');
+
                 continue;
             }
 
@@ -743,6 +793,7 @@ final class TalosWorkspaceSetting extends Model
                 $tokenPath = "{$areaPath}.{$key}";
                 if (! is_string($key) || ! isset(self::THEME_AREA_COLOR_KEYS[$key])) {
                     self::addThemeWriteError($errors, $tokenPath, 'Unknown theme area token.');
+
                     continue;
                 }
                 self::validateThemeColor($tokenValue, $tokenPath, $errors);
@@ -751,12 +802,13 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateUiAnimationCustomizationForWrite(mixed $value, string $path, array &$errors): void
     {
         if (! is_array($value)) {
             self::addThemeWriteError($errors, $path, 'UI animation customization must be an object.');
+
             return;
         }
 
@@ -777,11 +829,13 @@ final class TalosWorkspaceSetting extends Model
             $animationPath = "{$path}.{$key}";
             if (! is_string($key) || (! isset($enumRules[$key]) && ! isset($numberRules[$key]))) {
                 self::addThemeWriteError($errors, $animationPath, 'Unknown UI animation customization key.');
+
                 continue;
             }
 
             if (isset($enumRules[$key])) {
                 self::validateThemeEnum($animationValue, $enumRules[$key][0], $animationPath, $enumRules[$key][1], $errors);
+
                 continue;
             }
 
@@ -790,12 +844,13 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateChatLayoutForWrite(mixed $value, string $path, array &$errors): void
     {
         if (! is_array($value)) {
             self::addThemeWriteError($errors, $path, 'Chat layout must be an object.');
+
             return;
         }
 
@@ -816,7 +871,7 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemeColor(mixed $value, string $path, array &$errors): void
     {
@@ -826,7 +881,7 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateThemeNumber(mixed $value, int $min, int $max, string $path, string $message, array &$errors): void
     {
@@ -837,8 +892,8 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, mixed> $preferences
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, mixed>  $preferences
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function validateActiveCustomThemeIdForWrite(array $preferences, mixed $storedPreferences, array &$errors): void
     {
@@ -908,7 +963,7 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param array<string, array<int, string>> $errors
+     * @param  array<string, array<int, string>>  $errors
      */
     private static function addThemeWriteError(array &$errors, string $path, string $message): void
     {
@@ -931,6 +986,7 @@ final class TalosWorkspaceSetting extends Model
     {
         return [
             'user_id' => 'integer',
+            'revision' => 'integer',
             'preferences' => 'array',
         ];
     }
@@ -955,7 +1011,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<string, mixed>
      */
     private static function sanitizeThemeCustomization(mixed $value): array
@@ -1061,7 +1116,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<string, array<string, bool>>
      */
     private static function sanitizeAppearanceVisibility(mixed $value): array
@@ -1099,7 +1153,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<string, string>
      */
     private static function sanitizeKeyboardShortcuts(mixed $value): array
@@ -1141,7 +1194,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<string, bool|string>
      */
     private static function sanitizeChatLayout(mixed $value): array
@@ -1203,6 +1255,7 @@ final class TalosWorkspaceSetting extends Model
 
             if ($modifier !== null) {
                 $modifiers[$modifier] = true;
+
                 continue;
             }
 
@@ -1234,7 +1287,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<int, array<string, mixed>>
      */
     private static function sanitizeThemeLibrary(mixed $value): array
@@ -1291,6 +1343,15 @@ final class TalosWorkspaceSetting extends Model
                 if ($key === 'motion') {
                     if (is_string($recordValue) && isset(self::THEME_MOTION_VALUES[$recordValue])) {
                         $safeRecord[$key] = $recordValue;
+                    }
+
+                    continue;
+                }
+
+                if ($key === 'motion_v6') {
+                    $motion = TalosThemeMotionV6::parse($recordValue);
+                    if ($motion['success']) {
+                        $safeRecord[$key] = $motion['value'];
                     }
 
                     continue;
@@ -1395,7 +1456,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<string, array<string, mixed>>
      */
     private static function sanitizeThemeAreaTokens(mixed $value): array
@@ -1436,7 +1496,6 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @param mixed $value
      * @return array<string, mixed>
      */
     private static function sanitizeUiAnimationCustomization(mixed $value): array

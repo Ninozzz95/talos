@@ -17,17 +17,46 @@ import {
 import type { TalosWorkspaceSettings } from './useTalosSettings'
 import type { TalosThemeEditorPersistence } from './useTalosThemeEditorPersistence'
 import type { TalosThemeEditorState } from './useTalosThemeEditorState'
+import type { useTalosThemeMotionV6Editor } from './useTalosThemeMotionV6Editor'
+import {
+    createTalosThemeMotionV6SaveDelta,
+    resolveTalosThemeMotionV6Migration,
+} from '../motion-v6/migration'
 
 export type TalosNamedThemeLibraryOptions = {
     theme: Ref<TalosThemeId>
     settings: Ref<TalosWorkspaceSettings | null>
     editor: TalosThemeEditorState
+    motionV6: ReturnType<typeof useTalosThemeMotionV6Editor>
     persistence: TalosThemeEditorPersistence
     emitChangeTheme: (theme: TalosThemeId, persist?: boolean) => void
     emitThemeDraftChanged: (customization: null) => void
 }
 
 export type TalosNamedThemeLibrary = ReturnType<typeof useTalosNamedThemeLibrary>
+
+const NAMED_THEME_APPLY_KEYS = [
+    'theme',
+    'theme_mode',
+    'theme_customization',
+    'theme_area_tokens',
+    'theme_motion_v6',
+    'active_custom_theme_id',
+    'chat_layout',
+    'workspace_default_theme',
+] as const
+
+function namedThemeDelta(
+    preferences: Record<string, unknown>,
+    themeLibrary?: TalosNamedTheme[],
+): Record<string, unknown> {
+    const delta: Record<string, unknown> = {}
+    for (const key of NAMED_THEME_APPLY_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(preferences, key)) delta[key] = preferences[key]
+    }
+    if (themeLibrary) delta.theme_library = themeLibrary
+    return delta
+}
 
 export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions) {
     const themeLibrary = ref<TalosNamedTheme[]>([])
@@ -67,9 +96,7 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
             theme_mode: options.editor.themeMode.value,
             tokens: options.editor.sanitizedForm(),
             area_tokens: sanitizeTalosThemeAreaTokens(options.editor.areaTokens.value),
-            motion: options.editor.motionMode.value,
-            ui_animation_profile: options.editor.uiAnimationProfile.value,
-            ui_animation_customization: options.editor.sanitizedUiAnimationForm(),
+            motion_v6: createTalosThemeMotionV6SaveDelta(options.motionV6.draft.value).theme_motion_v6,
             chat_layout: sanitizeTalosChatLayout(options.editor.chatLayout.value),
             created_at: now,
             updated_at: now,
@@ -96,12 +123,10 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
                 workspace_default_theme: theme.base_theme,
             }, theme, {
                 themeMode: options.editor.themeMode.value,
-                motionMode: options.editor.motionMode.value,
-                uiAnimationProfile: options.editor.uiAnimationProfile.value,
             }),
             workspace_default_theme: theme.base_theme,
         }
-        await options.persistence.persistPreferences(preferences, 'Custom theme saved through /api/talos/settings.', { syncForm: true })
+        await options.persistence.persistPreferences(namedThemeDelta(preferences, nextLibrary), 'Custom theme saved through /api/talos/settings.', { syncForm: true })
         themeLibrary.value = nextLibrary
         activeCustomThemeId.value = theme.id
         options.editor.newThemeName.value = ''
@@ -117,13 +142,11 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
         const preferences = {
             ...applyTalosNamedThemePreferences(options.persistence.preferencesRecord(), theme, {
                 themeMode: options.editor.themeMode.value,
-                motionMode: options.editor.motionMode.value,
-                uiAnimationProfile: options.editor.uiAnimationProfile.value,
             }),
             workspace_default_theme: theme.base_theme,
         }
         try {
-            await options.persistence.persistPreferences(preferences, 'Custom theme applied.', { syncForm: true })
+            await options.persistence.persistPreferences(namedThemeDelta(preferences), 'Custom theme applied.', { syncForm: true })
             activeCustomThemeId.value = theme.id
             options.emitThemeDraftChanged(null)
             options.emitChangeTheme(theme.base_theme, false)
@@ -150,7 +173,7 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
         const nextLibrary = themeLibrary.value.map((item) => item.id === theme.id
             ? { ...item, name, updated_at: new Date().toISOString() }
             : item)
-        await options.persistence.persistPreferences({ ...options.persistence.preferencesRecord(), theme_library: nextLibrary }, 'Theme renamed.')
+        await options.persistence.persistPreferences({ theme_library: nextLibrary }, 'Theme renamed.')
         themeLibrary.value = nextLibrary
         options.persistence.localThemeError.value = ''
         renamingThemeId.value = null
@@ -158,8 +181,35 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
 
     async function duplicateTheme(theme: TalosNamedTheme) {
         if (!options.persistence.canWriteTheme()) return
+        let migratedMotion
+        if (theme.motion_v6) {
+            try {
+                migratedMotion = createTalosThemeMotionV6SaveDelta(theme.motion_v6).theme_motion_v6
+            } catch {
+                setError('TALOS rejected the saved theme motion payload.')
+                return
+            }
+        } else {
+            const migration = resolveTalosThemeMotionV6Migration({
+                theme_motion: theme.motion,
+                ui_animation_profile: theme.ui_animation_profile,
+                ui_animation_customization: theme.ui_animation_customization,
+            })
+            if (!migration.success) {
+                setError('TALOS could not migrate the saved theme motion payload.')
+                return
+            }
+            migratedMotion = migration.value
+        }
+        const {
+            motion: _legacyMotion,
+            ui_animation_profile: _legacyUiProfile,
+            ui_animation_customization: _legacyUiCustomization,
+            ...canonicalTheme
+        } = theme
         const duplicate = sanitizeTalosNamedTheme({
-            ...theme,
+            ...canonicalTheme,
+            motion_v6: migratedMotion,
             id: generateThemeId(`${theme.name} copy`),
             name: `${theme.name} copy`,
             created_at: new Date().toISOString(),
@@ -167,7 +217,7 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
         })
         if (!duplicate) return
         const nextLibrary = [...themeLibrary.value, duplicate]
-        await options.persistence.persistPreferences({ ...options.persistence.preferencesRecord(), theme_library: nextLibrary }, 'Theme duplicated.')
+        await options.persistence.persistPreferences({ theme_library: nextLibrary }, 'Theme duplicated.')
         themeLibrary.value = nextLibrary
     }
 
@@ -184,13 +234,12 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
         const theme = pendingDeleteTheme.value
         const nextLibrary = themeLibrary.value.filter((item) => item.id !== theme.id)
         const isActive = activeCustomThemeId.value === theme.id
+        const resetPreferences = isActive
+            ? resetTalosThemePreferences(options.persistence.preferencesRecord())
+            : null
         const preferences = isActive
-            ? resetTalosThemePreferences({ ...options.persistence.preferencesRecord(), theme_library: nextLibrary })
-            : {
-                ...options.persistence.preferencesRecord(),
-                theme_library: nextLibrary,
-                active_custom_theme_id: activeCustomThemeId.value,
-            }
+            ? namedThemeDelta(resetPreferences ?? {}, nextLibrary)
+            : { theme_library: nextLibrary }
 
         await options.persistence.persistPreferences(preferences, 'Theme deleted.', { syncForm: isActive })
         themeLibrary.value = nextLibrary
@@ -278,12 +327,10 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
                 theme_library: nextLibrary,
             }, theme, {
                 themeMode: options.editor.themeMode.value,
-                motionMode: options.editor.motionMode.value,
-                uiAnimationProfile: options.editor.uiAnimationProfile.value,
             }),
             workspace_default_theme: theme.base_theme,
         }
-        await options.persistence.persistPreferences(preferences, 'Theme imported.', { syncForm: true })
+        await options.persistence.persistPreferences(namedThemeDelta(preferences, nextLibrary), 'Theme imported.', { syncForm: true })
         themeLibrary.value = nextLibrary
         activeCustomThemeId.value = theme.id
         importJson.value = ''

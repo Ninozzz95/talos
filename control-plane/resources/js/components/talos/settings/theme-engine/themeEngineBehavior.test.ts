@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick } from 'vue'
+import { createDefaultTalosMotionV6Preferences } from '../../../../motion-v6/defaults'
 
 const settingsHarness = vi.hoisted(() => {
     const mockRef = <T>(value: T) => ({ __v_isRef: true, value })
@@ -43,18 +44,29 @@ function baseSettings(preferences: Record<string, unknown> = {}) {
 
 function mountTheme(
     preferences: Record<string, unknown> = {},
-    options: { onChangeTheme?: (theme: string) => void } = {},
+    options: { onChangeTheme?: (theme: string) => void; initialTab?: string } = {},
 ) {
     const container = document.createElement('div')
     document.body.append(container)
     settingsHarness.settings.value = baseSettings(preferences)
     settingsHarness.loadSettings.mockResolvedValue(settingsHarness.settings.value)
-    settingsHarness.updateSettings.mockResolvedValue(settingsHarness.settings.value)
+    settingsHarness.updateSettings.mockImplementation(async (payload: { preferences?: Record<string, unknown> }) => {
+        const next = {
+            ...settingsHarness.settings.value,
+            preferences: {
+                ...(settingsHarness.settings.value as { preferences?: Record<string, unknown> } | null)?.preferences,
+                ...payload.preferences,
+            },
+        }
+        settingsHarness.settings.value = next
+        return next
+    })
 
     const app = createApp(defineComponent({
         setup() {
             return () => h(TalosThemeEngine, {
                 theme: 'forge',
+                initialTab: options.initialTab,
                 onChangeTheme: options.onChangeTheme,
             })
         },
@@ -108,6 +120,146 @@ afterEach(() => {
 })
 
 describe('Theme Engine behavior', () => {
+    it('opens the requested tab when launched from another settings surface', async () => {
+        const container = mountTheme({}, { initialTab: 'motion' })
+        await nextTick()
+
+        expect(container.querySelector('#talos-theme-control-tab-motion')?.getAttribute('aria-selected')).toBe('true')
+        expect(container.querySelector('[data-testid="talos-motion-v6-editor"]')).toBeTruthy()
+    })
+
+    it('renders the complete Motion V6 control surface and saves one exact delta', async () => {
+        const container = mountTheme()
+        await nextTick()
+        await clickByText(container, 'Motion')
+
+        for (const label of ['Off', 'Static', 'Simple', 'Complex', 'Adaptive']) {
+            expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.trim() === label)).toBe(true)
+        }
+        for (const label of [
+            'Motion speed', 'Background intensity', 'Scene density', 'Scene depth', 'Trail strength',
+            'Ambient contrast', 'Parallax depth', 'Interface duration', 'Interface intensity', 'Interface stagger',
+        ]) {
+            expect(container.querySelector(`[aria-label="${label}"]`)).toBeTruthy()
+        }
+        for (const label of [
+            'Procedural background', 'Interface motion', 'Pause when hidden', 'Respect data saver',
+            'Animate windows', 'Animate surfaces', 'Animate navigation', 'Animate composer',
+            'Animate messages', 'Animate feedback',
+        ]) {
+            expect(container.querySelector(`[aria-label="${label}"]`)).toBeTruthy()
+        }
+
+        await clickByText(container, 'Complex')
+        const speed = container.querySelector<HTMLInputElement>('[aria-label="Motion speed"]')!
+        speed.value = '145'
+        speed.dispatchEvent(new Event('input', { bubbles: true }))
+        await nextTick()
+        expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
+
+        await clickByText(container, 'Save motion')
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        const payload = settingsHarness.updateSettings.mock.calls[0][0] as { preferences?: Record<string, unknown> }
+        expect(Object.keys(payload.preferences ?? {})).toEqual(['theme_motion_v6'])
+        expect(payload.preferences?.theme_motion_v6).toMatchObject({ mode: 'complex', speed: 145 })
+        expect(container.textContent).toContain('Requested')
+        expect(container.textContent).toContain('Effective')
+    })
+
+    it('rolls a rejected Motion V6 edit back and exposes an explicit retry', async () => {
+        const defaults = createDefaultTalosMotionV6Preferences()
+        const container = mountTheme({ theme_motion_v6: defaults })
+        settingsHarness.updateSettings.mockRejectedValueOnce(new Error('motion write rejected'))
+        await nextTick()
+        await clickByText(container, 'Motion')
+        await clickByText(container, 'Complex')
+        await clickByText(container, 'Save motion')
+
+        await vi.waitFor(() => expect(container.textContent).toContain('motion write rejected'))
+        expect(container.textContent).toContain('Retry last change')
+        expect(container.querySelector('[aria-label="Motion mode Complex"]')?.getAttribute('aria-pressed')).toBe('false')
+        expect(container.querySelector('[aria-label="Motion mode Adaptive"]')?.getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('runs a stable real-scene product preview without persisting draft interactions', async () => {
+        const container = mountTheme()
+        await nextTick()
+        await clickByText(container, 'Motion')
+        const preview = container.querySelector<HTMLElement>('[data-testid="talos-motion-v6-preview"]')
+        expect(preview).toBeTruthy()
+        expect(preview?.querySelector('[data-talos-motion-stage]')).toBeTruthy()
+        expect(preview?.querySelector('[data-preview-sample="window"]')).toBeTruthy()
+        expect(preview?.querySelector('[data-preview-sample="menu"]')).toBeTruthy()
+        expect(preview?.querySelector('[data-preview-sample="message"]')).toBeTruthy()
+        expect(preview?.querySelector('[data-preview-sample="feedback"]')?.textContent).toContain('Success')
+        expect(preview?.querySelector('[data-preview-sample="feedback"]')?.textContent).toContain('Warning')
+        expect(preview?.querySelector('[data-preview-sample="feedback"]')?.textContent).toContain('Error')
+
+        const previewRoot = preview
+        for (const label of ['Light preview', 'Pause preview', 'Restart preview']) {
+            const control = preview?.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)
+            expect(control).toBeTruthy()
+            control?.focus()
+            expect(document.activeElement).toBe(control)
+            control?.click()
+            await nextTick()
+        }
+
+        expect(container.querySelector('[data-testid="talos-motion-v6-preview"]')).toBe(previewRoot)
+        expect(preview?.querySelector('[data-testid="talos-motion-preview-diagnostics"]')?.textContent).toContain('adaptive')
+        expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
+    })
+
+    it('exports the active draft as strict talos_theme_export_v2 with Motion V6', async () => {
+        const container = mountTheme()
+        await nextTick()
+        await clickByText(container, 'Motion')
+        await clickByText(container, 'Complex')
+        await clickByText(container, 'Library')
+        await clickByText(container, 'Export active theme')
+
+        const raw = container.querySelector<HTMLTextAreaElement>('[aria-label="Exported theme JSON"]')?.value ?? ''
+        const exported = JSON.parse(raw)
+        expect(exported).toMatchObject({
+            schema: 'talos_theme_export_v2',
+            theme: {
+                base_theme: 'forge',
+                motion_v6: { mode: 'complex', schema_version: 1 },
+            },
+        })
+        expect(exported.theme).not.toHaveProperty('motion')
+        expect(exported.theme).not.toHaveProperty('ui_animation_profile')
+        expect(exported.theme).not.toHaveProperty('ui_animation_customization')
+        expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
+    })
+
+    it('imports and persists a strict V2 named theme with its Motion V6 policy', async () => {
+        const motionV6 = createDefaultTalosMotionV6Preferences()
+        motionV6.mode = 'simple'
+        motionV6.scene_override = 'aurora'
+        const container = mountTheme()
+        await nextTick()
+        await clickByText(container, 'Library')
+        await fillField(container, 'Import theme JSON', JSON.stringify({
+            schema: 'talos_theme_export_v2',
+            exported_at: '2026-07-12T07:00:00.000Z',
+            theme: {
+                id: 'motion-v2-import',
+                name: 'Motion V2 Import',
+                base_theme: 'aurora',
+                tokens: {},
+                motion_v6: motionV6,
+            },
+        }))
+        await clickByText(container, 'Import theme')
+
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        const preferences = settingsHarness.updateSettings.mock.calls[0][0].preferences as Record<string, unknown>
+        expect(preferences.theme_motion_v6).toEqual(motionV6)
+        expect(preferences.theme_library).toEqual([
+            expect.objectContaining({ id: 'motion-v2-import', motion_v6: motionV6 }),
+        ])
+    })
     it('shows an unsafe customization error and does not write it', async () => {
         const container = mountTheme()
         await nextTick()
@@ -178,6 +330,31 @@ describe('Theme Engine behavior', () => {
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('inter')
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('balanced messages, full composer')
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('#c98b32')
+    })
+
+    it('keeps legacy effect values as inert migration data when saving another customization', async () => {
+        const container = mountTheme({
+            theme_customization: {
+                effect: 'trace-rain',
+                effect_intensity: 88,
+            },
+        })
+        await nextTick()
+        await clickByText(container, 'Customize')
+
+        expect(container.querySelector('[aria-label="Background effect"]')).toBeNull()
+        expect(container.querySelector('[aria-label="Effect intensity"]')).toBeNull()
+
+        await selectField(container, 'Font', 'mono')
+        await clickByText(container, 'Save customization')
+
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        const payload = settingsHarness.updateSettings.mock.calls[0][0] as { preferences?: Record<string, unknown> }
+        expect(payload.preferences?.theme_customization).toMatchObject({
+            effect: 'trace-rain',
+            effect_intensity: 88,
+            font: 'mono',
+        })
     })
 
     it('renders every preview font option with bundled product families only', async () => {
@@ -392,8 +569,11 @@ describe('Theme Engine behavior', () => {
         await clickByText(container, 'Reset customization')
 
         const preferences = settingsHarness.updateSettings.mock.calls[0]?.[0]?.preferences as Record<string, unknown>
-        expect(preferences).toMatchObject({
+        expect(preferences).toEqual({
             theme_customization: {},
+            active_custom_theme_id: null,
+        })
+        expect((settingsHarness.settings.value as { preferences: Record<string, unknown> }).preferences).toMatchObject({
             theme_area_tokens: areaTokens,
             theme_mode: 'dark',
             theme_motion: 'cinematic',
@@ -401,25 +581,30 @@ describe('Theme Engine behavior', () => {
             theme_background_disabled: true,
             ui_animation_profile: 'custom',
             ui_animation_customization: { intensity: 88 },
-            active_custom_theme_id: null,
             chat_layout: chatLayout,
         })
     })
 
-    it('rolls a motion switch back when persistence is rejected', async () => {
+    it('rolls a Motion V6 background switch back when persistence is rejected', async () => {
         const container = mountTheme({ theme_background_disabled: true })
         await nextTick()
         await clickByText(container, 'Motion')
         settingsHarness.updateSettings.mockRejectedValueOnce(new Error('Rejected settings write.'))
-        const control = container.querySelector<HTMLInputElement>('[aria-label="Disable procedural background"]')
-        expect(control?.checked).toBe(true)
+        const control = container.querySelector<HTMLInputElement>('[aria-label="Procedural background"]')
+        expect(control?.checked).toBe(false)
 
         control?.click()
-        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalled())
-        await vi.waitFor(() => expect(container.querySelector<HTMLInputElement>('[aria-label="Disable procedural background"]')?.checked).toBe(true))
+        await nextTick()
+        expect(control?.checked).toBe(true)
+        expect(container.textContent).toContain('Unsaved motion changes')
+        expect(Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('Save motion'))?.disabled).toBe(false)
+        expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
+        await clickByText(container, 'Save motion')
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        await vi.waitFor(() => expect(container.querySelector<HTMLInputElement>('[aria-label="Procedural background"]')?.checked).toBe(false))
     })
 
-    it('rolls theme mode and motion mode back when persistence is rejected', async () => {
+    it('rolls theme mode and Motion V6 mode back when persistence is rejected', async () => {
         const container = mountTheme({ theme_mode: 'dark', theme_motion: 'cinematic' })
         await nextTick()
 
@@ -438,23 +623,24 @@ describe('Theme Engine behavior', () => {
         settingsHarness.updateSettings.mockImplementationOnce(() => new Promise((_, reject) => {
             rejectMotionMode = reject
         }))
-        await selectField(container, 'Theme motion', 'normal')
+        await clickByText(container, 'Complex')
+        await clickByText(container, 'Save motion')
         await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledTimes(2))
         rejectMotionMode(new Error('Rejected motion-mode write.'))
-        await vi.waitFor(() => expect(container.querySelector<HTMLSelectElement>('[aria-label="Theme motion"]')?.value).toBe('cinematic'))
+        await vi.waitFor(() => expect(container.querySelector('[aria-label="Motion mode Simple"]')?.getAttribute('aria-pressed')).toBe('true'))
     })
 
-    it('rolls the animation complexity switch back when persistence is rejected', async () => {
+    it('rolls the renderer complexity selection back when persistence is rejected', async () => {
         const container = mountTheme({ theme_simple_animation: false })
         await nextTick()
         await clickByText(container, 'Motion')
         settingsHarness.updateSettings.mockRejectedValueOnce(new Error('Rejected animation-profile write.'))
-        const control = container.querySelector<HTMLInputElement>('[aria-label="Use simple animation"]')
-        expect(control?.checked).toBe(false)
+        expect(container.querySelector('[aria-label="Motion mode Complex"]')?.getAttribute('aria-pressed')).toBe('true')
 
-        control?.click()
-        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalled())
-        await vi.waitFor(() => expect(container.querySelector<HTMLInputElement>('[aria-label="Use simple animation"]')?.checked).toBe(false))
+        await clickByText(container, 'Simple')
+        await clickByText(container, 'Save motion')
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        await vi.waitFor(() => expect(container.querySelector('[aria-label="Motion mode Complex"]')?.getAttribute('aria-pressed')).toBe('true'))
     })
 
     it('rolls a named-theme apply back when persistence is rejected', async () => {

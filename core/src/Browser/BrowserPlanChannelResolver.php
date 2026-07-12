@@ -29,10 +29,6 @@ final class BrowserPlanChannelResolver
             throw new InvalidArgumentException('Browser plan is ambiguous: both native and text tool channels were used.');
         }
 
-        if ($nativeMutations !== null && trim($response->text) !== '') {
-            throw new InvalidArgumentException('Browser plan is ambiguous: native tool calls cannot include assistant prose.');
-        }
-
         if ($response->mutations !== null && trim($response->text) !== '') {
             throw new InvalidArgumentException('Browser plan is ambiguous: text mutations cannot include assistant prose.');
         }

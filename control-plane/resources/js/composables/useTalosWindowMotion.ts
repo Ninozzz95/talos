@@ -7,51 +7,88 @@ import {
     type Readonly,
     type Ref,
 } from 'vue'
+import type { TalosMotionV6Preferences } from '../motion-v6/contracts'
 import {
-    createTalosRevisionedCompletionScheduler,
-    resolveTalosWindowTransitionDuration,
-    talosWindowTransitionDurationVariable,
-    type TalosWindowTransitionState,
-} from '../lib/talosMotion'
+    createDomInteractionMotionPlatform,
+    createInteractionMotionController,
+} from '../motion-v6/interaction/controller'
+import { getTalosInteractionProfileV6 } from '../motion-v6/interaction/profiles'
+import {
+    createDefaultInteractionProfile,
+    resolveTalosInteractionMotion,
+    type TalosInteractionMotionPlan,
+} from '../motion-v6/interaction/resolver'
+import type { TalosInteractionIntent } from '../motion-v6/interaction/intents'
+import {
+    createTalosWindowFlipPlan,
+    createTalosWindowPointPlan,
+    type TalosWindowMotionPoint,
+    type TalosWindowMotionRect,
+} from '../motion-v6/interaction/windowGeometry'
+import type { TalosThemeId } from '../lib/talosThemes'
 import type { TalosWindowId } from '../lib/talosWindowRegistry'
 import type { TalosWindowLaunchOrigin } from './useTalosWindowLaunchOrigins'
-import { useTalosMotion } from './useTalosMotion'
 
 type WindowMap<T> = Partial<Record<TalosWindowId, T>>
 
+export type TalosWindowLifecycleState =
+    | 'idle'
+    | 'opening'
+    | 'closing'
+    | 'minimizing'
+    | 'restoring'
+    | 'maximizing'
+    | 'unmaximizing'
+
 type UseTalosWindowMotionOptions = {
     visibleWindowIds: Readonly<Ref<TalosWindowId[]>>
-    minimizedWindowIds?: Readonly<Ref<TalosWindowId[]>>
+    minimizedWindowIds: Readonly<Ref<TalosWindowId[]>>
+    fullscreenWindowIds: Readonly<Ref<TalosWindowId[]>>
     windowLaunchOrigins: Readonly<Ref<WindowMap<TalosWindowLaunchOrigin>>>
     windowLaunchRevisions: Readonly<Ref<WindowMap<number>>>
     currentRailWidth: () => number
+    breakpoint: Readonly<Ref<'mobile' | 'tablet' | 'desktop'>>
+    theme: Readonly<Ref<TalosThemeId>>
+    motionPreferences: Readonly<Ref<TalosMotionV6Preferences>>
+    reducedMotion: Readonly<Ref<boolean>>
     uiMotionDisabled: Readonly<Ref<boolean>>
     requestModule: (id: TalosWindowId) => void
+    closeWindow: (id: TalosWindowId) => void
     minimizeWindow: (id: TalosWindowId) => void
     fullscreenWindow: (id: TalosWindowId) => void
     restoreWindow: (id: TalosWindowId) => void
 }
 
-const WINDOW_TRANSITION_ANIMATION_NAMES: Record<Exclude<TalosWindowTransitionState, 'idle'>, string[]> = {
-    opening: ['talos-window-open-from-sidebar'],
-    restoring: ['talos-window-restore-from-dock'],
-    minimizing: ['talos-window-minimize-to-dock', 'talos-window-minimize-to-dock-fullscreen'],
-    expanding: ['talos-window-expand', 'talos-window-expand-fullscreen'],
+function rectOf(target: HTMLElement): TalosWindowMotionRect {
+    const rect = target.getBoundingClientRect()
+    return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+    }
 }
 
 export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
-    const windowTransitionStates = ref<WindowMap<TalosWindowTransitionState>>({})
+    const windowTransitionStates = ref<WindowMap<TalosWindowLifecycleState>>({})
     const windowTransitionOrigins = ref<WindowMap<TalosWindowLaunchOrigin>>({})
     const pendingRestoreWindowIds = ref<TalosWindowId[]>([])
     const pendingRestoreOrigins = ref<WindowMap<TalosWindowLaunchOrigin>>({})
     const pendingMinimizeWindowIds = ref<TalosWindowId[]>([])
     const consumedLaunchRevisions: WindowMap<number> = {}
+    const lifecycleRevisions: WindowMap<number> = {}
+    const pendingSemanticCompletions: WindowMap<() => void> = {}
     const motionRoot = ref<HTMLElement | null>(null)
-    const transitionCompletions = createTalosRevisionedCompletionScheduler<TalosWindowId>()
-    const talosMotion = useTalosMotion({
-        uiMotionDisabled: options.uiMotionDisabled,
-        root: motionRoot,
-    })
+    const controller = createInteractionMotionController(createDomInteractionMotionPlatform())
+
+    function transitionKey(id: TalosWindowId): string {
+        return `window:${id}`
+    }
+
+    function targetFor(id: TalosWindowId): HTMLElement | null {
+        if (typeof document === 'undefined') return null
+        return document.querySelector<HTMLElement>(`[data-window-id="${id}"]`)
+    }
 
     function defaultWindowOrigin(source: TalosWindowLaunchOrigin['source'] = 'default'): TalosWindowLaunchOrigin {
         return {
@@ -64,14 +101,12 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
     function originFromElement(target: EventTarget | null, source: TalosWindowLaunchOrigin['source']): TalosWindowLaunchOrigin {
         if (target instanceof HTMLElement) {
             const rect = target.getBoundingClientRect()
-
             return {
                 x: Math.round(rect.left + (rect.width / 2) - options.currentRailWidth()),
                 y: Math.round(rect.top + (rect.height / 2)),
                 source,
             }
         }
-
         return defaultWindowOrigin(source)
     }
 
@@ -83,94 +118,7 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
         }
     }
 
-    function computedWindowDuration(state: TalosWindowTransitionState) {
-        if (state === 'idle' || typeof window === 'undefined') {
-            return null
-        }
-
-        const shell = motionRoot.value?.closest('.talos-shell') ?? motionRoot.value
-        if (!shell) {
-            return null
-        }
-
-        const property = talosWindowTransitionDurationVariable(state)
-        return property ? window.getComputedStyle(shell).getPropertyValue(property) : null
-    }
-
-    function transitionDurationFor(state: TalosWindowTransitionState) {
-        return resolveTalosWindowTransitionDuration(
-            state,
-            talosMotion.resolvedMotion.value,
-            computedWindowDuration(state),
-        )
-    }
-
-    function completeWindowTransition(
-        id: TalosWindowId,
-        state: TalosWindowTransitionState,
-        revision: number,
-        onComplete?: () => void,
-    ) {
-        if (!transitionCompletions.isCurrent(id, revision)) {
-            return
-        }
-
-        if (windowTransitionStates.value[id] === state) {
-            windowTransitionStates.value = {
-                ...windowTransitionStates.value,
-                [id]: 'idle',
-            }
-        }
-
-        onComplete?.()
-    }
-
-    function scheduleWindowTransitionFallback(
-        id: TalosWindowId,
-        state: TalosWindowTransitionState,
-        revision: number,
-        onComplete?: () => void,
-    ) {
-        const duration = transitionDurationFor(state)
-        if (duration <= 0 || typeof window === 'undefined') {
-            completeWindowTransition(id, state, revision, onComplete)
-            return
-        }
-
-        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
-            if (!transitionCompletions.isCurrent(id, revision)) {
-                return
-            }
-
-            transitionCompletions.schedule(
-                id,
-                revision,
-                duration,
-                () => completeWindowTransition(id, state, revision, onComplete),
-            )
-        }))
-    }
-
-    function setWindowTransition(
-        id: TalosWindowId,
-        state: TalosWindowTransitionState,
-        origin?: TalosWindowLaunchOrigin,
-        onComplete?: () => void,
-    ) {
-        const revision = transitionCompletions.begin(id)
-        if (origin) {
-            windowTransitionOrigins.value = { ...windowTransitionOrigins.value, [id]: origin }
-        }
-        windowTransitionStates.value = { ...windowTransitionStates.value, [id]: state }
-
-        void nextTick(() => {
-            if (transitionCompletions.isCurrent(id, revision)) {
-                scheduleWindowTransitionFallback(id, state, revision, onComplete)
-            }
-        })
-    }
-
-    function transitionStateFor(id: TalosWindowId): TalosWindowTransitionState {
+    function transitionStateFor(id: TalosWindowId): TalosWindowLifecycleState {
         return windowTransitionStates.value[id] ?? 'idle'
     }
 
@@ -183,8 +131,15 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
     function transitionOriginFor(id: TalosWindowId): TalosWindowLaunchOrigin {
         const origin = rawTransitionOriginFor(id)
         const stageTop = motionRoot.value?.getBoundingClientRect().top ?? 56
-
         return { ...origin, y: Math.round(origin.y - stageTop) }
+    }
+
+    function viewportPointFor(origin: TalosWindowLaunchOrigin): TalosWindowMotionPoint {
+        const stage = motionRoot.value?.getBoundingClientRect()
+        return {
+            x: Math.round((stage?.left ?? 0) + origin.x),
+            y: Math.round(origin.y),
+        }
     }
 
     function freshLaunchOrigin(id: TalosWindowId, fallbackSource: TalosWindowLaunchOrigin['source']) {
@@ -194,41 +149,180 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
             consumedLaunchRevisions[id] = revision
             return origin
         }
-
         return defaultWindowOrigin(fallbackSource)
     }
 
-    function handleWindowAnimationEnd(id: TalosWindowId, event: AnimationEvent) {
-        if (event.target !== event.currentTarget) return
-        const state = transitionStateFor(id)
-        if (state === 'idle' || !WINDOW_TRANSITION_ANIMATION_NAMES[state].includes(event.animationName)) return
-        transitionCompletions.finish(id)
-    }
-
-    function requestWindowMinimize(id: TalosWindowId) {
-        if (pendingMinimizeWindowIds.value.includes(id)) return
-        pendingMinimizeWindowIds.value = [...pendingMinimizeWindowIds.value, id]
-
-        void nextTick(() => {
-            const target = document.querySelector<HTMLElement>(`[data-testid="talos-minimize-target-${id}"]`)
-            const origin = target ? originFromElement(target, 'dock') : minimizeDockOrigin()
-            setWindowTransition(id, 'minimizing', origin, () => {
-                pendingMinimizeWindowIds.value = pendingMinimizeWindowIds.value.filter((item) => item !== id)
-                options.minimizeWindow(id)
-            })
+    function resolvePlan(intent: TalosInteractionIntent): TalosInteractionMotionPlan {
+        const preferences = options.motionPreferences.value
+        return resolveTalosInteractionMotion({
+            intent,
+            profile: getTalosInteractionProfileV6(options.theme.value) ?? createDefaultInteractionProfile(),
+            interfaceEnabled: preferences.interface_enabled && !options.uiMotionDisabled.value,
+            reducedMotion: options.reducedMotion.value,
+            preferences: preferences.interface,
         })
     }
 
-    function requestWindowFullscreen(id: TalosWindowId) {
+    function focusEntryTarget(target: HTMLElement | null) {
+        if (!target) return
+        if (options.breakpoint.value === 'desktop') {
+            target.focus({ preventScroll: true })
+            return
+        }
+        const primaryAction = target.querySelector<HTMLElement>(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        const focusTarget = primaryAction ?? target
+        focusTarget.focus({ preventScroll: true })
+    }
+
+    function clearPendingMinimize(id: TalosWindowId) {
+        pendingMinimizeWindowIds.value = pendingMinimizeWindowIds.value.filter((candidate) => candidate !== id)
+    }
+
+    function beginTransition(
+        id: TalosWindowId,
+        state: TalosWindowLifecycleState,
+        origin?: TalosWindowLaunchOrigin,
+    ): number {
+        controller.cancel(transitionKey(id))
+        lifecycleRevisions[id] = (lifecycleRevisions[id] ?? 0) + 1
+        delete pendingSemanticCompletions[id]
+        if (state !== 'minimizing') clearPendingMinimize(id)
+        if (origin) windowTransitionOrigins.value = { ...windowTransitionOrigins.value, [id]: origin }
+        windowTransitionStates.value = { ...windowTransitionStates.value, [id]: state }
+        return lifecycleRevisions[id]!
+    }
+
+    function isCurrent(id: TalosWindowId, revision: number): boolean {
+        return lifecycleRevisions[id] === revision
+    }
+
+    function completeTransition(id: TalosWindowId, revision: number, semanticCompletion?: () => void) {
+        if (!isCurrent(id, revision)) return
+        delete pendingSemanticCompletions[id]
+        windowTransitionStates.value = { ...windowTransitionStates.value, [id]: 'idle' }
+        semanticCompletion?.()
+    }
+
+    function runTransition(
+        id: TalosWindowId,
+        revision: number,
+        target: HTMLElement | null,
+        plan: TalosInteractionMotionPlan,
+        semanticCompletion?: () => void,
+        preserveFocus = true,
+    ) {
+        if (!isCurrent(id, revision)) return
+        if (semanticCompletion) pendingSemanticCompletions[id] = semanticCompletion
+        if (!target) {
+            completeTransition(id, revision, semanticCompletion)
+            return
+        }
+        controller.run(transitionKey(id), target, plan, {
+            preserveFocus,
+            onComplete: () => completeTransition(id, revision, semanticCompletion),
+        })
+    }
+
+    async function runEntryTransition(
+        id: TalosWindowId,
+        state: 'opening' | 'restoring',
+        intent: 'window-open' | 'window-restore',
+        origin: TalosWindowLaunchOrigin,
+    ) {
+        const revision = beginTransition(id, state, origin)
+        await nextTick()
+        if (!isCurrent(id, revision)) return
+        const target = targetFor(id)
+        const base = resolvePlan(intent)
+        const plan = target && options.breakpoint.value === 'desktop'
+            ? createTalosWindowPointPlan(base, {
+                direction: 'enter',
+                target: rectOf(target),
+                point: viewportPointFor(origin),
+            })
+            : base
+        runTransition(id, revision, target, plan, () => focusEntryTarget(target), false)
+    }
+
+    function requestWindowClose(id: TalosWindowId) {
+        const revision = beginTransition(id, 'closing', rawTransitionOriginFor(id))
+        const target = targetFor(id)
+        const base = resolvePlan('window-close')
+        const plan = target && options.breakpoint.value === 'desktop'
+            ? createTalosWindowPointPlan(base, {
+                direction: 'exit',
+                target: rectOf(target),
+                point: viewportPointFor(rawTransitionOriginFor(id)),
+            })
+            : base
+        runTransition(id, revision, target, plan, () => options.closeWindow(id), false)
+    }
+
+    async function requestWindowMinimize(id: TalosWindowId) {
+        if (pendingMinimizeWindowIds.value.includes(id)) return
+        const revision = beginTransition(id, 'minimizing')
+        pendingMinimizeWindowIds.value = [...pendingMinimizeWindowIds.value, id]
+        await nextTick()
+        if (!isCurrent(id, revision)) return
+        const target = targetFor(id)
+        const dockTarget = typeof document === 'undefined'
+            ? null
+            : document.querySelector<HTMLElement>(`[data-testid="talos-minimize-target-${id}"]`)
+        const origin = dockTarget ? originFromElement(dockTarget, 'dock') : minimizeDockOrigin()
+        windowTransitionOrigins.value = { ...windowTransitionOrigins.value, [id]: origin }
+        const base = resolvePlan('window-minimize')
+        const plan = target && options.breakpoint.value === 'desktop'
+            ? createTalosWindowPointPlan(base, {
+                direction: 'exit',
+                target: rectOf(target),
+                point: viewportPointFor(origin),
+            })
+            : base
+        runTransition(id, revision, target, plan, () => {
+            clearPendingMinimize(id)
+            options.minimizeWindow(id)
+        }, false)
+    }
+
+    async function requestWindowFullscreen(id: TalosWindowId) {
+        const wasFullscreen = options.fullscreenWindowIds.value.includes(id)
+        const revision = beginTransition(id, wasFullscreen ? 'unmaximizing' : 'maximizing')
+        const target = targetFor(id)
+        const before = target ? rectOf(target) : null
         options.fullscreenWindow(id)
-        setWindowTransition(id, 'expanding', rawTransitionOriginFor(id))
+        await nextTick()
+        if (!isCurrent(id, revision)) return
+        const updatedTarget = targetFor(id)
+        if (!before || !updatedTarget) {
+            completeTransition(id, revision)
+            return
+        }
+        const plan = createTalosWindowFlipPlan(resolvePlan('window-open'), {
+            before,
+            after: rectOf(updatedTarget),
+        })
+        runTransition(id, revision, updatedTarget, plan)
     }
 
     function restoreMinimizedWindow(id: TalosWindowId, event: MouseEvent) {
         const origin = originFromElement(event.currentTarget, 'dock')
-        pendingRestoreWindowIds.value = [...pendingRestoreWindowIds.value.filter((item) => item !== id), id]
+        pendingRestoreWindowIds.value = [...pendingRestoreWindowIds.value.filter((candidate) => candidate !== id), id]
         pendingRestoreOrigins.value = { ...pendingRestoreOrigins.value, [id]: origin }
         options.restoreWindow(id)
+    }
+
+    function flushPendingTransitions() {
+        for (const [rawId, completion] of Object.entries(pendingSemanticCompletions)) {
+            const id = rawId as TalosWindowId
+            controller.cancel(transitionKey(id))
+            lifecycleRevisions[id] = (lifecycleRevisions[id] ?? 0) + 1
+            delete pendingSemanticCompletions[id]
+            clearPendingMinimize(id)
+            windowTransitionStates.value = { ...windowTransitionStates.value, [id]: 'idle' }
+            completion?.()
+        }
     }
 
     watch(
@@ -237,18 +331,16 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
             for (const id of nextIds) {
                 options.requestModule(id)
                 if (previousIds.includes(id)) continue
-
                 const restoreOrigin = pendingRestoreOrigins.value[id]
                 if (pendingRestoreWindowIds.value.includes(id) && restoreOrigin) {
-                    setWindowTransition(id, 'restoring', restoreOrigin)
-                    pendingRestoreWindowIds.value = pendingRestoreWindowIds.value.filter((item) => item !== id)
+                    void runEntryTransition(id, 'restoring', 'window-restore', restoreOrigin)
+                    pendingRestoreWindowIds.value = pendingRestoreWindowIds.value.filter((candidate) => candidate !== id)
                     const nextOrigins = { ...pendingRestoreOrigins.value }
                     delete nextOrigins[id]
                     pendingRestoreOrigins.value = nextOrigins
                     continue
                 }
-
-                setWindowTransition(id, 'opening', freshLaunchOrigin(id, 'sidebar'))
+                void runEntryTransition(id, 'opening', 'window-open', freshLaunchOrigin(id, 'sidebar'))
             }
         },
         { flush: 'pre', immediate: true },
@@ -260,24 +352,31 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
             for (const [rawId, revision] of Object.entries(nextRevisions)) {
                 const id = rawId as TalosWindowId
                 if (previousRevisions[id] === revision) continue
-                if (!options.visibleWindowIds.value.includes(id) || options.minimizedWindowIds?.value.includes(id)) continue
+                if (!options.visibleWindowIds.value.includes(id) || options.minimizedWindowIds.value.includes(id)) continue
                 consumedLaunchRevisions[id] = typeof revision === 'number' ? revision : 0
-                setWindowTransition(id, 'opening', options.windowLaunchOrigins.value[id] ?? defaultWindowOrigin('sidebar'))
+                void runEntryTransition(
+                    id,
+                    'opening',
+                    'window-open',
+                    options.windowLaunchOrigins.value[id] ?? defaultWindowOrigin('sidebar'),
+                )
             }
         },
         { flush: 'post' },
     )
 
     watch(
-        [talosMotion.motionPaused, talosMotion.uiMotionEnabled],
-        ([paused, enabled]) => {
-            if (paused || !enabled) transitionCompletions.finishAll()
+        [options.uiMotionDisabled, options.reducedMotion, () => options.motionPreferences.value.interface_enabled,
+            () => options.motionPreferences.value.interface.profile,
+            () => options.motionPreferences.value.interface.categories.windows],
+        ([disabled, reduced, enabled, profile, windowsEnabled]) => {
+            if (disabled || reduced || !enabled || profile === 'off' || !windowsEnabled) flushPendingTransitions()
         },
         { flush: 'sync' },
     )
 
     if (getCurrentScope()) {
-        onScopeDispose(() => transitionCompletions.cancelAll())
+        onScopeDispose(() => controller.dispose())
     }
 
     return {
@@ -285,7 +384,7 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
         pendingMinimizeWindowIds,
         transitionStateFor,
         transitionOriginFor,
-        handleWindowAnimationEnd,
+        requestWindowClose,
         requestWindowMinimize,
         requestWindowFullscreen,
         restoreMinimizedWindow,

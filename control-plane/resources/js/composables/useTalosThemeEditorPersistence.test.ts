@@ -23,7 +23,13 @@ function createHarness(preferences: Record<string, unknown> = {}) {
     const editor = useTalosThemeEditorState({ theme, settings: settingsRef })
     editor.syncFromSettings()
     const updateSettings = vi.fn(async (payload: UpdateTalosSettingsPayload) => {
-        const next = { ...settingsRef.value!, preferences: payload.preferences ?? settingsRef.value!.preferences }
+        const next = {
+            ...settingsRef.value!,
+            preferences: {
+                ...settingsRef.value!.preferences,
+                ...payload.preferences,
+            },
+        }
         settingsRef.value = next
         return next
     })
@@ -86,5 +92,44 @@ describe('useTalosThemeEditorPersistence', () => {
 
         expect(harness.changeTheme).toHaveBeenNthCalledWith(1, 'paper', false)
         expect(harness.changeTheme).toHaveBeenNthCalledWith(2, 'forge', false)
+    })
+
+    it('persists only the owned preset delta and leaves unrelated preferences server-merged', async () => {
+        const harness = createHarness({ account_locale: 'it', keyboard_shortcuts: { command_palette: 'mod+k' } })
+
+        await harness.persistence.chooseTheme('paper')
+
+        const payload = harness.updateSettings.mock.calls[0]?.[0]?.preferences as Record<string, unknown>
+        expect(Object.keys(payload).sort()).toEqual([
+            'active_custom_theme_id',
+            'theme',
+            'theme_area_tokens',
+            'theme_customization',
+            'theme_mode',
+            'workspace_default_theme',
+        ])
+        expect(payload).not.toHaveProperty('account_locale')
+        expect(payload).not.toHaveProperty('keyboard_shortcuts')
+        expect(harness.settingsRef.value.preferences).toMatchObject({ account_locale: 'it', theme: 'paper' })
+    })
+
+    it('uses a narrow delta for reset customization', async () => {
+        const harness = createHarness({
+            theme_customization: { font: 'manrope' },
+            theme_area_tokens: { composer: { background: '#111827' } },
+            account_locale: 'it',
+            active_custom_theme_id: 'custom-theme',
+        })
+
+        await harness.persistence.resetCustomization()
+
+        expect(harness.updateSettings.mock.calls[0]?.[0]?.preferences).toEqual({
+            theme_customization: {},
+            active_custom_theme_id: null,
+        })
+        expect(harness.settingsRef.value.preferences).toMatchObject({
+            account_locale: 'it',
+            theme_area_tokens: { composer: { background: '#111827' } },
+        })
     })
 })

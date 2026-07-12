@@ -14,7 +14,6 @@ import {
     talosThemeAreaTokenStyle,
     talosThemeCustomizationStyle,
     talosThemeModeVariantStyle,
-    talosUiAnimationStyle,
     validateTalosThemeCustomizationContrast,
 } from './talosThemes'
 
@@ -464,37 +463,4 @@ describe('TALOS theme token contract', () => {
         }
     })
 
-    it('scales every semantic motion duration token from the shared baseline', () => {
-        const style = talosUiAnimationStyle('forge', 'custom', 'normal', false, {
-            duration_scale: 120,
-        })
-
-        expect(style).toMatchObject({
-            '--talos-motion-duration-control': '100ms',
-            '--talos-motion-duration-surface-enter': '200ms',
-            '--talos-motion-duration-surface-exit': '100ms',
-            '--talos-motion-duration-window-open': '300ms',
-            '--talos-motion-duration-window-restore': '300ms',
-            '--talos-motion-duration-window-minimize': '400ms',
-            '--talos-motion-duration-window-focus': '100ms',
-            '--talos-motion-duration-disclosure': '200ms',
-            '--talos-motion-duration-popover': '200ms',
-            '--talos-motion-duration-menu': '200ms',
-            '--talos-motion-duration-message-insert': '200ms',
-            '--talos-motion-duration-activity-progress': '400ms',
-            '--talos-motion-duration-error-attention': '300ms',
-            '--talos-motion-duration-success-confirm': '400ms',
-            '--talos-motion-duration-theme-transition': '300ms',
-        })
-    })
-
-    it('zeroes every semantic motion duration token when UI motion is disabled', () => {
-        const style = talosUiAnimationStyle('forge', 'preset', 'normal', true)
-
-        const semanticDurationEntries = Object.entries(style)
-            .filter(([token]) => token.startsWith('--talos-motion-duration-'))
-
-        expect(semanticDurationEntries.length).toBeGreaterThan(0)
-        expect(semanticDurationEntries.every(([, value]) => value === '0ms')).toBe(true)
-    })
 })

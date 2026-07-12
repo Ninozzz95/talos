@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/cli.ts",
+    "start": "tsx src/cli.ts",
+    "doctor:runtime": "node scripts/check-browser-runtime.mjs",
     "build": "tsc --noEmit",
     "test": "vitest run"
   },

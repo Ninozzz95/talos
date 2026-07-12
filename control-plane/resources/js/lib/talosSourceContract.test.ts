@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 const resourcesRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const appCssPath = join(resourcesRoot, '..', 'css', 'app.css')
 const appCss = readFileSync(appCssPath, 'utf8')
+const simpleMotionCss = readFileSync(join(resourcesRoot, '..', 'css', 'talos-motion-v6-simple.css'), 'utf8')
+const complexMotionCss = readFileSync(join(resourcesRoot, '..', 'css', 'talos-motion-v6-complex.css'), 'utf8')
 const sourceRoots = [
     join(resourcesRoot, 'components', 'talos'),
     join(resourcesRoot, 'components', 'ui'),
@@ -70,7 +72,7 @@ describe('TALOS source token contract', () => {
         }
 
         const feedbackStart = appCss.indexOf('@keyframes talos-feedback-pulse')
-        const feedbackEnd = appCss.indexOf('@keyframes talos-dag-pulse')
+        const feedbackEnd = appCss.indexOf('@keyframes talos-feedback-trace')
         expect(appCss.slice(feedbackStart, feedbackEnd)).not.toMatch(/\b(?:box-shadow|border-color|background|filter)\b/)
     })
 
@@ -88,9 +90,11 @@ describe('TALOS source token contract', () => {
             expect(appCss).toContain(`.talos-motion-paused ${selector}`)
         }
 
-        for (const selector of ['.talos-dag-grid', '.talos-effect-layer', '.talos-procedural-canvas']) {
-            expect(appCss).toContain(`.talos-motion-paused ${selector}`)
-        }
+        expect(appCss).toContain('.talos-motion-paused .talos-procedural-canvas')
+        expect(simpleMotionCss).toContain('[data-talos-motion-stage] .talos-v6-simple-layer')
+        expect(simpleMotionCss).toContain('@media (prefers-reduced-motion: reduce)')
+        expect(complexMotionCss).toContain('[data-talos-motion-stage] .talos-v6-complex-canvas')
+        expect(complexMotionCss).toContain('@media (prefers-reduced-motion: reduce)')
 
         const reducedMotionCss = appCss.slice(
             appCss.indexOf('@media (prefers-reduced-motion: reduce)'),
@@ -122,10 +126,66 @@ describe('TALOS source token contract', () => {
         const workspace = readFileSync(join(resourcesRoot, 'components', 'talos', 'workspace', 'TalosWorkspace.vue'), 'utf8')
         const background = readFileSync(join(resourcesRoot, 'components', 'talos', 'workspace', 'TalosProceduralBackground.vue'), 'utf8')
 
-        expect(workspace).toContain(':background-motion-enabled="workspaceBackgroundMotionEnabled"')
-        expect(workspace).toContain(':palette-key="workspaceBackgroundPaletteKey"')
-        expect(background).toContain("toRef(props, 'backgroundMotionEnabled')")
-        expect(background).toContain("toRef(props, 'paletteKey')")
+        expect(workspace).toContain(':effective-mode="workspaceMotionV6Decision.effectiveMode"')
+        expect(workspace).toContain(':input="workspaceMotionV6SceneInput"')
+        expect(background).toContain('TalosMotionStage')
+        expect(background).not.toContain('useTalosProceduralCanvas')
+    })
+
+    it('keeps legacy motion keys as migration input instead of active UI or runtime authority', () => {
+        const appearance = readFileSync(join(resourcesRoot, 'components', 'talos', 'settings', 'TalosSettingsAppearancePanel.vue'), 'utf8')
+        const settings = readFileSync(join(resourcesRoot, 'components', 'talos', 'settings', 'TalosSettingsCenter.vue'), 'utf8')
+        const customize = readFileSync(join(resourcesRoot, 'components', 'talos', 'settings', 'theme-engine', 'TalosThemeCustomize.vue'), 'utf8')
+        const editorState = readFileSync(join(resourcesRoot, 'composables', 'useTalosThemeEditorState.ts'), 'utf8')
+        const namedLibrary = readFileSync(join(resourcesRoot, 'composables', 'useTalosNamedThemeLibrary.ts'), 'utf8')
+        const persistence = readFileSync(join(resourcesRoot, 'composables', 'useTalosThemeEditorPersistence.ts'), 'utf8')
+        const workspaceTheme = readFileSync(join(resourcesRoot, 'composables', 'useTalosWorkspaceTheme.ts'), 'utf8')
+        const proceduralBackground = readFileSync(join(resourcesRoot, 'components', 'talos', 'workspace', 'TalosProceduralBackground.vue'), 'utf8')
+
+        for (const source of [appearance, settings, persistence]) {
+            expect(source).not.toMatch(/persistMotionMode|persistMotionDisabled|persistSimpleAnimation|persistBackgroundDisabled/)
+        }
+        expect(appearance).not.toMatch(/updateThemeMotion|themeMotionDisabled|themeSimpleAnimation|themeBackgroundDisabled/)
+        expect(settings).not.toMatch(/preferences\.theme_(?:motion|motion_disabled|simple_animation|background_disabled)/)
+        expect(customize).not.toMatch(/uiAnimationProfile|uiAnimationForm|motionPreviewStyle|Animation profile|Open\/close style/)
+        expect(customize).not.toMatch(/Background effect|Effect intensity/)
+        expect(editorState).not.toMatch(/preferences\.theme_(?:motion|motion_disabled|simple_animation|background_disabled)/)
+        expect(editorState).not.toMatch(/preferences\.ui_animation_(?:profile|customization)/)
+        expect(namedLibrary).not.toMatch(/(?:motion|ui_animation_profile|ui_animation_customization):\s*options\.editor/)
+        expect(workspaceTheme).not.toContain("from './useTalosMotion'")
+        expect(workspaceTheme).not.toMatch(/preferences\?\.theme_(?:motion|motion_disabled|simple_animation|background_disabled)/)
+        expect(workspaceTheme).not.toContain('talosThemeMotionStyle')
+        expect(workspaceTheme).not.toContain('talosUiAnimationStyle')
+        expect(workspaceTheme).not.toContain('talosBackgroundEffectFromCustomization')
+        expect(workspaceTheme).not.toContain('talos-effect-')
+        expect(proceduralBackground).not.toMatch(/talos-background-effect|data-effect=/)
+        expect(proceduralBackground).toContain('data-testid="talos-motion-background"')
+        expect(proceduralBackground).toContain(':data-scene-id="sceneId"')
+    })
+
+    it('does not retain the superseded window keyframes or duration token', () => {
+        const themeSource = readFileSync(join(resourcesRoot, 'lib', 'talosThemes.ts'), 'utf8')
+
+        expect(appCss).not.toMatch(/@keyframes talos-window-(?:open-from-sidebar|restore-from-dock|minimize-to-dock|expand)/)
+        expect(appCss).not.toContain('--talos-window-minimize-duration')
+        expect(themeSource).not.toContain('--talos-window-minimize-duration')
+        expect(themeSource).not.toContain('talosThemeMotionStyle')
+        expect(themeSource).not.toContain('talosUiAnimationStyle')
+        expect(appCss).not.toMatch(/\.talos-(?:dag-grid|dag-line|dag-node|effect-layer|trace-stream)/)
+        expect(appCss).not.toMatch(/@keyframes talos-(?:dag-pulse|grid-drift|dag-ribbon|node-alert|trace-rain|signal-mesh|node-route)/)
+    })
+
+    it('removes the superseded procedural canvas runtime after the V6 stage cutover', () => {
+        for (const path of [
+            ['composables', 'useTalosProceduralCanvas.ts'],
+            ['composables', 'useTalosProceduralCanvas.test.ts'],
+            ['composables', 'useTalosMotion.ts'],
+            ['composables', 'useTalosMotion.test.ts'],
+            ['lib', 'talosMotion.ts'],
+            ['lib', 'talosMotion.test.ts'],
+        ]) {
+            expect(existsSync(join(resourcesRoot, ...path))).toBe(false)
+        }
     })
 
     it('scopes every Advanced area contract to an owned product surface', () => {

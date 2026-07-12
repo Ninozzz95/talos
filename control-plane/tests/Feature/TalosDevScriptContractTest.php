@@ -8,7 +8,7 @@ use Tests\TestCase;
 
 final class TalosDevScriptContractTest extends TestCase
 {
-    public function test_composer_dev_script_is_windows_safe_and_uses_canonical_ports(): void
+    public function test_composer_dev_script_is_portable_and_uses_canonical_ports(): void
     {
         $composer = json_decode((string) file_get_contents(base_path('composer.json')), true);
 
@@ -17,9 +17,12 @@ final class TalosDevScriptContractTest extends TestCase
         $this->assertStringNotContainsString('artisan pail', $script);
         $this->assertStringNotContainsString('"php artisan', $script);
         $this->assertStringNotContainsString('"npm run dev', $script);
-        $this->assertStringContainsString('..\\.tools\\bin\\node.cmd scripts/dev-stack.mjs', $script);
+        $this->assertStringContainsString('node scripts/dev-stack.mjs', $script);
+        $this->assertStringNotContainsString('..\\.tools\\bin\\node.cmd', $script);
 
         $devStack = (string) file_get_contents(base_path('scripts/dev-stack.mjs'));
+        $this->assertStringContainsString("import { existsSync } from 'node:fs'", $devStack);
+        $this->assertStringContainsString("name === 'npm' ? 'npm.cmd' : name", $devStack);
         $this->assertStringContainsString('artisan serve --host=127.0.0.1 --port=8000', $devStack);
         $this->assertStringContainsString('artisan queue:listen --tries=1 --timeout=0', $devStack);
         $this->assertStringContainsString('run dev -- --host 127.0.0.1 --port 5173', $devStack);

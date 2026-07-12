@@ -1,31 +1,35 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { resolveTalosAppearanceVisibility } from '../lib/talosAppearancePreferences'
 import { syncTalosFavicon } from '../lib/talosFavicon'
+import { syncTalosBootAccent } from '../lib/talosBootLoader'
 import { resolveTalosShortcuts } from '../lib/talosShortcuts'
 import { validateTalosThemeStateContrast } from '../lib/talosThemeValidation'
 import {
     effectiveTalosThemeMode,
-    resolveTalosMotionMode,
     resolveTalosThemeMode,
-    resolveTalosUiAnimationProfile,
     sanitizeTalosThemeAreaTokens,
     sanitizeTalosThemeCustomization,
-    sanitizeTalosUiAnimationCustomization,
-    talosBackgroundEffectFromCustomization,
     talosThemeAreaTokenStyle,
     talosThemeClass,
     talosThemeCustomizationStyle,
     talosThemeModeVariantStyle,
-    talosThemeMotionStyle,
     talosThemePreset,
-    talosUiAnimationStyle,
     validateTalosThemeCustomizationContrast,
     type TalosThemeCustomization,
     type TalosThemeId,
 } from '../lib/talosThemes'
 import type { TalosChatBubbleScale } from '../lib/talosTypes'
-import { useTalosMotion } from './useTalosMotion'
+import { useTalosMotionEnvironment } from './useTalosMotionEnvironment'
 import type { TalosWorkspaceSettings } from './useTalosSettings'
+import { resolveTalosWorkspaceMotionV6 } from '../motion-v6/workspaceRuntime'
+import { talosInteractionMotionStyleV6 } from '../motion-v6/interaction/style'
+import {
+    createTalosMotionRuntimeGovernor,
+    type TalosMotionRuntimeFaultSignal,
+    type TalosMotionRuntimeStableWindowMetric,
+} from '../motion-v6/runtimeGovernor'
+import type { ComplexRendererFrameMetric } from '../motion-v6/renderers/complexRenderer'
+import type { TalosMotionRuntimeEnvironment } from '../motion-v6/runtimePolicy'
 
 export function useTalosWorkspaceTheme(options: {
     theme: Ref<TalosThemeId>
@@ -42,24 +46,58 @@ export function useTalosWorkspaceTheme(options: {
     const themeMode = computed(() => resolveTalosThemeMode(options.workspaceSettings.value?.preferences?.theme_mode))
     const resolvedThemeMode = computed(() => effectiveTalosThemeMode(options.theme.value, themeMode.value, browserPrefersDark.value))
     const preset = computed(() => talosThemePreset(options.theme.value))
-    const configuredMotionMode = computed(() => resolveTalosMotionMode(options.workspaceSettings.value?.preferences?.theme_motion))
-    const motionMode = computed(() => configuredMotionMode.value === 'system'
-        ? preset.value.defaultMotion
-        : configuredMotionMode.value)
-    const uiAnimationProfile = computed(() => resolveTalosUiAnimationProfile(options.workspaceSettings.value?.preferences?.ui_animation_profile))
-    const uiAnimationCustomization = computed(() => sanitizeTalosUiAnimationCustomization(options.workspaceSettings.value?.preferences?.ui_animation_customization))
-    const simpleAnimation = computed(() => options.workspaceSettings.value?.preferences?.theme_simple_animation !== false)
-    const backgroundDisabled = computed(() => options.workspaceSettings.value?.preferences?.theme_background_disabled === true)
     const workspaceReducedMotion = computed(() => options.workspaceSettings.value?.preferences?.reduced_motion === true)
-    const themeMotionDisabled = computed(() => options.workspaceSettings.value?.preferences?.theme_motion_disabled === true)
-    const runtimeMotion = useTalosMotion({
-        themeMotion: motionMode,
-        themeMotionDisabled,
-        uiAnimationProfile,
-        prefersReducedMotion: workspaceReducedMotion,
-        root: options.workspaceRoot,
+    const runtimeEnvironment = useTalosMotionEnvironment({ workspaceReducedMotion })
+    const runtimeGovernor = createTalosMotionRuntimeGovernor()
+    const runtimeGovernorRevision = ref(0)
+    const baseRuntimeEnvironment = computed<TalosMotionRuntimeEnvironment>(() => ({
+        workspaceBackgroundAllowed: true,
+        workspaceInterfaceMotionAllowed: true,
+        prefersReducedMotion: runtimeEnvironment.prefersReducedMotion.value,
+        documentHidden: runtimeEnvironment.documentHidden.value,
+        saveData: runtimeEnvironment.lowPower.value,
+        rendererFault: false,
+        failedEffectiveMode: null,
+        frameP95Ms: null,
+        frameSampleSufficient: false,
+    }))
+    const motionV6Baseline = computed(() => resolveTalosWorkspaceMotionV6({
+        settingsPreferences: options.workspaceSettings.value?.preferences ?? {},
+        themeId: options.theme.value,
+        colorMode: resolvedThemeMode.value,
+        environment: baseRuntimeEnvironment.value,
+    }))
+    const motionV6ConfigurationKey = computed(() => JSON.stringify([
+        options.theme.value,
+        resolvedThemeMode.value,
+        motionV6Baseline.value.sceneId,
+        motionV6Baseline.value.preferences,
+    ]))
+    const motionV6GovernorResolution = computed(() => {
+        void runtimeGovernorRevision.value
+        return runtimeGovernor.resolve(
+            motionV6Baseline.value.preferences,
+            baseRuntimeEnvironment.value,
+            motionV6ConfigurationKey.value,
+        )
     })
-    const motionDisabled = computed(() => !runtimeMotion.backgroundMotionEnabled.value)
+    const motionV6Runtime = computed(() => resolveTalosWorkspaceMotionV6({
+        settingsPreferences: options.workspaceSettings.value?.preferences ?? {},
+        themeId: options.theme.value,
+        colorMode: resolvedThemeMode.value,
+        environment: motionV6GovernorResolution.value.environment,
+        degradationStage: motionV6GovernorResolution.value.degradationStage,
+    }))
+    const motionV6Preferences = computed(() => motionV6Runtime.value.preferences)
+    const motionV6Decision = computed(() => motionV6Runtime.value.decision)
+    const motionV6SceneInput = computed(() => motionV6Runtime.value.sceneInput)
+    const motionV6SceneId = computed(() => motionV6Runtime.value.sceneId)
+    const uiAnimationProfile = computed(() => motionV6Preferences.value.interface.profile)
+    const simpleAnimation = computed(() => motionV6Decision.value.effectiveMode !== 'complex')
+    const backgroundDisabled = computed(() => !motionV6Preferences.value.background_enabled || motionV6Preferences.value.mode === 'off')
+    const motionDisabled = computed(() => motionV6Decision.value.effectiveMode === 'off'
+        || motionV6Decision.value.effectiveMode === 'static'
+        || motionV6Decision.value.paused)
     const savedCustomization = computed(() => {
         const customization = sanitizeTalosThemeCustomization(options.workspaceSettings.value?.preferences?.theme_customization)
 
@@ -81,9 +119,10 @@ export function useTalosWorkspaceTheme(options: {
     })
     const appearanceVisibility = computed(() => resolveTalosAppearanceVisibility(options.workspaceSettings.value?.preferences?.appearance_visibility))
     const keyboardShortcuts = computed(() => resolveTalosShortcuts(options.workspaceSettings.value?.preferences?.keyboard_shortcuts))
-    const uiMotionDisabled = computed(() => !runtimeMotion.uiMotionEnabled.value)
-    const backgroundMotionEnabled = runtimeMotion.backgroundMotionEnabled
-    const backgroundEffect = computed(() => talosBackgroundEffectFromCustomization(effectiveCustomization.value, preset.value, backgroundDisabled.value))
+    const uiMotionDisabled = computed(() => !motionV6Decision.value.uiMotionEnabled || motionV6Decision.value.paused)
+    const backgroundMotionEnabled = computed(() => motionV6Decision.value.backgroundEnabled
+        && (motionV6Decision.value.effectiveMode === 'simple' || motionV6Decision.value.effectiveMode === 'complex')
+        && !motionV6Decision.value.paused)
     const backgroundPaletteKey = computed(() => JSON.stringify([
         options.theme.value,
         resolvedThemeMode.value,
@@ -97,11 +136,10 @@ export function useTalosWorkspaceTheme(options: {
         `talos-theme-mode-${resolvedThemeMode.value}`,
         `talos-density-${effectiveCustomization.value.density ?? preset.value.defaultDensity}`,
         `talos-radius-${effectiveCustomization.value.radius ?? preset.value.defaultRadius}`,
-        `talos-effect-${backgroundEffect.value}`,
         motionDisabled.value ? 'talos-motion-disabled' : '',
         uiMotionDisabled.value ? 'talos-ui-motion-disabled' : '',
-        runtimeMotion.lowPower.value ? 'talos-low-power-motion' : '',
-        runtimeMotion.motionPaused.value ? 'talos-motion-paused' : '',
+        runtimeEnvironment.lowPower.value ? 'talos-low-power-motion' : '',
+        motionV6Decision.value.paused ? 'talos-motion-paused' : '',
         backgroundDisabled.value ? 'talos-background-disabled' : '',
         ...Object.keys(areaTokens.value).map((area) => `talos-area-${area}-customized`),
     ])
@@ -112,8 +150,12 @@ export function useTalosWorkspaceTheme(options: {
         '--talos-message-padding-block': options.bubbleScale.value === 'compact' ? '0.625rem' : options.bubbleScale.value === 'expanded' ? '1rem' : '0.75rem',
         '--talos-message-font-size': options.bubbleScale.value === 'compact' ? '0.8125rem' : options.bubbleScale.value === 'expanded' ? '0.9375rem' : '0.875rem',
         '--talos-message-line-height': options.bubbleScale.value === 'compact' ? '1.35rem' : options.bubbleScale.value === 'expanded' ? '1.65rem' : '1.5rem',
-        ...talosThemeMotionStyle(motionMode.value),
-        ...talosUiAnimationStyle(options.theme.value, uiAnimationProfile.value, motionMode.value, uiMotionDisabled.value, uiAnimationCustomization.value),
+        ...talosInteractionMotionStyleV6({
+            themeId: options.theme.value,
+            preferences: motionV6Preferences.value,
+            reducedMotion: motionV6Decision.value.reducedMotionApplied,
+            paused: !motionV6Decision.value.uiMotionEnabled,
+        }),
         ...talosThemeModeVariantStyle(options.theme.value, resolvedThemeMode.value),
         ...talosThemeCustomizationStyle(effectiveCustomization.value),
         ...talosThemeAreaTokenStyle(areaTokens.value),
@@ -121,7 +163,10 @@ export function useTalosWorkspaceTheme(options: {
 
     async function refreshFavicon() {
         await nextTick()
-        if (options.workspaceRoot.value) syncTalosFavicon(options.workspaceRoot.value)
+        if (options.workspaceRoot.value) {
+            syncTalosFavicon(options.workspaceRoot.value)
+            syncTalosBootAccent(options.workspaceRoot.value)
+        }
     }
     function handleColorSchemeChange(event: MediaQueryListEvent) {
         browserPrefersDark.value = event.matches
@@ -136,18 +181,46 @@ export function useTalosWorkspaceTheme(options: {
         colorSchemeQuery = null
     }
 
+    function recordMotionFrame(metric: ComplexRendererFrameMetric): void {
+        if (!runtimeGovernor.recordFrame(metric)) return
+        const previousStage = runtimeGovernor.snapshot().degradationStage
+        const next = runtimeGovernor.resolve(
+            motionV6Baseline.value.preferences,
+            baseRuntimeEnvironment.value,
+            motionV6ConfigurationKey.value,
+        )
+        if (next.degradationStage !== previousStage) runtimeGovernorRevision.value += 1
+    }
+
+    function recordMotionStableWindow(metric: TalosMotionRuntimeStableWindowMetric): void {
+        if (!runtimeGovernor.recordStableWindow(metric)) return
+        const previousStage = runtimeGovernor.snapshot().degradationStage
+        const next = runtimeGovernor.resolve(
+            motionV6Baseline.value.preferences,
+            baseRuntimeEnvironment.value,
+            motionV6ConfigurationKey.value,
+        )
+        if (next.degradationStage !== previousStage) runtimeGovernorRevision.value += 1
+    }
+
+    function recordMotionRendererFault(signal: TalosMotionRuntimeFaultSignal): void {
+        if (runtimeGovernor.recordRendererFault(signal.effectiveMode, motionV6ConfigurationKey.value)) {
+            runtimeGovernorRevision.value += 1
+        }
+    }
+
     watch(workspaceStyle, refreshFavicon, { deep: true })
     onMounted(() => {
         startMediaWatchers()
         void refreshFavicon()
     })
     onBeforeUnmount(stopMediaWatchers)
+    onBeforeUnmount(() => runtimeGovernor.dispose())
 
     return {
         themeMode,
         resolvedThemeMode,
         shellClass,
-        motionMode,
         motionDisabled,
         simpleAnimation,
         backgroundDisabled,
@@ -156,8 +229,20 @@ export function useTalosWorkspaceTheme(options: {
         uiAnimationProfile,
         uiMotionDisabled,
         backgroundMotionEnabled,
-        motionPaused: runtimeMotion.motionPaused,
-        backgroundEffect,
+        motionPaused: computed(() => motionV6Decision.value.paused),
+        motionV6Preferences,
+        motionV6Decision,
+        motionV6SceneInput,
+        motionV6SceneId,
+        motionV6Source: computed(() => motionV6Runtime.value.source),
+        motionV6Valid: computed(() => motionV6Runtime.value.success),
+        motionV6GovernorSnapshot: computed(() => {
+            void motionV6Runtime.value
+            return runtimeGovernor.snapshot()
+        }),
+        recordMotionFrame,
+        recordMotionStableWindow,
+        recordMotionRendererFault,
         backgroundPaletteKey,
         currentRailWidth,
         workspaceStyle,

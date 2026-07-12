@@ -8,6 +8,7 @@ defineProps<{ context: TalosWindowModuleContext }>()
 <template>
     <TalosThemeEngine
         :theme="context.theme"
+        :initial-tab="context.activeSection"
         @change-theme="context.changeTheme"
         @theme-customization-changed="context.themeCustomizationChanged"
         @theme-draft-changed="context.themeDraftChanged"

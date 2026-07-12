@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, toRef } from 'vue'
+import { onMounted, toRef, watch } from 'vue'
 import Card from '../../ui/Card.vue'
 import Tabs from '../../ui/Tabs.vue'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import { useTalosNamedThemeLibrary } from '../../../composables/useTalosNamedThemeLibrary'
 import { useTalosThemeEditorPersistence } from '../../../composables/useTalosThemeEditorPersistence'
-import { useTalosThemeEditorState, type TalosThemeEditorTab } from '../../../composables/useTalosThemeEditorState'
+import { normalizeTalosThemeEditorTab, useTalosThemeEditorState, type TalosThemeEditorTab } from '../../../composables/useTalosThemeEditorState'
+import { useTalosThemeMotionV6Editor } from '../../../composables/useTalosThemeMotionV6Editor'
 import { normalizeTalosTheme, TALOS_THEME_PRESETS, type TalosThemeCustomization, type TalosThemeId } from '../../../lib/talosThemes'
 import TalosThemeAdvanced from './theme-engine/TalosThemeAdvanced.vue'
 import TalosThemeCustomize from './theme-engine/TalosThemeCustomize.vue'
@@ -15,6 +16,7 @@ import TalosThemePresets from './theme-engine/TalosThemePresets.vue'
 
 const props = defineProps<{
     theme: TalosThemeId
+    initialTab?: TalosThemeEditorTab | string
 }>()
 
 const emit = defineEmits<{
@@ -49,7 +51,13 @@ const emitThemeDraftChanged = (customization: TalosThemeCustomization | null) =>
 const editor = useTalosThemeEditorState({
     theme,
     settings,
+    initialTab: props.initialTab,
     onDraftChanged: emitThemeDraftChanged,
+})
+const motionV6 = useTalosThemeMotionV6Editor({
+    settings,
+    updateSettings,
+    onSettingsChanged: emitThemeCustomizationChanged,
 })
 const persistence = useTalosThemeEditorPersistence({
     theme,
@@ -64,6 +72,7 @@ const library = useTalosNamedThemeLibrary({
     theme,
     settings,
     editor,
+    motionV6,
     persistence,
     emitChangeTheme,
     emitThemeDraftChanged: () => emitThemeDraftChanged(null),
@@ -74,14 +83,6 @@ const {
     customizationForm,
     newThemeName,
     themeMode,
-    motionMode,
-    motionDisabled,
-    simpleAnimation,
-    backgroundDisabled,
-    uiAnimationProfile,
-    uiAnimationForm,
-    motionPreviewOpen,
-    motionPreviewStyle,
     selectedArea,
     areaTokenForm,
     chatLayout,
@@ -91,10 +92,7 @@ const {
     hasAreaDraft,
     activateTab,
     updateCustomizationForm,
-    updateUiAnimationProfile,
-    updateUiAnimationForm,
     updateChatLayout,
-    previewMotion,
 } = editor
 const {
     localThemeError,
@@ -106,14 +104,23 @@ const {
     resetToPreset,
     resetCustomization,
     updateAndPersistThemeMode,
-    setMotionMode,
-    persistMotionMode,
-    persistMotionDisabled,
-    persistSimpleAnimation,
-    persistBackgroundDisabled,
     saveAreaTokens,
     resetAreaTokens,
 } = persistence
+const {
+    draft: motionV6Draft,
+    source: motionV6Source,
+    error: motionV6Error,
+    saving: motionV6Saving,
+    dirty: motionV6Dirty,
+    canRetry: motionV6CanRetry,
+    runtimeDecision: motionV6RuntimeDecision,
+    replaceDraft: replaceMotionV6Draft,
+    resetBackground: resetMotionV6Background,
+    resetInterface: resetMotionV6Interface,
+    save: saveMotionV6,
+    retry: retryMotionV6,
+} = motionV6
 const {
     themeLibrary,
     activeCustomThemeId,
@@ -137,12 +144,17 @@ const {
     saveAsNamedTheme,
 } = library
 
+watch(() => props.initialTab, (tab) => {
+    if (tab) activateTab(normalizeTalosThemeEditorTab(tab))
+})
+
 onMounted(async () => {
     const loaded = await loadSettings().catch(() => null)
     const loadedTheme = loaded?.preferences?.theme
     if (loadedTheme) emitChangeTheme(normalizeTalosTheme(loadedTheme), false)
     editor.syncFromSettings(loaded)
     editor.syncCustomizationForm()
+    motionV6.syncFromSettings(loaded)
     library.syncFromSettings(loaded)
 })
 </script>
@@ -187,21 +199,14 @@ onMounted(async () => {
                 v-else-if="activeTab === 'customize'"
                 :preset="activePreset"
                 :customization="customizationForm"
-                :ui-animation-profile="uiAnimationProfile"
-                :ui-animation-form="uiAnimationForm"
                 :chat-layout="chatLayout"
                 :new-theme-name="newThemeName"
                 :disabled="themePolicyLocked"
                 :saving="savingSettings"
                 :draft-is-dirty="draftIsDirty"
-                :motion-preview-open="motionPreviewOpen"
-                :motion-preview-style="motionPreviewStyle"
                 @update:customization="updateCustomizationForm"
-                @update:ui-animation-profile="updateUiAnimationProfile"
-                @update:ui-animation-form="updateUiAnimationForm"
                 @update:chat-layout="updateChatLayout"
                 @update:new-theme-name="newThemeName = $event"
-                @preview-motion="previewMotion"
                 @save-customization="saveCustomization"
                 @save-as-theme="saveAsNamedTheme"
                 @create-theme="saveAsNamedTheme"
@@ -237,21 +242,20 @@ onMounted(async () => {
             />
             <TalosThemeMotion
                 v-else-if="activeTab === 'motion'"
-                :key="`motion-${themeControlRevision}`"
-                :simple-animation="simpleAnimation"
-                :motion-disabled="motionDisabled"
-                :background-disabled="backgroundDisabled"
-                :motion-mode="motionMode"
+                :model-value="motionV6Draft"
+                :theme="activeTheme"
+                :runtime-decision="motionV6RuntimeDecision"
+                :source="motionV6Source"
+                :dirty="motionV6Dirty"
+                :error="motionV6Error"
+                :can-retry="motionV6CanRetry"
                 :disabled="themePolicyLocked"
-                :saving="savingSettings"
-                @update:simple-animation="simpleAnimation = $event"
-                @update:motion-disabled="motionDisabled = $event"
-                @update:background-disabled="backgroundDisabled = $event"
-                @update:motion-mode="setMotionMode"
-                @persist-simple-animation="persistSimpleAnimation"
-                @persist-motion-disabled="persistMotionDisabled"
-                @persist-background-disabled="persistBackgroundDisabled"
-                @persist-motion-mode="persistMotionMode"
+                :saving="savingSettings || motionV6Saving"
+                @update:model-value="replaceMotionV6Draft"
+                @save="saveMotionV6"
+                @retry="retryMotionV6"
+                @reset-background="resetMotionV6Background"
+                @reset-interface="resetMotionV6Interface"
             />
             <TalosThemeAdvanced
                 v-else

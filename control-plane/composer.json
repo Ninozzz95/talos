@@ -42,7 +42,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "..\\.tools\\bin\\node.cmd scripts/dev-stack.mjs"
+            "node scripts/dev-stack.mjs"
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",

@@ -25,6 +25,24 @@ Build AVM as a deterministic, inspectable execution system. Chat and UI are prod
 4. Keep the edit inside the owner boundary unless the task explicitly crosses layers.
 5. Do not commit. Never commit on behalf of the user.
 
+## User-Provided Artifact Fidelity
+
+- Treat a file supplied by the user as the source of truth for that artifact.
+- Integrate the supplied file unchanged whenever technically possible; do not recreate, approximate, or restyle it by default.
+- Put required security, accessibility, lifecycle, framework, and persistence behavior in an external wrapper so the supplied artifact remains intact.
+- If an in-file change is unavoidable, explain the exact compatibility or safety reason before treating the integration as complete.
+- Verify fidelity with a direct diff or equivalent structural comparison, then verify the integrated artifact in its real user-facing runtime.
+
+## Human-Visible UI Verification Contract
+
+- A user-visible UI change is not complete when a DOM node exists, an attribute changes, a request fires, or `getAnimations()` returns an object. Those checks are structural evidence only.
+- Verify the complete path from real user input through state/API behavior to the rendered result. For motion, capture a fixed paint surface before, during, and after the transition and compare decoded RGBA pixels.
+- Motion gates must also assert a running animation with nonzero duration and intermediate progress, computed visibility/opacity/geometry, viewport intersection, hit-testing where the surface should be interactive, semantic lifecycle state, focus, and the final interaction outcome.
+- Test fixed desktop and mobile viewports. A component is not visually verified when only one responsive branch is covered.
+- Use `control-plane/tests/e2e/helpers/talosVisibleMotion.ts` for composited motion evidence and `npm run test:e2e:visible-ui` as the focused regression gate.
+- Screenshots attached only for inspection do not constitute assertions. A visual artifact must be compared or inspected by an explicit automated invariant to close a bug.
+- Apply this layered method to all future UI debugging: semantic state, computed presentation, painted pixels, hit-testing/accessibility, and real backend integration when the feature crosses an API boundary.
+
 ## No fake feature rule
 
 Every user-visible feature must be backed by real behavior or clearly labeled as demo/mock.
@@ -166,6 +184,17 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - Backup APIs expose a manifest and restore validation only. Restore validation is dry-run only, rejects incompatible schema versions and incomplete domain manifests, and must not perform destructive restore until a separate capability, audit event, and rollback policy exist.
 
 ## Verification
+
+### Fresh-clone deployment contract
+
+- `.tools/` is ignored, disposable runtime state. Public startup must never assume it was copied from another checkout.
+- `./talos up` is Docker-first and must not require host PHP, Composer, Node, or npm. Laravel app-key generation and migrations happen in the container.
+- `./talos dev` owns pinned Windows toolchain bootstrap, locked dependency installation, SQLite initialization, and the single native dev stack.
+- Native runtime artifacts come only from the fixed HTTPS URLs and SHA-256 digests in `scripts/toolchain/manifest.json`; checksum or archive validation failures are fail-closed.
+- PHP configuration and launchers must remain relocatable. Never write a user checkout path into tracked files or generated `php.ini`.
+- Do not run `npm ci`, Composer repair, or migrations concurrently with an active native setup. The `.tools/.native-setup.lock` contract guards `talos dev` and `talos doctor --repair`.
+- Docker persistence must not mount over `control-plane/database/`, because that hides tracked migrations. SQLite runtime data belongs under the persisted storage volume.
+- The complete Docker stack includes TALOS, queue, validator, browser worker, and the PHP core. The public TALOS image uses nginx plus PHP-FPM, not `artisan serve`.
 
 Run verification before claiming completion:
 

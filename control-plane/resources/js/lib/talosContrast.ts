@@ -2,8 +2,12 @@ const OPAQUE_HEX = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i
 const COLOR_MIX = /^color-mix\(\s*in\s+srgb\s*,([\s\S]+)\)$/i
 const TOKEN_REFERENCE = /^var\(\s*(--[a-z0-9_-]+)\s*\)$/i
 
+export const TALOS_COLOR_RESOLUTION_MAX_DEPTH = 16 as const
+
+const TALOS_COLOR_RESOLUTION_MAX_LENGTH = 4096
+
 type Rgba = { red: number; green: number; blue: number; alpha: number }
-type TalosTokenStyle = Record<string, string>
+export type TalosTokenStyle = Record<string, string>
 
 export type TalosNormalTextPair = {
     field: string
@@ -84,7 +88,13 @@ function colorOperand(value: string) {
     }
 }
 
-function parseColor(value: string, style: TalosTokenStyle, resolving: Set<string> = new Set()): Rgba | null {
+function parseColor(
+    value: string,
+    style: TalosTokenStyle,
+    resolving: Set<string> = new Set(),
+    depth = 0,
+): Rgba | null {
+    if (depth > TALOS_COLOR_RESOLUTION_MAX_DEPTH || value.length > TALOS_COLOR_RESOLUTION_MAX_LENGTH) return null
     const normalized = value.trim()
     const hex = normalized.match(OPAQUE_HEX)
 
@@ -110,7 +120,7 @@ function parseColor(value: string, style: TalosTokenStyle, resolving: Set<string
 
         const nextResolving = new Set(resolving)
         nextResolving.add(token)
-        return parseColor(tokenValue, style, nextResolving)
+        return parseColor(tokenValue, style, nextResolving, depth + 1)
     }
 
     const colorMix = normalized.match(COLOR_MIX)
@@ -121,8 +131,8 @@ function parseColor(value: string, style: TalosTokenStyle, resolving: Set<string
 
     const firstOperand = colorOperand(parts[0])
     const secondOperand = colorOperand(parts[1])
-    const first = parseColor(firstOperand.color, style, resolving)
-    const second = parseColor(secondOperand.color, style, resolving)
+    const first = parseColor(firstOperand.color, style, resolving, depth + 1)
+    const second = parseColor(secondOperand.color, style, resolving, depth + 1)
     if (!first || !second) return null
 
     const firstWeight = firstOperand.weight ?? (secondOperand.weight === undefined ? 50 : 100 - secondOperand.weight)
@@ -155,6 +165,17 @@ function opaqueColor(value: string, style: TalosTokenStyle = {}) {
     }
 
     return color
+}
+
+function canonicalChannel(value: number) {
+    return Math.round(Math.min(1, Math.max(0, value)) * 255)
+        .toString(16)
+        .padStart(2, '0')
+}
+
+export function talosCanonicalOpaqueColor(value: string, style: TalosTokenStyle = {}) {
+    const color = opaqueColor(value, style)
+    return `#${canonicalChannel(color.red)}${canonicalChannel(color.green)}${canonicalChannel(color.blue)}`
 }
 
 export function talosRelativeLuminance(color: string, style: TalosTokenStyle = {}) {

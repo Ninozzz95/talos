@@ -2,6 +2,20 @@
 
 Official documentation for the AVM workspace.
 
+## Quick Commands
+
+```bash
+./talos up                 # Docker-first clean checkout
+./talos dev                # Native development bootstrap and stack
+./talos doctor             # Read-only readiness report
+./talos doctor --repair    # Repair ignored native runtime state
+```
+
+Windows Command Prompt users can run the equivalent `talos.cmd` commands.
+That wrapper resolves Git for Windows explicitly and preserves the child
+command exit code. On Unix, `bash ./talos <command>` is an equivalent fallback
+when checkout permissions do not mark the launcher executable.
+
 ## Start Here
 
 - [Deployment plans](deployment.md): development and production plans for TALOS and KADMOS.
@@ -21,4 +35,3 @@ Official documentation for the AVM workspace.
 
 Private implementation plans and progress logs live under `docs/superpowers/`
 and are intentionally not part of the public documentation set.
-

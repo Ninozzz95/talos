@@ -1,37 +1,37 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('./TalosWindowLayer.vue', import.meta.url), 'utf8')
 const motionSource = readFileSync(new URL('../../../composables/useTalosWindowMotion.ts', import.meta.url), 'utf8')
-const appCss = readFileSync(join(process.cwd(), 'resources/css/app.css'), 'utf8')
+const appCssSource = readFileSync(new URL('../../../../css/app.css', import.meta.url), 'utf8')
 
-describe('TalosWindowLayer motion integration', () => {
-    it('uses semantic window duration vars with animationend-first completion and a revision-safe fallback', () => {
+describe('TalosWindowLayer Motion V6 integration', () => {
+    it('routes destructive actions through the V6 lifecycle boundary', () => {
         expect(source).toContain('useTalosWindowMotion')
-        expect(motionSource).toContain('resolveTalosWindowTransitionDuration')
-        expect(motionSource).toContain('createTalosRevisionedCompletionScheduler')
-        expect(motionSource).toContain('talosWindowTransitionDurationVariable')
-        expect(motionSource).toContain('computedWindowDuration(state)')
-        expect(motionSource).toContain('getPropertyValue(property)')
-        expect(source).toContain('@animationend="handleWindowAnimationEnd(id, $event)"')
-        expect(motionSource).toMatch(/event\.target !== event\.currentTarget/)
-        expect(motionSource).toMatch(/requestAnimationFrame\(\(\) => window\.requestAnimationFrame\(\(\) =>/)
-        expect(motionSource).toContain('transitionCompletions.finish(id)')
-        expect(motionSource).toContain('transitionCompletions.isCurrent')
-        expect(motionSource).not.toContain("'--talos-motion-open-duration'")
-        expect(motionSource).not.toContain("'--talos-window-minimize-duration'")
+        expect(source).toContain("requestWindowClose(id)")
+        expect(source).toContain("requestWindowMinimize(id)")
+        expect(source).toContain("requestWindowFullscreen(id)")
+        expect(source).not.toContain('@animationend=')
+        expect(motionSource).toContain('createInteractionMotionController')
+        expect(motionSource).toContain('resolveTalosInteractionMotion')
+        expect(motionSource).toContain('createTalosWindowFlipPlan')
+        expect(motionSource).not.toContain('createTalosRevisionedCompletionScheduler')
     })
 
-    it('flushes pending completions when runtime motion pauses', () => {
-        expect(motionSource).toMatch(/watch\([\s\S]*talosMotion\.motionPaused[\s\S]*finishAll\(\)/)
+    it('separates the positioned frame from the animated window surface', () => {
+        expect(source).toContain('data-window-frame-id')
+        expect(source).toMatch(/class="talos-floating-window pointer-events-auto"/)
+        expect(source).toContain(':data-window-motion-state="transitionStateFor(id)"')
+        expect(source).not.toMatch(/<TalosToolWindow[\s\S]{0,900}class="talos-floating-window/)
     })
 
-    it('uses semantic motion duration tokens for window open restore and minimize CSS', () => {
-        expect(appCss).toContain('var(--talos-motion-duration-window-open)')
-        expect(appCss).toContain('var(--talos-motion-duration-window-restore)')
-        expect(appCss).toContain('var(--talos-motion-duration-window-minimize)')
-        expect(appCss).not.toContain('var(--talos-window-transition-duration')
-        expect(appCss).not.toContain('var(--talos-window-minimize-duration')
+    it('receives canonical V6 preferences and runtime reduced-motion policy from the workspace', () => {
+        expect(source).toContain('motionPreferences: toRef(props, \'motionPreferences\')')
+        expect(source).toContain('reducedMotion: toRef(props, \'reducedMotion\')')
+        expect(source).toContain('fullscreenWindowIds: toRef(props, \'fullscreenWindowIds\')')
+    })
+
+    it('lets the inner desktop surface fill the persisted frame height', () => {
+        expect(appCssSource).toMatch(/@media \(min-width: 1024px\)[\s\S]*?\.talos-floating-window > \.talos-tool-window\s*\{[\s\S]*?max-height:\s*none/)
     })
 })

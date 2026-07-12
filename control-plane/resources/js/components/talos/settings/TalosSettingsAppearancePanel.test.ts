@@ -16,19 +16,19 @@ function mountAppearance() {
     const container = document.createElement('div')
     document.body.append(container)
 
+    let themeEngineOpenCount = 0
     const app = createApp(defineComponent({
         setup() {
             return () => h(TalosSettingsAppearancePanel, {
                 theme: 'forge',
                 themeMode: 'dark',
-                themeMotion: 'standard',
-                themeMotionDisabled: false,
-                themeSimpleAnimation: true,
-                themeBackgroundDisabled: false,
                 chatLayout: TALOS_DEFAULT_CHAT_LAYOUT,
                 themePolicyLocked: false,
                 appearanceVisibility: {},
                 appearanceGroups: [],
+                onOpenThemeEngine: () => {
+                    themeEngineOpenCount += 1
+                },
             })
         },
     }))
@@ -36,12 +36,12 @@ function mountAppearance() {
     mounted.push(app)
     app.mount(container)
 
-    return container
+    return { container, themeEngineOpenCount: () => themeEngineOpenCount }
 }
 
 describe('TalosSettingsAppearancePanel tabs', () => {
     it('links the active tab to a labelled panel', () => {
-        const container = mountAppearance()
+        const { container } = mountAppearance()
         const designTab = container.querySelector<HTMLButtonElement>('[role="tab"]')
         const panel = container.querySelector<HTMLElement>('[role="tabpanel"]')
 
@@ -52,7 +52,7 @@ describe('TalosSettingsAppearancePanel tabs', () => {
     })
 
     it('activates Motion with ArrowRight and preserves roving focus', async () => {
-        const container = mountAppearance()
+        const { container } = mountAppearance()
         let tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
 
         expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1])
@@ -64,5 +64,26 @@ describe('TalosSettingsAppearancePanel tabs', () => {
         expect(tabs[1].getAttribute('aria-selected')).toBe('true')
         expect(document.activeElement?.id).toBe('talos-appearance-tab-motion')
         expect(container.querySelector('[role="tabpanel"]')?.id).toBe('talos-appearance-panel-motion')
+    })
+
+    it('routes Motion to the canonical Theme Engine without rendering legacy writers', async () => {
+        const { container, themeEngineOpenCount } = mountAppearance()
+        const motionTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+            .find((tab) => tab.textContent?.includes('Motion'))
+
+        motionTab?.click()
+        await nextTick()
+
+        expect(container.querySelector('[aria-label="Settings theme motion"]')).toBeNull()
+        expect(container.querySelector('[aria-label="Settings use simple animation"]')).toBeNull()
+        expect(container.querySelector('[aria-label="Settings disable background motion"]')).toBeNull()
+        expect(container.querySelector('[aria-label="Settings disable procedural background"]')).toBeNull()
+
+        const openButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+            .find((button) => button.textContent?.includes('Open Theme Engine'))
+        expect(openButton).toBeTruthy()
+        openButton?.click()
+        await nextTick()
+        expect(themeEngineOpenCount()).toBe(1)
     })
 })

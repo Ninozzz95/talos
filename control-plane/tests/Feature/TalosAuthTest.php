@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -64,11 +65,100 @@ final class TalosAuthTest extends TestCase
         $this->withoutVite();
         $user = User::factory()->create();
 
-        $this->actingAs($user)
+        $response = $this->actingAs($user)
             ->get('/')
             ->assertOk()
             ->assertSee('talos-workspace-root')
             ->assertSee('data-authenticated="true"', false);
+
+        self::assertStringContainsString('private', (string) $response->headers->get('Cache-Control'));
+        self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+    }
+
+    public function test_authenticated_workspace_server_renders_an_accessible_boot_loader_before_vue_mounts(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/');
+
+        $response
+            ->assertOk()
+            ->assertSee('data-talos-boot-loader="true"', false)
+            ->assertSee('role="status"', false)
+            ->assertSee('aria-busy="true"', false)
+            ->assertSee('@media (prefers-reduced-motion: reduce)', false)
+            ->assertSee('.talos-boot-loader .talos-spinner *', false)
+            ->assertSee('class="talos-loading-screen"', false)
+            ->assertSee('class="talos-spinner"', false)
+            ->assertSee('animation: flowData 2.5s infinite', false)
+            ->assertSee('animation: igniteNode 2.5s infinite', false)
+            ->assertSee('var(--talos-boot-accent, #F5A623)', false)
+            ->assertSee('animation-name: talosBootIgniteNode', false)
+            ->assertSeeInOrder([
+                'data-talos-boot-theme-bridge',
+                'data-talos-boot-loader="true"',
+            ], false)
+            ->assertSeeInOrder([
+                'data-talos-boot-loader="true"',
+                'id="talos-workspace-root"',
+            ], false);
+
+        $html = $response->getContent();
+
+        self::assertIsString($html);
+        self::assertStringNotContainsString('<iframe', strtolower($html));
+        self::assertStringNotContainsString('<script src="http', strtolower($html));
+        self::assertStringNotContainsString('talos-boot-loader__wordmark', $html);
+        self::assertStringNotContainsString('talos-boot-loader__edge', $html);
+    }
+
+    public function test_boot_loader_first_frame_uses_the_authenticated_users_server_theme_accent(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($user->id),
+            'user_id' => $user->id,
+            'preferences' => [
+                'theme' => 'terminal',
+                'theme_customization' => ['accent' => '#7c3aed'],
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('style="--talos-boot-accent: #7c3aed"', false)
+            ->assertDontSee('style="--talos-boot-accent: #63f08e"', false);
+    }
+
+    public function test_boot_loader_first_frame_falls_back_to_the_users_preset_and_never_another_users_settings(): void
+    {
+        $this->withoutVite();
+        $currentUser = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($currentUser->id),
+            'user_id' => $currentUser->id,
+            'preferences' => ['theme' => 'terminal'],
+        ]);
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($otherUser->id),
+            'user_id' => $otherUser->id,
+            'preferences' => [
+                'theme' => 'violet',
+                'theme_customization' => ['accent' => '#abcdef'],
+            ],
+        ]);
+
+        $this->actingAs($currentUser)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('style="--talos-boot-accent: #63f08e"', false)
+            ->assertDontSee('#abcdef', false);
     }
 
     public function test_login_redirects_to_setup_until_first_user_exists(): void

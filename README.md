@@ -8,12 +8,19 @@ AVM is the Agnostic Agent Virtual Machine workspace:
 
 ## Quick Start
 
-Docker-first local/private start:
+Docker-first local/private start from a clean checkout:
 
 ```bash
-cp .env.example .env
+git clone https://github.com/Ninozzz95/agent-virtual-machine.git
+cd agent-virtual-machine
 ./talos up
 ```
+
+On Windows Command Prompt use `talos.cmd up`. The launcher creates `.env`,
+generates the internal browser-worker credential and Laravel application key,
+builds the complete stack, runs migrations, and fails with diagnostics if
+validator or launchable-Chromium readiness does not pass. A repo-local `.tools`
+directory is not required for Docker startup.
 
 Open:
 
@@ -33,11 +40,34 @@ TALOS_NO_BOOT=1 ./talos up
 ./talos up --no-boot
 ```
 
+## Native Development
+
+From Git Bash on Windows:
+
+```bash
+./talos dev
+```
+
+The first run downloads pinned PHP, Composer, and Node archives into the ignored
+`.tools/` directory, verifies their SHA-256 digests, installs locked project
+dependencies and the actual Chromium executable, prepares SQLite, runs
+migrations, and starts Laravel, the queue, Vite, the validator, and the browser
+worker. The toolchain is relocatable and does not depend on the checkout
+directory name.
+
+Repair or inspect a native checkout with:
+
+```bash
+./talos doctor
+./talos doctor --repair
+```
+
 ## Operator CLI
 
 KADMOS runs from `core/`:
 
 ```bash
+./talos doctor --repair
 cd core
 ../.tools/bin/php.cmd kadmos
 ../.tools/bin/php.cmd kadmos doctor --json
@@ -56,6 +86,7 @@ cd core
 ```bash
 cd core && ../.tools/bin/php.cmd kadmos test
 cd ../validator && ../.tools/bin/npm.cmd test && ../.tools/bin/npm.cmd run build
+cd ../browser-worker && ../.tools/bin/npm.cmd test && ../.tools/bin/npm.cmd run build
 cd ../control-plane && ../.tools/bin/php.cmd artisan test && ../.tools/bin/npm.cmd run build
 ```
 

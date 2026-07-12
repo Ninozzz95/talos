@@ -769,6 +769,54 @@ final class TalosChatBrowserModeTest extends TestCase
         $this->assertSame('https://tanteauto.it/home', $browserRequests[0]['url'] ?? null);
     }
 
+    public function test_retry_follow_up_replays_the_previous_single_url_after_browse_is_enabled(): void
+    {
+        $chat = $this->chatSession();
+        $browser = $this->browserSession();
+        $url = 'https://www.autoscout24.it/annunci/peugeot-208-example?sort=standard&position=1&source=listpage_search-results';
+        $chat->messages()->create([
+            'role' => 'user',
+            'content' => "Puoi attivare il modulo web search e navigare su questa pagina? {$url}",
+        ]);
+        $chat->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Non ho un modulo di navigazione autorizzato in questa modalita.',
+        ]);
+        // Persistent chat saves the current user turn before calling the chat proxy.
+        $retryMessage = $chat->messages()->create(['role' => 'user', 'content' => 'riprova']);
+
+        Http::fake(function ($request) use ($url) {
+            $message = (string) $request['message'];
+            $this->assertStringContainsString($url, $message);
+            $this->assertStringContainsString('"operation":"navigate"', $message);
+            $this->assertStringContainsString('"operation":"snapshot"', $message);
+
+            return Http::response([
+                'mutations' => [],
+                'text' => 'Pagina caricata e analizzata con evidenza browser.',
+                'dag' => "DAG State:\n(empty)",
+            ]);
+        });
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $chat->id,
+            'message' => 'riprova',
+            'user_message_id' => $retryMessage->id,
+            'api_key' => 'sk-test',
+            'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
+        ])->assertOk()
+            ->assertJsonPath('text', 'Pagina caricata e analizzata con evidenza browser.')
+            ->assertJsonCount(2, 'browser_activities')
+            ->assertJsonPath('browser_activities.0.operation', 'navigate')
+            ->assertJsonPath('browser_activities.1.operation', 'snapshot');
+
+        $this->assertSame(1, Http::recorded()->count());
+        $browserRequests = array_values(array_filter($this->client->requests, fn (array $request): bool => $request['method'] !== 'inspect'));
+        $this->assertSame($url, $browserRequests[0]['url'] ?? null);
+        $this->assertDatabaseHas('talos_run_events', ['event_type' => 'chat.browser_follow_up_resolved']);
+        $response->assertJsonMissing(['code' => 'TALOS_BROWSER_COMMAND_MALFORMED']);
+    }
+
     public function test_browser_follow_up_recovers_a_current_page_after_a_non_executable_plan(): void
     {
         $chat = $this->chatSession();
