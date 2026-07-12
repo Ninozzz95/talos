@@ -45,59 +45,28 @@ validation service, not the application backend.
 
 ## TALOS Development Deployment
 
-Use this when actively developing the Laravel/Vue UI, APIs, tests, and local
-product behavior.
-
-### Requirements
-
-- Repo-local tools in `.tools/`.
-- Composer dependencies installed in `control-plane/` and `core/`.
-- Node dependencies installed in `control-plane/` and `validator/`.
-- SQLite database at `control-plane/database/database.sqlite`.
-
-### Terminal A: validator
-
-From Git Bash:
+Use this when editing Laravel, Vue, the PHP core, the validator, or browser
+automation. From the repository root in Git Bash:
 
 ```bash
-cd /c/Users/ninox/Desktop/AVM/validator
-export PATH="$PWD/../.tools/node:$PWD/../.tools/bin:$PATH"
-
-../.tools/bin/npm.cmd install
-../.tools/bin/npm.cmd run build
-
-export HOST=127.0.0.1
-export PORT=3000
-../.tools/bin/npm.cmd run start
+./talos dev
 ```
 
-Expected health URL:
+No manual runtime or package-manager setup is required on Windows. The command:
 
-```text
-http://127.0.0.1:3000/health
-```
+1. reads the pinned manifest at `scripts/toolchain/manifest.json`;
+2. downloads PHP, Composer, Node, and the CA bundle from fixed HTTPS origins;
+3. verifies every artifact against its tracked SHA-256 digest before extraction;
+4. generates relocatable wrappers and `php.ini` under the ignored `.tools/`;
+5. runs locked Composer/npm installs only when their lockfile changed;
+6. installs the pinned Playwright Chromium runtime and verifies its executable
+   independently from npm dependency markers;
+7. creates `control-plane/.env` and SQLite when absent;
+8. runs migrations and starts validator, Laravel, queue, Vite, and browser worker.
 
-### Terminal B: TALOS control-plane and Vite
-
-From Git Bash:
-
-```bash
-cd /c/Users/ninox/Desktop/AVM/control-plane
-export PATH="$PWD/../.tools/php:$PWD/../.tools/node:$PWD/../.tools/bin:$PATH"
-
-../.tools/bin/composer.cmd install
-../.tools/bin/npm.cmd install --ignore-scripts
-
-test -f .env || cp .env.example .env
-grep -q '^AVM_VALIDATOR_URL=' .env || echo 'AVM_VALIDATOR_URL=http://127.0.0.1:3000' >> .env
-grep -q '^TALOS_VALIDATOR_HEALTH_URL=' .env || echo 'TALOS_VALIDATOR_HEALTH_URL=http://127.0.0.1:3000/health' >> .env
-
-../.tools/bin/php.cmd artisan key:generate --force
-../.tools/bin/php.cmd artisan migrate
-../.tools/bin/php.cmd artisan config:clear
-
-../.tools/bin/composer.cmd run dev
-```
+The command stays attached to the terminal. Stop the complete stack with
+`Ctrl+C`. A second `talos dev` or repair process fails closed while the first is
+running, preventing concurrent `npm ci` or migration operations.
 
 Open:
 
@@ -133,11 +102,15 @@ After users exist, guests are redirected to `/login`.
 Run these before claiming a TALOS development deploy works:
 
 ```bash
-cd /c/Users/ninox/Desktop/AVM/control-plane
+cd control-plane
 ../.tools/bin/php.cmd artisan test
 ../.tools/bin/npm.cmd run build
 
-cd /c/Users/ninox/Desktop/AVM/validator
+cd ../validator
+../.tools/bin/npm.cmd test
+../.tools/bin/npm.cmd run build
+
+cd ../browser-worker
 ../.tools/bin/npm.cmd test
 ../.tools/bin/npm.cmd run build
 ```
@@ -145,9 +118,35 @@ cd /c/Users/ninox/Desktop/AVM/validator
 For UI changes, add Playwright route checks:
 
 ```bash
-cd /c/Users/ninox/Desktop/AVM/control-plane
+cd control-plane
 ../.tools/bin/npm.cmd run test:e2e -- --project=chromium
 ```
+
+### Native Doctor and repair
+
+```bash
+./talos doctor
+./talos doctor --repair
+```
+
+Doctor reports Docker and native profiles independently. It treats a missing
+Chromium executable as a failed native profile even when `node_modules` is
+present. `--repair` may rebuild only ignored local runtime/dependency state; it
+never modifies system PHP, Node, Composer, Docker, or user files outside the
+checkout, and it exits immediately if any repair step fails.
+
+If PHP reports missing `curl`, `openssl`, `pdo_sqlite`, or other extensions
+after a checkout was copied or renamed, do not edit `php.ini` and do not disable
+Composer TLS. Stop the active dev stack and run:
+
+```bash
+./talos doctor --repair
+bash scripts/bootstrap-tools.sh --verify-only
+```
+
+The repair regenerates relative PHP configuration and wrappers for the current
+checkout. A checksum mismatch, truncated download, unexpected archive layout,
+or untrusted download host fails closed before any downloaded executable runs.
 
 ## KADMOS Development Deployment
 
@@ -157,10 +156,9 @@ operator CLI.
 ### Setup
 
 ```bash
-cd /c/Users/ninox/Desktop/AVM/core
-export PATH="$PWD/../.tools/php:$PWD/../.tools/node:$PWD/../.tools/bin:$PATH"
-
-../.tools/bin/composer.cmd install
+./talos doctor --repair
+cd core
+../.tools/bin/php.cmd kadmos doctor --json
 ```
 
 Set URLs explicitly so the CLI follows the current TALOS and validator ports:
@@ -233,7 +231,7 @@ ready.
 ### KADMOS development verification
 
 ```bash
-cd /c/Users/ninox/Desktop/AVM/core
+cd core
 ../.tools/bin/php.cmd kadmos doctor --json
 ../.tools/bin/php.cmd kadmos test
 ```
@@ -243,11 +241,18 @@ cd /c/Users/ninox/Desktop/AVM/core
 Production should be Docker-first. The operator experience is:
 
 ```bash
-git clone <repo-url> AVM
-cd AVM
-cp .env.example .env
+git clone https://github.com/Ninozzz95/agent-virtual-machine.git
+cd agent-virtual-machine
 ./talos up
 ```
+
+On Windows Command Prompt use `talos.cmd up`. No PHP, Composer, Node, npm, or
+pre-existing `.tools` directory is required for this Docker path. The launcher
+creates `.env`, generates the internal browser-worker credential and a valid
+32-byte Laravel `APP_KEY`, builds all images, and returns nonzero with bounded
+service logs when `/readyz` fails. On Unix the generated `.env` is restricted to
+mode `0600`; Compose injects it with `env_file` rather than mounting it into the
+application filesystem.
 
 Then open:
 
@@ -274,6 +279,17 @@ The production compose stack contains:
 - `talos`: Laravel app with built assets.
 - `talos-queue`: Laravel queue worker using the same image and `.env`.
 - `validator`: Node/Fastify validator on an internal network URL.
+- `browser-worker`: Playwright/Chromium worker on an internal, token-protected
+  URL.
+
+The TALOS web image runs nginx plus PHP-FPM. It does not use Laravel's
+development server. The container monitors both processes and exits when either
+one terminates, allowing the restart policy to recover the complete web tier.
+
+`/readyz` is stricter than process liveness: it verifies Laravel, database,
+migrations, storage, queue configuration, validator health, and the authenticated
+browser-worker `/ready` endpoint. That endpoint launches Chromium and reports
+failure when the browser runtime is missing or cannot start.
 
 Optional later services:
 
@@ -288,16 +304,20 @@ Root `.env.example` exposes deployment-level knobs:
 ```env
 APP_NAME=TALOS
 APP_ENV=production
+APP_KEY=
 APP_DEBUG=false
 APP_URL=http://localhost:8088
 APP_BIND=127.0.0.1
 APP_PORT=8088
 
 DB_CONNECTION=sqlite
+DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
 QUEUE_CONNECTION=database
 
 AVM_VALIDATOR_URL=http://validator:3000
 TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
+TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
+TALOS_BROWSER_WORKER_TOKEN=
 
 TALOS_ADMIN_NAME=TALOS Admin
 TALOS_ADMIN_EMAIL=
@@ -324,6 +344,8 @@ control-plane tables, not as scattered deployment variables.
 - Keep validator private/internal.
 - Keep provider keys server-side in TALOS model profiles.
 - Never expose raw model, database, validator, queue, or storage ports publicly.
+- Keep root `.env` readable only by the deployment account. TALOS never mounts
+  this file into the PHP-FPM application path.
 - Do not commit `.env`, databases, uploads, logs, backups, generated artifacts,
   or provider credentials.
 
@@ -440,9 +462,11 @@ The repository ships these root commands:
 
 ```bash
 ./talos up
+./talos dev
 ./talos down
 ./talos logs
 ./talos doctor
+./talos doctor --repair
 ./talos open
 ./talos fresh
 ```
@@ -456,10 +480,15 @@ talos.cmd doctor
 
 Command responsibilities:
 
-- `up`: create `.env` if missing, generate app key if needed, build images,
-  run migrations, start TALOS, queue, and validator, then probe `/readyz`.
-- `doctor`: check Docker/native tools, database, storage, queue, validator,
-  auth bootstrap, and public URL.
+- `up`: create `.env` if missing, generate the browser-worker credential and
+  Laravel app key without host PHP, build images, run migrations, start the
+  complete stack, then require validator and launchable-browser `/readyz` checks
+  to pass.
+- `dev`: provision the pinned native toolchain and locked dependencies, then
+  start Laravel, queue, Vite, validator, and browser worker in one terminal.
+- `doctor`: inspect Docker and native profiles independently.
+- `doctor --repair`: repair only ignored native tool/dependency/application
+  state; system runtimes are never changed.
 - `open`: open the canonical TALOS URL.
 - `fresh`: development-only database reset with an explicit warning.
 
@@ -476,23 +505,30 @@ Interactive boot behavior:
 Development:
 
 - [ ] Validator starts on `127.0.0.1:3000`.
+- [ ] Browser worker starts on `127.0.0.1:3100`.
 - [ ] TALOS starts on `127.0.0.1:8000`.
 - [ ] `/` redirects guests to `/setup` or `/login`.
 - [ ] `/chat` and `/dashboard` redirect to `/`.
 - [ ] `php artisan test` passes.
 - [ ] `npm run build` passes in `control-plane/`.
 - [ ] `npm test` and `npm run build` pass in `validator/`.
+- [ ] `npm test`, `npm run build`, and `npm run doctor:runtime` pass in
+      `browser-worker/`.
 - [ ] `kadmos doctor --json` returns controlled JSON.
 
 Production target:
 
 - [ ] Root `.env.example` exists and contains only deployment-level settings.
-- [ ] `docker-compose.yml` starts TALOS, queue, and validator.
-- [ ] Validator is internal-only.
+- [ ] `docker-compose.yml` starts TALOS, queue, validator, and browser worker.
+- [ ] Validator and browser worker are internal-only.
+- [ ] SQLite persistence does not mount over tracked migration files.
+- [ ] The TALOS image contains the PHP core and runs nginx plus PHP-FPM.
 - [ ] TALOS is the only public web entrypoint.
 - [ ] First admin can be created from UI or pre-seeded env.
 - [ ] Queue worker is supervised.
 - [ ] `/up` and `/readyz` are used for liveness/readiness checks.
+- [ ] The Docker integration job builds every image, verifies `/readyz`, and
+      proves storage survives a Compose restart.
 - [ ] Provider keys are stored server-side, never in browser storage.
 - [ ] KADMOS remote operator commands use explicit auth before write/recovery
       actions are considered production ready.

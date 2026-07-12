@@ -6,6 +6,7 @@ import type { TalosNamedTheme, TalosThemeId } from '../lib/talosThemes'
 import type { TalosWorkspaceSettings } from './useTalosSettings'
 import { useTalosNamedThemeLibrary } from './useTalosNamedThemeLibrary'
 import { useTalosThemeEditorState } from './useTalosThemeEditorState'
+import { useTalosThemeMotionV6Editor } from './useTalosThemeMotionV6Editor'
 import type { TalosThemeEditorPersistence } from './useTalosThemeEditorPersistence'
 
 const now = '2026-07-11T12:00:00.000Z'
@@ -59,10 +60,15 @@ function createHarness() {
         bumpThemeControlRevision: vi.fn(),
     } as unknown as TalosThemeEditorPersistence
     const changeTheme = vi.fn()
+    const motionV6 = useTalosThemeMotionV6Editor({
+        settings: settingsRef,
+        updateSettings: async () => settingsRef.value!,
+    })
     const library = useTalosNamedThemeLibrary({
         theme: ref<TalosThemeId>('forge'),
         settings: settingsRef,
         editor,
+        motionV6,
         persistence,
         emitChangeTheme: changeTheme,
         emitThemeDraftChanged: vi.fn(),
@@ -113,6 +119,35 @@ describe('useTalosNamedThemeLibrary', () => {
         await apply
 
         expect(harness.changeTheme).toHaveBeenCalledWith('paper', false)
+    })
+
+    it('upgrades a duplicated legacy library theme to canonical V6 without copying legacy motion fields', async () => {
+        const harness = createHarness()
+        const legacyTheme = namedTheme({
+            motion: 'cinematic',
+            ui_animation_profile: 'custom',
+            ui_animation_customization: { intensity: 80 },
+        })
+
+        const duplicate = harness.library.duplicateTheme(legacyTheme)
+        await Promise.resolve()
+
+        const preferences = harness.persistPreferences.mock.calls[0]?.[0] as Record<string, unknown>
+        expect(Object.keys(preferences)).toEqual(['theme_library'])
+        const library = preferences.theme_library as Array<Record<string, unknown>>
+        expect(library).toHaveLength(1)
+        expect(library[0]?.motion_v6).toMatchObject({
+            schema_version: 1,
+            mode: 'simple',
+            speed: 140,
+            interface: { intensity: 80 },
+        })
+        expect(library[0]).not.toHaveProperty('motion')
+        expect(library[0]).not.toHaveProperty('ui_animation_profile')
+        expect(library[0]).not.toHaveProperty('ui_animation_customization')
+
+        harness.releaseWrite(harness.committedSettings.value)
+        await duplicate
     })
 
     it('validates an imported envelope before asking persistence to write it', async () => {

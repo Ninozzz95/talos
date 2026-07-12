@@ -93,8 +93,7 @@ const emit = defineEmits<{
                     <span>Motion: {{ preset.motion }}</span>
                 </span>
                 <span class="mt-3 flex flex-wrap gap-2">
-                    <Badge tone="success">Procedural effect</Badge>
-                    <Badge tone="neutral">{{ preset.defaultEffect }}</Badge>
+                    <Badge tone="success">Motion V6</Badge>
                 </span>
             </button>
         </div>

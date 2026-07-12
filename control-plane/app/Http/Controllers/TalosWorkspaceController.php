@@ -4,24 +4,26 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\TalosWorkspaceSetting;
 use App\Services\TalosFirstRunService;
+use App\Support\TalosThemeContrast;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\View\View;
 
 final class TalosWorkspaceController extends Controller
 {
-    public function __invoke(TalosFirstRunService $firstRun): View|RedirectResponse
+    public function __invoke(TalosFirstRunService $firstRun): Response|RedirectResponse
     {
         return $this->renderSurface($firstRun, 'workspace');
     }
 
-    public function browse(TalosFirstRunService $firstRun): View|RedirectResponse
+    public function browse(TalosFirstRunService $firstRun): Response|RedirectResponse
     {
         return $this->renderSurface($firstRun, 'browse');
     }
 
-    private function renderSurface(TalosFirstRunService $firstRun, string $surface): View|RedirectResponse
+    private function renderSurface(TalosFirstRunService $firstRun, string $surface): Response|RedirectResponse
     {
         $this->removeStaleLocalViteHotFile();
 
@@ -33,7 +35,18 @@ final class TalosWorkspaceController extends Controller
             return redirect()->guest('/login');
         }
 
-        return view('workspace', ['surface' => $surface]);
+        $setting = TalosWorkspaceSetting::query()
+            ->where('user_id', (int) Auth::id())
+            ->first();
+        $preferences = TalosWorkspaceSetting::sanitizePreferences($setting?->preferences ?? []);
+
+        return response()->view('workspace', [
+            'surface' => $surface,
+            'bootAccent' => TalosThemeContrast::resolveAccent($preferences),
+        ])->withHeaders([
+            'Cache-Control' => 'private, no-store, max-age=0, must-revalidate',
+            'Pragma' => 'no-cache',
+        ]);
     }
 
     private function removeStaleLocalViteHotFile(): void

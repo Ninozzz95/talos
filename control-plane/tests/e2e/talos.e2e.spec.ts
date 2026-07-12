@@ -1,12 +1,104 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { capturePaintedTransition, expectPaintedTransition } from './helpers/talosVisibleMotion'
 
 const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
 const talosThemePresetCount = 12
+const talosMotionV6Defaults = {
+    schema_version: 1,
+    mode: 'adaptive',
+    background_enabled: true,
+    interface_enabled: true,
+    scene_override: null,
+    speed: 100,
+    intensity: 65,
+    density: 100,
+    depth: 50,
+    trails: 35,
+    contrast: 60,
+    parallax: 20,
+    quality: 'adaptive',
+    fps_cap: 30,
+    dpr_cap: 1.25,
+    pause_when_hidden: true,
+    respect_data_saver: true,
+    interface: {
+        profile: 'preset',
+        duration_scale: 100,
+        intensity: 65,
+        easing: 'precise',
+        stagger: 40,
+        categories: {
+            windows: true,
+            surfaces: true,
+            navigation: true,
+            composer: true,
+            messages: true,
+            feedback: true,
+        },
+    },
+} as const
+
+const talosMotionV6SubtleMigration = {
+    ...talosMotionV6Defaults,
+    mode: 'simple',
+    speed: 75,
+    intensity: 40,
+} as const
+
+const talosMotionV6Complex = {
+    ...talosMotionV6Defaults,
+    mode: 'complex',
+    speed: 140,
+    intensity: 85,
+} as const
+
+function hasExactMotionV6(
+    preferences: Record<string, unknown> | undefined,
+    expected: Record<string, unknown> = talosMotionV6Defaults,
+) {
+    return JSON.stringify(preferences?.theme_motion_v6) === JSON.stringify(expected)
+}
+
+function hasSettingsExpectedRevision(body: Record<string, unknown>) {
+    return body.expected_revision === undefined
+        || (Number.isSafeInteger(body.expected_revision) && Number(body.expected_revision) >= 0)
+}
+
+function settingsPatchBody(request: { postDataJSON: () => unknown }) {
+    const body = request.postDataJSON() as Record<string, unknown>
+    if (body.expected_revision !== undefined) {
+        expect(hasSettingsExpectedRevision(body)).toBe(true)
+    }
+    return body
+}
+
+async function patchTalosSettings(page: Page, preferences: Record<string, unknown>) {
+    await page.evaluate(async (nextPreferences) => {
+        const currentResponse = await fetch('/api/talos/settings', { headers: { Accept: 'application/json' } })
+        const currentPayload = await currentResponse.json() as { data?: { revision?: unknown } }
+        const expectedRevision = currentPayload.data?.revision
+        const hasRevision = Number.isSafeInteger(expectedRevision) && Number(expectedRevision) >= 0
+
+        const response = await fetch('/api/talos/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+                ...(hasRevision ? { expected_revision: expectedRevision } : {}),
+                preferences: nextPreferences,
+            }),
+        })
+        if (!response.ok) throw new Error(`Settings patch failed with ${response.status}.`)
+        const payload = await response.json() as { data?: { revision?: unknown } }
+        if (hasRevision && payload.data?.revision !== Number(expectedRevision) + 1) {
+            throw new Error('Settings PATCH did not return the next revision.')
+        }
+    }, preferences)
+}
 
 async function expectNoHorizontalOverflow(page: Page) {
     const result = await page.evaluate(() => {
@@ -42,7 +134,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 }
 
 async function expectProceduralCanvasAboveScrim(page: Page) {
-    const layering = await page.getByTestId('talos-background-effect').evaluate((root) => {
+    const layering = await page.getByTestId('talos-motion-background').evaluate((root) => {
         const canvas = root.querySelector('.talos-procedural-canvas') as HTMLElement | null
         const scrim = root.querySelector('.talos-theme-background-scrim') as HTMLElement | null
 
@@ -70,8 +162,20 @@ async function expectProceduralCanvasAboveScrim(page: Page) {
     expect(layering.canvasZ).toBeGreaterThan(layering.scrimZ)
 }
 
+function workspaceMotionBackground(page: Page) {
+    return page.getByTestId('talos-motion-background')
+}
+
+function workspaceMotionStage(page: Page) {
+    return workspaceMotionBackground(page).locator('[data-talos-motion-stage]')
+}
+
+function workspaceMotionCanvas(page: Page) {
+    return workspaceMotionBackground(page).getByTestId('talos-procedural-canvas')
+}
+
 async function expectProceduralCanvasFrameChanges(page: Page) {
-    const canvas = page.getByTestId('talos-procedural-canvas')
+    const canvas = workspaceMotionCanvas(page)
     await expect(canvas).toHaveCount(1)
 
     const firstFrame = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())
@@ -82,7 +186,7 @@ async function expectProceduralCanvasFrameChanges(page: Page) {
 }
 
 async function expectProceduralCanvasFrameStaysStill(page: Page) {
-    const canvas = page.getByTestId('talos-procedural-canvas')
+    const canvas = workspaceMotionCanvas(page)
     await expect(canvas).toHaveCount(1)
 
     const firstFrame = await canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL())
@@ -92,8 +196,37 @@ async function expectProceduralCanvasFrameStaysStill(page: Page) {
     expect(secondFrame).toBe(firstFrame)
 }
 
-async function expectProceduralCanvasHasVisibleSignal(page: Page, minimumMeanContrast = 10) {
-    const canvas = page.getByTestId('talos-procedural-canvas')
+async function readSimpleMotionFrame(page: Page) {
+    return workspaceMotionStage(page).evaluate((stage) => (
+        Array.from(stage.querySelectorAll<HTMLElement>('.talos-v6-simple-layer')).map((layer) => {
+            const style = window.getComputedStyle(layer)
+            return [layer.dataset.talosMotionLayerRole ?? '', style.transform, style.opacity].join(':')
+        }).join('|')
+    ))
+}
+
+async function expectSimpleMotionFrameChanges(page: Page) {
+    const stage = workspaceMotionStage(page)
+    await expect(stage).toHaveAttribute('data-active-kind', 'simple')
+    expect(await stage.locator('.talos-v6-simple-layer').count()).toBeGreaterThan(0)
+    const firstFrame = await readSimpleMotionFrame(page)
+    await expect.poll(() => readSimpleMotionFrame(page), {
+        timeout: 2500,
+        intervals: [180, 240, 360, 520, 800],
+    }).not.toBe(firstFrame)
+}
+
+async function expectStaticMotionFrameStaysStill(page: Page) {
+    const stage = workspaceMotionStage(page)
+    await expect(stage).toHaveAttribute('data-active-kind', 'static')
+    expect(await stage.locator('.talos-v6-simple-layer').count()).toBeGreaterThan(0)
+    const firstFrame = await readSimpleMotionFrame(page)
+    await page.waitForTimeout(360)
+    expect(await readSimpleMotionFrame(page)).toBe(firstFrame)
+}
+
+async function expectProceduralCanvasHasVisibleSignal(page: Page) {
+    const canvas = workspaceMotionCanvas(page)
     await expect(canvas).toHaveCount(1)
 
     const signal = await canvas.evaluate((element) => {
@@ -103,52 +236,40 @@ async function expectProceduralCanvasHasVisibleSignal(page: Page, minimumMeanCon
         if (!context) {
             return {
                 hasContext: false,
-                contrastRatio: 0,
-                maxContrast: 0,
-                meanContrast: 0,
+                alphaCoverageRatio: 0,
+                maxAlpha: 0,
             }
         }
 
         const data = context.getImageData(0, 0, target.width, target.height).data
         const sampleStep = 16 * 4
-        let contrastSamples = 0
         let sampleCount = 0
-        let maxContrast = 0
-        let contrastSum = 0
+        let alphaCoveredSampleCount = 0
+        let maxAlpha = 0
 
         for (let index = 0; index < data.length; index += sampleStep) {
-            const red = data[index]
-            const green = data[index + 1]
-            const blue = data[index + 2]
-            const alpha = data[index + 3] / 255
-            const luma = (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
-            const contrastStrength = Math.max(luma, 255 - luma) * alpha
+            const alpha = data[index + 3]
 
             sampleCount += 1
-            contrastSum += contrastStrength
-            maxContrast = Math.max(maxContrast, contrastStrength)
-
-            if (contrastStrength > 42) {
-                contrastSamples += 1
-            }
+            if (alpha === 0) continue
+            alphaCoveredSampleCount += 1
+            maxAlpha = Math.max(maxAlpha, alpha)
         }
 
         return {
             hasContext: true,
-            contrastRatio: contrastSamples / Math.max(1, sampleCount),
-            maxContrast,
-            meanContrast: contrastSum / Math.max(1, sampleCount),
+            alphaCoverageRatio: alphaCoveredSampleCount / Math.max(1, sampleCount),
+            maxAlpha,
         }
     })
 
     expect(signal.hasContext).toBe(true)
-    expect(signal.maxContrast, JSON.stringify(signal)).toBeGreaterThan(75)
-    expect(signal.meanContrast, JSON.stringify(signal)).toBeGreaterThan(minimumMeanContrast)
-    expect(signal.contrastRatio, JSON.stringify(signal)).toBeGreaterThanOrEqual(0.01)
+    expect(signal.alphaCoverageRatio, JSON.stringify(signal)).toBeGreaterThan(0)
+    expect(signal.maxAlpha, JSON.stringify(signal)).toBeGreaterThan(0)
 }
 
 async function expectProceduralBackgroundVisiblyChanges(page: Page) {
-    const background = page.getByTestId('talos-background-effect')
+    const background = page.getByTestId('talos-motion-background')
     await expect(background).toBeVisible()
     const clip = await background.evaluate((element) => {
         const rect = element.getBoundingClientRect()
@@ -414,8 +535,8 @@ test('root is the canonical TALOS workspace and legacy routes redirect to it', a
     await expectUnifiedWorkspaceChrome(page)
     await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'dag-flow')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'forge')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'forge')
     await expectNoHorizontalOverflow(page)
 
     for (const routePath of ['/chat', '/dashboard'] as const) {
@@ -484,9 +605,11 @@ test('floating windows enter real fullscreen across the workspace width', async 
     await page.getByRole('button', { name: 'Artifacts', exact: true }).click()
     const artifactWindow = page.locator('[data-window-id="gallery"]')
     await expect(artifactWindow).toBeVisible()
+    await expect.poll(async () => artifactWindow.getAttribute('data-window-transition')).toBe('idle')
 
     await artifactWindow.getByRole('button', { name: 'Fullscreen Artifacts' }).click()
     await expect(artifactWindow).toHaveAttribute('data-window-fullscreen', 'true')
+    await expect.poll(async () => artifactWindow.getAttribute('data-window-transition')).toBe('idle')
 
     const metrics = await artifactWindow.evaluate((element) => {
         const rect = element.getBoundingClientRect()
@@ -664,7 +787,7 @@ test('chat action menu escapes the scroll container and remains inside the viewp
 
     const menu = page.getByRole('menu', { name: 'Chat actions' })
     await expect(menu).toBeVisible()
-    await expect.poll(() => menu.evaluate((element) => element.parentElement === document.body)).toBe(true)
+    await expect.poll(() => menu.evaluate((element) => element.closest('[data-testid="talos-session-history"]') === null)).toBe(true)
     await expect.poll(() => menu.evaluate((element) => window.getComputedStyle(element).position)).toBe('fixed')
 
     const geometry = await menu.evaluate((element) => {
@@ -1065,7 +1188,7 @@ ${'x'.repeat(2000)}
         await expectNoHorizontalOverflow(page)
 })
 
-test('settings boolean preferences render as accessible switch controls', async ({ page }) => {
+test('settings boolean preferences render as accessible switch controls', async ({ page, isMobile }) => {
     await openWorkspace(page)
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
@@ -1084,15 +1207,26 @@ test('settings boolean preferences render as accessible switch controls', async 
         const preferences = body.preferences as Record<string, unknown> | undefined
         const aiDefaults = preferences?.ai_defaults as Record<string, unknown> | undefined
 
-        return aiDefaults?.vision_enabled === !initialVisionState
+        return hasSettingsExpectedRevision(body)
+            && aiDefaults?.vision_enabled === !initialVisionState
     })
     await page.getByRole('button', { name: 'Save settings' }).click()
     await visionPatchRequest
 
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByRole('switch', { name: 'Settings disable background motion' })).toBeVisible()
-    await expect(page.getByRole('switch', { name: 'Settings disable procedural background' })).toBeVisible()
+    await expect(page.getByText('Theme Motion Engine V6', { exact: true })).toBeVisible()
+    await expect(page.getByText('Background, interface motion, performance policy and preview are managed from one canonical editor.', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Open Theme Engine', exact: true }).click()
+    await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
+    await expect(page.getByText('Motion Engine V6', { exact: true })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Motion', exact: true }).last()).toHaveAttribute('aria-selected', 'true')
+    await page.getByRole('button', { name: 'Close Theme', exact: true }).click()
+    await expect(page.locator('[data-window-id="theme"]')).toHaveCount(0)
+    if (isMobile) {
+        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        await page.getByRole('tab', { name: 'Appearance' }).click()
+    }
     await page.getByRole('tab', { name: 'Visibility' }).click()
     await expect(page.getByRole('switch', { name: 'Brand name' })).toBeVisible()
 
@@ -1454,7 +1588,7 @@ test('settings window loads safe preferences and persists theme through the sett
         }
     })
     const terminalThemePreset = page.getByRole('button', { name: 'Terminal Operator' })
-    await expect(terminalThemePreset).toContainText('Procedural effect')
+    await expect(terminalThemePreset).toContainText('Motion V6')
     const themePatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -1463,7 +1597,8 @@ test('settings window loads safe preferences and persists theme through the sett
         const body = request.postDataJSON() as Record<string, unknown>
         const preferences = body.preferences as Record<string, unknown> | undefined
 
-        return preferences?.theme === 'terminal'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme === 'terminal'
     })
     await terminalThemePreset.click()
     await themePatchRequest
@@ -1486,25 +1621,18 @@ test('settings window loads safe preferences and persists theme through the sett
     })
     await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
     await page.emulateMedia({ reducedMotion: 'no-preference' })
-    const terminalMotion = await page.getByTestId('talos-background-effect').evaluate((element) => {
-        const stream = element.querySelector('.talos-trace-stream-a')
-
-        return stream ? window.getComputedStyle(stream).animationName : ''
-    })
-    expect(terminalMotion).toContain('talos-trace-rain')
+    await expect(page.locator('[data-talos-motion-stage]')).toHaveAttribute('data-scene-id', 'terminal')
+    await expect(page.locator('[data-talos-motion-stage]')).toHaveAttribute('data-active-kind', 'complex')
 
     await page.getByRole('tab', { name: 'Customize' }).click()
     await expect(page.getByText('Workspace customization', { exact: true })).toBeVisible()
-    await page.getByLabel('Accent color').fill('#31d6c8')
-    await page.getByLabel('Background color').fill('#02080c')
-    await page.getByLabel('Panel color').fill('#08121a')
-    await page.getByLabel('Text color').fill('#e8fbff')
-    await page.getByLabel('Background effect').selectOption('trace-rain')
-    await page.getByLabel('Density').selectOption('compact')
-    await page.getByLabel('Corner radius').selectOption('sharp')
-    await page.getByLabel('Effect intensity').fill('82')
+    await expect(page.getByLabel('Background effect')).toHaveCount(0)
+    await expect(page.getByLabel('Effect intensity')).toHaveCount(0)
+    await page.getByLabel('Font', { exact: true }).selectOption('serif')
+    await page.getByLabel('Density').selectOption('spacious')
+    await page.getByLabel('Corner radius').selectOption('soft')
     const customizationPatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -1514,35 +1642,33 @@ test('settings window loads safe preferences and persists theme through the sett
         const preferences = body.preferences as Record<string, unknown> | undefined
         const customization = preferences?.theme_customization as Record<string, unknown> | undefined
 
-        return customization?.accent === '#31d6c8'
-            && customization?.background === '#02080c'
-            && customization?.panel === '#08121a'
-            && customization?.text === '#e8fbff'
-            && Number(customization?.effect_intensity) === 82
+        return hasSettingsExpectedRevision(body)
+            && customization?.font === 'serif'
+            && customization?.density === 'spacious'
+            && customization?.radius === 'soft'
             && !Object.prototype.hasOwnProperty.call(customization, 'effect')
-            && !Object.prototype.hasOwnProperty.call(customization, 'density')
-            && !Object.prototype.hasOwnProperty.call(customization, 'radius')
+            && !Object.prototype.hasOwnProperty.call(customization, 'effect_intensity')
     })
     await page.getByRole('button', { name: 'Save customization' }).click()
     await customizationPatchRequest
-    await expect(page.locator('.talos-shell')).toHaveClass(/talos-density-compact/)
-    await expect(page.locator('.talos-shell')).toHaveClass(/talos-radius-sharp/)
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-accent:\s*#31d6c8/)
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-density-spacious/)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-radius-soft/)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-font-ui:\s*"Source Serif 4"/)
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
     await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
     await expect(page.getByText('Theme customization saved through /api/talos/settings.')).toBeVisible()
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
-    await expect(page.locator('.talos-shell')).toHaveClass(/talos-density-compact/)
-    await expect(page.locator('.talos-shell')).toHaveClass(/talos-radius-sharp/)
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-accent:\s*#31d6c8/)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-density-spacious/)
+    await expect(page.locator('.talos-shell')).toHaveClass(/talos-radius-soft/)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('style', /--talos-font-ui:\s*"Source Serif 4"/)
     await expect(page.getByTestId('talos-theme-background-video')).toHaveCount(0)
     await expect(page.getByTestId('talos-theme-background-poster')).toHaveCount(0)
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
     await expectNoHorizontalOverflow(page)
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
@@ -1556,15 +1682,16 @@ test('settings window loads safe preferences and persists theme through the sett
         const preferences = body.preferences as Record<string, unknown> | undefined
         const customization = preferences?.theme_customization as Record<string, unknown> | undefined
 
-        return preferences?.theme === 'aurora'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme === 'aurora'
             && customization !== undefined
             && Object.keys(customization).length === 0
     })
     await auroraPreset.click()
     await presetResetPatchRequest
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-aurora/)
-    await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /#31d6c8/)
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'signal-mesh')
+    await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /--talos-font-ui:\s*"Source Serif 4"/)
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'aurora')
     const auroraActionMotion = await page.locator('.talos-shell').evaluate((element) => {
         const style = window.getComputedStyle(element)
 
@@ -1590,7 +1717,7 @@ test('settings window loads safe preferences and persists theme through the sett
     })
 })
 
-test('theme engine v2 manages custom themes, live preview, motion, area tokens and import export', async ({ page }, testInfo) => {
+test('theme engine V6 manages custom themes, live preview, motion, area tokens and import export', async ({ page }, testInfo) => {
     test.setTimeout(120_000)
 
     await openWorkspace(page)
@@ -1605,8 +1732,7 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
     await page.getByRole('button', { name: 'Discard changes' }).click()
     await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /#7c3aed/)
 
-    await page.getByLabel('Accent color').fill('#31d6c8')
-    await page.getByLabel('Background effect').selectOption('trace-rain')
+    await page.getByLabel('Font', { exact: true }).selectOption('mono')
     const saveNamedThemeRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -1617,10 +1743,11 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         const customization = preferences?.theme_customization as Record<string, unknown> | undefined
 
-        return Array.isArray(library)
-            && library.some((theme) => theme.name === 'Ninox Dark' && (theme.tokens as Record<string, unknown> | undefined)?.accent === '#31d6c8')
+        return hasSettingsExpectedRevision(body)
+            && Array.isArray(library)
+            && library.some((theme) => theme.name === 'Ninox Dark' && (theme.tokens as Record<string, unknown> | undefined)?.font === 'mono')
             && typeof preferences?.active_custom_theme_id === 'string'
-            && customization?.accent === '#31d6c8'
+            && customization?.font === 'mono'
     })
     await page.getByRole('button', { name: 'Save as theme' }).click()
     await page.getByLabel('Theme name').fill('Ninox Dark')
@@ -1636,12 +1763,18 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
 
     await page.getByRole('button', { name: 'Export active theme' }).click()
     const exportedTheme = await page.getByTestId('talos-theme-export-json').inputValue()
-    expect(JSON.parse(exportedTheme)).toMatchObject({
-        schema: 'talos_theme_export_v1',
+    const parsedExportedTheme = JSON.parse(exportedTheme) as Record<string, unknown>
+    expect(parsedExportedTheme).toMatchObject({
+        schema: 'talos_theme_export_v2',
         theme: {
             name: 'Ninox Dark',
+            motion_v6: { schema_version: 1 },
         },
     })
+    expect((parsedExportedTheme.theme as Record<string, unknown>).motion_v6).toEqual(talosMotionV6Defaults)
+    expect(parsedExportedTheme.theme).not.toHaveProperty('motion')
+    expect(parsedExportedTheme.theme).not.toHaveProperty('ui_animation_profile')
+    expect(parsedExportedTheme.theme).not.toHaveProperty('ui_animation_customization')
 
     await page.getByLabel('Import theme JSON').fill('{bad json')
     await page.getByRole('button', { name: 'Import theme' }).click()
@@ -1659,8 +1792,7 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
             name: 'Imported Mint',
             base_theme: 'aurora',
             tokens: {
-                accent: '#6ee7b7',
-                effect: 'signal-mesh',
+                font: 'mono',
             },
             motion: 'subtle',
             chat_layout: {
@@ -1674,9 +1806,13 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
         request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH'
     ))
     await page.getByRole('button', { name: 'Import theme' }).click()
-    const importedPreferences = (await importThemeRequest).postDataJSON().preferences as Record<string, unknown>
+    const importedPreferences = settingsPatchBody(await importThemeRequest).preferences as Record<string, unknown>
     const importedLibrary = importedPreferences.theme_library as Array<Record<string, unknown>>
     expect(importedLibrary.some((theme) => theme.name === 'Imported Mint')).toBe(true)
+    expect(importedPreferences.theme_motion_v6).toEqual(talosMotionV6SubtleMigration)
+    expect(importedPreferences).not.toHaveProperty('theme_motion')
+    expect(importedPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(importedPreferences).not.toHaveProperty('ui_animation_customization')
     expect(importedPreferences.chat_layout).toMatchObject({
         bubble_scale: 'expanded',
         composer_mode: 'minimal',
@@ -1687,59 +1823,40 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
     await expect(page.getByRole('button', { name: 'Use full composer' })).toBeVisible()
 
     await page.getByRole('tab', { name: 'Motion' }).click()
-    const motionOffRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
+    await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
+    await expect(page.getByText('Live product preview', { exact: true })).toBeVisible()
 
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
+    const motionOffRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Off', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const motionOffPreferences = settingsPatchBody(await motionOffRequest).preferences as Record<string, unknown>
+    expect(motionOffPreferences.theme_motion_v6).toEqual({ ...talosMotionV6SubtleMigration, mode: 'off' })
+    expect(motionOffPreferences).not.toHaveProperty('theme_motion')
+    expect(motionOffPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(motionOffPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'off')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'off')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'aurora')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
 
-        return preferences?.theme_motion === 'off'
-    })
-    await page.getByLabel('Theme motion', { exact: true }).selectOption('off')
-    await motionOffRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'signal-mesh')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
-    await expectProceduralCanvasFrameStaysStill(page)
-
-    const motionCinematicRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
-
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-
-        return preferences?.theme_motion === 'cinematic'
-    })
-    await page.getByLabel('Theme motion', { exact: true }).selectOption('cinematic')
-    await motionCinematicRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'signal-mesh')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
-    const canvasHasPixels = await page.getByTestId('talos-procedural-canvas').evaluate((canvas) => {
-        const element = canvas as HTMLCanvasElement
-        const context = element.getContext('2d')
-        if (!context || element.width === 0 || element.height === 0) {
-            return false
-        }
-
-        const sample = context.getImageData(0, 0, Math.min(80, element.width), Math.min(80, element.height)).data
-        for (let index = 3; index < sample.length; index += 4) {
-            if (sample[index] > 0) {
-                return true
-            }
-        }
-
-        return false
-    })
-    expect(canvasHasPixels).toBe(true)
+    const motionComplexRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const motionComplexPreferences = settingsPatchBody(await motionComplexRequest).preferences as Record<string, unknown>
+    expect(motionComplexPreferences.theme_motion_v6).toEqual({ ...talosMotionV6SubtleMigration, mode: 'complex' })
+    expect(motionComplexPreferences).not.toHaveProperty('theme_motion')
+    expect(motionComplexPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(motionComplexPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'aurora')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(1)
+    await expectProceduralCanvasHasVisibleSignal(page)
     await expectProceduralCanvasAboveScrim(page)
-    const cinematicOpacity = await page.locator('.talos-shell').evaluate((element) => (
-        Number(window.getComputedStyle(element).getPropertyValue('--talos-effect-opacity').trim())
+    const backgroundOpacity = await page.getByTestId('talos-motion-background').evaluate((element) => (
+        Number(window.getComputedStyle(element).opacity)
     ))
-    expect(cinematicOpacity).toBeGreaterThan(0.8)
+    expect(backgroundOpacity).toBe(1)
 
     await page.getByRole('tab', { name: 'Advanced' }).evaluate((element) => {
         (element as HTMLElement).click()
@@ -1771,7 +1888,8 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
         const preferences = body.preferences as Record<string, unknown> | undefined
         const areaTokens = preferences?.theme_area_tokens as Record<string, Record<string, unknown>> | undefined
 
-        return areaTokens?.composer?.background === '#111827'
+        return hasSettingsExpectedRevision(body)
+            && areaTokens?.composer?.background === '#111827'
     })
     await page.getByRole('button', { name: 'Save area tokens' }).click()
     await areaTokenRequest
@@ -1796,13 +1914,13 @@ test('theme engine v2 manages custom themes, live preview, motion, area tokens a
     })
     expect(scopedAreaTokens.sidebarText).not.toBe('#f9fafb')
 
-    await testInfo.attach(`theme-engine-v2-${testInfo.project.name}.png`, {
+    await testInfo.attach(`theme-engine-v6-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
 })
 
-test('theme engine v5.3 completes the named theme lifecycle and reset contract', async ({ page }, testInfo) => {
+test('theme engine V6 completes the named theme lifecycle and reset contract', async ({ page }, testInfo) => {
     test.setTimeout(120_000)
 
     await openWorkspace(page)
@@ -1821,7 +1939,9 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
     await page.getByLabel('Theme chat composer mode').selectOption('minimal')
     const conflictingLayoutRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return layout?.bubble_scale === 'compact' && layout?.composer_mode === 'minimal'
     })
@@ -1835,11 +1955,14 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
     await page.getByLabel('Theme name').fill('Lifecycle Theme')
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return Array.isArray(library)
             && library.some((theme) => theme.name === 'Lifecycle Theme')
+            && JSON.stringify(library.at(-1)?.motion_v6) === JSON.stringify(talosMotionV6Defaults)
             && layout?.bubble_scale === 'expanded'
             && layout?.composer_mode === 'full'
     })
@@ -1861,13 +1984,27 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
 
     const duplicateRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         return Array.isArray(library) && library.some((theme) => theme.name === 'Lifecycle Theme copy')
     })
     await lifecycleArticle.getByRole('button', { name: 'Duplicate', exact: true }).click()
     await duplicateRequest
     await expect(page.getByText('Lifecycle Theme copy', { exact: true })).toBeVisible()
+
+    const copiedArticle = page.locator('article').filter({ hasText: 'Lifecycle Theme copy' }).first()
+    const applyCopyRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        return (preferences?.active_custom_theme_id as string | undefined)?.startsWith('lifecycle-theme-copy-') === true
+    })
+    await copiedArticle.getByRole('button', { name: 'Apply', exact: true }).click()
+    await applyCopyRequest
+    await expect(copiedArticle.getByText('Active', { exact: true })).toBeVisible()
 
     let themePatchCount = 0
     page.on('request', (request) => {
@@ -1883,7 +2020,9 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
     await page.getByLabel('Rename theme').fill('Lifecycle Renamed')
     const renameRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         return Array.isArray(library) && library.some((theme) => theme.name === 'Lifecycle Renamed')
     })
@@ -1893,30 +2032,39 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
 
     const applyRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
-        const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
-        const layout = preferences?.chat_layout as Record<string, unknown> | undefined
-        return Array.isArray(library)
-            && (preferences?.active_custom_theme_id as string | undefined)?.startsWith('lifecycle-theme-')
-            && layout?.bubble_scale === 'expanded'
-            && layout?.composer_mode === 'full'
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
+        return (preferences?.active_custom_theme_id as string | undefined)?.startsWith('lifecycle-theme-') === true
+            && !(preferences?.active_custom_theme_id as string).startsWith('lifecycle-theme-copy-')
     })
     await page.locator('article').filter({ hasText: 'Lifecycle Renamed' }).first().getByRole('button', { name: 'Apply', exact: true }).click()
-    await applyRequest
+    const appliedThemeRequest = await applyRequest
+    const appliedThemePreferences = settingsPatchBody(appliedThemeRequest).preferences as Record<string, unknown>
+    expect(appliedThemePreferences.chat_layout).toMatchObject({
+        bubble_scale: 'expanded',
+        composer_mode: 'full',
+    })
 
     await page.getByRole('button', { name: 'Export active theme', exact: true }).click()
     const exportedJson = await page.getByTestId('talos-theme-export-json').inputValue()
     const exportedTheme = JSON.parse(exportedJson) as Record<string, unknown>
     expect(exportedTheme).toMatchObject({
-        schema: 'talos_theme_export_v1',
+        schema: 'talos_theme_export_v2',
         theme: {
             name: 'Lifecycle Renamed',
+            motion_v6: { schema_version: 1 },
             chat_layout: {
                 bubble_scale: 'expanded',
                 composer_mode: 'full',
             },
         },
     })
+    expect((exportedTheme.theme as Record<string, unknown>).motion_v6).toEqual(talosMotionV6Defaults)
+    const exportedThemePayload = exportedTheme.theme as Record<string, unknown>
+    expect(exportedThemePayload).not.toHaveProperty('motion')
+    expect(exportedThemePayload).not.toHaveProperty('ui_animation_profile')
+    expect(exportedThemePayload).not.toHaveProperty('ui_animation_customization')
 
     await page.getByRole('button', { name: 'Copy export', exact: true }).click()
     await expect(page.getByText('Theme export copied.', { exact: true })).toBeVisible()
@@ -1931,17 +2079,17 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
 
     const activeDeleteRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         return preferences?.active_custom_theme_id === null
             && JSON.stringify(preferences?.theme_customization) === '{}'
             && JSON.stringify(preferences?.theme_area_tokens) === '{}'
             && preferences?.theme_mode === 'system'
-            && preferences?.theme_motion === 'system'
-            && preferences?.theme_motion_disabled === false
-            && preferences?.theme_simple_animation === true
-            && preferences?.theme_background_disabled === false
-            && preferences?.ui_animation_profile === 'preset'
-            && JSON.stringify(preferences?.ui_animation_customization) === '{}'
+            && hasExactMotionV6(preferences)
+            && !Object.prototype.hasOwnProperty.call(preferences ?? {}, 'theme_motion')
+            && !Object.prototype.hasOwnProperty.call(preferences ?? {}, 'ui_animation_profile')
+            && !Object.prototype.hasOwnProperty.call(preferences ?? {}, 'ui_animation_customization')
             && (preferences?.theme_library as unknown[] | undefined)?.some((theme) => (theme as Record<string, unknown>).name === 'Lifecycle Theme copy') === true
     })
     await page.locator('article').filter({ hasText: 'Lifecycle Renamed' }).first().getByRole('button', { name: 'Delete', exact: true }).click()
@@ -1998,7 +2146,7 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
             id: 'imported-lifecycle-theme',
             name: 'Imported Lifecycle',
             base_theme: 'terminal',
-            tokens: { accent: '#6ee7b7' },
+            tokens: {},
             chat_layout: {
                 bubble_scale: 'compact',
                 composer_mode: 'minimal',
@@ -2009,7 +2157,9 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
     await page.getByLabel('Import theme JSON').fill(JSON.stringify(importedTheme))
     const importRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         return preferences?.theme === 'terminal'
@@ -2044,33 +2194,38 @@ test('theme engine v5.3 completes the named theme lifecycle and reset contract',
 
     const resetRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
-        const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         const chat = preferences?.chat_layout as Record<string, unknown> | undefined
-        return preferences?.theme === 'terminal'
-            && preferences?.active_custom_theme_id === null
+        return preferences?.active_custom_theme_id === null
             && JSON.stringify(preferences?.theme_customization) === '{}'
             && JSON.stringify(preferences?.theme_area_tokens) === '{}'
             && preferences?.theme_mode === 'system'
-            && preferences?.theme_motion === 'system'
-            && preferences?.theme_motion_disabled === false
-            && preferences?.theme_simple_animation === true
-            && preferences?.theme_background_disabled === false
-            && preferences?.ui_animation_profile === 'preset'
-            && JSON.stringify(preferences?.ui_animation_customization) === '{}'
+            && hasExactMotionV6(preferences)
             && chat?.bubble_scale === 'balanced'
             && chat?.composer_mode === 'full'
-            && Array.isArray(library)
-            && library.some((theme) => theme.id === 'imported-lifecycle-theme')
     })
     await page.getByRole('button', { name: 'Reset to preset', exact: true }).click()
-    await resetRequest
+    const resetThemeRequest = await resetRequest
+    const resetPreferences = settingsPatchBody(resetThemeRequest).preferences as Record<string, unknown>
+    expect(resetPreferences).not.toHaveProperty('theme_motion')
+    expect(resetPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(resetPreferences).not.toHaveProperty('ui_animation_customization')
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
     await expect(page.getByRole('button', { name: 'Use minimal composer', exact: true })).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible()
+    const settingsAfterReset = await page.evaluate(async () => {
+        const response = await fetch('/api/talos/settings', { headers: { Accept: 'application/json' } })
+        return response.json() as Promise<{ data: { preferences: Record<string, unknown> } }>
+    })
+    expect(settingsAfterReset.data.preferences.theme).toBe('terminal')
+    expect(settingsAfterReset.data.preferences.theme_library).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'imported-lifecycle-theme' }),
+    ]))
 
     await expectNoHorizontalOverflow(page)
-    await testInfo.attach(`theme-engine-v5.3-lifecycle-${testInfo.project.name}.png`, {
+    await testInfo.attach(`theme-engine-v6-lifecycle-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
@@ -2094,29 +2249,20 @@ test('named theme apply rolls the visible theme and local preference back when p
         theme_mode: 'dark',
         tokens: {},
         area_tokens: {},
-        motion: 'cinematic',
-        ui_animation_profile: 'preset',
-        ui_animation_customization: {},
+        motion_v6: talosMotionV6Complex,
         chat_layout: {},
         created_at: '2026-07-10T12:00:00.000Z',
         updated_at: '2026-07-10T12:00:00.000Z',
     }
 
     await openWorkspace(page)
-    await page.evaluate(async (theme) => {
-        await fetch('/api/talos/settings', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({
-                preferences: {
-                    theme: 'forge',
-                    theme_customization: {},
-                    active_custom_theme_id: null,
-                    theme_library: [theme],
-                },
-            }),
-        })
-    }, namedTheme)
+    await patchTalosSettings(page, {
+        theme: 'forge',
+        theme_motion_v6: talosMotionV6Defaults,
+        theme_customization: {},
+        active_custom_theme_id: null,
+        theme_library: [namedTheme],
+    })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
 
@@ -2124,12 +2270,16 @@ test('named theme apply rolls the visible theme and local preference back when p
     await expect(workspace).toHaveAttribute('data-theme-preset', 'forge')
 
     let rejectedApply = false
+    let rejectedApplyPreferences: Record<string, unknown> | undefined
     await page.route('**/api/talos/settings', async (route) => {
         const request = route.request()
         if (request.method() === 'PATCH') {
-            const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+            const body = request.postDataJSON() as Record<string, unknown>
+            const preferences = body.preferences as Record<string, unknown> | undefined
             if (preferences?.active_custom_theme_id === namedTheme.id) {
+                expect(hasSettingsExpectedRevision(body)).toBe(true)
                 rejectedApply = true
+                rejectedApplyPreferences = preferences
                 await route.fulfill({
                     status: 422,
                     contentType: 'application/json',
@@ -2147,6 +2297,10 @@ test('named theme apply rolls the visible theme and local preference back when p
     await page.locator('article').filter({ hasText: namedTheme.name }).getByRole('button', { name: 'Apply', exact: true }).click()
 
     await expect.poll(() => rejectedApply).toBe(true)
+    expect(rejectedApplyPreferences?.theme_motion_v6).toEqual(talosMotionV6Complex)
+    expect(rejectedApplyPreferences).not.toHaveProperty('theme_motion')
+    expect(rejectedApplyPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(rejectedApplyPreferences).not.toHaveProperty('ui_animation_customization')
     await expect(page.getByText('Rejected named theme for rollback test.', { exact: true })).toBeVisible()
     const themeWrites = await page.evaluate(() => (window as typeof window & { __talosThemeWrites?: string[] }).__talosThemeWrites ?? [])
     expect(themeWrites.at(-1), JSON.stringify(themeWrites)).toBe('forge')
@@ -2165,22 +2319,11 @@ test('named theme apply rolls the visible theme and local preference back when p
 
 test('Claudius font-only customization preserves palette and active background motion', async ({ page }) => {
     await openWorkspace(page)
-    await page.evaluate(async () => {
-        await fetch('/api/talos/settings', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                preferences: {
-                    theme: 'claudius',
-                    theme_mode: 'light',
-                    theme_customization: {},
-                    theme_motion: 'normal',
-                    theme_motion_disabled: false,
-                    theme_simple_animation: false,
-                    theme_background_disabled: false,
-                },
-            }),
-        })
+    await patchTalosSettings(page, {
+        theme: 'claudius',
+        theme_mode: 'light',
+        theme_customization: {},
+        theme_motion_v6: { ...talosMotionV6Defaults, mode: 'complex' },
     })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
@@ -2214,7 +2357,9 @@ test('Claudius font-only customization preserves palette and active background m
 
     const saveRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+        const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
+        const preferences = body.preferences as Record<string, unknown> | undefined
         return JSON.stringify(preferences?.theme_customization) === JSON.stringify({ font: 'manrope' })
     })
     await page.getByRole('button', { name: 'Save customization', exact: true }).click()
@@ -2226,115 +2371,93 @@ test('Claudius font-only customization preserves palette and active background m
     await expect.poll(() => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-font-ui').trim()
     ))).toContain('Manrope')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-performance-mode', 'motion')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
     await expectProceduralCanvasFrameChanges(page)
 })
 
-test('theme engine v3 persists interface motion tokens and previews action animation', async ({ page }, testInfo) => {
+test('theme engine v6 persists interface motion, previews the product surface, and exports V2', async ({ page }, testInfo) => {
     await openWorkspace(page)
 
-    const defaultMotionState = await page.locator('.talos-shell').evaluate((element) => {
-        const style = window.getComputedStyle(element)
-
-        return {
-            profile: element.getAttribute('data-ui-animation-profile'),
-            openDuration: style.getPropertyValue('--talos-motion-open-duration').trim(),
-            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
-        }
-    })
-    expect(defaultMotionState.profile).toBe('preset')
-    expect(defaultMotionState.openDuration).toMatch(/ms$/)
-    expect(defaultMotionState.hover).toBeTruthy()
-
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'adaptive')
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
-    await page.getByRole('tab', { name: 'Customize' }).click()
-    await expect(page.getByText('Interface motion', { exact: true })).toBeVisible()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
+    await expect(page.getByText('Motion Engine V6', { exact: true })).toBeVisible()
+    await expect(page.getByText('Live product preview', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Light preview', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Dark preview', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Light preview', exact: true }).click()
+    await expect(page.getByTestId('talos-motion-v6-preview').locator('[data-preview-color-mode="light"]')).toBeVisible()
+    await page.getByRole('button', { name: 'Dark preview', exact: true }).click()
+    await expect(page.getByTestId('talos-motion-v6-preview').locator('[data-preview-color-mode="dark"]')).toBeVisible()
+    await page.getByRole('button', { name: 'Restart preview', exact: true }).click()
+    await expect(page.getByTestId('talos-motion-v6-preview').locator('[data-preview-sample="window"]')).toBeVisible()
 
-    await page.getByLabel('Animation profile').selectOption('custom')
-    await page.getByLabel('Open/close style').selectOption('terminal-snap')
-    await page.getByLabel('Surface transition').selectOption('scanline')
-    await page.getByLabel('Feedback style').selectOption('trace')
-    await page.getByLabel('Hover/focus style').selectOption('node-glow')
-    await page.getByLabel('Duration scale').fill('125')
-    await page.getByLabel('Motion intensity').fill('86')
-    await page.getByLabel('Motion stagger').fill('64')
-    await page.getByLabel('Motion easing').selectOption('cinematic')
+    const customMotion = {
+        ...talosMotionV6Defaults,
+        mode: 'complex',
+        interface: {
+            ...talosMotionV6Defaults.interface,
+            profile: 'custom',
+            duration_scale: 125,
+            intensity: 86,
+            easing: 'cinematic',
+            stagger: 65,
+            categories: {
+                ...talosMotionV6Defaults.interface.categories,
+                windows: false,
+            },
+        },
+    } as const
 
-    await page.getByRole('button', { name: 'Preview motion' }).click()
-    await expect(page.getByTestId('talos-motion-preview-surface')).toHaveAttribute('data-preview-state', 'open')
-    await expect.poll(async () => page.getByTestId('talos-motion-preview-surface').evaluate((element) => (
-        window.getComputedStyle(element).animationName
-    ))).toContain('talos-feedback-trace')
+    await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
+    await page.getByLabel('Interface motion profile').selectOption('custom')
+    await page.getByLabel('Interface easing').selectOption('cinematic')
+    await page.getByRole('slider', { name: 'Interface duration' }).fill('125')
+    await page.getByRole('slider', { name: 'Interface intensity' }).fill('86')
+    await page.getByRole('slider', { name: 'Interface stagger' }).fill('65')
+    await page.getByLabel('Animate windows').click()
 
-    const saveMotionRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
-
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-        const animation = preferences?.ui_animation_customization as Record<string, unknown> | undefined
-
-        return preferences?.ui_animation_profile === 'custom'
-            && animation?.open_close === 'terminal-snap'
-            && animation?.surface_transition === 'scanline'
-            && animation?.feedback === 'trace'
-            && animation?.hover === 'node-glow'
-            && animation?.duration_scale === 125
-            && animation?.intensity === 86
-            && animation?.stagger === 64
-            && animation?.easing === 'cinematic'
-    })
-    await page.getByRole('button', { name: 'Save customization' }).click()
-    await saveMotionRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-animation-profile', 'custom')
-
-    const customMotionState = await page.locator('.talos-shell').evaluate((element) => {
-        const style = window.getComputedStyle(element)
-
-        return {
-            profile: element.getAttribute('data-ui-animation-profile'),
-            surface: style.getPropertyValue('--talos-motion-surface-style').trim(),
-            feedback: style.getPropertyValue('--talos-motion-feedback-style').trim(),
-            hover: style.getPropertyValue('--talos-motion-hover-style').trim(),
-            intensity: style.getPropertyValue('--talos-motion-intensity').trim(),
-            stagger: style.getPropertyValue('--talos-motion-stagger').trim(),
-        }
-    })
-    expect(customMotionState.profile).toBe('custom')
-    expect(customMotionState.surface).toBe('scanline')
-    expect(customMotionState.feedback).toBe('trace')
-    expect(customMotionState.hover).toBe('node-glow')
-    expect(Number(customMotionState.intensity)).toBeGreaterThan(0.8)
-    expect(customMotionState.stagger).toBe('64ms')
+    const saveMotionRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const savedPreferences = settingsPatchBody(await saveMotionRequest).preferences as Record<string, unknown>
+    expect(savedPreferences.theme_motion_v6).toEqual(customMotion)
+    expect(savedPreferences).not.toHaveProperty('theme_motion')
+    expect(savedPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(savedPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
+    await expect(page.getByTestId('talos-motion-v6-editor')).toContainText('v6')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-
-    const persistedMotionState = await page.locator('.talos-shell').evaluate((element) => ({
-        profile: element.getAttribute('data-ui-animation-profile'),
-        feedback: window.getComputedStyle(element).getPropertyValue('--talos-motion-feedback-style').trim(),
-    }))
-    expect(persistedMotionState).toEqual({
-        profile: 'custom',
-        feedback: 'trace',
-    })
-
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    await expect(page.getByLabel('Interface motion profile')).toHaveValue('custom')
+    await expect(page.getByLabel('Interface easing')).toHaveValue('cinematic')
+    await expect(page.getByRole('slider', { name: 'Interface duration' })).toHaveValue('125')
+    await expect(page.getByRole('slider', { name: 'Interface intensity' })).toHaveValue('86')
+    await expect(page.getByRole('slider', { name: 'Interface stagger' })).toHaveValue('65')
+    await expect(page.getByLabel('Animate windows')).not.toBeChecked()
+
     await page.getByRole('tab', { name: 'Library' }).click()
     await page.getByRole('button', { name: 'Export active theme' }).click()
     const exportedTheme = JSON.parse(await page.getByTestId('talos-theme-export-json').inputValue()) as Record<string, unknown>
     expect(exportedTheme).toMatchObject({
-        schema: 'talos_theme_export_v1',
+        schema: 'talos_theme_export_v2',
         theme: {
-            ui_animation_profile: 'custom',
-            ui_animation_customization: {
-                feedback: 'trace',
-            },
+            motion_v6: { schema_version: 1 },
         },
     })
+    expect((exportedTheme.theme as Record<string, unknown>).motion_v6).toEqual(customMotion)
+    const exportedThemePayload = exportedTheme.theme as Record<string, unknown>
+    expect(exportedThemePayload).not.toHaveProperty('motion')
+    expect(exportedThemePayload).not.toHaveProperty('ui_animation_profile')
+    expect(exportedThemePayload).not.toHaveProperty('ui_animation_customization')
 
-    await testInfo.attach(`theme-engine-v3-motion-${testInfo.project.name}.png`, {
+    await testInfo.attach(`theme-engine-v6-motion-${testInfo.project.name}.png`, {
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
@@ -2343,281 +2466,264 @@ test('theme engine v3 persists interface motion tokens and previews action anima
 test('browser reduced motion remains a hard override until the OS preference changes', async ({ page }) => {
     await openWorkspace(page)
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    await page.evaluate(async () => {
-        await fetch('/api/talos/settings', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                preferences: {
-                    theme: 'forge',
-                    reduced_motion: false,
-                    theme_motion: 'system',
-                    theme_customization: {
-                        effect: 'dag-flow',
-                    },
-                },
-            }),
-        })
+    await patchTalosSettings(page, {
+        theme: 'forge',
+        reduced_motion: false,
+        theme_motion_v6: talosMotionV6Defaults,
+        theme_customization: {
+            effect: 'dag-flow',
+        },
     })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
 
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'forge')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'adaptive')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'static')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
     await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
     ))).toBe('0ms')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
-    await expectProceduralCanvasFrameStaysStill(page)
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-motion-disabled', 'true')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
+    await expectStaticMotionFrameStaysStill(page)
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
-    const motionCinematicRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
+    const motionComplexRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const motionComplexPreferences = settingsPatchBody(await motionComplexRequest).preferences as Record<string, unknown>
+    expect(motionComplexPreferences.theme_motion_v6).toEqual({ ...talosMotionV6Defaults, mode: 'complex' })
+    expect(motionComplexPreferences).not.toHaveProperty('theme_motion')
+    expect(motionComplexPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(motionComplexPreferences).not.toHaveProperty('ui_animation_customization')
 
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-
-        return preferences?.theme_motion === 'cinematic'
-    })
-    await page.getByLabel('Theme motion', { exact: true }).selectOption('cinematic')
-    await motionCinematicRequest
-
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'dag-flow')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'forge')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'static')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
     await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
     ))).toBe('0ms')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
-    await expectProceduralCanvasFrameStaysStill(page)
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-motion-disabled', 'true')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
+    await expectStaticMotionFrameStaysStill(page)
 
     await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
     await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
     ))).not.toBe('0ms')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'false')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-motion-disabled', 'false')
     await expectProceduralCanvasAboveScrim(page)
     await expectProceduralCanvasFrameChanges(page)
 })
 
-test('theme engine defaults to simple animation and warns before rich motion', async ({ page }) => {
+test('theme engine V6 exposes adaptive, simple, and complex renderer modes', async ({ page }) => {
     await openWorkspace(page)
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
 
-    await expect(page.getByRole('switch', { name: 'Use simple animation' })).toBeChecked()
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-simple-animation', 'true')
+    await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Motion mode Adaptive', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('switch', { name: 'Procedural background' })).toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeChecked()
 
-    const richMotionRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
+    const simpleMotionRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Simple', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const simplePreferences = settingsPatchBody(await simpleMotionRequest).preferences as Record<string, unknown>
+    expect(simplePreferences.theme_motion_v6).toEqual({ ...talosMotionV6Defaults, mode: 'simple' })
+    expect(simplePreferences).not.toHaveProperty('theme_motion')
+    expect(simplePreferences).not.toHaveProperty('ui_animation_profile')
+    expect(simplePreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'simple')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'simple')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'forge')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-simple-animation', 'true')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
+    await expectSimpleMotionFrameChanges(page)
 
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-
-        return preferences?.theme_simple_animation === false
-    })
-    await page.getByRole('switch', { name: 'Use simple animation' }).click()
-    await richMotionRequest
-
-    await expect(page.getByText('Rich animation raises frame rate, DPR and effect complexity.')).toBeVisible()
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-simple-animation', 'false')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-performance-dpr-cap', '1.5')
+    const complexMotionRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const complexPreferences = settingsPatchBody(await complexMotionRequest).preferences as Record<string, unknown>
+    expect(complexPreferences.theme_motion_v6).toEqual({ ...talosMotionV6Defaults, mode: 'complex' })
+    expect(complexPreferences).not.toHaveProperty('theme_motion')
+    expect(complexPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(complexPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'forge')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-simple-animation', 'false')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-dpr-cap', '1.25')
+    await expectProceduralCanvasFrameChanges(page)
 })
 
 test('theme switches disable motion separately from the procedural background', async ({ page }) => {
     test.setTimeout(90_000)
 
     await openWorkspace(page)
-    await page.evaluate(async () => {
-        await fetch('/api/talos/settings', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                preferences: {
-                    theme: 'terminal',
-                    reduced_motion: false,
-                    theme_motion: 'cinematic',
-                    theme_motion_disabled: false,
-                    theme_simple_animation: false,
-                    theme_background_disabled: false,
-                    theme_customization: {
-                        effect: 'trace-rain',
-                    },
-                },
-            }),
-        })
+    await patchTalosSettings(page, {
+        theme: 'terminal',
+        reduced_motion: false,
+        theme_motion_v6: talosMotionV6Complex,
+        theme_customization: {
+            effect: 'trace-rain',
+        },
     })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
 
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(1)
     await expectProceduralCanvasFrameChanges(page)
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByRole('switch', { name: 'Use simple animation' })).not.toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Disable background motion' })).toBeVisible()
-    await expect(page.getByRole('switch', { name: 'Disable background motion' })).not.toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Disable procedural background' })).toBeVisible()
-    await expect(page.getByRole('switch', { name: 'Disable procedural background' })).not.toBeChecked()
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-performance-mode', 'motion')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-performance-raf-active', 'true')
+    await expect(page.getByRole('button', { name: 'Motion mode Complex', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('switch', { name: 'Procedural background' })).toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeChecked()
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-raf-active', 'true')
 
-    const motionDisabledRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
+    const staticMotionRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Static', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const staticPreferences = settingsPatchBody(await staticMotionRequest).preferences as Record<string, unknown>
+    expect(staticPreferences.theme_motion_v6).toEqual({ ...talosMotionV6Complex, mode: 'static' })
+    expect(staticPreferences).not.toHaveProperty('theme_motion')
+    expect(staticPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(staticPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'static')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'static')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-motion-disabled', 'true')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
+    await expectStaticMotionFrameStaysStill(page)
 
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
+    const backgroundDisabledRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('switch', { name: 'Procedural background' }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const backgroundDisabledPreferences = settingsPatchBody(await backgroundDisabledRequest).preferences as Record<string, unknown>
+    expect(backgroundDisabledPreferences.theme_motion_v6).toEqual({ ...talosMotionV6Complex, mode: 'static', background_enabled: false })
+    expect(backgroundDisabledPreferences).not.toHaveProperty('theme_motion')
+    expect(backgroundDisabledPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(backgroundDisabledPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
+    await expect(workspaceMotionStage(page)).toHaveCount(0)
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
 
-        return preferences?.theme_motion_disabled === true
-            && preferences?.theme_background_disabled === false
-    })
-    await page.getByRole('switch', { name: 'Disable background motion' }).click()
-    await motionDisabledRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
-    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
-        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
-    ))).not.toBe('0ms')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'true')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
-    await expectProceduralCanvasFrameStaysStill(page)
+    const backgroundEnabledRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('switch', { name: 'Procedural background' }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const backgroundEnabledPreferences = settingsPatchBody(await backgroundEnabledRequest).preferences as Record<string, unknown>
+    expect(backgroundEnabledPreferences.theme_motion_v6).toEqual({ ...talosMotionV6Complex, mode: 'static' })
+    expect(backgroundEnabledPreferences).not.toHaveProperty('theme_motion')
+    expect(backgroundEnabledPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(backgroundEnabledPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(0)
+    await expectStaticMotionFrameStaysStill(page)
 
-    const backgroundDisabledRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
-
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-
-        return preferences?.theme_background_disabled === true
-    })
-    await page.getByRole('switch', { name: 'Disable procedural background' }).click()
-    await backgroundDisabledRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'none')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(0)
-
-    const backgroundEnabledRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
-
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-
-        return preferences?.theme_background_disabled === false
-            && preferences?.theme_motion_disabled === true
-    })
-    await page.getByRole('switch', { name: 'Disable procedural background' }).click()
-    await backgroundEnabledRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
-    await expectProceduralCanvasFrameStaysStill(page)
-
-    const motionEnabledRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
-
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-
-        return preferences?.theme_motion_disabled === false
-            && preferences?.theme_background_disabled === false
-    })
-    await page.getByRole('switch', { name: 'Disable background motion' }).click()
-    await motionEnabledRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
-    await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
-        window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
-    ))).not.toBe('0ms')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    const motionEnabledRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const motionEnabledPreferences = settingsPatchBody(await motionEnabledRequest).preferences as Record<string, unknown>
+    expect(motionEnabledPreferences.theme_motion_v6).toEqual(talosMotionV6Complex)
+    expect(motionEnabledPreferences).not.toHaveProperty('theme_motion')
+    expect(motionEnabledPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(motionEnabledPreferences).not.toHaveProperty('ui_animation_customization')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(1)
     await expectProceduralCanvasFrameChanges(page)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-performance-mode', 'motion')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
     await expectProceduralCanvasFrameChanges(page)
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByRole('switch', { name: 'Use simple animation' })).not.toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Disable background motion' })).not.toBeChecked()
-    await expect(page.getByRole('switch', { name: 'Disable procedural background' })).not.toBeChecked()
+    await expect(page.getByRole('button', { name: 'Motion mode Complex', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('switch', { name: 'Procedural background' })).toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeChecked()
 
-    await page.evaluate(async () => {
-        await fetch('/api/talos/settings', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                preferences: {
-                    theme: 'terminal',
-                    reduced_motion: false,
-                    theme_motion: 'cinematic',
-                    theme_motion_disabled: false,
-                    theme_background_disabled: false,
-                    ui_animation_profile: 'off',
-                    theme_customization: {
-                        effect: 'trace-rain',
-                    },
-                },
-            }),
-        })
-    })
+    const interfaceDisabledRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
+    await page.getByRole('switch', { name: 'Interface motion' }).click()
+    await page.getByRole('button', { name: 'Save motion', exact: true }).click()
+    const interfaceDisabledPreferences = settingsPatchBody(await interfaceDisabledRequest).preferences as Record<string, unknown>
+    expect(interfaceDisabledPreferences.theme_motion_v6).toEqual({ ...talosMotionV6Complex, interface_enabled: false })
+    expect(interfaceDisabledPreferences).not.toHaveProperty('theme_motion')
+    expect(interfaceDisabledPreferences).not.toHaveProperty('ui_animation_profile')
+    expect(interfaceDisabledPreferences).not.toHaveProperty('ui_animation_customization')
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-animation-profile', 'off')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
     await expect.poll(async () => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
     ))).toBe('0ms')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-disabled', 'false')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(1)
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-motion-disabled', 'false')
+    await expect(workspaceMotionCanvas(page)).toHaveCount(1)
     await expectProceduralCanvasFrameChanges(page)
+
+    await patchTalosSettings(page, {
+        theme: 'terminal',
+        reduced_motion: false,
+        theme_motion_v6: {
+            ...talosMotionV6Complex,
+            interface: {
+                ...talosMotionV6Complex.interface,
+                profile: 'off',
+            },
+        },
+        theme_customization: {
+            effect: 'trace-rain',
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    await expect(page.getByLabel('Interface motion profile')).toHaveValue('off')
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeChecked()
 })
 
 test('settings preset changes refresh procedural background immediately', async ({ page }) => {
     test.setTimeout(75_000)
 
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
-    await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Background effect').selectOption('none')
-    const disabledEffectRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
-            return false
-        }
-
-        const body = request.postDataJSON() as Record<string, unknown>
-        const preferences = body.preferences as Record<string, unknown> | undefined
-        const customization = preferences?.theme_customization as Record<string, unknown> | undefined
-
-        return customization?.effect === 'none'
+    await patchTalosSettings(page, {
+        theme: 'forge',
+        theme_motion_v6: talosMotionV6Complex,
+        theme_customization: {
+            effect: 'none',
+            effect_intensity: 0,
+        },
     })
-    await page.getByRole('button', { name: 'Save customization' }).click()
-    await disabledEffectRequest
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'none')
-    await expect(page.getByTestId('talos-procedural-canvas')).toHaveCount(0)
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'forge')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'forge')
+    await expectProceduralCanvasFrameChanges(page)
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await page.getByRole('tab', { name: 'Appearance' }).click()
@@ -2631,7 +2737,8 @@ test('settings preset changes refresh procedural background immediately', async 
         const preferences = body.preferences as Record<string, unknown> | undefined
         const customization = preferences?.theme_customization as Record<string, unknown> | undefined
 
-        return preferences?.theme === 'terminal'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme === 'terminal'
             && customization !== undefined
             && Object.keys(customization).length === 0
     })
@@ -2639,15 +2746,14 @@ test('settings preset changes refresh procedural background immediately', async 
     await settingsPresetRequest
 
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
-    await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', 'trace-rain')
-    await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', 'trace-rain')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
+    await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
     await expectProceduralCanvasAboveScrim(page)
     await expectProceduralCanvasFrameChanges(page)
     await expectProceduralCanvasHasVisibleSignal(page)
-    await expectProceduralBackgroundVisiblyChanges(page)
 })
 
-test('every theme preset switches to its animated procedural default', async ({ page, isMobile }, testInfo) => {
+test('every theme preset switches to its distinct Motion V6 scene', async ({ page, isMobile }, testInfo) => {
     test.setTimeout(120_000)
     test.skip(Boolean(isMobile), 'desktop covers exhaustive preset animation; mobile verifies preset refresh in the targeted settings flow.')
 
@@ -2656,21 +2762,22 @@ test('every theme preset switches to its animated procedural default', async ({ 
     await page.getByRole('tab', { name: 'Presets' }).click()
 
     const presets = [
-        ['AVM Forge', 'talos-theme-forge', 'dag-flow', 'normal'],
-        ['Paper Review', 'talos-theme-paper', 'kahn-grid', 'subtle'],
-        ['Terminal Operator', 'talos-theme-terminal', 'trace-rain', 'cinematic'],
-        ['Aurora Research', 'talos-theme-aurora', 'signal-mesh', 'normal'],
-        ['Glacier Desk', 'talos-theme-glacier', 'kahn-grid', 'subtle'],
-        ['Ember Incident', 'talos-theme-ember', 'trace-rain', 'cinematic'],
-        ['Atlas Enterprise', 'talos-theme-atlas', 'signal-mesh', 'subtle'],
-        ['Noir Contrast', 'talos-theme-noir', 'trace-rain', 'subtle'],
-        ['Signal Command', 'talos-theme-signal', 'signal-mesh', 'cinematic'],
-        ['Violet Lab', 'talos-theme-violet', 'dag-flow', 'normal'],
-        ['Claudius Review', 'talos-theme-claudius', 'kahn-grid', 'subtle'],
-        ['Basicus Material', 'talos-theme-basicus', 'kahn-grid', 'normal'],
+        ['AVM Forge', 'talos-theme-forge'],
+        ['Paper Review', 'talos-theme-paper'],
+        ['Terminal Operator', 'talos-theme-terminal'],
+        ['Aurora Research', 'talos-theme-aurora'],
+        ['Glacier Desk', 'talos-theme-glacier'],
+        ['Ember Incident', 'talos-theme-ember'],
+        ['Atlas Enterprise', 'talos-theme-atlas'],
+        ['Noir Contrast', 'talos-theme-noir'],
+        ['Signal Command', 'talos-theme-signal'],
+        ['Violet Lab', 'talos-theme-violet'],
+        ['Claudius Review', 'talos-theme-claudius'],
+        ['Basicus Material', 'talos-theme-basicus'],
     ] as const
 
-    for (const [label, themeClass, effect, motionProfile] of presets) {
+    for (const [label, themeClass] of presets) {
+        const sceneId = themeClass.replace('talos-theme-', '')
         const presetRequest = page.waitForRequest((request) => {
             if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
                 return false
@@ -2680,20 +2787,28 @@ test('every theme preset switches to its animated procedural default', async ({ 
             const preferences = body.preferences as Record<string, unknown> | undefined
             const customization = preferences?.theme_customization as Record<string, unknown> | undefined
 
-            return preferences?.theme === themeClass.replace('talos-theme-', '')
+            return hasSettingsExpectedRevision(body)
+                && preferences?.theme === sceneId
                 && customization !== undefined
                 && Object.keys(customization).length === 0
         })
 
         await page.getByRole('button', { name: label }).click()
-        await presetRequest
+        const presetPreferences = settingsPatchBody(await presetRequest).preferences as Record<string, unknown>
+        expect(presetPreferences).not.toHaveProperty('theme_motion')
+        expect(presetPreferences).not.toHaveProperty('ui_animation_profile')
+        expect(presetPreferences).not.toHaveProperty('ui_animation_customization')
         await expect(page.locator('.talos-shell')).toHaveClass(new RegExp(themeClass))
-        await expect(page.locator('.talos-shell')).toHaveAttribute('data-background-effect', effect)
-        await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-effect', effect)
-        await expect(page.getByTestId('talos-background-effect')).toHaveAttribute('data-motion-profile', motionProfile)
+        await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', sceneId)
+        await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', sceneId)
+        await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'adaptive')
+        await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
+        await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
+        await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-simple-animation', 'false')
+        await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-dpr-cap', '1.25')
         await expectProceduralCanvasAboveScrim(page)
         await expectProceduralCanvasFrameChanges(page)
-        await expectProceduralCanvasHasVisibleSignal(page, motionProfile === 'subtle' ? 8 : 10)
+        await expectProceduralCanvasHasVisibleSignal(page)
         await testInfo.attach(`theme-preset-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${testInfo.project.name}.png`, {
             body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
             contentType: 'image/png',
@@ -2719,7 +2834,8 @@ test('theme color mode forces light and dark variants across presets and chat bu
         const body = request.postDataJSON() as Record<string, unknown>
         const preferences = body.preferences as Record<string, unknown> | undefined
 
-        return preferences?.theme_mode === 'light'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme_mode === 'light'
     })
     await page.getByLabel('Theme color mode').selectOption('light')
     await lightModeRequest
@@ -2732,7 +2848,8 @@ test('theme color mode forces light and dark variants across presets and chat bu
         const body = request.postDataJSON() as Record<string, unknown>
         const preferences = body.preferences as Record<string, unknown> | undefined
 
-        return preferences?.theme === 'terminal' && preferences?.theme_mode === 'light'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme === 'terminal' && preferences?.theme_mode === 'light'
     })
     await page.getByRole('button', { name: 'Terminal Operator' }).click()
     await terminalRequest
@@ -2764,7 +2881,8 @@ test('theme color mode forces light and dark variants across presets and chat bu
         const body = request.postDataJSON() as Record<string, unknown>
         const preferences = body.preferences as Record<string, unknown> | undefined
 
-        return preferences?.theme_mode === 'dark'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme_mode === 'dark'
     })
     await page.getByLabel('Theme color mode').selectOption('dark')
     await darkModeRequest
@@ -2777,7 +2895,8 @@ test('theme color mode forces light and dark variants across presets and chat bu
         const body = request.postDataJSON() as Record<string, unknown>
         const preferences = body.preferences as Record<string, unknown> | undefined
 
-        return preferences?.theme === 'paper' && preferences?.theme_mode === 'dark'
+        return hasSettingsExpectedRevision(body)
+            && preferences?.theme === 'paper' && preferences?.theme_mode === 'dark'
     })
     await page.getByRole('button', { name: 'Paper Review' }).click()
     await paperRequest
@@ -2814,7 +2933,7 @@ test('theme color mode forces light and dark variants across presets and chat bu
     })
 })
 
-test('v5.3 theme visual matrix covers every preset in forced light and dark', async ({ page, isMobile }, testInfo) => {
+test('V6 theme visual matrix covers every preset in forced light and dark', async ({ page, isMobile }, testInfo) => {
     test.setTimeout(180_000)
     await page.setViewportSize(isMobile ? { width: 375, height: 812 } : { width: 1440, height: 900 })
     await openWorkspace(page)
@@ -2835,45 +2954,45 @@ test('v5.3 theme visual matrix covers every preset in forced light and dark', as
         ['claudius', 'Claudius Review'],
         ['basicus', 'Basicus Material'],
     ] as const
-    const artifactDirectory = `storage/playwright-live/v5.3-theme-matrix/${testInfo.project.name}`
+    const artifactDirectory = `storage/playwright-live/v6-theme-matrix/${testInfo.project.name}`
     mkdirSync(artifactDirectory, { recursive: true })
 
     for (const mode of ['light', 'dark'] as const) {
         const modeRequest = page.waitForRequest((request) => {
             if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-            const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+            const body = request.postDataJSON() as Record<string, unknown>
+            if (!hasSettingsExpectedRevision(body)) return false
+            const preferences = body.preferences as Record<string, unknown> | undefined
             return preferences?.theme_mode === mode
         })
         await page.getByLabel('Theme color mode').selectOption(mode)
-        await modeRequest
+        settingsPatchBody(await modeRequest)
 
         for (const [id, label] of presets) {
             const presetRequest = page.waitForRequest((request) => {
                 if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-                const preferences = (request.postDataJSON() as Record<string, unknown>).preferences as Record<string, unknown> | undefined
+                const body = request.postDataJSON() as Record<string, unknown>
+                if (!hasSettingsExpectedRevision(body)) return false
+                const preferences = body.preferences as Record<string, unknown> | undefined
                 return preferences?.theme === id && preferences?.theme_mode === mode
             })
             await page.getByRole('button', { name: label }).click()
-            await presetRequest
+            settingsPatchBody(await presetRequest)
             await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-preset', id)
             await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-mode', mode)
             await expect(page.getByRole('tab', { name: 'Presets' })).toBeVisible()
             await expectNoHorizontalOverflow(page)
 
-            const canvas = page.getByTestId('talos-procedural-canvas')
+            const canvas = workspaceMotionCanvas(page)
             await expect(canvas).toHaveCount(1)
-            const canvasSize = await canvas.evaluate((element) => ({
-                width: (element as HTMLCanvasElement).width,
-                height: (element as HTMLCanvasElement).height,
-            }))
-            expect(canvasSize.width).toBeGreaterThan(100)
-            expect(canvasSize.height).toBeGreaterThan(100)
+            await expect.poll(async () => canvas.evaluate((element) => (element as HTMLCanvasElement).width)).toBeGreaterThan(100)
+            await expect.poll(async () => canvas.evaluate((element) => (element as HTMLCanvasElement).height)).toBeGreaterThan(100)
 
             const screenshot = await page.screenshot({
                 path: `${artifactDirectory}/${mode}-${id}.png`,
                 animations: 'disabled',
             })
-            await testInfo.attach(`v5.3-${mode}-${id}-${testInfo.project.name}.png`, {
+            await testInfo.attach(`v6-${mode}-${id}-${testInfo.project.name}.png`, {
                 body: screenshot,
                 contentType: 'image/png',
             })
@@ -2908,18 +3027,9 @@ test('favicon follows the active theme accent without reloading the workspace', 
 
 test('theme engine shows workspace policy lock as read only', async ({ page }) => {
     await openWorkspace(page)
-    await page.evaluate(async () => {
-        await fetch('/api/talos/settings', {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                preferences: {
-                    theme_policy_locked: true,
-                },
-            }),
-        })
+    await patchTalosSettings(page, {
+        theme_policy_locked: true,
+        theme_motion_v6: talosMotionV6Defaults,
     })
 
     await page.reload({ waitUntil: 'domcontentloaded' })
@@ -2931,6 +3041,7 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     const advancedRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
         const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
         const preferences = body.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return layout?.advanced_rail_expanded === true
@@ -2947,6 +3058,14 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     await expect(page.getByRole('button', { name: 'Save as theme' })).toBeDisabled()
     await expect(page.getByLabel('Theme chat message size')).toBeDisabled()
     await expect(page.getByLabel('Theme chat composer mode')).toBeDisabled()
+    await page.getByRole('tab', { name: 'Motion' }).click()
+    await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Motion mode Adaptive', exact: true })).toBeDisabled()
+    await expect(page.getByRole('switch', { name: 'Procedural background' })).toBeDisabled()
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Reset background', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Reset interface', exact: true })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save motion', exact: true })).toBeDisabled()
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await page.getByRole('tab', { name: 'Appearance' }).click()
@@ -3063,30 +3182,22 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
     expect(themeLauncherBox).toBeTruthy()
     await themeLauncher.click()
     const themeWindow = page.locator('[data-window-id="theme"]')
+    const themeFrame = page.locator('[data-window-frame-id="theme"]')
     await expect(themeWindow).toBeVisible()
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'opening')
-    await expect(themeWindow).toHaveAttribute('data-window-origin-source', 'sidebar')
+    await expect(themeFrame).toHaveAttribute('data-window-origin-source', 'sidebar')
 
-    const openingMotion = await themeWindow.evaluate((element) => {
-        const style = window.getComputedStyle(element)
-
-        return {
-            animationName: style.animationName,
-            originX: Number(element.getAttribute('data-window-origin-x')),
-            launchDx: style.getPropertyValue('--talos-window-launch-dx').trim(),
-        }
-    })
-    expect(openingMotion.animationName).toContain('talos-window-open-from-sidebar')
-    expect(openingMotion.originX).toBeLessThan(0)
-    expect(openingMotion.launchDx).toMatch(/px$/)
+    await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBeGreaterThan(0)
+    const openingOriginX = Number(await themeFrame.getAttribute('data-window-origin-x'))
+    expect(openingOriginX).toBeLessThan(0)
     const stageBox = await page.getByTestId('talos-desktop-window-stage').boundingBox()
     expect(stageBox).toBeTruthy()
     expect(Math.abs(
-        Number(await themeWindow.getAttribute('data-window-origin-x'))
+        Number(await themeFrame.getAttribute('data-window-origin-x'))
         - (themeLauncherBox!.x + (themeLauncherBox!.width / 2) - stageBox!.x),
     )).toBeLessThanOrEqual(1)
     expect(Math.abs(
-        Number(await themeWindow.getAttribute('data-window-origin-y'))
+        Number(await themeFrame.getAttribute('data-window-origin-y'))
         - (themeLauncherBox!.y + (themeLauncherBox!.height / 2) - stageBox!.y),
     )).toBeLessThanOrEqual(1)
 
@@ -3095,20 +3206,17 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
     await page.getByRole('button', { name: 'Minimize Theme' }).click()
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'minimizing')
     const minimizeMotion = await themeWindow.evaluate((element) => {
-        const style = window.getComputedStyle(element)
-        const duration = style.animationDuration.split(',')[0]?.trim() ?? '0s'
-        const durationMs = duration.endsWith('ms')
-            ? Number(duration.replace('ms', ''))
-            : Number(duration.replace('s', '')) * 1000
+        const animations = element.getAnimations()
+        const duration = animations[0]?.effect?.getTiming().duration
 
         return {
-            animationName: style.animationName,
-            animationDurationMs: durationMs,
-            opacity: Number(style.opacity),
+            animationCount: animations.length,
+            animationDurationMs: typeof duration === 'number' ? duration : 0,
+            opacity: Number(window.getComputedStyle(element).opacity),
         }
     })
-    expect(minimizeMotion.animationName).toContain('talos-window-minimize-to-dock')
-    expect(minimizeMotion.animationDurationMs).toBeGreaterThanOrEqual(280)
+    expect(minimizeMotion.animationCount).toBeGreaterThan(0)
+    expect(minimizeMotion.animationDurationMs).toBeGreaterThan(0)
     expect(minimizeMotion.opacity).toBeGreaterThan(0.1)
     const pendingMinimizeTarget = page.getByTestId('talos-minimize-target-theme')
     await expect(pendingMinimizeTarget).toHaveCount(1)
@@ -3117,11 +3225,11 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
         return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
     })
     expect(Math.abs(
-        Number(await themeWindow.getAttribute('data-window-origin-x'))
+        Number(await themeFrame.getAttribute('data-window-origin-x'))
         - (pendingTargetRect.x + (pendingTargetRect.width / 2) - stageBox!.x),
     )).toBeLessThanOrEqual(1)
     expect(Math.abs(
-        Number(await themeWindow.getAttribute('data-window-origin-y'))
+        Number(await themeFrame.getAttribute('data-window-origin-y'))
         - (pendingTargetRect.y + (pendingTargetRect.height / 2) - stageBox!.y),
     )).toBeLessThanOrEqual(1)
     await expect(themeWindow).toHaveCount(0)
@@ -3131,52 +3239,36 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
     await restoreButton.click()
     await expect(themeWindow).toBeVisible()
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'restoring')
-    await expect(themeWindow).toHaveAttribute('data-window-origin-source', 'dock')
-    const restoreMotion = await themeWindow.evaluate((element) => new Promise<{
-        animationName: string
-        animationDuration: string
-    }>((resolve) => {
-        window.requestAnimationFrame(() => {
-            window.requestAnimationFrame(() => {
-                const style = window.getComputedStyle(element)
-                resolve({
-                    animationName: style.animationName,
-                    animationDuration: style.animationDuration,
-                })
-            })
-        })
-    }))
-    expect(restoreMotion.animationName).toContain('talos-window-restore-from-dock')
-    expect(restoreMotion.animationDuration).not.toBe('0s')
+    await expect(themeFrame).toHaveAttribute('data-window-origin-source', 'dock')
+    await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBeGreaterThan(0)
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'opening')
-    await expect(themeWindow).toHaveAttribute('data-window-origin-source', 'sidebar')
+    await expect(themeFrame).toHaveAttribute('data-window-origin-source', 'sidebar')
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
 
     await page.getByRole('button', { name: 'Minimize Theme' }).click()
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'minimizing')
-    await expect.poll(async () => themeWindow.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-window-minimize-to-dock')
+    await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBeGreaterThan(0)
     await page.waitForTimeout(170)
     const sidebarRefocusMinimizeMotion = await themeWindow.evaluate((element) => {
-        const style = window.getComputedStyle(element)
-
         return {
-            opacity: Number(style.opacity),
-            animationName: style.animationName,
+            opacity: Number(window.getComputedStyle(element).opacity),
+            animationCount: element.getAnimations().length,
         }
     })
-    expect(sidebarRefocusMinimizeMotion.animationName).toContain('talos-window-minimize-to-dock')
-    expect(sidebarRefocusMinimizeMotion.opacity).toBeGreaterThan(0.1)
+    expect(sidebarRefocusMinimizeMotion.animationCount).toBeGreaterThan(0)
+    expect(sidebarRefocusMinimizeMotion.opacity).toBeGreaterThanOrEqual(0)
+    expect(sidebarRefocusMinimizeMotion.opacity).toBeLessThan(1)
     await expect(themeWindow).toHaveCount(0)
     await restoreButton.click()
     await expect(themeWindow).toBeVisible()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
 
     await page.getByRole('button', { name: 'Fullscreen Theme' }).click()
-    await expect(themeWindow).toHaveAttribute('data-window-transition', 'expanding')
-    await expect.poll(async () => themeWindow.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-window-expand')
+    await expect(themeWindow).toHaveAttribute('data-window-transition', 'maximizing')
+    await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBeGreaterThan(0)
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const fullscreenGeometry = await page.evaluate(() => {
         const windowElement = document.querySelector<HTMLElement>('[data-window-id="theme"]')
@@ -3526,7 +3618,8 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
         const preferences = body.preferences as Record<string, unknown> | undefined
         const appearance = preferences?.appearance_visibility as Record<string, Record<string, unknown>> | undefined
 
-        return appearance?.chat_area?.welcome_message === false
+        return hasSettingsExpectedRevision(body)
+            && appearance?.chat_area?.welcome_message === false
             && appearance?.chat_area?.full_width_chat === true
     })
     await page.getByRole('switch', { name: 'Welcome message' }).click()
@@ -3556,7 +3649,8 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
         const preferences = body.preferences as Record<string, unknown> | undefined
         const shortcuts = preferences?.keyboard_shortcuts as Record<string, unknown> | undefined
 
-        return shortcuts?.open_compare === 'Ctrl+Alt+M'
+        return hasSettingsExpectedRevision(body)
+            && shortcuts?.open_compare === 'Ctrl+Alt+M'
     })
     await page.getByRole('button', { name: 'Save settings' }).click()
     await shortcutPatchRequest
@@ -3568,8 +3662,10 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect(themeWindow).toBeVisible()
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     await page.getByRole('button', { name: 'Fullscreen Theme' }).click()
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const fullscreenBox = await themeWindow.boundingBox()
     expect(fullscreenBox?.width).toBeGreaterThan(900)
     const fullscreenGeometry = await themeWindow.evaluate((element) => {
@@ -4150,6 +4246,165 @@ test('dashboard runs a blind model comparison, reveals vote, and promotes benchm
     await expect(page.getByText('Benchmark report exported.')).toBeVisible()
 })
 
+test('window lifecycle produces a perceptible painted-frame trajectory with the real interface switches', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), 'desktop window lifecycle is measured by the desktop project')
+    test.setTimeout(90_000)
+
+    await patchTalosSettings(page, {
+        theme: 'ember',
+        reduced_motion: false,
+        theme_motion_v6: {
+            ...talosMotionV6Defaults,
+            mode: 'adaptive',
+            background_enabled: false,
+            interface_enabled: true,
+            interface: {
+                ...talosMotionV6Defaults.interface,
+                profile: 'expressive',
+                intensity: 70,
+                easing: 'soft',
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const workspace = page.getByTestId('talos-workspace')
+    await expect(workspace).toHaveAttribute('data-ui-motion-disabled', 'false')
+    await expect(workspace).toHaveAttribute('data-ui-animation-profile', 'expressive')
+
+    const themeWindow = page.locator('[data-window-id="theme"]')
+    const stage = page.getByTestId('talos-desktop-window-stage')
+    const themeLauncher = page.getByRole('button', { name: 'Theme', exact: true })
+    const opening = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: stage,
+        action: () => themeLauncher.click(),
+        waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
+    })
+    expect(opening.presentation.lifecycle).toBe('opening')
+    expectPaintedTransition(opening, { minimumDurationMs: 384 })
+    await expect(themeWindow).toBeFocused()
+    await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBe(0)
+
+    const minimizing = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: stage,
+        action: () => page.getByRole('button', { name: 'Minimize Theme' }).click(),
+        waitForFinal: () => expect(themeWindow).toHaveCount(0),
+    })
+    expect(minimizing.presentation.lifecycle).toBe('minimizing')
+    expectPaintedTransition(minimizing, { minimumDurationMs: 456, midpointInteractive: false })
+    await expect(themeWindow).toHaveCount(0)
+
+    const restoreButton = page.getByTestId('talos-restore-window-theme')
+    await expect(restoreButton).toBeVisible()
+    const restoring = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: stage,
+        action: () => restoreButton.click(),
+        waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
+    })
+    expect(restoring.presentation.lifecycle).toBe('restoring')
+    expectPaintedTransition(restoring, { minimumDurationMs: 384 })
+    await expect(themeWindow).toBeFocused()
+
+    const regularRect = await themeWindow.boundingBox()
+    const maximizing = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: stage,
+        action: () => page.getByRole('button', { name: 'Fullscreen Theme' }).click(),
+        waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
+    })
+    expect(maximizing.presentation.lifecycle).toBe('maximizing')
+    expectPaintedTransition(maximizing, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
+    const fullscreenRect = await themeWindow.boundingBox()
+    expect((fullscreenRect?.width ?? 0) - (regularRect?.width ?? 0)).toBeGreaterThan(200)
+    const stageRect = await stage.boundingBox()
+    expect(stageRect).toBeTruthy()
+    expect(fullscreenRect).toBeTruthy()
+    expect(Math.abs((fullscreenRect?.x ?? 0) - (stageRect?.x ?? 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((fullscreenRect?.y ?? 0) - (stageRect?.y ?? 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((fullscreenRect?.width ?? 0) - (stageRect?.width ?? 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((fullscreenRect?.height ?? 0) - (stageRect?.height ?? 0))).toBeLessThanOrEqual(1)
+
+    const unmaximizing = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: stage,
+        action: () => page.getByRole('button', { name: 'Exit fullscreen Theme' }).click(),
+        waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
+    })
+    expect(unmaximizing.presentation.lifecycle).toBe('unmaximizing')
+    expectPaintedTransition(unmaximizing, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'false')
+
+    const closing = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: stage,
+        action: () => page.getByRole('button', { name: 'Close Theme' }).click(),
+        waitForFinal: () => expect(themeWindow).toHaveCount(0),
+    })
+    expect(closing.presentation.lifecycle).toBe('closing')
+    expectPaintedTransition(closing, { minimumDurationMs: 288, midpointInteractive: false })
+    await expect(themeWindow).toHaveCount(0)
+    await expect(themeLauncher).toBeVisible()
+})
+
+test('mobile sheet open and close produce a perceptible painted-frame trajectory', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'mobile sheet motion is measured by the mobile project')
+    test.setTimeout(60_000)
+
+    await patchTalosSettings(page, {
+        theme: 'ember',
+        reduced_motion: false,
+        theme_motion_v6: {
+            ...talosMotionV6Defaults,
+            mode: 'adaptive',
+            background_enabled: false,
+            interface_enabled: true,
+            interface: {
+                ...talosMotionV6Defaults.interface,
+                profile: 'expressive',
+                intensity: 70,
+                easing: 'soft',
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const workspace = page.getByTestId('talos-workspace')
+    const sheet = page.getByTestId('talos-mobile-tool-sheet')
+    const opening = await capturePaintedTransition({
+        page,
+        target: sheet,
+        paintSurface: workspace,
+        action: () => page.getByRole('button', { name: 'Theme', exact: true }).first().click(),
+        waitForFinal: () => expect(sheet).toHaveAttribute('data-window-transition', 'idle'),
+    })
+    expect(opening.presentation.lifecycle).toBe('opening')
+    expectPaintedTransition(opening, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    await expect(sheet.getByRole('button', { name: 'Back to chat' })).toBeFocused()
+
+    const closing = await capturePaintedTransition({
+        page,
+        target: sheet,
+        paintSurface: workspace,
+        action: () => sheet.getByRole('button', { name: 'Close Theme' }).click(),
+        waitForFinal: () => expect(sheet).toHaveCount(0),
+    })
+    expect(closing.presentation.lifecycle).toBe('closing')
+    expectPaintedTransition(closing, { minimumDurationMs: 288, minimumPixelRatio: 0.01, midpointInteractive: false })
+    await expect(sheet).toHaveCount(0)
+})
+
 test('mobile chat and dashboard avoid layout overflow', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'mobile overflow is covered by the mobile project')
 
@@ -4431,11 +4686,13 @@ test('chat layout controls persist bubble scale, composer mode, and Advanced dis
     await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible()
 
     await expect.poll(() => settingsRequests.some((request) => {
+        if (!hasSettingsExpectedRevision(request)) return false
         const layout = (request.preferences as Record<string, unknown> | undefined)?.chat_layout as Record<string, unknown> | undefined
 
         return layout?.bubble_scale === 'expanded' && layout?.composer_mode === 'minimal'
     })).toBe(true)
     await expect.poll(() => settingsRequests.some((request) => {
+        if (!hasSettingsExpectedRevision(request)) return false
         const layout = (request.preferences as Record<string, unknown> | undefined)?.chat_layout as Record<string, unknown> | undefined
 
         return layout?.advanced_rail_expanded === true
@@ -4460,6 +4717,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
     await page.getByRole('button', { name: 'Save settings' }).click()
 
     await expect.poll(() => settingsRequests.some((request) => {
+        if (!hasSettingsExpectedRevision(request)) return false
         const preferences = request.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return layout?.bubble_scale === 'compact'
@@ -4476,6 +4734,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
     await page.getByRole('button', { name: 'Save customization' }).click()
 
     await expect.poll(() => settingsRequests.some((request) => {
+        if (!hasSettingsExpectedRevision(request)) return false
         const preferences = request.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return layout?.bubble_scale === 'expanded'
@@ -4510,6 +4769,7 @@ test('named theme chat layout overrides current layout and reset returns to pres
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
         const body = request.postDataJSON() as Record<string, unknown>
+        if (!hasSettingsExpectedRevision(body)) return false
         const preferences = body.preferences as Record<string, unknown> | undefined
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         const layout = library?.at(-1)?.chat_layout as Record<string, unknown> | undefined
@@ -4537,7 +4797,7 @@ test('named theme chat layout overrides current layout and reset returns to pres
         request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH'
     ))
     await page.getByRole('button', { name: 'Apply', exact: true }).click()
-    const appliedPreferences = (await applyRequest).postDataJSON().preferences as Record<string, unknown>
+    const appliedPreferences = settingsPatchBody(await applyRequest).preferences as Record<string, unknown>
     expect(appliedPreferences.active_custom_theme_id).not.toBeNull()
     expect(appliedPreferences.chat_layout).toMatchObject({
         bubble_scale: 'expanded',

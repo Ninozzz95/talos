@@ -26,6 +26,8 @@ describe('useTalosWindowModules', () => {
         expect(modules.activeSectionFor('model_lab')).toBe('cookbook')
         modules.setActiveWindowSection('model_lab', 'missing')
         expect(modules.activeSectionFor('model_lab')).toBe('cookbook')
+        modules.setActiveWindowSection('theme', 'motion')
+        expect(modules.activeSectionFor('theme')).toBe('motion')
         scope.stop()
     })
 

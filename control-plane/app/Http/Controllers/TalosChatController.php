@@ -23,6 +23,7 @@ use App\Services\Talos\Browser\TalosBrowserCommandService;
 use App\Services\Talos\Browser\TalosBrowserCommandException;
 use App\Services\Talos\Browser\TalosBrowserCommand;
 use App\Services\Talos\Browser\TalosBrowserDeadline;
+use App\Services\Talos\Browser\TalosBrowserFollowUpResolver;
 use App\Services\Talos\Browser\TalosBrowserRedactor;
 use App\Services\Tools\TalosToolPlanningContextService;
 use Illuminate\Http\Client\ConnectionException;
@@ -58,12 +59,14 @@ final class TalosChatController extends Controller
         TalosModelRoutingService $modelRouting,
         TalosSkillPlanningContextService $skillPlanningContext,
         TalosBrowserCommandService $browserCommands,
+        TalosBrowserFollowUpResolver $browserFollowUps,
     ): JsonResponse
     {
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:20000'],
             'api_key' => ['sometimes', 'nullable', 'string', 'max:4096'],
             'session_id' => ['sometimes', 'nullable', 'string', 'max:255', 'required_with:browser_context'],
+            'user_message_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'model_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'model_routing_profile_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'context_set_id' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -384,7 +387,25 @@ final class TalosChatController extends Controller
             'model' => is_string($validatorBase['model'] ?? null) ? $validatorBase['model'] : null,
         ];
         $pendingBrowserCommands = [];
-        $directNavigationUrl = $this->directBrowserNavigationUrl($originalMessage);
+        $directNavigation = is_array($browserMode)
+            ? $browserFollowUps->resolveNavigation(
+                $originalMessage,
+                $session,
+                is_string($validated['user_message_id'] ?? null) ? $validated['user_message_id'] : null,
+            )
+            : null;
+        $directNavigationUrl = $directNavigation['url'] ?? null;
+        if (($directNavigation['source'] ?? null) === 'retry_follow_up' && $run instanceof TalosRun) {
+            $this->appendRunEvent($run, $normalizer, [
+                'event_type' => 'chat.browser_follow_up_resolved',
+                'severity' => 'info',
+                'payload' => [
+                    'operation' => 'navigate',
+                    'source_message_id' => $directNavigation['source_message_id'] ?? null,
+                    'url_sha256' => hash('sha256', (string) $directNavigationUrl),
+                ],
+            ]);
+        }
         $directScreenshotRequested = is_array($browserMode)
             && ($this->directBrowserScreenshotRequested($originalMessage)
                 || $this->directBrowserScreenshotConfirmationRequested($originalMessage, $session)
@@ -1317,58 +1338,6 @@ final class TalosChatController extends Controller
                 'capability' => 'browser.read',
             ]],
         ];
-    }
-
-    private function directBrowserNavigationUrl(string $message): ?string
-    {
-        if (trim($message) === '') {
-            return null;
-        }
-
-        $matched = preg_match_all('~https?://[^\s<>"\'`]+~iu', $message, $matches);
-        if ($matched === false || $matched === 0 || ! is_array($matches[0] ?? null)) {
-            return null;
-        }
-
-        $candidates = [];
-        foreach ($matches[0] as $rawCandidate) {
-            if (! is_string($rawCandidate)) {
-                continue;
-            }
-
-            $candidate = $this->trimBrowserUrlCandidate($rawCandidate);
-            if ($candidate === '' || mb_strlen($candidate) > 2048 || filter_var($candidate, FILTER_VALIDATE_URL) === false) {
-                continue;
-            }
-
-            $parts = parse_url($candidate);
-            $scheme = is_array($parts) && is_string($parts['scheme'] ?? null) ? strtolower($parts['scheme']) : null;
-            $host = is_array($parts) && is_string($parts['host'] ?? null) ? trim($parts['host']) : '';
-            if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
-                continue;
-            }
-
-            $candidates[$candidate] = true;
-        }
-
-        if (count($candidates) !== 1) {
-            return null;
-        }
-
-        return array_key_first($candidates);
-    }
-
-    private function trimBrowserUrlCandidate(string $candidate): string
-    {
-        $candidate = rtrim($candidate, '.,;:!?');
-        foreach ([['(', ')'], ['[', ']'], ['{', '}']] as [$open, $close]) {
-            while (str_ends_with($candidate, $close)
-                && substr_count($candidate, $close) > substr_count($candidate, $open)) {
-                $candidate = substr($candidate, 0, -1);
-            }
-        }
-
-        return rtrim($candidate, '.,;:!?');
     }
 
     private function directBrowserScreenshotRequested(string $message): bool

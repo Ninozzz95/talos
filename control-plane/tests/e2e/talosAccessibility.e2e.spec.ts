@@ -53,6 +53,13 @@ async function expectNoAccessibilityViolations(page: Page, state: string) {
     expect(violations, `${state}: ${JSON.stringify(violations, null, 2)}`).toEqual([])
 }
 
+async function waitForSurfaceAnimations(page: Page, selector: string) {
+    await page.locator(selector).evaluate(async (surface) => {
+        const animations = surface.getAnimations({ subtree: true })
+        await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)))
+    })
+}
+
 test.beforeEach(async ({ page }) => {
     await installTalosApiMocks(page)
     await openAuthenticatedWorkspace(page)
@@ -77,6 +84,7 @@ test('authenticated workspace and complex overlays pass automated WCAG A/AA chec
     }
     await page.getByRole('button', { name: 'Open command palette' }).click()
     await expect(page.getByRole('dialog', { name: 'TALOS command palette' })).toBeVisible()
+    await waitForSurfaceAnimations(page, '.talos-command-palette')
     await expectNoAccessibilityViolations(page, 'command palette')
 })
 

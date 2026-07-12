@@ -1,15 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
+import { createTalosPlaywrightWebServer } from './tests/e2e/helpers/talosPlaywrightServer'
 
 const baseURL = process.env.TALOS_E2E_BASE_URL ?? 'http://127.0.0.1:8014'
 const reuseExistingServer = process.env.TALOS_E2E_REUSE_SERVER === '1'
 const useViteDevServer = process.env.TALOS_E2E_USE_VITE === '1'
 
-const laravelServer = {
-    command: '..\\.tools\\php\\php.exe artisan migrate --force && ..\\.tools\\php\\php.exe artisan db:seed --class=TalosE2ESeeder --force && ..\\.tools\\php\\php.exe -S 127.0.0.1:8014 -t public tests/e2e/php-router.php',
-    url: baseURL,
-    reuseExistingServer,
-    timeout: 120_000,
-}
+const laravelServer = createTalosPlaywrightWebServer(baseURL, reuseExistingServer)
 
 const viteServer = {
     command: 'npm run dev -- --host 127.0.0.1 --port 5173',
@@ -20,6 +16,7 @@ const viteServer = {
 
 export default defineConfig({
     testDir: './tests/e2e',
+    testIgnore: 'talosMotionV6CrossBrowser.e2e.spec.ts',
     timeout: 60_000,
     expect: {
         timeout: 8_000,

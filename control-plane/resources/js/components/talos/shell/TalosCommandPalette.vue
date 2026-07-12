@@ -66,7 +66,7 @@ function selectCommand(command: TalosCommand) {
             >
                 <span class="flex min-w-0 items-center justify-between gap-3">
                     <span class="truncate text-sm font-semibold">{{ command.label }}</span>
-                    <span class="shrink-0 rounded-sm border border-[var(--talos-border-strong)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-normal text-[var(--talos-muted)]">
+                    <span class="shrink-0 rounded-sm border border-[var(--talos-border-strong)] bg-[var(--talos-panel-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-normal text-[var(--talos-text)]">
                         {{ command.category }}
                     </span>
                 </span>

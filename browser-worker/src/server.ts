@@ -31,6 +31,20 @@ export function buildServer(options: { sessions?: BrowserSessionManager; interna
 
   app.get("/health", async () => ({ data: { status: "ok", service: "talos-browser-worker" } }));
 
+  app.get("/ready", async (_request, reply) => {
+    try {
+      await sessions.assertRuntimeReady();
+    } catch {
+      return reply.code(503).send({
+        data: { status: "degraded", service: "talos-browser-worker", runtime: "chromium" },
+      });
+    }
+
+    return {
+      data: { status: "ready", service: "talos-browser-worker", runtime: "chromium" },
+    };
+  });
+
   app.post("/sessions", async (request, reply) => {
     const parsed = createSessionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "Invalid browser session payload.", code: "TALOS_BROWSER_INVALID_SESSION_PAYLOAD", details: parsed.error.flatten() });

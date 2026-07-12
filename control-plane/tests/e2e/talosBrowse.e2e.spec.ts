@@ -492,3 +492,30 @@ test('Browse remains in place while the chat request carries the typed browser m
     await expect(page.getByTestId('talos-browser-activity').getByText('Chat browser read')).toHaveCount(1)
     expect(await page).toHaveURL(/\/$/)
 })
+
+test('a normal chat can enable Browse only for a contextual retry turn', async ({ page }) => {
+    const chatBodies: Record<string, unknown>[] = []
+    page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/talos/chat' && request.method() === 'POST') {
+            chatBodies.push(request.postDataJSON() as Record<string, unknown>)
+        }
+    })
+
+    await page.getByLabel('Message TALOS').fill('Open https://fixture.example.test/evidence and tell me what you see')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect.poll(() => chatBodies.length).toBe(1)
+    expect(chatBodies[0].browser_mode).toBeUndefined()
+    expect(chatBodies[0].user_message_id).toEqual(expect.any(String))
+
+    await page.getByRole('button', { name: 'Browse', exact: true }).click()
+    await expect(page.getByTestId('talos-browse-mode')).toHaveAttribute('data-enabled', 'true')
+
+    await page.getByLabel('Message TALOS').fill('riprova')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect.poll(() => chatBodies.length).toBe(2)
+
+    expect(chatBodies[1].session_id).toBe(chatBodies[0].session_id)
+    expect(chatBodies[1].user_message_id).toEqual(expect.any(String))
+    expect(chatBodies[1].user_message_id).not.toBe(chatBodies[0].user_message_id)
+    expect(chatBodies[1].browser_mode).toEqual({ enabled: true, browser_session_id: 'browser-session-e2e' })
+})

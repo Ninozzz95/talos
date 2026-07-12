@@ -19,6 +19,147 @@ type BrowserMockState = {
     snapshotCaptured: boolean
 }
 
+export type TalosSettingsPatchLedgerEntry = {
+    revision: number
+    expectedRevision: number | null
+    settingsRevision: number | null
+    preferenceKeys: string[]
+    request: {
+        url: string
+        method: 'PATCH'
+        payload: Record<string, unknown>
+    }
+    response: {
+        status: number
+        ok: boolean
+        body: Json
+    }
+}
+
+export type TalosSettingsPatchWaitOptions = {
+    key?: string
+    revision?: number
+    settingsRevision?: number
+    status?: number
+    ok?: boolean
+    timeoutMs?: number
+}
+
+export type TalosSettingsRequestLedger = {
+    patches: TalosSettingsPatchLedgerEntry[]
+    entries: TalosSettingsPatchLedgerEntry[]
+    clear: () => void
+    waitForPatch: (options?: TalosSettingsPatchWaitOptions) => Promise<TalosSettingsPatchLedgerEntry>
+    waitForAck: (options?: Omit<TalosSettingsPatchWaitOptions, 'ok'>) => Promise<TalosSettingsPatchLedgerEntry>
+}
+
+function cloneJsonSnapshot<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T
+}
+
+function createTalosSettingsRequestLedger(): TalosSettingsRequestLedger & {
+    record: (
+        url: string,
+        payload: Record<string, unknown>,
+        status: number,
+        body: Json,
+    ) => TalosSettingsPatchLedgerEntry
+} {
+    const patches: TalosSettingsPatchLedgerEntry[] = []
+    const pending: Array<{
+        options: TalosSettingsPatchWaitOptions
+        resolve: (entry: TalosSettingsPatchLedgerEntry) => void
+        reject: (error: Error) => void
+        timer: ReturnType<typeof setTimeout>
+    }> = []
+    let revision = 0
+
+    const matches = (entry: TalosSettingsPatchLedgerEntry, options: TalosSettingsPatchWaitOptions) => (
+        (options.key === undefined || entry.preferenceKeys.includes(options.key))
+        && (options.revision === undefined || entry.revision === options.revision)
+        && (options.settingsRevision === undefined || entry.settingsRevision === options.settingsRevision)
+        && (options.status === undefined || entry.response.status === options.status)
+        && (options.ok === undefined || entry.response.ok === options.ok)
+    )
+
+    const resolvePending = (entry: TalosSettingsPatchLedgerEntry) => {
+        for (let index = pending.length - 1; index >= 0; index -= 1) {
+            const waiter = pending[index]
+            if (!matches(entry, waiter.options)) continue
+            clearTimeout(waiter.timer)
+            pending.splice(index, 1)
+            waiter.resolve(entry)
+        }
+    }
+
+    const record = (
+        url: string,
+        payload: Record<string, unknown>,
+        status: number,
+        body: Json,
+    ) => {
+        revision += 1
+        const preferences = payload.preferences
+        const preferenceKeys = isPlainRecord(preferences) ? Object.keys(preferences) : []
+        const entry: TalosSettingsPatchLedgerEntry = {
+            revision,
+            expectedRevision: typeof payload.expected_revision === 'number'
+                && Number.isSafeInteger(payload.expected_revision)
+                ? payload.expected_revision
+                : null,
+            settingsRevision: isPlainRecord(body.data) && typeof body.data.revision === 'number'
+                ? body.data.revision
+                : null,
+            preferenceKeys,
+            request: {
+                url,
+                method: 'PATCH',
+                payload: cloneJsonSnapshot(payload),
+            },
+            response: {
+                status,
+                ok: status >= 200 && status < 300,
+                body: cloneJsonSnapshot(body),
+            },
+        }
+        patches.push(entry)
+        resolvePending(entry)
+
+        return entry
+    }
+
+    const waitForPatch = (options: TalosSettingsPatchWaitOptions = {}) => {
+        const existing = patches.find((entry) => matches(entry, options))
+        if (existing) return Promise.resolve(existing)
+
+        const timeoutMs = options.timeoutMs ?? 8_000
+        return new Promise<TalosSettingsPatchLedgerEntry>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                const index = pending.findIndex((waiter) => waiter.timer === timer)
+                if (index >= 0) pending.splice(index, 1)
+                reject(new Error(`Timed out waiting for settings PATCH ACK: ${JSON.stringify(options)}.`))
+            }, timeoutMs)
+            pending.push({ options, resolve, reject, timer })
+        })
+    }
+
+    const waitForAck = (options: Omit<TalosSettingsPatchWaitOptions, 'ok'> = {}) => (
+        waitForPatch({ ...options, ok: true })
+    )
+
+    return {
+        patches,
+        entries: patches,
+        clear() {
+            patches.splice(0)
+            revision = 0
+        },
+        waitForPatch,
+        waitForAck,
+        record,
+    }
+}
+
 const now = '2026-07-07T10:00:00.000000Z'
 
 function json(route: Route, payload: Json, status = 200) {
@@ -1269,6 +1410,22 @@ function modelComparisonBenchmarkGroupPayload(includeResults = false) {
     }
 }
 
+export type TalosInitialSettings = {
+    id?: string
+    revision?: number
+    default_model_profile_id?: string | null
+    default_context_set_id?: string | null
+    preferences?: Record<string, unknown>
+    created_at?: string
+    updated_at?: string
+}
+
+export type TalosSettingsPatchFailure = {
+    status?: number
+    code?: string
+    message?: string
+}
+
 export type InstallTalosApiMocksOptions = {
     initialSessions?: Array<{
         id: string
@@ -1282,6 +1439,8 @@ export type InstallTalosApiMocksOptions = {
         createStatuses?: string[]
         deny?: 'navigate' | 'screenshot' | 'snapshot'
     }
+    initialSettings?: TalosInitialSettings
+    settingsPatchFailure?: TalosSettingsPatchFailure
     chatDelayMs?: number
     promptEnhancement?: {
         delayMs?: number
@@ -1294,7 +1453,7 @@ export type InstallTalosApiMocksOptions = {
     }
 }
 
-export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}) {
+export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}): Promise<TalosSettingsRequestLedger> {
     let messageSequence = 0
     let fileUploaded = false
     let contextSetCreated = false
@@ -1322,6 +1481,8 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let browserCreateCount = 0
     const browserCreateAttemptsByTalosSession = new Map<string, number>()
     const messagesBySession = new Map<string, Record<string, unknown>[]>()
+    const settingsLedger = createTalosSettingsRequestLedger()
+    let settingsPatchFailure = options.settingsPatchFailure ? { ...options.settingsPatchFailure } : null
     let sessions = (options.initialSessions ?? []).map((session) => sessionPayload(
         session.title,
         session.persistence_mode ?? 'persistent',
@@ -1342,6 +1503,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
     let activeSessionPersistenceMode: PersistenceMode = 'persistent'
     let workspaceSettings: {
         id: string
+        revision: number
         default_model_profile_id: string | null
         default_context_set_id: string | null
         preferences: Record<string, unknown>
@@ -1349,6 +1511,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         updated_at: string
     } = {
         id: 'default',
+        revision: 0,
         default_model_profile_id: 'profile-e2e',
         default_context_set_id: null as string | null,
         preferences: {
@@ -1384,6 +1547,26 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         },
         created_at: now,
         updated_at: now,
+    }
+
+    if (options.initialSettings) {
+        workspaceSettings = {
+            ...workspaceSettings,
+            id: options.initialSettings.id ?? workspaceSettings.id,
+            revision: options.initialSettings.revision ?? workspaceSettings.revision,
+            default_model_profile_id: options.initialSettings.default_model_profile_id === undefined
+                ? workspaceSettings.default_model_profile_id
+                : options.initialSettings.default_model_profile_id,
+            default_context_set_id: options.initialSettings.default_context_set_id === undefined
+                ? workspaceSettings.default_context_set_id
+                : options.initialSettings.default_context_set_id,
+            preferences: {
+                ...workspaceSettings.preferences,
+                ...(options.initialSettings.preferences ?? {}),
+            },
+            created_at: options.initialSettings.created_at ?? workspaceSettings.created_at,
+            updated_at: options.initialSettings.updated_at ?? workspaceSettings.updated_at,
+        }
     }
 
     await page.route('**/api/**', async (route) => {
@@ -1627,8 +1810,39 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         if (path === '/api/talos/settings' && method === 'PATCH') {
             const body = request.postDataJSON() as Record<string, unknown>
+            const expectedRevision = body.expected_revision
+            const expectedRevisionMatches = Number.isSafeInteger(expectedRevision)
+                && expectedRevision === workspaceSettings.revision
+            if (!expectedRevisionMatches) {
+                const responseBody = {
+                    message: 'Workspace settings changed in another session. Reload the latest settings and retry your change.',
+                    code: 'TALOS_SETTINGS_REVISION_CONFLICT',
+                    data: workspaceSettings,
+                }
+                settingsLedger.record(request.url(), body, 409, responseBody)
+
+                return json(route, responseBody, 409)
+            }
+
+            if (settingsPatchFailure) {
+                const failure = settingsPatchFailure
+                settingsPatchFailure = null
+                const status = failure.status ?? 422
+                const message = failure.message ?? 'Deterministic E2E settings PATCH rejection.'
+                const responseBody = {
+                    message,
+                    error: failure.code ?? 'E2E_SETTINGS_PATCH_REJECTED',
+                }
+                settingsLedger.record(request.url(), body, status, responseBody)
+
+                return json(route, responseBody, status)
+            }
+
             if ('api_key' in body || 'secret' in body || 'encrypted_secret' in body || hasSecretPreferenceKey(body.preferences)) {
-                return json(route, { error: 'SECRET_FIELDS_REJECTED' }, 422)
+                const responseBody = { error: 'SECRET_FIELDS_REJECTED' }
+                settingsLedger.record(request.url(), body, 422, responseBody)
+
+                return json(route, responseBody, 422)
             }
 
             const incomingPreferences = body.preferences && typeof body.preferences === 'object' && !Array.isArray(body.preferences)
@@ -1643,6 +1857,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
             workspaceSettings = {
                 ...workspaceSettings,
+                revision: workspaceSettings.revision + 1,
                 default_model_profile_id: typeof body.default_model_profile_id === 'string' ? body.default_model_profile_id : workspaceSettings.default_model_profile_id,
                 default_context_set_id: typeof body.default_context_set_id === 'string' || body.default_context_set_id === null
                     ? body.default_context_set_id as string | null
@@ -1660,9 +1875,12 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 updated_at: now,
             }
 
-            return json(route, {
+            const responseBody = {
                 data: workspaceSettings,
-            })
+            }
+            settingsLedger.record(request.url(), body, 200, responseBody)
+
+            return json(route, responseBody)
         }
 
         if (path === '/api/talos/context-sets' && method === 'GET') {
@@ -2397,4 +2615,6 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
         return route.continue()
     })
+
+    return settingsLedger
 }

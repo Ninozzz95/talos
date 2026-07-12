@@ -1,3 +1,7 @@
 @echo off
-C:\Users\ninox\Desktop\AVM\.tools\php\php.exe C:\Users\ninox\Desktop\AVM\core\talos-boot-anim.php
-pause
+setlocal
+set "CORE_DIR=%~dp0"
+set "PHP_BIN=%CORE_DIR%..\.tools\bin\php.cmd"
+if not exist "%PHP_BIN%" set "PHP_BIN=php"
+"%PHP_BIN%" "%CORE_DIR%talos-boot-anim.php"
+exit /b %ERRORLEVEL%

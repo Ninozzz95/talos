@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import concurrently from 'concurrently'
@@ -6,9 +7,12 @@ import concurrently from 'concurrently'
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultWorkspaceRoot = path.resolve(scriptDirectory, '..', '..')
 
-function executable(workspaceRoot, name, platform) {
+function executable(workspaceRoot, name, platform, fileExists) {
     const suffix = platform === 'win32' ? '.cmd' : ''
-    return path.join(workspaceRoot, '.tools', 'bin', `${name}${suffix}`)
+    const localExecutable = path.join(workspaceRoot, '.tools', 'bin', `${name}${suffix}`)
+    if (fileExists(localExecutable)) return localExecutable
+
+    return platform === 'win32' && name === 'npm' ? 'npm.cmd' : name
 }
 
 function quoted(value) {
@@ -20,9 +24,15 @@ export function createDevStackConfig({
     inheritedEnv = process.env,
     platform = process.platform,
     workspaceRoot = defaultWorkspaceRoot,
+    fileExists = existsSync,
 } = {}) {
-    const php = quoted(executable(workspaceRoot, 'php', platform))
-    const npm = quoted(executable(workspaceRoot, 'npm', platform))
+    const php = quoted(executable(workspaceRoot, 'php', platform, fileExists))
+    const npm = quoted(executable(workspaceRoot, 'npm', platform, fileExists))
+    const phpRoot = path.join(workspaceRoot, '.tools', 'php')
+    const localPhpRuntime = path.join(phpRoot, platform === 'win32' ? 'php.exe' : 'bin/php')
+    const caBundle = path.join(phpRoot, 'extras', 'ssl', 'cacert.pem')
+    const hasLocalPhpRuntime = fileExists(localPhpRuntime)
+    const hasLocalCaBundle = hasLocalPhpRuntime && fileExists(caBundle)
     const browserWorker = path.join(workspaceRoot, 'browser-worker')
     const validator = path.join(workspaceRoot, 'validator')
     const sharedEnv = {
@@ -31,6 +41,12 @@ export function createDevStackConfig({
         TALOS_VALIDATOR_HEALTH_URL: 'http://127.0.0.1:3000/health',
         TALOS_BROWSER_WORKER_URL: 'http://127.0.0.1:3100',
         TALOS_BROWSER_WORKER_TOKEN: token,
+        PHP_BIN: hasLocalPhpRuntime ? localPhpRuntime : 'php',
+        ...(hasLocalCaBundle ? {
+            TALOS_PHP_ROOT: phpRoot,
+            CURL_CA_BUNDLE: caBundle,
+            SSL_CERT_FILE: caBundle,
+        } : {}),
     }
 
     return {

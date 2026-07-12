@@ -1,65 +1,141 @@
 <script setup lang="ts">
-import { computed, ref, toRef } from 'vue'
-import { useTalosProceduralCanvas } from '../../../composables/useTalosProceduralCanvas'
-import type { TalosBackgroundEffect, TalosThemeMotionMode } from '../../../lib/talosThemes'
+import { onBeforeUnmount, onMounted, shallowRef, watch, type PropType } from 'vue'
+import TalosMotionStage from '../motion/TalosMotionStage.vue'
+import { createTalosBrowserProductSceneRegistry } from '../../../motion-v6/productRegistry'
+import type { ComplexRendererFrameMetric } from '../../../motion-v6/renderers/complexRenderer'
+import type {
+    TalosMotionRuntimeEffectiveMode,
+    TalosMotionRuntimeReason,
+    TalosMotionRuntimeRequestedMode,
+} from '../../../motion-v6/runtimePolicy'
+import type {
+    TalosMotionRuntimeFaultSignal,
+    TalosMotionRuntimeStableWindowMetric,
+} from '../../../motion-v6/runtimeGovernor'
+import type { SceneId, SceneInput, SceneRegistry } from '../../../motion-v6/sceneRegistry'
+import type { TalosMotionStageFaultEvent } from '../../../motion-v6/stageController'
 
-const props = defineProps<{
-    effect: TalosBackgroundEffect
-    motion: TalosThemeMotionMode
-    backgroundMotionEnabled: boolean
-    simpleAnimation: boolean
-    paletteKey: string
+const RECOVERY_PROBE_MS = 1_000
+
+const emit = defineEmits<{
+    motionFrame: [metric: ComplexRendererFrameMetric]
+    rendererFault: [signal: TalosMotionRuntimeFaultSignal]
+    stableWindow: [metric: TalosMotionRuntimeStableWindowMetric]
 }>()
 
-const canvas = ref<HTMLCanvasElement | null>(null)
-const canvasEnabled = computed(() => props.effect !== 'none')
-const motionDisabled = computed(() => !props.backgroundMotionEnabled)
+const props = defineProps({
+    requestedMode: { type: String as PropType<TalosMotionRuntimeRequestedMode>, required: true },
+    effectiveMode: { type: String as PropType<TalosMotionRuntimeEffectiveMode>, required: true },
+    sceneId: { type: String as PropType<SceneId>, required: true },
+    input: { type: Object as PropType<SceneInput>, required: true },
+    backgroundEnabled: { type: Boolean, required: true },
+    paused: { type: Boolean, required: true },
+    runtimeReason: { type: String as PropType<TalosMotionRuntimeReason>, default: 'requested' },
+    degradationStage: { type: Number, default: 0 },
+    recoveryLocked: { type: Boolean, default: false },
+    registry: Object as PropType<SceneRegistry>,
+})
 
-const { performanceState } = useTalosProceduralCanvas(
-    canvas,
-    toRef(props, 'effect'),
-    toRef(props, 'motion'),
-    toRef(props, 'backgroundMotionEnabled'),
-    toRef(props, 'simpleAnimation'),
-    toRef(props, 'paletteKey'),
+const productRegistry = shallowRef<SceneRegistry | null>(props.registry ?? null)
+const registryFault = shallowRef(false)
+let recoveryProbe: ReturnType<typeof setInterval> | null = null
+let nextRecoveryProbeAtMs = 0
+
+function emitRendererFault(
+    effectiveMode: TalosMotionRuntimeEffectiveMode,
+    reason: TalosMotionRuntimeFaultSignal['reason'],
+): void {
+    if (effectiveMode === 'off') return
+    emit('rendererFault', Object.freeze({ effectiveMode, reason }))
+}
+
+function handleStageFault(event: TalosMotionStageFaultEvent): void {
+    const effectiveMode = event.kind ?? props.effectiveMode
+    emitRendererFault(effectiveMode, 'stage_fault')
+}
+
+function stopRecoveryProbe(): void {
+    if (recoveryProbe === null) return
+    clearInterval(recoveryProbe)
+    recoveryProbe = null
+    nextRecoveryProbeAtMs = 0
+}
+
+function recoveryProbeRequired(): boolean {
+    return props.runtimeReason === 'performance_degraded'
+        && props.degradationStage > 0
+        && !props.recoveryLocked
+        && props.backgroundEnabled
+        && !props.paused
+        && props.effectiveMode !== 'off'
+        && props.effectiveMode !== 'complex'
+        && props.requestedMode !== 'off'
+        && props.requestedMode !== 'static'
+}
+
+function syncRecoveryProbe(): void {
+    stopRecoveryProbe()
+    if (!recoveryProbeRequired()) return
+    nextRecoveryProbeAtMs = performance.now() + RECOVERY_PROBE_MS
+    recoveryProbe = setInterval(() => {
+        const nowMs = performance.now()
+        const eventLoopDelayMs = Math.max(0, nowMs - nextRecoveryProbeAtMs)
+        nextRecoveryProbeAtMs = nowMs + RECOVERY_PROBE_MS
+        emit('stableWindow', Object.freeze({ eventLoopDelayMs }))
+    }, RECOVERY_PROBE_MS)
+}
+
+onMounted(() => {
+    if (!productRegistry.value) {
+        try {
+            productRegistry.value = createTalosBrowserProductSceneRegistry(document, window, performance, {
+                onFrame: (metric) => emit('motionFrame', metric),
+                onFault: () => emitRendererFault('complex', 'renderer_fault'),
+            })
+        } catch {
+            registryFault.value = true
+            emitRendererFault(props.effectiveMode, 'registry_fault')
+        }
+    }
+    syncRecoveryProbe()
+})
+
+watch(
+    () => [props.runtimeReason, props.degradationStage, props.recoveryLocked, props.backgroundEnabled, props.paused, props.effectiveMode, props.requestedMode],
+    syncRecoveryProbe,
 )
+
+onBeforeUnmount(stopRecoveryProbe)
 </script>
 
 <template>
     <div
-        data-testid="talos-background-effect"
-        class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden opacity-80"
-        :class="[`talos-effect-${effect}`, { 'talos-motion-disabled': motionDisabled }]"
-        :data-effect="effect"
-        :data-motion-profile="motion"
-        :data-motion-disabled="motionDisabled ? 'true' : 'false'"
-        :data-performance-mode="performanceState.mode"
-        :data-performance-fps-cap="String(performanceState.fpsCap)"
-        :data-performance-dpr-cap="String(performanceState.dprCap)"
-        :data-performance-raf-active="performanceState.rafActive ? 'true' : 'false'"
-        :data-performance-frame-count="String(performanceState.frameCount)"
-        :data-performance-resize-count="String(performanceState.resizeCount)"
-        :data-performance-visibility-paused="performanceState.visibilityPaused ? 'true' : 'false'"
-        :data-simple-animation="performanceState.simpleAnimation ? 'true' : 'false'"
+        data-testid="talos-motion-background"
+        class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden"
+        :data-scene-id="sceneId"
+        :data-motion-disabled="effectiveMode === 'static' || effectiveMode === 'off' || paused ? 'true' : 'false'"
+        :data-performance-mode="effectiveMode === 'simple' || effectiveMode === 'complex' ? 'motion' : 'static'"
+        :data-performance-fps-cap="String(input.effectiveQuality.fpsCap)"
+        :data-performance-dpr-cap="String(input.effectiveQuality.dprCap)"
+        :data-performance-raf-active="backgroundEnabled && !paused && (effectiveMode === 'simple' || effectiveMode === 'complex') ? 'true' : 'false'"
+        :data-simple-animation="effectiveMode === 'simple' || effectiveMode === 'static' ? 'true' : 'false'"
+        :data-v6-registry-fault="registryFault ? 'true' : 'false'"
+        :data-recovery-locked="recoveryLocked ? 'true' : 'false'"
         aria-hidden="true"
     >
-        <canvas
-            v-if="canvasEnabled"
-            ref="canvas"
-            data-testid="talos-procedural-canvas"
-            class="talos-procedural-canvas absolute inset-0 h-full w-full"
-        ></canvas>
-        <div class="talos-theme-background-scrim absolute inset-0"></div>
-        <div class="talos-dag-grid absolute inset-0"></div>
-        <div class="talos-effect-layer talos-effect-layer-a"></div>
-        <div class="talos-effect-layer talos-effect-layer-b"></div>
-        <div class="talos-trace-stream talos-trace-stream-a"></div>
-        <div class="talos-trace-stream talos-trace-stream-b"></div>
-        <div class="talos-trace-stream talos-trace-stream-c"></div>
-        <div class="talos-dag-line talos-dag-line-a"></div>
-        <div class="talos-dag-line talos-dag-line-b"></div>
-        <div class="talos-dag-node talos-dag-node-a"></div>
-        <div class="talos-dag-node talos-dag-node-b"></div>
-        <div class="talos-dag-node talos-dag-node-c"></div>
+        <TalosMotionStage
+            v-if="backgroundEnabled && productRegistry"
+            class="absolute inset-0 h-full w-full"
+            :registry="productRegistry"
+            :requested-mode="requestedMode"
+            :effective-mode="effectiveMode"
+            :scene-id="sceneId"
+            :input="input"
+            :background-enabled="backgroundEnabled"
+            :paused="paused"
+            :on-fault="handleStageFault"
+        />
+        <div v-else-if="backgroundEnabled" class="absolute inset-0 bg-[var(--talos-background)]" data-talos-motion-solid-fallback />
+        <div class="talos-theme-background-scrim absolute inset-0" />
     </div>
 </template>

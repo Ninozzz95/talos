@@ -246,6 +246,7 @@ export function useTalosChat() {
             const payload: Record<string, unknown> = {
                 message: options.prompt,
                 session_id: options.sessionId,
+                user_message_id: userMessage.id,
             }
 
             if (options.modelProfileId) {

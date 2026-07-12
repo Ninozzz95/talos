@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+@import './talos-motion-v6-simple.css';
+@import './talos-motion-v6-complex.css';
+@import './talos-interaction-motion-v6.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -80,15 +83,8 @@ button {
     --talos-line-b: rgba(201, 139, 50, 0.42);
     --talos-node: rgba(106, 212, 212, 0.62);
     --talos-window-bg: var(--talos-card);
-    --talos-trace-duration-a: 5.8s;
-    --talos-trace-duration-b: 7.4s;
-    --talos-trace-duration-c: 6.6s;
-    --talos-grid-duration: 12s;
-    --talos-node-duration-a: 5.8s;
-    --talos-node-duration-b: 6.4s;
     --talos-motion-open-duration: 160ms;
     --talos-motion-close-duration: 120ms;
-    --talos-window-minimize-duration: 420ms;
     --talos-motion-surface-duration: 180ms;
     --talos-motion-feedback-duration: 700ms;
     --talos-motion-stagger: 40ms;
@@ -806,7 +802,7 @@ button {
 }
 
 .talos-background-procedural {
-    opacity: var(--talos-effect-opacity, 0.72);
+    opacity: 1;
 }
 
 .talos-procedural-canvas {
@@ -814,12 +810,17 @@ button {
     filter: saturate(1.25) contrast(1.12);
 }
 
-.talos-dark .talos-procedural-canvas,
-.talos-dark .talos-effect-layer,
-.talos-dark .talos-trace-stream,
-.talos-dark .talos-dag-line,
-.talos-dark .talos-dag-node {
+.talos-dark .talos-procedural-canvas {
     mix-blend-mode: screen;
+}
+
+.talos-light .talos-procedural-canvas {
+    filter: saturate(1.35) contrast(1.16) brightness(0.94);
+    mix-blend-mode: multiply;
+}
+
+.talos-light .talos-v6-simple-layer {
+    filter: saturate(1.2) contrast(1.08);
 }
 
 .talos-theme-background-scrim {
@@ -827,199 +828,6 @@ button {
     background:
         radial-gradient(circle at 28% 16%, var(--talos-workspace-glow-a), transparent 28rem),
         linear-gradient(180deg, color-mix(in srgb, var(--talos-background) 18%, transparent), var(--talos-background) 96%);
-}
-
-.talos-dag-grid {
-    z-index: 2;
-    background-image:
-        linear-gradient(var(--talos-grid-color) 1px, transparent 1px),
-        linear-gradient(90deg, var(--talos-grid-color) 1px, transparent 1px);
-    background-size: 36px 36px;
-    mask-image: radial-gradient(circle at center, black 0%, transparent 75%);
-}
-
-.talos-effect-layer,
-.talos-trace-stream {
-    position: absolute;
-    z-index: 3;
-    pointer-events: none;
-}
-
-.talos-effect-layer {
-    inset: auto;
-    width: 42rem;
-    height: 42rem;
-    border-radius: 999px;
-    opacity: 0;
-    filter: blur(1px) saturate(1.16);
-}
-
-.talos-effect-layer-a {
-    left: -10rem;
-    top: 18%;
-    background: radial-gradient(circle, var(--talos-line-a), transparent 64%);
-}
-
-.talos-effect-layer-b {
-    bottom: -14rem;
-    right: 6%;
-    background: radial-gradient(circle, var(--talos-line-b), transparent 66%);
-}
-
-.talos-trace-stream {
-    top: -12%;
-    bottom: -12%;
-    width: 2px;
-    opacity: 0;
-    background: linear-gradient(180deg, transparent, var(--talos-accent), var(--talos-node), var(--talos-accent), transparent);
-    box-shadow:
-        0 0 18px var(--talos-accent),
-        0 0 34px var(--talos-line-a),
-        0 0 52px var(--talos-line-b);
-}
-
-.talos-trace-stream-a {
-    left: 22%;
-}
-
-.talos-trace-stream-b {
-    left: 52%;
-}
-
-.talos-trace-stream-c {
-    left: 78%;
-}
-
-.talos-effect-none .talos-dag-grid,
-.talos-effect-none .talos-dag-line,
-.talos-effect-none .talos-dag-node,
-.talos-effect-none .talos-effect-layer,
-.talos-effect-none .talos-trace-stream {
-    opacity: 0;
-}
-
-.talos-motion-disabled .talos-dag-grid,
-.talos-motion-disabled .talos-dag-line,
-.talos-motion-disabled .talos-dag-node,
-.talos-motion-disabled .talos-effect-layer,
-.talos-motion-disabled .talos-trace-stream {
-    animation: none !important;
-}
-
-.talos-motion-disabled .talos-trace-stream,
-.talos-motion-disabled .talos-dag-node {
-    transform: none !important;
-}
-
-.talos-effect-kahn-grid .talos-dag-grid {
-    opacity: 0.9;
-    background-size: 48px 30px;
-    mask-image: linear-gradient(90deg, transparent 2%, black 18%, black 82%, transparent 98%);
-}
-
-.talos-effect-kahn-grid .talos-dag-line {
-    opacity: 0.62;
-}
-
-.talos-effect-kahn-grid .talos-dag-node {
-    opacity: 0.68;
-}
-
-.talos-effect-dag-flow .talos-dag-grid {
-    opacity: 0.68;
-}
-
-.talos-effect-dag-flow .talos-dag-line {
-    height: 2px;
-    opacity: 0.86;
-}
-
-.talos-effect-dag-flow .talos-dag-node {
-    width: 9px;
-    height: 9px;
-    opacity: 0.92;
-}
-
-.talos-effect-dag-flow .talos-effect-layer {
-    opacity: 0.2;
-}
-
-.talos-effect-trace-rain .talos-dag-grid {
-    opacity: 0.46;
-}
-
-.talos-effect-trace-rain .talos-trace-stream {
-    width: 4px;
-    opacity: 0.9;
-}
-
-.talos-effect-trace-rain .talos-dag-line,
-.talos-effect-trace-rain .talos-dag-node {
-    opacity: 0.68;
-}
-
-.talos-effect-signal-mesh .talos-dag-grid {
-    opacity: 0.48;
-}
-
-.talos-effect-signal-mesh .talos-effect-layer {
-    opacity: 0.34;
-}
-
-.talos-effect-signal-mesh .talos-dag-line {
-    opacity: 0.84;
-}
-
-.talos-effect-signal-mesh .talos-dag-node {
-    opacity: 0.86;
-}
-
-.talos-dag-line {
-    position: absolute;
-    z-index: 4;
-    height: 1px;
-    transform-origin: left center;
-    background: linear-gradient(90deg, transparent, var(--talos-line-a), var(--talos-line-b), transparent);
-}
-
-.talos-dag-line-a {
-    left: 18%;
-    top: 28%;
-    width: 52%;
-    transform: rotate(15deg);
-}
-
-.talos-dag-line-b {
-    left: 30%;
-    top: 62%;
-    width: 46%;
-    transform: rotate(-18deg);
-}
-
-.talos-dag-node {
-    position: absolute;
-    z-index: 5;
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    border: 1px solid var(--talos-node);
-    background: rgba(8, 11, 17, 0.9);
-    box-shadow: 0 0 18px var(--talos-line-a);
-}
-
-.talos-dag-node-a {
-    left: 18%;
-    top: 27.5%;
-}
-
-.talos-dag-node-b {
-    left: 56%;
-    top: 38%;
-}
-
-.talos-dag-node-c {
-    left: 75%;
-    top: 49%;
 }
 
 .talos-tool-window {
@@ -1053,6 +861,10 @@ button {
         height: var(--talos-window-height, 520px);
         max-height: none;
         transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0);
+    }
+
+    .talos-floating-window > .talos-tool-window {
+        max-height: none;
     }
 }
 
@@ -1190,29 +1002,14 @@ button {
     box-shadow: inset 2px 0 0 color-mix(in srgb, var(--talos-accent) calc(72% * var(--talos-motion-intensity)), transparent);
 }
 
-.talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="opening"] {
-    animation: talos-window-open-from-sidebar var(--talos-motion-duration-window-open) var(--talos-motion-ease) both;
+.talos-floating-window [data-window-motion-state]:not([data-window-motion-state="idle"]),
+[data-window-id][data-window-motion-state]:not([data-window-motion-state="idle"]) {
+    will-change: transform, opacity;
 }
 
-.talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="restoring"] {
-    animation: talos-window-restore-from-dock var(--talos-motion-duration-window-restore) var(--talos-motion-ease) both;
-}
-
-.talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="minimizing"] {
-    animation: talos-window-minimize-to-dock var(--talos-motion-duration-window-minimize) var(--talos-motion-ease) both;
+[data-window-id][data-window-motion-state="closing"],
+[data-window-id][data-window-motion-state="minimizing"] {
     pointer-events: none;
-}
-
-.talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window[data-window-transition="expanding"] {
-    animation: talos-window-expand var(--talos-motion-duration-window-open) var(--talos-motion-ease) both;
-}
-
-.talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window-fullscreen[data-window-transition="expanding"] {
-    animation-name: talos-window-expand-fullscreen;
-}
-
-.talos-shell:not(.talos-ui-motion-disabled) .talos-floating-window-fullscreen[data-window-transition="minimizing"] {
-    animation-name: talos-window-minimize-to-dock-fullscreen;
 }
 
 .talos-shell:not(.talos-ui-motion-disabled) .talos-composer-popover {
@@ -1340,12 +1137,7 @@ button {
 .talos-motion-paused .talos-motion-control::before,
 .talos-motion-paused .talos-motion-feedback,
 .talos-motion-paused .talos-motion-loader,
-.talos-motion-paused .talos-procedural-canvas,
-.talos-motion-paused .talos-dag-grid,
-.talos-motion-paused .talos-dag-line,
-.talos-motion-paused .talos-dag-node,
-.talos-motion-paused .talos-effect-layer,
-.talos-motion-paused .talos-trace-stream {
+.talos-motion-paused .talos-procedural-canvas {
     animation-play-state: paused !important;
     transition: none !important;
 }
@@ -1377,12 +1169,7 @@ button {
     .talos-shell .talos-left-rail,
     .talos-shell .talos-tool-window,
     .talos-shell .talos-floating-window,
-    .talos-shell .talos-procedural-canvas,
-    .talos-shell .talos-dag-grid,
-    .talos-shell .talos-dag-line,
-    .talos-shell .talos-dag-node,
-    .talos-shell .talos-effect-layer,
-    .talos-shell .talos-trace-stream {
+    .talos-shell .talos-procedural-canvas {
         animation: none !important;
         transition: none !important;
     }
@@ -1407,12 +1194,7 @@ button {
     .talos-shell .talos-motion-loader,
     .talos-shell .talos-tool-window,
     .talos-shell .talos-floating-window,
-    .talos-shell .talos-procedural-canvas,
-    .talos-shell .talos-dag-grid,
-    .talos-shell .talos-dag-line,
-    .talos-shell .talos-dag-node,
-    .talos-shell .talos-effect-layer,
-    .talos-shell .talos-trace-stream {
+    .talos-shell .talos-procedural-canvas {
         animation-play-state: paused !important;
         transition: none !important;
     }
@@ -1501,67 +1283,6 @@ button {
     top: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .talos-dag-line {
-        animation: talos-dag-pulse 6s ease-in-out infinite;
-    }
-
-    .talos-theme-terminal .talos-dag-grid,
-    .talos-theme-signal .talos-dag-grid {
-        animation: talos-grid-drift var(--talos-grid-duration) linear infinite;
-    }
-
-    .talos-theme-aurora .talos-dag-line,
-    .talos-theme-violet .talos-dag-line {
-        animation: talos-dag-ribbon 8s ease-in-out infinite;
-    }
-
-    .talos-theme-ember .talos-dag-node,
-    .talos-theme-noir .talos-dag-node {
-        animation: talos-node-alert 3.8s ease-in-out infinite;
-    }
-
-    .talos-effect-trace-rain .talos-trace-stream-a {
-        animation: talos-trace-rain var(--talos-trace-duration-a) linear infinite;
-    }
-
-    .talos-effect-trace-rain .talos-trace-stream-b {
-        animation: talos-trace-rain var(--talos-trace-duration-b) linear infinite reverse;
-    }
-
-    .talos-effect-trace-rain .talos-trace-stream-c {
-        animation: talos-trace-rain var(--talos-trace-duration-c) linear infinite;
-    }
-
-    .talos-effect-signal-mesh .talos-effect-layer-a {
-        animation: talos-signal-mesh 9s ease-in-out infinite;
-    }
-
-    .talos-effect-signal-mesh .talos-effect-layer-b {
-        animation: talos-signal-mesh 11s ease-in-out infinite reverse;
-    }
-
-    .talos-effect-dag-flow .talos-dag-node-a {
-        animation: talos-node-route-a var(--talos-node-duration-a) ease-in-out infinite;
-    }
-
-    .talos-effect-dag-flow .talos-dag-node-b {
-        animation: talos-node-route-b var(--talos-node-duration-b) ease-in-out infinite;
-    }
-
-    .talos-effect-dag-flow .talos-effect-layer-a {
-        animation: talos-signal-mesh 10s ease-in-out infinite;
-    }
-
-    .talos-effect-dag-flow .talos-effect-layer-b {
-        animation: talos-signal-mesh 12s ease-in-out infinite reverse;
-    }
-
-    .talos-effect-kahn-grid .talos-dag-grid {
-        animation: talos-grid-drift var(--talos-grid-duration) linear infinite;
-    }
-}
-
 @keyframes talos-action-fade-in {
     from {
         opacity: 0;
@@ -1610,7 +1331,7 @@ button {
 
 @keyframes talos-composer-popover-in {
     0% {
-        opacity: 0;
+        opacity: 1;
         transform: translateY(10px) scale(0.982);
     }
 
@@ -1621,102 +1342,6 @@ button {
     100% {
         opacity: 1;
         transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes talos-window-activate {
-    from {
-        opacity: 0.76;
-        transform: scale(0.995);
-    }
-
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-@keyframes talos-window-open-from-sidebar {
-    0% {
-        opacity: 0;
-        transform: translate3d(
-            calc(var(--talos-window-x, 24px) + var(--talos-window-launch-dx, -180px)),
-            calc(var(--talos-window-y, 24px) + var(--talos-window-launch-dy, 0px)),
-            0
-        ) scale(0.985);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
-    }
-}
-
-@keyframes talos-window-restore-from-dock {
-    0% {
-        opacity: 0;
-        transform: translate3d(
-            calc(var(--talos-window-x, 24px) + var(--talos-window-launch-dx, -120px)),
-            calc(var(--talos-window-y, 24px) + var(--talos-window-launch-dy, 420px)),
-            0
-        ) scale(0.985);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
-    }
-}
-
-@keyframes talos-window-minimize-to-dock {
-    0% {
-        opacity: 1;
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
-    }
-
-    98% {
-        opacity: 0.2;
-    }
-
-    100% {
-        opacity: 0;
-        transform: translate3d(
-            calc(var(--talos-window-x, 24px) + var(--talos-window-launch-dx, -160px)),
-            calc(var(--talos-window-y, 24px) + var(--talos-window-launch-dy, 420px)),
-            0
-        ) scale(0.985);
-    }
-}
-
-@keyframes talos-window-expand {
-    0% {
-        opacity: 0.88;
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(0.985);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translate3d(var(--talos-window-x, 24px), var(--talos-window-y, 24px), 0) scale(1);
-    }
-}
-
-@keyframes talos-window-expand-fullscreen {
-    0% {
-        opacity: 0.88;
-    }
-
-    100% {
-        opacity: 1;
-    }
-}
-
-@keyframes talos-window-minimize-to-dock-fullscreen {
-    0% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0;
     }
 }
 
@@ -1773,101 +1398,5 @@ button {
     50% {
         opacity: 0.88;
         transform: scale(0.995);
-    }
-}
-
-@keyframes talos-dag-pulse {
-    0%,
-    100% {
-        opacity: 0.28;
-    }
-
-    50% {
-        opacity: 0.72;
-    }
-}
-
-@keyframes talos-grid-drift {
-    from {
-        background-position: 0 0;
-    }
-
-    to {
-        background-position: 36px 72px;
-    }
-}
-
-@keyframes talos-dag-ribbon {
-    0%,
-    100% {
-        opacity: 0.22;
-        filter: saturate(0.9);
-    }
-
-    50% {
-        opacity: 0.82;
-        filter: saturate(1.35);
-    }
-}
-
-@keyframes talos-node-alert {
-    0%,
-    100% {
-        transform: scale(1);
-        opacity: 0.72;
-    }
-
-    50% {
-        transform: scale(1.35);
-        opacity: 1;
-    }
-}
-
-@keyframes talos-trace-rain {
-    from {
-        transform: translateY(-18%);
-    }
-
-    to {
-        transform: translateY(18%);
-    }
-}
-
-@keyframes talos-signal-mesh {
-    0%,
-    100% {
-        transform: scale(0.92) translate3d(0, 0, 0);
-        opacity: 0.16;
-    }
-
-    50% {
-        transform: scale(1.08) translate3d(4%, -3%, 0);
-        opacity: 0.32;
-    }
-}
-
-@keyframes talos-node-route-a {
-    0%,
-    100% {
-        transform: translate3d(0, 0, 0) scale(1);
-        box-shadow: 0 0 16px var(--talos-line-a);
-    }
-
-    45% {
-        transform: translate3d(12vw, 8vh, 0) scale(1.22);
-        box-shadow: 0 0 28px var(--talos-line-b);
-    }
-}
-
-@keyframes talos-node-route-b {
-    0%,
-    100% {
-        transform: translate3d(0, 0, 0) scale(1);
-        box-shadow: 0 0 14px var(--talos-line-b);
-    }
-
-    55% {
-        transform: translate3d(9vw, -6vh, 0) scale(1.18);
-        box-shadow: 0 0 30px var(--talos-line-a);
     }
 }

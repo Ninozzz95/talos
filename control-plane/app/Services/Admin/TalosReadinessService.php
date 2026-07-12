@@ -22,6 +22,7 @@ final class TalosReadinessService
             'storage' => $this->storageCheck(),
             'queue' => $this->queueCheck(),
             'validator' => $this->validatorCheck(),
+            'browser_worker' => $this->browserWorkerCheck(),
         ];
 
         $ready = ! collect($checks)->contains(
@@ -143,6 +144,44 @@ final class TalosReadinessService
     /**
      * @return array{status: string, detail: string}
      */
+    private function browserWorkerCheck(): array
+    {
+        $url = config('services.talos.browser.worker_url');
+        $token = config('services.talos.browser.worker_token');
+
+        if (! is_string($url) || trim($url) === '') {
+            return $this->check('failed', 'TALOS_BROWSER_WORKER_URL is not configured.');
+        }
+
+        if (! is_string($token) || trim($token) === '') {
+            return $this->check('failed', 'TALOS_BROWSER_WORKER_TOKEN is not configured.');
+        }
+
+        $readinessUrl = rtrim($url, '/').'/ready';
+
+        try {
+            $response = Http::timeout(3)
+                ->acceptJson()
+                ->withHeader('X-Talos-Worker-Token', $token)
+                ->get($readinessUrl);
+        } catch (\Throwable $exception) {
+            return $this->check('failed', 'browser worker readiness request failed: '.$exception->getMessage());
+        }
+
+        if (! $response->successful()) {
+            return $this->check('failed', 'browser worker readiness returned HTTP '.$response->status().'.');
+        }
+
+        if ($response->json('data.status') !== 'ready' || $response->json('data.runtime') !== 'chromium') {
+            return $this->check('failed', 'browser worker readiness returned an invalid payload.');
+        }
+
+        return $this->check('healthy', $readinessUrl);
+    }
+
+    /**
+     * @return array{status: string, detail: string}
+     */
     private function check(string $status, string $detail): array
     {
         return [
@@ -151,4 +190,3 @@ final class TalosReadinessService
         ];
     }
 }
-

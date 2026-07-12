@@ -5,16 +5,21 @@ services:
       dockerfile: Dockerfile.talos
     ports:
       - "${APP_BIND:-127.0.0.1}:${APP_PORT:-8088}:8088"
+    env_file:
+      - .env
     volumes:
-      - ./.env:/app/control-plane/.env
-      - talos-database:/app/control-plane/database
       - talos-storage:/app/control-plane/storage
     environment:
       - APP_URL=${APP_URL:-http://localhost:8088}
+      - DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
       - AVM_VALIDATOR_URL=http://validator:3000
       - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
+      - TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
+      - TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
     depends_on:
       validator:
+        condition: service_healthy
+      browser-worker:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1:8088/readyz') === false ? 1 : 0);\""]
@@ -29,18 +34,23 @@ services:
       context: .
       dockerfile: Dockerfile.talos
     command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
+    env_file:
+      - .env
     volumes:
-      - ./.env:/app/control-plane/.env
-      - talos-database:/app/control-plane/database
       - talos-storage:/app/control-plane/storage
     environment:
       - APP_URL=${APP_URL:-http://localhost:8088}
+      - DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
       - AVM_VALIDATOR_URL=http://validator:3000
       - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
+      - TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
+      - TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
     depends_on:
       talos:
         condition: service_healthy
       validator:
+        condition: service_healthy
+      browser-worker:
         condition: service_healthy
     restart: unless-stopped
 
@@ -64,6 +74,24 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  browser-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.browser-worker
+    expose:
+      - "3100"
+    shm_size: "1gb"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3100
+      TALOS_BROWSER_WORKER_TOKEN: ${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/ready',{headers:{'x-talos-worker-token':process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
-  talos-database:
   talos-storage:

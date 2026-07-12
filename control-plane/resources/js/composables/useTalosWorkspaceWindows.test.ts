@@ -28,7 +28,7 @@ describe('useTalosWorkspaceWindows', () => {
         }))
         expect(windows).toBeTruthy()
         expect(windows?.state.value.breakpoint).toBe('desktop')
-        expect(windows?.state.value.area).toEqual({ left: 16, top: 24, right: 1172, bottom: 644 })
+        expect(windows?.state.value.area).toEqual({ left: 0, top: 0, right: 1204, bottom: 616 })
 
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 })
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 812 })
@@ -52,14 +52,14 @@ describe('useTalosWorkspaceWindows', () => {
             composerHeight,
         }))
 
-        expect(windows?.state.value.area.bottom).toBe(644)
+        expect(windows?.state.value.area.bottom).toBe(616)
         composerHeight.value = 120
         await nextTick()
-        expect(windows?.state.value.area.bottom).toBe(604)
+        expect(windows?.state.value.area.bottom).toBe(576)
 
         windows?.openWindow('calendar')
         const calendar = windows?.state.value.windows.calendar
-        expect((calendar?.bounds.y ?? 0) + (calendar?.bounds.height ?? 0)).toBeLessThanOrEqual(604)
+        expect((calendar?.bounds.y ?? 0) + (calendar?.bounds.height ?? 0)).toBeLessThanOrEqual(576)
         scope.stop()
     })
 

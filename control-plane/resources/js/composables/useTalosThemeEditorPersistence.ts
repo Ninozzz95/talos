@@ -3,14 +3,13 @@ import {
     sanitizeTalosChatLayout,
 } from '../lib/talosChatLayout'
 import {
-    resolveTalosMotionMode,
     resolveTalosThemeMode,
     sanitizeTalosThemeAreaTokens,
+    sanitizeTalosThemeCustomization,
     type TalosThemeAreaTokens,
     type TalosThemeCustomization,
     type TalosThemeId,
     type TalosThemeMode,
-    type TalosThemeMotionMode,
 } from '../lib/talosThemes'
 import {
     resetTalosCustomizationPreferences,
@@ -100,7 +99,6 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
 
         try {
             await persistPreferences({
-                ...preferencesRecord(),
                 theme,
                 theme_mode: options.editor.themeMode.value,
                 workspace_default_theme: theme,
@@ -122,11 +120,13 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
         const themeCustomization = options.editor.sanitizedForm()
         if (rejectUnsafeThemeState(themeCustomization, options.editor.activeTheme.value)) return
 
+        const savedCustomization = sanitizeTalosThemeCustomization(preferencesRecord().theme_customization)
+        const nextCustomization: TalosThemeCustomization = { ...themeCustomization }
+        if (savedCustomization.effect !== undefined) nextCustomization.effect = savedCustomization.effect
+        if (savedCustomization.effect_intensity !== undefined) nextCustomization.effect_intensity = savedCustomization.effect_intensity
+
         await persistPreferences({
-            ...preferencesRecord(),
-            theme_customization: themeCustomization,
-            ui_animation_profile: options.editor.uiAnimationProfile.value,
-            ui_animation_customization: options.editor.sanitizedUiAnimationForm(),
+            theme_customization: nextCustomization,
             chat_layout: sanitizeTalosChatLayout(options.editor.chatLayout.value),
             active_custom_theme_id: preferencesRecord().active_custom_theme_id ?? null,
         }, 'Theme customization saved through /api/talos/settings.', { syncForm: true })
@@ -141,14 +141,26 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
     async function resetToPreset() {
         if (!canWriteTheme()) return
         localThemeError.value = ''
-        await persistPreferences(resetTalosThemePreferences(preferencesRecord()), 'Theme customization reset.', { syncForm: true })
+        const reset = resetTalosThemePreferences(preferencesRecord())
+        await persistPreferences({
+            theme_customization: reset.theme_customization,
+            theme_area_tokens: reset.theme_area_tokens,
+            theme_mode: reset.theme_mode,
+            theme_motion_v6: reset.theme_motion_v6,
+            active_custom_theme_id: reset.active_custom_theme_id,
+            chat_layout: reset.chat_layout,
+        }, 'Theme customization reset.', { syncForm: true })
         options.emitThemeDraftChanged(null)
     }
 
     async function resetCustomization() {
         if (!canWriteTheme()) return
         localThemeError.value = ''
-        await persistPreferences(resetTalosCustomizationPreferences(preferencesRecord()), 'Theme customization reset.', { syncForm: true })
+        const reset = resetTalosCustomizationPreferences(preferencesRecord())
+        await persistPreferences({
+            theme_customization: reset.theme_customization,
+            active_custom_theme_id: reset.active_custom_theme_id,
+        }, 'Theme customization reset.', { syncForm: true })
         options.emitThemeDraftChanged(null)
     }
 
@@ -170,70 +182,10 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
         const mode = resolveTalosThemeMode(options.editor.themeMode.value)
         options.editor.setThemeMode(mode)
         try {
-            await persistPreferences({ ...preferencesRecord(), theme_mode: mode }, 'Theme color mode saved.')
+            await persistPreferences({ theme_mode: mode }, 'Theme color mode saved.')
         } catch {
             await nextTick()
             options.editor.setThemeMode(previous)
-            bumpThemeControlRevision()
-        }
-    }
-
-    function setMotionMode(value: TalosThemeMotionMode) {
-        options.editor.setMotionMode(value)
-    }
-
-    async function persistMotionMode() {
-        if (!canWriteTheme()) return
-        const previous = resolveTalosMotionMode(preferencesRecord().theme_motion)
-        const mode = resolveTalosMotionMode(options.editor.motionMode.value)
-        options.editor.setMotionMode(mode)
-        try {
-            await persistPreferences({ ...preferencesRecord(), theme_motion: mode }, 'Theme motion saved.')
-        } catch {
-            await nextTick()
-            options.editor.setMotionMode(previous)
-            bumpThemeControlRevision()
-        }
-    }
-
-    async function persistMotionDisabled() {
-        if (!canWriteTheme()) {
-            options.editor.motionDisabled.value = preferencesRecord().theme_motion_disabled === true
-            return
-        }
-        const previous = preferencesRecord().theme_motion_disabled === true
-        try {
-            await persistPreferences({ ...preferencesRecord(), theme_motion_disabled: options.editor.motionDisabled.value }, options.editor.motionDisabled.value ? 'Theme motion disabled.' : 'Theme motion enabled.')
-        } catch {
-            options.editor.motionDisabled.value = previous
-            bumpThemeControlRevision()
-        }
-    }
-
-    async function persistSimpleAnimation() {
-        if (!canWriteTheme()) {
-            options.editor.simpleAnimation.value = preferencesRecord().theme_simple_animation !== false
-            return
-        }
-        const previous = preferencesRecord().theme_simple_animation !== false
-        try {
-            await persistPreferences({ ...preferencesRecord(), theme_simple_animation: options.editor.simpleAnimation.value }, options.editor.simpleAnimation.value ? 'Simple animation enabled.' : 'Rich animation enabled.')
-        } catch {
-            options.editor.simpleAnimation.value = previous
-            bumpThemeControlRevision()
-        }
-    }
-
-    async function persistBackgroundDisabled() {
-        if (!canWriteTheme()) {
-            options.editor.backgroundDisabled.value = preferencesRecord().theme_background_disabled === true
-            return
-        }
-        const previous = preferencesRecord().theme_background_disabled === true
-        try {
-            await persistPreferences({ ...preferencesRecord(), theme_background_disabled: options.editor.backgroundDisabled.value }, options.editor.backgroundDisabled.value ? 'Procedural background disabled.' : 'Procedural background enabled.')
-        } catch {
-            options.editor.backgroundDisabled.value = previous
             bumpThemeControlRevision()
         }
     }
@@ -274,7 +226,7 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
             return
         }
 
-        await persistPreferences({ ...preferencesRecord(), theme_area_tokens: nextTokens }, 'Area tokens saved.')
+        await persistPreferences({ theme_area_tokens: nextTokens }, 'Area tokens saved.')
         options.editor.areaTokens.value = nextTokens
         options.editor.syncAreaForm()
     }
@@ -283,7 +235,7 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
         if (!canWriteTheme()) return
         const nextTokens = { ...sanitizeTalosThemeAreaTokens(options.editor.areaTokens.value) }
         delete nextTokens[options.editor.selectedArea.value]
-        await persistPreferences({ ...preferencesRecord(), theme_area_tokens: nextTokens }, 'Area tokens reset.')
+        await persistPreferences({ theme_area_tokens: nextTokens }, 'Area tokens reset.')
         options.editor.areaTokens.value = nextTokens
         options.editor.syncAreaForm()
     }
@@ -305,11 +257,6 @@ export function useTalosThemeEditorPersistence(options: TalosThemeEditorPersiste
         setThemeMode,
         updateAndPersistThemeMode,
         persistThemeMode,
-        setMotionMode,
-        persistMotionMode,
-        persistMotionDisabled,
-        persistSimpleAnimation,
-        persistBackgroundDisabled,
         saveAreaTokens,
         resetAreaTokens,
     }

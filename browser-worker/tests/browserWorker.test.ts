@@ -43,6 +43,21 @@ describe("TALOS browser worker", () => {
     });
   });
 
+  it("requires authentication and a launchable Chromium runtime for readiness", async () => {
+    const unauthenticated = await app.inject({ method: "GET", url: "/ready" });
+    const authenticated = await app.inject({
+      method: "GET",
+      url: "/ready",
+      headers: { "x-talos-worker-token": "test-worker-token" },
+    });
+
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(authenticated.statusCode).toBe(200);
+    expect(authenticated.json()).toEqual({
+      data: { status: "ready", service: "talos-browser-worker", runtime: "chromium" },
+    });
+  });
+
   it("rejects an invalid session payload", async () => {
     const response = await app.inject({
       method: "POST",
@@ -322,6 +337,27 @@ describe("BrowserSessionManager resource lifecycle", () => {
     await tick?.();
     expect(fake.contextClosed()).toBe(true);
     await manager.close();
+  });
+
+  it("fails readiness when Chromium cannot launch", async () => {
+    const manager = new BrowserSessionManager({
+      browserFactory: async () => {
+        throw new Error("runtime missing");
+      },
+    });
+    const app = buildServer({ sessions: manager, internalToken: "test-worker-token" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/ready",
+      headers: { "x-talos-worker-token": "test-worker-token" },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      data: { status: "degraded", service: "talos-browser-worker", runtime: "chromium" },
+    });
+    await app.close();
   });
 });
 

@@ -22,6 +22,7 @@ import type { TalosWindowLaunchOrigin } from '../../../composables/useTalosWindo
 import type { TalosWindowModuleContext } from '../../../lib/talosWindowModuleContext'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 import type { TalosThemeCustomization, TalosThemeId } from '../../../lib/talosThemes'
+import type { TalosMotionV6Preferences } from '../../../motion-v6/contracts'
 
 const props = defineProps<{
     breakpoint: 'mobile' | 'tablet' | 'desktop'
@@ -51,6 +52,8 @@ const props = defineProps<{
     logoutUrl: string
     csrfToken: string
     theme: TalosThemeId
+    motionPreferences: TalosMotionV6Preferences
+    reducedMotion: boolean
     uiMotionDisabled: boolean
     requestedWindowSections?: Partial<Record<TalosWindowId, string>>
     requestedWindowSectionRevision?: number
@@ -96,18 +99,24 @@ const {
     pendingMinimizeWindowIds,
     transitionStateFor,
     transitionOriginFor,
-    handleWindowAnimationEnd,
+    requestWindowClose,
     requestWindowMinimize,
     requestWindowFullscreen,
     restoreMinimizedWindow,
 } = useTalosWindowMotion({
     visibleWindowIds: toRef(props, 'visibleWindowIds'),
     minimizedWindowIds: toRef(props, 'minimizedWindowIds'),
+    fullscreenWindowIds: toRef(props, 'fullscreenWindowIds'),
     windowLaunchOrigins: toRef(props, 'windowLaunchOrigins'),
     windowLaunchRevisions: toRef(props, 'windowLaunchRevisions'),
     currentRailWidth: () => props.currentRailWidth,
+    breakpoint: toRef(props, 'breakpoint'),
+    theme: toRef(props, 'theme'),
+    motionPreferences: toRef(props, 'motionPreferences'),
+    reducedMotion: toRef(props, 'reducedMotion'),
     uiMotionDisabled: toRef(props, 'uiMotionDisabled'),
     requestModule: requestWindowModule,
+    closeWindow: (id) => emit('closeWindow', id),
     minimizeWindow: (id) => emit('minimizeWindow', id),
     fullscreenWindow: (id) => emit('fullscreenWindow', id),
     restoreWindow: (id) => emit('restoreWindow', id),
@@ -178,7 +187,7 @@ function emitWindow(action: 'closeWindow' | 'minimizeWindow' | 'dockWindow' | 'f
     }
 
     if (action === 'closeWindow') {
-        emit('closeWindow', id)
+        requestWindowClose(id)
     } else if (action === 'minimizeWindow') {
         requestWindowMinimize(id)
     } else if (action === 'dockWindow') {
@@ -286,6 +295,8 @@ function resetFloatingWindowSize(id: string) {
         :key="mobileWindowId"
         :title="TALOS_WINDOW_REGISTRY[mobileWindowId].title"
         :description="TALOS_WINDOW_REGISTRY[mobileWindowId].description"
+        :data-window-transition="transitionStateFor(mobileWindowId)"
+        :data-window-motion-state="transitionStateFor(mobileWindowId)"
         @close="emitWindow('closeWindow', $event)"
     >
         <TalosWindowSectionTabs
@@ -310,62 +321,65 @@ function resetFloatingWindowSize(id: string) {
     </TalosMobileToolSheet>
 
     <div v-if="breakpoint === 'desktop'" ref="motionRoot" data-testid="talos-desktop-window-stage" class="pointer-events-none absolute inset-x-0 bottom-[calc(var(--talos-composer-height,168px)+3rem)] top-14 z-50 hidden overflow-hidden xl:block">
-        <TalosToolWindow
+        <div
             v-for="(id, index) in floatingWindowIds"
-            :id="id"
             :key="id"
-            :title="TALOS_WINDOW_REGISTRY[id].title"
-            :description="TALOS_WINDOW_REGISTRY[id].description"
-            :active="activeWindowId === id"
-            :width="floatingWindowSize(id).width"
-            :height="floatingWindowSize(id).height"
-            :interacting="interactingWindowId === id"
-            :fullscreen="fullscreenWindowIds.includes(id)"
             class="talos-floating-window pointer-events-auto"
-            :class="[
-                fullscreenWindowIds.includes(id) ? 'talos-floating-window-fullscreen' : '',
-                `talos-window-transition-${transitionStateFor(id)}`,
-            ]"
+            :class="fullscreenWindowIds.includes(id) ? 'talos-floating-window-fullscreen' : ''"
             :style="floatingWindowStyle(id, index)"
-            :data-window-transition="transitionStateFor(id)"
+            :data-window-frame-id="id"
+            :data-window-motion-state="transitionStateFor(id)"
             :data-window-origin-source="transitionOriginFor(id).source"
             :data-window-origin-x="String(transitionOriginFor(id).x)"
             :data-window-origin-y="String(transitionOriginFor(id).y)"
-            @animationend="handleWindowAnimationEnd(id, $event)"
-            @close="emitWindow('closeWindow', $event)"
-            @minimize="emitWindow('minimizeWindow', $event)"
-            @dock="emitWindow('dockWindow', $event)"
-            @fullscreen="emitWindow('fullscreenWindow', $event)"
-            @focus="emitWindow('focusWindow', $event)"
-            @drag-start="startWindowDrag"
-            @resize-start="startWindowResize"
-            @reset-size="resetFloatingWindowSize"
-            @snap="snapFloatingWindow"
-            @cancel-interaction="cancelWindowInteraction"
         >
-            <TalosWindowSectionTabs
-                v-if="sectionTabsFor(id).length"
-                :window-id="id"
-                :tabs="sectionTabsFor(id)"
-                :active-tab="activeSectionFor(id)"
-                @select="setActiveWindowSection(id, $event)"
-            />
-            <component
-                :is="windowModuleComponent(id)"
-                v-if="windowLoadStates[id].status === 'success' && windowModuleComponent(id)"
-                :context="moduleContextFor(id)"
-            />
-            <TalosWindowErrorState
-                v-else-if="windowLoadStates[id].status === 'error'"
+            <TalosToolWindow
+                :id="id"
                 :title="TALOS_WINDOW_REGISTRY[id].title"
-                :message="windowModuleErrorMessage(id)"
-                @retry="requestWindowModule(id, true)"
-            />
-            <TalosWindowLoadingState
-                v-else
-                :title="TALOS_WINDOW_REGISTRY[id].title"
-            />
-        </TalosToolWindow>
+                :description="TALOS_WINDOW_REGISTRY[id].description"
+                :active="activeWindowId === id"
+                :width="floatingWindowSize(id).width"
+                :height="floatingWindowSize(id).height"
+                :interacting="interactingWindowId === id"
+                :fullscreen="fullscreenWindowIds.includes(id)"
+                class="h-full pointer-events-auto"
+                :data-window-transition="transitionStateFor(id)"
+                :data-window-motion-state="transitionStateFor(id)"
+                @close="emitWindow('closeWindow', $event)"
+                @minimize="emitWindow('minimizeWindow', $event)"
+                @dock="emitWindow('dockWindow', $event)"
+                @fullscreen="emitWindow('fullscreenWindow', $event)"
+                @focus="emitWindow('focusWindow', $event)"
+                @drag-start="startWindowDrag"
+                @resize-start="startWindowResize"
+                @reset-size="resetFloatingWindowSize"
+                @snap="snapFloatingWindow"
+                @cancel-interaction="cancelWindowInteraction"
+            >
+                <TalosWindowSectionTabs
+                    v-if="sectionTabsFor(id).length"
+                    :window-id="id"
+                    :tabs="sectionTabsFor(id)"
+                    :active-tab="activeSectionFor(id)"
+                    @select="setActiveWindowSection(id, $event)"
+                />
+                <component
+                    :is="windowModuleComponent(id)"
+                    v-if="windowLoadStates[id].status === 'success' && windowModuleComponent(id)"
+                    :context="moduleContextFor(id)"
+                />
+                <TalosWindowErrorState
+                    v-else-if="windowLoadStates[id].status === 'error'"
+                    :title="TALOS_WINDOW_REGISTRY[id].title"
+                    :message="windowModuleErrorMessage(id)"
+                    @retry="requestWindowModule(id, true)"
+                />
+                <TalosWindowLoadingState
+                    v-else
+                    :title="TALOS_WINDOW_REGISTRY[id].title"
+                />
+            </TalosToolWindow>
+        </div>
     </div>
 
     <aside v-if="breakpoint === 'desktop' && hasDockedWindows" data-testid="talos-right-dock" class="pointer-events-none absolute inset-y-14 right-0 z-30 hidden w-[420px] flex-col gap-3 overflow-y-auto border-l border-[var(--talos-border)] bg-[var(--talos-sidebar)]/92 p-3 backdrop-blur xl:flex">
@@ -378,6 +392,8 @@ function resetFloatingWindowSize(id: string) {
             :active="activeWindowId === id"
             docked
             class="pointer-events-auto"
+            :data-window-transition="transitionStateFor(id)"
+            :data-window-motion-state="transitionStateFor(id)"
             @close="emitWindow('closeWindow', $event)"
             @minimize="emitWindow('minimizeWindow', $event)"
             @dock="emitWindow('dockWindow', $event)"

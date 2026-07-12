@@ -40,11 +40,9 @@ import {
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
     normalizeTalosTheme,
-    resolveTalosMotionMode,
     resolveTalosThemeMode,
     type TalosThemeId,
     type TalosThemeMode,
-    type TalosThemeMotionMode,
 } from '../../../lib/talosThemes'
 import {
     TALOS_APPEARANCE_GROUPS,
@@ -75,10 +73,6 @@ type SettingsTab =
 type SettingsPreferences = {
     theme: TalosThemeId
     theme_mode: TalosThemeMode
-    theme_motion: TalosThemeMotionMode
-    theme_motion_disabled: boolean
-    theme_simple_animation: boolean
-    theme_background_disabled: boolean
     chat_layout: TalosChatLayoutPreferences
     ai_defaults: {
         utility_model_mode: string
@@ -166,10 +160,6 @@ const activeTab = ref<SettingsTab>('models')
 const preferences = reactive<SettingsPreferences>({
     theme: 'forge',
     theme_mode: 'system',
-    theme_motion: 'system',
-    theme_motion_disabled: false,
-    theme_simple_animation: true,
-    theme_background_disabled: false,
     chat_layout: { ...TALOS_DEFAULT_CHAT_LAYOUT },
     ai_defaults: {
         utility_model_mode: 'same_as_chat',
@@ -255,10 +245,6 @@ function isSettingsTab(value: unknown): value is SettingsTab {
 function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme = normalizeTalosTheme(nextPreferences.theme)
     preferences.theme_mode = resolveTalosThemeMode(nextPreferences.theme_mode)
-    preferences.theme_motion = resolveTalosMotionMode(nextPreferences.theme_motion)
-    preferences.theme_motion_disabled = booleanValue(nextPreferences.theme_motion_disabled, false)
-    preferences.theme_simple_animation = booleanValue(nextPreferences.theme_simple_animation, true)
-    preferences.theme_background_disabled = booleanValue(nextPreferences.theme_background_disabled, false)
     preferences.chat_layout = sanitizeTalosChatLayout(nextPreferences.chat_layout)
 
     const aiDefaults = record(nextPreferences.ai_defaults)
@@ -307,10 +293,6 @@ function preferencesPayload() {
         theme_mode: preferences.theme_mode,
         workspace_default_theme: preferences.theme,
         ...(themeChanged ? { theme_customization: {} } : {}),
-        theme_motion: preferences.theme_motion,
-        theme_motion_disabled: preferences.theme_motion_disabled,
-        theme_simple_animation: preferences.theme_simple_animation,
-        theme_background_disabled: preferences.theme_background_disabled,
         chat_layout: {
             ...preferences.chat_layout,
         },
@@ -592,20 +574,13 @@ watch(
                         <TalosSettingsAppearancePanel
                             :theme="preferences.theme"
                             :theme-mode="preferences.theme_mode"
-                            :theme-motion="preferences.theme_motion"
-                            :theme-motion-disabled="preferences.theme_motion_disabled"
-                            :theme-simple-animation="preferences.theme_simple_animation"
-                            :theme-background-disabled="preferences.theme_background_disabled"
                             :chat-layout="preferences.chat_layout"
                             :theme-policy-locked="themePolicyLocked"
                             :appearance-visibility="preferences.appearance_visibility"
                             :appearance-groups="TALOS_APPEARANCE_GROUPS"
                             @update-theme="preferences.theme = $event"
                             @update-theme-mode="preferences.theme_mode = $event"
-                            @update-theme-motion="preferences.theme_motion = $event"
-                            @update-theme-motion-disabled="preferences.theme_motion_disabled = $event"
-                            @update-theme-simple-animation="preferences.theme_simple_animation = $event"
-                            @update-theme-background-disabled="preferences.theme_background_disabled = $event"
+                            @open-theme-engine="openModule('theme', 'motion')"
                             @update-chat-bubble-scale="preferences.chat_layout.bubble_scale = $event"
                             @update-chat-composer-mode="preferences.chat_layout.composer_mode = $event"
                             @update-advanced-rail-expanded="preferences.chat_layout.advanced_rail_expanded = $event"
