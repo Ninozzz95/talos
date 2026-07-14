@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { PNG } from 'pngjs'
 import { createDefaultTalosMotionV6Preferences } from '../../resources/js/motion-v6/defaults'
 import { installTalosApiMocks, type InstallTalosApiMocksOptions } from './helpers/talosApiMocks'
 
@@ -34,7 +35,10 @@ async function isAuthenticatedWorkspace(page: Page) {
 }
 
 async function waitForWorkspaceReady(page: Page) {
-    await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
+    const workspace = page.locator('#talos-workspace-root[data-authenticated="true"]')
+    await expect(workspace).toHaveCount(1)
+    await expect(workspace).toHaveAttribute('data-talos-app-ready', 'true')
+    await expect(page.locator('[data-talos-boot-loader="true"]')).toHaveCount(0, { timeout: 8_000 })
 }
 
 async function submitLogin(page: Page, email: string, password: string) {
@@ -124,6 +128,30 @@ async function setRange(page: Page, label: string, value: number) {
     }, value)
 }
 
+function visiblePixelDifference(before: Buffer, after: Buffer) {
+    const first = PNG.sync.read(before)
+    const second = PNG.sync.read(after)
+    expect(second.width).toBe(first.width)
+    expect(second.height).toBe(first.height)
+
+    let changed = 0
+    let totalDelta = 0
+    const pixels = first.width * first.height
+    for (let offset = 0; offset < first.data.length; offset += 4) {
+        const delta = Math.abs(first.data[offset] - second.data[offset])
+            + Math.abs(first.data[offset + 1] - second.data[offset + 1])
+            + Math.abs(first.data[offset + 2] - second.data[offset + 2])
+            + Math.abs(first.data[offset + 3] - second.data[offset + 3])
+        totalDelta += delta
+        if (delta >= 12) changed += 1
+    }
+
+    return {
+        changedRatio: changed / pixels,
+        meanChannelDelta: totalDelta / (pixels * 4),
+    }
+}
+
 async function readPreviewCanvas(page: Page) {
     return page.getByTestId('talos-motion-v6-preview').locator('canvas[data-testid="talos-procedural-canvas"]').evaluate((element) => {
         const canvas = element as HTMLCanvasElement
@@ -193,6 +221,121 @@ test('saves only a complete Motion V6 payload and preserves it across reload', a
     await expect(page.getByRole('slider', { name: 'Motion speed' })).toHaveValue('145')
 })
 
+test('renders independent glow as a visible effect beneath the readability scrim', async ({ page, isMobile }) => {
+    await bootstrap(page, {
+        initialSettings: { preferences: { theme_motion_v6: cloneMotion({ mode: 'static' }) } },
+    })
+    await openThemeMotion(page, isMobile)
+
+    const preview = page.getByTestId('talos-motion-v6-preview').locator('.talos-background-procedural')
+    const glow = preview.locator('[data-talos-background-glow]')
+    const scrim = preview.locator('[data-talos-background-scrim]')
+    await expect(glow).toHaveCount(1)
+    await expect(scrim).toHaveCount(1)
+    await expect.poll(() => glow.evaluate((element) => window.getComputedStyle(element).opacity)).toBe('0')
+    const withoutGlow = await preview.screenshot({ animations: 'disabled' })
+
+    await setRange(page, 'Glow / lens flare', 80)
+    await expect.poll(() => glow.evaluate((element) => window.getComputedStyle(element).opacity)).toBe('0.8')
+    const layerOrder = await preview.evaluate((root) => {
+        const glowLayer = root.querySelector('[data-talos-background-glow]') as HTMLElement
+        const scrimLayer = root.querySelector('[data-talos-background-scrim]') as HTMLElement
+        return {
+            glow: Number(window.getComputedStyle(glowLayer).zIndex),
+            scrim: Number(window.getComputedStyle(scrimLayer).zIndex),
+            scrimImage: window.getComputedStyle(scrimLayer).backgroundImage,
+        }
+    })
+    expect(layerOrder.scrim).toBeGreaterThan(layerOrder.glow)
+    expect(layerOrder.scrimImage).toContain('linear-gradient')
+
+    const withGlow = await preview.screenshot({ animations: 'disabled' })
+    const difference = visiblePixelDifference(withoutGlow, withGlow)
+    expect(difference.changedRatio).toBeGreaterThan(0.01)
+    expect(difference.meanChannelDelta).toBeGreaterThan(0.25)
+})
+
+test('applies background intensity, contrast and independent glow through preview, save, reset and reload', async ({ page, isMobile }) => {
+    const ledger = await bootstrap(page, {
+        initialSettings: { preferences: { theme_motion_v6: cloneMotion() } },
+    })
+    await openThemeMotion(page, isMobile)
+    ledger.clear()
+
+    const workspaceBackground = page.getByTestId('talos-motion-background')
+    const previewBackground = page.getByTestId('talos-motion-v6-preview').locator('.talos-background-procedural')
+    const customProperty = (locator: typeof workspaceBackground, name: string) => locator.evaluate(
+        (element, property) => (element as HTMLElement).style.getPropertyValue(property),
+        name,
+    )
+
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-stage-opacity')).toBe('0.65')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0')
+    await setRange(page, 'Background intensity', 20)
+    await setRange(page, 'Ambient contrast', 30)
+    await setRange(page, 'Glow / lens flare', 75)
+
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-stage-opacity')).toBe('0.2')
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-scrim-start')).toBe('69.6%')
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-filter-contrast')).toBe('0.99')
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-glow-opacity')).toBe('0.75')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-stage-opacity')).toBe('0.65')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0')
+    expect(ledger.patches).toHaveLength(0)
+
+    const customAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 1 })
+    await page.getByRole('button', { name: 'Save motion' }).click()
+    await customAck
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-stage-opacity')).toBe('0.2')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-scrim-end')).toBe('81%')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0.75')
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await expect(workspaceBackground).toHaveAttribute('data-motion-disabled', 'true')
+    await expect(workspaceBackground.locator('[data-talos-background-glow]')).toHaveCount(1)
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0.75')
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+
+    await page.getByRole('switch', { name: 'Procedural background' }).click()
+    await expect(previewBackground.locator('[data-talos-background-glow]')).toHaveCount(0)
+    await expect(previewBackground.locator('[data-talos-background-scrim]')).toHaveCount(0)
+    await expect(previewBackground.locator('[data-talos-motion-stage]')).toHaveCount(0)
+    await expect(previewBackground.locator('canvas')).toHaveCount(0)
+    await expect(workspaceBackground.locator('[data-talos-background-glow]')).toHaveCount(1)
+    const disabledAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 2 })
+    await page.getByRole('button', { name: 'Save motion' }).click()
+    await disabledAck
+    await expect(workspaceBackground.locator('[data-talos-background-glow]')).toHaveCount(0)
+    await expect(workspaceBackground.locator('[data-talos-background-scrim]')).toHaveCount(0)
+    await expect(workspaceBackground.locator('[data-talos-motion-stage]')).toHaveCount(0)
+    await expect(workspaceBackground.locator('canvas')).toHaveCount(0)
+    await expect(workspaceBackground).toHaveAttribute('data-performance-raf-active', 'false')
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    const reloadedBackground = page.getByTestId('talos-motion-background')
+    await expect(reloadedBackground.locator('[data-talos-background-glow]')).toHaveCount(0)
+    await expect(reloadedBackground.locator('[data-talos-background-scrim]')).toHaveCount(0)
+    await expect(reloadedBackground.locator('[data-talos-motion-stage]')).toHaveCount(0)
+    await expect(reloadedBackground.locator('canvas')).toHaveCount(0)
+    await expect(reloadedBackground).toHaveAttribute('data-performance-raf-active', 'false')
+    await openThemeMotion(page, isMobile)
+
+    await page.getByRole('button', { name: 'Reset all defaults' }).click()
+    await expect(page.getByRole('slider', { name: 'Background intensity' })).toHaveValue('65')
+    await expect(page.getByRole('slider', { name: 'Glow / lens flare' })).toHaveValue('0')
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-stage-opacity')).toBe('0.65')
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-glow-opacity')).toBe('0')
+    const resetAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 3 })
+    await page.getByRole('button', { name: 'Save motion' }).click()
+    await resetAck
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect.poll(() => customProperty(page.getByTestId('talos-motion-background'), '--talos-background-stage-opacity')).toBe('0.65')
+    await expect.poll(() => customProperty(page.getByTestId('talos-motion-background'), '--talos-background-glow-opacity')).toBe('0')
+})
+
 test('rolls back the first rejected save and retries the exact failed draft', async ({ page, isMobile }) => {
     const ledger = await bootstrap(page, {
         settingsPatchFailure: { status: 422, message: 'Deterministic V6 settings rejection.' },
@@ -202,9 +345,18 @@ test('rolls back the first rejected save and retries the exact failed draft', as
 
     await page.getByRole('button', { name: 'Motion mode Complex' }).click()
     await setRange(page, 'Motion speed', 145)
+    await setRange(page, 'Glow / lens flare', 80)
+    const workspaceBackground = page.getByTestId('talos-motion-background')
+    const previewBackground = page.getByTestId('talos-motion-v6-preview').locator('.talos-background-procedural')
+    const customProperty = (locator: typeof workspaceBackground, name: string) => locator.evaluate(
+        (element, property) => (element as HTMLElement).style.getPropertyValue(property),
+        name,
+    )
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-glow-opacity')).toBe('0.8')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0')
     const expectedFailedPayload = {
         expected_revision: 0,
-        preferences: { theme_motion_v6: cloneMotion({ mode: 'complex', speed: 145 }) },
+        preferences: { theme_motion_v6: cloneMotion({ mode: 'complex', speed: 145, glow_intensity: 80 }) },
     }
 
     const failureExchange = ledger.waitForPatch({ key: 'theme_motion_v6', revision: 1 })
@@ -215,6 +367,9 @@ test('rolls back the first rejected save and retries the exact failed draft', as
     await expect(page.getByRole('alert')).toContainText('Deterministic V6 settings rejection.')
     await expect(page.getByRole('button', { name: 'Motion mode Adaptive' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('slider', { name: 'Motion speed' })).toHaveValue('100')
+    await expect(page.getByRole('slider', { name: 'Glow / lens flare' })).toHaveValue('0')
+    await expect.poll(() => customProperty(previewBackground, '--talos-background-glow-opacity')).toBe('0')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0')
     await expect(page.getByRole('button', { name: 'Retry last change' })).toBeVisible()
 
     const retryAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 2 })
@@ -225,6 +380,8 @@ test('rolls back the first rejected save and retries the exact failed draft', as
     expect(ledger.patches).toHaveLength(2)
     await expect(page.getByRole('button', { name: 'Motion mode Complex' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('slider', { name: 'Motion speed' })).toHaveValue('145')
+    await expect(page.getByRole('slider', { name: 'Glow / lens flare' })).toHaveValue('80')
+    await expect.poll(() => customProperty(workspaceBackground, '--talos-background-glow-opacity')).toBe('0.8')
 
     const conflictWait = ledger.waitForPatch({ revision: 3, status: 409 })
     const conflict = await page.evaluate(async () => {

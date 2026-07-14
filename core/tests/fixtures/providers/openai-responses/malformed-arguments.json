@@ -1,0 +1,15 @@
+{
+  "provider_response": {
+    "id": "resp-malformed-1",
+    "status": "completed",
+    "output": [
+      {
+        "type": "function_call",
+        "id": "fc-bad",
+        "call_id": "call_browser_bad",
+        "name": "browser_navigate",
+        "arguments": "{\"url\":"
+      }
+    ]
+  }
+}

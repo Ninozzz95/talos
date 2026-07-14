@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>TALOS HMI Fixture</title>
+    <style>
+      html, body { width: 100%; height: 100%; margin: 0; }
+      body { font-family: sans-serif; }
+      #cookie-banner {
+        position: fixed;
+        inset: 72px auto auto 56px;
+        width: 232px;
+        padding: 18px;
+        border: 1px solid #777;
+        background: #fff;
+      }
+      #dismiss-cookie {
+        position: absolute;
+        left: 24px;
+        top: 72px;
+        width: 160px;
+        height: 48px;
+      }
+      #changing-target {
+        position: fixed;
+        left: 400px;
+        top: 100px;
+        width: 160px;
+        height: 48px;
+      }
+      #nested-disabled {
+        position: fixed;
+        left: 400px;
+        top: 200px;
+        width: 160px;
+        height: 48px;
+      }
+      #nested-disabled span { display: grid; width: 100%; height: 100%; place-items: center; }
+      #clear-page {
+        position: fixed;
+        left: 80px;
+        top: 260px;
+        width: 160px;
+        height: 48px;
+      }
+      #open-popups {
+        position: fixed;
+        left: 400px;
+        top: 300px;
+        width: 160px;
+        height: 48px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>TALOS HMI Fixture</h1>
+      <section id="cookie-banner" role="dialog" aria-label="Cookie preferences">
+        <p>Cookie preferences</p>
+        <button id="dismiss-cookie" type="button">Reject optional cookies</button>
+      </section>
+      <button id="changing-target" type="button" aria-label="Stable target">Stable target</button>
+      <button id="nested-disabled" type="submit" disabled><span>Disabled nested action</span></button>
+      <button id="clear-page" type="button">Clear page</button>
+      <button id="open-popups" type="button">Open popups</button>
+      <a href="https://example.com/reset?token=browser-secret#fragment">Sensitive query link</a>
+    </main>
+    <script>
+      document.querySelector('#dismiss-cookie').addEventListener('click', () => {
+        document.querySelector('#cookie-banner').remove();
+      });
+      document.querySelector('#clear-page').addEventListener('click', () => {
+        document.body.replaceChildren();
+      });
+      document.querySelector('#open-popups').addEventListener('click', () => {
+        window.open('about:blank', '_blank');
+        window.open('about:blank', '_blank');
+      });
+    </script>
+  </body>
+</html>

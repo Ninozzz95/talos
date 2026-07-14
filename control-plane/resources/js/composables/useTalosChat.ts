@@ -24,6 +24,9 @@ export type TalosChatProxyResponse = {
     run?: TalosRun
     browser_activities?: unknown
     used_browser_context?: unknown
+    assistant_message?: unknown
+    pending_approvals?: unknown
+    agent_turn?: unknown
     [key: string]: unknown
 }
 
@@ -67,7 +70,7 @@ function normalizeUsedContext(value: unknown) {
     return Array.isArray(value) ? value : []
 }
 
-const browserOperations = new Set(['session_start', 'navigate', 'snapshot', 'screenshot', 'read'])
+const browserOperations = new Set(['session_start', 'navigate', 'snapshot', 'screenshot', 'read', 'click'])
 const browserActivityStatuses = new Set(['queued', 'running', 'succeeded', 'failed', 'denied'])
 
 function normalizeBrowserActivities(value: unknown): TalosBrowserActivity[] {
@@ -112,6 +115,31 @@ function record(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown) {
     return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function persistedAssistantMessage(value: unknown, sessionId: string): TalosMessage | null {
+    const data = record(value)
+    const id = stringValue(data?.id)
+    const messageSessionId = stringValue(data?.session_id)
+    const content = stringValue(data?.content)
+    const createdAt = stringValue(data?.created_at)
+
+    if (!id || messageSessionId !== sessionId || data?.role !== 'assistant' || !content || !createdAt) {
+        return null
+    }
+
+    const metadata = record(data?.metadata)
+
+    return {
+        id,
+        session_id: messageSessionId,
+        role: 'assistant',
+        content,
+        model_profile_id: data?.model_profile_id === null ? null : stringValue(data?.model_profile_id),
+        run_id: data?.run_id === null ? null : stringValue(data?.run_id),
+        metadata,
+        created_at: createdAt,
+    }
 }
 
 function booleanValue(value: unknown) {
@@ -194,10 +222,33 @@ export function useTalosChat() {
     }
 
     async function persistAssistantMessage(sessionId: string, response: TalosChatProxyResponse, persistMessage: PersistMessage) {
+        const persisted = persistedAssistantMessage(response.assistant_message, sessionId)
+        if (persisted) {
+            const browserActivities = normalizeBrowserActivities(response.browser_activities)
+            const metadata = persisted.metadata ?? {}
+
+            return {
+                ...persisted,
+                metadata: {
+                    ...metadata,
+                    ...(browserActivities.length > 0 ? { browser_activities: browserActivities } : {}),
+                    ...(response.used_browser_context !== undefined
+                        ? { used_browser_context: response.used_browser_context }
+                        : {}),
+                },
+            }
+        }
+
+        const agentTurnStatus = stringValue(record(response.agent_turn)?.status)
+        if (agentTurnStatus && agentTurnStatus !== 'completed') {
+            return null
+        }
+
         const mutations = Array.isArray(response.mutations) ? response.mutations : []
         const errors = Array.isArray(response.errors) ? response.errors : []
+        const browserActivities = normalizeBrowserActivities(response.browser_activities)
 
-        return persistMessage(sessionId, {
+        const created = await persistMessage(sessionId, {
             role: 'assistant',
             content: response.text || 'Kadmos completed the request.',
             run_id: response.run?.id ?? null,
@@ -209,11 +260,20 @@ export function useTalosChat() {
                 validation_errors: errors,
                 run: response.run ?? null,
                 used_context: normalizeUsedContext(response.used_context),
-                used_browser_context: response.used_browser_context ?? null,
-                browser_activities: normalizeBrowserActivities(response.browser_activities),
                 model_routing: response.model_routing ?? null,
             },
         })
+
+        return {
+            ...created,
+            metadata: {
+                ...(created.metadata ?? {}),
+                ...(browserActivities.length > 0 ? { browser_activities: browserActivities } : {}),
+                ...(response.used_browser_context !== undefined
+                    ? { used_browser_context: response.used_browser_context }
+                    : {}),
+            },
+        }
     }
 
     async function persistSystemMessage(

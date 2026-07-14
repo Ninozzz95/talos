@@ -62,6 +62,12 @@ export function useTalosSessions(surface: TalosSessionSurface = 'chat') {
     const sessionError = ref<string | null>(null)
     const messageError = ref<string | null>(null)
     const sessionExportError = ref<string | null>(null)
+    let createOperation: {
+        persistenceMode: TalosSessionPersistenceMode
+        initialTitle: string
+        requestedTitle: string
+        promise: Promise<TalosSession>
+    } | null = null
 
     const hasSessions = computed(() => sessions.value.length > 0)
 
@@ -113,7 +119,7 @@ export function useTalosSessions(surface: TalosSessionSurface = 'chat') {
         }
     }
 
-    async function createSession(title = 'New chat', persistenceMode: TalosSessionPersistenceMode = 'persistent') {
+    async function performCreateSession(title: string, persistenceMode: TalosSessionPersistenceMode) {
         sessionError.value = null
 
         try {
@@ -139,6 +145,41 @@ export function useTalosSessions(surface: TalosSessionSurface = 'chat') {
             sessionError.value = error instanceof Error ? error.message : 'TALOS could not create a chat session.'
             throw error
         }
+    }
+
+    function createSession(title = 'New chat', persistenceMode: TalosSessionPersistenceMode = 'persistent') {
+        const normalizedTitle = title.trim() || 'New chat'
+        if (createOperation?.persistenceMode === persistenceMode) {
+            if (createOperation.initialTitle === 'New chat' && normalizedTitle !== 'New chat') {
+                createOperation.requestedTitle = normalizedTitle
+            }
+
+            return createOperation.promise
+        }
+
+        let operation: NonNullable<typeof createOperation>
+        const pending = performCreateSession(normalizedTitle, persistenceMode)
+            .then(async (created) => {
+                if (operation.initialTitle === 'New chat'
+                    && operation.requestedTitle !== 'New chat'
+                    && created.title === 'New chat') {
+                    return updateSessionTitle(created.id, operation.requestedTitle)
+                }
+
+                return created
+            })
+            .finally(() => {
+                if (createOperation === operation) createOperation = null
+            })
+        operation = {
+            persistenceMode,
+            initialTitle: normalizedTitle,
+            requestedTitle: normalizedTitle,
+            promise: pending,
+        }
+        createOperation = operation
+
+        return pending
     }
 
     async function updateSessionTitle(sessionId: string, title: string) {
@@ -317,15 +358,25 @@ export function useTalosSessions(surface: TalosSessionSurface = 'chat') {
                 body: JSON.stringify(payload),
             })
 
-            if (activeSession.value?.id === sessionId) {
-                messages.value.push(response.data)
-            }
+            acceptPersistedMessage(response.data)
 
             return response.data
         } catch (error) {
             messageError.value = error instanceof Error ? error.message : 'TALOS could not persist the chat message.'
             throw error
         }
+    }
+
+    function acceptPersistedMessage(message: TalosMessage) {
+        if (activeSession.value?.id !== message.session_id) return
+
+        const index = messages.value.findIndex((candidate) => candidate.id === message.id)
+        if (index >= 0) {
+            messages.value.splice(index, 1, message)
+            return
+        }
+
+        messages.value.push(message)
     }
 
     async function exportSession(sessionId: string, format: TalosSessionExportFormat = 'json') {
@@ -373,6 +424,7 @@ export function useTalosSessions(surface: TalosSessionSurface = 'chat') {
         selectSession,
         loadMessages,
         createMessage,
+        acceptPersistedMessage,
         exportSession,
         replaceMessages,
     }

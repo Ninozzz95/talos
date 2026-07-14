@@ -17,6 +17,13 @@ describe('cold-review UI contracts', () => {
         expect(windowLayerSource).not.toContain('absolute bottom-28 left-6')
     })
 
+    it('gives every minimized window distinct restore and close controls', () => {
+        expect(windowLayerSource).toContain('talos-restore-window-${id}')
+        expect(windowLayerSource).toContain('talos-close-minimized-window-${id}')
+        expect(windowLayerSource).toContain(':aria-label="`Close minimized ${TALOS_WINDOW_REGISTRY[id].title}`"')
+        expect(windowLayerSource).toContain('@click.stop="requestWindowClose(id)"')
+    })
+
     it('uses a theme-owned confirmation dialog for model-profile deletion', () => {
         expect(modelCenterSource).not.toContain('window.confirm')
         expect(modelCenterSource).toContain('role="dialog"')

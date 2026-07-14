@@ -55,6 +55,18 @@ describe('useTalosThemeMotionV6Editor', () => {
         expect(h.editor.dirty.value).toBe(false)
     })
 
+    it('hydrates an existing V6 payload without glow as a canonical glow-off draft', () => {
+        const persisted = createDefaultTalosMotionV6Preferences() as Record<string, unknown>
+        delete persisted.glow_intensity
+
+        const h = harness({ theme_motion_v6: persisted })
+
+        expect(h.editor.source.value).toBe('v6')
+        expect(h.editor.draft.value.glow_intensity).toBe(0)
+        expect(h.editor.error.value).toBe('')
+        expect(h.editor.dirty.value).toBe(false)
+    })
+
     it('migrates legacy preferences for editing without writing during hydration', () => {
         const h = harness({
             theme_motion: 'cinematic',
@@ -176,17 +188,60 @@ describe('useTalosThemeMotionV6Editor', () => {
         const h = harness()
         h.editor.updateTopLevel('mode', 'complex')
         h.editor.updateTopLevel('speed', 190)
+        h.editor.updateTopLevel('glow_intensity', 80)
         h.editor.updateInterface('profile', 'expressive')
         h.editor.updateInterface('duration_scale', 140)
         h.editor.resetBackground()
 
-        expect(h.editor.draft.value).toMatchObject({ mode: 'adaptive', speed: 100 })
+        expect(h.editor.draft.value).toMatchObject({ mode: 'adaptive', speed: 100, glow_intensity: 0 })
         expect(h.editor.draft.value.interface).toMatchObject({ profile: 'expressive', duration_scale: 140 })
 
         h.editor.updateTopLevel('speed', 175)
         h.editor.resetInterface()
         expect(h.editor.draft.value.speed).toBe(175)
         expect(h.editor.draft.value.interface).toEqual(createDefaultTalosMotionV6Preferences().interface)
+    })
+
+    it('resets the complete motion policy to canonical defaults without persisting implicitly', () => {
+        const persisted = createDefaultTalosMotionV6Preferences()
+        persisted.mode = 'complex'
+        persisted.background_enabled = false
+        persisted.interface_enabled = false
+        persisted.scene_override = 'noir'
+        persisted.speed = 180
+        persisted.intensity = 95
+        persisted.density = 145
+        persisted.depth = 90
+        persisted.trails = 80
+        persisted.contrast = 90
+        persisted.parallax = 75
+        persisted.quality = 'high'
+        persisted.fps_cap = 60
+        persisted.dpr_cap = 2
+        persisted.pause_when_hidden = false
+        persisted.respect_data_saver = false
+        persisted.interface = {
+            profile: 'custom',
+            duration_scale: 145,
+            intensity: 95,
+            easing: 'cinematic',
+            stagger: 110,
+            categories: {
+                windows: false,
+                surfaces: false,
+                navigation: false,
+                composer: false,
+                messages: false,
+                feedback: false,
+            },
+        }
+        const h = harness({ theme_motion_v6: persisted })
+
+        h.editor.resetAll()
+
+        expect(h.editor.draft.value).toEqual(createDefaultTalosMotionV6Preferences())
+        expect(h.editor.dirty.value).toBe(true)
+        expect(h.updateSettings).not.toHaveBeenCalled()
     })
 
     it('exposes truthful requested and effective renderer diagnostics', async () => {

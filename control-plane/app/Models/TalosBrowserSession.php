@@ -15,11 +15,12 @@ final class TalosBrowserSession extends Model
 
     public $incrementing = false;
     protected $keyType = 'string';
-    protected $fillable = ['user_id', 'talos_session_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
+    protected $attributes = ['worker_state_version' => 0];
+    protected $fillable = ['user_id', 'talos_session_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'worker_state_version', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
 
     protected function casts(): array
     {
-        return ['capabilities' => 'array', 'policy' => 'array', 'expires_at' => 'datetime', 'last_seen_at' => 'datetime'];
+        return ['capabilities' => 'array', 'policy' => 'array', 'worker_state_version' => 'integer', 'expires_at' => 'datetime', 'last_seen_at' => 'datetime'];
     }
 
     /** @return HasMany<TalosBrowserEvent, $this> */
@@ -31,7 +32,7 @@ final class TalosBrowserSession extends Model
 
     public function toApiArray(): array
     {
-        return ['id' => $this->id, 'talos_session_id' => $this->talos_session_id, 'status' => $this->status, 'mode' => $this->mode, 'current_url' => $this->current_url, 'current_title' => $this->current_title, 'viewport' => ['width' => $this->viewport_width, 'height' => $this->viewport_height], 'capabilities' => $this->apiCapabilities(), 'policy' => $this->policy, 'last_snapshot_artifact_id' => $this->last_snapshot_artifact_id, 'last_screenshot_artifact_id' => $this->last_screenshot_artifact_id, 'expires_at' => $this->expires_at?->toJSON(), 'last_seen_at' => $this->last_seen_at?->toJSON(), 'created_at' => $this->created_at?->toJSON(), 'updated_at' => $this->updated_at?->toJSON()];
+        return ['id' => $this->id, 'talos_session_id' => $this->talos_session_id, 'status' => $this->status, 'mode' => $this->mode, 'current_url' => $this->current_url, 'current_title' => $this->current_title, 'viewport' => ['width' => $this->viewport_width, 'height' => $this->viewport_height], 'capabilities' => $this->apiCapabilities(), 'policy' => $this->policy, 'state_version' => (int) $this->worker_state_version, 'last_snapshot_artifact_id' => $this->last_snapshot_artifact_id, 'last_screenshot_artifact_id' => $this->last_screenshot_artifact_id, 'expires_at' => $this->expires_at?->toJSON(), 'last_seen_at' => $this->last_seen_at?->toJSON(), 'created_at' => $this->created_at?->toJSON(), 'updated_at' => $this->updated_at?->toJSON()];
     }
 
     /** @return list<string> */
@@ -48,7 +49,7 @@ final class TalosBrowserSession extends Model
         }
 
         $names = [];
-        foreach (['navigation' => 'navigate', 'screenshots' => 'screenshot', 'accessibilitySnapshot' => 'snapshot'] as $workerName => $apiName) {
+        foreach (['navigation' => 'navigate', 'screenshots' => 'screenshot', 'accessibilitySnapshot' => 'snapshot', 'hmiActions' => 'interact'] as $workerName => $apiName) {
             if (($capabilities[$workerName] ?? false) === true) {
                 $names[] = $apiName;
             }

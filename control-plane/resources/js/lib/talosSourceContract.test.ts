@@ -31,6 +31,28 @@ function contractSourceFiles() {
     return [...sourceRoots.flatMap((root) => sourceFiles(root)), appCssPath]
 }
 
+function cssKeyframeSteps(name: string): string[] {
+    const marker = `@keyframes ${name}`
+    const start = appCss.indexOf(marker)
+    if (start < 0) return []
+
+    const open = appCss.indexOf('{', start + marker.length)
+    let depth = 0
+    let close = -1
+    for (let index = open; index < appCss.length; index += 1) {
+        if (appCss[index] === '{') depth += 1
+        if (appCss[index] === '}') depth -= 1
+        if (depth === 0) {
+            close = index
+            break
+        }
+    }
+    if (open < 0 || close < 0) return []
+
+    return [...appCss.slice(open + 1, close).matchAll(/(?:from|to|\d+%)\s*\{([^}]+)\}/g)]
+        .map((match) => match[1])
+}
+
 describe('TALOS source token contract', () => {
     it('does not use raw red, green, or amber status utilities', () => {
         const violations = contractSourceFiles().filter((path) => forbiddenStatusUtility.test(readFileSync(path, 'utf8')))
@@ -61,19 +83,37 @@ describe('TALOS source token contract', () => {
     })
 
     it('limits motion-owned transitions to transform and opacity', () => {
-        const motionStart = appCss.indexOf('.talos-chat-composer-shell')
-        const motionEnd = appCss.indexOf('.talos-window-resize-handle')
-        const motionCss = appCss.slice(motionStart, motionEnd)
-        const transitions = [...motionCss.matchAll(/transition(?:-property)?\s*:\s*([^;]+);/g)].map((match) => match[1])
+        const forbiddenMotionProperty = /\b(?:all|color|border-color|background-color|box-shadow|filter|width|height|top|right|bottom|left|margin(?:-[a-z-]+)?|padding(?:-[a-z-]+)?)\b/
+        const transitions = [...appCss.matchAll(/transition(?:-property)?\s*:\s*([^;]+);/g)].map((match) => match[1])
+        const willChangeDeclarations = [...appCss.matchAll(/will-change\s*:\s*([^;]+);/g)].map((match) => match[1])
 
         expect(transitions.length).toBeGreaterThan(0)
         for (const transition of transitions) {
-            expect(transition).not.toMatch(/\b(?:all|color|border-color|background-color|box-shadow|filter)\b/)
+            expect(transition).not.toMatch(forbiddenMotionProperty)
+        }
+        for (const willChange of willChangeDeclarations) {
+            expect(willChange).not.toMatch(forbiddenMotionProperty)
         }
 
         const feedbackStart = appCss.indexOf('@keyframes talos-feedback-pulse')
         const feedbackEnd = appCss.indexOf('@keyframes talos-feedback-trace')
         expect(appCss.slice(feedbackStart, feedbackEnd)).not.toMatch(/\b(?:box-shadow|border-color|background|filter)\b/)
+    })
+
+    it('keeps every rail and composer popover keyframe exact-target paintable', () => {
+        for (const name of [
+            'talos-sidebar-expand',
+            'talos-sidebar-collapse',
+            'talos-composer-popover-in',
+            'talos-composer-popover-out',
+        ]) {
+            const steps = cssKeyframeSteps(name)
+            expect(steps.length, name).toBeGreaterThanOrEqual(2)
+            for (const step of steps) {
+                expect(step, `${name} opacity`).toMatch(/\bopacity\s*:/)
+                expect(step, `${name} transform`).toMatch(/\btransform\s*:/)
+            }
+        }
     })
 
     it('suppresses every owned UI and background motion surface', () => {
@@ -100,9 +140,10 @@ describe('TALOS source token contract', () => {
             appCss.indexOf('@media (prefers-reduced-motion: reduce)'),
             appCss.indexOf('@media (prefers-reduced-data: reduce)'),
         )
+        const reducedDataStart = appCss.indexOf('@media (prefers-reduced-data: reduce)')
         const reducedDataCss = appCss.slice(
-            appCss.indexOf('@media (prefers-reduced-data: reduce)'),
-            appCss.indexOf('.talos-window-resize-handle'),
+            reducedDataStart,
+            appCss.indexOf('.talos-window-resize-handle', reducedDataStart),
         )
         expect(reducedMotionCss).toContain('.talos-shell .talos-motion-preview-surface')
         expect(reducedDataCss).toContain('.talos-shell .talos-motion-preview-surface')
@@ -130,6 +171,16 @@ describe('TALOS source token contract', () => {
         expect(workspace).toContain(':input="workspaceMotionV6SceneInput"')
         expect(background).toContain('TalosMotionStage')
         expect(background).not.toContain('useTalosProceduralCanvas')
+    })
+
+    it('does not dim the canonical motion surface with a chat-only background wash', () => {
+        const chatThreadRules = [...appCss.matchAll(/\.talos-chat-thread\s*\{([^}]*)\}/g)]
+            .map((match) => match[1])
+
+        expect(chatThreadRules.length).toBeGreaterThan(0)
+        for (const rule of chatThreadRules) {
+            expect(rule).not.toMatch(/\bbackground(?:-image)?\s*:/)
+        }
     })
 
     it('keeps legacy motion keys as migration input instead of active UI or runtime authority', () => {

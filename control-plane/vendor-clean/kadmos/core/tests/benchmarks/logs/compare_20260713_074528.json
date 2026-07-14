@@ -1,0 +1,107 @@
+{
+    "schema_version": 1,
+    "generated_at": "2026-07-13T07:45:28+00:00",
+    "runs": 1,
+    "scenario": {
+        "name": "deep_chain_failure",
+        "difficulty": 5,
+        "description": "5-node chain where node 2 fails \u2014 only n3-n5 should BLOCK, n1 remains SUCCESS",
+        "path": "C:\\Users\\ninox\\Desktop\\AVM\\core\\tests\/benchmarks\/scenarios\/05_deep_chain_failure.json",
+        "expected_nodes": 5,
+        "mutation_count": 11,
+        "injected_error": {
+            "cycle": 2,
+            "node": "n2",
+            "type": "EXECUTION_FAILURE"
+        }
+    },
+    "modes": {
+        "avm_on": {
+            "mode": "avm_on",
+            "label": "AVM ON",
+            "total_nodes": 5,
+            "success_nodes": 1,
+            "failed_nodes": 1,
+            "blocked_nodes": 3,
+            "completion_rate": 0.2,
+            "state_match": true,
+            "contract_violation_count": 0,
+            "recovery_score": 0.8,
+            "determinism_score": 1,
+            "enterprise_risk_score": 30,
+            "cycles": 5,
+            "validation_faults": 0,
+            "token_estimate": 392,
+            "elapsed_ms": 1,
+            "node_statuses": {
+                "n1": "SUCCESS",
+                "n2": "FAILED",
+                "n3": "BLOCKED_BY_DEPENDENCY",
+                "n4": "BLOCKED_BY_DEPENDENCY",
+                "n5": "BLOCKED_BY_DEPENDENCY"
+            },
+            "notes": "Deterministic AVM run with DAG scheduling, validation gate, and failure-state propagation."
+        },
+        "avm_off_direct": {
+            "mode": "avm_off_direct",
+            "label": "AVM OFF Direct",
+            "total_nodes": 5,
+            "success_nodes": 1,
+            "failed_nodes": 4,
+            "blocked_nodes": 0,
+            "completion_rate": 0.2,
+            "state_match": false,
+            "contract_violation_count": 3,
+            "recovery_score": 0.2,
+            "determinism_score": 1,
+            "enterprise_risk_score": 100,
+            "cycles": 2,
+            "validation_faults": 0,
+            "token_estimate": 402,
+            "elapsed_ms": 1,
+            "node_statuses": {
+                "n1": "SUCCESS",
+                "n2": "FAILED",
+                "n3": "FAILED",
+                "n4": "FAILED",
+                "n5": "FAILED"
+            },
+            "notes": "Direct LLM baseline: no durable DAG state, no dependency blocking, failures collapse into plain failed outputs."
+        },
+        "tool_agent": {
+            "mode": "tool_agent",
+            "label": "Tool Agent",
+            "total_nodes": 5,
+            "success_nodes": 4,
+            "failed_nodes": 1,
+            "blocked_nodes": 0,
+            "completion_rate": 0.8,
+            "state_match": false,
+            "contract_violation_count": 3,
+            "recovery_score": 0.8,
+            "determinism_score": 1,
+            "enterprise_risk_score": 100,
+            "cycles": 2,
+            "validation_faults": 0,
+            "token_estimate": 503,
+            "elapsed_ms": 1,
+            "node_statuses": {
+                "n1": "SUCCESS",
+                "n2": "FAILED",
+                "n3": "SUCCESS",
+                "n4": "SUCCESS",
+                "n5": "SUCCESS"
+            },
+            "notes": "Tool-agent baseline: structured tool calls and light validation, but no AVM failure-state cascade."
+        }
+    },
+    "comparison": {
+        "avm_vs_direct_completion_delta": 0,
+        "avm_vs_tool_completion_delta": -0.6,
+        "avm_blocked_nodes_delta_vs_direct": 3,
+        "avm_state_match": true,
+        "avm_risk_delta_vs_direct": -70,
+        "avm_risk_delta_vs_tool": -70,
+        "avm_contract_advantage": true
+    }
+}

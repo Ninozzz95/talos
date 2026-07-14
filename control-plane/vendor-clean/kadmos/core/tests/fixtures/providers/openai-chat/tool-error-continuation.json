@@ -1,0 +1,20 @@
+{
+  "provider_response": {
+    "id": "chatcmpl-recovered-1",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The browser timed out, so I could not ground the requested page."
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 42,
+      "completion_tokens": 12,
+      "total_tokens": 54
+    }
+  }
+}

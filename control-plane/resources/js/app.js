@@ -32,6 +32,8 @@ if (workspaceRoot) {
             loginUrl: workspaceRoot.dataset.loginUrl ?? '/login',
             logoutUrl: workspaceRoot.dataset.logoutUrl ?? '/logout',
             csrfToken: workspaceRoot.dataset.csrfToken ?? '',
+            devBrowserEvidence: workspaceRoot.dataset.devBrowserEvidence === 'true',
+            developmentMode: workspaceRoot.dataset.developmentMode === 'true',
         }).mount(workspaceRoot)
 
         scheduleTalosBootCompletion(workspaceRoot)

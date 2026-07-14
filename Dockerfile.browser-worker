@@ -12,6 +12,7 @@ COPY --chown=node:node browser-worker ./
 
 ENV HOST=0.0.0.0
 ENV PORT=3100
+ENV NODE_ENV=production
 ENV TALOS_BROWSER_WORKER_TOKEN=
 
 EXPOSE 3100

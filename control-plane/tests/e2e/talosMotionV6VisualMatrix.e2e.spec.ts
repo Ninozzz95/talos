@@ -28,6 +28,7 @@ function preferences(mode: TalosMotionRendererMode): TalosMotionV6Preferences {
         scene_override: null,
         speed: 100,
         intensity: 65,
+        glow_intensity: 0,
         density: 100,
         depth: 50,
         trails: 35,
@@ -40,7 +41,7 @@ function preferences(mode: TalosMotionRendererMode): TalosMotionV6Preferences {
         respect_data_saver: true,
         interface: {
             profile: 'preset',
-            duration_scale: 100,
+            duration_scale: 50,
             intensity: 65,
             easing: 'precise',
             stagger: 40,
@@ -61,7 +62,10 @@ async function isAuthenticated(page: Page) {
 }
 
 async function waitForWorkspace(page: Page) {
-    await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
+    const workspace = page.locator('#talos-workspace-root[data-authenticated="true"]')
+    await expect(workspace).toHaveCount(1)
+    await expect(workspace).toHaveAttribute('data-talos-app-ready', 'true')
+    await expect(page.locator('[data-talos-boot-loader="true"]')).toHaveCount(0, { timeout: 8_000 })
     await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
 }
 
@@ -292,6 +296,14 @@ test.beforeEach(async ({ page }) => {
     await installTalosApiMocks(page)
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await ensureAuthenticated(page)
+})
+
+test('does not declare the workspace ready while the boot loader still covers it', async ({ page }) => {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspace(page)
+
+    expect(await page.locator('[data-talos-boot-loader="true"]').count()).toBe(0)
+    await expect(page.locator('#talos-workspace-root')).toHaveAttribute('data-talos-app-ready', 'true')
 })
 
 test('verifies all Motion V6 preset, color, renderer and viewport states', async ({ page, context, isMobile }, testInfo) => {

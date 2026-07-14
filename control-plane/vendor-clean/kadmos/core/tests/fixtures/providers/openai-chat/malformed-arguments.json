@@ -1,0 +1,25 @@
+{
+  "provider_response": {
+    "id": "chatcmpl-malformed-1",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "I will inspect it.",
+          "tool_calls": [
+            {
+              "id": "call_browser_bad",
+              "type": "function",
+              "function": {
+                "name": "browser_navigate",
+                "arguments": "{\"url\":"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "error_recovery_hallucination",
+  "difficulty": 4,
+  "description": "LLM makes a bad MUTATE_PAYLOAD — must recover via BLOCKED_BY_DEPENDENCY",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "A", "node_type": "HTTP_REQUEST" },
+      { "action": "SPAWN_NODE", "node_id": "B", "node_type": "HTTP_REQUEST", "dependencies": ["A"] }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "A", "payload": { "url": "not-a-valid-url", "method": "GET" } }
+    ]},
+    { "cycle": 3, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "A", "payload": { "url": "https://api.example.com/fixed", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "B", "payload": { "url": "https://api.example.com/second", "method": "GET" } },
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": { "cycle": 2, "node": "A", "type": "VALIDATION_FAULT" },
+  "expected_nodes": 2,
+  "expected_all_success": true,
+  "expects_recovery": true
+}

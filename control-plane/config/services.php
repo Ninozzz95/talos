@@ -38,7 +38,7 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/') . '/integrations/google/callback'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/integrations/google/callback'),
         'auth_uri' => env('GOOGLE_AUTH_URI', 'https://accounts.google.com/o/oauth2/v2/auth'),
         'token_uri' => env('GOOGLE_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
         'userinfo_uri' => env('GOOGLE_USERINFO_URI', 'https://www.googleapis.com/oauth2/v3/userinfo'),
@@ -52,6 +52,21 @@ return [
         'browser' => [
             'worker_url' => env('TALOS_BROWSER_WORKER_URL'),
             'worker_token' => env('TALOS_BROWSER_WORKER_TOKEN'),
+            'allow_insecure_internal_transport' => env('TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT', false),
+            'dev_evidence' => env('TALOS_DEV_BROWSER_EVIDENCE', false),
+            'hmi_min_mode' => env('TALOS_BROWSER_HMI_MIN_MODE'),
+        ],
+        'web' => [
+            'search' => [
+                'provider' => env('TALOS_WEB_SEARCH_PROVIDER', 'unavailable'),
+                'searxng' => [
+                    'url' => env('TALOS_SEARXNG_URL'),
+                ],
+                'browser' => [
+                    'enabled' => env('TALOS_BROWSER_SEARCH_ENABLED', false),
+                    'origin' => env('TALOS_BROWSER_SEARCH_ORIGIN'),
+                ],
+            ],
         ],
         'registry_write_token' => env('TALOS_REGISTRY_WRITE_TOKEN'),
         'validator_health_url' => env('TALOS_VALIDATOR_HEALTH_URL'),

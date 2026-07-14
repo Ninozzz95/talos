@@ -1,0 +1,10 @@
+{
+  "provider_response": {
+    "id": "resp-incomplete-1",
+    "status": "incomplete",
+    "incomplete_details": {
+      "reason": "max_output_tokens"
+    },
+    "output": []
+  }
+}

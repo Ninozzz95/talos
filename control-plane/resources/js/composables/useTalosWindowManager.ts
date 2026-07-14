@@ -11,6 +11,7 @@ import {
     type TalosWindowBounds,
     type TalosWindowBreakpoint,
 } from '../lib/talosWindowManager'
+import type { TalosWindowTileTarget } from '../lib/talosWindowTilePolicy'
 import {
     TALOS_WINDOW_IDS,
     type TalosWindowId,
@@ -20,6 +21,9 @@ import {
 
 export type UseTalosWindowManagerOptions = {
     area?: MaybeRefOrGetter<TalosWindowArea>
+    tileArea?: MaybeRefOrGetter<TalosWindowArea>
+    maximizeArea?: MaybeRefOrGetter<TalosWindowArea>
+    fullscreenArea?: MaybeRefOrGetter<TalosWindowArea>
     breakpoint?: MaybeRefOrGetter<TalosWindowBreakpoint>
 }
 
@@ -53,9 +57,20 @@ export function useTalosWindowManager(
     const fallbackArea = ref(browserArea())
     const fallbackBreakpoint = ref<TalosWindowBreakpoint>(viewportBreakpoint(fallbackArea.value.right))
     const currentArea = () => toValue(options.area ?? fallbackArea)
+    const currentTileArea = () => toValue(options.tileArea ?? options.area ?? fallbackArea)
+    const currentMaximizeArea = () => toValue(options.maximizeArea ?? options.area ?? fallbackArea)
+    const currentFullscreenArea = () => toValue(options.fullscreenArea ?? options.maximizeArea ?? options.area ?? fallbackArea)
     const currentBreakpoint = () => toValue(options.breakpoint ?? fallbackBreakpoint)
     let persistedLayout = readBrowserLayout(currentArea())
-    const state = ref(createTalosWindowManagerState(initialOpen, currentBreakpoint(), currentArea(), persistedLayout))
+    const state = ref(createTalosWindowManagerState(
+        initialOpen,
+        currentBreakpoint(),
+        currentArea(),
+        persistedLayout,
+        currentMaximizeArea(),
+        currentFullscreenArea(),
+        currentTileArea(),
+    ))
     let returnFocusSequence = 0
 
     if ((!options.area || !options.breakpoint) && typeof window !== 'undefined') {
@@ -72,8 +87,8 @@ export function useTalosWindowManager(
     }
 
     watch(
-        [currentArea, currentBreakpoint],
-        ([area, breakpoint]) => {
+        [currentArea, currentTileArea, currentMaximizeArea, currentFullscreenArea, currentBreakpoint],
+        ([area, tileArea, maximizeArea, fullscreenArea, breakpoint]) => {
             if (breakpoint !== state.value.breakpoint) {
                 persistedLayout = projectTalosWindowLayout(state.value, persistedLayout)
                 const visibleIds = TALOS_WINDOW_IDS.filter((id) => state.value.windows[id].visibility === 'open')
@@ -81,14 +96,14 @@ export function useTalosWindowManager(
                 const orderedVisibleIds = activeId && visibleIds.includes(activeId)
                     ? [activeId, ...visibleIds.filter((id) => id !== activeId)]
                     : visibleIds
-                let nextState = createTalosWindowManagerState(orderedVisibleIds, breakpoint, area, persistedLayout)
+                let nextState = createTalosWindowManagerState(orderedVisibleIds, breakpoint, area, persistedLayout, maximizeArea, fullscreenArea, tileArea)
                 if (activeId && nextState.windows[activeId].visibility === 'open') {
                     nextState = reduceTalosWindowState(nextState, { type: 'focus', id: activeId })
                 }
                 state.value = nextState
                 return
             }
-            dispatch({ type: 'reconcile-area', area })
+            dispatch({ type: 'reconcile-areas', area, tileArea, maximizeArea, fullscreenArea })
         },
         { deep: true },
     )
@@ -97,7 +112,17 @@ export function useTalosWindowManager(
     const visibleWindowIds = computed(() => TALOS_WINDOW_IDS.filter((id) => state.value.windows[id].visibility === 'open'))
     const minimizedWindowIds = computed(() => TALOS_WINDOW_IDS.filter((id) => state.value.windows[id].visibility === 'minimized'))
     const dockedWindowIds = computed(() => TALOS_WINDOW_IDS.filter((id) => state.value.windows[id].visibility === 'open' && state.value.windows[id].presentation === 'docked'))
-    const fullscreenWindowIds = computed(() => TALOS_WINDOW_IDS.filter((id) => state.value.windows[id].visibility === 'open' && state.value.windows[id].presentation === 'maximized'))
+    const fullscreenWindowIds = computed(() => TALOS_WINDOW_IDS.filter((id) => (
+        state.value.windows[id].visibility === 'open'
+        && (state.value.windows[id].presentation === 'maximized' || state.value.windows[id].presentation === 'fullscreen')
+    )))
+    const viewportFullscreenWindowIds = computed(() => TALOS_WINDOW_IDS.filter((id) => (
+        state.value.windows[id].visibility === 'open' && state.value.windows[id].presentation === 'fullscreen'
+    )))
+    const windowTileTargets = computed(() => Object.fromEntries(TALOS_WINDOW_IDS.map((id) => [
+        id,
+        state.value.windows[id].tileTarget,
+    ])) as Record<TalosWindowId, TalosWindowTileTarget>)
     const activeWindowId = computed(() => state.value.activeWindowId)
     const windowPositions = computed(() => Object.fromEntries(TALOS_WINDOW_IDS.map((id) => [id, {
         x: state.value.windows[id].bounds.x,
@@ -107,6 +132,10 @@ export function useTalosWindowManager(
         width: state.value.windows[id].bounds.width,
         height: state.value.windows[id].bounds.height,
     }])) as Record<TalosWindowId, TalosWindowSize>)
+    const windowRestoreBounds = computed(() => Object.fromEntries(TALOS_WINDOW_IDS.map((id) => [
+        id,
+        state.value.windows[id].restoreBounds ? { ...state.value.windows[id].restoreBounds } : null,
+    ])) as Record<TalosWindowId, TalosWindowBounds | null>)
     const windowZIndexes = computed(() => Object.fromEntries(TALOS_WINDOW_IDS.map((id) => [id, state.value.windows[id].zIndex])) as Record<TalosWindowId, number>)
 
     function captureReturnFocusId(windowId: TalosWindowId) {
@@ -188,7 +217,20 @@ export function useTalosWindowManager(
     }
 
     function snapWindow(id: TalosWindowId, side: 'left' | 'right') {
-        dispatch({ type: 'snap', id, side })
+        tileWindow(id, side === 'left' ? 'left-half' : 'right-half')
+    }
+
+    function tileWindow(
+        id: TalosWindowId,
+        target: Exclude<TalosWindowTileTarget, 'none'>,
+        restoreBounds?: TalosWindowBounds,
+    ) {
+        dispatch({ type: 'tile', id, target, ...(restoreBounds ? { restoreBounds } : {}) })
+        saveWindowLayout()
+    }
+
+    function untileWindow(id: TalosWindowId, bounds?: TalosWindowBounds) {
+        dispatch({ type: 'untile', id, ...(bounds ? { bounds } : {}) })
         saveWindowLayout()
     }
 
@@ -210,9 +252,12 @@ export function useTalosWindowManager(
         minimizedWindowIds,
         dockedWindowIds,
         fullscreenWindowIds,
+        viewportFullscreenWindowIds,
+        windowTileTargets,
         activeWindowId,
         windowPositions,
         windowSizes,
+        windowRestoreBounds,
         windowZIndexes,
         openWindow,
         closeWindow,
@@ -227,6 +272,8 @@ export function useTalosWindowManager(
         resetWindowSize,
         restoreWindow,
         snapWindow,
+        tileWindow,
+        untileWindow,
         reconcileWindowArea,
         saveWindowLayout,
     }

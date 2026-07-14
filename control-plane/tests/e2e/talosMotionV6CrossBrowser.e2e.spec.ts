@@ -118,9 +118,88 @@ test('desktop cross-browser smoke covers Complex, reduced motion and Motion Off'
     await page.locator('#talos-theme-control-tab-motion').click()
     await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Motion mode Off' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('talos-background-motion-state')).toHaveText('Off')
+    const backgroundSwitch = page.getByRole('switch', { name: 'Procedural background' })
+    await expect(backgroundSwitch).not.toBeChecked()
+
+    await backgroundSwitch.click()
+    await expect(backgroundSwitch).toBeChecked()
+    await expect(page.getByTestId('talos-background-motion-state')).toHaveText('Active')
+    await expect(page.getByRole('button', { name: 'Motion mode Adaptive' })).toHaveAttribute('aria-pressed', 'true')
+
+    const saveResponse = page.waitForResponse((response) => (
+        response.url().endsWith('/api/talos/settings')
+        && response.request().method() === 'PATCH'
+    ))
+    await page.getByRole('button', { name: 'Save motion' }).click()
+    expect((await saveResponse).ok()).toBe(true)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await expect(workspace).toHaveAttribute('data-motion-v6-requested', 'adaptive')
+    await expect(workspace).toHaveAttribute('data-motion-v6-effective', 'complex')
+    const restoredCanvas = page.getByTestId('talos-motion-background').getByTestId('talos-procedural-canvas')
+    await expect.poll(async () => restoredCanvas.evaluate((element) => (element as HTMLCanvasElement).width)).toBeGreaterThan(100)
+    const restoredFrame = await restoredCanvas.screenshot()
+    await expect.poll(async () => !(await restoredCanvas.screenshot()).equals(restoredFrame)).toBe(true)
     expect(errors).toEqual([])
 
-    await testInfo.attach(`motion-v6-off-${browserName}.png`, {
+    await testInfo.attach(`motion-v6-restored-${browserName}.png`, {
+        body: await page.screenshot({ animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+})
+
+test('desktop cross-browser window interactions snap, restore, and Peek through interactjs', async ({ page, browserName }, testInfo) => {
+    const errors = pageErrors.get(page) ?? []
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    const window = page.locator('[data-window-id="theme"]')
+    const frame = page.locator('[data-window-frame-id="theme"]')
+    const handle = window.locator('.talos-window-drag-handle[aria-label="Drag Theme window"]')
+    const stage = page.getByTestId('talos-desktop-window-stage')
+    await expect(window).toBeVisible()
+    await expect.poll(async () => window.getAttribute('data-window-transition')).toBe('idle')
+
+    const initial = await window.boundingBox()
+    const handleBounds = await handle.boundingBox()
+    const stageBounds = await stage.boundingBox()
+    expect(initial).toBeTruthy()
+    expect(handleBounds).toBeTruthy()
+    expect(stageBounds).toBeTruthy()
+
+    await page.mouse.move(handleBounds!.x + 48, handleBounds!.y + (handleBounds!.height / 2))
+    await page.mouse.down()
+    await page.mouse.move(stageBounds!.x + 1, stageBounds!.y + (stageBounds!.height / 2), { steps: 12 })
+    const preview = page.getByTestId('talos-window-snap-preview')
+    await expect(preview).toBeVisible()
+    await expect(preview).toHaveAttribute('data-snap-target', 'left-half')
+    await page.mouse.up()
+    await expect(frame).toHaveAttribute('data-window-tile-target', 'left-half')
+    await expect(window).toHaveAttribute('data-window-transition', 'snapping')
+    await expect.poll(async () => window.getAttribute('data-window-transition')).toBe('idle')
+    await expect(page.locator('.talos-left-rail')).toHaveAttribute('data-sidebar-state', 'collapsed')
+    const snappedStageBounds = await stage.boundingBox()
+    const snappedBounds = await window.boundingBox()
+    expect(Math.abs(snappedBounds!.y - snappedStageBounds!.y)).toBeLessThanOrEqual(1)
+    expect(Math.abs(snappedBounds!.height - snappedStageBounds!.height)).toBeLessThanOrEqual(1)
+
+    const snappedHandle = await handle.boundingBox()
+    await page.mouse.move(snappedHandle!.x + 72, snappedHandle!.y + (snappedHandle!.height / 2))
+    await page.mouse.down()
+    await page.mouse.move(snappedStageBounds!.x + (snappedStageBounds!.width * 0.58), snappedStageBounds!.y + 180, { steps: 12 })
+    await page.mouse.up()
+    await expect(frame).toHaveAttribute('data-window-tile-target', 'none')
+    await expect.poll(async () => window.getAttribute('data-window-transition')).toBe('idle')
+    const restored = await window.boundingBox()
+    expect(Math.abs(restored!.width - initial!.width)).toBeLessThanOrEqual(2)
+    expect(Math.abs(restored!.height - initial!.height)).toBeLessThanOrEqual(2)
+
+    await window.getByRole('button', { name: 'Peek behind Theme' }).click()
+    await expect(window).toHaveAttribute('data-window-peeking', 'true')
+    expect(await window.evaluate((element) => window.getComputedStyle(element).opacity)).toBe('1')
+    expect(errors).toEqual([])
+
+    await testInfo.attach(`window-interactions-${browserName}.png`, {
         body: await page.screenshot({ animations: 'disabled' }),
         contentType: 'image/png',
     })

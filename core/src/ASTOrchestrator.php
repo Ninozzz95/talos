@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Kadmos;
 
+use Kadmos\Tool\ToolApprovalGrant;
+use Kadmos\Tool\ToolApprovalAuthority;
 use Kadmos\Workers\WorkerRegistry;
 use Kadmos\Workers\NodeWorkerInterface;
 use InvalidArgumentException;
 
 final class ASTOrchestrator
 {
-    /** @var array<string, array{id: string, status: string, type: string, payload?: array<string, mixed>, output_summary?: string, raw_output?: mixed}> */
+    /** @var array<string, array{id: string, status: string, type: string, payload?: array<string, mixed>, approval_requirement?: array{capability: string, plan_hash: string}, approval_grant?: array<string, string>, output_summary?: string, raw_output?: mixed}> */
     private array $nodes = [];
 
     /** @var array<string, list<string>> */
@@ -19,9 +21,12 @@ final class ASTOrchestrator
     /** @var array<string, list<string>> */
     private array $children = [];
 
+    /** @var array<string, true> */
+    private array $consumedApprovalIds = [];
+
     private WorkerRegistry $workerRegistry;
 
-    public function __construct(WorkerRegistry $workerRegistry)
+    public function __construct(WorkerRegistry $workerRegistry, private readonly ?ToolApprovalAuthority $approvalAuthority = null)
     {
         $this->workerRegistry = $workerRegistry;
     }
@@ -56,17 +61,38 @@ final class ASTOrchestrator
 
     public function markRunning(string $nodeId): void
     {
+        $this->assertNodeExists($nodeId);
+        if (! in_array($this->nodes[$nodeId]['status'], [NodeStatus::PENDING, NodeStatus::VALIDATED, NodeStatus::RETRYING], true)) {
+            throw new InvalidArgumentException("Node cannot transition to RUNNING from its current state: {$nodeId}");
+        }
+        if (! $this->allDependenciesSucceeded($nodeId)) {
+            throw new InvalidArgumentException("Node dependencies have not succeeded: {$nodeId}");
+        }
+        if (isset($this->nodes[$nodeId]['approval_requirement']) && ! isset($this->nodes[$nodeId]['approval_grant'])) {
+            throw new InvalidArgumentException("Node requires a verified approval grant: {$nodeId}");
+        }
+
+        $this->claimApprovalForExecution($nodeId);
+
         $this->setStatus($nodeId, NodeStatus::RUNNING);
     }
 
     public function markSuccess(string $nodeId): void
     {
+        $this->assertNodeExists($nodeId);
+        if ($this->nodes[$nodeId]['status'] !== NodeStatus::RUNNING) {
+            throw new InvalidArgumentException("Only RUNNING nodes can transition to SUCCESS: {$nodeId}");
+        }
         $this->setStatus($nodeId, NodeStatus::SUCCESS);
         $this->restoreBlockedDescendants($nodeId);
     }
 
     public function markFailed(string $nodeId): void
     {
+        $this->assertNodeExists($nodeId);
+        if ($this->nodes[$nodeId]['status'] !== NodeStatus::RUNNING) {
+            throw new InvalidArgumentException("Only RUNNING nodes can transition to FAILED: {$nodeId}");
+        }
         $this->setStatus($nodeId, NodeStatus::FAILED);
         $this->blockPendingDescendants($nodeId);
     }
@@ -79,7 +105,70 @@ final class ASTOrchestrator
             throw new InvalidArgumentException("Only FAILED nodes can be forced to RETRYING: {$nodeId}");
         }
 
+        if (isset($this->nodes[$nodeId]['approval_requirement'])) {
+            unset($this->nodes[$nodeId]['approval_grant']);
+            $this->setStatus($nodeId, NodeStatus::AWAITING_APPROVAL);
+
+            return;
+        }
+
         $this->setStatus($nodeId, NodeStatus::RETRYING);
+    }
+
+    public function markAwaitingApproval(string $nodeId, string $capability): void
+    {
+        $this->assertNodeExists($nodeId);
+        if (! in_array($this->nodes[$nodeId]['status'], [NodeStatus::PENDING, NodeStatus::VALIDATED], true)) {
+            throw new InvalidArgumentException("Only pending or validated nodes can await approval: {$nodeId}");
+        }
+        if (! isset($this->nodes[$nodeId]['payload'])) {
+            throw new InvalidArgumentException("Approval-gated node requires a payload: {$nodeId}");
+        }
+        if ($capability === '' || strlen($capability) > 128) {
+            throw new InvalidArgumentException("Approval capability is invalid: {$nodeId}");
+        }
+
+        $this->nodes[$nodeId]['approval_requirement'] = [
+            'capability' => $capability,
+            'plan_hash' => $this->approvalPlanHash($nodeId),
+        ];
+        unset($this->nodes[$nodeId]['approval_grant']);
+        $this->setStatus($nodeId, NodeStatus::AWAITING_APPROVAL);
+    }
+
+    /** @return array{capability: string, plan_hash: string} */
+    public function getApprovalRequirement(string $nodeId): array
+    {
+        $this->assertNodeExists($nodeId);
+        $requirement = $this->nodes[$nodeId]['approval_requirement'] ?? null;
+        if (! is_array($requirement)) {
+            throw new InvalidArgumentException("Node does not carry an approval requirement: {$nodeId}");
+        }
+
+        return $requirement;
+    }
+
+    public function approveNode(string $nodeId, ToolApprovalGrant $approval): void
+    {
+        $this->assertNodeExists($nodeId);
+        if ($this->nodes[$nodeId]['status'] !== NodeStatus::AWAITING_APPROVAL) {
+            throw new InvalidArgumentException("Only AWAITING_APPROVAL nodes can be approved: {$nodeId}");
+        }
+        $requirement = $this->getApprovalRequirement($nodeId);
+        if ($approval->nodeId !== $nodeId
+            || $approval->capability !== $requirement['capability']
+            || $approval->planHash !== $requirement['plan_hash']) {
+            throw new InvalidArgumentException("Approval grant does not match the current node plan: {$nodeId}");
+        }
+        if (isset($this->consumedApprovalIds[$approval->approvalId])) {
+            throw new InvalidArgumentException("Approval grant has already been consumed: {$nodeId}");
+        }
+        if ($this->approvalAuthority === null || ! $this->approvalAuthority->authorizes($approval)) {
+            throw new InvalidArgumentException("Approval actor is not authorized for the node capability: {$nodeId}");
+        }
+
+        $this->nodes[$nodeId]['approval_grant'] = $approval->toArray();
+        $this->setStatus($nodeId, NodeStatus::VALIDATED);
     }
 
     /**
@@ -107,6 +196,11 @@ final class ASTOrchestrator
         $this->assertNodeExists($nodeId);
 
         return $this->nodes[$nodeId]['status'];
+    }
+
+    public function isEmpty(): bool
+    {
+        return $this->nodes === [];
     }
 
     /**
@@ -142,6 +236,14 @@ final class ASTOrchestrator
         $nodeId = (string) $nodeId;
         $this->assertNodeExists($nodeId);
         $this->nodes[$nodeId]['payload'] = $payload;
+        if (isset($this->nodes[$nodeId]['approval_requirement'])) {
+            $this->nodes[$nodeId]['approval_requirement']['plan_hash'] = $this->approvalPlanHash($nodeId);
+            unset($this->nodes[$nodeId]['approval_grant']);
+            $this->nodes[$nodeId]['status'] = NodeStatus::AWAITING_APPROVAL;
+
+            return;
+        }
+
         $this->nodes[$nodeId]['status'] = NodeStatus::VALIDATED;
     }
 
@@ -150,13 +252,20 @@ final class ASTOrchestrator
      */
     public function executeNode(string $nodeId): void
     {
+        $this->assertNodeExists($nodeId);
         $node = $this->nodes[$nodeId];
 
         if ($node['status'] !== NodeStatus::VALIDATED && $node['status'] !== NodeStatus::RETRYING) {
             throw new \RuntimeException("Node {$nodeId} is not in an executable state.");
         }
+        if (! $this->allDependenciesSucceeded($nodeId)) {
+            throw new \RuntimeException("Node {$nodeId} dependencies have not succeeded.");
+        }
+        if (isset($node['approval_requirement']) && ! isset($node['approval_grant'])) {
+            throw new \RuntimeException("Node {$nodeId} requires a verified approval grant.");
+        }
 
-        $this->setStatus($nodeId, NodeStatus::RUNNING);
+        $this->markRunning($nodeId);
 
         try {
             $worker = $this->workerRegistry->getWorker($node['type']);
@@ -171,9 +280,9 @@ final class ASTOrchestrator
             } elseif ($delta['status'] === NodeStatus::SUCCESS) {
                 $this->restoreBlockedDescendants($nodeId);
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable) {
             $this->setStatus($nodeId, NodeStatus::FAILED);
-            $this->nodes[$nodeId]['output_summary'] = "Worker Exception: " . $e->getMessage();
+            $this->nodes[$nodeId]['output_summary'] = 'Worker execution failed.';
             $this->nodes[$nodeId]['raw_output'] = null;
             $this->blockPendingDescendants($nodeId);
         }
@@ -243,7 +352,7 @@ final class ASTOrchestrator
 
     /**
      * Exports the full DAG state as an array for serialization.
-     * @return array{nodes: array, dependencies: array, children: array}
+     * @return array{nodes: array, dependencies: array, children: array, consumed_approval_ids: list<string>}
      */
     public function exportState(): array
     {
@@ -251,18 +360,103 @@ final class ASTOrchestrator
             'nodes' => $this->nodes,
             'dependencies' => $this->dependencies,
             'children' => $this->children,
+            'consumed_approval_ids' => array_keys($this->consumedApprovalIds),
         ];
     }
 
     /**
      * Imports DAG state from a previously exported array.
-     * @param array{nodes: array, dependencies: array, children: array} $data
+     * @param array{nodes: array, dependencies: array, children: array, consumed_approval_ids?: list<string>} $data
      */
     public function importState(array $data): void
     {
-        $this->nodes = $data['nodes'] ?? [];
-        $this->dependencies = $data['dependencies'] ?? [];
-        $this->children = $data['children'] ?? [];
+        $expectedApprovalCapabilities = [];
+        foreach ($this->nodes as $nodeId => $node) {
+            $capability = $node['approval_requirement']['capability'] ?? null;
+            if (is_string($capability) && $capability !== '') {
+                $expectedApprovalCapabilities[$nodeId] = $capability;
+            }
+        }
+
+        $nodes = $data['nodes'] ?? [];
+        $dependencies = $data['dependencies'] ?? [];
+        $children = $data['children'] ?? [];
+        if (! is_array($nodes) || ! is_array($dependencies) || ! is_array($children)) {
+            throw new InvalidArgumentException('Imported DAG collections must be arrays.');
+        }
+        if ($nodes !== [] && $this->nodes === []) {
+            throw new InvalidArgumentException('Executable DAG state requires a pre-materialized topology.');
+        }
+
+        $this->validateImportedTopology($nodes, $dependencies, $children);
+
+        $consumedApprovalIdList = $data['consumed_approval_ids'] ?? [];
+        if (! is_array($consumedApprovalIdList) || ! array_is_list($consumedApprovalIdList)) {
+            throw new InvalidArgumentException('Imported consumed approval IDs must be a list.');
+        }
+        $consumedApprovalIds = [];
+        foreach ($consumedApprovalIdList as $approvalId) {
+            if (! is_string($approvalId) || $approvalId === '' || isset($consumedApprovalIds[$approvalId])) {
+                throw new InvalidArgumentException('Imported consumed approval IDs must be unique non-empty strings.');
+            }
+            $consumedApprovalIds[$approvalId] = true;
+        }
+
+        $this->validateImportedApprovals($nodes, $dependencies, $consumedApprovalIds, $expectedApprovalCapabilities);
+
+        $this->nodes = $nodes;
+        $this->dependencies = $dependencies;
+        $this->children = $children;
+        $this->consumedApprovalIds = $consumedApprovalIds;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $nodes
+     * @param array<string, list<string>> $dependencies
+     * @param array<string, list<string>> $children
+     */
+    private function validateImportedTopology(array $nodes, array $dependencies, array $children): void
+    {
+        $expectedIds = array_keys($this->nodes);
+        $importedIds = array_keys($nodes);
+        sort($expectedIds, SORT_STRING);
+        sort($importedIds, SORT_STRING);
+        if ($expectedIds !== $importedIds) {
+            throw new InvalidArgumentException('Imported DAG node set does not match the materialized topology.');
+        }
+
+        $expectedChildren = array_fill_keys($importedIds, []);
+        foreach ($nodes as $nodeId => $node) {
+            if (! is_string($nodeId) || ! is_array($node) || ($node['id'] ?? null) !== $nodeId) {
+                throw new InvalidArgumentException('Imported DAG node identity is invalid.');
+            }
+            $importedDependencies = $dependencies[$nodeId] ?? null;
+            if (! is_array($importedDependencies) || ! array_is_list($importedDependencies)) {
+                throw new InvalidArgumentException("Imported DAG dependencies are invalid: {$nodeId}");
+            }
+            foreach ($importedDependencies as $dependencyId) {
+                if (! is_string($dependencyId) || ! isset($nodes[$dependencyId])) {
+                    throw new InvalidArgumentException("Imported DAG dependency is unknown: {$nodeId}");
+                }
+                $expectedChildren[$dependencyId][] = $nodeId;
+            }
+
+            if (($node['type'] ?? null) !== ($this->nodes[$nodeId]['type'] ?? null)) {
+                throw new InvalidArgumentException("Imported DAG node type does not match the materialized plan: {$nodeId}");
+            }
+            if ($importedDependencies !== ($this->dependencies[$nodeId] ?? [])) {
+                throw new InvalidArgumentException("Imported DAG dependencies do not match the materialized plan: {$nodeId}");
+            }
+            if ($this->canonicalApprovalValue($node['payload'] ?? []) !== $this->canonicalApprovalValue($this->nodes[$nodeId]['payload'] ?? [])) {
+                throw new InvalidArgumentException("Imported DAG payload does not match the materialized plan: {$nodeId}");
+            }
+        }
+
+        foreach ($expectedChildren as $nodeId => $expected) {
+            if (($children[$nodeId] ?? null) !== $expected) {
+                throw new InvalidArgumentException("Imported DAG child index is invalid: {$nodeId}");
+            }
+        }
     }
 
     private function setStatus(string $nodeId, string $status): void
@@ -325,6 +519,179 @@ final class ASTOrchestrator
     private function isSchedulableState(string $status): bool
     {
         return \in_array($status, [NodeStatus::PENDING, NodeStatus::VALIDATED, NodeStatus::RETRYING], true);
+    }
+
+    private function approvalPlanHash(string $nodeId): string
+    {
+        return $this->approvalPlanHashFor($nodeId, $this->nodes, $this->dependencies);
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $nodes
+     * @param array<string, list<string>> $dependencies
+     * @param array<string, true> $consumedApprovalIds
+     * @param array<string, string> $expectedApprovalCapabilities
+     */
+    private function validateImportedApprovals(
+        array $nodes,
+        array $dependencies,
+        array $consumedApprovalIds,
+        array $expectedApprovalCapabilities,
+    ): void
+    {
+        $activeApprovalIds = [];
+        foreach ($nodes as $nodeId => $node) {
+            if (! is_string($nodeId) || $nodeId === '' || ! is_array($node) || ($node['id'] ?? null) !== $nodeId) {
+                throw new InvalidArgumentException('Imported DAG node identity is invalid.');
+            }
+
+            $requirement = $node['approval_requirement'] ?? null;
+            $grantData = $node['approval_grant'] ?? null;
+            $expectedCapability = $expectedApprovalCapabilities[$nodeId]
+                ?? $this->proceduralApprovalCapability($nodeId, $node);
+            if ($expectedCapability !== null && $requirement === null) {
+                throw new InvalidArgumentException("Imported state removed a required approval policy: {$nodeId}");
+            }
+            if ($requirement === null && $grantData === null) {
+                continue;
+            }
+            if (! is_array($requirement)
+                || array_keys($requirement) !== ['capability', 'plan_hash']
+                || ! is_string($requirement['capability'])
+                || $requirement['capability'] === ''
+                || ($expectedCapability !== null && $requirement['capability'] !== $expectedCapability)
+                || ! is_string($requirement['plan_hash'])
+                || $requirement['plan_hash'] !== $this->approvalPlanHashFor($nodeId, $nodes, $dependencies)) {
+                throw new InvalidArgumentException("Imported approval requirement is invalid: {$nodeId}");
+            }
+            if ($grantData === null) {
+                if (($node['status'] ?? null) !== NodeStatus::AWAITING_APPROVAL) {
+                    throw new InvalidArgumentException("Imported unapproved node is not awaiting approval: {$nodeId}");
+                }
+
+                continue;
+            }
+            if (! is_array($grantData)) {
+                throw new InvalidArgumentException("Imported approval grant is invalid: {$nodeId}");
+            }
+
+            $grant = ToolApprovalGrant::fromArray($grantData);
+            if ($grant->nodeId !== $nodeId
+                || $grant->capability !== $requirement['capability']
+                || $grant->planHash !== $requirement['plan_hash']
+                || isset($activeApprovalIds[$grant->approvalId])
+                || $this->approvalAuthority === null
+                || ! $this->approvalAuthority->authorizes($grant)) {
+                throw new InvalidArgumentException("Imported approval grant could not be verified: {$nodeId}");
+            }
+            $status = $node['status'] ?? null;
+            $wasClaimed = isset($consumedApprovalIds[$grant->approvalId]);
+            if (($status === NodeStatus::VALIDATED && $wasClaimed)
+                || (in_array($status, [NodeStatus::RUNNING, NodeStatus::SUCCESS, NodeStatus::FAILED], true) && ! $wasClaimed)
+                || ! in_array($status, [NodeStatus::VALIDATED, NodeStatus::RUNNING, NodeStatus::SUCCESS, NodeStatus::FAILED], true)) {
+                throw new InvalidArgumentException("Imported approval execution state is invalid: {$nodeId}");
+            }
+            $activeApprovalIds[$grant->approvalId] = true;
+        }
+    }
+
+    /** @param array<string, mixed> $node */
+    private function proceduralApprovalCapability(string $nodeId, array $node): ?string
+    {
+        $type = $node['type'] ?? null;
+        if (! is_string($type) || ! str_starts_with($type, 'TOOL_')) {
+            return null;
+        }
+
+        $payload = $node['payload'] ?? null;
+        $context = is_array($payload) ? ($payload['context'] ?? null) : null;
+        if (! is_array($context)
+            || ($context['node_id'] ?? null) !== $nodeId
+            || ! is_string($context['risk'] ?? null)
+            || ! is_string($context['capability'] ?? null)
+            || $context['capability'] === '') {
+            throw new InvalidArgumentException("Imported procedural node context is invalid: {$nodeId}");
+        }
+
+        return in_array($context['risk'], ['high', 'critical'], true) ? $context['capability'] : null;
+    }
+
+    private function claimApprovalForExecution(string $nodeId): void
+    {
+        $requirement = $this->nodes[$nodeId]['approval_requirement'] ?? null;
+        if ($requirement === null) {
+            return;
+        }
+
+        $grantData = $this->nodes[$nodeId]['approval_grant'] ?? null;
+        if (! is_array($grantData)) {
+            throw new InvalidArgumentException("Node requires a verified approval grant: {$nodeId}");
+        }
+        $grant = ToolApprovalGrant::fromArray($grantData);
+        if (isset($this->consumedApprovalIds[$grant->approvalId])
+            || $this->approvalAuthority === null
+            || ! $this->approvalAuthority->claimForExecution($grant)) {
+            throw new InvalidArgumentException("Approval grant could not be claimed for execution: {$nodeId}");
+        }
+
+        $this->consumedApprovalIds[$grant->approvalId] = true;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $nodes
+     * @param array<string, list<string>> $dependencies
+     */
+    private function approvalPlanHashFor(string $nodeId, array $nodes, array $dependencies): string
+    {
+        $node = $nodes[$nodeId] ?? null;
+        if (! is_array($node) || ! isset($node['type']) || ! is_string($node['type'])) {
+            throw new InvalidArgumentException("Approval node state is invalid: {$nodeId}");
+        }
+        $material = $this->canonicalApprovalValue([
+            'node_id' => $nodeId,
+            'type' => $node['type'],
+            'dependencies' => $dependencies[$nodeId] ?? [],
+            'payload' => $node['payload'] ?? [],
+        ]);
+
+        try {
+            $json = json_encode($material, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            throw new InvalidArgumentException("Approval payload is not JSON-compatible: {$nodeId}", previous: $exception);
+        }
+
+        return 'sha256:'.hash('sha256', $json);
+    }
+
+    private function canonicalApprovalValue(mixed $value): mixed
+    {
+        if ($value instanceof \stdClass) {
+            $entries = [];
+            $properties = get_object_vars($value);
+            ksort($properties, SORT_STRING);
+            foreach ($properties as $key => $item) {
+                $entries[] = [$key, $this->canonicalApprovalValue($item)];
+            }
+
+            return ['kind' => 'object', 'entries' => $entries];
+        }
+        if (! is_array($value)) {
+            return $value;
+        }
+        if (array_is_list($value)) {
+            return [
+                'kind' => 'list',
+                'items' => array_map($this->canonicalApprovalValue(...), $value),
+            ];
+        }
+
+        ksort($value, SORT_STRING);
+        $entries = [];
+        foreach ($value as $key => $item) {
+            $entries[] = [(string) $key, $this->canonicalApprovalValue($item)];
+        }
+
+        return ['kind' => 'object', 'entries' => $entries];
     }
 
     private function assertNodeExists(string $nodeId): void

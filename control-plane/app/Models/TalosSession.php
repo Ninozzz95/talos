@@ -34,6 +34,11 @@ final class TalosSession extends Model
         return $this->hasMany(TalosMessage::class, 'session_id');
     }
 
+    public function toolTurns(): HasMany
+    {
+        return $this->hasMany(TalosToolTurn::class, 'session_id');
+    }
+
     /**
      * @return array<string, string>
      */

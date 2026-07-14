@@ -12,15 +12,15 @@ afterEach(() => {
 })
 
 describe('TalosWindowResizeHandles', () => {
-    it('renders eight labelled handles and emits their edge on pointer down', () => {
-        const events: unknown[][] = []
+    it('renders eight labelled handles and lets the upstream adapter own pointer down', () => {
         const container = document.createElement('div')
+        let bubbled = 0
+        container.addEventListener('pointerdown', () => { bubbled += 1 })
         document.body.append(container)
         const app = createApp(defineComponent({
             setup() {
                 return () => h(TalosWindowResizeHandles, {
                     title: 'Runtime',
-                    onResizeStart: (...args: unknown[]) => events.push(args),
                 })
             },
         }))
@@ -40,11 +40,11 @@ describe('TalosWindowResizeHandles', () => {
             'Resize Runtime window top left',
         ])
 
-        handles[4].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+        const pointer = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })
+        handles[4].dispatchEvent(pointer)
 
-        expect(events).toHaveLength(1)
-        expect(events[0][0]).toBe('top-right')
-        expect(events[0][1]).toBeInstanceOf(PointerEvent)
+        expect(pointer.defaultPrevented).toBe(false)
+        expect(bubbled).toBe(1)
     })
 
     it('does not render handles while docked or fullscreen', () => {
@@ -59,5 +59,24 @@ describe('TalosWindowResizeHandles', () => {
         app.mount(container)
 
         expect(container.querySelectorAll('.talos-window-resize-handle')).toHaveLength(0)
+    })
+
+    it.each([
+        ['left-half', 'Resize Runtime window right'],
+        ['right-half', 'Resize Runtime window left'],
+    ] as const)('exposes only the shared divider for a %s tile', (tileTarget, expectedLabel) => {
+        const container = document.createElement('div')
+        document.body.append(container)
+        const app = createApp(defineComponent({
+            setup() {
+                return () => h(TalosWindowResizeHandles, { title: 'Runtime', tileTarget })
+            },
+        }))
+        mounted.push(app)
+        app.mount(container)
+
+        const handles = Array.from(container.querySelectorAll<HTMLButtonElement>('.talos-window-resize-handle'))
+        expect(handles).toHaveLength(1)
+        expect(handles[0]?.getAttribute('aria-label')).toBe(expectedLabel)
     })
 })

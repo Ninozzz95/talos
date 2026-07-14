@@ -28,7 +28,7 @@ export type TalosChatLayoutPreferences = {
     composer_mode: TalosComposerMode
     advanced_rail_expanded: boolean
 }
-export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'stopped' | 'failed'
+export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'recovery_required' | 'stopped' | 'failed'
 export type TalosBrowserMode = {
     enabled: boolean
     session_id: string | null
@@ -49,6 +49,32 @@ export type TalosBrowserActivity = {
     browser_session_id: string
     artifact_ids: string[]
     occurred_at: string
+}
+export type TalosPendingToolApproval = {
+    id: string
+    turn_id: string
+    run_id: string
+    tool_name: 'browser_click'
+    risk: 'high'
+    capability: 'browser.write'
+    status: 'pending' | 'stale'
+    actionable: boolean
+    stale_reason: string | null
+    plan_hash: string
+    browser_session_id: string
+    snapshot_artifact_id: string
+    snapshot_id: string
+    state_version: number
+    evidence_hash: string
+    expected_effect: string
+    target: {
+        ref: string
+        role: string
+        name: string
+        visible: boolean
+    }
+    url: string | null
+    title: string | null
 }
 export type TalosRunMode = 'avm_on' | 'avm_off_direct' | 'tool_agent'
     | 'avm_off'
@@ -804,6 +830,9 @@ export type TalosBrowserSession = {
     status: 'ready' | 'active' | 'closed' | 'expired' | 'failed' | string
     mode: 'read_only' | string
     capabilities: string[]
+    state_version?: number
+    viewport?: { width: number; height: number }
+    policy?: Record<string, unknown> | null
     current_url?: string | null
     current_title?: string | null
     last_screenshot_artifact_id?: string | null
@@ -815,10 +844,50 @@ export type TalosBrowserSession = {
 
 export type TalosBrowserArtifact = {
     id: string
+    browser_session_id?: string
+    worker_capture_id?: string | null
+    source_command_id?: string | null
+    source_state_version?: number | null
+    state_version?: number | null
+    trust_boundary?: string | null
     type: 'screenshot' | 'snapshot' | string
     mime?: string | null
+    sha256?: string | null
     metadata?: Record<string, unknown> | null
+    preview_url?: string
     created_at?: string
+}
+
+export type TalosBrowserHmiChallenge = {
+    approval_id: string
+    request_hash: string
+    expires_at: string
+    action: {
+        category: string
+        label: string
+        origin: string
+        consequence: string
+    }
+}
+
+export type TalosBrowserPointerFrame = {
+    browserSessionId: string
+    artifact: TalosBrowserArtifact
+    normalizedX: number
+    normalizedY: number
+    clickCount: 1 | 2
+}
+
+export type TalosBrowserHmiExecution = {
+    interaction: {
+        status: 'executed'
+        command_id: string
+        approval_id?: string
+        target?: Record<string, unknown>
+    }
+    session: TalosBrowserSession
+    screenshot: TalosBrowserArtifact
+    snapshot: TalosBrowserArtifact
 }
 
 export type TalosBrowserEvent = {
@@ -843,7 +912,8 @@ export type TalosBrowserSnapshotNode = {
 
 export type TalosBrowserSnapshotPreview = {
     preview_available?: boolean
-    snapshot: {
+    reason?: string
+    snapshot?: {
         untrusted: true
         format?: string
         url?: string

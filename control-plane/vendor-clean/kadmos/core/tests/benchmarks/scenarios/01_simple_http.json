@@ -1,0 +1,18 @@
+{
+  "name": "simple_http_call",
+  "difficulty": 1,
+  "description": "Single HTTP request workflow",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "n1", "node_type": "HTTP_REQUEST" },
+      { "action": "MUTATE_PAYLOAD", "node_id": "n1", "payload": { "url": "https://api.example.com/data", "method": "GET" } },
+      { "action": "YIELD_EXECUTION" }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": null,
+  "expected_nodes": 1,
+  "expected_all_success": true
+}

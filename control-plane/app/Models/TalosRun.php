@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 final class TalosRun extends Model
 {
@@ -80,6 +81,11 @@ final class TalosRun extends Model
     public function artifacts(): HasMany
     {
         return $this->hasMany(TalosRunArtifact::class, 'run_id');
+    }
+
+    public function toolTurn(): HasOne
+    {
+        return $this->hasOne(TalosToolTurn::class, 'run_id');
     }
 
     /**

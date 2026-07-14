@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertCircle, Loader2 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
-import TalosBrowserScreenshotEvidence from '../chat/TalosBrowserScreenshotEvidence.vue'
 import TalosMessageContent from '../chat/TalosMessageContent.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosRunActivity from '../chat/TalosRunActivity.vue'
@@ -13,8 +12,20 @@ import TalosGuidedStart from './TalosGuidedStart.vue'
 import TalosLiveEdgeControl from './TalosLiveEdgeControl.vue'
 import { resolveTalosWelcomePrompt } from '../../../lib/talosWelcomePrompts'
 import type { TalosMessage } from '../../../lib/talosTypes'
-import type { TalosBrowserActivity as TalosBrowserActivityItem, TalosBrowserSnapshotPreview, TalosChatBubbleScale } from '../../../lib/talosTypes'
+import type {
+    TalosBrowserActivity as TalosBrowserActivityItem,
+    TalosBrowserHmiChallenge,
+    TalosBrowserPointerFrame,
+    TalosBrowserSession,
+    TalosBrowserSnapshotPreview,
+    TalosChatBubbleScale,
+    TalosPendingToolApproval,
+} from '../../../lib/talosTypes'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
+
+const TalosBrowserScreenshotEvidence = defineAsyncComponent(
+    () => import('../chat/TalosBrowserScreenshotEvidence.vue'),
+)
 
 type MessageSource = {
     context_set_id?: string
@@ -43,11 +54,20 @@ const props = defineProps<{
     expandedEvidenceMessageIds: string[]
     welcomePromptId?: string | null
     showWelcomeMessage: boolean
+    showMissionPath: boolean
     fullWidthChat: boolean
     sensitiveBlur: boolean
     bubbleScale: TalosChatBubbleScale
     browserActivities: TalosBrowserActivityItem[]
     browserSnapshot: TalosBrowserSnapshotPreview | null
+    activeBrowserSession: TalosBrowserSession | null
+    browserInteractionPending: boolean
+    browserInteractionLocked: boolean
+    browserInteractionError: string | null
+    pendingBrowserInteractionApproval: TalosBrowserHmiChallenge | null
+    pendingToolApprovals: TalosPendingToolApproval[]
+    decidingToolApprovalIds: string[]
+    devBrowserEvidence: boolean
     activeTalosSessionId: string | null
     viewport: TalosChatViewportController
 }>()
@@ -63,6 +83,9 @@ const emit = defineEmits<{
     retryAssistantMessage: [message: TalosMessage]
     toggleMessageEvidence: [message: TalosMessage]
     benchmarkMessageRun: [message: TalosMessage]
+    interactBrowserFrame: [frame: TalosBrowserPointerFrame]
+    confirmBrowserFrameInteraction: [decision: 'approve' | 'reject']
+    decideToolApproval: [approval: TalosPendingToolApproval, decision: 'approve' | 'reject']
 }>()
 
 const chatThreadEl = ref<HTMLElement | null>(null)
@@ -98,6 +121,12 @@ function messageBrowserActivities(message: TalosMessage): TalosBrowserActivityIt
         }]
     })
 }
+
+const currentBrowserScreenshotActivity = computed(() => [...props.browserActivities].reverse().find((activity) => (
+    activity.operation === 'screenshot'
+    && activity.status === 'succeeded'
+    && activity.artifact_ids.length > 0
+)) ?? null)
 
 const messageScreenshotArtifactIds = computed(() => [...new Set(
     props.messages.flatMap((message) => messageBrowserActivities(message).flatMap((activity) => activity.artifact_ids)),
@@ -172,14 +201,6 @@ function messageSources(message: TalosMessage): MessageSource[] {
 
         return [source as MessageSource]
     })
-}
-
-function browserEvidence(message: TalosMessage) {
-    const evidence = message.metadata?.used_browser_context
-
-    return evidence && typeof evidence === 'object' && !Array.isArray(evidence)
-        ? evidence as { url?: string; title?: string; text_digest?: string; untrusted?: boolean }
-        : null
 }
 
 function messageHasEvidence(message: TalosMessage) {
@@ -290,7 +311,18 @@ defineExpose({ scrollToBottom })
                 :activities="browserActivities"
                 :snapshot="browserSnapshot"
                 :talos-session-id="activeTalosSessionId"
+                :active-browser-session="activeBrowserSession"
+                :interaction-pending="browserInteractionPending"
+                :interaction-locked="browserInteractionLocked"
+                :interaction-error="browserInteractionError"
+                :pending-interaction-approval="pendingBrowserInteractionApproval"
+                :pending-tool-approvals="pendingToolApprovals"
+                :deciding-tool-approval-ids="decidingToolApprovalIds"
+                :dev-browser-evidence="devBrowserEvidence"
                 :excluded-screenshot-artifact-ids="messageScreenshotArtifactIds"
+                @interact="emit('interactBrowserFrame', $event)"
+                @confirm="emit('confirmBrowserFrameInteraction', $event)"
+                @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
             />
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
@@ -311,8 +343,8 @@ defineExpose({ scrollToBottom })
             </div>
 
             <div v-else-if="!messages.length" class="flex flex-1 flex-col items-center justify-center text-center">
-                <div data-testid="talos-empty-brand" class="mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
-                    <span class="talos-short-logo talos-short-logo-hero" aria-hidden="true">
+                <div data-testid="talos-empty-brand" class="talos-chat-empty-brand mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
+                    <span class="talos-short-logo talos-short-logo-hero talos-chat-brand-logo" aria-hidden="true">
                         <span class="talos-short-logo-mark"></span>
                     </span>
                     <span class="talos-orbitron-brand text-4xl font-semibold text-[var(--talos-text)] sm:text-5xl">TALOS</span>
@@ -324,7 +356,7 @@ defineExpose({ scrollToBottom })
                     </p>
                 </template>
                 <TalosGuidedStart
-                    v-if="showWelcomeMessage"
+                    v-if="showMissionPath"
                     class="mt-5"
                     :model-ready="selectedModelProfileIsUsable"
                     :context-selected="contextSelected"
@@ -383,8 +415,16 @@ defineExpose({ scrollToBottom })
                         <TalosBrowserScreenshotEvidence
                             v-if="message.role === 'assistant'"
                             :activities="messageBrowserActivities(message)"
+                            :current-frame-activity="currentBrowserScreenshotActivity"
                             :talos-session-id="activeTalosSessionId"
+                            :active-browser-session="activeBrowserSession"
+                            :interaction-pending="browserInteractionPending"
+                            :interaction-locked="browserInteractionLocked"
+                            :interaction-error="browserInteractionError"
+                            :pending-interaction-approval="pendingBrowserInteractionApproval"
                             loading-strategy="eager"
+                            @interact="emit('interactBrowserFrame', $event)"
+                            @confirm="emit('confirmBrowserFrameInteraction', $event)"
                         />
                         <TalosRunActivity
                             v-if="message.role === 'assistant'"
@@ -433,11 +473,6 @@ defineExpose({ scrollToBottom })
                                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ sourcePreview(source) }}</p>
                                 </article>
                             </div>
-                        </div>
-                        <div v-if="message.role === 'assistant' && browserEvidence(message)" data-testid="talos-browser-evidence-disclosure" class="mt-3 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3 text-xs">
-                            <div class="font-semibold text-[var(--talos-warning)]">Untrusted browser evidence</div>
-                            <div class="mt-1 break-words text-[var(--talos-text)] [overflow-wrap:anywhere]">{{ browserEvidence(message)?.title || browserEvidence(message)?.url || 'Captured browser page' }}</div>
-                            <div class="mt-1 break-words [overflow-wrap:anywhere] text-[var(--talos-muted)]">{{ browserEvidence(message)?.text_digest }}</div>
                         </div>
                     </div>
                 </article>

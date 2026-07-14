@@ -8,10 +8,13 @@ use App\Models\TalosContextSet;
 use App\Models\TalosBrowserArtifact;
 use App\Models\TalosBrowserSession;
 use App\Models\TalosFileChunk;
+use App\Models\TalosMessage;
 use App\Models\TalosModelProfile;
 use App\Models\TalosModelRoutingProfile;
 use App\Models\TalosRun;
 use App\Models\TalosSession;
+use App\Models\TalosToolCall;
+use App\Models\TalosToolTurn;
 use App\Models\User;
 use App\Services\Memory\TalosMemoryRetrievalService;
 use App\Services\Models\TalosModelProviderCatalog;
@@ -19,12 +22,19 @@ use App\Services\Models\TalosModelRoutingService;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\Security\PublicHttpUrlPolicy;
 use App\Services\Skills\TalosSkillPlanningContextService;
+use App\Services\Talos\Agent\TalosAgentTurnOutcome;
+use App\Services\Talos\Agent\TalosAgentTurnService;
+use App\Services\Talos\Agent\TalosApprovalService;
 use App\Services\Talos\Browser\TalosBrowserCommandService;
 use App\Services\Talos\Browser\TalosBrowserCommandException;
 use App\Services\Talos\Browser\TalosBrowserCommand;
+use App\Services\Talos\Browser\TalosBrowserArtifactIntegrityException;
+use App\Services\Talos\Browser\TalosBrowserArtifactReader;
+use App\Services\Talos\Browser\TalosBrowserActivityProjector;
 use App\Services\Talos\Browser\TalosBrowserDeadline;
 use App\Services\Talos\Browser\TalosBrowserFollowUpResolver;
 use App\Services\Talos\Browser\TalosBrowserRedactor;
+use App\Services\Talos\Browser\TalosBrowserSemanticClickService;
 use App\Services\Tools\TalosToolPlanningContextService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -32,8 +42,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 use Throwable;
 
 final class TalosChatController extends Controller
@@ -51,6 +61,10 @@ final class TalosChatController extends Controller
     private const MAX_BROWSER_WALL_SECONDS = 60;
     private const MAX_BROWSER_EVIDENCE_BYTES = 120000;
 
+    public function __construct(
+        private readonly TalosBrowserActivityProjector $browserActivityProjector,
+    ) {}
+
     public function __invoke(
         Request $request,
         RunEventNormalizer $normalizer,
@@ -58,8 +72,11 @@ final class TalosChatController extends Controller
         TalosMemoryRetrievalService $memoryRetrieval,
         TalosModelRoutingService $modelRouting,
         TalosSkillPlanningContextService $skillPlanningContext,
+        TalosBrowserArtifactReader $browserArtifactReader,
         TalosBrowserCommandService $browserCommands,
         TalosBrowserFollowUpResolver $browserFollowUps,
+        TalosAgentTurnService $agentTurns,
+        TalosBrowserSemanticClickService $browserClicks,
     ): JsonResponse
     {
         $validated = $request->validate([
@@ -129,6 +146,11 @@ final class TalosChatController extends Controller
             $browserSession = $resolvedBrowserMode['session'];
             $browserMode = $resolvedBrowserMode['manifest'];
         }
+
+        $directScreenshotRequested = is_array($browserMode)
+            && ($this->directBrowserScreenshotRequested($originalMessage)
+                || $this->directBrowserScreenshotConfirmationRequested($originalMessage, $session)
+                || $this->directBrowserScreenshotRetryRequested($originalMessage, $session));
 
         if (filled($validated['model_profile_id'] ?? null) && filled($validated['model_routing_profile_id'] ?? null)) {
             throw ValidationException::withMessages([
@@ -226,6 +248,7 @@ final class TalosChatController extends Controller
                 $user,
                 $session,
                 (string) $validated['browser_context']['browser_session_id'],
+                $browserArtifactReader,
             );
             if ($resolvedBrowserContext instanceof JsonResponse) {
                 return $resolvedBrowserContext;
@@ -346,6 +369,40 @@ final class TalosChatController extends Controller
             $browserMode['run_id'] = $run->id;
         }
 
+        if ($run instanceof TalosRun && $session instanceof TalosSession) {
+            $this->bindUserMessageToRun(
+                $session,
+                $run,
+                is_string($validated['user_message_id'] ?? null) ? $validated['user_message_id'] : null,
+            );
+        }
+
+        if (is_array($browserMode)
+            && $run instanceof TalosRun
+            && $profile instanceof TalosModelProfile
+            && $browserSession instanceof TalosBrowserSession
+            && ! $directScreenshotRequested) {
+            $user = $request->user();
+            abort_unless($user instanceof User, 401);
+
+            $outcome = $agentTurns->execute((int) $user->id, $run, $profile, $browserSession);
+            $pendingApprovals = $outcome->status === 'awaiting_approval'
+                ? $this->proceduralPendingApprovals((int) $user->id, $outcome->turnId, $browserSession, $browserClicks)
+                : [];
+
+            return $this->proceduralBrowserResponse(
+                $outcome,
+                $run,
+                $session,
+                $browserSession,
+                $usedMemories,
+                $usedContext,
+                $skillPlan,
+                $routingContext,
+                $pendingApprovals,
+            );
+        }
+
         $validatorUrl = rtrim((string) config(
             'services.avm_validator.url',
             env('AVM_VALIDATOR_URL', 'http://127.0.0.1:3000'),
@@ -406,10 +463,6 @@ final class TalosChatController extends Controller
                 ],
             ]);
         }
-        $directScreenshotRequested = is_array($browserMode)
-            && ($this->directBrowserScreenshotRequested($originalMessage)
-                || $this->directBrowserScreenshotConfirmationRequested($originalMessage, $session)
-                || $this->directBrowserScreenshotRetryRequested($originalMessage, $session));
         if (is_array($browserMode)
             && $run instanceof TalosRun
             && $browserSession instanceof TalosBrowserSession
@@ -592,7 +645,7 @@ final class TalosChatController extends Controller
             if ($directScreenshotRequested && $operation === 'screenshot') {
                 $payload = [
                     'mutations' => [],
-                    'text' => 'Screenshot captured and attached as browser evidence.',
+                    'text' => 'Screenshot captured and attached as verified TALOS evidence.',
                     'dag' => "DAG State:\n(empty)",
                 ];
                 break;
@@ -632,6 +685,30 @@ final class TalosChatController extends Controller
             $payload['run'] = $run->refresh()->toApiArray();
         }
 
+        if ($directScreenshotRequested
+            && $run instanceof TalosRun
+            && $session instanceof TalosSession) {
+            $projection = $this->browserActivityProjector->projectionForRun($run);
+            $browserActivities = $projection['activities'];
+            $browserEvidence = $projection['context'];
+            $assistantMessage = TalosMessage::query()->firstOrNew([
+                'session_id' => $session->id,
+                'run_id' => $run->id,
+                'role' => 'assistant',
+            ]);
+            $assistantMessage->forceFill([
+                'content' => (string) $payload['text'],
+                'model_profile_id' => $profile?->id,
+                'metadata' => [
+                    'source' => 'talos_browser_direct',
+                    'grounded' => true,
+                    'used_browser_context' => $browserEvidence,
+                    'browser_activities' => $browserActivities,
+                ],
+            ])->save();
+            $payload['assistant_message'] = $this->assistantMessagePayload($assistantMessage->refresh());
+        }
+
         $payload['used_memories'] = $usedMemories;
         $payload['used_context'] = $usedContext;
         $payload['used_browser_context'] = is_array($browserMode) ? $browserEvidence : ($browserContext === null ? null : [
@@ -649,6 +726,412 @@ final class TalosChatController extends Controller
         }
 
         return response()->json($payload);
+    }
+
+    private function bindUserMessageToRun(?TalosSession $session, TalosRun $run, ?string $userMessageId): void
+    {
+        if (! $session instanceof TalosSession || $userMessageId === null || trim($userMessageId) === '') {
+            return;
+        }
+
+        TalosMessage::query()
+            ->whereKey($userMessageId)
+            ->where('session_id', $session->id)
+            ->where('role', 'user')
+            ->where(function ($query) use ($run): void {
+                $query->whereNull('run_id')->orWhere('run_id', $run->id);
+            })
+            ->update(['run_id' => $run->id]);
+    }
+
+    public function decideToolApproval(
+        Request $request,
+        string $toolTurn,
+        string $toolCall,
+        TalosApprovalService $approvals,
+        TalosAgentTurnService $agentTurns,
+        TalosBrowserSemanticClickService $browserClicks,
+    ): JsonResponse {
+        $input = $request->validate([
+            'decision' => ['required', 'string', 'in:approve,reject'],
+            'plan_hash' => ['required', 'string', 'regex:/^sha256:[a-f0-9]{64}$/'],
+        ]);
+        $user = $request->user();
+        abort_unless($user instanceof User, 401);
+
+        $turn = TalosToolTurn::query()
+            ->ownedBy((int) $user->id)
+            ->with(['run', 'session', 'modelProfile', 'browserSession'])
+            ->find($toolTurn);
+        $call = $turn instanceof TalosToolTurn
+            ? TalosToolCall::query()
+                ->ownedBy((int) $user->id)
+                ->where('tool_turn_id', $turn->id)
+                ->where('run_id', $turn->run_id)
+                ->find($toolCall)
+            : null;
+        if (! $turn instanceof TalosToolTurn || ! $call instanceof TalosToolCall) {
+            return response()->json([
+                'code' => 'TALOS_TOOL_APPROVAL_NOT_FOUND',
+                'message' => 'The requested tool approval was not found.',
+                'details' => [],
+            ], 404);
+        }
+        if ($call->tool_name !== 'browser_click'
+            || $call->capability !== 'browser.write'
+            || $call->risk !== 'high'
+            || ! is_string($call->approval_payload_sha256)
+            || ! hash_equals($call->approval_payload_sha256, (string) $input['plan_hash'])) {
+            return response()->json([
+                'code' => 'TALOS_TOOL_APPROVAL_MISMATCH',
+                'message' => 'The approval does not match the exact pending browser action.',
+                'details' => [],
+            ], 409);
+        }
+
+        $run = $turn->run;
+        $session = $turn->session;
+        if (! $run instanceof TalosRun
+            || ! $session instanceof TalosSession
+            || (int) $run->user_id !== (int) $user->id
+            || (int) $session->user_id !== (int) $user->id) {
+            return response()->json([
+                'code' => 'TALOS_TOOL_APPROVAL_CONTEXT_INVALID',
+                'message' => 'The approval context is no longer available.',
+                'details' => [],
+            ], 409);
+        }
+
+        if ($input['decision'] === 'reject') {
+            try {
+                $approvals->reject((string) $call->id, (int) $user->id, (string) $input['plan_hash']);
+            } catch (InvalidArgumentException) {
+                return response()->json([
+                    'code' => 'TALOS_TOOL_APPROVAL_CONFLICT',
+                    'message' => 'The browser action is no longer awaiting this rejection.',
+                    'details' => [],
+                ], 409);
+            }
+
+            return response()->json([
+                'text' => '',
+                'run' => $run->refresh()->toApiArray(),
+                'agent_turn' => [
+                    'id' => $turn->id,
+                    'status' => 'failed',
+                    'failure_code' => 'TALOS_TOOL_APPROVAL_REJECTED',
+                ],
+                'pending_approvals' => [],
+                'approval_decision' => ['id' => $call->id, 'decision' => 'reject'],
+            ]);
+        }
+
+        $profile = $turn->modelProfile;
+        $browserSession = $turn->browserSession;
+        if (! $profile instanceof TalosModelProfile
+            || ! $browserSession instanceof TalosBrowserSession
+            || (int) $profile->user_id !== (int) $user->id
+            || (int) $browserSession->user_id !== (int) $user->id
+            || (string) $browserSession->talos_session_id !== (string) $session->id) {
+            return response()->json([
+                'code' => 'TALOS_TOOL_APPROVAL_CONTEXT_INVALID',
+                'message' => 'The approval context is no longer available.',
+                'details' => [],
+            ], 409);
+        }
+
+        $alreadyApproved = in_array($call->approval_state, ['approved', 'claimed'], true)
+            && (int) $call->approved_by_user_id === (int) $user->id
+            && is_string($call->approval_payload_sha256)
+            && hash_equals($call->approval_payload_sha256, (string) $input['plan_hash']);
+        if (! $alreadyApproved) {
+            try {
+                if ($turn->status !== 'awaiting_approval'
+                    || $call->status !== 'awaiting_approval'
+                    || (int) $call->state_version !== (int) $browserSession->worker_state_version) {
+                    throw new InvalidArgumentException('Approval state is stale.');
+                }
+                $browserClicks->preview(
+                    $browserSession,
+                    is_array($call->arguments) ? $call->arguments : [],
+                    $call->evidence_snapshot_artifact_id,
+                    $call->evidence_hash,
+                    $call->evidence_snapshot_id,
+                    (int) $call->state_version,
+                );
+                $approvals->approve((string) $call->id, (int) $user->id, (string) $input['plan_hash']);
+            } catch (TalosBrowserCommandException|InvalidArgumentException) {
+                return response()->json([
+                    'code' => 'TALOS_TOOL_APPROVAL_CONFLICT',
+                    'message' => 'The browser action is stale or no longer awaiting this approval.',
+                    'details' => [],
+                ], 409);
+            }
+        }
+
+        $outcome = $agentTurns->execute((int) $user->id, $run, $profile, $browserSession);
+        $pendingApprovals = $outcome->status === 'awaiting_approval'
+            ? $this->proceduralPendingApprovals((int) $user->id, $outcome->turnId, $browserSession, $browserClicks)
+            : [];
+        $metadata = is_array($run->metadata) ? $run->metadata : [];
+
+        return $this->proceduralBrowserResponse(
+            $outcome,
+            $run,
+            $session,
+            $browserSession,
+            [],
+            [],
+            is_array($metadata['skill_plan'] ?? null) ? $metadata['skill_plan'] : [],
+            is_array($metadata['model_routing'] ?? null) ? $metadata['model_routing'] : null,
+            $pendingApprovals,
+        );
+    }
+
+    /**
+     * @param list<array<string, mixed>> $usedMemories
+     * @param list<array<string, mixed>> $usedContext
+     * @param array<string, mixed> $skillPlan
+     * @param array<string, mixed>|null $routingContext
+     */
+    private function proceduralBrowserResponse(
+        TalosAgentTurnOutcome $outcome,
+        TalosRun $run,
+        ?TalosSession $session,
+        TalosBrowserSession $browserSession,
+        array $usedMemories,
+        array $usedContext,
+        array $skillPlan,
+        ?array $routingContext,
+        array $pendingApprovals = [],
+    ): JsonResponse {
+        $run->refresh();
+        $browserProjection = $this->browserActivityProjector->projectionForRun($run);
+        $browserActivities = $browserProjection['activities'];
+        $browserContext = $browserProjection['context'];
+        $assistantMessage = $session?->messages()
+            ->where('run_id', $run->id)
+            ->where('role', 'assistant')
+            ->first();
+        if ($assistantMessage instanceof TalosMessage && $outcome->status === 'completed') {
+            $metadata = is_array($assistantMessage->metadata) ? $assistantMessage->metadata : [];
+            $assistantMessage->forceFill([
+                'metadata' => [
+                    ...$metadata,
+                    'used_browser_context' => $browserContext,
+                    'browser_activities' => $browserActivities,
+                ],
+            ])->save();
+            $assistantMessage->refresh();
+        }
+        $payload = [
+            'mutations' => [],
+            'errors' => [],
+            'text' => $outcome->text ?? '',
+            'dag' => "DAG State:\n(empty)",
+            'run' => $run->toApiArray(),
+            'agent_turn' => [
+                'id' => $outcome->turnId,
+                'status' => $outcome->status,
+                'failure_code' => $outcome->failureCode,
+            ],
+            'assistant_message' => $assistantMessage instanceof TalosMessage
+                ? $this->assistantMessagePayload($assistantMessage)
+                : null,
+            'used_memories' => $usedMemories,
+            'used_context' => $usedContext,
+            'used_browser_context' => $browserContext,
+            'browser_activities' => $browserActivities,
+            'skill_plan' => $skillPlan,
+            'pending_approvals' => $pendingApprovals,
+        ];
+        if (is_array($routingContext)) {
+            $payload['model_routing'] = $routingContext;
+        }
+
+        if ($outcome->status === 'completed') {
+            return response()->json($payload);
+        }
+
+        if ($outcome->status === 'awaiting_approval') {
+            return response()->json($payload, 202);
+        }
+
+        $status = match ($outcome->status) {
+            'in_progress' => 202,
+            'recovery_required' => 409,
+            default => 422,
+        };
+        $payload['error'] = match ($outcome->status) {
+            'in_progress' => 'The procedural browser turn is still running.',
+            'recovery_required' => 'The procedural browser turn requires operator recovery.',
+            default => 'The procedural browser turn failed.',
+        };
+        $payload['code'] = $outcome->failureCode ?? match ($outcome->status) {
+            'in_progress' => 'TALOS_AGENT_TURN_IN_PROGRESS',
+            'recovery_required' => 'TALOS_AGENT_RECOVERY_REQUIRED',
+            default => 'TALOS_AGENT_TURN_FAILED',
+        };
+
+        return response()->json($payload, $status);
+    }
+
+    /** @return array<string, mixed> */
+    private function assistantMessagePayload(TalosMessage $message): array
+    {
+        return [
+            'id' => $message->id,
+            'session_id' => $message->session_id,
+            'role' => $message->role,
+            'content' => $message->content,
+            'model_profile_id' => $message->model_profile_id,
+            'run_id' => $message->run_id,
+            'metadata' => $message->metadata,
+            'created_at' => $message->created_at?->toJSON(),
+            'updated_at' => $message->updated_at?->toJSON(),
+        ];
+    }
+
+    public function pendingToolApprovals(
+        Request $request,
+        TalosSession $session,
+        TalosBrowserSemanticClickService $browserClicks,
+    ): JsonResponse {
+        $user = $request->user();
+        abort_unless($user instanceof User && (int) $session->user_id === (int) $user->id, 404);
+
+        $turns = TalosToolTurn::query()
+            ->ownedBy((int) $user->id)
+            ->where('session_id', $session->id)
+            ->where('status', 'awaiting_approval')
+            ->with(['browserSession', 'calls' => static fn ($query) => $query
+                ->where('user_id', $user->id)
+                ->where('status', 'awaiting_approval')
+                ->where('approval_state', 'awaiting_approval')
+                ->orderBy('sequence')])
+            ->orderBy('created_at')
+            ->get();
+
+        $data = [];
+        foreach ($turns as $turn) {
+            $browserSession = $turn->browserSession;
+            if ($browserSession instanceof TalosBrowserSession
+                && ((int) $browserSession->user_id !== (int) $user->id
+                    || (string) $browserSession->talos_session_id !== (string) $session->id)) {
+                $browserSession = null;
+            }
+            foreach ($turn->calls as $call) {
+                $data[] = $this->proceduralPendingApprovalPayload($call, $browserSession, $browserClicks);
+            }
+        }
+
+        return response()->json(['data' => $data]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function proceduralPendingApprovals(
+        int $ownerUserId,
+        string $turnId,
+        TalosBrowserSession $browserSession,
+        TalosBrowserSemanticClickService $browserClicks,
+    ): array {
+        $turn = TalosToolTurn::query()
+            ->ownedBy($ownerUserId)
+            ->where('browser_session_id', $browserSession->id)
+            ->find($turnId);
+        if (! $turn instanceof TalosToolTurn || $turn->status !== 'awaiting_approval') {
+            return [];
+        }
+
+        return $turn->calls()
+            ->where('user_id', $ownerUserId)
+            ->where('status', 'awaiting_approval')
+            ->where('approval_state', 'awaiting_approval')
+            ->orderBy('sequence')
+            ->get()
+            ->map(fn (TalosToolCall $call): array => $this->proceduralPendingApprovalPayload($call, $browserSession, $browserClicks))
+            ->values()
+            ->all();
+    }
+
+    /** @return array<string, mixed> */
+    private function proceduralPendingApprovalPayload(
+        TalosToolCall $call,
+        ?TalosBrowserSession $browserSession,
+        TalosBrowserSemanticClickService $browserClicks,
+    ): array {
+        $arguments = is_array($call->arguments) ? $call->arguments : [];
+        $targetRef = is_string($arguments['target'] ?? null) ? $arguments['target'] : 'unavailable';
+        $base = [
+            'id' => (string) $call->id,
+            'turn_id' => (string) $call->tool_turn_id,
+            'run_id' => (string) $call->run_id,
+            'tool_name' => 'browser_click',
+            'risk' => 'high',
+            'capability' => 'browser.write',
+            'plan_hash' => $call->approval_payload_sha256,
+            'browser_session_id' => $browserSession?->id,
+            'snapshot_artifact_id' => $call->evidence_snapshot_artifact_id,
+            'snapshot_id' => $call->evidence_snapshot_id,
+            'state_version' => (int) $call->state_version,
+            'evidence_hash' => $call->evidence_hash,
+            'expected_effect' => 'Activate the selected browser control and capture verified post-action evidence.',
+        ];
+        $validContract = $call->tool_name === 'browser_click'
+            && $call->capability === 'browser.write'
+            && $call->risk === 'high'
+            && is_string($call->approval_payload_sha256)
+            && is_string($call->evidence_hash)
+            && is_string($call->evidence_snapshot_artifact_id)
+            && is_string($call->evidence_snapshot_id)
+            && $browserSession instanceof TalosBrowserSession;
+        if (! $validContract) {
+            return [
+                ...$base,
+                'status' => 'stale',
+                'actionable' => false,
+                'stale_reason' => 'TALOS_TOOL_APPROVAL_CONTEXT_INVALID',
+                'target' => ['ref' => $targetRef, 'role' => 'unknown', 'name' => 'Target unavailable', 'visible' => false],
+                'url' => null,
+                'title' => null,
+            ];
+        }
+
+        try {
+            $preview = $browserClicks->preview(
+                $browserSession,
+                $arguments,
+                $call->evidence_snapshot_artifact_id,
+                $call->evidence_hash,
+                $call->evidence_snapshot_id,
+                (int) $call->state_version,
+            );
+
+            return [
+                ...$base,
+                'status' => 'pending',
+                'actionable' => true,
+                'stale_reason' => null,
+                'target' => $preview['target'],
+                'browser_session_id' => (string) $browserSession->id,
+                'snapshot_artifact_id' => $preview['snapshot_artifact_id'],
+                'snapshot_id' => $preview['snapshot_id'],
+                'state_version' => $preview['state_version'],
+                'evidence_hash' => $preview['evidence_hash'],
+                'url' => $preview['url'],
+                'title' => $preview['title'],
+            ];
+        } catch (TalosBrowserCommandException $exception) {
+            return [
+                ...$base,
+                'status' => 'stale',
+                'actionable' => false,
+                'stale_reason' => $exception->errorCode,
+                'target' => ['ref' => $targetRef, 'role' => 'unknown', 'name' => 'Target unavailable', 'visible' => false],
+                'url' => $browserSession->current_url,
+                'title' => $browserSession->current_title,
+            ];
+        }
     }
 
     /**
@@ -1108,7 +1591,12 @@ final class TalosChatController extends Controller
     /**
      * @return array{session_id: string, snapshot_artifact_id: string, url: string, title: string, text_digest: string, evidence_hash: string, nodes: list<array{ref: string, role: string, name: string, visible: bool, level?: int}>}|JsonResponse
      */
-    private function browserContextFor(User $user, TalosSession $chatSession, string $browserSessionId): array|JsonResponse
+    private function browserContextFor(
+        User $user,
+        TalosSession $chatSession,
+        string $browserSessionId,
+        TalosBrowserArtifactReader $artifactReader,
+    ): array|JsonResponse
     {
         $session = TalosBrowserSession::query()
             ->where('user_id', $user->id)
@@ -1130,12 +1618,18 @@ final class TalosChatController extends Controller
             ->where('browser_session_id', $session->id)
             ->where('type', 'snapshot')
             ->first();
-        if (! $artifact instanceof TalosBrowserArtifact || ! Storage::disk($artifact->storage_disk)->exists($artifact->storage_path)) {
+        if (! $artifact instanceof TalosBrowserArtifact) {
             return $this->browserContextError('Browser snapshot evidence is unavailable.', 422);
         }
 
         try {
-            $raw = json_decode(Storage::disk($artifact->storage_disk)->get($artifact->storage_path), true, 32, JSON_THROW_ON_ERROR);
+            $contents = $artifactReader->read($artifact);
+        } catch (TalosBrowserArtifactIntegrityException) {
+            return $this->browserContextError('Browser snapshot integrity failed and recovery is required.', 409);
+        }
+
+        try {
+            $raw = json_decode($contents, true, 32, JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
             return $this->browserContextError('Browser snapshot evidence is invalid.', 422);
         }

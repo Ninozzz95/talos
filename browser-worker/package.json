@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/cli.ts",
+    "dev": "tsx watch src/cli.ts",
     "start": "tsx src/cli.ts",
     "doctor:runtime": "node scripts/check-browser-runtime.mjs",
     "build": "tsc --noEmit",
@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "fastify": "^5.4.0",
-    "playwright": "^1.54.0",
+    "ipaddr.js": "2.4.0",
+    "playwright": "1.61.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {

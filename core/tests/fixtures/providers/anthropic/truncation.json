@@ -1,0 +1,14 @@
+{
+  "provider_response": {
+    "id": "msg-truncated-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Partial response"
+      }
+    ],
+    "stop_reason": "max_tokens"
+  }
+}

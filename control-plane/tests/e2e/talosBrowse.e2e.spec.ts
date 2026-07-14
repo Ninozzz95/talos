@@ -3,6 +3,7 @@ import { installTalosApiMocks } from './helpers/talosApiMocks'
 
 const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
+const browserScreenshotName = /^Browser screenshot \d+ of \d+$/
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
 
@@ -144,26 +145,23 @@ test('Browse lifecycle starts a real session and captures screenshot evidence in
     await page.getByRole('button', { name: 'Capture browser screenshot' }).click()
     await screenshotRequest
     await expect(page.getByTestId('talos-browser-activity')).toContainText(/Screenshot|screenshot/)
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toBeVisible()
 
     await page.getByRole('button', { name: 'Browse actions' }).click()
-    const snapshotRequest = page.waitForRequest((request) => request.url().endsWith('/snapshot') && request.method() === 'POST')
-    await page.getByRole('menuitem', { name: 'Capture page structure' }).click()
-    await snapshotRequest
-    const snapshotToggle = page.getByRole('button', { name: 'View captured page structure' })
-    await expect(snapshotToggle).toBeVisible()
-    await snapshotToggle.click()
-    await expect(page.getByTestId('talos-browser-snapshot-viewer')).toContainText('Fixture evidence')
-    await expect(page.getByTestId('talos-browser-snapshot-viewer')).toContainText('fixture-snapshot-digest')
-
-    await page.getByRole('button', { name: 'Browse actions' }).click()
+    await expect(page.getByRole('menuitem', { name: 'Capture page structure' })).toHaveCount(0)
+    await expect(page.getByTestId('talos-browser-snapshot-viewer')).toHaveCount(0)
     await expect(page.getByRole('menuitem', { name: 'Disable Browse' })).toBeVisible()
 })
 
 test('Browse exposes the current page and a real stop then retry lifecycle', async ({ page }) => {
-    let browserCreates = 0
+    const browserCreates: Record<string, unknown>[] = []
+    let chatCreates = 0
     page.on('request', (request) => {
-        if (new URL(request.url()).pathname === '/api/talos/browser/sessions' && request.method() === 'POST') browserCreates += 1
+        const path = new URL(request.url()).pathname
+        if (path === '/api/talos/browser/sessions' && request.method() === 'POST') {
+            browserCreates.push(request.postDataJSON() as Record<string, unknown>)
+        }
+        if (path === '/api/talos/sessions' && request.method() === 'POST') chatCreates += 1
     })
     await page.getByRole('button', { name: 'Browse', exact: true }).click()
     await page.getByLabel('Message TALOS').fill('/browse open https://fixture.example.test/evidence')
@@ -181,16 +179,7 @@ test('Browse exposes the current page and a real stop then retry lifecycle', asy
     ))
     await page.getByRole('button', { name: 'Capture browser screenshot' }).click()
     const firstScreenshot = await (await firstScreenshotResponse).json()
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
-
-    await page.getByRole('button', { name: 'Browse actions' }).click()
-    const firstSnapshotResponse = page.waitForResponse((response) => (
-        response.request().method() === 'POST'
-        && new URL(response.url()).pathname.endsWith('/snapshot')
-    ))
-    await page.getByRole('menuitem', { name: 'Capture page structure' }).click()
-    const firstSnapshot = await (await firstSnapshotResponse).json()
-    await expect(page.getByRole('button', { name: 'View captured page structure' })).toBeVisible()
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toBeVisible()
 
     const stopResponse = page.waitForResponse((response) => (
         response.request().method() === 'DELETE'
@@ -214,18 +203,22 @@ test('Browse exposes the current page and a real stop then retry lifecycle', asy
     await page.getByRole('menuitem', { name: 'Retry browser' }).click()
     const retriedSession = await (await retryResponse).json()
     await expect(page.getByTestId('talos-browse-mode')).toHaveAttribute('aria-label', /Browse status: (Ready|Active)/)
-    expect(browserCreates).toBe(2)
+    expect(browserCreates).toHaveLength(2)
+    expect(chatCreates).toBe(1)
+    const talosSessionId = String(browserCreates[0]?.talos_session_id ?? '')
+    expect(talosSessionId).not.toBe('')
+    expect(browserCreates[1]?.talos_session_id).toBe(talosSessionId)
     expect(retriedSession.data.id).not.toBe(stoppedBrowserSessionId)
     expect(retriedSession.data.status).toMatch(/active|ready/)
-    const sessionsAfterRetry = await page.evaluate(async () => fetch('/api/talos/browser/sessions?talos_session_id=session-e2e', {
-        headers: { 'X-Talos-Session-Id': 'session-e2e' },
-    }).then((response) => response.json()))
+    const sessionsAfterRetry = await page.evaluate(async (sessionId) => fetch(`/api/talos/browser/sessions?${new URLSearchParams({ talos_session_id: sessionId })}`, {
+        headers: { 'X-Talos-Session-Id': sessionId },
+    }).then((response) => response.json()), talosSessionId)
     expect(sessionsAfterRetry.data).toEqual(expect.arrayContaining([
         expect.objectContaining({ id: stoppedBrowserSessionId, status: 'closed' }),
         expect.objectContaining({ id: retriedSession.data.id, status: expect.stringMatching(/active|ready/) }),
     ]))
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toHaveCount(0)
-    await expect(page.getByTestId('talos-browser-activity')).not.toContainText('screenshot created')
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toHaveCount(0)
+    await expect(page.getByTestId('talos-browser-activity')).not.toContainText('Screenshot capture succeeded')
 
     const retriedScreenshotRequest = page.waitForRequest((request) => (
         request.method() === 'POST'
@@ -244,30 +237,12 @@ test('Browse exposes the current page and a real stop then retry lifecycle', asy
     expect(new URL((await retriedScreenshotRequest).url()).pathname).toBe(`/api/talos/browser/sessions/${retriedSession.data.id}/screenshot`)
     expect(retriedScreenshot.data.id).not.toBe(firstScreenshot.data.id)
     expect(new URL((await retriedScreenshotPreview).url()).pathname).toBe(`/api/talos/browser/artifacts/${retriedScreenshot.data.id}/preview`)
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Browse actions' }).click()
-    const retriedSnapshotRequest = page.waitForRequest((request) => (
-        request.method() === 'POST'
-        && new URL(request.url()).pathname.endsWith('/snapshot')
-    ))
-    const retriedSnapshotResponse = page.waitForResponse((response) => (
-        response.request().method() === 'POST'
-        && new URL(response.url()).pathname.endsWith('/snapshot')
-    ))
-    await page.getByRole('menuitem', { name: 'Capture page structure' }).click()
-    const retriedSnapshot = await (await retriedSnapshotResponse).json()
-    expect(new URL((await retriedSnapshotRequest).url()).pathname).toBe(`/api/talos/browser/sessions/${retriedSession.data.id}/snapshot`)
-    expect(retriedSnapshot.data.id).not.toBe(firstSnapshot.data.id)
-    const retriedSnapshotToggle = page.getByRole('button', { name: 'View captured page structure' })
-    await expect(retriedSnapshotToggle).toBeVisible()
-    await retriedSnapshotToggle.click()
-    await expect(page.getByTestId('talos-browser-snapshot-viewer')).toContainText('fixture-snapshot-digest')
-
-    const scopedEvidence = await page.evaluate(async ({ stoppedBrowserSessionId, retriedBrowserSessionId }) => {
-        const headers = { 'X-Talos-Session-Id': 'session-e2e' }
+    const scopedEvidence = await page.evaluate(async ({ stoppedBrowserSessionId, retriedBrowserSessionId, talosSessionId }) => {
+        const headers = { 'X-Talos-Session-Id': talosSessionId }
         const [sessions, stoppedEvents, retriedEvents] = await Promise.all([
-            fetch('/api/talos/browser/sessions?talos_session_id=session-e2e', { headers }).then((response) => response.json()),
+            fetch(`/api/talos/browser/sessions?${new URLSearchParams({ talos_session_id: talosSessionId })}`, { headers }).then((response) => response.json()),
             fetch(`/api/talos/browser/sessions/${stoppedBrowserSessionId}/events`, { headers }).then((response) => response.json()),
             fetch(`/api/talos/browser/sessions/${retriedBrowserSessionId}/events`, { headers }).then((response) => response.json()),
         ])
@@ -275,17 +250,16 @@ test('Browse exposes the current page and a real stop then retry lifecycle', asy
     }, {
         stoppedBrowserSessionId,
         retriedBrowserSessionId: retriedSession.data.id,
+        talosSessionId,
     })
     expect(scopedEvidence.sessions.data).toEqual(expect.arrayContaining([
         expect.objectContaining({
             id: stoppedBrowserSessionId,
             last_screenshot_artifact_id: firstScreenshot.data.id,
-            last_snapshot_artifact_id: firstSnapshot.data.id,
         }),
         expect.objectContaining({
             id: retriedSession.data.id,
             last_screenshot_artifact_id: retriedScreenshot.data.id,
-            last_snapshot_artifact_id: retriedSnapshot.data.id,
         }),
     ]))
     const stoppedEventIds = scopedEvidence.stoppedEvents.data.map((event: { id: string }) => event.id)
@@ -293,7 +267,6 @@ test('Browse exposes the current page and a real stop then retry lifecycle', asy
     expect(retriedEventIds.filter((eventId: string) => stoppedEventIds.includes(eventId))).toEqual([])
     expect(scopedEvidence.retriedEvents.data).toEqual(expect.arrayContaining([
         expect.objectContaining({ payload: expect.objectContaining({ artifact_id: retriedScreenshot.data.id }) }),
-        expect.objectContaining({ payload: expect.objectContaining({ artifact_id: retriedSnapshot.data.id }) }),
     ]))
 })
 
@@ -336,25 +309,25 @@ test('Browse state is isolated per TALOS chat session', async ({ page, isMobile 
     expect(browserCreates[0].talos_session_id).toBe('chat-a-e2e')
 
     await page.getByRole('button', { name: 'Capture browser screenshot' }).click()
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toBeVisible()
     await expect(page.getByTestId('talos-browser-activity')).toContainText(/Screenshot|screenshot/)
 
     await page.getByRole('button', { name: 'New Chat', exact: true }).first().click()
     const history = page.getByTestId('talos-session-history')
     if (!isMobile) await expect(history.getByRole('button', { name: 'Open chat New chat', exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-browser-activity')).toHaveCount(0)
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toHaveCount(0)
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Browse', exact: true }).click()
     await expect.poll(() => browserCreates.length).toBe(2)
     expect(browserCreates[1].talos_session_id).toBe('session-e2e')
-    await expect(page.getByTestId('talos-browser-activity')).toContainText(/session.created|session created/)
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toHaveCount(0)
+    await expect(page.getByTestId('talos-browser-activity')).toContainText('Browser session succeeded')
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toHaveCount(0)
 
     await page.getByLabel('Message TALOS').fill('Read the current page')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
-    await expect(page.getByTestId('talos-browser-activity')).toContainText('Chat browser read')
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toHaveCount(0)
+    await expect(page.getByTestId('talos-browser-activity')).toContainText('Page read succeeded')
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toHaveCount(0)
 
     if (isMobile) {
         await expectNoDocumentOverflow(page)
@@ -363,7 +336,7 @@ test('Browse state is isolated per TALOS chat session', async ({ page, isMobile 
 
     await history.getByRole('button', { name: 'Open chat Chat A', exact: true }).click()
     await expect(page.getByTestId('talos-browse-mode')).toContainText(/Ready|Active/)
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toBeVisible()
     await expect(page.getByTestId('talos-browser-activity')).toContainText(/Screenshot|screenshot/)
     expect(browserCreates).toHaveLength(2)
     await expectNoDocumentOverflow(page)
@@ -382,7 +355,7 @@ test('Browse chat can capture screenshot evidence and restores it after reload',
 
     const assistantBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
     const activity = page.getByTestId('talos-browser-activity')
-    const screenshot = assistantBubble.getByRole('img', { name: 'Browser screenshot evidence' })
+    const screenshot = assistantBubble.getByRole('img', { name: browserScreenshotName })
     await expect(assistantBubble).toContainText('E2E response from AVM')
     await expect(activity).toContainText('Screenshot')
     await expect(screenshot).toBeVisible()
@@ -393,14 +366,74 @@ test('Browse chat can capture screenshot evidence and restores it after reload',
     await expect(page.getByTestId('talos-browse-mode')).toContainText(/Ready|Active/)
     expect(browserSessionCreates).toBe(1)
     const restoredAssistantBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
-    await expect(restoredAssistantBubble.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
+    await expect(restoredAssistantBubble.getByRole('img', { name: browserScreenshotName })).toBeVisible()
 
     await page.getByLabel('Message TALOS').fill('prova ora')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     const retriedAssistantBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
-    await expect(retriedAssistantBubble.getByRole('img', { name: 'Browser screenshot evidence' })).toBeVisible()
+    await expect(retriedAssistantBubble.getByRole('img', { name: browserScreenshotName })).toBeVisible()
     await expect(page.getByText('TALOS_BROWSER_COMMAND_MALFORMED', { exact: false })).toHaveCount(0)
     expect(browserSessionCreates).toBe(1)
+})
+
+test('procedural screenshot answer renders immediately from authenticated evidence and survives reload', async ({ page }) => {
+    await resetMocks(page, {
+        proceduralServerPersistedAssistant: true,
+        chatResponseText: `Ecco l'ultimo screenshot della pagina:\n\n![Screenshot ManagerCar](https://talo.sh/artifact/fabricated)`,
+    })
+    const messagePosts: Array<Record<string, unknown>> = []
+    page.on('request', (request) => {
+        if (request.method() !== 'POST') return
+        if (!/^\/api\/talos\/sessions\/[^/]+\/messages$/.test(new URL(request.url()).pathname)) return
+        messagePosts.push(request.postDataJSON() as Record<string, unknown>)
+    })
+
+    await page.getByRole('button', { name: 'Browse', exact: true }).click()
+    await page.getByLabel('Message TALOS').fill('cattura screenshot')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+
+    const assistantBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
+    const verifiedScreenshot = assistantBubble.getByRole('img', { name: browserScreenshotName })
+    await expect(assistantBubble).toContainText("Ecco l'ultimo screenshot della pagina")
+    await expect(assistantBubble).toContainText('External image omitted: Screenshot ManagerCar')
+    await expect(verifiedScreenshot).toBeVisible()
+    await expect.poll(() => verifiedScreenshot.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
+    await expect(page.getByText('Processing', { exact: true })).toHaveCount(0)
+    await expect.poll(() => messagePosts.length).toBe(1)
+    expect(messagePosts[0]).toMatchObject({ role: 'user' })
+    const previewUrl = await verifiedScreenshot.getAttribute('src')
+    expect(previewUrl).toContain('/api/talos/browser/artifacts/')
+    expect(previewUrl).not.toContain('talo.sh')
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    const restoredBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
+    await expect(restoredBubble.getByRole('img', { name: browserScreenshotName })).toBeVisible()
+    await expect(restoredBubble).toContainText('External image omitted: Screenshot ManagerCar')
+})
+
+test('procedural browser approval survives reload and resumes into a persisted answer', async ({ page }) => {
+    await resetMocks(page, { proceduralBrowserApproval: true })
+    await page.getByRole('button', { name: 'Browse', exact: true }).click()
+    await page.getByLabel('Message TALOS').fill('Accept the cookie banner.')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+
+    const approvalCard = page.getByTestId('tool-approval-card')
+    await expect(approvalCard).toContainText('Browser action requires approval')
+    await expect(approvalCard).toContainText('Accept all')
+    await expect(page.getByText('Processing', { exact: true })).toHaveCount(0)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByTestId('tool-approval-card')).toContainText('Accept all')
+
+    await page.getByTestId('tool-approval-open-confirm').click()
+    await expect(page.getByText('Approve this exact browser action?')).toBeVisible()
+    await page.getByTestId('tool-approval-confirm').click()
+
+    const assistantBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
+    await expect(assistantBubble).toContainText('The cookie banner was dismissed through verified browser evidence.')
+    await expect(page.getByTestId('tool-approval-card')).toHaveCount(0)
 })
 
 test('a screenshot capability question does not fabricate screenshot evidence', async ({ page }) => {
@@ -408,8 +441,8 @@ test('a screenshot capability question does not fabricate screenshot evidence', 
     await page.getByLabel('Message TALOS').fill('quindi hai permessi screenshot?')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
-    await expect(page.getByTestId('talos-browser-activity')).toContainText('Chat browser read')
-    await expect(page.getByRole('img', { name: 'Browser screenshot evidence' })).toHaveCount(0)
+    await expect(page.getByTestId('talos-browser-activity')).toContainText('Page read succeeded')
+    await expect(page.getByRole('img', { name: browserScreenshotName })).toHaveCount(0)
 })
 
 test('Browse actions close on Escape and click outside', async ({ page }) => {
@@ -420,7 +453,7 @@ test('Browse actions close on Escape and click outside', async ({ page }) => {
     await expect(page.getByRole('menuitem', { name: 'Restart browser' })).toBeHidden()
 
     await page.getByRole('button', { name: 'Browse actions' }).click()
-    await page.getByRole('heading', { name: 'TALOS', exact: true }).click()
+    await page.getByTestId('talos-workspace-header').click({ position: { x: 4, y: 4 } })
     await expect(page.getByRole('menuitem', { name: 'Restart browser' })).toBeHidden()
 })
 
@@ -489,7 +522,7 @@ test('Browse remains in place while the chat request carries the typed browser m
     await expect.poll(() => chatBodies.length).toBe(1)
     expect(chatBodies[0].browser_mode).toEqual({ enabled: true, browser_session_id: 'browser-session-e2e' })
     expect(chatBodies[0].browser_context).toBeUndefined()
-    await expect(page.getByTestId('talos-browser-activity').getByText('Chat browser read')).toHaveCount(1)
+    await expect(page.getByTestId('talos-browser-activity').getByText('Page read succeeded')).toHaveCount(1)
     expect(await page).toHaveURL(/\/$/)
 })
 

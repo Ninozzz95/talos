@@ -1,0 +1,21 @@
+{
+    "$schema": "https://shadcn-vue.com/schema.json",
+    "style": "default",
+    "typescript": false,
+    "tailwind": {
+        "config": "",
+        "css": "resources/css/app.css",
+        "baseColor": "neutral",
+        "cssVariables": true,
+        "prefix": ""
+    },
+    "aliases": {
+        "components": "@/components",
+        "utils": "@/lib/utils"
+    },
+    "registries": {
+        "@talos-shadcn-vue-2-7-4": {
+            "url": "https://raw.githubusercontent.com/unovue/shadcn-vue/v2.7.4/apps/v4/public/r/styles/default/{name}.json"
+        }
+    }
+}

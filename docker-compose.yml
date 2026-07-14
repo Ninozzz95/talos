@@ -16,6 +16,11 @@ services:
       - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
       - TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
       - TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+      - TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+      - TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}
+      - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
+      - TALOS_BROWSER_SEARCH_ENABLED=${TALOS_BROWSER_SEARCH_ENABLED:-false}
+      - TALOS_BROWSER_SEARCH_ORIGIN=${TALOS_BROWSER_SEARCH_ORIGIN:-}
     depends_on:
       validator:
         condition: service_healthy
@@ -45,6 +50,11 @@ services:
       - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
       - TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
       - TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+      - TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+      - TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}
+      - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
+      - TALOS_BROWSER_SEARCH_ENABLED=${TALOS_BROWSER_SEARCH_ENABLED:-false}
+      - TALOS_BROWSER_SEARCH_ORIGIN=${TALOS_BROWSER_SEARCH_ORIGIN:-}
     depends_on:
       talos:
         condition: service_healthy
@@ -85,8 +95,38 @@ services:
       HOST: 0.0.0.0
       PORT: 3100
       TALOS_BROWSER_WORKER_TOKEN: ${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+      TALOS_BROWSER_MCP_ALLOWED_HOSTS: ${TALOS_BROWSER_MCP_ALLOWED_HOSTS:-browser-worker,localhost,127.0.0.1,::1}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/ready',{headers:{'x-talos-worker-token':process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  searxng:
+    profiles: ["search"]
+    image: docker.io/searxng/searxng:2026.7.12-c19d86faa@sha256:f433294b46a93564993c4371005341e013d94aa8ea4662d8ee521cd2cccb08e8
+    expose:
+      - "8080"
+    environment:
+      SEARXNG_BASE_URL: http://searxng:8080/
+      SEARXNG_SECRET: ${TALOS_SEARXNG_SECRET:-}
+      SEARXNG_LIMITER: "false"
+      SEARXNG_PUBLIC_INSTANCE: "false"
+      FORCE_OWNERSHIP: "false"
+    volumes:
+      - ./deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "--timeout=5", "--tries=1", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 5s
       retries: 12

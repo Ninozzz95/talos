@@ -1,0 +1,16 @@
+{
+  "provider_response": {
+    "id": "chatcmpl-refusal-1",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "refusal": "I cannot perform that request."
+        },
+        "finish_reason": "stop"
+      }
+    ]
+  }
+}

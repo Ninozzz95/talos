@@ -3,10 +3,10 @@ import { Command, Download, UserRound } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import Tooltip from '../../ui/Tooltip.vue'
+import type { TalosChatBubbleScale } from '../../../lib/talosTypes'
+import TalosMessageScaleControls from './TalosMessageScaleControls.vue'
 
 const props = defineProps<{
-    logoUrl: string
-    workspaceSubtitle: string
     statusText: string
     temporarySession: boolean
     hasActiveSession: boolean
@@ -16,29 +16,32 @@ const props = defineProps<{
     loginUrl: string
     logoutUrl: string
     csrfToken: string
+    bubbleScale: TalosChatBubbleScale
+    bubbleScaleLabel: string
+    chatLayoutLocked: boolean
 }>()
 
 const emit = defineEmits<{
     openCommands: []
     openExport: []
     openAccount: []
+    decreaseMessageScale: []
+    increaseMessageScale: []
+    resetMessageScale: []
 }>()
 </script>
 
 <template>
-    <header class="talos-workspace-header relative z-20 flex min-h-14 items-center justify-between gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-2 backdrop-blur sm:gap-2 sm:px-3 md:px-5">
-        <div class="min-w-0 flex-1">
-            <div data-testid="talos-header-brand" class="flex min-w-0 items-center gap-2">
-                <span class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
-                    <span class="talos-short-logo-mark"></span>
-                </span>
-                <h1 class="talos-orbitron-brand truncate text-base font-semibold text-[var(--talos-text)]">TALOS</h1>
-            </div>
-            <div class="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--talos-muted)]">
-                {{ workspaceSubtitle }}
-            </div>
-        </div>
+    <header data-testid="talos-workspace-header" class="talos-workspace-header relative z-20 flex min-h-14 items-center justify-end gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-2 backdrop-blur sm:gap-2 sm:px-3 md:px-5">
         <div class="flex shrink-0 items-center gap-1 sm:gap-2">
+            <TalosMessageScaleControls
+                :bubble-scale="bubbleScale"
+                :label="bubbleScaleLabel"
+                :locked="chatLayoutLocked"
+                @decrease="emit('decreaseMessageScale')"
+                @increase="emit('increaseMessageScale')"
+                @reset="emit('resetMessageScale')"
+            />
             <div class="hidden max-w-[360px] truncate rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-1.5 text-xs text-[var(--talos-muted)] md:block">
                 {{ statusText }}
             </div>

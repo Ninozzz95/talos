@@ -24,6 +24,7 @@ const TOP_LEVEL_KEYS = [
     'scene_override',
     'speed',
     'intensity',
+    'glow_intensity',
     'density',
     'depth',
     'trails',
@@ -63,6 +64,7 @@ const EXPECTED_DEFAULTS = {
     scene_override: null,
     speed: 100,
     intensity: 65,
+    glow_intensity: 0,
     density: 100,
     depth: 50,
     trails: 35,
@@ -75,7 +77,7 @@ const EXPECTED_DEFAULTS = {
     respect_data_saver: true,
     interface: {
         profile: 'preset',
-        duration_scale: 100,
+        duration_scale: 50,
         intensity: 65,
         easing: 'precise',
         stagger: 40,
@@ -158,7 +160,7 @@ describe('TALOS Theme Motion Engine V6 contract', () => {
 
     it('accepts both edges of every bounded integer range', () => {
         const payload = defaultPayload()
-        const topLevelFields = ['speed', 'intensity', 'density', 'depth', 'trails', 'contrast', 'parallax'] as const
+        const topLevelFields = ['speed', 'intensity', 'glow_intensity', 'density', 'depth', 'trails', 'contrast', 'parallax'] as const
         const interfaceFields = ['duration_scale', 'intensity', 'stagger'] as const
 
         for (const field of topLevelFields) {
@@ -181,7 +183,7 @@ describe('TALOS Theme Motion Engine V6 contract', () => {
 
     it('rejects one value below and above every bounded integer range', () => {
         const payload = defaultPayload()
-        const topLevelFields = ['speed', 'intensity', 'density', 'depth', 'trails', 'contrast', 'parallax'] as const
+        const topLevelFields = ['speed', 'intensity', 'glow_intensity', 'density', 'depth', 'trails', 'contrast', 'parallax'] as const
         const interfaceFields = ['duration_scale', 'intensity', 'stagger'] as const
 
         for (const field of topLevelFields) {
@@ -247,7 +249,24 @@ describe('TALOS Theme Motion Engine V6 contract', () => {
         first.interface.duration_scale = 120
 
         expect(second.interface.categories.windows).toBe(true)
-        expect(second.interface.duration_scale).toBe(100)
+        expect(second.interface.duration_scale).toBe(50)
+    })
+
+    it('preserves an explicitly saved interface duration scale', () => {
+        const payload = defaultPayload()
+        payload.interface.duration_scale = 100
+
+        expect(expectSuccess(payload).interface.duration_scale).toBe(100)
+    })
+
+    it('accepts a legacy V6 payload without glow intensity and canonicalizes it off', () => {
+        const payload = defaultPayload()
+        delete payload.glow_intensity
+
+        const parsed = expectSuccess(payload)
+
+        expect(parsed.glow_intensity).toBe(0)
+        expect(Object.keys(parsed)).toEqual(TOP_LEVEL_KEYS)
     })
 
     it('rejects missing and unknown keys at every strict object level', () => {
@@ -359,6 +378,7 @@ describe('TALOS Theme Motion Engine V6 contract', () => {
     it('rejects wrong types without coercing numeric or boolean strings', () => {
         const cases: Array<[string, MutableRecord]> = [
             ['speed', { ...defaultPayload(), speed: '100' }],
+            ['glow_intensity', { ...defaultPayload(), glow_intensity: '0' }],
             ['background_enabled', { ...defaultPayload(), background_enabled: 'true' }],
             ['scene_override', { ...defaultPayload(), scene_override: 1 }],
             ['interface', { ...defaultPayload(), interface: [] }],

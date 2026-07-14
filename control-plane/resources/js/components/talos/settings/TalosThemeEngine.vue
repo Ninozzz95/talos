@@ -2,6 +2,7 @@
 import { onMounted, toRef, watch } from 'vue'
 import Card from '../../ui/Card.vue'
 import Tabs from '../../ui/Tabs.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import { useTalosNamedThemeLibrary } from '../../../composables/useTalosNamedThemeLibrary'
 import { useTalosThemeEditorPersistence } from '../../../composables/useTalosThemeEditorPersistence'
@@ -118,6 +119,7 @@ const {
     replaceDraft: replaceMotionV6Draft,
     resetBackground: resetMotionV6Background,
     resetInterface: resetMotionV6Interface,
+    resetAll: resetMotionV6All,
     save: saveMotionV6,
     retry: retryMotionV6,
 } = motionV6
@@ -181,7 +183,15 @@ onMounted(async () => {
                 tab-id-prefix="talos-theme-control-tab"
                 panel-id-prefix="talos-theme-control-panel"
                 @update:model-value="activateTab($event as ThemeTab)"
-            />
+            >
+                <template #item-action="{ item }">
+                    <TalosGuideInfoButton
+                        :guide-id="`theme.${item.id}`"
+                        compact
+                        side="bottom"
+                    />
+                </template>
+            </Tabs>
 
             <!-- Existing automation expects data-testid="talos-theme-preset" on every preset trigger; ownership lives in TalosThemePresets. -->
             <TalosThemePresets
@@ -256,6 +266,7 @@ onMounted(async () => {
                 @retry="retryMotionV6"
                 @reset-background="resetMotionV6Background"
                 @reset-interface="resetMotionV6Interface"
+                @reset-all="resetMotionV6All"
             />
             <TalosThemeAdvanced
                 v-else

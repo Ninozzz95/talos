@@ -5,6 +5,7 @@ import {
     Bot,
     BrainCircuit,
     Database,
+    Globe2,
     Keyboard,
     Loader2,
     Mail,
@@ -22,7 +23,9 @@ import Input from '../../ui/Input.vue'
 import Select from '../../ui/Select.vue'
 import Switch from '../../ui/Switch.vue'
 import Tabs from '../../ui/Tabs.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
+import TalosSettingsBrowserPanel from './TalosSettingsBrowserPanel.vue'
 import TalosSettingsIntegrationsPanel from './TalosSettingsIntegrationsPanel.vue'
 import TalosSettingsModelsPanel from './TalosSettingsModelsPanel.vue'
 import TalosSettingsSearchPanel from './TalosSettingsSearchPanel.vue'
@@ -56,11 +59,16 @@ import {
     shortcutConflict,
     type TalosShortcutActionId,
 } from '../../../lib/talosShortcuts'
+import {
+    normalizeTalosBrowserHmiMode,
+    type TalosBrowserHmiMode,
+} from '../../../lib/talosBrowserHmiPolicy'
 
 type SettingsTab =
     | 'models'
     | 'ai_defaults'
     | 'search'
+    | 'browser'
     | 'integrations'
     | 'email'
     | 'reminders'
@@ -91,6 +99,7 @@ type SettingsPreferences = {
             timeout: number
         }
     }
+    browser_hmi_mode: TalosBrowserHmiMode
     reminders: {
         channel: string
         ai_synthesis: boolean
@@ -135,6 +144,7 @@ const tabs: Array<{ id: SettingsTab; label: string; icon: unknown; group?: strin
     { id: 'models', label: 'Models', icon: Bot },
     { id: 'ai_defaults', label: 'AI Defaults', icon: BrainCircuit },
     { id: 'search', label: 'Search', icon: Search },
+    { id: 'browser', label: 'Browser', icon: Globe2 },
     { id: 'integrations', label: 'Integrations', icon: Wrench },
     { id: 'email', label: 'Email', icon: Mail },
     { id: 'reminders', label: 'Reminders', icon: Bell },
@@ -178,6 +188,7 @@ const preferences = reactive<SettingsPreferences>({
             timeout: 1800,
         },
     },
+    browser_hmi_mode: 'confirm_sensitive',
     reminders: {
         channel: 'browser',
         ai_synthesis: false,
@@ -263,6 +274,7 @@ function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.search.deep_research.extract_timeout = numberValue(deepResearch.extract_timeout, preferences.search.deep_research.extract_timeout)
     preferences.search.deep_research.extract_parallel = numberValue(deepResearch.extract_parallel, preferences.search.deep_research.extract_parallel)
     preferences.search.deep_research.timeout = numberValue(deepResearch.timeout, preferences.search.deep_research.timeout)
+    preferences.browser_hmi_mode = normalizeTalosBrowserHmiMode(nextPreferences.browser_hmi_mode)
 
     const reminders = record(nextPreferences.reminders)
     preferences.reminders.channel = stringValue(reminders.channel, preferences.reminders.channel)
@@ -311,6 +323,7 @@ function preferencesPayload() {
                 timeout: Number(preferences.search.deep_research.timeout) || 1800,
             },
         },
+        browser_hmi_mode: preferences.browser_hmi_mode,
         reminders: {
             ...preferences.reminders,
         },
@@ -442,6 +455,13 @@ watch(
                         <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                         <span>{{ item.label }}</span>
                     </template>
+                    <template #item-action="{ item }">
+                        <TalosGuideInfoButton
+                            :guide-id="`settings.${item.id}`"
+                            compact
+                            side="right"
+                        />
+                    </template>
                 </Tabs>
             </aside>
 
@@ -526,6 +546,13 @@ watch(
                             :search="preferences.search"
                             @update-search="updateSearchPreferences"
                             @update-deep-research="updateDeepResearchPreferences"
+                        />
+                    </template>
+
+                    <template v-else-if="activeTab === 'browser'">
+                        <TalosSettingsBrowserPanel
+                            v-model="preferences.browser_hmi_mode"
+                            :policy="settings?.browser_hmi_policy ?? null"
                         />
                     </template>
 

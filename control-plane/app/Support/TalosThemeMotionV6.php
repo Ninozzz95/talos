@@ -54,6 +54,7 @@ final class TalosThemeMotionV6
         'scene_override',
         'speed',
         'intensity',
+        'glow_intensity',
         'density',
         'depth',
         'trails',
@@ -98,6 +99,7 @@ final class TalosThemeMotionV6
             'scene_override' => null,
             'speed' => 100,
             'intensity' => 65,
+            'glow_intensity' => 0,
             'density' => 100,
             'depth' => 50,
             'trails' => 35,
@@ -110,7 +112,7 @@ final class TalosThemeMotionV6
             'respect_data_saver' => true,
             'interface' => [
                 'profile' => 'preset',
-                'duration_scale' => 100,
+                'duration_scale' => 50,
                 'intensity' => 65,
                 'easing' => 'precise',
                 'stagger' => 40,
@@ -137,7 +139,7 @@ final class TalosThemeMotionV6
         }
 
         $issues = [];
-        $top = self::snapshotObject($input, self::TOP_LEVEL_KEYS, '$', $issues);
+        $top = self::snapshotObject($input, self::TOP_LEVEL_KEYS, '$', $issues, ['glow_intensity']);
         $interface = null;
 
         if ($top !== null) {
@@ -160,6 +162,7 @@ final class TalosThemeMotionV6
             foreach ([
                 'speed' => [25, 200],
                 'intensity' => [0, 100],
+                'glow_intensity' => [0, 100],
                 'density' => [25, 150],
                 'depth' => [0, 100],
                 'trails' => [0, 100],
@@ -209,6 +212,9 @@ final class TalosThemeMotionV6
                 'scene_override' => $top['scene_override'],
                 'speed' => (int) $top['speed'],
                 'intensity' => (int) $top['intensity'],
+                'glow_intensity' => array_key_exists('glow_intensity', $top)
+                    ? (int) $top['glow_intensity']
+                    : 0,
                 'density' => (int) $top['density'],
                 'depth' => (int) $top['depth'],
                 'trails' => (int) $top['trails'],
@@ -522,6 +528,7 @@ final class TalosThemeMotionV6
     /**
      * @param array<int, string> $expectedKeys
      * @param array<int, array{path: string, code: string, message: string}> $issues
+     * @param array<int, string> $optionalKeys
      * @return array<string, mixed>|null
      */
     private static function snapshotObject(
@@ -529,6 +536,7 @@ final class TalosThemeMotionV6
         array $expectedKeys,
         string $parentPath,
         array &$issues,
+        array $optionalKeys = [],
     ): ?array {
         if (is_array($value) && ! array_is_list($value)) {
             $record = $value;
@@ -541,8 +549,9 @@ final class TalosThemeMotionV6
         }
 
         $expected = array_fill_keys($expectedKeys, true);
+        $optional = array_fill_keys($optionalKeys, true);
         foreach ($expectedKeys as $key) {
-            if (! array_key_exists($key, $record)) {
+            if (! array_key_exists($key, $record) && ! isset($optional[$key])) {
                 self::addIssue($issues, self::pathFor($parentPath, $key), 'missing_key', 'Missing required key.');
             }
         }

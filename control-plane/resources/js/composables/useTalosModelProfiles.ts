@@ -7,6 +7,8 @@ type ApiEnvelope<T> = {
     data: T
 }
 
+const sharedModelProfiles = ref<TalosModelProfile[]>([])
+
 export type CreateTalosModelProfilePayload = {
     provider: TalosModelProfile['provider']
     model?: string | null
@@ -28,7 +30,7 @@ export type TalosModelDraftProbeResult = {
 }
 
 export function useTalosModelProfiles() {
-    const modelProfiles = ref<TalosModelProfile[]>([])
+    const modelProfiles = sharedModelProfiles
     const loadingModelProfiles = ref(false)
     const modelProfileError = ref<string | null>(null)
 

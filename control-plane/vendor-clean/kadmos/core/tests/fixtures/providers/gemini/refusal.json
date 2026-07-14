@@ -1,0 +1,14 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-refusal-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": []
+        },
+        "finishReason": "SAFETY"
+      }
+    ]
+  }
+}

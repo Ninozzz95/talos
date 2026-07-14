@@ -39,9 +39,10 @@ const emit = defineEmits<{
     retry: []
     resetBackground: []
     resetInterface: []
+    resetAll: []
 }>()
 
-type NumericTopLevelKey = 'speed' | 'intensity' | 'density' | 'depth' | 'trails' | 'contrast' | 'parallax'
+type NumericTopLevelKey = 'speed' | 'intensity' | 'glow_intensity' | 'density' | 'depth' | 'trails' | 'contrast' | 'parallax'
 type NumericInterfaceKey = 'duration_scale' | 'intensity' | 'stagger'
 
 const backgroundRanges: ReadonlyArray<{
@@ -54,6 +55,7 @@ const backgroundRanges: ReadonlyArray<{
 }> = [
     { key: 'speed', label: 'Motion speed', min: 25, max: 200, step: 5, suffix: '%' },
     { key: 'intensity', label: 'Background intensity', min: 0, max: 100, step: 1, suffix: '%' },
+    { key: 'glow_intensity', label: 'Glow / lens flare', min: 0, max: 100, step: 1, suffix: '%' },
     { key: 'density', label: 'Scene density', min: 25, max: 150, step: 5, suffix: '%' },
     { key: 'depth', label: 'Scene depth', min: 0, max: 100, step: 1, suffix: '%' },
     { key: 'trails', label: 'Trail strength', min: 0, max: 100, step: 1, suffix: '%' },
@@ -87,6 +89,17 @@ const categoryControls: ReadonlyArray<{
 ]
 
 const controlsDisabled = computed(() => props.disabled || props.saving)
+const backgroundControlValue = computed(() => props.modelValue.background_enabled && props.modelValue.mode !== 'off')
+const interfaceControlValue = computed(() => props.modelValue.interface_enabled && props.modelValue.interface.profile !== 'off')
+const backgroundMotionState = computed(() => {
+    if (!backgroundControlValue.value) return 'Off'
+    if (props.runtimeDecision.paused || !props.runtimeDecision.backgroundEnabled) return 'Suppressed'
+    return props.runtimeDecision.effectiveMode === 'static' ? 'Static' : 'Active'
+})
+const interfaceMotionState = computed(() => {
+    if (!interfaceControlValue.value) return 'Off'
+    return props.runtimeDecision.uiMotionEnabled ? 'Active' : 'Suppressed'
+})
 
 function clone(): TalosMotionV6Preferences {
     return {
@@ -104,6 +117,20 @@ function updateTopLevel<K extends Exclude<keyof TalosMotionV6Preferences, 'schem
 ) {
     const next = clone()
     ;(next as unknown as Record<string, unknown>)[key] = value
+    emit('update:modelValue', next)
+}
+
+function updateBackgroundEnabled(value: boolean) {
+    const next = clone()
+    next.background_enabled = value
+    if (value && next.mode === 'off') next.mode = 'adaptive'
+    emit('update:modelValue', next)
+}
+
+function updateInterfaceEnabled(value: boolean) {
+    const next = clone()
+    next.interface_enabled = value
+    if (value && next.interface.profile === 'off') next.interface.profile = 'preset'
     emit('update:modelValue', next)
 }
 
@@ -153,13 +180,19 @@ function title(value: string): string {
                     </InfoPopover>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs" aria-live="polite">
-                <span class="text-[var(--talos-muted)]">Requested</span>
-                <strong class="text-[var(--talos-text)]">{{ title(runtimeDecision.requestedMode) }}</strong>
-                <span class="text-[var(--talos-muted)]">Effective</span>
-                <strong class="text-[var(--talos-text)]">{{ title(runtimeDecision.effectiveMode) }}</strong>
-                <span class="text-[var(--talos-muted)]">Reason</span>
-                <span class="text-[var(--talos-text)]">{{ title(runtimeDecision.reason) }}</span>
+            <div class="flex flex-col items-end gap-3">
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs" aria-live="polite">
+                    <span class="text-[var(--talos-muted)]">Requested</span>
+                    <strong class="text-[var(--talos-text)]">{{ title(runtimeDecision.requestedMode) }}</strong>
+                    <span class="text-[var(--talos-muted)]">Effective</span>
+                    <strong class="text-[var(--talos-text)]">{{ title(runtimeDecision.effectiveMode) }}</strong>
+                    <span class="text-[var(--talos-muted)]">Reason</span>
+                    <span class="text-[var(--talos-text)]">{{ title(runtimeDecision.reason) }}</span>
+                </div>
+                <Button size="sm" variant="outline" :disabled="controlsDisabled" @click="emit('resetAll')">
+                    <RotateCcw class="h-3.5 w-3.5" aria-hidden="true" />
+                    Reset all defaults
+                </Button>
             </div>
         </header>
 
@@ -193,12 +226,24 @@ function title(value: string): string {
 
         <div class="grid gap-3 md:grid-cols-2">
             <label class="flex min-h-16 items-center justify-between gap-3 border-b border-[var(--talos-border)] py-2">
-                <span><span class="block text-sm font-medium text-[var(--talos-text)]">Procedural background</span><span class="block text-xs text-[var(--talos-muted)]">Keep the selected scene visible.</span></span>
-                <Switch :model-value="modelValue.background_enabled" aria-label="Procedural background" :disabled="controlsDisabled" @change="updateTopLevel('background_enabled', $event)" />
+                <span>
+                    <span class="flex items-center gap-2 text-sm font-medium text-[var(--talos-text)]">
+                        Procedural background
+                        <span data-testid="talos-background-motion-state" class="text-[10px] font-semibold uppercase text-[var(--talos-muted)]">{{ backgroundMotionState }}</span>
+                    </span>
+                    <span class="block text-xs text-[var(--talos-muted)]">Keep the selected scene visible. Enabling it from Off restores Adaptive.</span>
+                </span>
+                <Switch :model-value="backgroundControlValue" aria-label="Procedural background" :disabled="controlsDisabled" @change="updateBackgroundEnabled" />
             </label>
             <label class="flex min-h-16 items-center justify-between gap-3 border-b border-[var(--talos-border)] py-2">
-                <span><span class="block text-sm font-medium text-[var(--talos-text)]">Interface motion</span><span class="block text-xs text-[var(--talos-muted)]">Animate windows, navigation and feedback.</span></span>
-                <Switch :model-value="modelValue.interface_enabled" aria-label="Interface motion" :disabled="controlsDisabled" @change="updateTopLevel('interface_enabled', $event)" />
+                <span>
+                    <span class="flex items-center gap-2 text-sm font-medium text-[var(--talos-text)]">
+                        Interface motion
+                        <span data-testid="talos-interface-motion-state" class="text-[10px] font-semibold uppercase text-[var(--talos-muted)]">{{ interfaceMotionState }}</span>
+                    </span>
+                    <span class="block text-xs text-[var(--talos-muted)]">Animate windows, navigation and feedback independently from the background renderer.</span>
+                </span>
+                <Switch :model-value="interfaceControlValue" aria-label="Interface motion" :disabled="controlsDisabled" @change="updateInterfaceEnabled" />
             </label>
         </div>
 

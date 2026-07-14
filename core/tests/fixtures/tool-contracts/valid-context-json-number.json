@@ -1,0 +1,14 @@
+{
+  "schema_version": "talos_tool_execution_context_v1",
+  "user_id": "user-1",
+  "chat_session_id": "chat-1",
+  "run_id": "run-1",
+  "turn_id": "turn-1",
+  "browser_session_id": "browser-1",
+  "node_id": "tool-node-1",
+  "capability": "browser.read",
+  "risk": "read",
+  "state_version": 1.0,
+  "deadline_at": "2026-07-12T20:00:00Z",
+  "idempotency_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

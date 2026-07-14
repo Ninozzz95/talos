@@ -1,0 +1,28 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-tools-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "I will inspect the page."
+            },
+            {
+              "functionCall": {
+                "id": "gemini-call-1",
+                "name": "browser_navigate",
+                "args": {
+                  "url": "https://example.com"
+                }
+              },
+              "thoughtSignature": "opaque-thought-signature"
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ]
+  }
+}

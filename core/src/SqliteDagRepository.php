@@ -45,6 +45,10 @@ final class SqliteDagRepository implements DagRepositoryInterface
             return false;
         }
 
+        if ($orchestrator->isEmpty() && ($data['nodes'] ?? []) !== []) {
+            $this->materializeTopology($orchestrator, $data);
+        }
+
         $orchestrator->importState($data);
         return true;
     }
@@ -64,5 +68,53 @@ final class SqliteDagRepository implements DagRepositoryInterface
     {
         $result = $this->db->querySingle('SELECT saved_at FROM dag_state WHERE id = 1', true);
         return $result['saved_at'] ?? null;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function materializeTopology(ASTOrchestrator $orchestrator, array $data): void
+    {
+        $nodes = $data['nodes'] ?? null;
+        $dependencies = $data['dependencies'] ?? null;
+        if (! is_array($nodes) || ! is_array($dependencies)) {
+            throw new \InvalidArgumentException('Persisted DAG topology is invalid.');
+        }
+
+        $remaining = $nodes;
+        $materialized = [];
+        while ($remaining !== []) {
+            $progress = false;
+            foreach ($remaining as $nodeId => $node) {
+                $nodeDependencies = $dependencies[$nodeId] ?? null;
+                if (! is_string($nodeId) || ! is_array($node) || ! is_array($nodeDependencies) || ! array_is_list($nodeDependencies)) {
+                    throw new \InvalidArgumentException('Persisted DAG node topology is invalid.');
+                }
+                if (array_filter($nodeDependencies, static fn (mixed $dependency): bool => ! is_string($dependency) || ! isset($materialized[$dependency])) !== []) {
+                    continue;
+                }
+
+                $type = $node['type'] ?? null;
+                if (! is_string($type) || $type === '') {
+                    throw new \InvalidArgumentException("Persisted DAG node type is invalid: {$nodeId}");
+                }
+                $orchestrator->addNode($nodeId, $nodeDependencies, $type);
+                if (array_key_exists('payload', $node)) {
+                    if (! is_array($node['payload'])) {
+                        throw new \InvalidArgumentException("Persisted DAG node payload is invalid: {$nodeId}");
+                    }
+                    $orchestrator->setPayload($nodeId, $node['payload']);
+                }
+                $requirement = $node['approval_requirement'] ?? null;
+                if (is_array($requirement) && is_string($requirement['capability'] ?? null)) {
+                    $orchestrator->markAwaitingApproval($nodeId, $requirement['capability']);
+                }
+
+                $materialized[$nodeId] = true;
+                unset($remaining[$nodeId]);
+                $progress = true;
+            }
+            if (! $progress) {
+                throw new \InvalidArgumentException('Persisted DAG topology is cyclic or incomplete.');
+            }
+        }
     }
 }

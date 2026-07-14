@@ -43,6 +43,12 @@ const tabClass = computed(() => props.variant === 'settings'
     ? 'talos-tab flex min-h-11 w-full cursor-pointer items-center justify-start rounded-md border px-2 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-9'
     : 'talos-tab inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-md border px-3 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8')
 
+const itemClass = computed(() => props.variant === 'settings'
+    ? 'flex w-full min-w-0 items-center gap-1'
+    : 'inline-flex shrink-0 items-center gap-0.5')
+
+const ownedTabIds = computed(() => props.items.map((item) => tabId(item.id)).join(' '))
+
 function tabId(id: string) {
     return `${props.tabIdPrefix}-${id}`
 }
@@ -117,7 +123,14 @@ function onKeydown(event: KeyboardEvent, currentId: string) {
 </script>
 
 <template>
-    <div :class="rootClass" role="tablist" :aria-label="label" :aria-orientation="orientation">
+    <div :class="rootClass">
+        <div
+            class="sr-only"
+            role="tablist"
+            :aria-label="label"
+            :aria-orientation="orientation"
+            :aria-owns="ownedTabIds"
+        ></div>
         <template v-for="(item, index) in items" :key="item.id">
             <div
                 v-if="startsGroup(item, index)"
@@ -127,29 +140,32 @@ function onKeydown(event: KeyboardEvent, currentId: string) {
             >
                 {{ item.group }}
             </div>
-        <button
-            :id="tabId(item.id)"
-            type="button"
-            role="tab"
-            :class="[
-                tabClass,
-                modelValue === item.id
-                    ? 'border-[var(--talos-accent-border)] bg-[var(--talos-panel)] text-[var(--talos-text)] shadow-sm'
-                    : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-accent-border)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]',
-            ]"
-            :aria-selected="modelValue === item.id"
-            :aria-controls="panelId(item.id)"
-            :aria-disabled="item.disabled || undefined"
-            :disabled="item.disabled"
-            :tabindex="modelValue === item.id ? 0 : -1"
-            :title="item.description ?? item.label"
-            @click="selectTab(item.id)"
-            @keydown="onKeydown($event, item.id)"
-        >
-            <slot name="tab" :item="item" :active="modelValue === item.id">
-                {{ item.label }}
-            </slot>
-        </button>
+            <div :class="itemClass" role="presentation">
+                <button
+                    :id="tabId(item.id)"
+                    type="button"
+                    role="tab"
+                    :class="[
+                        tabClass,
+                        modelValue === item.id
+                            ? 'border-[var(--talos-accent-border)] bg-[var(--talos-panel)] text-[var(--talos-text)] shadow-sm'
+                            : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-accent-border)] hover:bg-[var(--talos-active)] hover:text-[var(--talos-text)]',
+                    ]"
+                    :aria-selected="modelValue === item.id"
+                    :aria-controls="panelId(item.id)"
+                    :aria-disabled="item.disabled || undefined"
+                    :disabled="item.disabled"
+                    :tabindex="modelValue === item.id ? 0 : -1"
+                    :title="item.description ?? item.label"
+                    @click="selectTab(item.id)"
+                    @keydown="onKeydown($event, item.id)"
+                >
+                    <slot name="tab" :item="item" :active="modelValue === item.id">
+                        {{ item.label }}
+                    </slot>
+                </button>
+                <slot name="item-action" :item="item" :active="modelValue === item.id" />
+            </div>
         </template>
     </div>
 </template>

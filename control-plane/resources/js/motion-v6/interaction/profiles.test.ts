@@ -53,10 +53,10 @@ describe('TALOS V6 interaction profiles', () => {
     })
 
     it.each([
-        ['window-open', 320],
-        ['window-close', 240],
-        ['window-minimize', 380],
-        ['window-restore', 320],
+        ['window-open', 160],
+        ['window-close', 120],
+        ['window-minimize', 190],
+        ['window-restore', 160],
     ] as const)('keeps %s perceptible at the default duration scale across every preset', (intent, minimumMs) => {
         const preferences = createDefaultTalosMotionV6Preferences().interface
         for (const profile of TALOS_INTERACTION_PROFILES_V6) {

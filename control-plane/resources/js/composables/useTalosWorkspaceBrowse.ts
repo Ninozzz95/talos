@@ -1,6 +1,6 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useTalosBrowse } from './useTalosBrowse'
-import type { TalosBrowserActivity, TalosBrowserCurrentPage } from '../lib/talosTypes'
+import type { TalosBrowserActivity, TalosBrowserCurrentPage, TalosBrowserPointerFrame } from '../lib/talosTypes'
 
 type TalosBrowsePersistence = {
     shouldRestore?: (talosSessionId: string) => boolean
@@ -13,9 +13,10 @@ export function useTalosWorkspaceBrowse(
     activeTalosSessionId: Ref<string | null>,
     ensureTalosSessionId: () => Promise<string>,
     persistence: TalosBrowsePersistence = {},
+    options: { devBrowserEvidence?: boolean } = {},
 ) {
     const enabled = ref(initiallyEnabled)
-    const browse = useTalosBrowse()
+    const browse = useTalosBrowse({ devBrowserEvidence: options.devBrowserEvidence === true })
     const chatActivities = ref<TalosBrowserActivity[]>([])
     let workspaceScopeRevision = 0
     const isBrowseSurface = computed(() => enabled.value)
@@ -24,13 +25,13 @@ export function useTalosWorkspaceBrowse(
         && browse.activeSession.value
         && ['ready', 'active'].includes(browse.activeSession.value.status)
         && browse.activeSession.value.last_snapshot_artifact_id
-        && browse.latestSnapshot.value,
+        && browse.latestSnapshot.value?.snapshot,
     ))
     const browserContext = computed(() => {
         if (!browserContextEligible.value || !browse.activeSession.value) return null
         try {
-            const url = new URL(browse.activeSession.value.current_url ?? browse.latestSnapshot.value?.snapshot.url ?? '')
-            return { host: url.host, title: browse.activeSession.value.current_title || browse.latestSnapshot.value?.snapshot.title || 'Captured page' }
+            const url = new URL(browse.activeSession.value.current_url ?? browse.latestSnapshot.value?.snapshot?.url ?? '')
+            return { host: url.host, title: browse.activeSession.value.current_title || browse.latestSnapshot.value?.snapshot?.title || 'Captured page' }
         } catch {
             return { host: 'Captured page', title: browse.activeSession.value.current_title || 'Browser evidence' }
         }
@@ -252,6 +253,14 @@ export function useTalosWorkspaceBrowse(
         window.history.replaceState({}, '', '/')
     }
 
+    async function interactWithBrowserFrame(frame: TalosBrowserPointerFrame) {
+        return browse.interactWithScreenshot(frame)
+    }
+
+    async function confirmBrowserFrameInteraction(decision: 'approve' | 'reject') {
+        return browse.confirmScreenshotInteraction(decision)
+    }
+
     return {
         browseModeEnabled: enabled,
         isBrowseSurface,
@@ -262,6 +271,9 @@ export function useTalosWorkspaceBrowse(
         visibleBrowserActivities: visibleActivities,
         latestBrowserScreenshot: browse.latestScreenshot,
         latestBrowserSnapshot: browse.latestSnapshot,
+        browserInteractionPending: browse.interactionPending,
+        browserInteractionError: browse.interactionError,
+        pendingBrowserInteractionApproval: browse.pendingInteractionApproval,
         toggleBrowseMode: toggle,
         handleEnableBrowse: enable,
         handleDisableBrowse: disable,
@@ -273,5 +285,7 @@ export function useTalosWorkspaceBrowse(
         recordBrowserActivities: recordActivities,
         restoreBrowseForActiveSession: restoreForActiveSession,
         initializeBrowse: initialize,
+        interactWithBrowserFrame,
+        confirmBrowserFrameInteraction,
     }
 }

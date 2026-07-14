@@ -2,8 +2,10 @@ import { resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import type { Browser, BrowserContext, Page } from "playwright";
-import { BrowserSessionManager } from "../src/BrowserSessionManager.js";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { BrowserSessionManager, CLICK_COMMAND_TTL_MS, MAX_CLICK_COMMAND_RECORDS } from "../src/BrowserSessionManager.js";
+import { MAX_HMI_COMMAND_RECORDS } from "../src/BrowserHmiCommandLedger.js";
+import { captureSnapshot } from "../src/BrowserSnapshot.js";
 import type { CreateSessionInput } from "../src/schemas.js";
 import { buildServer } from "../src/server.js";
 import { startBrowserWorker } from "../src/startBrowserWorker.js";
@@ -132,6 +134,21 @@ describe("TALOS browser worker", () => {
     },
   );
 
+  it("rejects navigation URLs that exceed the UTF-8 wire bound", async () => {
+    const created = await ownedInject({ method: "POST", url: "/sessions", payload: createPayload });
+    const sessionId = created.json().data.sessionId;
+
+    const response = await ownedInject({
+      method: "POST",
+      url: `/sessions/${sessionId}/navigate`,
+      payload: { url: `https://example.com/${"界".repeat(1_000)}` },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_INVALID_NAVIGATION_PAYLOAD" });
+    await ownedInject({ method: "DELETE", url: `/sessions/${sessionId}` });
+  });
+
   it("captures a PNG screenshot with a digest", async () => {
     const created = await ownedInject({ method: "POST", url: "/sessions", payload: createPayload });
     const sessionId = created.json().data.sessionId;
@@ -163,7 +180,11 @@ describe("TALOS browser worker", () => {
     expect(data.nodes.every((node: { ref: string }) => /^r\d+$/.test(node.ref))).toBe(true);
     expect(data.nodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ role: "p", name: "This page is available for read-only browser worker tests." }),
+      expect.objectContaining({ role: "link", name: "Bounded result link", href: "https://example.com" }),
     ]));
+    expect(data.nodes.find((node: { name: string }) => node.name === "JavaScript link")).not.toHaveProperty("href");
+    expect(data.nodes.find((node: { name: string }) => node.name === "Data link")).not.toHaveProperty("href");
+    expect(data.nodes.find((node: { name: string }) => node.name === "Oversized link")).toHaveProperty("href", "https://example.com");
     expect(data.nodes.filter((node: { name: string }) => node.name === "Open vehicle")).toHaveLength(2);
     expect(data.nodes.find((node: { name: string }) => node.name === "Bounded custom role")?.role.length).toBeLessThanOrEqual(64);
     expect(data.textDigest).toContain("TALOS Browse Fixture");
@@ -215,6 +236,115 @@ describe("TALOS browser worker", () => {
     const retrieved = await ownedInject({ method: "GET", url: `/sessions/${sessionId}` });
     expect(retrieved.statusCode).toBe(404);
     expect(retrieved.json()).toMatchObject({ code: "TALOS_BROWSER_SESSION_NOT_FOUND" });
+  });
+
+  it("publishes one shared browser initialization while concurrent sessions are created", async () => {
+    let releaseStart!: () => void;
+    const startGate = new Promise<void>((resolveStart) => { releaseStart = resolveStart; });
+    let proxyCreated = 0;
+    let proxyStarted = 0;
+    let proxyClosed = 0;
+    let browserLaunches = 0;
+    const page = { on: () => undefined } as unknown as Page;
+    const context = {
+      route: async () => undefined,
+      newPage: async () => page,
+      close: async () => undefined,
+    } as unknown as BrowserContext;
+    const browser = {
+      newContext: async () => context,
+      close: async () => undefined,
+    } as unknown as Browser;
+    const manager = new BrowserSessionManager({
+      proxyFactory: () => {
+        proxyCreated += 1;
+        return {
+          serverUrl: `http://127.0.0.1:${46000 + proxyCreated}`,
+          start: async () => {
+            proxyStarted += 1;
+            await startGate;
+          },
+          close: async () => { proxyClosed += 1; },
+        };
+      },
+      browserLauncher: async () => {
+        browserLaunches += 1;
+        return browser;
+      },
+      scheduleCleanup: () => ({}),
+      cancelCleanup: () => undefined,
+    });
+    const first = manager.create(createPayload as CreateSessionInput);
+    const second = manager.create(createPayload as CreateSessionInput);
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    releaseStart();
+    await Promise.all([first, second]);
+
+    expect(proxyCreated).toBe(1);
+    expect(proxyStarted).toBe(1);
+    expect(browserLaunches).toBe(1);
+    await manager.close();
+    expect(proxyClosed).toBe(1);
+  });
+});
+
+describe("TALOS browser snapshot security", () => {
+  it("uses bounded accessible names without exposing populated form secrets", async () => {
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+      const page = await browser.newPage();
+      const oversizedName = "界".repeat(1_000);
+      const oversizedHref = `https://example.com/${"界".repeat(1_000)}`;
+      await page.setContent(`
+        <label id="password-label" for="password">Account password</label>
+        <input id="password" type="password" value="password-secret-value">
+        <label for="api-key">API key</label>
+        <input id="api-key" name="api_key" value="api-key-secret-value">
+        <label for="notes">Secret notes</label>
+        <textarea id="notes">textarea-secret-value</textarea>
+        <label>Embedded secret notes
+          <textarea>embedded-textarea-secret-value</textarea>
+        </label>
+        <input aria-label="${oversizedName}" value="bounded-name-secret-value">
+        <a href="${oversizedHref}">Oversized href</a>
+      `);
+      await page.evaluate(() => {
+        const state = globalThis as typeof globalThis & { capturedHrefBytes?: number };
+        const NativeUrl = URL;
+        Object.defineProperty(globalThis, "URL", {
+          configurable: true,
+          value: class extends NativeUrl {
+            constructor(url: string | URL, base?: string | URL) {
+              state.capturedHrefBytes = new TextEncoder().encode(String(url)).byteLength;
+              super(url, base);
+            }
+          },
+        });
+      });
+
+      const snapshot = await captureSnapshot(page);
+      const serialized = JSON.stringify(snapshot);
+      const capturedHrefBytes = await page.evaluate(() => (
+        globalThis as typeof globalThis & { capturedHrefBytes?: number }
+      ).capturedHrefBytes);
+
+      expect(snapshot.nodes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ role: "input", name: "Account password" }),
+        expect.objectContaining({ role: "input", name: "API key" }),
+        expect.objectContaining({ role: "textarea", name: "Secret notes" }),
+        expect.objectContaining({ role: "textarea", name: "Embedded secret notes" }),
+      ]));
+      expect(serialized).not.toContain("password-secret-value");
+      expect(serialized).not.toContain("api-key-secret-value");
+      expect(serialized).not.toContain("textarea-secret-value");
+      expect(serialized).not.toContain("embedded-textarea-secret-value");
+      expect(serialized).not.toContain("bounded-name-secret-value");
+      expect(snapshot.nodes.every((node) => Buffer.byteLength(node.name, "utf8") <= 200)).toBe(true);
+      expect(capturedHrefBytes).toBeLessThanOrEqual(2_048);
+    } finally {
+      await browser.close();
+    }
   });
 });
 
@@ -306,6 +436,53 @@ describe("BrowserSessionManager resource lifecycle", () => {
     await manager.close();
   });
 
+  it("bounds per-session HMI command retention and clears records when the session closes", async () => {
+    const fake = fakeBrowser();
+    const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => 1_000 });
+    const created = await manager.create(createPayload as CreateSessionInput);
+    const session = await manager.get(created.sessionId);
+    for (let index = 0; index < MAX_HMI_COMMAND_RECORDS; index += 1) {
+      expect(session.hmiCommands.claim(`hmi_cmd_retained_${index}`, `sha256:${index}`)).toEqual({ kind: "new" });
+    }
+
+    expect(() => session.hmiCommands.claim("hmi_cmd_overflow", "sha256:overflow")).toThrowError(expect.objectContaining({
+      code: "TALOS_BROWSER_HMI_COMMAND_RETENTION_EXHAUSTED",
+    }));
+    const ledger = session.hmiCommands;
+    await manager.delete(created.sessionId);
+    expect(ledger.size).toBe(0);
+    await manager.close();
+  });
+
+  it("bounds and expires semantic click records, then clears cached evidence on session close", async () => {
+    const fake = fakeBrowser();
+    let now = 1_000;
+    const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => now });
+    const created = await manager.create(createPayload as CreateSessionInput);
+    const session = await manager.get(created.sessionId);
+
+    expect(manager.claimClickCommand(created.sessionId, "click-ttl", "sha256:one")).toEqual({ kind: "new" });
+    manager.commitClickCommand(created.sessionId, "click-ttl", "sha256:one", { content: [{ type: "image", data: "retained-screenshot" }] });
+    expect(session.clickCommands.size).toBe(1);
+    now += CLICK_COMMAND_TTL_MS + 1;
+    await manager.get(created.sessionId);
+    expect(session.clickCommands.size).toBe(0);
+    expect(manager.claimClickCommand(created.sessionId, "click-ttl", "sha256:two")).toEqual({ kind: "new" });
+
+    const remainingSlots = MAX_CLICK_COMMAND_RECORDS - session.clickCommands.size;
+    for (let index = 0; index < remainingSlots; index += 1) {
+      expect(manager.claimClickCommand(created.sessionId, `click-bound-${index}`, `sha256:${index}`)).toEqual({ kind: "new" });
+    }
+    expect(() => manager.claimClickCommand(created.sessionId, "click-overflow", "sha256:overflow")).toThrowError(expect.objectContaining({
+      code: "TALOS_BROWSER_CLICK_COMMAND_RETENTION_EXHAUSTED",
+    }));
+
+    const cache = session.clickCommands;
+    await manager.delete(created.sessionId);
+    expect(cache.size).toBe(0);
+    await manager.close();
+  });
+
   it("closes expired contexts during deterministic cleanup", async () => {
     const fake = fakeBrowser();
     let now = 1_000;
@@ -359,6 +536,64 @@ describe("BrowserSessionManager resource lifecycle", () => {
     });
     await app.close();
   });
+
+  it("returns a correlation-safe typed diagnostic for unexpected HMI protocol failures", async () => {
+    const manager = new BrowserSessionManager();
+    const reported: Array<{ correlationId: string; method: string; route: string; error: unknown }> = [];
+    const isolatedApp = buildServer({
+      sessions: manager,
+      internalToken: "test-worker-token",
+      onUnexpectedError: (event) => reported.push(event),
+    });
+    const headers = { "x-talos-worker-token": "test-worker-token", "x-talos-owner-ref": "user:1" };
+    const created = await isolatedApp.inject({
+      method: "POST",
+      url: "/sessions",
+      headers,
+      payload: {
+        ...createPayload,
+        capabilities: { ...createPayload.capabilities, hmiActions: true },
+      },
+    });
+    const sessionId = created.json().data.sessionId;
+    manager.runExclusive = (async () => {
+      throw new Error("private CDP protocol detail");
+    }) as typeof manager.runExclusive;
+
+    const response = await isolatedApp.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/hmi/pointer/preflight`,
+      headers,
+      payload: {
+        schema_version: "talos_browser_hmi_pointer_v2",
+        interaction_id: "123e4567-e89b-42d3-a456-426614174000",
+        state_version: 0,
+        normalized_x: 0.2,
+        normalized_y: 0.3,
+        button: "left",
+        click_count: 1,
+        expected_frame_sha256: `sha256:${"a".repeat(64)}`,
+      },
+    });
+    const body = response.json();
+
+    expect(response.statusCode).toBe(502);
+    expect(body).toMatchObject({
+      message: "Browser HMI protocol operation failed.",
+      code: "TALOS_BROWSER_HMI_PROTOCOL_FAILURE",
+      details: { correlation_id: expect.any(String) },
+    });
+    expect(JSON.stringify(body)).not.toContain("private CDP protocol detail");
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatchObject({
+      correlationId: body.details.correlation_id,
+      method: "POST",
+      route: "/sessions/:id/hmi/pointer/preflight",
+      error: expect.any(Error),
+    });
+
+    await isolatedApp.close();
+  });
 });
 
 describe("TALOS browser worker boundary", () => {
@@ -394,6 +629,20 @@ describe("TALOS browser worker boundary", () => {
     const data = response.json().data;
 
     expect(response.statusCode).toBe(200);
+    expect(Object.keys(data).sort()).toEqual([
+      "capabilities",
+      "createdAt",
+      "expiresAt",
+      "mode",
+      "sessionId",
+      "stateVersion",
+      "status",
+      "viewport",
+    ]);
+    expect(data).not.toHaveProperty("hmiIdentityKey");
+    expect(data).not.toHaveProperty("singlePageViolation");
+    expect(data).not.toHaveProperty("singlePageGuard");
+    expect(data).not.toHaveProperty("latestSnapshot");
     expect(data).not.toHaveProperty("page");
     expect(data).not.toHaveProperty("context");
     expect(data).not.toHaveProperty("ownerRef");
@@ -411,6 +660,21 @@ describe("TALOS browser worker boundary", () => {
     const created = await app.inject({ method: "POST", url: "/sessions", headers: ownerOne, payload: createPayload });
     const sessionId = created.json().data.sessionId;
     const response = await app.inject({ method: "POST", url: `/sessions/${sessionId}/navigate`, headers: ownerOne, payload: { url: "http://127.0.0.1:8080/private" } });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_INVALID_NAVIGATION_URL" });
+    await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerOne });
+  });
+
+  it.each([
+    "http://localhost./private",
+    "http://api.localhost./private",
+    "http://service.local./private",
+    "http://metadata.google.internal./computeMetadata/v1",
+  ])("rejects reserved navigation hostname %s", async (url) => {
+    const created = await app.inject({ method: "POST", url: "/sessions", headers: ownerOne, payload: createPayload });
+    const sessionId = created.json().data.sessionId;
+    const response = await app.inject({ method: "POST", url: `/sessions/${sessionId}/navigate`, headers: ownerOne, payload: { url } });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_INVALID_NAVIGATION_URL" });

@@ -47,6 +47,12 @@ final class PublicHttpUrlPolicy
         'ff00::/8',
     ];
 
+    /** @var list<string> */
+    private const RESERVED_HOSTNAMES = [
+        'localhost',
+        'metadata.google.internal',
+    ];
+
     /**
      * @param  list<string>  $allowedHosts
      */
@@ -55,6 +61,7 @@ final class PublicHttpUrlPolicy
         private readonly ?Closure $resolver = null,
         private readonly bool $requireAllowedHost = false,
         private readonly bool $rejectQueryAndFragment = false,
+        private readonly bool $allowNonPublicAddresses = false,
     ) {}
 
     /**
@@ -70,6 +77,23 @@ final class PublicHttpUrlPolicy
         );
     }
 
+    /**
+     * Operator-owned service endpoints may live on a private container network.
+     * The exact hostname remains mandatory and every resolved address is pinned.
+     *
+     * @param  list<string>  $hosts
+     */
+    public static function forTrustedServiceHosts(array $hosts, ?Closure $resolver = null): self
+    {
+        return new self(
+            allowedHosts: $hosts,
+            resolver: $resolver,
+            requireAllowedHost: true,
+            rejectQueryAndFragment: true,
+            allowNonPublicAddresses: true,
+        );
+    }
+
     public static function fromConfig(): self
     {
         $hosts = config('services.talos.model_provider_allowed_hosts', []);
@@ -82,7 +106,7 @@ final class PublicHttpUrlPolicy
     /**
      * @return array{allowed: bool, reason: string, host: string, resolved_ips: list<string>}
      */
-    public function inspect(string $url, bool $requireResolution = false): array
+    public function inspect(string $url, bool $requireResolution = false, bool $resolveHostname = true): array
     {
         $parts = parse_url($url);
         $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
@@ -109,8 +133,14 @@ final class PublicHttpUrlPolicy
             return $this->decision(false, 'host is not allowlisted', $host, []);
         }
 
-        if ($this->isPrivateHost($host)) {
+        $trustedExactHost = $this->allowNonPublicAddresses && in_array($host, $allowedHosts, true);
+        if ((! $trustedExactHost && $this->isReservedHostname($host))
+            || (! $trustedExactHost && $this->isPrivateHost($host))) {
             return $this->decision(false, 'private network host blocked', $host, []);
+        }
+
+        if (! $resolveHostname) {
+            return $this->decision(true, in_array($host, $allowedHosts, true) ? 'allowed host' : 'allowed', $host, []);
         }
 
         if (! $requireResolution && in_array($host, $allowedHosts, true)) {
@@ -127,7 +157,7 @@ final class PublicHttpUrlPolicy
                 return $this->decision(false, 'invalid DNS resolution', $host, $resolvedIps);
             }
 
-            if ($this->isPrivateHost($ip)) {
+            if (! $trustedExactHost && $this->isPrivateHost($ip)) {
                 return $this->decision(false, 'private network host blocked', $host, $resolvedIps);
             }
         }
@@ -214,6 +244,11 @@ final class PublicHttpUrlPolicy
         }
 
         return false;
+    }
+
+    private function isReservedHostname(string $host): bool
+    {
+        return in_array($host, self::RESERVED_HOSTNAMES, true) || str_ends_with($host, '.localhost');
     }
 
     private function ipInCidr(string $ip, string $cidr): bool

@@ -142,7 +142,7 @@ export function useTalosThemeMotionV6Editor(options: TalosThemeMotionV6EditorOpt
         const defaults = createDefaultTalosMotionV6Preferences()
         const candidate = clonePreferences(draft.value)
         for (const key of [
-            'mode', 'background_enabled', 'scene_override', 'speed', 'intensity', 'density', 'depth',
+            'mode', 'background_enabled', 'scene_override', 'speed', 'intensity', 'glow_intensity', 'density', 'depth',
             'trails', 'contrast', 'parallax', 'quality', 'fps_cap', 'dpr_cap', 'pause_when_hidden',
             'respect_data_saver',
         ] as const) {
@@ -160,6 +160,10 @@ export function useTalosThemeMotionV6Editor(options: TalosThemeMotionV6EditorOpt
             categories: { ...defaults.interface.categories },
         }
         replaceDraft(candidate)
+    }
+
+    function resetAll() {
+        replaceDraft(createDefaultTalosMotionV6Preferences())
     }
 
     async function save(): Promise<boolean> {
@@ -242,6 +246,7 @@ export function useTalosThemeMotionV6Editor(options: TalosThemeMotionV6EditorOpt
         updateCategory,
         resetBackground,
         resetInterface,
+        resetAll,
         save,
         retry,
     }

@@ -1,0 +1,26 @@
+{
+  "provider_response": {
+    "id": "msg-tools-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I will inspect the page."
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_browser_1",
+        "name": "browser_navigate",
+        "input": {
+          "url": "https://example.com"
+        }
+      }
+    ],
+    "stop_reason": "tool_use",
+    "usage": {
+      "input_tokens": 30,
+      "output_tokens": 10
+    }
+  }
+}

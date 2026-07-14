@@ -12,6 +12,12 @@ final class TalosWorkspaceSetting extends Model
 {
     public const DEFAULT_ID = 'default';
 
+    private const BROWSER_HMI_MODE_VALUES = [
+        'read_only' => true,
+        'confirm_sensitive' => true,
+        'confirm_every_interaction' => true,
+    ];
+
     private const THEME_COLOR_KEYS = [
         'background' => true,
         'panel' => true,
@@ -185,6 +191,7 @@ final class TalosWorkspaceSetting extends Model
             'session_header' => true,
             'full_width_chat' => true,
             'welcome_message' => true,
+            'mission_path' => true,
             'incognito' => true,
             'text_only_emoji_output' => true,
             'thinking_process' => true,
@@ -439,6 +446,14 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'browser_hmi_mode') {
+                if (is_string($value) && isset(self::BROWSER_HMI_MODE_VALUES[$value])) {
+                    $safe[$key] = $value;
+                }
+
+                continue;
+            }
+
             if (is_string($key) && self::isThemePreferenceKeyCandidate($key)) {
                 continue;
             }
@@ -447,6 +462,27 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return $safe;
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateBrowserHmiPreferencesForWrite(mixed $preferences): array
+    {
+        if (! is_array($preferences) || ! array_key_exists('browser_hmi_mode', $preferences)) {
+            return [];
+        }
+
+        $mode = $preferences['browser_hmi_mode'];
+        if (! is_string($mode) || ! isset(self::BROWSER_HMI_MODE_VALUES[$mode])) {
+            return [
+                'preferences.browser_hmi_mode' => [
+                    'Browser interaction policy must be read_only, confirm_sensitive, or confirm_every_interaction.',
+                ],
+            ];
+        }
+
+        return [];
     }
 
     /**

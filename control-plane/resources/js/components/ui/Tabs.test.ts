@@ -12,6 +12,52 @@ afterEach(() => {
 })
 
 describe('Tabs', () => {
+    it('renders item actions as siblings without selecting the tab', async () => {
+        const selected = ref('timeline')
+        let actionClicks = 0
+        const container = document.createElement('div')
+        document.body.append(container)
+        const app = createApp(defineComponent({
+            setup() {
+                return () => h(Tabs, {
+                    modelValue: selected.value,
+                    items: [
+                        { id: 'timeline', label: 'Timeline' },
+                        { id: 'recovery', label: 'Recovery' },
+                    ],
+                    label: 'Runtime sections',
+                    tabIdPrefix: 'runtime-tab',
+                    panelIdPrefix: 'runtime-panel',
+                    'onUpdate:modelValue': (value: string) => {
+                        selected.value = value
+                    },
+                }, {
+                    'item-action': ({ item }: { item: { label: string } }) => h('button', {
+                        type: 'button',
+                        'aria-label': `Information about ${item.label}`,
+                        onClick: () => { actionClicks += 1 },
+                    }),
+                })
+            },
+        }))
+
+        mounted.push(app)
+        app.mount(container)
+
+        const info = container.querySelector<HTMLButtonElement>('[aria-label="Information about Recovery"]')
+        const tablist = container.querySelector<HTMLElement>('[role="tablist"]')
+        expect(info).not.toBeNull()
+        expect(container.querySelector('button button')).toBeNull()
+        expect(tablist?.contains(info ?? null)).toBe(false)
+        expect(tablist?.getAttribute('aria-owns')).toBe('runtime-tab-timeline runtime-tab-recovery')
+        expect(Array.from(tablist?.querySelectorAll('[role="button"], button') ?? [])).toEqual([])
+        info?.click()
+        await nextTick()
+
+        expect(actionClicks).toBe(1)
+        expect(selected.value).toBe('timeline')
+    })
+
     it('renders grouped vertical settings tabs and supports ArrowDown', async () => {
         const selected = ref('models')
         const container = document.createElement('div')

@@ -19,6 +19,13 @@ type BrowserMockState = {
     snapshotCaptured: boolean
 }
 
+type ProceduralApprovalMockState = {
+    sessionId: string
+    turnId: string
+    callId: string
+    approval: Record<string, unknown>
+}
+
 export type TalosSettingsPatchLedgerEntry = {
     revision: number
     expectedRevision: number | null
@@ -1442,6 +1449,9 @@ export type InstallTalosApiMocksOptions = {
     initialSettings?: TalosInitialSettings
     settingsPatchFailure?: TalosSettingsPatchFailure
     chatDelayMs?: number
+    proceduralServerPersistedAssistant?: boolean
+    proceduralBrowserApproval?: boolean
+    chatResponseText?: string
     promptEnhancement?: {
         delayMs?: number
         failure?: {
@@ -1476,6 +1486,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             model: 'claude-e2e',
         }),
     ]
+    const proceduralApprovalsBySession = new Map<string, ProceduralApprovalMockState>()
     let createdSessionCount = 0
     const browserStatesByTalosSession = new Map<string, BrowserMockState[]>()
     let browserCreateCount = 0
@@ -1942,6 +1953,76 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             return json(route, sessionExportPayload(sessionExportMatch[1], format))
         }
 
+        const pendingApprovalsMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/pending-tool-approvals$/)
+        if (pendingApprovalsMatch && method === 'GET') {
+            const pending = proceduralApprovalsBySession.get(pendingApprovalsMatch[1])
+            return json(route, { data: pending ? [pending.approval] : [] })
+        }
+
+        const toolApprovalMatch = path.match(/^\/api\/talos\/agent-turns\/([^/]+)\/approvals\/([^/]+)$/)
+        if (toolApprovalMatch && method === 'POST') {
+            const pending = [...proceduralApprovalsBySession.values()].find((candidate) => (
+                candidate.turnId === toolApprovalMatch[1] && candidate.callId === toolApprovalMatch[2]
+            ))
+            const body = request.postDataJSON() as Record<string, unknown>
+            if (!pending) {
+                return json(route, {
+                    code: 'TALOS_TOOL_APPROVAL_NOT_FOUND',
+                    message: 'The requested tool approval was not found.',
+                }, 404)
+            }
+            if (body.plan_hash !== pending.approval.plan_hash || (body.decision !== 'approve' && body.decision !== 'reject')) {
+                return json(route, {
+                    code: 'TALOS_TOOL_APPROVAL_CONFLICT',
+                    message: 'The browser action is stale or no longer awaiting this approval.',
+                }, 409)
+            }
+
+            proceduralApprovalsBySession.delete(pending.sessionId)
+            if (body.decision === 'reject') {
+                return json(route, {
+                    text: '',
+                    assistant_message: null,
+                    pending_approvals: [],
+                    approval_decision: { id: pending.callId, decision: 'reject' },
+                    agent_turn: { id: pending.turnId, status: 'failed', failure_code: 'TALOS_TOOL_APPROVAL_REJECTED' },
+                })
+            }
+
+            messageSequence += 1
+            const approvalResultText = 'The cookie banner was dismissed through verified browser evidence.'
+            const assistantMessage = messagePayload({
+                role: 'assistant',
+                content: approvalResultText,
+                model_profile_id: 'profile-e2e',
+                run_id: 'run-approval-e2e',
+                metadata: { source: 'talos_agent_turn' },
+            }, messageSequence, pending.sessionId)
+            messagesBySession.set(pending.sessionId, [
+                ...(messagesBySession.get(pending.sessionId) ?? []),
+                assistantMessage,
+            ])
+
+            return json(route, {
+                text: approvalResultText,
+                mutations: [],
+                errors: [],
+                assistant_message: assistantMessage,
+                pending_approvals: [],
+                agent_turn: { id: pending.turnId, status: 'completed', failure_code: null },
+                browser_activities: [{
+                    id: 'browser-click-approval-e2e',
+                    operation: 'click',
+                    status: 'succeeded',
+                    label: 'Browser click succeeded',
+                    run_id: 'run-approval-e2e',
+                    browser_session_id: pending.approval.browser_session_id,
+                    artifact_ids: [],
+                    occurred_at: now,
+                }],
+            })
+        }
+
         const sessionMessagesMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/messages$/)
         if (sessionMessagesMatch && method === 'GET') {
             return json(route, { data: messagesBySession.get(sessionMessagesMatch[1]) ?? [] })
@@ -1989,14 +2070,122 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                     created_at: now,
                 }]
             }
+            if (options.proceduralBrowserApproval && browserSessionId && /accept\s+(?:the\s+)?cookie\s+banner/i.test(prompt)) {
+                const turnId = 'turn-approval-e2e'
+                const callId = 'call-approval-e2e'
+                const approval = {
+                    id: callId,
+                    turn_id: turnId,
+                    run_id: 'run-approval-e2e',
+                    tool_name: 'browser_click',
+                    risk: 'high',
+                    capability: 'browser.write',
+                    status: 'pending',
+                    actionable: true,
+                    stale_reason: null,
+                    plan_hash: `sha256:${'a'.repeat(64)}`,
+                    browser_session_id: browserSessionId,
+                    snapshot_artifact_id: browserSnapshotArtifactId ?? 'browser-snapshot-approval-e2e',
+                    snapshot_id: 'snapshot-approval-e2e',
+                    state_version: 0,
+                    evidence_hash: `sha256:${'b'.repeat(64)}`,
+                    expected_effect: 'Activate the selected browser control and capture verified post-action evidence.',
+                    target: { ref: 'r1', role: 'button', name: 'Accept all', visible: true },
+                    url: 'https://example.com/privacy',
+                    title: 'Example privacy',
+                }
+                proceduralApprovalsBySession.set(talosSessionId, {
+                    sessionId: talosSessionId,
+                    turnId,
+                    callId,
+                    approval,
+                })
+
+                return json(route, {
+                    text: '',
+                    mutations: [],
+                    errors: [],
+                    assistant_message: null,
+                    pending_approvals: [approval],
+                    agent_turn: { id: turnId, status: 'awaiting_approval', failure_code: null },
+                    browser_activities: [{
+                        id: 'browser-snapshot-approval-e2e',
+                        operation: 'snapshot',
+                        status: 'succeeded',
+                        label: 'Page structure capture succeeded',
+                        run_id: 'run-approval-e2e',
+                        browser_session_id: browserSessionId,
+                        artifact_ids: [approval.snapshot_artifact_id],
+                        occurred_at: now,
+                    }],
+                    run: {
+                        id: 'run-approval-e2e',
+                        session_id: talosSessionId,
+                        mode: 'verified_execution',
+                        status: 'blocked',
+                        provider: 'openai',
+                        model: 'gpt-e2e',
+                        created_at: now,
+                        updated_at: now,
+                    },
+                }, 202)
+            }
             if (options.chatDelayMs) {
                 await new Promise((resolve) => setTimeout(resolve, options.chatDelayMs))
             }
 
+            const responseText = options.chatResponseText ?? (contextSetId
+                ? 'E2E response from AVM with replayable evidence and grounded file context.'
+                : 'E2E response from AVM with replayable evidence.')
+            const usedBrowserContext = browserState && browserSessionId ? {
+                session_id: browserSessionId,
+                snapshot_artifact_id: browserSnapshotArtifactId,
+                title: 'Fixture evidence page',
+                text_digest: 'fixture-snapshot-digest',
+                untrusted: true,
+            } : null
+            const browserActivities = screenshotRequested ? [{
+                id: `browser-activity-chat-screenshot-${browserToken}`,
+                operation: 'screenshot',
+                status: 'succeeded',
+                label: 'Screenshot',
+                run_id: 'run-e2e',
+                browser_session_id: browserSessionId,
+                artifact_ids: browserScreenshotArtifactId ? [browserScreenshotArtifactId] : [],
+                occurred_at: now,
+            }] : browserSessionId ? [{
+                id: `browser-activity-chat-${browserToken}`,
+                operation: 'read',
+                status: 'succeeded',
+                label: 'Chat browser read',
+                run_id: 'run-e2e',
+                browser_session_id: browserSessionId,
+                artifact_ids: [],
+                occurred_at: now,
+            }] : []
+            let assistantMessage: Record<string, unknown> | null = null
+            if (options.proceduralServerPersistedAssistant) {
+                messageSequence += 1
+                assistantMessage = messagePayload({
+                    role: 'assistant',
+                    content: responseText,
+                    model_profile_id: 'profile-e2e',
+                    run_id: 'run-e2e',
+                    metadata: {
+                        source: 'talos_agent_turn',
+                        grounded: true,
+                        used_browser_context: usedBrowserContext,
+                        browser_activities: browserActivities,
+                    },
+                }, messageSequence, talosSessionId)
+                messagesBySession.set(talosSessionId, [
+                    ...(messagesBySession.get(talosSessionId) ?? []),
+                    assistantMessage,
+                ])
+            }
+
             return json(route, {
-                text: contextSetId
-                    ? 'E2E response from AVM with replayable evidence and grounded file context.'
-                    : 'E2E response from AVM with replayable evidence.',
+                text: responseText,
                 mutations: [
                     { action: 'SPAWN_NODE', node_id: 'node-e2e', node_type: 'HTTP_REQUEST' },
                 ],
@@ -2010,44 +2199,9 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                         preview: 'Workflow file says approve the deployment checklist.',
                     },
                 ] : [],
-                used_browser_context: browserState && browserSessionId ? {
-                    session_id: browserSessionId,
-                    snapshot_artifact_id: browserSnapshotArtifactId,
-                    title: 'Fixture evidence page',
-                    text_digest: 'fixture-snapshot-digest',
-                    untrusted: true,
-                } : null,
-                browser_activities: screenshotRequested ? [{
-                    id: `browser-activity-chat-screenshot-${browserToken}`,
-                    operation: 'screenshot',
-                    status: 'succeeded',
-                    label: 'Screenshot',
-                    run_id: 'run-e2e',
-                    browser_session_id: browserSessionId,
-                    artifact_ids: browserScreenshotArtifactId ? [browserScreenshotArtifactId] : [],
-                    occurred_at: now,
-                }] : browserSessionId ? [
-                    {
-                        id: `browser-activity-chat-${browserToken}`,
-                        operation: 'read',
-                        status: 'succeeded',
-                        label: 'Chat browser read',
-                        run_id: 'run-e2e',
-                        browser_session_id: browserSessionId,
-                        artifact_ids: [],
-                        occurred_at: now,
-                    },
-                    {
-                        id: `browser-activity-chat-${browserToken}`,
-                        operation: 'read',
-                        status: 'succeeded',
-                        label: 'Chat browser read',
-                        run_id: 'run-e2e',
-                        browser_session_id: browserSessionId,
-                        artifact_ids: [],
-                        occurred_at: now,
-                    },
-                ] : [],
+                used_browser_context: usedBrowserContext,
+                browser_activities: browserActivities,
+                assistant_message: assistantMessage,
                 run: {
                     id: 'run-e2e',
                     session_id: talosSessionId,

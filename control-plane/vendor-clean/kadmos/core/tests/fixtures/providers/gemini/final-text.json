@@ -1,0 +1,23 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-final-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The page is ready."
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 20,
+      "candidatesTokenCount": 5,
+      "totalTokenCount": 25
+    }
+  }
+}

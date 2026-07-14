@@ -59,11 +59,107 @@ describe('TalosProceduralBackground V6 cutover', () => {
         app.mount(root)
         await nextTick()
         expect(root.querySelector('[data-talos-motion-stage]')).not.toBeNull()
+        expect(root.querySelector('.talos-theme-background-scrim')).not.toBeNull()
         expect(calls).toEqual(expect.arrayContaining(['mount', 'render']))
         enabled.value = false
         await nextTick()
         expect(root.querySelector('[data-talos-motion-stage]')).toBeNull()
+        expect(root.querySelector('[data-talos-background-glow]')).toBeNull()
+        expect(root.querySelector('[data-talos-background-scrim]')).toBeNull()
         expect(calls).toContain('dispose')
+        app.unmount()
+    })
+
+    it('maps background intensity to the final stage opacity and readability scrim', async () => {
+        const sceneInput = ref<SceneInput>({
+            ...input,
+            parameters: { ...input.parameters, intensity: 20, contrast: 30 },
+        })
+        const root = document.createElement('div')
+        document.body.append(root)
+        const app = createApp(defineComponent({
+            setup: () => () => h(TalosProceduralBackground, {
+                registry: registry([]), requestedMode: 'simple', effectiveMode: 'simple', sceneId: 'forge',
+                input: sceneInput.value, backgroundEnabled: true, paused: false,
+            }),
+        }))
+
+        app.mount(root)
+        await nextTick()
+
+        const background = root.querySelector<HTMLElement>('[data-testid="talos-motion-background"]')!
+        const scrim = root.querySelector<HTMLElement>('[data-talos-background-scrim]')!
+        expect(background.dataset.backgroundIntensity).toBe('20')
+        expect(background.style.getPropertyValue('--talos-background-stage-opacity')).toBe('0.2')
+        expect(background.style.getPropertyValue('--talos-background-scrim-start')).toBe('69.6%')
+        expect(background.style.getPropertyValue('--talos-background-scrim-end')).toBe('81%')
+        expect(background.style.getPropertyValue('--talos-background-filter-contrast')).toBe('0.99')
+        expect(scrim).toBeTruthy()
+
+        sceneInput.value = {
+            ...sceneInput.value,
+            parameters: { ...sceneInput.value.parameters, intensity: 90, contrast: 80 },
+        }
+        await nextTick()
+
+        expect(background.dataset.backgroundIntensity).toBe('90')
+        expect(background.style.getPropertyValue('--talos-background-stage-opacity')).toBe('0.9')
+        expect(background.style.getPropertyValue('--talos-background-scrim-start')).toBe('40.2%')
+        expect(background.style.getPropertyValue('--talos-background-scrim-end')).toBe('56.5%')
+        expect(background.style.getPropertyValue('--talos-background-filter-contrast')).toBe('1.14')
+
+        sceneInput.value = {
+            ...sceneInput.value,
+            parameters: { ...sceneInput.value.parameters, intensity: 0 },
+        }
+        await nextTick()
+        expect(background.style.getPropertyValue('--talos-background-stage-opacity')).toBe('0')
+        app.unmount()
+    })
+
+    it('renders glow as an independent default-off layer with bounded live intensity', async () => {
+        const glowIntensity = ref(0)
+        const root = document.createElement('div')
+        document.body.append(root)
+        const app = createApp(defineComponent({
+            setup: () => () => h(TalosProceduralBackground, {
+                registry: registry([]), requestedMode: 'simple', effectiveMode: 'simple', sceneId: 'forge', input,
+                backgroundEnabled: true, paused: false, glowIntensity: glowIntensity.value,
+            }),
+        }))
+
+        app.mount(root)
+        await nextTick()
+
+        const background = root.querySelector<HTMLElement>('[data-testid="talos-motion-background"]')!
+        const glow = root.querySelector<HTMLElement>('[data-talos-background-glow]')!
+        expect(glow).toBeTruthy()
+        expect(background.dataset.backgroundGlowIntensity).toBe('0')
+        expect(background.style.getPropertyValue('--talos-background-glow-opacity')).toBe('0')
+
+        glowIntensity.value = 80
+        await nextTick()
+        expect(background.dataset.backgroundGlowIntensity).toBe('80')
+        expect(background.style.getPropertyValue('--talos-background-glow-opacity')).toBe('0.8')
+
+        glowIntensity.value = 180
+        await nextTick()
+        expect(background.dataset.backgroundGlowIntensity).toBe('100')
+        expect(background.style.getPropertyValue('--talos-background-glow-opacity')).toBe('1')
+
+        glowIntensity.value = -10
+        await nextTick()
+        expect(background.dataset.backgroundGlowIntensity).toBe('0')
+        expect(background.style.getPropertyValue('--talos-background-glow-opacity')).toBe('0')
+
+        const css = readFileSync(resolve(process.cwd(), 'resources/css/app.css'), 'utf8')
+        const workspaceRule = css.match(/\.talos-workspace\s*\{[\s\S]*?\}/)?.[0] ?? ''
+        const scrimRule = css.match(/\.talos-theme-background-scrim\s*\{[\s\S]*?\}/)?.[0] ?? ''
+        expect(css).toContain('.talos-theme-background-glow')
+        expect(css).toContain('var(--talos-background-glow-opacity, 0)')
+        expect(workspaceRule).not.toContain('radial-gradient')
+        expect(scrimRule).not.toContain('radial-gradient')
+
         app.unmount()
     })
 

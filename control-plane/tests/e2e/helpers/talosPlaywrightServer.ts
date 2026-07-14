@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path'
 
 export function createTalosPlaywrightWebServer(baseURL: string, reuseExistingServer: boolean) {
     const databasePath = resolve('storage/framework/testing/talos-playwright.sqlite')
+    const hotFilePath = resolve('storage/framework/testing/talos-playwright.hot')
     mkdirSync(dirname(databasePath), { recursive: true })
     closeSync(openSync(databasePath, 'a'))
 
@@ -18,6 +19,8 @@ export function createTalosPlaywrightWebServer(baseURL: string, reuseExistingSer
             CACHE_STORE: 'array',
             QUEUE_CONNECTION: 'sync',
             SESSION_DRIVER: 'file',
+            VITE_HOT_FILE: hotFilePath,
+            TALOS_DEV_BROWSER_EVIDENCE: process.env.TALOS_E2E_DEV_BROWSER_EVIDENCE === '1' ? 'true' : 'false',
         },
     }
 }

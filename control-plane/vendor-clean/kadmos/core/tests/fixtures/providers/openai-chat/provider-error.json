@@ -1,0 +1,8 @@
+{
+  "status": 401,
+  "body": {
+    "error": {
+      "message": "Authorization failed for Bearer sk-provider-secret-value"
+    }
+  }
+}

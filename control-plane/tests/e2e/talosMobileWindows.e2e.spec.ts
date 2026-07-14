@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { waitForTalosWorkspaceReady as waitForWorkspaceReady } from './helpers/talosWorkspaceReady'
 import { TALOS_WINDOW_IDS, TALOS_WINDOW_REGISTRY, type TalosWindowId } from '../../resources/js/lib/talosWindowRegistry'
 
 const e2eSetupEmail = 'talos-e2e@example.test'
@@ -10,11 +11,6 @@ const ADVANCED_WINDOW_IDS = new Set<TalosWindowId>(['search', 'brain', 'tasks', 
 
 async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
-}
-
-async function waitForWorkspaceReady(page: Page) {
-    await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
-    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
 }
 
 async function submitLogin(page: Page, email: string, password: string) {

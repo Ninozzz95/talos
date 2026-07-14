@@ -89,13 +89,173 @@ describe('TALOS pure window manager', () => {
         expect(state.windows.tasks.bounds).toEqual({ x: 840, y: 56, width: 600, height: 664 })
     })
 
-    it('clamps snap before persistence so minimum-size windows reload without shifting', () => {
+    it('owns named tile targets and restores the original floating rectangle after re-tiling', () => {
+        const maximizeArea = { left: 240, top: 56, right: 1440, bottom: 900 }
+        const fullscreenArea = { left: 0, top: 0, right: 1440, bottom: 900 }
+        let state = createTalosWindowManagerState(['tasks'], 'desktop', area, undefined, maximizeArea, fullscreenArea)
+        const original = state.windows.tasks.bounds
+
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'tasks', target: 'top-half' })
+        expect(state.windows.tasks.tileTarget).toBe('top-half')
+        expect(state.windows.tasks.bounds).toEqual({ x: 240, y: 56, width: 1200, height: 332 })
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'tasks', target: 'fullscreen-workspace' })
+        expect(state.windows.tasks.presentation).toBe('fullscreen')
+        expect(state.windows.tasks.bounds).toEqual({ x: 0, y: 0, width: 1440, height: 900 })
+        expect(state.windows.tasks.restoreBounds).toEqual(original)
+
+        state = reduceTalosWindowState(state, { type: 'untile', id: 'tasks' })
+        expect(state.windows.tasks.presentation).toBe('floating')
+        expect(state.windows.tasks.tileTarget).toBe('none')
+        expect(state.windows.tasks.bounds).toEqual(original)
+        expect(state.windows.tasks.restoreBounds).toBeNull()
+    })
+
+    it('uses a dedicated full-height tile area without expanding floating restore bounds', () => {
+        const maximizeArea = { left: 0, top: 0, right: 1204, bottom: 900 }
+        const fullscreenArea = { left: 0, top: 0, right: 1204, bottom: 900 }
+        const tileArea = { left: 0, top: 0, right: 1204, bottom: 900 }
+        let state = createTalosWindowManagerState(
+            ['theme'],
+            'desktop',
+            area,
+            undefined,
+            maximizeArea,
+            fullscreenArea,
+            tileArea,
+        )
+        const floatingBounds = { ...state.windows.theme.bounds }
+
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'theme', target: 'left-half' })
+
+        expect(state.tileArea).toEqual(tileArea)
+        expect(state.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 602, height: 900 })
+        expect(state.windows.theme.restoreBounds).toEqual(floatingBounds)
+
+        state = reduceTalosWindowState(state, { type: 'untile', id: 'theme' })
+        expect(state.windows.theme.bounds).toEqual(floatingBounds)
+    })
+
+    it('keeps an untouched side snap at half width when rail collapse expands the tile area', () => {
+        const expandedRailArea = { left: 0, top: 0, right: 1204, bottom: 900 }
+        const collapsedRailArea = { left: 0, top: 0, right: 1376, bottom: 900 }
+        let state = createTalosWindowManagerState(
+            ['theme'],
+            'desktop',
+            area,
+            undefined,
+            expandedRailArea,
+            expandedRailArea,
+            expandedRailArea,
+        )
+
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'theme', target: 'left-half' })
+        expect(state.windows.theme.bounds.width).toBe(602)
+
+        state = reduceTalosWindowState(state, {
+            type: 'reconcile-areas',
+            area,
+            tileArea: collapsedRailArea,
+            maximizeArea: collapsedRailArea,
+            fullscreenArea: collapsedRailArea,
+        })
+
+        expect(state.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 688, height: 900 })
+    })
+
+    it('resizes a side tile along its shared divider while preserving full height and persisted restore geometry', () => {
+        const tileArea = { left: 0, top: 0, right: 1204, bottom: 900 }
+        let state = createTalosWindowManagerState(['theme'], 'desktop', area, undefined, tileArea, tileArea, tileArea)
+        const floatingBounds = { ...state.windows.theme.bounds }
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'theme', target: 'left-half' })
+
+        state = reduceTalosWindowState(state, {
+            type: 'set-bounds',
+            id: 'theme',
+            bounds: { x: 0, y: 400, width: 748, height: 120 },
+        })
+
+        expect(state.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 748, height: 900 })
+        expect(state.windows.theme.restoreBounds).toEqual(floatingBounds)
+        state = reduceTalosWindowState(state, {
+            type: 'reconcile-areas',
+            area,
+            tileArea: { ...tileArea, right: 1368 },
+            maximizeArea: { ...tileArea, right: 1368 },
+            fullscreenArea: { ...tileArea, right: 1368 },
+        })
+        expect(state.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 748, height: 900 })
+        const reloaded = createTalosWindowManagerState(
+            [],
+            'desktop',
+            area,
+            projectTalosWindowLayout(state),
+            { ...tileArea, right: 1368 },
+            { ...tileArea, right: 1368 },
+            { ...tileArea, right: 1368 },
+        )
+        const reopened = reduceTalosWindowState(reloaded, { type: 'open', id: 'theme' })
+        expect(reopened.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 748, height: 900 })
+    })
+
+    it('restores the pre-drag floating rectangle after an edge drag changes live bounds', () => {
+        const fullscreenArea = { left: 0, top: 0, right: 1440, bottom: 900 }
+        let state = createTalosWindowManagerState(['theme'], 'desktop', area, undefined, area, fullscreenArea)
+        const beforeDrag = { ...state.windows.theme.bounds }
+
+        state = reduceTalosWindowState(state, {
+            type: 'set-bounds',
+            id: 'theme',
+            bounds: { ...beforeDrag, x: 360, y: 56 },
+        })
+        state = reduceTalosWindowState(state, {
+            type: 'tile',
+            id: 'theme',
+            target: 'fullscreen-workspace',
+            restoreBounds: beforeDrag,
+        })
+        state = reduceTalosWindowState(state, { type: 'toggle-maximize', id: 'theme' })
+
+        expect(state.windows.theme.tileTarget).toBe('none')
+        expect(state.windows.theme.bounds).toEqual(beforeDrag)
+    })
+
+    it('reconciles tiled and maximized geometry without overwriting restore bounds', () => {
+        const maximizeArea = { left: 240, top: 56, right: 1440, bottom: 900 }
+        const fullscreenArea = { left: 0, top: 0, right: 1440, bottom: 900 }
+        let state = createTalosWindowManagerState(['notes'], 'desktop', area, undefined, maximizeArea, fullscreenArea)
+        const original = state.windows.notes.bounds
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'notes', target: 'maximize-workspace' })
+        state = reduceTalosWindowState(state, {
+            type: 'reconcile-areas',
+            area: { left: 72, top: 56, right: 1024, bottom: 560 },
+            maximizeArea: { left: 72, top: 56, right: 1024, bottom: 700 },
+            fullscreenArea: { left: 0, top: 0, right: 1024, bottom: 700 },
+        })
+
+        expect(state.windows.notes.bounds).toEqual({ x: 72, y: 56, width: 952, height: 644 })
+        expect(state.windows.notes.restoreBounds).toEqual(original)
+    })
+
+    it('can untile into an explicit pointer-anchored floating rectangle', () => {
+        let state = createTalosWindowManagerState(['notes'], 'desktop', area)
+        state = reduceTalosWindowState(state, { type: 'tile', id: 'notes', target: 'left-half' })
+        state = reduceTalosWindowState(state, {
+            type: 'untile',
+            id: 'notes',
+            bounds: { x: 360, y: 88, width: 620, height: 460 },
+        })
+
+        expect(state.windows.notes.bounds).toEqual({ x: 360, y: 88, width: 620, height: 460 })
+        expect(state.windows.notes.tileTarget).toBe('none')
+    })
+
+    it('persists exact half-area snap geometry even below the floating minimum size', () => {
         const compactArea = { left: 16, top: 24, right: 1012, bottom: 524 }
         let state = createTalosWindowManagerState(['theme'], 'desktop', compactArea)
         state = reduceTalosWindowState(state, { type: 'snap', id: 'theme', side: 'right' })
         const snapped = state.windows.theme.bounds
 
-        expect(snapped).toEqual({ x: 452, y: 24, width: 560, height: 500 })
+        expect(snapped).toEqual({ x: 514, y: 24, width: 498, height: 500 })
         const reloaded = createTalosWindowManagerState(['theme'], 'desktop', compactArea, projectTalosWindowLayout(state))
         expect(reloaded.windows.theme.bounds).toEqual(snapped)
     })
@@ -155,6 +315,43 @@ describe('TALOS window persistence V2', () => {
         expect(TALOS_WINDOW_LAYOUT_V1_KEY).toBe('talos.windowLayout.v1')
         expect(TALOS_WINDOW_LAYOUT_V2_KEY).toBe('talos.windowLayout.v2')
         expect(readTalosWindowLayout('{broken', null, area)).toEqual({ schema_version: 2, layouts: { desktop: { windows: {} }, tablet: { windows: {} } } })
+    })
+
+    it('round-trips valid tile state and ignores corrupt tile or restore geometry', () => {
+        const restoreBounds = { x: 320, y: 96, width: 640, height: 480 }
+        const layout = readTalosWindowLayout(JSON.stringify({
+            schema_version: 2,
+            layouts: {
+                desktop: {
+                    windows: {
+                        notes: {
+                            bounds: { x: 240, y: 56, width: 600, height: 664 },
+                            presentation: 'floating',
+                            tile_target: 'left-half',
+                            restore_bounds: restoreBounds,
+                        },
+                        theme: {
+                            bounds: { x: 340, y: 80, width: 760, height: 500 },
+                            presentation: 'floating',
+                            tile_target: 'outside-workspace',
+                            restore_bounds: { x: 'invalid', y: 80, width: 760, height: 500 },
+                        },
+                    },
+                },
+                tablet: { windows: {} },
+            },
+        }), null, area)
+
+        expect(layout.layouts.desktop.windows.notes?.tile_target).toBe('left-half')
+        expect(layout.layouts.desktop.windows.notes?.restore_bounds).toEqual(restoreBounds)
+        expect(layout.layouts.desktop.windows.theme?.tile_target).toBeUndefined()
+        expect(layout.layouts.desktop.windows.theme?.restore_bounds).toBeUndefined()
+
+        let state = createTalosWindowManagerState(['notes'], 'desktop', area, layout)
+        expect(state.windows.notes.tileTarget).toBe('left-half')
+        expect(state.windows.notes.bounds).toEqual({ x: 240, y: 56, width: 600, height: 664 })
+        state = reduceTalosWindowState(state, { type: 'untile', id: 'notes' })
+        expect(state.windows.notes.bounds).toEqual(restoreBounds)
     })
 
     it('migrates only known finite V1 geometry into the desktop bucket', () => {

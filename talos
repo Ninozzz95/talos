@@ -110,16 +110,54 @@ maybe_boot() {
   fi
 }
 
-compose() {
-  docker compose "$@"
-}
-
 env_value() {
   local key="$1"
   if [ ! -f .env ]; then
     return 1
   fi
   grep -E "^${key}=" .env | tail -n 1 | cut -d= -f2- || true
+}
+
+effective_env_value() {
+  local key="$1"
+  if [ "${!key+x}" = "x" ]; then
+    printf '%s\n' "${!key}"
+    return
+  fi
+  env_value "$key" || true
+}
+
+compose_profile_is_enabled() {
+  local profile="$1"
+  local profiles
+  profiles="$(effective_env_value COMPOSE_PROFILES)"
+  profiles="${profiles//[[:space:]]/}"
+
+  case ",$profiles," in
+    *,"$profile",*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+compose() {
+  local compose_args=()
+  if [ "$(effective_env_value TALOS_WEB_SEARCH_PROVIDER)" = "searxng" ] \
+    && ! compose_profile_is_enabled search; then
+    compose_args+=(--profile search)
+  fi
+  docker compose "${compose_args[@]}" "$@"
+}
+
+compose_all_profiles() {
+  docker compose --profile "*" "$@"
+}
+
+reconcile_stale_search_service() {
+  if [ "$(effective_env_value TALOS_WEB_SEARCH_PROVIDER)" != "searxng" ] \
+    && ! compose_profile_is_enabled search; then
+    echo "Reconciling stale auto-managed SearXNG service"
+    docker compose --profile search rm -sf searxng
+  fi
 }
 
 set_env_value() {
@@ -183,6 +221,13 @@ ensure_env() {
     echo "Generated the internal browser-worker credential in .env"
   fi
 
+  local searxng_secret
+  searxng_secret="$(env_value TALOS_SEARXNG_SECRET || true)"
+  if [[ ! "$searxng_secret" =~ ^[a-f0-9]{64}$ ]]; then
+    set_env_value .env TALOS_SEARXNG_SECRET "$(random_hex_32)"
+    echo "Generated the internal SearXNG credential in .env"
+  fi
+
   local app_key
   app_key="$(env_value APP_KEY || true)"
   if [[ ! "$app_key" =~ ^base64:[A-Za-z0-9+/]{43}=$ ]]; then
@@ -197,7 +242,7 @@ require_docker() {
     echo "Docker is required for 'talos up'. Install Docker or run 'talos dev'." >&2
     return 1
   fi
-  if ! docker compose version >/dev/null 2>&1; then
+  if ! compose version >/dev/null 2>&1; then
     echo "The Docker Compose plugin is required for 'talos up'." >&2
     return 1
   fi
@@ -351,7 +396,7 @@ wait_for_ready() {
       return 0
     fi
     if ! command -v curl >/dev/null 2>&1 \
-      && docker compose exec -T talos php -r \
+      && compose exec -T talos php -r \
         "exit(@file_get_contents('http://127.0.0.1:8088/readyz') === false ? 1 : 0);" >/dev/null 2>&1; then
       echo "Readiness OK: $ready_url"
       return 0
@@ -360,10 +405,69 @@ wait_for_ready() {
   done
 
   echo "Readiness failed: $ready_url" >&2
-  docker compose ps || true
-  docker compose logs --tail=120 talos validator browser-worker || true
+  compose ps || true
+  compose logs --tail=120 talos validator browser-worker || true
   echo "Run: ./talos doctor" >&2
   return 1
+}
+
+wait_for_search_ready() {
+  local search_health_url="http://127.0.0.1:8080/healthz"
+  local search_json_url="http://127.0.0.1:8080/search?q=talos&format=json"
+
+  local attempt
+  for attempt in $(seq 1 15); do
+    if compose exec -T searxng wget --spider --quiet --timeout=5 --tries=1 "$search_health_url" >/dev/null 2>&1; then
+      echo "SearXNG liveness OK: $search_health_url"
+      break
+    fi
+    sleep 2
+  done
+
+  if ! compose exec -T searxng wget --spider --quiet --timeout=5 --tries=1 "$search_health_url" >/dev/null 2>&1; then
+    echo "SearXNG readiness failed: $search_health_url" >&2
+    compose ps searxng || true
+    compose logs --tail=120 searxng || true
+    echo "Check the SearXNG container and run: ./talos doctor" >&2
+    return 1
+  fi
+
+  local probe_error=""
+  for attempt in $(seq 1 3); do
+    if probe_error="$(compose exec -T searxng python3 -c \
+      "import json,urllib.request; payload=json.load(urllib.request.urlopen('${search_json_url}', timeout=5)); raise SystemExit(0 if isinstance(payload, dict) and isinstance(payload.get('results'), list) else 1)" 2>&1)"; then
+      echo "SearXNG JSON readiness OK: $search_json_url (results list shape valid; results may be empty)"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "SearXNG JSON readiness failed: $search_json_url" >&2
+  if [ -n "$probe_error" ]; then
+    echo "Last JSON probe error: $probe_error" >&2
+  fi
+  compose ps searxng || true
+  compose logs --tail=120 searxng || true
+  echo "Check the SearXNG JSON API and run: ./talos doctor" >&2
+  return 1
+}
+
+browser_worker_ownership_doctor() {
+  local node_bin=""
+  if [ -x "$ROOT_DIR/.tools/bin/node" ]; then
+    node_bin="$ROOT_DIR/.tools/bin/node"
+  elif [ -f "$ROOT_DIR/.tools/bin/node.cmd" ]; then
+    node_bin="$ROOT_DIR/.tools/bin/node.cmd"
+  elif command -v node >/dev/null 2>&1; then
+    node_bin="$(command -v node)"
+  fi
+
+  if [ -z "$node_bin" ]; then
+    echo "browser ownership   WARN Node.js is unavailable; endpoint ownership was not inspected"
+    return 0
+  fi
+
+  "$node_bin" "$ROOT_DIR/control-plane/scripts/browser-worker-ownership.mjs" --doctor || true
 }
 
 doctor() {
@@ -382,8 +486,8 @@ doctor() {
     echo "docker              WARN Docker CLI is not available"
   fi
 
-  if [ "$docker_available" -eq 1 ] && docker compose version >/dev/null 2>&1; then
-    echo "docker compose      OK   $(docker compose version)"
+  if [ "$docker_available" -eq 1 ] && compose version >/dev/null 2>&1; then
+    echo "docker compose      OK   $(compose version)"
     compose_available=1
   else
     echo "docker compose      WARN Docker Compose plugin is not available"
@@ -404,7 +508,7 @@ doctor() {
   if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ]; then
     if ! docker info >/dev/null 2>&1; then
       echo "docker daemon       WARN unavailable"
-    elif docker compose config >/dev/null 2>&1; then
+    elif compose config >/dev/null 2>&1; then
       echo "docker daemon       OK   reachable"
       echo "compose config      OK   valid"
       docker_ready=1
@@ -445,8 +549,10 @@ doctor() {
     echo "native toolchain    WARN run ./talos dev or ./talos doctor --repair"
   fi
 
-  if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ] && docker compose ps >/dev/null 2>&1; then
-    docker compose ps
+  browser_worker_ownership_doctor
+
+  if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ] && compose ps >/dev/null 2>&1; then
+    compose ps
   fi
 
   local url
@@ -491,10 +597,14 @@ case "$cmd" in
     require_docker
     print_step "Preparing environment"
     ensure_env
+    reconcile_stale_search_service
     print_step "Building and starting TALOS, queue, validator, and browser worker"
-    docker compose up -d --build
+    compose up -d --build
     print_step "Checking readiness"
     wait_for_ready
+    if [ "$(effective_env_value TALOS_WEB_SEARCH_PROVIDER)" = "searxng" ]; then
+      wait_for_search_ready
+    fi
     echo "TALOS is starting at $(talos_url)"
     ;;
   dev)
@@ -505,10 +615,10 @@ case "$cmd" in
     ;;
   down)
     print_step "Stopping TALOS stack"
-    docker compose down
+    compose_all_profiles down
     ;;
   logs)
-    docker compose logs -f
+    compose logs -f
     ;;
   doctor)
     doctor "${2:-}"
@@ -526,13 +636,16 @@ case "$cmd" in
       exit 1
     fi
     print_step "Resetting Docker volumes"
-    docker compose down -v
+    compose_all_profiles down -v
     print_step "Preparing environment"
     ensure_env
     print_step "Building and starting fresh TALOS stack"
-    docker compose up -d --build
+    compose up -d --build
     print_step "Checking readiness"
     wait_for_ready
+    if [ "$(effective_env_value TALOS_WEB_SEARCH_PROVIDER)" = "searxng" ]; then
+      wait_for_search_ready
+    fi
     echo "Fresh TALOS stack is starting at $(talos_url)"
     ;;
   help|-h|--help)

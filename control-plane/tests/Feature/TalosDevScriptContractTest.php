@@ -31,5 +31,8 @@ final class TalosDevScriptContractTest extends TestCase
         $this->assertStringContainsString('run start', $devStack);
         $this->assertStringContainsString("PORT: '3100'", $devStack);
         $this->assertStringContainsString('TALOS_BROWSER_WORKER_TOKEN', $devStack);
+
+        $rootLauncher = (string) file_get_contents(base_path('../talos'));
+        $this->assertStringContainsString('browser-worker-ownership.mjs" --doctor', $rootLauncher);
     }
 }

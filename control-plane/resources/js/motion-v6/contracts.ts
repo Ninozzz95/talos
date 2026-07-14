@@ -54,6 +54,7 @@ const motionRange = (min: number, max: number) => Object.freeze({ min, max })
 export const TALOS_MOTION_RANGES = Object.freeze({
     speed: motionRange(25, 200),
     intensity: motionRange(0, 100),
+    glow_intensity: motionRange(0, 100),
     density: motionRange(25, 150),
     depth: motionRange(0, 100),
     trails: motionRange(0, 100),
@@ -74,6 +75,7 @@ const TOP_LEVEL_KEYS = [
     'scene_override',
     'speed',
     'intensity',
+    'glow_intensity',
     'density',
     'depth',
     'trails',
@@ -141,6 +143,7 @@ export type TalosMotionV6Preferences = {
     scene_override: TalosMotionSceneId | null
     speed: number
     intensity: number
+    glow_intensity: number
     density: number
     depth: number
     trails: number
@@ -242,6 +245,7 @@ function snapshotStrictObject(
     parentPath: string,
     expectedType: string,
     issues: TalosMotionValidationIssue[],
+    optionalKeys: readonly string[] = [],
 ): MotionRecord | null {
     if (typeof value !== 'object' || value === null) {
         invalidType(issues, parentPath, expectedType)
@@ -268,8 +272,9 @@ function snapshotStrictObject(
 
     const stringKeys = ownKeys.filter((key): key is string => typeof key === 'string')
     const ownStringKeys = new Set(stringKeys)
+    const optional = new Set(optionalKeys)
     for (const key of expectedKeys) {
-        if (!ownStringKeys.has(key)) {
+        if (!ownStringKeys.has(key) && !optional.has(key)) {
             const path = pathFor(parentPath, key)
             addIssue(issues, path, 'missing_key', `Missing required key "${path}".`)
         }
@@ -465,7 +470,14 @@ function validateInterface(
 
 export function parseTalosMotionV6Preferences(input: unknown): TalosMotionParseResult {
     const issues: TalosMotionValidationIssue[] = []
-    const inputSnapshot = snapshotStrictObject(input, TOP_LEVEL_KEYS, '$', 'a complete non-array object', issues)
+    const inputSnapshot = snapshotStrictObject(
+        input,
+        TOP_LEVEL_KEYS,
+        '$',
+        'a complete non-array object',
+        issues,
+        ['glow_intensity'],
+    )
     if (!inputSnapshot) {
         return { success: false, issues }
     }
@@ -492,6 +504,9 @@ export function parseTalosMotionV6Preferences(input: unknown): TalosMotionParseR
     }
     if (hasOwn(inputSnapshot, 'intensity')) {
         validateNumberRange(inputSnapshot.intensity, 'intensity', TALOS_MOTION_RANGES.intensity, issues)
+    }
+    if (hasOwn(inputSnapshot, 'glow_intensity')) {
+        validateNumberRange(inputSnapshot.glow_intensity, 'glow_intensity', TALOS_MOTION_RANGES.glow_intensity, issues)
     }
     if (hasOwn(inputSnapshot, 'density')) {
         validateNumberRange(inputSnapshot.density, 'density', TALOS_MOTION_RANGES.density, issues)
@@ -544,6 +559,9 @@ export function parseTalosMotionV6Preferences(input: unknown): TalosMotionParseR
             scene_override: inputSnapshot.scene_override as TalosMotionSceneId | null,
             speed: inputSnapshot.speed as number,
             intensity: inputSnapshot.intensity as number,
+            glow_intensity: hasOwn(inputSnapshot, 'glow_intensity')
+                ? inputSnapshot.glow_intensity as number
+                : 0,
             density: inputSnapshot.density as number,
             depth: inputSnapshot.depth as number,
             trails: inputSnapshot.trails as number,

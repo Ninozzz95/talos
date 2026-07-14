@@ -137,7 +137,7 @@ describe('Theme Engine behavior', () => {
             expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent?.trim() === label)).toBe(true)
         }
         for (const label of [
-            'Motion speed', 'Background intensity', 'Scene density', 'Scene depth', 'Trail strength',
+            'Motion speed', 'Background intensity', 'Glow / lens flare', 'Scene density', 'Scene depth', 'Trail strength',
             'Ambient contrast', 'Parallax depth', 'Interface duration', 'Interface intensity', 'Interface stagger',
         ]) {
             expect(container.querySelector(`[aria-label="${label}"]`)).toBeTruthy()
@@ -155,15 +155,84 @@ describe('Theme Engine behavior', () => {
         speed.value = '145'
         speed.dispatchEvent(new Event('input', { bubbles: true }))
         await nextTick()
+        const glow = container.querySelector<HTMLInputElement>('[aria-label="Glow / lens flare"]')!
+        expect(glow.value).toBe('0')
+        glow.value = '70'
+        glow.dispatchEvent(new Event('input', { bubbles: true }))
+        await nextTick()
         expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
 
         await clickByText(container, 'Save motion')
         await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
         const payload = settingsHarness.updateSettings.mock.calls[0][0] as { preferences?: Record<string, unknown> }
         expect(Object.keys(payload.preferences ?? {})).toEqual(['theme_motion_v6'])
-        expect(payload.preferences?.theme_motion_v6).toMatchObject({ mode: 'complex', speed: 145 })
+        expect(payload.preferences?.theme_motion_v6).toMatchObject({ mode: 'complex', speed: 145, glow_intensity: 70 })
         expect(container.textContent).toContain('Requested')
         expect(container.textContent).toContain('Effective')
+    })
+
+    it('shows renderer-off background as disabled and restores Adaptive when the user enables it', async () => {
+        const motion = createDefaultTalosMotionV6Preferences()
+        motion.mode = 'off'
+        motion.background_enabled = true
+        motion.interface_enabled = true
+        motion.interface.profile = 'expressive'
+        const container = mountTheme({ theme_motion_v6: motion }, { initialTab: 'motion' })
+        await nextTick()
+        await vi.waitFor(() => expect(settingsHarness.loadSettings).toHaveBeenCalledOnce())
+        await nextTick()
+
+        const background = container.querySelector<HTMLInputElement>('[aria-label="Procedural background"]')
+        const interfaceMotion = container.querySelector<HTMLInputElement>('[aria-label="Interface motion"]')
+        expect(background?.checked).toBe(false)
+        expect(interfaceMotion?.checked).toBe(true)
+        expect(container.querySelector('[data-testid="talos-background-motion-state"]')?.textContent).toContain('Off')
+        expect(container.querySelector('[data-testid="talos-interface-motion-state"]')?.textContent).toContain('Active')
+        expect(container.querySelector('[aria-label="Motion mode Off"]')?.getAttribute('aria-pressed')).toBe('true')
+
+        background?.click()
+        await nextTick()
+
+        expect(container.querySelector('[aria-label="Motion mode Adaptive"]')?.getAttribute('aria-pressed')).toBe('true')
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Procedural background"]')?.checked).toBe(true)
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Interface motion"]')?.checked).toBe(true)
+        expect(container.querySelector('[data-testid="talos-background-motion-state"]')?.textContent).toContain('Active')
+        await clickByText(container, 'Save motion')
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        expect(settingsHarness.updateSettings.mock.calls[0]?.[0]?.preferences?.theme_motion_v6).toMatchObject({
+            mode: 'adaptive',
+            background_enabled: true,
+            interface_enabled: true,
+            interface: { profile: 'expressive' },
+        })
+    })
+
+    it('shows an off interface profile as disabled and restores the preset profile when enabled', async () => {
+        const motion = createDefaultTalosMotionV6Preferences()
+        motion.interface_enabled = true
+        motion.interface.profile = 'off'
+        const container = mountTheme({ theme_motion_v6: motion }, { initialTab: 'motion' })
+        await nextTick()
+        await vi.waitFor(() => expect(settingsHarness.loadSettings).toHaveBeenCalledOnce())
+        await nextTick()
+
+        const interfaceMotion = container.querySelector<HTMLInputElement>('[aria-label="Interface motion"]')
+        expect(interfaceMotion?.checked).toBe(false)
+        expect(container.querySelector('[data-testid="talos-interface-motion-state"]')?.textContent).toContain('Off')
+
+        interfaceMotion?.click()
+        await nextTick()
+
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Interface motion"]')?.checked).toBe(true)
+        expect(container.querySelector<HTMLSelectElement>('[aria-label="Interface motion profile"]')?.value).toBe('preset')
+        expect(container.querySelector('[data-testid="talos-interface-motion-state"]')?.textContent).toContain('Active')
+        await clickByText(container, 'Save motion')
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        expect(settingsHarness.updateSettings.mock.calls[0]?.[0]?.preferences?.theme_motion_v6).toMatchObject({
+            mode: 'adaptive',
+            interface_enabled: true,
+            interface: { profile: 'preset' },
+        })
     })
 
     it('rolls a rejected Motion V6 edit back and exposes an explicit retry', async () => {
@@ -602,6 +671,33 @@ describe('Theme Engine behavior', () => {
         await clickByText(container, 'Save motion')
         await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
         await vi.waitFor(() => expect(container.querySelector<HTMLInputElement>('[aria-label="Procedural background"]')?.checked).toBe(false))
+    })
+
+    it('offers one reset control for every Motion V6 value and saves canonical defaults only on confirmation', async () => {
+        const customized = createDefaultTalosMotionV6Preferences()
+        customized.mode = 'complex'
+        customized.speed = 180
+        customized.intensity = 92
+        customized.contrast = 88
+        customized.interface.profile = 'custom'
+        customized.interface.duration_scale = 145
+        customized.interface.categories.windows = false
+        const container = mountTheme({ theme_motion_v6: customized })
+        await nextTick()
+        await clickByText(container, 'Motion')
+
+        await clickByText(container, 'Reset all defaults')
+
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Background intensity"]')?.value).toBe('65')
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Motion speed"]')?.value).toBe('100')
+        expect(container.querySelector<HTMLSelectElement>('[aria-label="Interface motion profile"]')?.value).toBe('preset')
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Animate windows"]')?.checked).toBe(true)
+        expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
+
+        await clickByText(container, 'Save motion')
+        await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
+        expect(settingsHarness.updateSettings.mock.calls[0]?.[0]?.preferences?.theme_motion_v6)
+            .toEqual(createDefaultTalosMotionV6Preferences())
     })
 
     it('rolls theme mode and Motion V6 mode back when persistence is rejected', async () => {

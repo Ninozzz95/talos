@@ -43,6 +43,29 @@ jobs:
       - run: cd browser-worker && npm test
       - run: cd browser-worker && npm run build
 
+  browser-worker-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/tests/talos-browser-gates-contract.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: browser-worker/package-lock.json
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, mbstring, sqlite3, zip
+      - run: cd browser-worker && npm ci
+      - run: cd browser-worker && npx playwright install --with-deps chromium
+      - run: cd control-plane && composer install --no-interaction --prefer-dist
+        env:
+          APP_ENV: testing
+      - name: Run mandatory Laravel-to-Chromium HMI integration
+        run: bash scripts/tests/talos-live-browser-worker-ci.sh
+
   control-plane:
     runs-on: windows-latest
     steps:
@@ -56,8 +79,8 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: control-plane/package-lock.json
-      - run: cd control-plane && composer install --no-interaction --prefer-dist
       - run: cd control-plane && copy .env.example .env
+      - run: cd control-plane && composer install --no-interaction --prefer-dist
       - run: cd control-plane && php artisan key:generate
       - run: cd control-plane && npm ci
       - run: cd control-plane && npm run build

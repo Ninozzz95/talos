@@ -2,8 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, Cpu, Download, Loader2, PackageCheck, ServerCog } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
-import Button from '../../ui/Button.vue'
 import Surface from '../../ui/Surface.vue'
+import Tabs from '../../ui/Tabs.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosCookbookDependencies from './TalosCookbookDependencies.vue'
 import TalosCookbookDownload from './TalosCookbookDownload.vue'
 import TalosCookbookLaunch from './TalosCookbookLaunch.vue'
@@ -173,28 +174,38 @@ onMounted(() => {
                 <span>{{ actionMessage }}</span>
             </div>
 
-            <div class="flex flex-wrap gap-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-active)] p-1" role="tablist" aria-label="Cookbook panels">
-                <Button
-                    v-for="tab in tabs"
-                    :key="tab.id"
-                    type="button"
-                    :variant="activeTab === tab.id ? 'secondary' : 'ghost'"
-                    size="sm"
-                    role="tab"
-                    :aria-selected="activeTab === tab.id"
-                    :aria-controls="`talos-cookbook-${tab.id}`"
-                    @click="activeTab = tab.id"
+            <div class="flex items-center gap-2">
+                <Tabs
+                    :model-value="activeTab"
+                    :items="tabs"
+                    label="Cookbook panels"
+                    tab-id-prefix="talos-cookbook-tab"
+                    panel-id-prefix="talos-cookbook-panel"
+                    @update:model-value="activeTab = $event as CookbookTab"
                 >
-                    <component :is="tab.icon" class="h-4 w-4" />
-                    {{ tab.label }}
-                </Button>
-                <div v-if="loading" class="ml-auto flex items-center gap-2 px-2 text-xs text-[var(--talos-muted)]">
+                    <template #tab="{ item }">
+                        <component :is="item.icon" class="h-4 w-4" />
+                        <span>{{ item.label }}</span>
+                    </template>
+                    <template #item-action="{ item }">
+                        <TalosGuideInfoButton
+                            :guide-id="`cookbook.${item.id}`"
+                            compact
+                            side="bottom"
+                        />
+                    </template>
+                </Tabs>
+                <div v-if="loading" class="flex shrink-0 items-center gap-2 px-2 text-xs text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                     Syncing
                 </div>
             </div>
 
-            <div :id="`talos-cookbook-${activeTab}`" role="tabpanel">
+            <div
+                :id="`talos-cookbook-panel-${activeTab}`"
+                role="tabpanel"
+                :aria-labelledby="`talos-cookbook-tab-${activeTab}`"
+            >
                 <TalosCookbookLaunch
                     v-if="activeTab === 'launch'"
                     :overview="overview"

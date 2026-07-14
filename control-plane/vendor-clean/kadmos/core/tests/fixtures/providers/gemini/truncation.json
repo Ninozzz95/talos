@@ -1,0 +1,18 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-truncated-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Partial response"
+            }
+          ]
+        },
+        "finishReason": "MAX_TOKENS"
+      }
+    ]
+  }
+}

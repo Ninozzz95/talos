@@ -1,0 +1,30 @@
+{
+  "provider_response": {
+    "id": "chatcmpl-tools-1",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "I will inspect the page.",
+          "tool_calls": [
+            {
+              "id": "call_browser_1",
+              "type": "function",
+              "function": {
+                "name": "browser_navigate",
+                "arguments": "{\"url\":\"https://example.com\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 30,
+      "completion_tokens": 10,
+      "total_tokens": 40
+    }
+  }
+}

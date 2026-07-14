@@ -20,6 +20,8 @@
         data-login-url="{{ route('login') }}"
         data-logout-url="{{ route('logout') }}"
         data-csrf-token="{{ csrf_token() }}"
+        data-dev-browser-evidence="{{ ($devBrowserEvidence ?? false) ? 'true' : 'false' }}"
+        data-development-mode="{{ ($developmentMode ?? false) ? 'true' : 'false' }}"
         aria-busy="true"
     ></div>
 </body>

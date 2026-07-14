@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\TalosContextSet;
 use App\Models\TalosModelProfile;
 use App\Models\TalosWorkspaceSetting;
+use App\Services\Talos\Browser\TalosBrowserHmiPolicy;
 use App\Support\TalosThemeContrast;
 use App\Support\TalosThemeMotionV6;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -20,6 +21,8 @@ use Throwable;
 
 final class TalosSettingsController extends Controller
 {
+    public function __construct(private readonly TalosBrowserHmiPolicy $browserHmiPolicy) {}
+
     public function show(Request $request): JsonResponse
     {
         $userId = $request->user()?->id;
@@ -68,6 +71,7 @@ final class TalosSettingsController extends Controller
                 $themeErrors = array_replace_recursive(
                     $themeErrors,
                     TalosThemeContrast::validatePreferences($effectivePreferences),
+                    TalosWorkspaceSetting::validateBrowserHmiPreferencesForWrite($validated['preferences']),
                 );
                 if ($themeErrors !== []) {
                     throw ValidationException::withMessages($themeErrors);
@@ -329,6 +333,17 @@ final class TalosSettingsController extends Controller
         ) {
             $payload['default_context_set_id'] = null;
         }
+
+        $userMode = $this->browserHmiPolicy->normalizeMode($payload['preferences']['browser_hmi_mode'] ?? null)
+            ?? TalosBrowserHmiPolicy::CONFIRM_SENSITIVE;
+        $workspaceMode = $this->browserHmiPolicy->normalizeMode(config('services.talos.browser.hmi_min_mode'));
+        $effectiveMode = $this->browserHmiPolicy->effectiveMode($userMode, $workspaceMode);
+        $payload['browser_hmi_policy'] = [
+            'user_mode' => $userMode,
+            'workspace_minimum_mode' => $workspaceMode,
+            'effective_mode' => $effectiveMode,
+            'preference_constrained' => $effectiveMode !== $userMode,
+        ];
 
         return $payload;
     }

@@ -103,6 +103,9 @@ function createHarness(breakpoint: 'mobile' | 'tablet' | 'desktop' = 'desktop') 
                 ? { left: 236, top: 56, width: 1200, height: 720 }
                 : { left: 280, top: 120, width: 640, height: 460 })
         }),
+        tileWindow: vi.fn((id: TalosWindowId) => {
+            rects.set(id, { left: 236, top: 0, width: 600, height: 900 })
+        }),
         restoreWindow: vi.fn((id: TalosWindowId) => {
             minimizedWindowIds.value = minimizedWindowIds.value.filter((candidate) => candidate !== id)
             visibleWindowIds.value = [...visibleWindowIds.value.filter((candidate) => candidate !== id), id]
@@ -125,6 +128,7 @@ function createHarness(breakpoint: 'mobile' | 'tablet' | 'desktop' = 'desktop') 
         closeWindow: callbacks.closeWindow,
         minimizeWindow: callbacks.minimizeWindow,
         fullscreenWindow: callbacks.fullscreenWindow,
+        tileWindow: callbacks.tileWindow,
         restoreWindow: callbacks.restoreWindow,
     }))!
     motion.motionRoot.value = stage
@@ -258,6 +262,30 @@ describe('useTalosWindowMotion V6 lifecycle', () => {
         h.animations.records.at(-1)!.finish()
         expect(h.motion.transitionStateFor('theme')).toBe('idle')
         expect(h.callbacks.fullscreenWindow).toHaveBeenCalledTimes(2)
+        h.scope.stop()
+    })
+
+    it('uses the shared lifecycle and FLIP geometry when a window is snapped', async () => {
+        const h = createHarness()
+        h.visibleWindowIds.value = ['theme']
+        await nextTick(); await nextTick()
+        h.animations.records.at(-1)!.finish()
+
+        h.motion.requestWindowTile('theme', 'left-half', {
+            x: 280,
+            y: 120,
+            width: 640,
+            height: 460,
+        })
+        expect(h.callbacks.tileWindow).toHaveBeenCalledOnce()
+        await nextTick(); await nextTick()
+
+        expect(h.motion.transitionStateFor('theme')).toBe('snapping')
+        const snap = h.animations.records.at(-1)!
+        expect(String(snap.keyframes[0].transform)).toContain('scale(')
+        expect(snap.options.duration).toBe(223)
+        snap.finish()
+        expect(h.motion.transitionStateFor('theme')).toBe('idle')
         h.scope.stop()
     })
 
