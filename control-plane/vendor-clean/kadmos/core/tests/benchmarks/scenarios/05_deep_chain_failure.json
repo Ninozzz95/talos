@@ -1,0 +1,32 @@
+{
+  "name": "deep_chain_failure",
+  "difficulty": 5,
+  "description": "5-node chain where node 2 fails — only n3-n5 should BLOCK, n1 remains SUCCESS",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "n1", "node_type": "HTTP_REQUEST" },
+      { "action": "SPAWN_NODE", "node_id": "n2", "node_type": "HTTP_REQUEST", "dependencies": ["n1"] },
+      { "action": "SPAWN_NODE", "node_id": "n3", "node_type": "QUERY_DATABASE", "dependencies": ["n2"] },
+      { "action": "SPAWN_NODE", "node_id": "n4", "node_type": "HTTP_REQUEST", "dependencies": ["n3"] },
+      { "action": "SPAWN_NODE", "node_id": "n5", "node_type": "HTTP_REQUEST", "dependencies": ["n4"] }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "n1", "payload": { "url": "https://api.example.com/1", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "n2", "payload": { "url": "https://api.example.com/2", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "n3", "payload": { "query": "SELECT 1" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "n4", "payload": { "url": "https://api.example.com/4", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "n5", "payload": { "url": "https://api.example.com/5", "method": "GET" } },
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": { "cycle": 2, "node": "n2", "type": "EXECUTION_FAILURE" },
+  "expected_nodes": 5,
+  "expected_all_success": false,
+  "expected_state": {
+    "n1": "SUCCESS",
+    "n2": "FAILED",
+    "n3": "BLOCKED_BY_DEPENDENCY",
+    "n4": "BLOCKED_BY_DEPENDENCY",
+    "n5": "BLOCKED_BY_DEPENDENCY"
+  }
+}

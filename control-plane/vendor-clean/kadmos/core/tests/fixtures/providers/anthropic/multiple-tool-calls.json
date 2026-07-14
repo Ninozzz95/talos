@@ -1,0 +1,24 @@
+{
+  "provider_response": {
+    "id": "msg-tools-2",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_browser_1",
+        "name": "browser_navigate",
+        "input": {
+          "url": "https://example.com"
+        }
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_browser_2",
+        "name": "browser_snapshot",
+        "input": {}
+      }
+    ],
+    "stop_reason": "tool_use"
+  }
+}

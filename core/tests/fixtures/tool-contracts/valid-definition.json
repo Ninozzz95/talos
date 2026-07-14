@@ -1,0 +1,44 @@
+{
+  "name": "browser_navigate",
+  "title": "Navigate",
+  "description": "Navigate the isolated Browser page.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "format": "uri"
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "state_version": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "url",
+      "title",
+      "state_version"
+    ],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  }
+}

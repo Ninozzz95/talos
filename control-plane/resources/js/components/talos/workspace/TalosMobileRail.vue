@@ -21,6 +21,7 @@ import {
     Wrench,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
 import type { TalosWindowId } from '../../../lib/talosWindowRegistry'
 
@@ -39,26 +40,26 @@ const emit = defineEmits<{
     toggleAdvanced: []
 }>()
 
-const mobileRailItems: Array<{ id: TalosWindowId; label: string; icon: unknown }> = [
-    { id: 'runtime', label: 'Runtime', icon: Activity },
-    { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-    { id: 'compare', label: 'Compare', icon: BarChart3 },
-    { id: 'model_lab', label: 'Model Lab', icon: FlaskConical },
-    { id: 'research', label: 'Deep Research', icon: BookOpen },
-    { id: 'library', label: 'Library', icon: FileArchive },
-    { id: 'gallery', label: 'Artifacts', icon: Image },
-    { id: 'browse', label: 'Browse', icon: Globe2 },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'theme', label: 'Theme', icon: Palette },
+const mobileRailItems: Array<{ id: TalosWindowId; label: string; guideId: string; icon: unknown }> = [
+    { id: 'runtime', label: 'Runtime', guideId: 'rail.runtime', icon: Activity },
+    { id: 'calendar', label: 'Calendar', guideId: 'rail.calendar', icon: CalendarDays },
+    { id: 'compare', label: 'Compare', guideId: 'rail.compare', icon: BarChart3 },
+    { id: 'model_lab', label: 'Model Lab', guideId: 'rail.model_lab', icon: FlaskConical },
+    { id: 'research', label: 'Deep Research', guideId: 'rail.research', icon: BookOpen },
+    { id: 'library', label: 'Library', guideId: 'rail.library', icon: FileArchive },
+    { id: 'gallery', label: 'Artifacts', guideId: 'rail.gallery', icon: Image },
+    { id: 'browse', label: 'Browse', guideId: 'rail.browse', icon: Globe2 },
+    { id: 'settings', label: 'Settings', guideId: 'rail.settings', icon: Settings },
+    { id: 'theme', label: 'Theme', guideId: 'rail.theme', icon: Palette },
 ]
 
 const advancedItems: TalosAdvancedRailItem[] = [
-    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
-    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
-    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
-    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
-    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
-    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
+    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', guideId: 'rail.tasks', icon: ListTodo },
+    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', guideId: 'rail.notes', icon: NotebookPen },
+    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', guideId: 'rail.search', icon: Search },
+    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', guideId: 'rail.brain', icon: Brain },
+    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', guideId: 'rail.tools', icon: Wrench },
+    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', guideId: 'rail.doctor', icon: Stethoscope },
 ]
 
 const visibleMobileRailItems = computed(() => mobileRailItems.filter((item) => {
@@ -137,20 +138,25 @@ watch(
             >
                 <MessageSquare class="h-4 w-4 text-[var(--talos-accent)]" />
             </Button>
-            <Button
+            <div
                 v-for="item in visibleMobileRailItems"
                 :key="item.id"
-                data-mobile-rail-item
-                size="icon"
-                variant="ghost"
-                class="min-h-11 min-w-11"
-                :aria-label="item.label"
-                :aria-pressed="(activeIds ?? []).includes(item.id)"
-                :title="item.label"
-                @click="emit('openWindow', item.id)"
+                class="inline-flex shrink-0 items-center gap-0.5"
             >
-                <component :is="item.icon" class="h-4 w-4 text-[var(--talos-accent)]" />
-            </Button>
+                <Button
+                    data-mobile-rail-item
+                    size="icon"
+                    variant="ghost"
+                    class="min-h-11 min-w-11"
+                    :aria-label="item.label"
+                    :aria-pressed="(activeIds ?? []).includes(item.id)"
+                    :title="item.label"
+                    @click="emit('openWindow', item.id)"
+                >
+                    <component :is="item.icon" class="h-4 w-4 text-[var(--talos-accent)]" />
+                </Button>
+                <TalosGuideInfoButton :guide-id="item.guideId" side="bottom" />
+            </div>
             <TalosAdvancedRailGroup
                 v-if="visibleAdvancedItems.length"
                 ref="advancedGroup"

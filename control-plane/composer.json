@@ -5,10 +5,21 @@
     "description": "The skeleton application for the Laravel framework.",
     "keywords": ["laravel", "framework"],
     "license": "MIT",
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../core",
+            "options": {
+                "symlink": false
+            }
+        }
+    ],
     "require": {
-        "php": "^8.3",
+        "php": "^8.5",
+        "kadmos/core": "@dev",
         "laravel/framework": "^13.8",
-        "laravel/tinker": "^3.0"
+        "laravel/tinker": "^3.0",
+        "opis/json-schema": "2.6.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

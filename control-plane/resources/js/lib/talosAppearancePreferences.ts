@@ -5,6 +5,7 @@ export type TalosAppearanceVisibility = {
         session_header: boolean
         full_width_chat: boolean
         welcome_message: boolean
+        mission_path: boolean
         incognito: boolean
         text_only_emoji_output: boolean
         thinking_process: boolean
@@ -48,6 +49,7 @@ export const TALOS_APPEARANCE_DEFAULTS: TalosAppearanceVisibility = {
         session_header: true,
         full_width_chat: false,
         welcome_message: true,
+        mission_path: true,
         incognito: true,
         text_only_emoji_output: false,
         thinking_process: true,
@@ -100,6 +102,7 @@ export const TALOS_APPEARANCE_GROUPS: Array<{
             { key: 'session_header', label: 'Session header' },
             { key: 'full_width_chat', label: 'Full-width chat' },
             { key: 'welcome_message', label: 'Welcome message' },
+            { key: 'mission_path', label: 'Mission Path' },
             { key: 'incognito', label: 'Incognito' },
             { key: 'text_only_emoji_output', label: 'Text-only emoji output' },
             { key: 'thinking_process', label: 'Thinking process' },

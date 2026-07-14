@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Kadmos;
 
 use Kadmos\Provider\ProviderRequestException;
+use Kadmos\Provider\PinnedProviderHttpTransport;
 use Kadmos\Security\ExecutionPolicy;
 use Kadmos\Security\PolicyDecision;
 
@@ -192,11 +193,6 @@ final class OpenAIClient implements LLMClientInterface
 
     private function callApi(string $url, string $body): array
     {
-        $insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
-        if ($insecureSsl) {
-            fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
-        }
-
         $headers = ['Content-Type: application/json'];
         if ($this->provider !== 'ollama') {
             $headers[] = "Authorization: Bearer {$this->apiKey}";
@@ -208,74 +204,18 @@ final class OpenAIClient implements LLMClientInterface
 
             return $response;
         }
-
-        $decision = $this->assertProviderBaseUrlAllowed(
-            $url,
-            $this->timeoutMs,
-            requireResolution: true,
+        $payload = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
+        if (! is_array($payload)) {
+            throw new \RuntimeException('Provider request body must be a JSON object.');
+        }
+        $transport = new PinnedProviderHttpTransport(
+            provider: $this->provider,
+            executionPolicy: $this->executionPolicy,
+            curlTransport: $this->curlTransport,
+            maxTimeoutMs: $this->timeoutMs,
         );
-        $options = [
-            \CURLOPT_RETURNTRANSFER => true,
-            \CURLOPT_POST => true,
-            \CURLOPT_POSTFIELDS => $body,
-            \CURLOPT_HTTPHEADER => $headers,
-            \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
-            \CURLOPT_FOLLOWLOCATION => false,
-            \CURLOPT_MAXREDIRS => 0,
-        ];
 
-        $resolveEntries = $this->curlResolveEntries($url, $decision);
-        if ($resolveEntries === []) {
-            throw new \RuntimeException('Provider connection could not be pinned to an approved IP address.');
-        }
-        $options[\CURLOPT_RESOLVE] = $resolveEntries;
-
-        if ($insecureSsl) {
-            $options[\CURLOPT_SSL_VERIFYPEER] = false;
-            $options[\CURLOPT_SSL_VERIFYHOST] = 0;
-        } else {
-            $options[\CURLOPT_SSL_VERIFYPEER] = true;
-            $options[\CURLOPT_SSL_VERIFYHOST] = 2;
-        }
-
-        if ($this->curlTransport !== null) {
-            $result = ($this->curlTransport)($url, $options);
-            if (!is_array($result)) {
-                throw new \RuntimeException('Provider transport returned an invalid result.');
-            }
-            $response = $result['raw_response'] ?? false;
-            $error = is_string($result['curl_error'] ?? null) ? $result['curl_error'] : '';
-            $httpCode = is_int($result['http_code'] ?? null) ? $result['http_code'] : 0;
-            $primaryIp = is_string($result['primary_ip'] ?? null) && $result['primary_ip'] !== ''
-                ? $result['primary_ip']
-                : null;
-        } else {
-            $ch = \curl_init($url);
-            if ($ch === false) {
-                throw new \RuntimeException('Provider transport could not be initialized.');
-            }
-
-            \curl_setopt_array($ch, $options);
-            $response = \curl_exec($ch);
-            $error = \curl_error($ch);
-            $httpCode = (int) \curl_getinfo($ch, \CURLINFO_HTTP_CODE);
-            $connectedIp = \curl_getinfo($ch, \CURLINFO_PRIMARY_IP);
-            $primaryIp = is_string($connectedIp) && $connectedIp !== '' ? $connectedIp : null;
-        }
-
-        if ($response === false) {
-            throw new \RuntimeException("OpenAI API unreachable: {$error}");
-        }
-
-        if (!$this->connectedToApprovedIp($primaryIp, $decision)) {
-            throw new \RuntimeException('Provider connection did not use an approved IP address.');
-        }
-
-        if ($httpCode >= 300) {
-            throw new ProviderRequestException($httpCode, (string) $response);
-        }
-
-        return \json_decode($response, true, flags: \JSON_THROW_ON_ERROR);
+        return $transport($url, $payload, $headers, $this->timeoutMs);
     }
 
     private function assertProviderBaseUrlAllowed(
@@ -359,52 +299,6 @@ final class OpenAIClient implements LLMClientInterface
             static fn(string $host): string => self::normalizeHost($host),
             $hosts,
         ))));
-    }
-
-    /** @return list<string> */
-    private function curlResolveEntries(string $url, PolicyDecision $decision): array
-    {
-        $host = self::normalizeHost((string) parse_url($url, PHP_URL_HOST));
-        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-        $port = parse_url($url, PHP_URL_PORT) ?: ($scheme === 'https' ? 443 : 80);
-        $resolvedIps = is_array($decision->audit['resolved_ips'] ?? null)
-            ? array_values(array_filter($decision->audit['resolved_ips'], 'is_string'))
-            : [];
-
-        if ($host === '' || !is_int($port) && !is_numeric($port)) {
-            return [];
-        }
-
-        return array_map(
-            static fn(string $ip): string => sprintf(
-                '%s:%d:%s',
-                $host,
-                (int) $port,
-                str_contains($ip, ':') ? "[{$ip}]" : $ip,
-            ),
-            $resolvedIps,
-        );
-    }
-
-    private function connectedToApprovedIp(?string $primaryIp, PolicyDecision $decision): bool
-    {
-        if ($primaryIp === null || filter_var($primaryIp, FILTER_VALIDATE_IP) === false) {
-            return false;
-        }
-
-        $resolvedIps = is_array($decision->audit['resolved_ips'] ?? null)
-            ? array_filter($decision->audit['resolved_ips'], 'is_string')
-            : [];
-
-        foreach ($resolvedIps as $resolvedIp) {
-            $primaryBytes = inet_pton($primaryIp);
-            $resolvedBytes = inet_pton($resolvedIp);
-            if ($primaryBytes !== false && $resolvedBytes !== false && hash_equals($resolvedBytes, $primaryBytes)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static function normalizeHost(string $host): string

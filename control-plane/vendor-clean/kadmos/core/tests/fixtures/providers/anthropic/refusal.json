@@ -1,0 +1,14 @@
+{
+  "provider_response": {
+    "id": "msg-refusal-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I cannot perform that request."
+      }
+    ],
+    "stop_reason": "refusal"
+  }
+}

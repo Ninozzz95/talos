@@ -135,6 +135,28 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 - Screenshot evidence is rendered by TALOS from owner-scoped artifact IDs. Model-authored Markdown images are inert and must never become clickable artifact URLs.
 - A navigation turn cannot return a grounded final answer until a later successful `snapshot` or `read` exists.
 - Exclude controlled operational Browser fault messages from future model history; retain them in run trace and replay instead.
+- Carry one server-owned `interaction_id` through UI, Laravel, worker, audit,
+  artifact provenance, and replay. Durable command/event IDs require database
+  uniqueness; process-local deduplication is not an execution guarantee.
+- Fence terminal status, evidence writes, and recovery mutations with an exact
+  execution lease token. Retry automatically only after a worker-proven
+  pre-dispatch rejection; a post-dispatch timeout or transport ambiguity must
+  enter recovery instead of risking a duplicate physical action.
+- A consumed HMI replay must reread the physical artifact and verify bytes,
+  size, hash, MIME, owner, session, capture, frame, command, and interaction
+  provenance. A stored success row alone is not replay evidence.
+- Browser network isolation includes a DNS-pinning HTTP(S) egress proxy,
+  blocked service workers, denied direct/private resolution, and disabled
+  non-proxied WebRTC UDP. Production requires a strong worker token and an
+  explicit opt-in before insecure HTTP transport is accepted.
+- Browse startup is single-flight and user-intent fenced. A late create-session
+  response must not re-enable Browse after the user disables it or changes the
+  bound chat session.
+- HMI motion and geometry gates must use the exact interactive target and a
+  target-bound pixel crop; unrelated page movement cannot prove a control's
+  visible transition.
+- The official MCP live conformance gate is mandatory. Unit mocks may isolate
+  behavior but cannot substitute for the pinned upstream SDK round trip.
 
 ## AVM Evidence Rules
 

@@ -5,13 +5,18 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\TalosSession;
+use App\Services\Talos\Browser\TalosBrowserActivityProjector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 final class TalosMessageController extends Controller
 {
-    public function index(Request $request, TalosSession $session): JsonResponse
+    public function index(
+        Request $request,
+        TalosSession $session,
+        TalosBrowserActivityProjector $browserActivityProjector,
+    ): JsonResponse
     {
         $this->abortUnlessOwnedByCurrentUser($request, $session);
 
@@ -19,6 +24,7 @@ final class TalosMessageController extends Controller
             ->oldest('created_at')
             ->oldest('id')
             ->get();
+        $browserActivityProjector->projectMissingForSession($messages, $session);
 
         return response()->json(['data' => $messages]);
     }
@@ -59,7 +65,11 @@ final class TalosMessageController extends Controller
         ]);
 
         if ($request->has('metadata')) {
-            $validated['metadata'] = $request->input('metadata');
+            $metadata = $request->input('metadata');
+            if (is_array($metadata)) {
+                unset($metadata['browser_activities'], $metadata['used_browser_context']);
+            }
+            $validated['metadata'] = $metadata;
         }
 
         $message = $session->messages()->create($validated);

@@ -1,0 +1,22 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-malformed-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "functionCall": {
+                "id": "gemini-call-bad",
+                "name": "browser_navigate",
+                "args": "{\"url\":\"https://example.com\"}"
+              }
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ]
+  }
+}

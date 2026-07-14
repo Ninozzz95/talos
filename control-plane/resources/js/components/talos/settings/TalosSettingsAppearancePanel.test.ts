@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import { TALOS_DEFAULT_CHAT_LAYOUT } from '../../../lib/talosChatLayout'
+import { TALOS_APPEARANCE_DEFAULTS, TALOS_APPEARANCE_GROUPS } from '../../../lib/talosAppearancePreferences'
 import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
 
 const mounted: Array<ReturnType<typeof createApp>> = []
@@ -12,9 +13,14 @@ afterEach(() => {
     document.body.replaceChildren()
 })
 
-function mountAppearance() {
+function mountAppearance(withVisibilityGroups = false) {
+    const shell = document.createElement('div')
+    shell.className = 'talos-shell'
+    const portalRoot = document.createElement('div')
+    portalRoot.id = 'talos-portal-root'
     const container = document.createElement('div')
-    document.body.append(container)
+    shell.append(portalRoot, container)
+    document.body.append(shell)
 
     let themeEngineOpenCount = 0
     const app = createApp(defineComponent({
@@ -24,8 +30,8 @@ function mountAppearance() {
                 themeMode: 'dark',
                 chatLayout: TALOS_DEFAULT_CHAT_LAYOUT,
                 themePolicyLocked: false,
-                appearanceVisibility: {},
-                appearanceGroups: [],
+                appearanceVisibility: structuredClone(TALOS_APPEARANCE_DEFAULTS),
+                appearanceGroups: withVisibilityGroups ? TALOS_APPEARANCE_GROUPS : [],
                 onOpenThemeEngine: () => {
                     themeEngineOpenCount += 1
                 },
@@ -36,10 +42,26 @@ function mountAppearance() {
     mounted.push(app)
     app.mount(container)
 
-    return { container, themeEngineOpenCount: () => themeEngineOpenCount }
+    return { container, portalRoot, themeEngineOpenCount: () => themeEngineOpenCount }
 }
 
 describe('TalosSettingsAppearancePanel tabs', () => {
+    it('renders canonical information for every Appearance visibility group', async () => {
+        const { container, portalRoot } = mountAppearance(true)
+        const visibilityTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
+            .find((tab) => tab.textContent?.includes('Visibility'))
+        visibilityTab?.click()
+        await nextTick()
+
+        expect(container.querySelectorAll('[data-guide-id^="settings.appearance."]')).toHaveLength(3)
+        expect(container.querySelector('button button')).toBeNull()
+
+        container.querySelector<HTMLButtonElement>('[aria-label="Information about Chat Bar"]')?.click()
+        await nextTick()
+        await nextTick()
+        expect(portalRoot.textContent).toContain('Choose which supported composer tools are visible.')
+    })
+
     it('links the active tab to a labelled panel', () => {
         const { container } = mountAppearance()
         const designTab = container.querySelector<HTMLButtonElement>('[role="tab"]')

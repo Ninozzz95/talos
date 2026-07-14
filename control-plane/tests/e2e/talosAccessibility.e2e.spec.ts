@@ -70,6 +70,7 @@ test('authenticated workspace and complex overlays pass automated WCAG A/AA chec
 
     await page.getByRole('button', { name: 'Settings', exact: true }).click()
     await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
+    await waitForSurfaceAnimations(page, '[data-window-id="settings"]')
     await expectNoAccessibilityViolations(page, 'settings')
 
     if (isMobile) {
@@ -77,6 +78,7 @@ test('authenticated workspace and complex overlays pass automated WCAG A/AA chec
     }
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Theme Engine', exact: true })).toBeVisible()
+    await waitForSurfaceAnimations(page, '[data-window-id="theme"]')
     await expectNoAccessibilityViolations(page, 'theme')
 
     if (isMobile) {

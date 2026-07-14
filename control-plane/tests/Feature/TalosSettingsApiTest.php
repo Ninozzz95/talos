@@ -513,6 +513,7 @@ final class TalosSettingsApiTest extends TestCase
                         'session_header' => false,
                         'full_width_chat' => true,
                         'welcome_message' => false,
+                        'mission_path' => false,
                         'unknown_chat_control' => true,
                         'api_key' => 'appearance-secret',
                     ],
@@ -541,6 +542,7 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.appearance_visibility.chat_area.session_header', false)
             ->assertJsonPath('data.preferences.appearance_visibility.chat_area.full_width_chat', true)
             ->assertJsonPath('data.preferences.appearance_visibility.chat_area.welcome_message', false)
+            ->assertJsonPath('data.preferences.appearance_visibility.chat_area.mission_path', false)
             ->assertJsonPath('data.preferences.appearance_visibility.chat_bar.web_search', false)
             ->assertJsonPath('data.preferences.appearance_visibility.chat_bar.attach_files', true)
             ->assertJsonPath('data.preferences.appearance_visibility.sidebar.brand_name', true)
@@ -1805,6 +1807,43 @@ final class TalosSettingsApiTest extends TestCase
         self::assertSame($motion, $response->json('data.preferences.theme_motion_v6'));
     }
 
+    public function test_theme_motion_v6_persists_nonzero_glow_and_returns_it_on_fresh_read(): void
+    {
+        $motion = $this->motionV6Defaults();
+        $motion['glow_intensity'] = 73;
+
+        $this->patchRawThemeMotionV6($motion)
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_motion_v6.glow_intensity', 73);
+
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 32, JSON_THROW_ON_ERROR);
+        self::assertSame($motion, $stored['theme_motion_v6']);
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_motion_v6.glow_intensity', 73)
+            ->assertJsonPath('data.preferences.theme_motion_v6.interface.duration_scale', 50);
+    }
+
+    public function test_legacy_v6_without_glow_is_canonicalized_through_api_and_storage(): void
+    {
+        $legacy = $this->motionV6Defaults();
+        $legacy['interface']['duration_scale'] = 100;
+        unset($legacy['glow_intensity']);
+        $canonical = $this->motionV6Defaults();
+        $canonical['interface']['duration_scale'] = 100;
+
+        $response = $this->patchRawThemeMotionV6($legacy)->assertOk();
+
+        self::assertSame($canonical, $response->json('data.preferences.theme_motion_v6'));
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 32, JSON_THROW_ON_ERROR);
+        self::assertSame($canonical, $stored['theme_motion_v6']);
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme_motion_v6.glow_intensity', 0)
+            ->assertJsonPath('data.preferences.theme_motion_v6.interface.duration_scale', 100);
+    }
+
     public function test_theme_motion_v6_only_delta_preserves_legacy_bytes_and_persists_exact_canonical_value(): void
     {
         $legacy = [
@@ -1912,6 +1951,7 @@ final class TalosSettingsApiTest extends TestCase
             'schema_version',
             'speed',
             'intensity',
+            'glow_intensity',
             'density',
             'depth',
             'trails',
@@ -2050,6 +2090,54 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.theme', 'terminal');
     }
 
+    public function test_browser_hmi_mode_is_validated_persisted_and_returned_with_effective_policy(): void
+    {
+        config(['services.talos.browser.hmi_min_mode' => null]);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['browser_hmi_mode' => 'confirm_every_interaction'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.browser_hmi_mode', 'confirm_every_interaction')
+            ->assertJsonPath('data.browser_hmi_policy.user_mode', 'confirm_every_interaction')
+            ->assertJsonPath('data.browser_hmi_policy.workspace_minimum_mode', null)
+            ->assertJsonPath('data.browser_hmi_policy.effective_mode', 'confirm_every_interaction')
+            ->assertJsonPath('data.browser_hmi_policy.preference_constrained', false);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['browser_hmi_mode' => 'unrestricted'],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preferences.browser_hmi_mode');
+
+        self::assertSame(
+            'confirm_every_interaction',
+            TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->value('preferences')['browser_hmi_mode'],
+        );
+    }
+
+    public function test_workspace_browser_hmi_floor_is_disclosed_and_cannot_be_weakened_by_user_preference(): void
+    {
+        config(['services.talos.browser.hmi_min_mode' => 'confirm_every_interaction']);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['browser_hmi_mode' => 'confirm_sensitive'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.browser_hmi_policy.user_mode', 'confirm_sensitive')
+            ->assertJsonPath('data.browser_hmi_policy.workspace_minimum_mode', 'confirm_every_interaction')
+            ->assertJsonPath('data.browser_hmi_policy.effective_mode', 'confirm_every_interaction')
+            ->assertJsonPath('data.browser_hmi_policy.preference_constrained', true);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['browser_hmi_mode' => 'read_only'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.browser_hmi_policy.user_mode', 'read_only')
+            ->assertJsonPath('data.browser_hmi_policy.effective_mode', 'read_only')
+            ->assertJsonPath('data.browser_hmi_policy.preference_constrained', false);
+    }
+
     private function seedAtomicMotionBaseline(): string
     {
         TalosWorkspaceSetting::query()->create([
@@ -2127,6 +2215,7 @@ final class TalosSettingsApiTest extends TestCase
             'scene_override' => null,
             'speed' => 100,
             'intensity' => 65,
+            'glow_intensity' => 0,
             'density' => 100,
             'depth' => 50,
             'trails' => 35,
@@ -2139,7 +2228,7 @@ final class TalosSettingsApiTest extends TestCase
             'respect_data_saver' => true,
             'interface' => [
                 'profile' => 'preset',
-                'duration_scale' => 100,
+                'duration_scale' => 50,
                 'intensity' => 65,
                 'easing' => 'precise',
                 'stagger' => 40,

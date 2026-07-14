@@ -17,16 +17,41 @@ export function useTalosWorkspaceWindows(options: {
         const sheet = breakpoint.value !== 'desktop'
         const left = 0
         const top = sheet ? 96 : 0
-        // Desktop bounds are local to the stage: 56px header + 48px composer clearance.
-        const composerExclusion = sheet ? 20 : 104
+        const desktopTop = 56
+        const resolvedTop = sheet ? top : desktopTop
+        const composerExclusion = sheet ? 20 : 48
         return {
             left,
-            top,
+            top: resolvedTop,
             right: Math.max(left + 1, sheet ? viewportWidth.value : viewportWidth.value - options.currentRailWidth.value),
-            bottom: Math.max(top + 1, viewportHeight.value - (options.composerHeight.value || 168) - composerExclusion),
+            bottom: Math.max(resolvedTop + 1, viewportHeight.value - (options.composerHeight.value || 168) - composerExclusion),
         }
     })
-    const manager = useTalosWindowManager(options.initialOpen, { area, breakpoint })
+    const tileArea = computed(() => breakpoint.value === 'desktop'
+        ? {
+            left: 0,
+            top: 0,
+            right: Math.max(1, viewportWidth.value - options.currentRailWidth.value),
+            bottom: Math.max(1, viewportHeight.value),
+        }
+        : area.value)
+    const maximizeArea = computed(() => breakpoint.value === 'desktop'
+        ? {
+            left: 0,
+            top: 0,
+            right: Math.max(1, viewportWidth.value - options.currentRailWidth.value),
+            bottom: Math.max(1, viewportHeight.value),
+        }
+        : area.value)
+    const fullscreenArea = computed(() => breakpoint.value === 'desktop'
+        ? {
+            left: 0,
+            top: 0,
+            right: Math.max(1, viewportWidth.value - options.currentRailWidth.value),
+            bottom: Math.max(1, viewportHeight.value),
+        }
+        : area.value)
+    const manager = useTalosWindowManager(options.initialOpen, { area, tileArea, maximizeArea, fullscreenArea, breakpoint })
     const launchOrigins = useTalosWindowLaunchOrigins(options.currentRailWidth, manager.openWindow)
 
     if (typeof window !== 'undefined') {
@@ -68,5 +93,8 @@ export function useTalosWorkspaceWindows(options: {
         ...launchOrigins,
         breakpoint,
         area,
+        tileArea,
+        maximizeArea,
+        fullscreenArea,
     }
 }

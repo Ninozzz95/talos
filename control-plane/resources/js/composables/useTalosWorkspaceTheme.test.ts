@@ -107,13 +107,13 @@ describe('useTalosWorkspaceTheme motion precedence', () => {
         expect(paper.shellClass.value).toContain('talos-density-spacious')
         expect(paper.shellClass.value).toContain('talos-radius-balanced')
         expect(paper.motionV6SceneId.value).toBe('paper')
-        expect(paper.workspaceStyle.value['--talos-motion-duration-window-open']).toBe('365ms')
+        expect(paper.workspaceStyle.value['--talos-motion-duration-window-open']).toBe('183ms')
 
         const terminal = await mountWorkspaceTheme('system', {}, 'terminal')
         expect(terminal.shellClass.value).toContain('talos-density-compact')
         expect(terminal.shellClass.value).toContain('talos-radius-sharp')
         expect(terminal.motionV6SceneId.value).toBe('terminal')
-        expect(terminal.workspaceStyle.value['--talos-motion-duration-window-open']).toBe('320ms')
+        expect(terminal.workspaceStyle.value['--talos-motion-duration-window-open']).toBe('160ms')
     })
 
     it.each(['normal', 'cinematic'] as const)('treats OS reduced motion as a hard override for %s', async (themeMotion) => {

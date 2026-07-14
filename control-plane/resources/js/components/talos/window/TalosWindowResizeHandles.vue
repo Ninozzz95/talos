@@ -1,14 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import type { TalosWindowTileTarget } from '../../../lib/talosWindowTilePolicy'
+
 type ResizeEdge = 'top' | 'right' | 'bottom' | 'left' | 'top-right' | 'bottom-right' | 'bottom-left' | 'top-left'
 
-defineProps<{
+const props = defineProps<{
     title: string
     docked?: boolean
     fullscreen?: boolean
-}>()
-
-const emit = defineEmits<{
-    resizeStart: [edge: ResizeEdge, event: PointerEvent]
+    tileTarget?: TalosWindowTileTarget
 }>()
 
 const resizeEdges: Array<{ edge: ResizeEdge; label: string }> = [
@@ -21,18 +21,23 @@ const resizeEdges: Array<{ edge: ResizeEdge; label: string }> = [
     { edge: 'bottom-left', label: 'bottom left' },
     { edge: 'top-left', label: 'top left' },
 ]
+
+const visibleResizeEdges = computed(() => {
+    if (props.docked || props.fullscreen) return []
+    if (props.tileTarget === 'left-half') return resizeEdges.filter(({ edge }) => edge === 'right')
+    if (props.tileTarget === 'right-half') return resizeEdges.filter(({ edge }) => edge === 'left')
+    if (props.tileTarget && props.tileTarget !== 'none') return []
+    return resizeEdges
+})
 </script>
 
 <template>
-    <template v-if="!docked && !fullscreen">
-        <button
-            v-for="handle in resizeEdges"
-            :key="handle.edge"
-            type="button"
-            class="talos-window-resize-handle hidden lg:block"
-            :class="`talos-window-resize-${handle.edge}`"
-            :aria-label="`Resize ${title} window ${handle.label}`"
-            @pointerdown.left.stop.prevent="emit('resizeStart', handle.edge, $event)"
-        ></button>
-    </template>
+    <button
+        v-for="handle in visibleResizeEdges"
+        :key="handle.edge"
+        type="button"
+        class="talos-window-resize-handle hidden lg:block"
+        :class="`talos-window-resize-${handle.edge}`"
+        :aria-label="`Resize ${title} window ${handle.label}`"
+    ></button>
 </template>

@@ -22,7 +22,6 @@ function mountTitleBar(options: Record<string, unknown> = {}) {
                 title: 'Runtime',
                 description: 'Execution state',
                 ...options,
-                onDragStart: (...args: unknown[]) => events.push({ name: 'dragStart', args }),
                 onMaximize: (...args: unknown[]) => events.push({ name: 'maximize', args }),
                 onRestore: (...args: unknown[]) => events.push({ name: 'restore', args }),
                 onMinimize: (...args: unknown[]) => events.push({ name: 'minimize', args }),
@@ -30,6 +29,7 @@ function mountTitleBar(options: Record<string, unknown> = {}) {
                 onDock: (...args: unknown[]) => events.push({ name: 'dock', args }),
                 onClose: (...args: unknown[]) => events.push({ name: 'close', args }),
                 onSnap: (...args: unknown[]) => events.push({ name: 'snap', args }),
+                onPeek: (...args: unknown[]) => events.push({ name: 'peek', args }),
                 onCancelInteraction: (...args: unknown[]) => events.push({ name: 'cancelInteraction', args }),
             })
         },
@@ -40,15 +40,21 @@ function mountTitleBar(options: Record<string, unknown> = {}) {
 }
 
 describe('TalosWindowTitleBar', () => {
-    it('starts dragging only from the non-interactive title space', () => {
+    it('exposes the upstream drag handle without swallowing its pointer event', () => {
         const { container, events } = mountTitleBar()
         const titleSpace = container.querySelector<HTMLElement>('[aria-label="Drag Runtime window"]')!
         const button = container.querySelector<HTMLButtonElement>('[aria-label="Minimize Runtime"]')!
+        let bubbled = 0
+        container.addEventListener('pointerdown', () => { bubbled += 1 })
 
-        titleSpace.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+        const pointer = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })
+        titleSpace.dispatchEvent(pointer)
         button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
 
-        expect(events.filter((event) => event.name === 'dragStart')).toHaveLength(1)
+        expect(titleSpace.classList.contains('talos-window-drag-handle')).toBe(true)
+        expect(pointer.defaultPrevented).toBe(false)
+        expect(bubbled).toBe(1)
+        expect(events.filter((event) => event.name === 'dragStart')).toHaveLength(0)
     })
 
     it('emits fullscreen toggle, snap, and cancellation keyboard interactions', () => {
@@ -86,6 +92,30 @@ describe('TalosWindowTitleBar', () => {
 
         expect(events.map((event) => event.name)).toEqual(['minimize', 'reset', 'maximize', 'dock', 'close'])
         expect(events.every((event) => event.args[0] === 'runtime')).toBe(true)
-        expect(events.filter((event) => event.name === 'dragStart')).toHaveLength(0)
+    })
+
+    it('exposes an accessible transient Peek toggle only for eligible windows', () => {
+        const hidden = mountTitleBar()
+        expect(hidden.container.querySelector('[aria-label^="Peek behind"]')).toBeNull()
+
+        const available = mountTitleBar({
+            id: 'theme',
+            title: 'Theme',
+            peekAvailable: true,
+            peeking: false,
+        })
+        const peek = available.container.querySelector<HTMLButtonElement>('[aria-label="Peek behind Theme"]')!
+        expect(peek).not.toBeNull()
+        expect(peek.getAttribute('aria-pressed')).toBe('false')
+        peek.click()
+        expect(available.events.filter((event) => event.name === 'peek').map((event) => event.args)).toEqual([['theme']])
+
+        const active = mountTitleBar({
+            id: 'settings',
+            title: 'Settings',
+            peekAvailable: true,
+            peeking: true,
+        })
+        expect(active.container.querySelector('[aria-label="Stop peeking behind Settings"]')?.getAttribute('aria-pressed')).toBe('true')
     })
 })

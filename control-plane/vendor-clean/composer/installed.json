@@ -1,0 +1,55 @@
+{
+    "packages": [
+        {
+            "name": "kadmos/core",
+            "version": "dev-main",
+            "version_normalized": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "../core",
+                "reference": "d876da58f83b4a23d73acaa24fa6d954bf32eaf0"
+            },
+            "require": {
+                "php": "^8.5"
+            },
+            "require-dev": {
+                "mcp/sdk": "0.6.0",
+                "phpunit/phpunit": "^12.5"
+            },
+            "type": "library",
+            "installation-source": "dist",
+            "autoload": {
+                "psr-4": {
+                    "Kadmos\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Kadmos\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "php kadmos test"
+                ]
+            },
+            "license": [
+                "proprietary"
+            ],
+            "authors": [
+                {
+                    "name": "antoninorizzo",
+                    "email": "ninozz142@gmail.com"
+                }
+            ],
+            "description": "AVM Pure PHP Engine",
+            "transport-options": {
+                "symlink": false,
+                "relative": true
+            },
+            "install-path": "../kadmos/core"
+        }
+    ],
+    "dev": true,
+    "dev-package-names": []
+}

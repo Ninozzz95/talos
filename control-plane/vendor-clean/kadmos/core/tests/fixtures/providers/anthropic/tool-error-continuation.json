@@ -1,0 +1,14 @@
+{
+  "provider_response": {
+    "id": "msg-recovered-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "The browser timed out, so I could not ground the requested page."
+      }
+    ],
+    "stop_reason": "end_turn"
+  }
+}

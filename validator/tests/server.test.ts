@@ -1,9 +1,17 @@
 import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import { buildServer } from '../src/server';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+function toolContractFixture(name: string): unknown {
+  return JSON.parse(readFileSync(resolve(__dirname, '../../core/tests/fixtures/tool-contracts', name), 'utf8'));
+}
 
 const originalPhpBin = process.env.PHP_BIN;
 const originalKadmosChatScript = process.env.KADMOS_CHAT_SCRIPT;
+const originalBenchmarkScript = process.env.KADMOS_BENCHMARK_SCRIPT;
+const originalKadmosCli = process.env.KADMOS_CLI;
+const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
 
 afterEach(() => {
   if (originalPhpBin === undefined) {
@@ -16,6 +24,24 @@ afterEach(() => {
     delete process.env.KADMOS_CHAT_SCRIPT;
   } else {
     process.env.KADMOS_CHAT_SCRIPT = originalKadmosChatScript;
+  }
+
+  if (originalBenchmarkScript === undefined) {
+    delete process.env.KADMOS_BENCHMARK_SCRIPT;
+  } else {
+    process.env.KADMOS_BENCHMARK_SCRIPT = originalBenchmarkScript;
+  }
+
+  if (originalKadmosCli === undefined) {
+    delete process.env.KADMOS_CLI;
+  } else {
+    process.env.KADMOS_CLI = originalKadmosCli;
+  }
+
+  if (originalDeepseekApiKey === undefined) {
+    delete process.env.DEEPSEEK_API_KEY;
+  } else {
+    process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
   }
 });
 
@@ -75,6 +101,17 @@ describe('POST /validate', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.valid).toBe(false);
+  });
+
+  it.each([undefined, null])('returns a validation response instead of 500 for an absent or null body', async (payload) => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate',
+      ...(payload === undefined ? {} : { payload }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().valid).toBe(false);
   });
 
   it('returns 200 with valid:false for missing node_id in context', async () => {
@@ -228,6 +265,139 @@ describe('POST /validate', () => {
   });
 });
 
+describe('canonical tool contract validation endpoints', () => {
+  const server = buildServer();
+
+  afterAll(async () => {
+    await server.close();
+  });
+
+  it('validates a strict MCP tool definition', async () => {
+    const definition = toolContractFixture('valid-definition.json');
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-definition',
+      payload: { definition },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      valid: true,
+      contract: 'tool_definition',
+      contract_version: 'mcp-2025-11-25+talos-v1',
+      data: definition,
+    });
+  });
+
+  it('validates a provider tool call together with its execution context', async () => {
+    const call = toolContractFixture('valid-call.json');
+    const context = toolContractFixture('valid-context.json');
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-call',
+      payload: { call, context },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      valid: true,
+      contract: 'tool_call',
+      data: { call, context },
+    });
+  });
+
+  it('validates a result only when it is correlated to the expected provider call', async () => {
+    const result = toolContractFixture('valid-result.json');
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-result',
+      payload: { result, expected_tool_use_id: 'call_browser_1' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      valid: true,
+      contract: 'tool_result',
+      data: result,
+    });
+  });
+
+  it.each([
+    ['/validate/tool-definition', { definition: { name: 'secret-sk-should-not-leak' } }, 'TOOL_DEFINITION_INVALID'],
+    ['/validate/tool-call', { call: {}, context: {} }, 'TOOL_CALL_INVALID'],
+    ['/validate/tool-result', { result: toolContractFixture('valid-result.json'), expected_tool_use_id: 'different-call' }, 'TOOL_RESULT_INVALID'],
+  ])('returns a typed 422 without reflecting invalid input for %s', async (url, payload, code) => {
+    const response = await server.inject({ method: 'POST', url, payload });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({
+      valid: false,
+      fault: {
+        code,
+        issues: expect.any(Array),
+      },
+    });
+    expect(response.body).not.toContain('secret-sk-should-not-leak');
+  });
+
+  it('returns a typed 422 instead of a 500 for missing request bodies', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-result',
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().fault.code).toBe('TOOL_RESULT_INVALID');
+  });
+
+  it('does not leak unknown client-controlled field names through Zod issue messages', async () => {
+    const definition = toolContractFixture('valid-definition.json') as Record<string, unknown>;
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-definition',
+      payload: {
+        definition: {
+          ...definition,
+          'sk-client-controlled-secret': true,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.body).not.toContain('sk-client-controlled-secret');
+  });
+
+  it('returns a typed 400 for malformed JSON before route validation', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-definition',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"definition":',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      valid: false,
+      fault: { code: 'TOOL_DEFINITION_INVALID' },
+    });
+  });
+
+  it('returns a typed 413 when a contract body exceeds its route limit', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/validate/tool-call',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ oversized: 'x'.repeat(1_100_000) }),
+    });
+
+    expect(response.statusCode).toBe(413);
+    expect(response.json()).toMatchObject({
+      valid: false,
+      fault: { code: 'TOOL_CALL_INVALID' },
+    });
+  });
+});
+
 describe('POST /chat', () => {
   const server = buildServer();
 
@@ -280,6 +450,168 @@ describe('POST /chat', () => {
     expect(response.json().details).toContain('HTTP 401');
     expect(response.json().details).not.toContain('sk-test');
   });
+
+  it('redacts a fallback provider key inherited from the environment', async () => {
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_CHAT_SCRIPT = resolve(__dirname, 'fixtures/chat-env-stderr-fail.mjs');
+    process.env.DEEPSEEK_API_KEY = 'fallback-secret-value-12345';
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat',
+      payload: {
+        message: 'Use configured provider.',
+        provider: 'deepseek',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().code).toBe('CORE_CHAT_PROCESS_FAILED');
+    expect(response.body).not.toContain('fallback-secret-value-12345');
+    expect(response.json().details).toContain('[redacted]');
+  });
+
+  it('recursively redacts secrets from parsed child JSON', async () => {
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_CHAT_SCRIPT = resolve(__dirname, 'fixtures/chat-json-secrets.mjs');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat',
+      payload: {
+        message: 'Return structured data.',
+        api_key: 'sk-chat-secret-123',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      api_key: '[redacted]',
+      nested: {
+        token: '[redacted]',
+        safe: 'visible',
+      },
+      items: [{ access_token: '[redacted]' }],
+      credentials: '[redacted]',
+      private_key: '[redacted]',
+      API_KEY: '[redacted]',
+      TOKEN: '[redacted]',
+      PRIVATE_KEY: '[redacted]',
+      auth_token: '[redacted]',
+      sessionToken: '[redacted]',
+      requestAuthorization: '[redacted]',
+      session_cookie: '[redacted]',
+      max_tokens: 4096,
+    });
+    expect(response.json().long_text).toHaveLength(1200);
+    expect(response.body).not.toContain('sk-chat-secret-123');
+    expect(response.body).not.toContain('nested-password-value');
+    expect(response.body).not.toContain('sk-inline-secret');
+    expect(response.body).not.toContain('array-chat-token');
+    expect(response.body).not.toContain('opaque-credential-value');
+    expect(response.body).not.toContain('opaque-private-key-value');
+    expect(response.body).not.toContain('uppercase-api-key-value');
+    expect(response.body).not.toContain('uppercase-token-value');
+    expect(response.body).not.toContain('uppercase-private-key-value');
+    expect(response.body).not.toContain('prefixed-auth-token-value');
+    expect(response.body).not.toContain('prefixed-session-token-value');
+    expect(response.body).not.toContain('prefixed-authorization-value');
+    expect(response.body).not.toContain('prefixed-cookie-value');
+  });
+
+  it('returns a controlled fault when the chat process cannot spawn', async () => {
+    process.env.PHP_BIN = resolve(__dirname, 'fixtures/missing-runtime-do-not-create');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/chat',
+      payload: { message: 'Hello.' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ code: 'CORE_CHAT_PROCESS_FAILED' });
+  });
+});
+
+describe('POST /execute process boundary', () => {
+  const server = buildServer();
+
+  afterAll(async () => {
+    await server.close();
+  });
+
+  it('returns a controlled fault when the execute process cannot spawn', async () => {
+    process.env.PHP_BIN = resolve(__dirname, 'fixtures/missing-runtime-do-not-create');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/execute',
+      payload: { mutations: [] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ code: 'CORE_EXECUTE_PROCESS_FAILED' });
+  });
+});
+
+describe('POST /benchmark', () => {
+  const server = buildServer();
+
+  afterAll(async () => {
+    await server.close();
+  });
+
+  it('uses the child environment instead of benchmark argv and redacts parsed JSON recursively', async () => {
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_BENCHMARK_SCRIPT = resolve(__dirname, 'fixtures/benchmark-json-secrets.mjs');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark',
+      payload: {
+        scenario: '01_simple_http',
+        api_key: 'sk-benchmark-secret-123',
+        use_live: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      argv_has_api_key: false,
+      env_has_api_key: true,
+      nested: { api_key: '[redacted]', safe: 'visible' },
+    });
+    expect(response.body).not.toContain('sk-benchmark-secret-123');
+    expect(response.body).not.toContain('nested-benchmark-token');
+    expect(response.body).not.toContain('array-benchmark-secret');
+  });
+
+  it('rejects unsafe scenario names before spawning a process', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark',
+      payload: { scenario: '../private-file', use_live: false },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain('scenario');
+  });
+
+  it('uses the real benchmark script and handles spawn failures', async () => {
+    const source = readFileSync(resolve(__dirname, '../src/server.ts'), 'utf8');
+    expect(source).toContain("join(process.cwd(), '..', 'core', 'kadmos-bench-live.php')");
+    expect(source).not.toContain("join(process.cwd(), '..', 'core', 'talos-bench-live.php')");
+
+    process.env.PHP_BIN = resolve(__dirname, 'fixtures/missing-runtime-do-not-create');
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark',
+      payload: { scenario: '01_simple_http', use_live: false },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ code: 'BENCHMARK_PROCESS_FAILED' });
+  });
 });
 
 describe('POST /benchmark/compare', () => {
@@ -319,5 +651,40 @@ describe('POST /benchmark/compare', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toContain('scenario');
+  });
+
+  it('recursively redacts secrets from parsed child JSON', async () => {
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_CLI = resolve(__dirname, 'fixtures/benchmark-json-secrets.mjs');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark/compare',
+      payload: {
+        scenario: '05_deep_chain_failure',
+        runs: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      nested: { api_key: '[redacted]', safe: 'visible' },
+    });
+    expect(response.body).not.toContain('sk-benchmark-secret-123');
+    expect(response.body).not.toContain('nested-benchmark-token');
+    expect(response.body).not.toContain('array-benchmark-secret');
+  });
+
+  it('returns a controlled fault when the comparison process cannot spawn', async () => {
+    process.env.PHP_BIN = resolve(__dirname, 'fixtures/missing-runtime-do-not-create');
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/benchmark/compare',
+      payload: { scenario: '05_deep_chain_failure', runs: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ code: 'BENCHMARK_COMPARE_PROCESS_FAILED' });
   });
 });

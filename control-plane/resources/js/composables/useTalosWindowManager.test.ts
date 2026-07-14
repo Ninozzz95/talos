@@ -117,6 +117,26 @@ describe('useTalosWindowManager', () => {
         expect(JSON.parse(localStorage.getItem(TALOS_WINDOW_LAYOUT_V2_KEY) ?? '{}').layouts.desktop.windows.theme.bounds.x).toBeGreaterThan(initialArea.left)
     })
 
+    it('exposes named tile state and persists exact restore geometry', () => {
+        const maximizeArea = ref({ left: 220, top: 56, right: 1440, bottom: 900 })
+        const fullscreenArea = ref({ left: 0, top: 0, right: 1440, bottom: 900 })
+        const manager = useTalosWindowManager(['theme'], {
+            area: ref(initialArea),
+            maximizeArea,
+            fullscreenArea,
+            breakpoint: ref('desktop'),
+        })
+        const original = manager.state.value.windows.theme.bounds
+
+        manager.tileWindow('theme', 'fullscreen-workspace')
+        expect(manager.viewportFullscreenWindowIds.value).toEqual(['theme'])
+        expect(manager.windowTileTargets.value.theme).toBe('fullscreen-workspace')
+        expect(manager.state.value.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 1440, height: 900 })
+        manager.untileWindow('theme')
+        expect(manager.state.value.windows.theme.bounds).toEqual(original)
+        expect(manager.windowTileTargets.value.theme).toBe('none')
+    })
+
     it('clears a stale return-focus target when reopening without a connected launcher', () => {
         const launcher = document.createElement('button')
         document.body.append(launcher)

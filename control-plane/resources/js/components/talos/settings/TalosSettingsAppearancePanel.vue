@@ -10,6 +10,7 @@ import {
 } from '../../../lib/talosThemes'
 import Button from '../../ui/Button.vue'
 import Tabs from '../../ui/Tabs.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
@@ -190,7 +191,15 @@ function selectThemeMode(value: unknown) {
                     <h5 class="text-sm font-semibold text-[var(--talos-text)]">{{ group.label }}</h5>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ group.description }}</p>
                 </div>
-                <Button type="button" size="sm" variant="ghost" @click="emit('resetAppearanceGroup', group.id)">Reset group</Button>
+                <div class="flex items-center gap-1">
+                    <TalosGuideInfoButton
+                        :guide-id="`settings.appearance.${group.id}`"
+                        :aria-label="`Information about ${group.label}`"
+                        compact
+                        side="left"
+                    />
+                    <Button type="button" size="sm" variant="ghost" @click="emit('resetAppearanceGroup', group.id)">Reset group</Button>
+                </div>
             </div>
             <div class="grid gap-2 md:grid-cols-2">
                 <label

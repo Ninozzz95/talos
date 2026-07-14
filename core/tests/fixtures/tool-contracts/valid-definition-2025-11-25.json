@@ -1,0 +1,37 @@
+{
+  "name": "browser_snapshot",
+  "title": "Browser Snapshot",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "state_version": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "state_version"
+    ],
+    "additionalProperties": false
+  },
+  "icons": [
+    {
+      "src": "https://example.com/talos.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "48x48",
+        "any"
+      ],
+      "theme": "dark"
+    }
+  ],
+  "execution": {
+    "taskSupport": "optional"
+  },
+  "_meta": {
+    "talos/schema_version": "1"
+  }
+}

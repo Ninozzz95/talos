@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { waitForTalosWorkspaceReady as waitForWorkspaceReady } from './helpers/talosWorkspaceReady'
 import type {
     TalosMotionRendererMode,
     TalosMotionV6Preferences,
@@ -206,6 +207,7 @@ function createCompleteMotionV6Preferences(
         scene_override: null,
         speed: 100,
         intensity: 65,
+        glow_intensity: 0,
         density: 100,
         depth: 50,
         trails: 35,
@@ -218,7 +220,7 @@ function createCompleteMotionV6Preferences(
         respect_data_saver: true,
         interface: {
             profile: 'preset',
-            duration_scale: 100,
+            duration_scale: 50,
             intensity: 65,
             easing: 'precise',
             stagger: 40,
@@ -411,11 +413,6 @@ function observeSettingsPatchExchanges(page: Page) {
 
 async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
-}
-
-async function waitForWorkspaceReady(page: Page) {
-    await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
-    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
 }
 
 async function submitLogin(page: Page, email: string, password: string) {

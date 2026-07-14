@@ -7,13 +7,17 @@ import {
     type TalosWindowPosition,
     type TalosWindowSize,
 } from './talosWindowRegistry'
+import {
+    resolveTalosWindowTileBounds,
+    type TalosWindowTileTarget,
+} from './talosWindowTilePolicy'
 
 export const TALOS_WINDOW_LAYOUT_V1_KEY = 'talos.windowLayout.v1'
 export const TALOS_WINDOW_LAYOUT_V2_KEY = 'talos.windowLayout.v2'
 
 export type TalosWindowBreakpoint = 'desktop' | 'tablet' | 'mobile'
 export type TalosWindowVisibility = 'closed' | 'open' | 'minimized'
-export type TalosWindowPresentation = 'floating' | 'docked' | 'maximized' | 'mobile-sheet'
+export type TalosWindowPresentation = 'floating' | 'docked' | 'maximized' | 'fullscreen' | 'mobile-sheet'
 export type TalosPersistedWindowPresentation = Exclude<TalosWindowPresentation, 'mobile-sheet'>
 
 export type TalosWindowArea = {
@@ -38,6 +42,7 @@ export type TalosManagedWindowState = {
     previousPresentation: TalosPersistedWindowPresentation
     bounds: TalosWindowBounds
     restoreBounds: TalosWindowBounds | null
+    tileTarget: TalosWindowTileTarget
     zIndex: number
     launchOrigin: TalosWindowLaunchOrigin | null
     returnFocusId: string | null
@@ -47,6 +52,9 @@ export type TalosWindowManagerState = {
     schemaVersion: 2
     breakpoint: TalosWindowBreakpoint
     area: TalosWindowArea
+    tileArea: TalosWindowArea
+    maximizeArea: TalosWindowArea
+    fullscreenArea: TalosWindowArea
     activeWindowId: TalosWindowId | null
     windows: Record<TalosWindowId, TalosManagedWindowState>
 }
@@ -55,6 +63,7 @@ export type TalosPersistedWindowState = {
     bounds: TalosWindowBounds
     presentation: TalosPersistedWindowPresentation
     restore_bounds?: TalosWindowBounds | null
+    tile_target?: Exclude<TalosWindowTileTarget, 'none'>
 }
 
 export type TalosPersistedWindowBucket = {
@@ -82,8 +91,16 @@ export type TalosWindowAction =
     | { type: 'toggle-maximize'; id: TalosWindowId }
     | { type: 'toggle-dock'; id: TalosWindowId }
     | { type: 'snap'; id: TalosWindowId; side: 'left' | 'right' }
+    | {
+        type: 'tile'
+        id: TalosWindowId
+        target: Exclude<TalosWindowTileTarget, 'none'>
+        restoreBounds?: TalosWindowBounds
+    }
+    | { type: 'untile'; id: TalosWindowId; bounds?: TalosWindowBounds }
     | { type: 'reset'; id: TalosWindowId }
     | { type: 'reconcile-area'; area: TalosWindowArea }
+    | { type: 'reconcile-areas'; area: TalosWindowArea; tileArea?: TalosWindowArea; maximizeArea: TalosWindowArea; fullscreenArea: TalosWindowArea }
     | { type: 'set-breakpoint'; breakpoint: TalosWindowBreakpoint; area: TalosWindowArea }
 
 function emptyPersistedLayout(): TalosPersistedWindowLayoutV2 {
@@ -162,6 +179,65 @@ function dockBounds(id: TalosWindowId, area: TalosWindowArea): TalosWindowBounds
     }, area)
 }
 
+function tilePresentation(target: TalosWindowTileTarget): TalosWindowPresentation {
+    if (target === 'maximize-workspace') return 'maximized'
+    if (target === 'fullscreen-workspace') return 'fullscreen'
+    return 'floating'
+}
+
+function isSideTile(target: TalosWindowTileTarget): target is 'left-half' | 'right-half' {
+    return target === 'left-half' || target === 'right-half'
+}
+
+function sideTileBounds(
+    id: TalosWindowId,
+    target: 'left-half' | 'right-half',
+    requested: TalosWindowBounds,
+    tileArea: TalosWindowArea,
+): TalosWindowBounds {
+    const area = validArea(tileArea)
+    const areaWidth = area.right - area.left
+    const minWindowWidth = Math.min(TALOS_WINDOW_MIN_SIZES[id].width, Math.max(1, Math.floor(areaWidth / 2)))
+    const minChatWidth = Math.min(420, Math.max(280, Math.floor(areaWidth * 0.3)))
+    const maxWindowWidth = Math.max(minWindowWidth, areaWidth - minChatWidth)
+    const width = Math.min(maxWindowWidth, Math.max(minWindowWidth, Math.round(requested.width)))
+    return {
+        x: target === 'left-half' ? area.left : area.right - width,
+        y: area.top,
+        width,
+        height: area.bottom - area.top,
+    }
+}
+
+function sameBounds(left: TalosWindowBounds, right: TalosWindowBounds): boolean {
+    return Math.abs(left.x - right.x) <= 1
+        && Math.abs(left.y - right.y) <= 1
+        && Math.abs(left.width - right.width) <= 1
+        && Math.abs(left.height - right.height) <= 1
+}
+
+function tileBounds(
+    target: TalosWindowTileTarget,
+    tileArea: TalosWindowArea,
+    maximizeArea: TalosWindowArea,
+    fullscreenArea: TalosWindowArea,
+): TalosWindowBounds | null {
+    const resolved = resolveTalosWindowTileBounds(target, {
+        tile: validArea(tileArea),
+        maximize: validArea(maximizeArea),
+        fullscreen: validArea(fullscreenArea),
+    })
+    if (!resolved) return null
+    return resolved
+}
+
+function persistedTileTarget(state: TalosPersistedWindowState | undefined): TalosWindowTileTarget {
+    if (state?.tile_target) return state.tile_target
+    if (state?.presentation === 'maximized') return 'maximize-workspace'
+    if (state?.presentation === 'fullscreen') return 'fullscreen-workspace'
+    return 'none'
+}
+
 function copyWindows(windows: Record<TalosWindowId, TalosManagedWindowState>) {
     return Object.fromEntries(TALOS_WINDOW_IDS.map((id) => [id, { ...windows[id] }])) as Record<TalosWindowId, TalosManagedWindowState>
 }
@@ -193,30 +269,43 @@ export function createTalosWindowManagerState(
     breakpoint: TalosWindowBreakpoint = 'desktop',
     area: TalosWindowArea,
     persistedLayout: TalosPersistedWindowLayoutV2 = emptyPersistedLayout(),
+    maximizeArea: TalosWindowArea = area,
+    fullscreenArea: TalosWindowArea = maximizeArea,
+    tileArea: TalosWindowArea = area,
 ): TalosWindowManagerState {
     const normalizedArea = validArea(area)
+    const normalizedTileArea = validArea(tileArea)
+    const normalizedMaximizeArea = validArea(maximizeArea)
+    const normalizedFullscreenArea = validArea(fullscreenArea)
     const sheetBreakpoint = isSheetBreakpoint(breakpoint)
     const bucket = breakpoint === 'mobile' ? null : persistedLayout.layouts[breakpoint]
     const initialSet = new Set(initialOpen)
     const windows = Object.fromEntries(TALOS_WINDOW_IDS.map((id, index) => {
         const persisted = bucket?.windows[id]
+        const tileTarget = sheetBreakpoint ? 'none' : persistedTileTarget(persisted)
         const presentation = sheetBreakpoint
             ? 'mobile-sheet'
             : persisted?.presentation ?? 'floating'
-        const bounds = sheetBreakpoint
+        const baseBounds = sheetBreakpoint
             ? fullAreaBounds(normalizedArea)
             : persisted?.bounds ?? defaultBounds(id, index, normalizedArea)
+        const resolvedTileBounds = isSideTile(tileTarget) && persisted?.bounds
+            ? sideTileBounds(id, tileTarget, persisted.bounds, normalizedTileArea)
+            : tileBounds(tileTarget, normalizedTileArea, normalizedMaximizeArea, normalizedFullscreenArea)
         return [id, {
             id,
             visibility: initialSet.has(id) ? 'open' : 'closed',
             presentation,
             previousPresentation: 'floating',
-            bounds: presentation === 'maximized'
-                ? fullAreaBounds(normalizedArea)
+            bounds: resolvedTileBounds ?? (presentation === 'maximized'
+                ? fullAreaBounds(normalizedMaximizeArea)
+                : presentation === 'fullscreen'
+                    ? fullAreaBounds(normalizedFullscreenArea)
                 : presentation === 'docked'
                     ? dockBounds(id, normalizedArea)
-                    : clampBounds(id, bounds, normalizedArea),
+                    : clampBounds(id, baseBounds, normalizedArea)),
             restoreBounds: persisted?.restore_bounds ? clampBounds(id, persisted.restore_bounds, normalizedArea) : null,
+            tileTarget,
             zIndex: initialSet.has(id) ? index + 1 : 0,
             launchOrigin: null,
             returnFocusId: null,
@@ -227,6 +316,9 @@ export function createTalosWindowManagerState(
         schemaVersion: 2,
         breakpoint,
         area: normalizedArea,
+        tileArea: normalizedTileArea,
+        maximizeArea: normalizedMaximizeArea,
+        fullscreenArea: normalizedFullscreenArea,
         activeWindowId: null,
         windows,
     }
@@ -253,11 +345,18 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
         target.presentation = isSheetBreakpoint(state.breakpoint)
             ? 'mobile-sheet'
             : target.presentation === 'mobile-sheet' ? target.previousPresentation : target.presentation
-        target.bounds = target.presentation === 'mobile-sheet' || target.presentation === 'maximized'
+        const resolvedTileBounds = isSideTile(target.tileTarget)
+            ? sideTileBounds(action.id, target.tileTarget, target.bounds, state.tileArea)
+            : tileBounds(target.tileTarget, state.tileArea, state.maximizeArea, state.fullscreenArea)
+        target.bounds = resolvedTileBounds ?? (target.presentation === 'mobile-sheet'
             ? fullAreaBounds(state.area)
+            : target.presentation === 'maximized'
+                ? fullAreaBounds(state.maximizeArea)
+                : target.presentation === 'fullscreen'
+                    ? fullAreaBounds(state.fullscreenArea)
             : target.presentation === 'docked'
                 ? dockBounds(action.id, state.area)
-                : clampBounds(action.id, target.bounds, state.area)
+                : clampBounds(action.id, target.bounds, state.area))
         target.launchOrigin = action.launchOrigin ?? target.launchOrigin
         if ('returnFocusId' in action) target.returnFocusId = action.returnFocusId ?? null
         return focusWindow({ ...state, windows }, action.id)
@@ -285,9 +384,17 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
         return focusWindow({ ...state, windows }, action.id)
     }
 
+    if (action.type === 'set-bounds' && isSideTile(state.windows[action.id].tileTarget)) {
+        const target = state.windows[action.id]
+        if (target.visibility !== 'open' || isSheetBreakpoint(state.breakpoint)) return state
+        const windows = copyWindows(state.windows)
+        windows[action.id].bounds = sideTileBounds(action.id, target.tileTarget, action.bounds, state.tileArea)
+        return { ...state, windows }
+    }
+
     if (action.type === 'move' || action.type === 'resize' || action.type === 'set-bounds') {
         const target = state.windows[action.id]
-        if (target.visibility !== 'open' || target.presentation !== 'floating') return state
+        if (target.visibility !== 'open' || target.presentation !== 'floating' || target.tileTarget !== 'none') return state
         const windows = copyWindows(state.windows)
         const bounds = action.type === 'set-bounds'
             ? action.bounds
@@ -304,15 +411,18 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
         if (target.visibility !== 'open' || isSheetBreakpoint(state.breakpoint)) return state
         const windows = copyWindows(state.windows)
         const next = windows[action.id]
-        if (target.presentation === 'maximized') {
-            next.presentation = target.previousPresentation
+        if (target.presentation === 'maximized' || target.presentation === 'fullscreen') {
+            next.presentation = 'floating'
             next.bounds = target.restoreBounds ?? defaultBounds(action.id, TALOS_WINDOW_IDS.indexOf(action.id), state.area)
             next.restoreBounds = null
+            next.tileTarget = 'none'
         } else {
-            next.restoreBounds = { ...target.bounds }
+            if (!next.restoreBounds) next.restoreBounds = { ...target.bounds }
             next.previousPresentation = target.presentation === 'mobile-sheet' ? 'floating' : target.presentation
             next.presentation = 'maximized'
-            next.bounds = fullAreaBounds(state.area)
+            next.tileTarget = 'maximize-workspace'
+            next.bounds = tileBounds(next.tileTarget, state.tileArea, state.maximizeArea, state.fullscreenArea)
+                ?? fullAreaBounds(state.maximizeArea)
         }
         return focusWindow({ ...state, windows }, action.id)
     }
@@ -326,30 +436,56 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
             next.presentation = target.previousPresentation === 'docked' ? 'floating' : target.previousPresentation
             next.bounds = target.restoreBounds ?? defaultBounds(action.id, TALOS_WINDOW_IDS.indexOf(action.id), state.area)
             next.restoreBounds = null
+            next.tileTarget = 'none'
         } else {
-            next.restoreBounds = { ...target.bounds }
+            if (!next.restoreBounds) next.restoreBounds = { ...target.bounds }
             next.previousPresentation = target.presentation === 'mobile-sheet' ? 'floating' : target.presentation
             next.presentation = 'docked'
+            next.tileTarget = 'none'
             next.bounds = dockBounds(action.id, state.area)
         }
         return focusWindow({ ...state, windows }, action.id)
     }
 
     if (action.type === 'snap') {
+        return reduceTalosWindowState(state, {
+            type: 'tile',
+            id: action.id,
+            target: action.side === 'left' ? 'left-half' : 'right-half',
+        })
+    }
+
+    if (action.type === 'tile') {
         const target = state.windows[action.id]
         if (target.visibility !== 'open' || isSheetBreakpoint(state.breakpoint)) return state
+        const nextBounds = tileBounds(action.target, state.tileArea, state.maximizeArea, state.fullscreenArea)
+        if (!nextBounds) return state
         const windows = copyWindows(state.windows)
         const next = windows[action.id]
-        if (!next.restoreBounds) next.restoreBounds = { ...target.bounds }
+        if (next.tileTarget === 'none' && !next.restoreBounds) {
+            next.restoreBounds = clampBounds(action.id, action.restoreBounds ?? target.bounds, state.area)
+        }
         next.previousPresentation = 'floating'
+        next.presentation = tilePresentation(action.target)
+        next.tileTarget = action.target
+        next.bounds = nextBounds
+        return focusWindow({ ...state, windows }, action.id)
+    }
+
+    if (action.type === 'untile') {
+        const target = state.windows[action.id]
+        if (target.visibility !== 'open' || isSheetBreakpoint(state.breakpoint) || target.tileTarget === 'none') return state
+        const windows = copyWindows(state.windows)
+        const next = windows[action.id]
         next.presentation = 'floating'
-        const width = Math.round((state.area.right - state.area.left) / 2)
-        next.bounds = clampBounds(action.id, {
-            x: action.side === 'left' ? state.area.left : state.area.right - width,
-            y: state.area.top,
-            width,
-            height: state.area.bottom - state.area.top,
-        }, state.area)
+        next.previousPresentation = 'floating'
+        next.tileTarget = 'none'
+        next.bounds = clampBounds(
+            action.id,
+            action.bounds ?? target.restoreBounds ?? defaultBounds(action.id, TALOS_WINDOW_IDS.indexOf(action.id), state.area),
+            state.area,
+        )
+        next.restoreBounds = null
         return focusWindow({ ...state, windows }, action.id)
     }
 
@@ -359,6 +495,7 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
         target.presentation = isSheetBreakpoint(state.breakpoint) ? 'mobile-sheet' : 'floating'
         target.previousPresentation = 'floating'
         target.restoreBounds = null
+        target.tileTarget = 'none'
         target.bounds = isSheetBreakpoint(state.breakpoint)
             ? fullAreaBounds(state.area)
             : defaultBounds(action.id, TALOS_WINDOW_IDS.indexOf(action.id), state.area)
@@ -366,16 +503,44 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
     }
 
     if (action.type === 'reconcile-area') {
+        return reduceTalosWindowState(state, {
+            type: 'reconcile-areas',
+            area: action.area,
+            tileArea: state.tileArea,
+            maximizeArea: state.maximizeArea,
+            fullscreenArea: state.fullscreenArea,
+        })
+    }
+
+    if (action.type === 'reconcile-areas') {
         const area = validArea(action.area)
+        const tileArea = validArea(action.tileArea ?? action.area)
+        const maximizeArea = validArea(action.maximizeArea)
+        const fullscreenArea = validArea(action.fullscreenArea)
         const windows = copyWindows(state.windows)
         for (const id of TALOS_WINDOW_IDS) {
             const target = windows[id]
-            if (target.presentation === 'mobile-sheet' || target.presentation === 'maximized') target.bounds = fullAreaBounds(area)
+            const previousDefaultTileBounds = isSideTile(target.tileTarget)
+                ? tileBounds(target.tileTarget, state.tileArea, state.maximizeArea, state.fullscreenArea)
+                : null
+            const nextDefaultTileBounds = isSideTile(target.tileTarget)
+                ? tileBounds(target.tileTarget, tileArea, maximizeArea, fullscreenArea)
+                : null
+            const requestedSideBounds = previousDefaultTileBounds
+                && nextDefaultTileBounds
+                && sameBounds(target.bounds, previousDefaultTileBounds)
+                ? nextDefaultTileBounds
+                : target.bounds
+            const resolvedTileBounds = isSideTile(target.tileTarget)
+                ? sideTileBounds(id, target.tileTarget, requestedSideBounds, tileArea)
+                : tileBounds(target.tileTarget, tileArea, maximizeArea, fullscreenArea)
+            if (target.presentation === 'mobile-sheet') target.bounds = fullAreaBounds(area)
+            else if (resolvedTileBounds) target.bounds = resolvedTileBounds
             else if (target.presentation === 'docked') target.bounds = dockBounds(id, area)
             else target.bounds = clampBounds(id, target.bounds, area)
             if (target.restoreBounds) target.restoreBounds = clampBounds(id, target.restoreBounds, area)
         }
-        return { ...state, area, windows }
+        return { ...state, area, tileArea, maximizeArea, fullscreenArea, windows }
     }
 
     if (action.type === 'set-breakpoint') {
@@ -394,7 +559,8 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
         } else {
             for (const id of TALOS_WINDOW_IDS) {
                 if (windows[id].presentation === 'mobile-sheet') windows[id].presentation = windows[id].previousPresentation
-                windows[id].bounds = clampBounds(id, windows[id].bounds, area)
+                windows[id].bounds = tileBounds(windows[id].tileTarget, state.tileArea, state.maximizeArea, state.fullscreenArea)
+                    ?? clampBounds(id, windows[id].bounds, area)
             }
         }
         return { ...state, breakpoint: action.breakpoint, area, windows }
@@ -412,7 +578,18 @@ function parseBounds(value: unknown): TalosWindowBounds | null {
 }
 
 function parsePresentation(value: unknown): TalosPersistedWindowPresentation | null {
-    return value === 'floating' || value === 'docked' || value === 'maximized' ? value : null
+    return value === 'floating' || value === 'docked' || value === 'maximized' || value === 'fullscreen' ? value : null
+}
+
+function parseTileTarget(value: unknown): Exclude<TalosWindowTileTarget, 'none'> | null {
+    return value === 'left-half'
+        || value === 'right-half'
+        || value === 'top-half'
+        || value === 'bottom-half'
+        || value === 'maximize-workspace'
+        || value === 'fullscreen-workspace'
+        ? value
+        : null
 }
 
 function sanitizeBucket(value: unknown): TalosPersistedWindowBucket {
@@ -429,10 +606,12 @@ function sanitizeBucket(value: unknown): TalosPersistedWindowBucket {
         const presentation = parsePresentation(stateRecord.presentation)
         if (!bounds || !presentation) continue
         const restoreBounds = stateRecord.restore_bounds === null ? null : parseBounds(stateRecord.restore_bounds)
+        const tileTarget = parseTileTarget(stateRecord.tile_target)
         windows[id] = {
             bounds,
             presentation,
             ...(restoreBounds ? { restore_bounds: restoreBounds } : {}),
+            ...(tileTarget ? { tile_target: tileTarget } : {}),
         }
     }
     const activeWindowId = typeof record.active_window_id === 'string' && isTalosWindowId(record.active_window_id)
@@ -517,6 +696,7 @@ export function projectTalosWindowLayout(
             bounds: { ...target.bounds },
             presentation,
             ...(target.restoreBounds ? { restore_bounds: { ...target.restoreBounds } } : {}),
+            ...(target.tileTarget !== 'none' ? { tile_target: target.tileTarget } : {}),
         } satisfies TalosPersistedWindowState]
     })) as Record<TalosWindowId, TalosPersistedWindowState>
     return {

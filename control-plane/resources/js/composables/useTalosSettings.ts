@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { TalosApiError, talosFetch } from '../lib/api'
+import type { TalosBrowserHmiPolicyState } from '../lib/talosBrowserHmiPolicy'
 
 type ApiEnvelope<T> = {
     data: T
@@ -11,6 +12,7 @@ export type TalosWorkspaceSettings = {
     default_model_profile_id?: string | null
     default_context_set_id?: string | null
     preferences: Record<string, unknown>
+    browser_hmi_policy?: TalosBrowserHmiPolicyState
     created_at?: string | null
     updated_at?: string | null
 }

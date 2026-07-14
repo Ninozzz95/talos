@@ -14,6 +14,7 @@ import { createDefaultInteractionProfile, resolveTalosInteractionMotion } from '
 import { createTalosBrowserProductSceneRegistry } from '../../../../motion-v6/productRegistry'
 import { resolveTalosWorkspaceMotionV6 } from '../../../../motion-v6/workspaceRuntime'
 import type { TalosThemeId } from '../../../../lib/talosThemes'
+import { resolveTalosBackgroundPresentation } from '../../../../motion-v6/backgroundPresentation'
 
 const props = defineProps<{
     theme: TalosThemeId
@@ -55,6 +56,10 @@ const effectivePreviewMode = computed(() => (
 const previewStyle = computed(() => {
     const palette = previewRuntime.value.sceneInput.palette[colorMode.value]
     return {
+        ...resolveTalosBackgroundPresentation(
+            previewRuntime.value.sceneInput.parameters,
+            props.preferences.glow_intensity,
+        ).style,
         '--talos-background': palette.background,
         '--talos-panel': palette.surface,
         '--talos-panel-soft': palette.surface_muted,
@@ -143,11 +148,12 @@ onBeforeUnmount(() => interactions.dispose())
         </header>
 
         <div
-            class="relative isolate aspect-[16/9] min-h-56 w-full overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-background)]"
+            class="talos-background-procedural relative isolate aspect-[16/9] min-h-56 w-full overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-background)]"
             :data-preview-color-mode="colorMode"
             :style="previewStyle"
         >
             <TalosMotionStage
+                v-if="previewRuntime.decision.backgroundEnabled"
                 :key="stageRevision"
                 class="absolute inset-0 h-full w-full"
                 :registry="registry"
@@ -158,6 +164,8 @@ onBeforeUnmount(() => interactions.dispose())
                 :background-enabled="previewRuntime.decision.backgroundEnabled"
                 :paused="paused || previewRuntime.decision.paused"
             />
+            <div v-if="previewRuntime.decision.backgroundEnabled" class="talos-theme-background-glow pointer-events-none absolute inset-0" data-talos-background-glow />
+            <div v-if="previewRuntime.decision.backgroundEnabled" class="talos-theme-background-scrim pointer-events-none absolute inset-0" data-talos-background-scrim />
 
             <div class="pointer-events-none absolute inset-0 z-10 grid grid-cols-[minmax(0,1fr)_8.5rem] gap-3 p-4">
                 <div ref="sampleWindow" class="self-center overflow-hidden rounded-md border border-[var(--talos-border-strong)] bg-[var(--talos-window-bg)]/95 shadow-xl" data-preview-sample="window">

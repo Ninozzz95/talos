@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { rgbaDifferenceRatio } from './helpers/talosVisibleMotion'
 
 const appEntryPattern = /\/(?:build\/assets\/app-[^/]+\.js|resources\/js\/app\.js)(?:\?.*)?$/
 
@@ -105,13 +106,20 @@ test.beforeEach(async ({ page }) => {
     await signIn(page)
 })
 
-test('hard reload shows the exact server boot logo until Vue has painted', async ({ page }, testInfo) => {
+test('painted-frame hard reload shows the exact animated server boot logo until Vue has painted', async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     const animatedGate = await gateAppEntry(page)
 
     await page.reload({ waitUntil: 'commit' })
     await animatedGate.waitUntilIntercepted()
     await expectServerRenderedBootFrame(page)
+    if (!process.env.TALOS_E2E_BASE_URL && process.env.TALOS_E2E_USE_VITE !== '1') {
+        const appEntrySource = await page.locator('script[type="module"][src]').evaluateAll((scripts) => (
+            scripts.map((script) => (script as HTMLScriptElement).src)
+                .find((source) => /\/build\/assets\/app-[^/]+\.js(?:\?.*)?$/.test(source)) ?? ''
+        ))
+        expect(appEntrySource).toMatch(/\/build\/assets\/app-[^/]+\.js(?:\?.*)?$/)
+    }
 
     const animatedStyles = await page.locator('.edge-main').evaluate((element) => {
         const style = window.getComputedStyle(element)
@@ -122,12 +130,15 @@ test('hard reload shows the exact server boot logo until Vue has painted', async
     const firstDashOffset = await page.locator('.edge-main').evaluate((element) => (
         window.getComputedStyle(element).strokeDashoffset
     ))
+    const firstPaintedFrame = await capturePaintedFrame(page)
     await expect.poll(() => page.locator('.edge-main').evaluate((element) => (
         window.getComputedStyle(element).strokeDashoffset
     )), {
         intervals: [180, 240, 360],
         timeout: 1_500,
     }).not.toBe(firstDashOffset)
+    const secondPaintedFrame = await capturePaintedFrame(page)
+    expect(rgbaDifferenceRatio(firstPaintedFrame, secondPaintedFrame, 4)).toBeGreaterThan(0.00001)
     await testInfo.attach(`talos-boot-loader-painted-frame-${testInfo.project.name}.png`, {
         body: await capturePaintedFrame(page),
         contentType: 'image/png',

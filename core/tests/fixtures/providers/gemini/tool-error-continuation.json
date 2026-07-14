@@ -1,0 +1,18 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-recovered-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The browser timed out, so I could not ground the requested page."
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ]
+  }
+}

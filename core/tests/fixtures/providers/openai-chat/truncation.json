@@ -1,0 +1,15 @@
+{
+  "provider_response": {
+    "id": "chatcmpl-length-1",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "Partial response"
+        },
+        "finish_reason": "length"
+      }
+    ]
+  }
+}

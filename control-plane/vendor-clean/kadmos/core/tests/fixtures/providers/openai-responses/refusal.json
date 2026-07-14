@@ -1,0 +1,19 @@
+{
+  "provider_response": {
+    "id": "resp-refusal-1",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg-refusal-1",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "refusal",
+            "refusal": "I cannot perform that request."
+          }
+        ]
+      }
+    ]
+  }
+}

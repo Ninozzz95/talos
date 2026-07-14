@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { waitForTalosWorkspaceReady as waitForWorkspaceReady } from './helpers/talosWorkspaceReady'
 import type {
     TalosMotionRendererMode,
     TalosMotionV6Preferences,
@@ -23,6 +24,7 @@ function createCompleteMotionV6Preferences(
         scene_override: null,
         speed: 100,
         intensity: 65,
+        glow_intensity: 0,
         density: 100,
         depth: 50,
         trails: 35,
@@ -35,7 +37,7 @@ function createCompleteMotionV6Preferences(
         respect_data_saver: true,
         interface: {
             profile: 'preset',
-            duration_scale: 100,
+            duration_scale: 50,
             intensity: 65,
             easing: 'precise',
             stagger: 40,
@@ -53,11 +55,6 @@ function createCompleteMotionV6Preferences(
 
 async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
-}
-
-async function waitForWorkspaceReady(page: Page) {
-    await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
-    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
 }
 
 async function submitLogin(page: Page, email: string, password: string) {
@@ -477,6 +474,30 @@ test.beforeEach(async ({ page }) => {
     await installTalosApiMocks(page)
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await ensureTalosAuthenticated(page)
+})
+
+test('workspace readiness does not resolve beneath the boot loader', async ({ page }) => {
+    await page.setContent(`
+        <main id="talos-workspace-root" data-authenticated="true" data-talos-app-ready="false">
+            <label>Message TALOS<textarea aria-label="Message TALOS"></textarea></label>
+        </main>
+        <div data-talos-boot-loader="true"></div>
+    `)
+    await page.evaluate(() => {
+        window.setTimeout(() => {
+            document.querySelector('#talos-workspace-root')?.setAttribute('data-talos-app-ready', 'true')
+            document.querySelector('[data-talos-boot-loader="true"]')?.remove()
+        }, 750)
+    })
+    const startedAt = Date.now()
+    await waitForWorkspaceReady(page)
+
+    const state = await page.evaluate(() => ({
+        ready: document.querySelector('#talos-workspace-root')?.getAttribute('data-talos-app-ready'),
+        loaderPresent: document.querySelector('[data-talos-boot-loader="true"]') !== null,
+    }))
+    expect(state).toEqual({ ready: 'true', loaderPresent: false })
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(650)
 })
 
 test('warm window interactions meet responsiveness and layout stability budgets', async ({ page, isMobile }) => {

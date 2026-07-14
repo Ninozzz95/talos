@@ -6,10 +6,17 @@
       <h1>TALOS Browse Fixture</h1>
       <p>This page is available for read-only browser worker tests.</p>
       <a href="https://example.com">Example link</a>
+      <a href="https://example.com/search-result">Bounded result link</a>
+      <a href="javascript:alert('nope')">JavaScript link</a>
+      <a href="data:text/html,pwned">Data link</a>
+      <a href="https://example.com/" id="oversized-link">Oversized link</a>
       <button>Open vehicle</button>
       <button>Open vehicle</button>
       <div role="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" aria-label="Bounded custom role">Role boundary fixture</div>
     </main>
+    <script>
+      document.querySelector('#oversized-link').setAttribute('href', 'https://example.com/' + 'x'.repeat(2100));
+    </script>
     <script>
       setTimeout(() => {
         const detail = document.createElement('p');

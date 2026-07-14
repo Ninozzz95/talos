@@ -1,0 +1,51 @@
+{
+  "schema_version": "talos_tool_result_v1",
+  "tool_use_id": "call_browser_1",
+  "isError": false,
+  "content": [
+    {
+      "type": "text",
+      "text": "Page inspected."
+    },
+    {
+      "type": "image",
+      "mimeType": "image/png",
+      "data": "iVBORw0KGgo="
+    },
+    {
+      "type": "audio",
+      "mimeType": "audio/wav",
+      "data": "UklGRg=="
+    },
+    {
+      "type": "resource_link",
+      "uri": "talos-artifact://artifact-1",
+      "name": "Browser screenshot",
+      "mimeType": "image/png"
+    },
+    {
+      "type": "resource",
+      "resource": {
+        "uri": "talos-artifact://artifact-1/snapshot",
+        "mimeType": "text/plain",
+        "text": "Example Domain"
+      }
+    }
+  ],
+  "structuredContent": {
+    "url": "https://example.com",
+    "title": "Example Domain",
+    "state_version": 4,
+    "evidence_ids": [
+      "artifact-1"
+    ]
+  },
+  "evidence": [
+    {
+      "artifact_id": "artifact-1",
+      "kind": "screenshot",
+      "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "trusted_boundary": "untrusted_web_content"
+    }
+  ]
+}

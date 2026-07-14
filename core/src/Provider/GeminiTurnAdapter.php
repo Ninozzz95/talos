@@ -1,0 +1,290 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Kadmos\Provider;
+
+use InvalidArgumentException;
+use Kadmos\Tool\ProviderTurnRequest;
+use Kadmos\Tool\ProviderTurnResponse;
+use Kadmos\Tool\ProviderTurnState;
+use Kadmos\Tool\TokenUsage;
+use Kadmos\Tool\ToolCall;
+use Kadmos\Tool\ToolContractGuard;
+use Kadmos\Tool\ToolDefinition;
+use Kadmos\Tool\ToolResult;
+use Throwable;
+
+final class GeminiTurnAdapter implements ProviderTurnAdapter
+{
+    public const ADAPTER_VERSION = 'gemini_generate_content_v1beta';
+
+    public function __construct(
+        private readonly string $endpoint,
+        private readonly string $apiKey,
+        private readonly ProviderTransport $transport,
+        private readonly int $timeoutMs = 30000,
+    ) {
+        ToolContractGuard::nonEmptyString($apiKey, 'Gemini API key', 8192);
+        if ($timeoutMs < 1) {
+            throw new InvalidArgumentException('Gemini timeout must be positive.');
+        }
+        $parts = parse_url($endpoint);
+        if (! is_array($parts)
+            || strtolower((string) ($parts['scheme'] ?? '')) !== 'https'
+            || trim((string) ($parts['host'] ?? '')) === ''
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || isset($parts['query'])
+            || isset($parts['fragment'])) {
+            throw new InvalidArgumentException('Gemini endpoint must be a credential-free HTTPS URL.');
+        }
+    }
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities(
+            provider: 'gemini',
+            adapterVersion: self::ADAPTER_VERSION,
+            nativeTools: true,
+            parallelToolCalls: false,
+            strictSchemas: false,
+            statefulContinuation: false,
+            reasoningContinuationState: true,
+            imageToolResults: false,
+            source: 'adapter_contract',
+            limitations: ['Model-level capabilities still require a successful probe.'],
+        );
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        if (strtolower($request->provider) !== 'gemini') {
+            throw new InvalidArgumentException('Gemini request requires the gemini provider.');
+        }
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $request->systemPrompt]]],
+            'contents' => array_map(
+                static fn (array $message): array => [
+                    'role' => $message['role'] === 'assistant' ? 'model' : 'user',
+                    'parts' => [['text' => $message['content']]],
+                ],
+                $request->messages,
+            ),
+        ];
+        $generationConfig = [];
+        if ($request->maxTokens !== null) {
+            $generationConfig['maxOutputTokens'] = $request->maxTokens;
+        }
+        if ($request->temperature !== null) {
+            $generationConfig['temperature'] = $request->temperature;
+        }
+        if ($generationConfig !== []) {
+            $payload['generationConfig'] = $generationConfig;
+        }
+        if ($request->tools !== []) {
+            $payload['tools'] = [[
+                'functionDeclarations' => array_map($this->providerTool(...), $request->tools),
+            ]];
+            $payload['toolConfig'] = ['functionCallingConfig' => ['mode' => 'AUTO']];
+        }
+
+        return $this->perform($payload);
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        if ($state->provider !== 'gemini') {
+            throw new InvalidArgumentException('Gemini state belongs to another provider.');
+        }
+        $results = $this->correlatedResults($state, $toolResults);
+        $native = $state->nativeStateFor(self::ADAPTER_VERSION);
+        $contents = ToolContractGuard::listArray($native['contents'] ?? null, 'Gemini continuation contents');
+        $modelContent = ToolContractGuard::objectArray($native['model_content'] ?? null, 'Gemini continuation model content');
+        $callNames = ToolContractGuard::objectArray($native['call_names'] ?? null, 'Gemini continuation call names');
+        $contents[] = $modelContent;
+        $responseParts = [];
+        foreach ($state->pendingToolCallIds as $callId) {
+            $name = ToolContractGuard::nonEmptyString($callNames[$callId] ?? null, 'Gemini continuation function name', 128);
+            $responseParts[] = [
+                'functionResponse' => [
+                    'id' => $callId,
+                    'name' => $name,
+                    'response' => $results[$callId]->toRedactedArray(),
+                ],
+            ];
+        }
+        $contents[] = ['role' => 'user', 'parts' => $responseParts];
+
+        $payload = [
+            'systemInstruction' => ToolContractGuard::objectArray($native['systemInstruction'] ?? null, 'Gemini continuation system instruction'),
+            'contents' => $contents,
+        ];
+        foreach (['generationConfig', 'tools', 'toolConfig'] as $field) {
+            if (array_key_exists($field, $native)) {
+                $payload[$field] = $native[$field];
+            }
+        }
+
+        return $this->perform($payload);
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function perform(array $payload): ProviderTurnResponse
+    {
+        try {
+            $response = $this->transport->send(
+                $this->endpoint,
+                $payload,
+                ['Content-Type: application/json', 'x-goog-api-key: '.$this->apiKey],
+                $this->timeoutMs,
+            );
+            if (! is_array($response)) {
+                throw new InvalidArgumentException('Gemini transport returned a non-object response.');
+            }
+
+            return $this->normalize($response, $payload);
+        } catch (ProviderRequestException $exception) {
+            return ProviderTurnResponse::failure(new ProviderFailure(
+                code: 'PROVIDER_HTTP_ERROR',
+                message: sprintf('Provider request failed with HTTP %d.', $exception->status),
+                retryable: $exception->status === 429 || $exception->status >= 500,
+                httpStatus: $exception->status,
+                details: ToolContractGuard::redact(['provider_response' => $exception->responseBody]),
+            ));
+        } catch (Throwable $exception) {
+            return ProviderTurnResponse::failure(new ProviderFailure(
+                code: 'PROVIDER_PROTOCOL_ERROR',
+                message: 'Provider response did not satisfy the Gemini adapter contract.',
+                retryable: false,
+                details: ToolContractGuard::redact(['transport_error' => $exception->getMessage()]),
+            ));
+        }
+    }
+
+    /** @param array<string, mixed> $response @param array<string, mixed> $requestPayload */
+    private function normalize(array $response, array $requestPayload): ProviderTurnResponse
+    {
+        $responseId = is_string($response['responseId'] ?? null) ? $response['responseId'] : null;
+        $usage = TokenUsage::fromGemini(is_array($response['usageMetadata'] ?? null) ? $response['usageMetadata'] : []);
+        $candidates = ToolContractGuard::listArray($response['candidates'] ?? null, 'Gemini candidates');
+        if ($candidates === [] || ! is_array($candidates[0])) {
+            return ProviderTurnResponse::failure(new ProviderFailure(
+                code: 'PROVIDER_RESPONSE_EMPTY',
+                message: 'Gemini response did not contain a candidate.',
+                retryable: false,
+            ), $responseId, usage: $usage);
+        }
+        $candidate = ToolContractGuard::objectArray($candidates[0], 'Gemini candidate');
+        $finishReason = is_string($candidate['finishReason'] ?? null) ? $candidate['finishReason'] : null;
+        $content = ToolContractGuard::objectArray($candidate['content'] ?? null, 'Gemini candidate content');
+        $parts = ToolContractGuard::listArray($content['parts'] ?? null, 'Gemini candidate parts');
+        $texts = [];
+        $toolCalls = [];
+        $callNames = [];
+        foreach ($parts as $index => $part) {
+            $part = ToolContractGuard::objectArray($part, sprintf('Gemini candidate part %d', $index));
+            if (is_string($part['text'] ?? null)) {
+                $texts[] = trim($part['text']);
+            }
+            if (! array_key_exists('functionCall', $part)) {
+                continue;
+            }
+            $function = ToolContractGuard::objectArray($part['functionCall'], sprintf('Gemini functionCall %d', $index));
+            $callId = is_string($function['id'] ?? null) && trim($function['id']) !== ''
+                ? $function['id']
+                : sprintf('gemini:%s:%d', $responseId ?? hash('sha256', json_encode($part, JSON_THROW_ON_ERROR)), $index);
+            $name = ToolContractGuard::nonEmptyString($function['name'] ?? null, sprintf('Gemini functionCall %d name', $index), 128);
+            $toolCalls[] = ToolCall::fromArray([
+                'schema_version' => ToolCall::SCHEMA_VERSION,
+                'provider_call_id' => $callId,
+                'name' => $name,
+                'arguments' => ToolContractGuard::objectArray($function['args'] ?? null, sprintf('Gemini functionCall %d args', $index)),
+                'assistant_preamble' => null,
+                'provider_metadata' => [
+                    'adapter' => self::ADAPTER_VERSION,
+                    'response_id' => $responseId,
+                    'stop_reason' => $finishReason,
+                    'index' => $index,
+                ],
+            ]);
+            $callNames[$callId] = $name;
+        }
+        $text = trim(implode("\n", array_filter($texts, static fn (string $value): bool => $value !== '')));
+        if (in_array($finishReason, ['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'], true)) {
+            return ProviderTurnResponse::refusal($text !== '' ? $text : 'The provider blocked this response.', $responseId, $finishReason, $usage);
+        }
+        if ($finishReason === 'MAX_TOKENS') {
+            return ProviderTurnResponse::incomplete($text !== '' ? $text : 'The provider response was truncated.', $responseId, $finishReason, $usage);
+        }
+        if ($toolCalls !== []) {
+            $toolCalls = array_map(
+                static fn (ToolCall $call): ToolCall => ToolCall::fromArray([
+                    ...$call->toArray(),
+                    'assistant_preamble' => $text !== '' ? $text : null,
+                ]),
+                $toolCalls,
+            );
+            $native = [
+                'systemInstruction' => $requestPayload['systemInstruction'],
+                'contents' => $requestPayload['contents'],
+                'model_content' => $content,
+                'call_names' => $callNames,
+            ];
+            foreach (['generationConfig', 'tools', 'toolConfig'] as $field) {
+                if (array_key_exists($field, $requestPayload)) {
+                    $native[$field] = $requestPayload[$field];
+                }
+            }
+            $state = new ProviderTurnState(
+                provider: 'gemini',
+                adapterVersion: self::ADAPTER_VERSION,
+                responseId: $responseId,
+                continuationKind: 'content_history',
+                nativeState: $native,
+                pendingToolCallIds: array_map(static fn (ToolCall $call): string => $call->providerCallId, $toolCalls),
+            );
+
+            return ProviderTurnResponse::toolCalls($text !== '' ? $text : null, $toolCalls, $state, $responseId, $finishReason, $usage);
+        }
+        if ($text === '') {
+            return ProviderTurnResponse::failure(new ProviderFailure(
+                code: 'PROVIDER_RESPONSE_EMPTY',
+                message: 'Gemini response contained neither final text nor function calls.',
+                retryable: false,
+            ), $responseId, $finishReason, $usage);
+        }
+
+        return ProviderTurnResponse::final($text, $responseId, $finishReason, $usage);
+    }
+
+    /** @param list<ToolResult> $toolResults @return array<string, ToolResult> */
+    private function correlatedResults(ProviderTurnState $state, array $toolResults): array
+    {
+        ToolContractGuard::listArray($toolResults, 'Gemini continuation tool results');
+        $results = [];
+        foreach ($toolResults as $result) {
+            if (! $result instanceof ToolResult || isset($results[$result->toolUseId])) {
+                throw new InvalidArgumentException('Gemini continuation requires unique ToolResult values.');
+            }
+            $results[$result->toolUseId] = $result;
+        }
+        if (array_keys($results) !== $state->pendingToolCallIds) {
+            throw new InvalidArgumentException('Gemini continuation results must match pending function call IDs in order.');
+        }
+
+        return $results;
+    }
+
+    /** @return array<string, mixed> */
+    private function providerTool(ToolDefinition $tool): array
+    {
+        $wireDefinition = $tool->toWireArray();
+
+        return [
+            'name' => $tool->name,
+            'description' => $tool->description,
+            'parametersJsonSchema' => $wireDefinition['inputSchema'],
+        ];
+    }
+}

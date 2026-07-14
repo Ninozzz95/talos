@@ -37,15 +37,44 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 export function useTalosWorkspaceBootstrap(deps: TalosWorkspaceBootstrapDependencies) {
-    async function refreshModelAndContext() {
-        await Promise.allSettled([deps.loadModelProfiles(), deps.loadModelRoutingProfiles(), deps.loadContextSets()])
-        if (!deps.selectedModelProfileId.value && !deps.selectedModelRoutingProfileId.value && deps.callableModelProfiles.value.length > 0) {
+    function reconcileModelSelection(preferredModelProfileId: string | null = null) {
+        const previousModelProfileId = deps.selectedModelProfileId.value
+        const previousRoutingProfileId = deps.selectedModelRoutingProfileId.value
+        const preferredProfile = preferredModelProfileId
+            ? deps.callableModelProfiles.value.find((profile) => profile.id === preferredModelProfileId)
+            : null
+        const selectedProfileIsUsable = deps.callableModelProfiles.value.some((profile) => profile.id === previousModelProfileId)
+        const selectedRouteIsUsable = deps.usableModelRoutingProfiles.value.some((profile) => profile.id === previousRoutingProfileId)
+
+        if (preferredProfile) {
+            deps.selectedModelProfileId.value = preferredProfile.id
+            deps.selectedModelRoutingProfileId.value = ''
+        } else if (selectedProfileIsUsable) {
+            deps.selectedModelRoutingProfileId.value = ''
+        } else if (selectedRouteIsUsable) {
+            deps.selectedModelProfileId.value = ''
+        } else if (deps.callableModelProfiles.value.length > 0) {
             deps.selectedModelProfileId.value = deps.callableModelProfiles.value[0].id
-            deps.saveWorkspacePreferences()
-        } else if (!deps.selectedModelProfileId.value && !deps.selectedModelRoutingProfileId.value && deps.usableModelRoutingProfiles.value.length > 0) {
+            deps.selectedModelRoutingProfileId.value = ''
+        } else if (deps.usableModelRoutingProfiles.value.length > 0) {
+            deps.selectedModelProfileId.value = ''
             deps.selectedModelRoutingProfileId.value = deps.usableModelRoutingProfiles.value[0].id
+        } else {
+            deps.selectedModelProfileId.value = ''
+            deps.selectedModelRoutingProfileId.value = ''
+        }
+
+        if (
+            deps.selectedModelProfileId.value !== previousModelProfileId
+            || deps.selectedModelRoutingProfileId.value !== previousRoutingProfileId
+        ) {
             deps.saveWorkspacePreferences()
         }
+    }
+
+    async function refreshModelAndContext(preferredModelProfileId: string | null = null) {
+        await Promise.allSettled([deps.loadModelProfiles(), deps.loadModelRoutingProfiles(), deps.loadContextSets()])
+        reconcileModelSelection(preferredModelProfileId)
     }
 
     async function loadPersistedWorkspaceSettings() {
@@ -80,6 +109,7 @@ export function useTalosWorkspaceBootstrap(deps: TalosWorkspaceBootstrapDependen
         try {
             await refreshModelAndContext()
             await loadPersistedWorkspaceSettings()
+            reconcileModelSelection()
         } catch (error) {
             deps.uiError.value = errorMessage(error, 'TALOS could not load model and context state.')
         }
@@ -98,6 +128,7 @@ export function useTalosWorkspaceBootstrap(deps: TalosWorkspaceBootstrapDependen
 
     return {
         refreshModelAndContext,
+        reconcileModelSelection,
         loadPersistedWorkspaceSettings,
         applyQueryModules,
         initialize,

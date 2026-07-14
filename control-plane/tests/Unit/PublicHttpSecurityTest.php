@@ -160,6 +160,116 @@ final class PublicHttpSecurityTest extends TestCase
         $this->assertSame(0, $resolutionAttempts);
     }
 
+    public function test_no_dns_mode_skips_hostname_resolution_but_keeps_literal_and_reserved_host_blocks(): void
+    {
+        $resolutionAttempts = 0;
+        $policy = new PublicHttpUrlPolicy(
+            resolver: static function (string $host) use (&$resolutionAttempts): array {
+                $resolutionAttempts++;
+
+                return ['93.184.216.34'];
+            },
+        );
+
+        $allowed = $policy->inspect(
+            'https://never-resolves.example/path',
+            requireResolution: true,
+            resolveHostname: false,
+        );
+
+        $this->assertTrue($allowed['allowed']);
+        $this->assertSame([], $allowed['resolved_ips']);
+        $this->assertSame(0, $resolutionAttempts);
+
+        foreach ([
+            'http://localhost/path',
+            'http://worker.localhost/path',
+            'http://metadata.google.internal/path',
+            'http://127.0.0.1/path',
+            'http://169.254.169.254/latest/meta-data',
+        ] as $blockedUrl) {
+            $decision = $policy->inspect($blockedUrl, resolveHostname: false);
+
+            $this->assertFalse($decision['allowed'], $blockedUrl);
+            $this->assertSame('private network host blocked', $decision['reason'], $blockedUrl);
+        }
+    }
+
+    public function test_trusted_configured_service_policy_pins_an_exact_private_service_without_weakening_public_urls(): void
+    {
+        $resolver = static fn (string $host): array => $host === 'searxng'
+            ? ['172.24.0.12']
+            : [];
+        $trustedPolicy = PublicHttpUrlPolicy::forTrustedServiceHosts(['searxng'], $resolver);
+        $publicPolicy = new PublicHttpUrlPolicy(resolver: $resolver);
+
+        $trustedDecision = $trustedPolicy->inspect('http://searxng:8080/search', requireResolution: true);
+        $publicDecision = $publicPolicy->inspect('http://searxng:8080/search', requireResolution: true);
+        $unlistedDecision = $trustedPolicy->inspect('http://metadata:8080/search', requireResolution: true);
+
+        $this->assertTrue($trustedDecision['allowed']);
+        $this->assertSame(['172.24.0.12'], $trustedDecision['resolved_ips']);
+        $this->assertFalse($publicDecision['allowed']);
+        $this->assertSame('private network host blocked', $publicDecision['reason']);
+        $this->assertFalse($unlistedDecision['allowed']);
+        $this->assertSame('host is not allowlisted', $unlistedDecision['reason']);
+
+        $pinning = new PublicHttpRequestPinning(
+            $trustedPolicy,
+            curlResolveAvailable: true,
+            requirePrimaryIpEvidence: false,
+        );
+        $pin = $pinning->pin('http://searxng:8080/search');
+
+        $this->assertTrue($pin['allowed']);
+        $this->assertSame(['searxng:8080:172.24.0.12'], $pin['curl_resolve']);
+    }
+
+    public function test_exact_allowlisted_trusted_loopback_hosts_resolve_and_pin_while_generic_no_dns_policy_rejects_them(): void
+    {
+        $localhostPolicy = PublicHttpUrlPolicy::forTrustedServiceHosts(
+            ['localhost'],
+            static fn (string $host): array => ['127.0.0.1', '::1'],
+        );
+        $localhostDecision = $localhostPolicy->inspect('http://localhost:8080/search', requireResolution: true);
+        $localhostPin = (new PublicHttpRequestPinning(
+            $localhostPolicy,
+            curlResolveAvailable: true,
+            requirePrimaryIpEvidence: false,
+        ))->pin('http://localhost:8080/search');
+
+        $literalPolicy = PublicHttpUrlPolicy::forTrustedServiceHosts(['127.0.0.1']);
+        $literalDecision = $literalPolicy->inspect('http://127.0.0.1:8080/search', requireResolution: true);
+        $literalPin = (new PublicHttpRequestPinning(
+            $literalPolicy,
+            curlResolveAvailable: true,
+            requirePrimaryIpEvidence: false,
+        ))->pin('http://127.0.0.1:8080/search');
+
+        $genericPolicy = new PublicHttpUrlPolicy(
+            resolver: static fn (string $host): array => throw new \RuntimeException('generic policy must not resolve in no-DNS mode'),
+        );
+
+        $this->assertTrue($localhostDecision['allowed']);
+        $this->assertSame(['127.0.0.1', '::1'], $localhostDecision['resolved_ips']);
+        $this->assertTrue($localhostPin['allowed']);
+        $this->assertSame([
+            'localhost:8080:127.0.0.1',
+            'localhost:8080:[::1]',
+        ], $localhostPin['curl_resolve']);
+        $this->assertTrue($literalDecision['allowed']);
+        $this->assertSame(['127.0.0.1'], $literalDecision['resolved_ips']);
+        $this->assertTrue($literalPin['allowed']);
+        $this->assertSame(['127.0.0.1:8080:127.0.0.1'], $literalPin['curl_resolve']);
+
+        foreach (['http://localhost:8080/search', 'http://127.0.0.1:8080/search'] as $url) {
+            $decision = $genericPolicy->inspect($url, resolveHostname: false);
+
+            $this->assertFalse($decision['allowed'], $url);
+            $this->assertSame('private network host blocked', $decision['reason'], $url);
+        }
+    }
+
     #[DataProvider('unsafeProviderUrls')]
     public function test_provider_policy_rejects_credential_bearing_or_ambiguous_url_components(string $url): void
     {

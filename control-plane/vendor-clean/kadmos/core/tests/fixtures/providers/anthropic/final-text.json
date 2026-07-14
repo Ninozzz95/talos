@@ -1,0 +1,18 @@
+{
+  "provider_response": {
+    "id": "msg-final-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "The page is ready."
+      }
+    ],
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 20,
+      "output_tokens": 5
+    }
+  }
+}

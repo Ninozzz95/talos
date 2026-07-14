@@ -1,0 +1,33 @@
+{
+  "provider_response": {
+    "id": "resp-tools-1",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg-preamble-1",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "I will inspect the page.",
+            "annotations": []
+          }
+        ]
+      },
+      {
+        "type": "function_call",
+        "id": "fc-1",
+        "call_id": "call_browser_1",
+        "name": "browser_navigate",
+        "arguments": "{\"url\":\"https://example.com\"}",
+        "status": "completed"
+      }
+    ],
+    "usage": {
+      "input_tokens": 30,
+      "output_tokens": 10,
+      "total_tokens": 40
+    }
+  }
+}

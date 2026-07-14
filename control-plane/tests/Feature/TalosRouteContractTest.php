@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Foundation\Vite;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\HtmlString;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -29,6 +31,49 @@ final class TalosRouteContractTest extends TestCase
             ->assertSee('data-talos-surface="workspace"', false);
     }
 
+    public function test_workspace_receives_the_server_owned_development_browser_evidence_gate(): void
+    {
+        $this->withoutVite();
+        config(['services.talos.browser.dev_evidence' => true]);
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('data-dev-browser-evidence="true"', false);
+
+        $originalEnvironment = $this->app['env'];
+        $this->app['env'] = 'production';
+        try {
+            $this->get('/')
+                ->assertOk()
+                ->assertSee('data-dev-browser-evidence="false"', false);
+        } finally {
+            $this->app['env'] = $originalEnvironment;
+        }
+    }
+
+    public function test_workspace_receives_a_server_owned_development_mode_gate(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('data-development-mode="true"', false);
+
+        $originalEnvironment = $this->app['env'];
+        $this->app['env'] = 'production';
+        try {
+            $this->get('/')
+                ->assertOk()
+                ->assertSee('data-development-mode="false"', false);
+        } finally {
+            $this->app['env'] = $originalEnvironment;
+        }
+    }
+
     public function test_browse_deep_link_boots_the_unified_workspace_with_browse_enabled(): void
     {
         $this->withoutVite();
@@ -43,21 +88,32 @@ final class TalosRouteContractTest extends TestCase
 
     public function test_root_removes_stale_local_vite_hot_file_before_rendering(): void
     {
-        $this->withoutVite();
         $user = User::factory()->create();
+        $hotFile = storage_path('framework/testing/talos-route-contract.hot');
+        $vite = new class extends Vite
+        {
+            public function __invoke($entrypoints, $buildDirectory = null): HtmlString
+            {
+                return new HtmlString('');
+            }
+        };
+        $vite->useHotFile($hotFile);
+        $this->swap(Vite::class, $vite);
+        $this->assertSame($hotFile, $vite->hotFile());
 
-        file_put_contents(public_path('hot'), 'http://127.0.0.1:1');
+        file_put_contents($hotFile, 'http://127.0.0.1:1');
 
         try {
             $this->actingAs($user)
                 ->get('/')
                 ->assertOk();
 
-            $this->assertFileDoesNotExist(public_path('hot'));
+            $this->assertFileDoesNotExist($hotFile);
         } finally {
-            if (file_exists(public_path('hot'))) {
-                unlink(public_path('hot'));
+            if (file_exists($hotFile)) {
+                unlink($hotFile);
             }
+            app(Vite::class)->useHotFile(public_path('hot'));
         }
     }
 

@@ -1,10 +1,13 @@
 import { computed, ref } from 'vue'
-import { talosFetch } from '../lib/api'
+import { TalosApiError, talosFetch } from '../lib/api'
 import type {
     TalosBrowserActivity,
     TalosBrowserArtifact,
     TalosBrowserEvent,
+    TalosBrowserHmiChallenge,
+    TalosBrowserHmiExecution,
     TalosBrowserMode,
+    TalosBrowserPointerFrame,
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
 } from '../lib/talosTypes'
@@ -24,7 +27,13 @@ function artifactPreviewUrl(artifactId: string, talosSessionId: string) {
     return `/api/talos/browser/artifacts/${idPath(artifactId)}/preview?${query}`
 }
 
-export function useTalosBrowse() {
+function browserInteractionId() {
+    const interactionId = globalThis.crypto?.randomUUID?.()
+    if (!interactionId) throw new Error('Secure browser interaction identity is unavailable.')
+    return interactionId
+}
+
+export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     const boundTalosSessionId = ref<string | null>(null)
     const sessions = ref<TalosBrowserSession[]>([])
     const activeSession = ref<TalosBrowserSession | null>(null)
@@ -43,7 +52,17 @@ export function useTalosBrowse() {
     const collectionError = ref<string | null>(null)
     const sessionError = ref<string | null>(null)
     const mutationError = ref<string | null>(null)
+    const interactionPending = ref(false)
+    const interactionError = ref<string | null>(null)
+    const pendingInteractionApproval = ref<TalosBrowserHmiChallenge | null>(null)
     let scopeRevision = 0
+    let browseIntentRevision = 0
+    let enableOperation: {
+        talosSessionId: string
+        revision: number
+        intentRevision: number
+        promise: Promise<TalosBrowserSession | null>
+    } | null = null
 
     function setMutationError(error: unknown, fallback: string) {
         mutationError.value = error instanceof Error ? error.message : fallback
@@ -51,6 +70,7 @@ export function useTalosBrowse() {
 
     function sessionStatus(session: TalosBrowserSession | null): TalosBrowserMode['status'] {
         if (!session) return 'disconnected'
+        if (session.status === 'recovery_required') return 'recovery_required'
         if (session.status === 'active') return 'active'
         if (session.status === 'ready') return 'ready'
         if (session.status === 'closed') return 'stopped'
@@ -76,6 +96,9 @@ export function useTalosBrowse() {
         collectionError.value = null
         sessionError.value = null
         mutationError.value = null
+        interactionPending.value = false
+        interactionError.value = null
+        pendingInteractionApproval.value = null
         loadingCollection.value = false
         loadingSession.value = false
         mutating.value = false
@@ -87,6 +110,7 @@ export function useTalosBrowse() {
         if (boundTalosSessionId.value === normalizedId) return
 
         scopeRevision += 1
+        browseIntentRevision += 1
         boundTalosSessionId.value = normalizedId
         resetScopedState()
     }
@@ -101,6 +125,10 @@ export function useTalosBrowse() {
 
     function scopeIsCurrent(talosSessionId: string, revision: number) {
         return boundTalosSessionId.value === talosSessionId && scopeRevision === revision
+    }
+
+    function browseIntentIsCurrent(talosSessionId: string, revision: number, intentRevision: number) {
+        return scopeIsCurrent(talosSessionId, revision) && browseIntentRevision === intentRevision
     }
 
     function assertScopedSession(session: TalosBrowserSession, talosSessionId: string) {
@@ -118,7 +146,7 @@ export function useTalosBrowse() {
         const screenshot = session.last_screenshot_artifact_id
             ? artifactPreviewUrl(session.last_screenshot_artifact_id, session.talos_session_id ?? '')
             : null
-        const snapshot = session.last_snapshot_artifact_id
+        const snapshot = options.devBrowserEvidence === true && session.last_snapshot_artifact_id
             ? (await talosFetch<ApiEnvelope<TalosBrowserSnapshotPreview>>(artifactPreviewUrl(session.last_snapshot_artifact_id, session.talos_session_id ?? ''), { headers: scopedHeaders(session.talos_session_id ?? '') })).data
             : null
 
@@ -185,12 +213,14 @@ export function useTalosBrowse() {
         if (browserMode.value.enabled) setBrowserMode(true, session)
     }
 
-    async function createSession() {
+    async function createSession(activationGuard: () => boolean = () => true) {
         const talosSessionId = requiredTalosSessionId()
         const revision = scopeRevision
-        mutating.value = true
-        mutationError.value = null
-        browserMode.value = { ...browserMode.value, enabled: true, status: 'starting' }
+        if (activationGuard()) {
+            mutating.value = true
+            mutationError.value = null
+            browserMode.value = { ...browserMode.value, enabled: true, status: 'starting' }
+        }
         try {
             const response = await talosFetch<ApiEnvelope<TalosBrowserSession>>('/api/talos/browser/sessions', {
                 method: 'POST',
@@ -198,38 +228,65 @@ export function useTalosBrowse() {
                 headers: scopedHeaders(talosSessionId),
             })
             assertScopedSession(response.data, talosSessionId)
-            if (!scopeIsCurrent(talosSessionId, revision)) return response.data
+            if (!scopeIsCurrent(talosSessionId, revision) || !activationGuard()) return response.data
             await refreshActive(response.data, talosSessionId, revision)
+            if (!activationGuard()) return response.data
             setBrowserMode(true, response.data)
             return response.data
         } catch (error) {
-            if (scopeIsCurrent(talosSessionId, revision)) {
+            if (scopeIsCurrent(talosSessionId, revision) && activationGuard()) {
                 setMutationError(error, 'TALOS could not start a browser session.')
                 browserMode.value = { ...browserMode.value, enabled: true, status: 'failed' }
             }
             throw error
         } finally {
-            if (scopeIsCurrent(talosSessionId, revision)) mutating.value = false
+            if (scopeIsCurrent(talosSessionId, revision) && activationGuard()) mutating.value = false
         }
     }
 
-    async function enableBrowse() {
-        const talosSessionId = requiredTalosSessionId()
-        const revision = scopeRevision
+    async function performEnableBrowse(talosSessionId: string, revision: number, intentRevision: number) {
+        if (!browseIntentIsCurrent(talosSessionId, revision, intentRevision)) return null
         browserMode.value = { ...browserMode.value, enabled: true, status: 'starting' }
         if (sessions.value.length === 0) await loadSessions()
-        if (!scopeIsCurrent(talosSessionId, revision)) return null
-        const existing = activeSession.value ?? sessions.value.find((session) => ['ready', 'active'].includes(session.status)) ?? null
-        if (existing && ['ready', 'active'].includes(existing.status)) {
-            const selected = activeSession.value ?? await selectSession(existing.id)
-            if (selected) setBrowserMode(true, selected)
-            return selected
+        if (!browseIntentIsCurrent(talosSessionId, revision, intentRevision)) return null
+        const resumableStatuses = ['ready', 'active', 'recovery_required']
+        const existing = activeSession.value ?? sessions.value.find((session) => resumableStatuses.includes(session.status)) ?? null
+        if (existing && resumableStatuses.includes(existing.status)) {
+            const selected = await selectSession(existing.id)
+            if (!browseIntentIsCurrent(talosSessionId, revision, intentRevision)) return null
+            if (selected && resumableStatuses.includes(selected.status)) {
+                setBrowserMode(true, selected)
+                return selected
+            }
         }
 
-        return createSession()
+        const created = await createSession(() => browseIntentIsCurrent(talosSessionId, revision, intentRevision))
+        return browseIntentIsCurrent(talosSessionId, revision, intentRevision) ? created : null
+    }
+
+    function enableBrowse() {
+        const talosSessionId = requiredTalosSessionId()
+        const revision = scopeRevision
+        if (enableOperation
+            && enableOperation.talosSessionId === talosSessionId
+            && enableOperation.revision === revision
+            && enableOperation.intentRevision === browseIntentRevision) {
+            return enableOperation.promise
+        }
+
+        const intentRevision = ++browseIntentRevision
+        let promise: Promise<TalosBrowserSession | null>
+        promise = performEnableBrowse(talosSessionId, revision, intentRevision).finally(() => {
+            if (enableOperation?.promise === promise) enableOperation = null
+        })
+        enableOperation = { talosSessionId, revision, intentRevision, promise }
+
+        return promise
     }
 
     function disableBrowse() {
+        browseIntentRevision += 1
+        mutating.value = false
         setBrowserMode(false)
     }
 
@@ -282,6 +339,9 @@ export function useTalosBrowse() {
     }
 
     async function captureSnapshot() {
+        if (options.devBrowserEvidence !== true) {
+            throw new Error('Raw browser evidence is disabled outside the explicit development gate.')
+        }
         const session = activeSession.value
         if (!session) return
         const talosSessionId = requiredTalosSessionId()
@@ -320,6 +380,202 @@ export function useTalosBrowse() {
         }
     }
 
+    function interactionErrorCode(error: unknown) {
+        if (!(error instanceof TalosApiError) || !error.details || typeof error.details !== 'object' || Array.isArray(error.details)) return null
+        const code = (error.details as { code?: unknown }).code
+        return typeof code === 'string' ? code : null
+    }
+
+    function confirmationChallenge(error: unknown): TalosBrowserHmiChallenge | null {
+        if (!(error instanceof TalosApiError) || error.status !== 428 || !error.details || typeof error.details !== 'object' || Array.isArray(error.details)) return null
+        const envelope = error.details as { code?: unknown; details?: unknown }
+        if (envelope.code !== 'TALOS_BROWSER_HMI_CONFIRMATION_REQUIRED'
+            || !envelope.details
+            || typeof envelope.details !== 'object'
+            || Array.isArray(envelope.details)) return null
+        const details = envelope.details as Record<string, unknown>
+        const action = details.action
+        if (typeof details.approval_id !== 'string'
+            || typeof details.request_hash !== 'string'
+            || !/^sha256:[a-f0-9]{64}$/.test(details.request_hash)
+            || typeof details.expires_at !== 'string'
+            || !action
+            || typeof action !== 'object'
+            || Array.isArray(action)) return null
+        const typedAction = action as Record<string, unknown>
+        if (!['category', 'label', 'origin', 'consequence'].every((field) => typeof typedAction[field] === 'string')) return null
+
+        return details as unknown as TalosBrowserHmiChallenge
+    }
+
+    function assertInteractiveFrame(frame: TalosBrowserPointerFrame) {
+        const session = activeSession.value
+        const artifactHash = frame.artifact.sha256?.replace(/^sha256:/, '') ?? ''
+        if (!session
+            || session.id !== frame.browserSessionId
+            || session.last_screenshot_artifact_id !== frame.artifact.id
+            || session.state_version !== frame.artifact.state_version
+            || !session.capabilities.includes('interact')
+            || !/^[a-f0-9]{64}$/.test(artifactHash)
+            || !Number.isFinite(frame.normalizedX)
+            || frame.normalizedX < 0
+            || frame.normalizedX > 1
+            || !Number.isFinite(frame.normalizedY)
+            || frame.normalizedY < 0
+            || frame.normalizedY > 1
+            || ![1, 2].includes(frame.clickCount)) {
+            throw new Error('The selected browser frame is not current or interactive.')
+        }
+
+        return { session, artifactHash }
+    }
+
+    async function applyInteraction(execution: TalosBrowserHmiExecution, talosSessionId: string, revision: number) {
+        assertScopedSession(execution.session, talosSessionId)
+        if (!scopeIsCurrent(talosSessionId, revision)) return
+        browserMode.value = { ...browserMode.value, enabled: true }
+        await refreshActive(execution.session, talosSessionId, revision)
+        if (scopeIsCurrent(talosSessionId, revision)) {
+            recordInteractionFrame(execution)
+            latestScreenshot.value = execution.screenshot.preview_url
+                ? `${execution.screenshot.preview_url}?${new URLSearchParams({ talos_session_id: talosSessionId })}`
+                : artifactPreviewUrl(execution.screenshot.id, talosSessionId)
+            setBrowserMode(true, execution.session)
+        }
+    }
+
+    function recordInteractionFrame(execution: TalosBrowserHmiExecution) {
+        const artifactId = execution.screenshot.id
+        const alreadyPresent = events.value.some((event) => {
+            const payload = event.payload ?? {}
+            const operation = typeof payload.operation === 'string' ? payload.operation : ''
+            const eventType = event.type ?? event.event_type ?? ''
+            if (operation !== 'screenshot' && !eventType.includes('screenshot')) return false
+            if (payload.screenshot_artifact_id === artifactId || payload.artifact_id === artifactId) return true
+
+            return Array.isArray(payload.artifact_ids) && payload.artifact_ids.includes(artifactId)
+        })
+        if (alreadyPresent) return
+
+        events.value = [...events.value, {
+            id: `hmi-frame-${artifactId}`,
+            type: 'hmi.evidence.persisted',
+            actor: 'system',
+            payload: {
+                operation: 'screenshot',
+                screenshot_artifact_id: artifactId,
+                artifact_ids: [artifactId],
+            },
+            created_at: execution.screenshot.created_at ?? new Date().toISOString(),
+        }]
+    }
+
+    async function refreshAfterStale(sessionId: string) {
+        try {
+            await selectSession(sessionId)
+            interactionError.value = 'The page changed before the action. Review the refreshed frame and try again.'
+            return true
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : 'Browser refresh failed.'
+            interactionError.value = `Frame changed, but TALOS could not refresh the current browser capture. ${detail}`
+            return false
+        }
+    }
+
+    async function interactWithScreenshot(frame: TalosBrowserPointerFrame) {
+        if (interactionPending.value) throw new Error('A browser interaction is already in progress.')
+        const { session, artifactHash } = assertInteractiveFrame(frame)
+        const talosSessionId = requiredTalosSessionId()
+        const revision = scopeRevision
+        interactionPending.value = true
+        interactionError.value = null
+        pendingInteractionApproval.value = null
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosBrowserHmiExecution>>(`/api/talos/browser/sessions/${idPath(session.id)}/interactions/pointer`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    schema_version: 'talos_browser_hmi_pointer_v2',
+                    interaction_id: browserInteractionId(),
+                    artifact_id: frame.artifact.id,
+                    artifact_sha256: `sha256:${artifactHash}`,
+                    state_version: frame.artifact.state_version,
+                    normalized_x: frame.normalizedX,
+                    normalized_y: frame.normalizedY,
+                    button: 'left',
+                    click_count: frame.clickCount,
+                }),
+                headers: scopedHeaders(talosSessionId),
+            })
+            await applyInteraction(response.data, talosSessionId, revision)
+
+            return { status: 'executed' as const, ...response.data.interaction, screenshot: response.data.screenshot, snapshot: response.data.snapshot }
+        } catch (error) {
+            const challenge = confirmationChallenge(error)
+            if (challenge && scopeIsCurrent(talosSessionId, revision)) {
+                pendingInteractionApproval.value = challenge
+                browserMode.value = { ...browserMode.value, enabled: true, status: 'awaiting_approval' }
+                return { status: 'confirmation_required' as const, challenge }
+            }
+            const code = interactionErrorCode(error)
+            if (code === 'TALOS_BROWSER_FRAME_STALE' || code === 'TALOS_BROWSER_TARGET_STALE' || code === 'TALOS_BROWSER_STALE_STATE') {
+                await refreshAfterStale(session.id)
+                return { status: 'stale' as const }
+            }
+            if (code === 'TALOS_BROWSER_HMI_RECOVERY_REQUIRED') {
+                interactionError.value = error instanceof Error ? error.message : 'Browser recovery is required.'
+                browserMode.value = { ...browserMode.value, enabled: true, status: 'recovery_required' }
+                return { status: 'recovery_required' as const }
+            }
+            interactionError.value = error instanceof Error ? error.message : 'TALOS could not execute the browser interaction.'
+            throw error
+        } finally {
+            if (scopeIsCurrent(talosSessionId, revision)) interactionPending.value = false
+        }
+    }
+
+    async function confirmScreenshotInteraction(decision: 'approve' | 'reject') {
+        if (interactionPending.value) throw new Error('A browser interaction is already in progress.')
+        const approval = pendingInteractionApproval.value
+        const session = activeSession.value
+        if (!approval || !session) throw new Error('No browser interaction is awaiting confirmation.')
+        const talosSessionId = requiredTalosSessionId()
+        const revision = scopeRevision
+        interactionPending.value = true
+        interactionError.value = null
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosBrowserHmiExecution | { interaction: { status: 'rejected'; approval_id: string } }>>(`/api/talos/browser/interactions/${idPath(approval.approval_id)}/confirm`, {
+                method: 'POST',
+                body: JSON.stringify({ decision, request_hash: approval.request_hash }),
+                headers: scopedHeaders(talosSessionId),
+            })
+            pendingInteractionApproval.value = null
+            if (response.data.interaction.status === 'rejected') {
+                setBrowserMode(true, session)
+                return response.data.interaction
+            }
+            await applyInteraction(response.data, talosSessionId, revision)
+
+            return { status: 'executed' as const, ...response.data.interaction, screenshot: response.data.screenshot, snapshot: response.data.snapshot }
+        } catch (error) {
+            const code = interactionErrorCode(error)
+            if (['TALOS_BROWSER_FRAME_STALE', 'TALOS_BROWSER_TARGET_STALE', 'TALOS_BROWSER_STALE_STATE', 'TALOS_BROWSER_HMI_APPROVAL_EXPIRED', 'TALOS_BROWSER_HMI_APPROVAL_CONSUMED'].includes(code ?? '')) {
+                pendingInteractionApproval.value = null
+                await refreshAfterStale(session.id)
+                return { status: 'stale' as const }
+            }
+            if (code === 'TALOS_BROWSER_HMI_RECOVERY_REQUIRED') {
+                pendingInteractionApproval.value = null
+                interactionError.value = error instanceof Error ? error.message : 'Browser recovery is required.'
+                browserMode.value = { ...browserMode.value, enabled: true, status: 'recovery_required' }
+                return { status: 'recovery_required' as const }
+            }
+            interactionError.value = error instanceof Error ? error.message : 'TALOS could not confirm the browser interaction.'
+            throw error
+        } finally {
+            if (scopeIsCurrent(talosSessionId, revision)) interactionPending.value = false
+        }
+    }
+
     const browserActivities = computed<TalosBrowserActivity[]>(() => events.value.map((event) => {
         const type = event.type ?? event.event_type ?? 'browser.event'
         const payload = event.payload ?? {}
@@ -333,7 +589,11 @@ export function useTalosBrowse() {
                     : type.includes('read') ? 'read'
                         : 'session_start')
         const status = type.includes('failed') || event.severity === 'error' ? 'failed' : type.includes('denied') ? 'denied' : 'succeeded'
-        const artifactIds = typeof payload.artifact_id === 'string' ? [payload.artifact_id] : []
+        const artifactIds = operation === 'screenshot' && typeof payload.screenshot_artifact_id === 'string'
+            ? [payload.screenshot_artifact_id]
+            : Array.isArray(payload.artifact_ids)
+            ? payload.artifact_ids.filter((artifactId): artifactId is string => typeof artifactId === 'string')
+            : typeof payload.artifact_id === 'string' ? [payload.artifact_id] : []
 
         return {
             id: event.id,
@@ -362,6 +622,9 @@ export function useTalosBrowse() {
         collectionError,
         sessionError,
         mutationError,
+        interactionPending,
+        interactionError,
+        pendingInteractionApproval,
         bindTalosSession,
         loadSessions,
         selectSession,
@@ -373,5 +636,7 @@ export function useTalosBrowse() {
         captureScreenshot,
         captureSnapshot,
         closeSession,
+        interactWithScreenshot,
+        confirmScreenshotInteraction,
     }
 }

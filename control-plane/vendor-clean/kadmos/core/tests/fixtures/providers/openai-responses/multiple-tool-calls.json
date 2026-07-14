@@ -1,0 +1,24 @@
+{
+  "provider_response": {
+    "id": "resp-tools-2",
+    "status": "completed",
+    "output": [
+      {
+        "type": "function_call",
+        "id": "fc-1",
+        "call_id": "call_browser_1",
+        "name": "browser_navigate",
+        "arguments": "{\"url\":\"https://example.com\"}",
+        "status": "completed"
+      },
+      {
+        "type": "function_call",
+        "id": "fc-2",
+        "call_id": "call_browser_2",
+        "name": "browser_snapshot",
+        "arguments": "{}",
+        "status": "completed"
+      }
+    ]
+  }
+}

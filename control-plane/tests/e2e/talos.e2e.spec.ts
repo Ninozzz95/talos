@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
-import { capturePaintedTransition, expectPaintedTransition } from './helpers/talosVisibleMotion'
+import { capturePaintedTransition, expectPaintedTransition, rgbaDifferenceRatio } from './helpers/talosVisibleMotion'
+import { waitForTalosWorkspaceReady as waitForWorkspaceReady } from './helpers/talosWorkspaceReady'
 
 const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
@@ -16,6 +17,7 @@ const talosMotionV6Defaults = {
     scene_override: null,
     speed: 100,
     intensity: 65,
+    glow_intensity: 0,
     density: 100,
     depth: 50,
     trails: 35,
@@ -28,7 +30,7 @@ const talosMotionV6Defaults = {
     respect_data_saver: true,
     interface: {
         profile: 'preset',
-        duration_scale: 100,
+        duration_scale: 50,
         intensity: 65,
         easing: 'precise',
         stagger: 40,
@@ -133,33 +135,30 @@ async function expectNoHorizontalOverflow(page: Page) {
     expect(result.overflow, JSON.stringify(result.offenders, null, 2)).toBeLessThanOrEqual(1)
 }
 
-async function expectProceduralCanvasAboveScrim(page: Page) {
-    const layering = await page.getByTestId('talos-motion-background').evaluate((root) => {
+async function expectProceduralBackgroundComposition(page: Page) {
+    const composition = await page.getByTestId('talos-motion-background').evaluate((root) => {
         const canvas = root.querySelector('.talos-procedural-canvas') as HTMLElement | null
+        const glow = root.querySelector('.talos-theme-background-glow') as HTMLElement | null
         const scrim = root.querySelector('.talos-theme-background-scrim') as HTMLElement | null
-
-        if (!canvas || !scrim) {
-            return {
-                hasCanvas: Boolean(canvas),
-                hasScrim: Boolean(scrim),
-                canvasZ: -1,
-                scrimZ: -1,
-            }
-        }
-
-        const toNumber = (value: string) => value === 'auto' ? 0 : Number(value)
+        const thread = document.querySelector('.talos-chat-thread') as HTMLElement | null
 
         return {
-            hasCanvas: true,
-            hasScrim: true,
-            canvasZ: toNumber(window.getComputedStyle(canvas).zIndex),
-            scrimZ: toNumber(window.getComputedStyle(scrim).zIndex),
+            hasCanvas: Boolean(canvas),
+            hasGlow: Boolean(glow),
+            hasScrim: Boolean(scrim),
+            glowZIndex: glow ? Number(window.getComputedStyle(glow).zIndex) : null,
+            scrimZIndex: scrim ? Number(window.getComputedStyle(scrim).zIndex) : null,
+            scrimBackgroundImage: scrim ? window.getComputedStyle(scrim).backgroundImage : null,
+            threadBackgroundImage: thread ? window.getComputedStyle(thread).backgroundImage : null,
         }
     })
 
-    expect(layering.hasCanvas).toBe(true)
-    expect(layering.hasScrim).toBe(true)
-    expect(layering.canvasZ).toBeGreaterThan(layering.scrimZ)
+    expect(composition.hasCanvas).toBe(true)
+    expect(composition.hasGlow).toBe(true)
+    expect(composition.hasScrim).toBe(true)
+    expect(composition.scrimBackgroundImage).toContain('linear-gradient')
+    expect(composition.scrimZIndex).toBeGreaterThan(composition.glowZIndex ?? Number.MAX_SAFE_INTEGER)
+    expect(composition.threadBackgroundImage).toBe('none')
 }
 
 function workspaceMotionBackground(page: Page) {
@@ -346,6 +345,42 @@ async function expectNoComposerOverlap(page: Page) {
     expect(result.overlaps, JSON.stringify(result.overlaps, null, 2)).toEqual([])
 }
 
+async function expectWorkspaceFullscreenCoverage(page: Page, windowId: string) {
+    const geometry = await page.evaluate((id) => {
+        const windowElement = document.querySelector<HTMLElement>(`[data-window-id="${id}"]`)
+        const stage = document.querySelector<HTMLElement>('[data-testid="talos-desktop-window-stage"]')
+        const composer = document.querySelector<HTMLElement>('.talos-chat-composer-shell')
+        const header = document.querySelector<HTMLElement>('.talos-workspace-header')
+        if (!windowElement || !stage || !composer || !header) return null
+
+        const rect = windowElement.getBoundingClientRect()
+        const stageRect = stage.getBoundingClientRect()
+        const composerRect = composer.getBoundingClientRect()
+        const headerRect = header.getBoundingClientRect()
+
+        return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            stageLeft: stageRect.left,
+            stageTop: stageRect.top,
+            stageRight: stageRect.right,
+            stageBottom: stageRect.bottom,
+            coversComposer: rect.bottom > composerRect.top,
+            coversHeader: rect.top <= headerRect.top && rect.bottom >= headerRect.bottom,
+        }
+    }, windowId)
+
+    expect(geometry).not.toBeNull()
+    expect(Math.abs(geometry!.left - geometry!.stageLeft)).toBeLessThanOrEqual(1)
+    expect(Math.abs(geometry!.top - geometry!.stageTop)).toBeLessThanOrEqual(1)
+    expect(Math.abs(geometry!.right - geometry!.stageRight)).toBeLessThanOrEqual(1)
+    expect(Math.abs(geometry!.bottom - geometry!.stageBottom)).toBeLessThanOrEqual(1)
+    expect(geometry!.coversComposer).toBe(true)
+    expect(geometry!.coversHeader).toBe(true)
+}
+
 async function selectDashboardTab(page: Page, name: string) {
     const moduleName = {
         Agents: 'Model Lab',
@@ -404,10 +439,11 @@ async function expandAdvancedRail(page: Page) {
 }
 
 async function expectUnifiedWorkspaceChrome(page: Page) {
-    await expect(page.getByRole('heading', { name: 'TALOS', exact: true })).toBeVisible()
-    await expect(page.getByTestId('talos-header-brand')).toBeVisible()
-    await expect(page.locator('.talos-short-logo-mark:visible').first()).toBeVisible()
-    await expect(page.getByText('Ready for verified workflows', { exact: true })).toBeVisible()
+    const header = page.getByTestId('talos-workspace-header')
+    await expect(header).toBeVisible()
+    await expect(header.getByRole('heading', { name: 'TALOS', exact: true })).toHaveCount(0)
+    await expect(header.locator('.talos-short-logo')).toHaveCount(0)
+    await expect(header.getByText('Ready for verified workflows', { exact: true })).toHaveCount(0)
     await expect(page.locator('[data-testid="talos-workspace"], .talos-workspace').first()).toBeVisible()
     await expect(page.locator('[aria-label="TALOS workspace rail"]').filter({ visible: true }).first()).toBeVisible()
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
@@ -434,13 +470,9 @@ async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
 }
 
-async function waitForWorkspaceReady(page: Page) {
-    await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
-    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
-}
-
 async function openWorkspace(page: Page) {
     if (await page.getByLabel('Message TALOS').isVisible().catch(() => false)) {
+        await waitForWorkspaceReady(page)
         return
     }
 
@@ -809,7 +841,7 @@ test('chat action menu escapes the scroll container and remains inside the viewp
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight - 8)
 })
 
-test('left rail and empty chat brand expose polished pointer and logo affordances', async ({ page, isMobile }) => {
+test('left rail and empty chat brand remain polished without duplicating branding in the header', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), 'desktop rail branding is covered by the desktop project')
 
     await openWorkspace(page)
@@ -840,20 +872,16 @@ test('left rail and empty chat brand expose polished pointer and logo affordance
     expect(Math.abs(brandMetrics.logoCenterY - brandMetrics.copyCenterY), JSON.stringify(brandMetrics)).toBeLessThanOrEqual(10)
 
     const emptyBrandLogo = page.getByTestId('talos-empty-brand').locator('.talos-short-logo').first()
-    const headerBrandLogo = page.getByTestId('talos-header-brand').locator('.talos-short-logo').first()
     const logoSizes = await page.evaluate(() => {
         const empty = document.querySelector('[data-testid="talos-empty-brand"] .talos-short-logo')?.getBoundingClientRect()
-        const header = document.querySelector('[data-testid="talos-header-brand"] .talos-short-logo')?.getBoundingClientRect()
 
         return {
             emptyWidth: Math.round(empty?.width ?? 0),
-            headerWidth: Math.round(header?.width ?? 0),
         }
     })
     await expect(emptyBrandLogo).toBeVisible()
-    await expect(headerBrandLogo).toBeVisible()
     expect(logoSizes.emptyWidth, JSON.stringify(logoSizes)).toBeGreaterThanOrEqual(64)
-    expect(logoSizes.emptyWidth, JSON.stringify(logoSizes)).toBeGreaterThan(logoSizes.headerWidth + 20)
+    await expect(page.getByTestId('talos-workspace-header').locator('.talos-short-logo')).toHaveCount(0)
 })
 
 test('header account label opens settings directly on account tab', async ({ page }) => {
@@ -871,7 +899,7 @@ test('desktop header action labels stay inside disjoint controls', async ({ page
     test.skip(Boolean(isMobile), 'desktop header geometry is covered by the desktop project')
     await openWorkspace(page)
 
-    const header = page.getByTestId('talos-header-brand').locator('xpath=ancestor::header[1]')
+    const header = page.getByTestId('talos-workspace-header')
     const metrics = await header.locator('button').evaluateAll((buttons) => buttons
         .filter((button) => {
             const style = window.getComputedStyle(button)
@@ -907,17 +935,21 @@ test('desktop header action labels stay inside disjoint controls', async ({ page
     }
 })
 
-test('chat loads, sends a deterministic persisted turn, and stays keyboard reachable', async ({ page }, testInfo) => {
+test('chat loads, sends a deterministic persisted turn, and stays keyboard reachable', async ({ page, isMobile }, testInfo) => {
     await openWorkspace(page)
 
     await expect(page.getByRole('heading', { name: /^(What workflow should TALOS handle\?|What claim should we benchmark\?)$/ })).toBeVisible()
     await expect(page.getByTestId('talos-empty-brand')).toContainText('TALOS')
     await expect(page.getByTestId('talos-empty-brand').locator('.talos-short-logo-mark')).toBeVisible()
-    await expect(page.getByText('Mission Path', { exact: true })).toBeVisible()
-    await expect(page.getByText('Model linked', { exact: true })).toBeVisible()
-    await expect(page.getByText('Context optional', { exact: true })).toBeVisible()
-    await expect(page.getByText('Session staged', { exact: true })).toBeVisible()
-    await expect(page.getByText('Evidence pending', { exact: true })).toBeVisible()
+    if (isMobile) {
+        await expect(page.getByRole('region', { name: 'TALOS guided start' })).toHaveCount(0)
+    } else {
+        await expect(page.getByRole('region', { name: 'TALOS guided start' })).toBeVisible()
+        await expect(page.getByText('Model linked', { exact: true })).toBeVisible()
+        await expect(page.getByText('Context optional', { exact: true })).toBeVisible()
+        await expect(page.getByText('Session staged', { exact: true })).toBeVisible()
+        await expect(page.getByText('Evidence pending', { exact: true })).toBeVisible()
+    }
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Choose model profile' })).toContainText('E2E server-side profile')
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveAttribute('title', 'Type a workflow in the composer before sending.')
@@ -969,6 +1001,30 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
+})
+
+test('chat repairs a stale local model selection and submits with Enter', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        initialSettings: { default_model_profile_id: null },
+    })
+    await page.evaluate(() => {
+        localStorage.setItem('talos_workspace_preferences', JSON.stringify({
+            model_profile_id: 'deleted-model-profile',
+            model_routing_profile_id: '',
+            context_set_id: '',
+        }))
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+
+    const composer = page.getByLabel('Message TALOS')
+    await composer.fill('Submit this repaired model selection with Enter.')
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+    await composer.press('Enter')
+
+    await expect(page.locator('.talos-chat-thread').getByText('Submit this repaired model selection with Enter.', { exact: true })).toBeVisible()
+    await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
 })
 
 test('chat provider failures render typed recovery guidance instead of generic errors', async ({ page }) => {
@@ -1056,7 +1112,7 @@ test('composer model and context popovers animate from the chat field', async ({
     await expect(contextPopover).toBeVisible()
     await expect.poll(async () => contextPopover.evaluate((element) => window.getComputedStyle(element).animationName)).toContain('talos-composer-popover-in')
 
-    await page.getByTestId('talos-header-brand').click()
+    await page.getByTestId('talos-workspace-header').click({ position: { x: 4, y: 4 } })
     await expect(contextPopover).toBeHidden()
 
     await page.getByLabel('Message TALOS').fill('Improve this prompt without changing its intent.')
@@ -1452,6 +1508,10 @@ test('model center offers provider-first quick add with optional draft test', as
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
+
+    await page.getByRole('button', { name: 'Close Model Lab' }).click()
+    await page.getByRole('button', { name: 'Choose model profile' }).click()
+    await expect(page.getByLabel('Server-side model profile').locator('option', { hasText: 'OpenRouter quick profile' })).toHaveCount(1)
 })
 
 test('model center can save a provider profile after a failed optional draft probe', async ({ page }) => {
@@ -1852,7 +1912,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'aurora')
     await expect(workspaceMotionCanvas(page)).toHaveCount(1)
     await expectProceduralCanvasHasVisibleSignal(page)
-    await expectProceduralCanvasAboveScrim(page)
+    await expectProceduralBackgroundComposition(page)
     const backgroundOpacity = await page.getByTestId('talos-motion-background').evaluate((element) => (
         Number(window.getComputedStyle(element).opacity)
     ))
@@ -2518,7 +2578,7 @@ test('browser reduced motion remains a hard override until the OS preference cha
         window.getComputedStyle(element).getPropertyValue('--talos-motion-open-duration').trim()
     ))).not.toBe('0ms')
     await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-motion-disabled', 'false')
-    await expectProceduralCanvasAboveScrim(page)
+    await expectProceduralBackgroundComposition(page)
     await expectProceduralCanvasFrameChanges(page)
 })
 
@@ -2704,7 +2764,7 @@ test('theme switches disable motion separately from the procedural background', 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByLabel('Interface motion profile')).toHaveValue('off')
-    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeChecked()
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).not.toBeChecked()
 })
 
 test('settings preset changes refresh procedural background immediately', async ({ page }) => {
@@ -2748,7 +2808,7 @@ test('settings preset changes refresh procedural background immediately', async 
     await expect(page.locator('.talos-shell')).toHaveClass(/talos-theme-terminal/)
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-scene', 'terminal')
     await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
-    await expectProceduralCanvasAboveScrim(page)
+    await expectProceduralBackgroundComposition(page)
     await expectProceduralCanvasFrameChanges(page)
     await expectProceduralCanvasHasVisibleSignal(page)
 })
@@ -2806,7 +2866,7 @@ test('every theme preset switches to its distinct Motion V6 scene', async ({ pag
         await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
         await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-simple-animation', 'false')
         await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-dpr-cap', '1.25')
-        await expectProceduralCanvasAboveScrim(page)
+        await expectProceduralBackgroundComposition(page)
         await expectProceduralCanvasFrameChanges(page)
         await expectProceduralCanvasHasVisibleSignal(page)
         await testInfo.attach(`theme-preset-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${testInfo.project.name}.png`, {
@@ -3270,17 +3330,7 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'maximizing')
     await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBeGreaterThan(0)
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
-    const fullscreenGeometry = await page.evaluate(() => {
-        const windowElement = document.querySelector<HTMLElement>('[data-window-id="theme"]')
-        const composer = document.querySelector<HTMLElement>('.talos-chat-composer-shell')
-        if (!windowElement || !composer) return null
-        return {
-            windowBottom: windowElement.getBoundingClientRect().bottom,
-            composerTop: composer.getBoundingClientRect().top,
-        }
-    })
-    expect(fullscreenGeometry).not.toBeNull()
-    expect(fullscreenGeometry?.windowBottom).toBeLessThanOrEqual((fullscreenGeometry?.composerTop ?? 0) - 8)
+    await expectWorkspaceFullscreenCoverage(page, 'theme')
 
     await expectNoHorizontalOverflow(page)
     await testInfo.attach(`floating-window-transitions-${testInfo.project.name}.png`, {
@@ -3454,6 +3504,86 @@ test('floating tool windows are resizable and can reset their saved size', async
     })
 })
 
+test('resizing a side-snapped window reflows chat in the same interaction and persists the split', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), 'desktop split resizing is covered by the desktop project')
+
+    await openWorkspace(page)
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    let themeWindow = page.getByRole('region', { name: 'Theme' }).first()
+    const titleSpace = page.getByLabel('Drag Theme window')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+    await titleSpace.focus()
+    await page.keyboard.press('Control+ArrowLeft')
+    await expect(page.locator('[data-window-frame-id="theme"]')).toHaveAttribute('data-window-tile-target', 'left-half')
+    await expect(page.locator('.talos-left-rail')).toHaveAttribute('data-sidebar-state', 'collapsed')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    const stage = page.getByTestId('talos-desktop-window-stage')
+    const thread = page.locator('.talos-chat-thread').first()
+    const header = page.locator('.talos-workspace-header').first()
+    const composer = page.locator('.talos-composer-area').first()
+    const beforeWindow = await themeWindow.boundingBox()
+    const beforeThread = await thread.boundingBox()
+    const beforeHeader = await header.boundingBox()
+    const beforeComposer = await composer.boundingBox()
+    const stageBounds = await stage.boundingBox()
+    const resizeHandle = page.getByLabel('Resize Theme window right')
+    const handleBounds = await resizeHandle.boundingBox()
+    expect(beforeWindow).toBeTruthy()
+    expect(beforeThread).toBeTruthy()
+    expect(beforeHeader).toBeTruthy()
+    expect(beforeComposer).toBeTruthy()
+    expect(stageBounds).toBeTruthy()
+    expect(handleBounds).toBeTruthy()
+
+    const handleX = (handleBounds?.x ?? 0) + ((handleBounds?.width ?? 0) / 2)
+    const handleY = (handleBounds?.y ?? 0) + Math.min(120, (handleBounds?.height ?? 0) / 2)
+    await page.mouse.move(handleX, handleY)
+    await page.mouse.down()
+    await page.mouse.move(handleX + 120, handleY, { steps: 8 })
+
+    await expect(stage).toHaveAttribute('data-window-interaction', 'resize')
+    const duringWindow = await themeWindow.boundingBox()
+    const duringThread = await thread.boundingBox()
+    const duringHeader = await header.boundingBox()
+    const duringComposer = await composer.boundingBox()
+    const duringTransitions = await Promise.all([thread, header, composer].map((surface) => (
+        surface.evaluate((element) => getComputedStyle(element).transitionDuration)
+    )))
+    const windowDelta = (duringWindow?.width ?? 0) - (beforeWindow?.width ?? 0)
+    expect(duringWindow?.width).toBeGreaterThan((beforeWindow?.width ?? 0) + 90)
+    expect(Math.abs((duringWindow?.height ?? 0) - (stageBounds?.height ?? 0))).toBeLessThanOrEqual(1)
+    for (const [beforeSurface, duringSurface] of [
+        [beforeThread, duringThread],
+        [beforeHeader, duringHeader],
+        [beforeComposer, duringComposer],
+    ] as const) {
+        expect(duringSurface?.x).toBeGreaterThan((beforeSurface?.x ?? 0) + 90)
+        expect(Math.abs(((duringSurface?.x ?? 0) - (beforeSurface?.x ?? 0)) - windowDelta)).toBeLessThanOrEqual(3)
+    }
+    expect(duringTransitions.every((transition) => transition.split(',').every((duration) => duration.trim() === '0s'))).toBe(true)
+
+    await page.mouse.up()
+    await expect(stage).toHaveAttribute('data-window-interaction', 'idle')
+    const savedWidth = Math.round((await themeWindow.boundingBox())?.width ?? 0)
+    const storedWidth = await page.evaluate(() => JSON.parse(window.localStorage.getItem('talos.windowLayout.v2') ?? '{}')?.layouts?.desktop?.windows?.theme?.bounds?.width)
+    expect(storedWidth).toBe(savedWidth)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    themeWindow = page.getByRole('region', { name: 'Theme' }).first()
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+    const reloadedWidth = (await themeWindow.boundingBox())?.width ?? 0
+    const reloadDiagnostic = await page.evaluate(() => ({
+        railState: document.querySelector('.talos-left-rail')?.getAttribute('data-sidebar-state'),
+        railWidth: getComputedStyle(document.querySelector('[data-testid="talos-workspace"]')!).getPropertyValue('--talos-rail-width'),
+        reflowLeft: getComputedStyle(document.querySelector('.talos-chat-scroll-root')!).getPropertyValue('--talos-window-reflow-left'),
+        stored: JSON.parse(window.localStorage.getItem('talos.windowLayout.v2') ?? '{}')?.layouts?.desktop?.windows?.theme,
+    }))
+    expect(Math.abs(reloadedWidth - savedWidth), JSON.stringify({ savedWidth, reloadedWidth, reloadDiagnostic }, null, 2)).toBeLessThanOrEqual(1)
+})
+
 test('closing or minimizing a desktop window returns focus to its launcher and removes its interaction surface', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), 'mobile focus return is owned by the modal sheet contract')
 
@@ -3487,9 +3617,12 @@ test('desktop title-space keyboard snapping and Escape cancellation reach the wi
     await titleSpace.focus()
 
     await page.keyboard.press('Control+ArrowLeft')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const leftBounds = await themeWindow.boundingBox()
     expect(leftBounds).toBeTruthy()
+    await titleSpace.focus()
     await page.keyboard.press('Control+ArrowRight')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const rightBounds = await themeWindow.boundingBox()
     expect(rightBounds).toBeTruthy()
     expect(rightBounds!.x).toBeGreaterThan(leftBounds!.x + 200)
@@ -3555,13 +3688,14 @@ test('desktop window layout survives reload and corrupt V2 geometry fails closed
     themeWindow = page.getByRole('region', { name: 'Theme' })
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
-    await expectNoComposerOverlap(page)
+    await expectWorkspaceFullscreenCoverage(page, 'theme')
 
     await themeWindow.getByRole('button', { name: 'Exit fullscreen Theme' }).click()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const reloadedTitleSpace = page.getByLabel('Drag Theme window')
     await reloadedTitleSpace.focus()
     await page.keyboard.press('Control+ArrowRight')
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const snappedBounds = await themeWindow.boundingBox()
     const snappedLayout = await page.evaluate(() => window.localStorage.getItem('talos.windowLayout.v2'))
     expect(snappedBounds).toBeTruthy()
@@ -3621,12 +3755,15 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
         return hasSettingsExpectedRevision(body)
             && appearance?.chat_area?.welcome_message === false
             && appearance?.chat_area?.full_width_chat === true
+            && appearance?.chat_area?.mission_path === false
     })
     await page.getByRole('switch', { name: 'Welcome message' }).click()
     await page.getByRole('switch', { name: 'Full-width chat' }).click()
+    await page.getByRole('switch', { name: 'Mission Path' }).click()
     await page.getByRole('button', { name: 'Save settings' }).click()
     await appearancePatchRequest
     await expect(page.locator('[aria-label="TALOS chat thread"] h2')).toHaveCount(0)
+    await expect(page.getByRole('region', { name: 'TALOS guided start' })).toHaveCount(0)
 
     await page.getByRole('tab', { name: 'Shortcuts' }).click()
     const compareShortcutRow = page.getByTestId('talos-shortcut-row-open_compare')
@@ -3668,18 +3805,7 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const fullscreenBox = await themeWindow.boundingBox()
     expect(fullscreenBox?.width).toBeGreaterThan(900)
-    const fullscreenGeometry = await themeWindow.evaluate((element) => {
-        const rect = element.getBoundingClientRect()
-        const composer = document.querySelector('.talos-chat-composer-shell')?.getBoundingClientRect()
-
-        return {
-            height: rect.height,
-            viewportHeight: window.innerHeight,
-            overlapsComposer: Boolean(composer && rect.bottom > composer.top),
-        }
-    })
-    expect(fullscreenGeometry.height).toBeGreaterThan(fullscreenGeometry.viewportHeight * 0.6)
-    expect(fullscreenGeometry.overlapsComposer, JSON.stringify(fullscreenGeometry)).toBe(false)
+    await expectWorkspaceFullscreenCoverage(page, 'theme')
 
     await page.getByRole('button', { name: 'Minimize Theme' }).click()
     await expect(page.getByTestId('talos-minimized-window-dock')).toBeVisible()
@@ -3690,6 +3816,27 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
+})
+
+test('a minimized desktop window can be closed without being restored', async ({ page }) => {
+    await openWorkspace(page)
+
+    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    const themeWindow = page.locator('[data-window-id="theme"]')
+    await expect(themeWindow).toBeVisible()
+    await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
+
+    await themeWindow.getByRole('button', { name: 'Minimize Theme', exact: true }).click()
+    const restoreButton = page.getByTestId('talos-restore-window-theme')
+    const closeButton = page.getByTestId('talos-close-minimized-window-theme')
+    await expect(restoreButton).toBeVisible()
+    await expect(closeButton).toBeVisible()
+
+    await closeButton.click()
+
+    await expect(themeWindow).toHaveCount(0)
+    await expect(restoreButton).toHaveCount(0)
+    await expect(closeButton).toHaveCount(0)
 })
 
 test('prompt enhancer uses the selected model and supports review, cancel, insert, replace, and final send', async ({ page }, testInfo) => {
@@ -4344,6 +4491,27 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
     expectPaintedTransition(unmaximizing, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'false')
 
+    const snapping = await capturePaintedTransition({
+        page,
+        target: themeWindow,
+        paintSurface: workspace,
+        action: async () => {
+            const dragHandle = themeWindow.locator('.talos-window-drag-handle')
+            await dragHandle.focus()
+            await dragHandle.press('Control+ArrowLeft')
+        },
+        waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
+    })
+    expect(snapping.presentation.lifecycle).toBe('snapping')
+    expectPaintedTransition(snapping, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    await expect(page.locator('[data-window-frame-id="theme"]')).toHaveAttribute('data-window-tile-target', 'left-half')
+    const snappedRect = await themeWindow.boundingBox()
+    const snappedStageRect = await stage.boundingBox()
+    expect(snappedRect).toBeTruthy()
+    expect(snappedStageRect).toBeTruthy()
+    expect(Math.abs((snappedRect?.y ?? 0) - (snappedStageRect?.y ?? 0))).toBeLessThanOrEqual(1)
+    expect(Math.abs((snappedRect?.height ?? 0) - (snappedStageRect?.height ?? 0))).toBeLessThanOrEqual(1)
+
     const closing = await capturePaintedTransition({
         page,
         target: themeWindow,
@@ -4355,6 +4523,97 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
     expectPaintedTransition(closing, { minimumDurationMs: 288, midpointInteractive: false })
     await expect(themeWindow).toHaveCount(0)
     await expect(themeLauncher).toBeVisible()
+})
+
+test('workspace motion integrity produces painted-frame changes for background, rail, and composer popover', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop workspace motion integrity is measured by the desktop project')
+    test.setTimeout(60_000)
+
+    await patchTalosSettings(page, {
+        theme: 'terminal',
+        reduced_motion: false,
+        theme_motion_v6: {
+            ...talosMotionV6Defaults,
+            mode: 'complex',
+            background_enabled: true,
+            interface_enabled: true,
+            speed: 100,
+            intensity: 70,
+            interface: {
+                ...talosMotionV6Defaults.interface,
+                profile: 'expressive',
+                duration_scale: 120,
+                intensity: 75,
+                easing: 'soft',
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const workspace = page.getByTestId('talos-workspace')
+    await expect(workspace).toHaveAttribute('data-ui-motion-disabled', 'false')
+    await expect(workspace).toHaveAttribute('data-motion-v6-effective', 'complex')
+    const canvas = workspace.locator('canvas[data-testid="talos-procedural-canvas"]').first()
+    await expect(canvas).toBeVisible()
+    const backgroundBefore = await canvas.screenshot({ animations: 'allow' })
+    await page.waitForTimeout(400)
+    const backgroundAfter = await canvas.screenshot({ animations: 'allow' })
+    expect(rgbaDifferenceRatio(backgroundBefore, backgroundAfter, 4)).toBeGreaterThan(0.0001)
+
+    const rail = workspace.locator('.talos-left-rail')
+    if (await rail.getAttribute('data-sidebar-state') === 'collapsed') {
+        await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click()
+        await expect(rail).toHaveAttribute('data-sidebar-state', 'expanded')
+        await expect.poll(() => rail.evaluate((element) => element.getAnimations().length)).toBe(0)
+    }
+    const railMotion = await capturePaintedTransition({
+        page,
+        target: rail,
+        paintSurface: workspace,
+        action: () => page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click(),
+        waitForFinal: async () => {
+            await expect(rail).toHaveAttribute('data-sidebar-state', 'collapsed')
+            await expect.poll(() => rail.evaluate((element) => element.getAnimations().length)).toBe(0)
+        },
+    })
+    expectPaintedTransition(railMotion, { minimumDurationMs: 120, minimumPixelRatio: 0.002 })
+
+    const modelPopover = page.getByTestId('talos-model-popover')
+    const popoverMotion = await capturePaintedTransition({
+        page,
+        target: modelPopover,
+        paintSurface: workspace,
+        action: () => page.getByRole('button', { name: 'Choose model profile', exact: true }).click(),
+        waitForFinal: async () => {
+            await expect(modelPopover).toBeVisible()
+            await expect.poll(() => modelPopover.evaluate((element) => (
+                element.getAnimations().filter((animation) => animation.playState === 'running').length
+            ))).toBe(0)
+        },
+    })
+    expectPaintedTransition(popoverMotion, { minimumDurationMs: 120, minimumPixelRatio: 0.002 })
+
+    const popoverCloseMotion = await capturePaintedTransition({
+        page,
+        target: modelPopover,
+        paintSurface: workspace,
+        action: () => page.getByRole('button', { name: 'Choose model profile', exact: true }).click(),
+        waitForFinal: () => expect(modelPopover).toHaveCount(0),
+        midpointProgress: 0.9,
+    })
+    try {
+        expectPaintedTransition(popoverCloseMotion, {
+            minimumDurationMs: 90,
+            minimumPixelRatio: 0.002,
+            midpointInteractive: false,
+        })
+    } catch (error) {
+        await testInfo.attach('popover-close-target-before', { body: popoverCloseMotion.targetBefore, contentType: 'image/png' })
+        await testInfo.attach('popover-close-target-midpoint', { body: popoverCloseMotion.targetMidpoint, contentType: 'image/png' })
+        await testInfo.attach('popover-close-target-after', { body: popoverCloseMotion.targetAfter, contentType: 'image/png' })
+        throw error
+    }
 })
 
 test('mobile sheet open and close produce a perceptible painted-frame trajectory', async ({ page, isMobile }) => {

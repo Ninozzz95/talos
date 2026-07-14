@@ -9,6 +9,7 @@ require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 
 use Kadmos\ASTOrchestrator;
 use Kadmos\NodeStatus;
+use Kadmos\Workers\NodeWorkerInterface;
 use Kadmos\Workers\WorkerRegistry;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
@@ -97,11 +98,61 @@ function testHmiRetryDoesNotRestoreChildWhileAnotherParentFailed(): void
     assertSameValue([], $orchestrator->getExecutionQueue(), 'No child should be schedulable while one parent remains failed.');
 }
 
+function testExecuteNodeRejectsUnsatisfiedDependencies(): void
+{
+    $registry = new WorkerRegistry();
+    $registry->register('TEST', new class implements NodeWorkerInterface {
+        public function execute(array $payload): array
+        {
+            return ['status' => NodeStatus::SUCCESS, 'output_summary' => 'done', 'raw_output' => null];
+        }
+    });
+    $orchestrator = new ASTOrchestrator($registry);
+    $orchestrator->addNode('A', [], 'TEST');
+    $orchestrator->setPayload('A', []);
+    $orchestrator->addNode('B', ['A'], 'TEST');
+    $orchestrator->setPayload('B', []);
+
+    $blocked = false;
+    try {
+        $orchestrator->executeNode('B');
+    } catch (RuntimeException $exception) {
+        $blocked = str_contains($exception->getMessage(), 'dependencies have not succeeded');
+    }
+
+    assertSameValue(true, $blocked, 'Direct execution must enforce the same dependency barrier as the scheduler.');
+    assertSameValue(NodeStatus::VALIDATED, $orchestrator->getNodeStatus('B'), 'Rejected execution must not mutate the child state.');
+}
+
+function testWorkerExceptionDoesNotLeakIntoDagState(): void
+{
+    $registry = new WorkerRegistry();
+    $registry->register('THROWING', new class implements NodeWorkerInterface {
+        public function execute(array $payload): array
+        {
+            throw new RuntimeException('api_key=synthetic-secret');
+        }
+    });
+    $orchestrator = new ASTOrchestrator($registry);
+    $orchestrator->addNode('A', [], 'THROWING');
+    $orchestrator->setPayload('A', []);
+
+    $orchestrator->executeNode('A');
+
+    $serialized = $orchestrator->serializeDagState();
+    $exported = json_encode($orchestrator->exportState(), JSON_THROW_ON_ERROR);
+    assertSameValue(false, str_contains($serialized, 'synthetic-secret'), 'Model-visible DAG state must not contain worker exception details.');
+    assertSameValue(false, str_contains($exported, 'synthetic-secret'), 'Persisted DAG state must not contain worker exception details.');
+    assertSameValue(NodeStatus::FAILED, $orchestrator->getNodeStatus('A'), 'A controlled worker exception should still fail the node.');
+}
+
 $tests = [
     'testFailureCascadesToLinearDescendants',
     'testFailureBlocksSharedChildUntilAllParentsSucceed',
     'testHmiRetryRestoresBlockedDescendants',
     'testHmiRetryDoesNotRestoreChildWhileAnotherParentFailed',
+    'testExecuteNodeRejectsUnsatisfiedDependencies',
+    'testWorkerExceptionDoesNotLeakIntoDagState',
     'testBuildContextReturnsTypeMapping',
     'testBuildContextIgnoresNonMutateActions',
     'testBuildContextIgnoresUnknownNodes',

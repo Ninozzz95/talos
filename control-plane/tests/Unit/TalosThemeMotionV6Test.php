@@ -45,6 +45,29 @@ final class TalosThemeMotionV6Test extends TestCase
         self::assertTrue($arrayResult['value']['interface']['categories']['feedback']);
     }
 
+    public function test_parser_preserves_an_explicitly_saved_interface_duration_scale(): void
+    {
+        $input = self::canonicalDefaults();
+        $input['interface']['duration_scale'] = 100;
+
+        $result = TalosThemeMotionV6::parse($input);
+
+        self::assertTrue($result['success']);
+        self::assertSame(100, $result['value']['interface']['duration_scale']);
+    }
+
+    public function test_parser_accepts_legacy_v6_without_glow_intensity_and_canonicalizes_it_off(): void
+    {
+        $input = self::canonicalDefaults();
+        unset($input['glow_intensity']);
+
+        $result = TalosThemeMotionV6::parse($input);
+
+        self::assertTrue($result['success']);
+        self::assertSame(0, $result['value']['glow_intensity']);
+        self::assertSame(array_keys(self::canonicalDefaults()), array_keys($result['value']));
+    }
+
     #[DataProvider('stringAllowlistProvider')]
     public function test_string_allowlists_match_typescript(string $path, array $allowed): void
     {
@@ -92,6 +115,7 @@ final class TalosThemeMotionV6Test extends TestCase
         return [
             'speed' => ['speed', 25, 200],
             'intensity' => ['intensity', 0, 100],
+            'glow intensity' => ['glow_intensity', 0, 100],
             'density' => ['density', 25, 150],
             'depth' => ['depth', 0, 100],
             'trails' => ['trails', 0, 100],
@@ -159,6 +183,7 @@ final class TalosThemeMotionV6Test extends TestCase
             'mode number' => ['mode', 1],
             'scene boolean' => ['scene_override', false],
             'speed string' => ['speed', '100'],
+            'glow intensity string' => ['glow_intensity', '0'],
             'quality number' => ['quality', 1],
             'fps string' => ['fps_cap', '30'],
             'dpr string' => ['dpr_cap', '1.25'],
@@ -189,6 +214,7 @@ final class TalosThemeMotionV6Test extends TestCase
             'schema_version',
             'speed',
             'intensity',
+            'glow_intensity',
             'density',
             'depth',
             'trails',
@@ -567,6 +593,7 @@ final class TalosThemeMotionV6Test extends TestCase
             'scene_override' => null,
             'speed' => 100,
             'intensity' => 65,
+            'glow_intensity' => 0,
             'density' => 100,
             'depth' => 50,
             'trails' => 35,
@@ -579,7 +606,7 @@ final class TalosThemeMotionV6Test extends TestCase
             'respect_data_saver' => true,
             'interface' => [
                 'profile' => 'preset',
-                'duration_scale' => 100,
+                'duration_scale' => 50,
                 'intensity' => 65,
                 'easing' => 'precise',
                 'stagger' => 40,

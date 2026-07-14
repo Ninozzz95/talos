@@ -281,6 +281,8 @@ The production compose stack contains:
 - `validator`: Node/Fastify validator on an internal network URL.
 - `browser-worker`: Playwright/Chromium worker on an internal, token-protected
   URL.
+- `searxng`: optional internal metasearch service, enabled only through the
+  Compose `search` profile. Its API is not published on a host port.
 
 The TALOS web image runs nginx plus PHP-FPM. It does not use Laravel's
 development server. The container monitors both processes and exits when either
@@ -290,6 +292,44 @@ one terminates, allowing the restart policy to recover the complete web tier.
 migrations, storage, queue configuration, validator health, and the authenticated
 browser-worker `/ready` endpoint. That endpoint launches Chromium and reports
 failure when the browser runtime is missing or cannot start.
+
+### Browser deployment gates
+
+CI keeps the Chromium and production-stack checks separate so neither can be
+silently skipped by a failure in an unrelated test job:
+
+- `browser-worker-live` installs the locked browser-worker and control-plane
+  dependencies, installs the pinned Playwright Chromium runtime, generates a
+  random 256-bit worker token, starts the worker with `NODE_ENV=production`,
+  waits for authenticated `/ready`, runs the official MCP Streamable HTTP
+  client round trip against that live worker, and runs
+  `LiveBrowserWorkerHmiIntegrationTest.php` with `--fail-on-skipped`.
+- `docker-integration` builds the production Compose stack under a unique
+  project name. It authenticates through the real TALOS login and CSRF flow,
+  creates a durable chat and browser session, navigates only to
+  `https://example.com/`, verifies a hash-bound PNG preview, completes the HMI
+  preflight and confirmation path, and checks persisted screenshot, snapshot,
+  and event evidence.
+- The Docker gate recreates the stack without deleting the test volume, signs
+  in again, and verifies that the same session, evidence pointers, PNG bytes,
+  SHA-256 digest, snapshot policy, and event stream remain available. Final
+  teardown removes all profile containers and volumes and restores any root
+  `.env` that existed before the gate.
+
+Run the focused contracts locally from the repository root:
+
+```bash
+bash scripts/tests/talos-browser-gates-contract.sh
+bash scripts/tests/talos-live-browser-worker-ci.sh
+bash scripts/tests/talos-docker-integration.sh
+```
+
+The live worker command requires installed `browser-worker` npm dependencies,
+the pinned Chromium runtime, control-plane Composer dependencies, and PHP 8.5.
+The Docker command requires Docker Compose and is destructive only to its
+ephemeral `talos-integration-<pid>` Compose project. A failure prints service
+status and bounded logs before teardown; credentials and worker tokens are not
+printed.
 
 Optional later services:
 
@@ -318,6 +358,13 @@ AVM_VALIDATOR_URL=http://validator:3000
 TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
 TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
 TALOS_BROWSER_WORKER_TOKEN=
+TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=false
+
+TALOS_WEB_SEARCH_PROVIDER=unavailable
+TALOS_SEARXNG_URL=http://searxng:8080
+TALOS_SEARXNG_SECRET=
+TALOS_BROWSER_SEARCH_ENABLED=false
+TALOS_BROWSER_SEARCH_ORIGIN=
 
 TALOS_ADMIN_NAME=TALOS Admin
 TALOS_ADMIN_EMAIL=
@@ -335,6 +382,72 @@ Provider profiles, theme settings, Context Vault, tool registry, benchmarks,
 memory, skills, and workflow settings belong in TALOS Settings or persisted
 control-plane tables, not as scattered deployment variables.
 
+### Web search providers
+
+Search is fail-closed by default. With `TALOS_WEB_SEARCH_PROVIDER=unavailable`,
+TALOS reports that current web search is unavailable and never substitutes
+fixture results or remembered sources.
+
+The recommended private deployment uses the directly integrated official
+SearXNG container. In root `.env`, set:
+
+```env
+TALOS_WEB_SEARCH_PROVIDER=searxng
+TALOS_SEARXNG_URL=http://searxng:8080
+```
+
+Then run:
+
+```bash
+./talos up
+```
+
+When `TALOS_WEB_SEARCH_PROVIDER=searxng`, the Bash launcher automatically
+enables the Compose `search` profile for `up` and related Compose commands,
+keeps the internal SearXNG `/healthz` liveness check after TALOS `/readyz`, and
+then performs a bounded JSON API readiness probe against
+`/search?q=talos&format=json`. The probe parses the response and requires an
+object whose `results` field is a list; an empty list is valid and does not
+claim that external search results are available. Failure prints the last
+probe error plus SearXNG status and logs.
+
+An explicit `COMPOSE_PROFILES` list remains unchanged; when it already
+contains `search`, the launcher does not add a duplicate `--profile search`
+option. When the effective provider is changed away from `searxng`, `talos up`
+removes a stale auto-managed SearXNG service with
+`docker compose --profile search rm -sf searxng`, unless `search` is explicitly
+present in `COMPOSE_PROFILES`. The default `unavailable` provider therefore
+does not start or retain an implicitly managed search service, while an
+explicit profile selection remains the operator's responsibility.
+
+`talos down` always runs `docker compose --profile "*" down`, and `talos fresh`
+uses the same all-profile teardown before removing volumes. This removes a
+previously enabled SearXNG service even after the provider is changed back to
+`unavailable`.
+
+The launcher generates `TALOS_SEARXNG_SECRET` when absent. The Compose profile
+uses a tag-and-digest-pinned official image, mounts the tracked JSON-only API
+configuration, and exposes port `8080` only to the internal Compose network.
+Search result URLs still pass the public-network policy; configuring a trusted
+internal SearXNG endpoint does not allow `web_fetch` to reach loopback, private,
+link-local, or cloud metadata addresses. See the upstream
+[SearXNG container installation](https://docs.searxng.org/admin/installation-docker.html)
+and [Search API](https://docs.searxng.org/dev/search_api.html) documentation.
+
+An external browser-backed fallback is available only through explicit opt-in:
+
+```env
+TALOS_WEB_SEARCH_PROVIDER=browser
+TALOS_BROWSER_SEARCH_ENABLED=true
+TALOS_BROWSER_SEARCH_ORIGIN=https://your-search-origin.example/search
+```
+
+This mode opens the configured public origin in an ephemeral, owner-scoped,
+read-only Chromium session. The query and result URLs therefore leave the
+control plane and are subject to that origin's privacy policy. TALOS rejects
+private origins, closes the session after every search, and marks all returned
+content as untrusted.
+
 ### Production security rules
 
 - Keep auth enabled.
@@ -343,6 +456,7 @@ control-plane tables, not as scattered deployment variables.
 - Set `SECURE_COOKIES=true` behind HTTPS.
 - Keep validator private/internal.
 - Keep provider keys server-side in TALOS model profiles.
+- Keep SearXNG internal; do not publish its raw API port.
 - Never expose raw model, database, validator, queue, or storage ports publicly.
 - Keep root `.env` readable only by the deployment account. TALOS never mounts
   this file into the PHP-FPM application path.
@@ -386,11 +500,58 @@ npm run build
 HOST=127.0.0.1 PORT=3000 npm run start
 ```
 
+### Native browser-worker service
+
+The native fallback must run the pinned Playwright worker as a managed private
+service. Generate one strong secret during provisioning, store it in the host
+secret manager or a root-readable environment file, and inject the same value
+into Laravel and the worker. Do not publish port `3100`.
+
+```bash
+cd /srv/avm/browser-worker
+npm ci
+npm run build
+npx playwright install --with-deps chromium
+
+HOST=127.0.0.1 \
+PORT=3100 \
+NODE_ENV=production \
+TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret> \
+npm run start
+```
+
+Configure the control plane with the matching internal endpoint and secret:
+
+```env
+TALOS_BROWSER_WORKER_URL=http://127.0.0.1:3100
+TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret>
+TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+```
+
+Use systemd, Supervisor, or the host's equivalent process manager for the
+worker, validator, queue and PHP-FPM. Production boot is fail-closed: Laravel
+rejects a missing, malformed or weak browser-worker configuration before it
+serves TALOS. The reverse proxy or deployment controller must not expose the
+TALOS UI until `/readyz` reports `browser_worker.status=healthy`.
+
+HTTPS worker URLs are accepted by default. A direct production HTTP worker URL
+is rejected unless `TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true`
+is explicitly set for a private, trusted internal bridge such as the bundled
+Compose network or loopback native fallback. This opt-in does not enable public
+transport.
+
+The Docker-first `./talos up` path performs the secret generation, service
+wiring, dependency ordering and readiness check automatically and remains the
+recommended production installation.
+
 Configure TALOS:
 
 ```env
 AVM_VALIDATOR_URL=http://127.0.0.1:3000
 TALOS_VALIDATOR_HEALTH_URL=http://127.0.0.1:3000/health
+TALOS_BROWSER_WORKER_URL=http://127.0.0.1:3100
+TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret>
+TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
 APP_ENV=production
 APP_DEBUG=false
 SECURE_COOKIES=true
@@ -500,6 +661,32 @@ Interactive boot behavior:
   suppress the bootstrap;
 - state lives in `.talos/state.json` and is intentionally gitignored.
 
+### Browser worker protocol boundaries
+
+The browser worker exposes two internal protocol surfaces. Laravel uses the
+TALOS REST adapter (`/tools` and `/sessions/{id}/tools/call`) so product state,
+policy, evidence, and replay remain control-plane owned. Standards-based
+internal clients may use the stateless MCP Streamable HTTP endpoint at
+`/sessions/{id}/mcp`, implemented with the pinned official
+`@modelcontextprotocol/sdk` package.
+
+Both surfaces require the worker token and an exact owner reference. The MCP
+endpoint additionally rejects every browser `Origin` header and validates the
+HTTP host against `TALOS_BROWSER_MCP_ALLOWED_HOSTS`. Keep that allowlist limited
+to the Compose service name and explicit loopback names. Never publish port
+`3100`; TALOS remains the only browser-facing entrypoint.
+
+Browser navigation uses a DNS-pinning egress proxy that rejects private,
+loopback, link-local, metadata, reserved, and disallowed resolved addresses.
+The Chromium launcher also disables service workers and non-proxied WebRTC UDP
+so page code cannot bypass the HTTP(S) proxy through alternate network paths.
+Production startup requires a strong browser-worker token; insecure HTTP
+transport is available only through an explicit development opt-in.
+
+The authenticated screenshot interaction flow, approval modes, recovery
+semantics, and replay guarantees are documented in
+[`architecture/talos-interactive-browser-evidence.md`](architecture/talos-interactive-browser-evidence.md).
+
 ## Deployment Checklist
 
 Development:
@@ -514,6 +701,8 @@ Development:
 - [ ] `npm test` and `npm run build` pass in `validator/`.
 - [ ] `npm test`, `npm run build`, and `npm run doctor:runtime` pass in
       `browser-worker/`.
+- [ ] The official MCP SDK client round-trip test passes against the internal
+      stateless Streamable HTTP endpoint.
 - [ ] `kadmos doctor --json` returns controlled JSON.
 
 Production target:
@@ -521,14 +710,20 @@ Production target:
 - [ ] Root `.env.example` exists and contains only deployment-level settings.
 - [ ] `docker-compose.yml` starts TALOS, queue, validator, and browser worker.
 - [ ] Validator and browser worker are internal-only.
+- [ ] `TALOS_BROWSER_MCP_ALLOWED_HOSTS` contains only internal service and
+      loopback hostnames; browser `Origin` requests remain denied.
+- [ ] Browser egress remains DNS-pinned and Chromium non-proxied WebRTC UDP
+      remains disabled.
 - [ ] SQLite persistence does not mount over tracked migration files.
 - [ ] The TALOS image contains the PHP core and runs nginx plus PHP-FPM.
 - [ ] TALOS is the only public web entrypoint.
 - [ ] First admin can be created from UI or pre-seeded env.
 - [ ] Queue worker is supervised.
 - [ ] `/up` and `/readyz` are used for liveness/readiness checks.
-- [ ] The Docker integration job builds every image, verifies `/readyz`, and
-      proves storage survives a Compose restart.
+- [ ] The Docker integration job enables the pinned `search` profile, verifies
+      Compose config, SearXNG `/healthz`, the JSON `results` response shape,
+      TALOS `/readyz`, authenticated Browser/HMI evidence and preview reload,
+      and all-profile teardown while preserving any existing root `.env`.
 - [ ] Provider keys are stored server-side, never in browser storage.
 - [ ] KADMOS remote operator commands use explicit auth before write/recovery
       actions are considered production ready.

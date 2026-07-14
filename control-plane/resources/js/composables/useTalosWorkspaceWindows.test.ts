@@ -28,7 +28,10 @@ describe('useTalosWorkspaceWindows', () => {
         }))
         expect(windows).toBeTruthy()
         expect(windows?.state.value.breakpoint).toBe('desktop')
-        expect(windows?.state.value.area).toEqual({ left: 0, top: 0, right: 1204, bottom: 616 })
+        expect(windows?.state.value.area).toEqual({ left: 0, top: 56, right: 1204, bottom: 672 })
+        expect(windows?.state.value.tileArea).toEqual({ left: 0, top: 0, right: 1204, bottom: 900 })
+        expect(windows?.state.value.maximizeArea).toEqual({ left: 0, top: 0, right: 1204, bottom: 900 })
+        expect(windows?.state.value.fullscreenArea).toEqual({ left: 0, top: 0, right: 1204, bottom: 900 })
 
         Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 })
         Object.defineProperty(window, 'innerHeight', { configurable: true, value: 812 })
@@ -52,14 +55,37 @@ describe('useTalosWorkspaceWindows', () => {
             composerHeight,
         }))
 
-        expect(windows?.state.value.area.bottom).toBe(616)
+        expect(windows?.state.value.area.bottom).toBe(672)
         composerHeight.value = 120
         await nextTick()
-        expect(windows?.state.value.area.bottom).toBe(576)
+        expect(windows?.state.value.area.bottom).toBe(632)
 
         windows?.openWindow('calendar')
         const calendar = windows?.state.value.windows.calendar
-        expect((calendar?.bounds.y ?? 0) + (calendar?.bounds.height ?? 0)).toBeLessThanOrEqual(576)
+        expect((calendar?.bounds.y ?? 0) + (calendar?.bounds.height ?? 0)).toBeLessThanOrEqual(632)
+        scope.stop()
+    })
+
+    it('uses a composer-safe floating area and full-height tile, maximize, and fullscreen areas', () => {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 })
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 })
+        const scope = effectScope()
+        const windows = scope.run(() => useTalosWorkspaceWindows({
+            initialOpen: ['theme'],
+            currentRailWidth: ref(236),
+            composerHeight: ref(168),
+        }))!
+
+        windows.tileWindow('theme', 'left-half')
+        expect(windows.state.value.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 602, height: 900 })
+        windows.untileWindow('theme')
+        windows.toggleFullscreenWindow('theme')
+        expect(windows.state.value.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 1204, height: 900 })
+        windows.tileWindow('theme', 'fullscreen-workspace')
+        expect(windows.state.value.windows.theme.presentation).toBe('fullscreen')
+        expect(windows.state.value.windows.theme.bounds).toEqual({ x: 0, y: 0, width: 1204, height: 900 })
+        windows.untileWindow('theme')
+        expect(windows.state.value.windows.theme.presentation).toBe('floating')
         scope.stop()
     })
 

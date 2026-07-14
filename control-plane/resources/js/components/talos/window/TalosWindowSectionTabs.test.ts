@@ -40,6 +40,44 @@ function mountTabs() {
 }
 
 describe('TalosWindowSectionTabs', () => {
+    it('adds canonical information actions without changing the active section', async () => {
+        const selected = ref('timeline')
+        const shell = document.createElement('div')
+        shell.className = 'talos-shell'
+        const portalRoot = document.createElement('div')
+        portalRoot.id = 'talos-portal-root'
+        const container = document.createElement('div')
+        shell.append(portalRoot, container)
+        document.body.append(shell)
+
+        const app = createApp(defineComponent({
+            setup() {
+                return () => h(TalosWindowSectionTabs, {
+                    windowId: 'runtime',
+                    tabs: [
+                        { id: 'timeline', label: 'Timeline' },
+                        { id: 'dag', label: 'DAG' },
+                        { id: 'recovery', label: 'Recovery' },
+                    ],
+                    activeTab: selected.value,
+                    onSelect: (value: string) => { selected.value = value },
+                })
+            },
+        }))
+
+        mounted.push(app)
+        app.mount(container)
+
+        const info = container.querySelector<HTMLButtonElement>('[aria-label="Information about Recovery"]')
+        expect(info).not.toBeNull()
+        expect(container.querySelector('button button')).toBeNull()
+        info?.click()
+        await nextTick()
+
+        expect(selected.value).toBe('timeline')
+        expect(portalRoot.textContent).toContain('Request a guarded retry, override or node recovery.')
+    })
+
     it('links tabs to panels and exposes one tab stop', () => {
         const { container } = mountTabs()
         const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))

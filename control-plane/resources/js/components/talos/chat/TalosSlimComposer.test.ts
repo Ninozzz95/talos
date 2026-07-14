@@ -34,6 +34,7 @@ function mountComposer(mode: TalosComposerMode, browserEnabled = false, override
             temporaryMode: false,
             visibility: {},
             browserMode,
+            devBrowserEvidence: false,
             composerMode: mode,
             chatLayoutLocked: false,
             ...overrides,
@@ -45,6 +46,39 @@ function mountComposer(mode: TalosComposerMode, browserEnabled = false, override
 }
 
 describe('TalosSlimComposer', () => {
+    it('routes a non-empty Enter submission through the workspace guard even when availability is blocked', () => {
+        const send = vi.fn()
+        const container = mountComposer('full', false, {
+            canSend: false,
+            sendDisabledReason: 'Choose a usable model or routing profile before sending.',
+            onSend: send,
+        })
+        const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+
+        composer?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }))
+
+        expect(send).toHaveBeenCalledOnce()
+    })
+
+    it('keeps Shift+Enter available for multiline prompts', () => {
+        const send = vi.fn()
+        const container = mountComposer('full', false, { onSend: send })
+        const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+
+        composer?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            shiftKey: true,
+            bubbles: true,
+            cancelable: true,
+        }))
+
+        expect(send).not.toHaveBeenCalled()
+    })
+
     it('organizes full mode into one prompt row and one quiet capability row', () => {
         const container = mountComposer('full')
         const promptRow = container.querySelector('[data-testid="talos-composer-prompt-row"]')
@@ -93,5 +127,63 @@ describe('TalosSlimComposer', () => {
         expect(stop).toBeDefined()
         stop?.click()
         expect(stopBrowse).toHaveBeenCalledOnce()
+    })
+
+    it('keeps screenshot capture available but omits page-structure capture outside the development gate', async () => {
+        const container = mountComposer('full', true)
+
+        const screenshot = container.querySelector<HTMLButtonElement>('[aria-label="Capture browser screenshot"]')
+        expect(screenshot).not.toBeNull()
+        expect(screenshot?.disabled).toBe(false)
+
+        container.querySelector<HTMLButtonElement>('[aria-label="Browse actions"]')?.click()
+        await nextTick()
+
+        expect([...container.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent?.includes('Capture page structure'))).toBe(false)
+    })
+
+    it('exposes the real page-structure command only inside the development gate', async () => {
+        const captureSnapshot = vi.fn()
+        const container = mountComposer('full', true, {
+            devBrowserEvidence: true,
+            onCaptureSnapshot: captureSnapshot,
+        })
+
+        container.querySelector<HTMLButtonElement>('[aria-label="Browse actions"]')?.click()
+        await nextTick()
+
+        const snapshotCommand = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+            .find((button) => button.textContent?.includes('Capture page structure'))
+        expect(snapshotCommand).toBeDefined()
+        expect(snapshotCommand?.disabled).toBe(false)
+
+        snapshotCommand?.click()
+        expect(captureSnapshot).toHaveBeenCalledOnce()
+    })
+
+    it('labels recovery-required Browse state and exposes a Retry browser action', async () => {
+        const restartBrowse = vi.fn()
+        const container = mountComposer('full', true, {
+            browserMode: {
+                enabled: true,
+                session_id: 'browser-1',
+                status: 'recovery_required',
+                capabilities: ['snapshot', 'screenshot'],
+            },
+            onRestartBrowse: restartBrowse,
+        })
+
+        const status = container.querySelector<HTMLButtonElement>('[aria-label="Browse status: Recovery required"]')
+        expect(status).not.toBeNull()
+        expect(container.querySelector<HTMLButtonElement>('[aria-label="Capture browser screenshot"]')?.disabled).toBe(true)
+
+        status?.click()
+        await nextTick()
+
+        const retry = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+            .find((button) => button.textContent?.includes('Retry browser'))
+        expect(retry).toBeDefined()
+        retry?.click()
+        expect(restartBrowse).toHaveBeenCalledOnce()
     })
 })

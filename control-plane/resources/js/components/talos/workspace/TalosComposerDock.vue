@@ -10,11 +10,12 @@ import type { TalosPromptEnhancementResult } from '../../../composables/useTalos
 import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
 import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     prompt: string
     browserContext?: { host: string; title: string } | null
     browserMode: TalosBrowserMode
     browserCurrentPage?: TalosBrowserCurrentPage | null
+    devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
     chatLayoutLocked: boolean
     viewport: TalosChatViewportController
@@ -44,7 +45,9 @@ const props = defineProps<{
     enhancingPrompt: boolean
     promptEnhancementError: string | null
     visibility: Record<string, boolean>
-}>()
+}>(), {
+    devBrowserEvidence: false,
+})
 
 const emit = defineEmits<{
     updatePrompt: [prompt: string]
@@ -114,6 +117,18 @@ function handleDocumentKeydown(event: KeyboardEvent) {
     closeComposerOverlays(true)
 }
 
+function completePopoverLeave(element: Element, done: () => void) {
+    requestAnimationFrame(() => {
+        const animations = element.getAnimations()
+        if (animations.length === 0) {
+            done()
+            return
+        }
+
+        void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => done())
+    })
+}
+
 onMounted(() => {
     props.viewport.registerComposer(composerRoot.value)
     document.addEventListener('pointerdown', handleDocumentPointerDown)
@@ -133,14 +148,15 @@ onBeforeUnmount(() => {
                 <span class="min-w-0 truncate"><strong>Browse evidence</strong> <span class="text-[var(--talos-muted)]">{{ browserContext.host }} - {{ browserContext.title }}</span></span>
                 <Button size="sm" variant="ghost" aria-label="Detach browser evidence" @click="emit('detachBrowserContext')">Detach</Button>
             </div>
-            <div
-                v-if="modelPopoverOpen"
-                data-testid="talos-model-popover"
-                data-talos-composer-overlay
-                role="dialog"
-                aria-label="Model selection"
-                class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
-            >
+            <Transition name="talos-popover" @leave="completePopoverLeave">
+                <div
+                    v-if="modelPopoverOpen"
+                    data-testid="talos-model-popover"
+                    data-talos-composer-overlay
+                    role="dialog"
+                    aria-label="Model selection"
+                    class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+                >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model profile</div>
                 <label class="sr-only" for="talos-workspace-model-profile">Server-side model profile</label>
                 <Select
@@ -185,16 +201,18 @@ onBeforeUnmount(() => {
                     <Button size="sm" variant="ghost" @click="emit('refreshModelAndContext')">Refresh</Button>
                     <Button size="sm" @click="emit('openModelLab')">Model Lab</Button>
                 </div>
-            </div>
+                </div>
+            </Transition>
 
-            <div
-                v-if="contextPopoverOpen"
-                data-testid="talos-context-popover"
-                data-talos-composer-overlay
-                role="dialog"
-                aria-label="Grounding context selection"
-                class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
-            >
+            <Transition name="talos-popover" @leave="completePopoverLeave">
+                <div
+                    v-if="contextPopoverOpen"
+                    data-testid="talos-context-popover"
+                    data-talos-composer-overlay
+                    role="dialog"
+                    aria-label="Grounding context selection"
+                    class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+                >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Grounding context</div>
                 <label class="sr-only" for="talos-workspace-context-set">Grounding context set</label>
                 <Select
@@ -222,41 +240,44 @@ onBeforeUnmount(() => {
                     <Button size="sm" variant="ghost" @click="emit('refreshModelAndContext')">Refresh</Button>
                     <Button size="sm" @click="emit('openLibrary')">Library</Button>
                 </div>
-            </div>
-
-            <div
-                v-if="promptEnhancementResult"
-                data-testid="talos-enhancement-popover"
-                data-talos-composer-overlay
-                role="dialog"
-                aria-label="Prompt enhancement preview"
-                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2"
-            >
-                <TalosPromptEnhancerPopover
-                    :result="promptEnhancementResult"
-                    @replace="emit('replacePromptWithEnhanced')"
-                    @insert="emit('insertEnhancedPromptBelow')"
-                    @cancel="emit('clearPromptEnhancement')"
-                />
-            </div>
-
-            <div
-                v-else-if="enhancingPrompt || promptEnhancementError"
-                data-testid="talos-enhancement-status-popover"
-                data-talos-composer-overlay
-                role="status"
-                aria-live="polite"
-                class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl"
-            >
-                <div v-if="enhancingPrompt" class="flex items-center gap-2 text-[var(--talos-muted)]">
-                    <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
-                    Enhancing prompt
                 </div>
-                <div v-else class="flex items-start justify-between gap-3">
-                    <span>{{ promptEnhancementError }}</span>
-                    <Button size="sm" variant="ghost" @click="emit('clearPromptEnhancement')">Cancel</Button>
+            </Transition>
+
+            <Transition name="talos-popover" @leave="completePopoverLeave">
+                <div
+                    v-if="promptEnhancementResult"
+                    data-testid="talos-enhancement-popover"
+                    data-talos-composer-overlay
+                    role="dialog"
+                    aria-label="Prompt enhancement preview"
+                    class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2"
+                >
+                    <TalosPromptEnhancerPopover
+                        :result="promptEnhancementResult"
+                        @replace="emit('replacePromptWithEnhanced')"
+                        @insert="emit('insertEnhancedPromptBelow')"
+                        @cancel="emit('clearPromptEnhancement')"
+                    />
                 </div>
-            </div>
+
+                <div
+                    v-else-if="enhancingPrompt || promptEnhancementError"
+                    data-testid="talos-enhancement-status-popover"
+                    data-talos-composer-overlay
+                    role="status"
+                    aria-live="polite"
+                    class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl"
+                >
+                    <div v-if="enhancingPrompt" class="flex items-center gap-2 text-[var(--talos-muted)]">
+                        <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                        Enhancing prompt
+                    </div>
+                    <div v-else class="flex items-start justify-between gap-3">
+                        <span>{{ promptEnhancementError }}</span>
+                        <Button size="sm" variant="ghost" @click="emit('clearPromptEnhancement')">Cancel</Button>
+                    </div>
+                </div>
+            </Transition>
 
             <TalosSlimComposer
                 v-model:prompt="composerPrompt"
@@ -270,6 +291,7 @@ onBeforeUnmount(() => {
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
                 :browser-current-page="browserCurrentPage"
+                :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
                 :chat-layout-locked="chatLayoutLocked"
                 :send-disabled-reason="sendDisabledReason"

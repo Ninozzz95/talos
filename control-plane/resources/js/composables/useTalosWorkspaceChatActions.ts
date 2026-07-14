@@ -1,10 +1,12 @@
 import { nextTick, ref, type Readonly, type Ref } from 'vue'
 import { talosFetch } from '../lib/api'
 import type { CreateTalosMessagePayload } from './useTalosSessions'
+import type { TalosChatProxyResponse } from './useTalosChat'
 import type { TalosMessage, TalosSession } from '../lib/talosTypes'
 
 type ChatResult = {
     assistantMessage?: TalosMessage | null
+    response?: TalosChatProxyResponse | null
 }
 
 export type TalosWorkspaceChatActionDependencies = {
@@ -35,8 +37,10 @@ export type TalosWorkspaceChatActionDependencies = {
         persistMessage: (sessionId: string, payload: CreateTalosMessagePayload) => Promise<TalosMessage>
     }) => Promise<ChatResult>
     createMessage: (sessionId: string, payload: CreateTalosMessagePayload) => Promise<TalosMessage>
+    acceptPersistedMessage: (message: TalosMessage) => void
     centerMessage: (messageId: string) => Promise<void>
     recordBrowserActivities: (value: unknown) => void
+    recordPendingToolApprovals: (value: unknown) => void
     openSettings: () => void
     openModelPopover: () => void
     closePopover: () => void
@@ -94,7 +98,14 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
                     ? persistedUserMessage
                     : deps.createMessage(sessionId, payload),
             })
-            deps.recordBrowserActivities(chatResult.assistantMessage?.metadata?.browser_activities)
+            if (chatResult.assistantMessage) {
+                deps.acceptPersistedMessage(chatResult.assistantMessage)
+            }
+            deps.recordBrowserActivities(
+                chatResult.response?.browser_activities
+                ?? chatResult.assistantMessage?.metadata?.browser_activities,
+            )
+            deps.recordPendingToolApprovals(chatResult.response?.pending_approvals ?? [])
             await nextTick()
             return true
         } catch (error) {

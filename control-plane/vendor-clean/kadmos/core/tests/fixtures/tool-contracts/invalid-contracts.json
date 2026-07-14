@@ -1,0 +1,436 @@
+[
+  {
+    "label": "definition rejects unknown root fields",
+    "contract": "definition",
+    "payload": {
+      "name": "browser_snapshot",
+      "description": "Capture a snapshot.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "handler": "BrowserWorker"
+    }
+  },
+  {
+    "label": "definition requires an object input schema",
+    "contract": "definition",
+    "payload": {
+      "name": "browser_snapshot",
+      "description": "Capture a snapshot.",
+      "inputSchema": {
+        "type": "array",
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "label": "definition input schema is closed",
+    "contract": "strict_definition",
+    "payload": {
+      "name": "browser_snapshot",
+      "description": "Capture a snapshot.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      }
+    }
+  },
+  {
+    "label": "definition annotations are booleans",
+    "contract": "definition",
+    "payload": {
+      "name": "browser_snapshot",
+      "description": "Capture a snapshot.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "annotations": {
+        "readOnlyHint": "yes"
+      }
+    }
+  },
+  {
+    "label": "call schema version is pinned",
+    "contract": "call",
+    "payload": {
+      "schema_version": "talos_provider_tool_call_v2",
+      "provider_call_id": "call-1",
+      "name": "browser_snapshot",
+      "arguments": {},
+      "assistant_preamble": null,
+      "provider_metadata": {}
+    }
+  },
+  {
+    "label": "definition name follows MCP characters",
+    "contract": "definition",
+    "payload": {
+      "name": "browser:snapshot",
+      "description": "Capture a snapshot.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "label": "call id is required",
+    "contract": "call",
+    "payload": {
+      "schema_version": "talos_provider_tool_call_v1",
+      "provider_call_id": "",
+      "name": "browser_snapshot",
+      "arguments": {},
+      "assistant_preamble": null,
+      "provider_metadata": {}
+    }
+  },
+  {
+    "label": "call arguments stay structured",
+    "contract": "call",
+    "payload": {
+      "schema_version": "talos_provider_tool_call_v1",
+      "provider_call_id": "call-1",
+      "name": "browser_snapshot",
+      "arguments": "{}",
+      "assistant_preamble": null,
+      "provider_metadata": {}
+    }
+  },
+  {
+    "label": "call arguments reject ambiguous sequential numeric objects",
+    "contract": "call",
+    "payload": {
+      "schema_version": "talos_provider_tool_call_v1",
+      "provider_call_id": "call-1",
+      "name": "browser_snapshot",
+      "arguments": {
+        "0": "ambiguous",
+        "1": "object"
+      },
+      "assistant_preamble": null,
+      "provider_metadata": {}
+    }
+  },
+  {
+    "label": "call rejects model authority",
+    "contract": "call",
+    "payload": {
+      "schema_version": "talos_provider_tool_call_v1",
+      "provider_call_id": "call-1",
+      "name": "browser_snapshot",
+      "arguments": {},
+      "assistant_preamble": null,
+      "provider_metadata": {},
+      "run_id": "model-run"
+    }
+  },
+  {
+    "label": "context state version is non-negative",
+    "contract": "context",
+    "payload": {
+      "schema_version": "talos_tool_execution_context_v1",
+      "user_id": "user-1",
+      "chat_session_id": "chat-1",
+      "run_id": "run-1",
+      "turn_id": "turn-1",
+      "browser_session_id": null,
+      "node_id": "node-1",
+      "capability": "browser.read",
+      "risk": "read",
+      "state_version": -1,
+      "deadline_at": "2026-07-12T20:00:00Z",
+      "idempotency_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "label": "context idempotency key is a sha256 digest",
+    "contract": "context",
+    "payload": {
+      "schema_version": "talos_tool_execution_context_v1",
+      "user_id": "user-1",
+      "chat_session_id": "chat-1",
+      "run_id": "run-1",
+      "turn_id": "turn-1",
+      "browser_session_id": null,
+      "node_id": "node-1",
+      "capability": "browser.read",
+      "risk": "read",
+      "state_version": 0,
+      "deadline_at": "2026-07-12T20:00:00Z",
+      "idempotency_key": "not-a-digest"
+    }
+  },
+  {
+    "label": "context deadline is ISO-8601",
+    "contract": "context",
+    "payload": {
+      "schema_version": "talos_tool_execution_context_v1",
+      "user_id": "user-1",
+      "chat_session_id": "chat-1",
+      "run_id": "run-1",
+      "turn_id": "turn-1",
+      "browser_session_id": null,
+      "node_id": "node-1",
+      "capability": "browser.read",
+      "risk": "read",
+      "state_version": 0,
+      "deadline_at": "tomorrow",
+      "idempotency_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "label": "call identifiers reject Unicode-only whitespace",
+    "contract": "call",
+    "payload": {
+      "schema_version": "talos_provider_tool_call_v1",
+      "provider_call_id": "\u2003",
+      "name": "browser_snapshot",
+      "arguments": {},
+      "assistant_preamble": null,
+      "provider_metadata": {}
+    }
+  },
+  {
+    "label": "result schema version is pinned",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v2",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [],
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "result content is a list",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": {
+        "type": "text",
+        "text": "not a list"
+      },
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "result requires every canonical root field",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [],
+      "structuredContent": null
+    }
+  },
+  {
+    "label": "result error flag is boolean",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": "false",
+      "content": [],
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "result content union is closed",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [
+        {
+          "type": "video",
+          "url": "https://example.com/video.mp4"
+        }
+      ],
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "result id must match the provider call",
+    "contract": "result",
+    "expected_tool_use_id": "call-expected",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-other",
+      "isError": true,
+      "content": [
+        {
+          "type": "text",
+          "text": "Failed."
+        }
+      ],
+      "structuredContent": {
+        "code": "TOOL_FAILED"
+      },
+      "evidence": []
+    }
+  },
+  {
+    "label": "structured JSON belongs in structuredContent",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [
+        {
+          "type": "json",
+          "value": {
+            "state_version": 4
+          }
+        }
+      ],
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "evidence hash is pinned to sha256",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [],
+      "structuredContent": null,
+      "evidence": [
+        {
+          "artifact_id": "artifact-1",
+          "kind": "snapshot",
+          "sha256": "md5:bad",
+          "trusted_boundary": "untrusted_web_content"
+        }
+      ]
+    }
+  },
+  {
+    "label": "image data is valid base64",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [
+        {
+          "type": "image",
+          "mimeType": "image/png",
+          "data": "not base64!"
+        }
+      ],
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "evidence artifact IDs are unique",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [],
+      "structuredContent": null,
+      "evidence": [
+        {
+          "artifact_id": "artifact-1",
+          "kind": "snapshot",
+          "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "trusted_boundary": "untrusted_web_content"
+        },
+        {
+          "artifact_id": "artifact-1",
+          "kind": "screenshot",
+          "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "trusted_boundary": "untrusted_web_content"
+        }
+      ]
+    }
+  },
+  {
+    "label": "content artifact must reference persisted evidence",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [
+        {
+          "type": "resource_link",
+          "uri": "talos-artifact://artifact-missing",
+          "name": "Missing screenshot",
+          "mimeType": "image/png"
+        }
+      ],
+      "structuredContent": null,
+      "evidence": []
+    }
+  },
+  {
+    "label": "structured evidence ids reject explicit null",
+    "contract": "result",
+    "payload": {
+      "schema_version": "talos_tool_result_v1",
+      "tool_use_id": "call-1",
+      "isError": false,
+      "content": [],
+      "structuredContent": {
+        "evidence_ids": null
+      },
+      "evidence": []
+    }
+  },
+  {
+    "label": "definition properties reject ambiguous sequential numeric objects",
+    "contract": "definition",
+    "payload": {
+      "name": "browser_snapshot",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "0": {
+            "type": "string"
+          },
+          "1": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "label": "definition icons reject unsafe schemes",
+    "contract": "definition",
+    "payload": {
+      "name": "browser_snapshot",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "icons": [
+        {
+          "src": "ftp://example.com/talos.png"
+        }
+      ]
+    }
+  }
+]

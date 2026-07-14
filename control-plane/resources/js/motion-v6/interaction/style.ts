@@ -94,6 +94,7 @@ export function talosInteractionMotionStyleV6(request: TalosInteractionMotionSty
         '--talos-motion-stagger': `${plans.message.delayMs}ms`,
         '--talos-motion-intensity': enabled ? String(request.preferences.interface.intensity / 100) : '0',
         '--talos-motion-ease': plans.menuOpen.easing,
+        '--talos-motion-ease-exit': plans.menuClose.easing,
         '--talos-motion-open-transform': plans.menuOpen.keyframes[0]?.transform ?? 'none',
         '--talos-motion-surface-transform': plans.disclosure.keyframes[0]?.transform ?? 'none',
         '--talos-motion-open-style': plans.menuOpen.enabled ? presentation.open : 'off',

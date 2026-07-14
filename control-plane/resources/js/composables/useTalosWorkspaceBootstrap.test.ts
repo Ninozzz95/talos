@@ -39,6 +39,18 @@ function dependencies() {
 }
 
 describe('useTalosWorkspaceBootstrap', () => {
+    it('replaces a stale persisted model selection with the first callable profile', async () => {
+        const deps = dependencies()
+        deps.selectedModelProfileId.value = 'deleted-model'
+        const bootstrap = useTalosWorkspaceBootstrap(deps)
+
+        await bootstrap.refreshModelAndContext()
+
+        expect(deps.selectedModelProfileId.value).toBe('model-1')
+        expect(deps.selectedModelRoutingProfileId.value).toBe('')
+        expect(deps.saveWorkspacePreferences).toHaveBeenCalledOnce()
+    })
+
     it('applies query modules without consuming unrelated parameters', () => {
         const deps = dependencies()
         const bootstrap = useTalosWorkspaceBootstrap(deps)

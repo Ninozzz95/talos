@@ -1,0 +1,26 @@
+{
+  "provider_response": {
+    "id": "deepseek-tools-1",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "reasoning_content": "private-reasoning-trace",
+          "tool_calls": [
+            {
+              "id": "call_browser_1",
+              "type": "function",
+              "function": {
+                "name": "browser_navigate",
+                "arguments": "{\"url\":\"https://example.com\"}"
+              }
+            }
+          ]
+        },
+        "finish_reason": "tool_calls"
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "provider_response": {
+    "id": "resp-final-1",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "id": "msg-final-1",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "The page is ready.",
+            "annotations": []
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 20,
+      "output_tokens": 5,
+      "total_tokens": 25
+    }
+  }
+}

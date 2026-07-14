@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Dock, Maximize2, Minimize2, Minus, RotateCcw, X } from '@lucide/vue'
+import { Dock, Eye, EyeOff, Maximize2, Minimize2, Minus, RotateCcw, X } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 
 const props = defineProps<{
@@ -8,6 +8,8 @@ const props = defineProps<{
     description?: string
     docked?: boolean
     fullscreen?: boolean
+    peekAvailable?: boolean
+    peeking?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -17,8 +19,8 @@ const emit = defineEmits<{
     restore: [id: string]
     dock: [id: string]
     close: [id: string]
-    dragStart: [id: string, event: PointerEvent]
     snap: [id: string, side: 'left' | 'right']
+    peek: [id: string]
     cancelInteraction: [id: string]
 }>()
 
@@ -50,12 +52,11 @@ function handleTitleKeydown(event: KeyboardEvent) {
 <template>
     <header class="flex min-h-12 items-center justify-between gap-3 border-b border-[var(--talos-border)] bg-[var(--talos-header)] px-3">
         <div
-            class="min-w-0 flex-1 select-none"
+            class="talos-window-drag-handle min-w-0 flex-1 select-none"
             :class="fullscreen ? 'cursor-default' : 'cursor-move'"
             :aria-label="`Drag ${title} window`"
             role="button"
             tabindex="0"
-            @pointerdown.left="!fullscreen && emit('dragStart', id, $event)"
             @dblclick="toggleFullscreen"
             @keydown="handleTitleKeydown"
         >
@@ -63,6 +64,20 @@ function handleTitleKeydown(event: KeyboardEvent) {
             <p v-if="description" class="truncate text-[11px] text-[var(--talos-muted)]">{{ description }}</p>
         </div>
         <div class="flex items-center gap-1">
+            <Button
+                v-if="peekAvailable"
+                type="button"
+                variant="ghost"
+                size="icon"
+                :aria-label="peeking ? `Stop peeking behind ${title}` : `Peek behind ${title}`"
+                :aria-pressed="peeking ? 'true' : 'false'"
+                :title="peeking ? 'Stop Peek' : 'Peek behind window'"
+                @pointerdown.stop
+                @click.stop="emit('peek', id)"
+            >
+                <EyeOff v-if="peeking" class="h-4 w-4" />
+                <Eye v-else class="h-4 w-4" />
+            </Button>
             <Button type="button" variant="ghost" size="icon" :aria-label="`Minimize ${title}`" @pointerdown.stop @click.stop="emit('minimize', id)">
                 <Minus class="h-4 w-4" />
             </Button>

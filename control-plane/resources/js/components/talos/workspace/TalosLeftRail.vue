@@ -36,6 +36,7 @@ import {
     X,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
 import { sessionChatState } from '../../../composables/useTalosSessions'
 import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
@@ -45,6 +46,7 @@ type RailItem = {
     id: string
     label: string
     description: string
+    guideId: string
     icon: unknown
     disabledReason?: string
 }
@@ -69,28 +71,28 @@ const emit = defineEmits<{
 }>()
 
 const primaryItems: RailItem[] = [
-    { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', icon: Activity },
-    { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', icon: CalendarDays },
-    { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
-    { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', icon: FlaskConical },
-    { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', icon: BookOpen },
-    { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', icon: Image },
-    { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },
-    { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', icon: Globe2 },
+    { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', guideId: 'rail.runtime', icon: Activity },
+    { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', guideId: 'rail.calendar', icon: CalendarDays },
+    { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', guideId: 'rail.compare', icon: BarChart3 },
+    { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', guideId: 'rail.model_lab', icon: FlaskConical },
+    { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', guideId: 'rail.research', icon: BookOpen },
+    { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', guideId: 'rail.gallery', icon: Image },
+    { id: 'library', label: 'Library', description: 'Documents and file context.', guideId: 'rail.library', icon: FileArchive },
+    { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', guideId: 'rail.browse', icon: Globe2 },
 ]
 
 const advancedItems: TalosAdvancedRailItem[] = [
-    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
-    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
-    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
-    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
-    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
-    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
+    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', guideId: 'rail.tasks', icon: ListTodo },
+    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', guideId: 'rail.notes', icon: NotebookPen },
+    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', guideId: 'rail.search', icon: Search },
+    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', guideId: 'rail.brain', icon: Brain },
+    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', guideId: 'rail.tools', icon: Wrench },
+    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', guideId: 'rail.doctor', icon: Stethoscope },
 ]
 
 const systemItems: RailItem[] = [
-    { id: 'settings', label: 'Settings', description: 'Workspace setup and appearance.', icon: Settings },
-    { id: 'theme', label: 'Theme', description: 'Local theme switcher.', icon: Palette },
+    { id: 'settings', label: 'Settings', description: 'Workspace setup and appearance.', guideId: 'rail.settings', icon: Settings },
+    { id: 'theme', label: 'Theme', description: 'Local theme switcher.', guideId: 'rail.theme', icon: Palette },
 ]
 
 const props = defineProps<{
@@ -478,7 +480,7 @@ function startNewChat() {
         <h2 v-if="mobileOpen" id="talos-mobile-history-title" class="sr-only">Chat history</h2>
         <div class="flex items-center gap-2 px-1" :class="effectiveCollapsed ? 'justify-center' : 'justify-between'">
             <div v-if="!effectiveCollapsed && visibility.brand_name !== false" data-testid="talos-rail-brand" class="flex min-w-0 flex-1 items-center gap-2">
-                <span data-testid="talos-rail-brand-logo" class="talos-short-logo talos-short-logo-compact" aria-hidden="true">
+                <span data-testid="talos-rail-brand-logo" class="talos-short-logo talos-short-logo-compact talos-rail-brand-logo" aria-hidden="true">
                     <span class="talos-short-logo-mark"></span>
                 </span>
                 <div data-testid="talos-rail-brand-copy" class="min-w-0">
@@ -657,29 +659,35 @@ function startNewChat() {
         </Teleport>
 
         <nav class="mt-3 min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="TALOS modules">
-            <button
+            <div
                 v-for="item in visiblePrimaryItems"
                 :key="item.id"
-                type="button"
-                class="group flex w-full cursor-pointer items-center rounded-md border text-left transition hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-                :class="[
-                    effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5',
-                    activeIds.includes(item.id)
-                        ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]'
-                        : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]',
-                ]"
-                :aria-pressed="activeIds.includes(item.id)"
-                :aria-label="item.label"
-                :title="item.disabledReason || item.description"
-                :disabled="Boolean(item.disabledReason)"
-                @click="openRailItem(item.id, $event)"
+                class="flex min-w-0 items-center"
+                :class="effectiveCollapsed ? 'justify-center gap-0' : 'gap-1'"
             >
-                <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-                <span v-if="!effectiveCollapsed" class="min-w-0">
-                    <span class="block truncate text-[13px] font-medium">{{ item.label }}</span>
-                    <span class="sr-only">{{ item.description }}</span>
-                </span>
-            </button>
+                <button
+                    type="button"
+                    class="group flex min-w-0 flex-1 cursor-pointer items-center rounded-md border text-left transition hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                    :class="[
+                        effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5',
+                        activeIds.includes(item.id)
+                            ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]'
+                            : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]',
+                    ]"
+                    :aria-pressed="activeIds.includes(item.id)"
+                    :aria-label="item.label"
+                    :title="item.disabledReason || item.description"
+                    :disabled="Boolean(item.disabledReason)"
+                    @click="openRailItem(item.id, $event)"
+                >
+                    <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
+                    <span v-if="!effectiveCollapsed" class="min-w-0">
+                        <span class="block truncate text-[13px] font-medium">{{ item.label }}</span>
+                        <span class="sr-only">{{ item.description }}</span>
+                    </span>
+                </button>
+                <TalosGuideInfoButton :guide-id="item.guideId" :compact="effectiveCollapsed" side="right" />
+            </div>
             <TalosAdvancedRailGroup
                 v-if="visibleAdvancedItems.length"
                 :items="visibleAdvancedItems"
@@ -694,20 +702,26 @@ function startNewChat() {
 
         <div class="mt-2 border-t border-[var(--talos-border)] pt-2">
             <div class="space-y-0.5">
-                <button
+                <div
                     v-for="item in visibleSystemItems"
                     :key="item.id"
-                    type="button"
-                    class="flex w-full cursor-pointer items-center rounded-md border border-transparent text-left text-[13px] text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                    :class="effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5'"
-                    :aria-pressed="activeIds.includes(item.id)"
-                    :aria-label="item.label"
-                    :title="item.description"
-                    @click="openRailItem(item.id, $event)"
+                    class="flex min-w-0 items-center"
+                    :class="effectiveCollapsed ? 'justify-center gap-0' : 'gap-1'"
                 >
-                    <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-                    <span v-if="!effectiveCollapsed" class="truncate">{{ item.label }}</span>
-                </button>
+                    <button
+                        type="button"
+                        class="flex min-w-0 flex-1 cursor-pointer items-center rounded-md border border-transparent text-left text-[13px] text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                        :class="effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5'"
+                        :aria-pressed="activeIds.includes(item.id)"
+                        :aria-label="item.label"
+                        :title="item.description"
+                        @click="openRailItem(item.id, $event)"
+                    >
+                        <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
+                        <span v-if="!effectiveCollapsed" class="truncate">{{ item.label }}</span>
+                    </button>
+                    <TalosGuideInfoButton :guide-id="item.guideId" :compact="effectiveCollapsed" side="right" />
+                </div>
             </div>
 
             <button

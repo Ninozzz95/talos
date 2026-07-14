@@ -32,6 +32,13 @@ This file defines how agentic coding work must be done in this repository. It is
 - When no suitable standard exists, document the gap, evaluated alternatives, and reason for a custom design before implementation.
 - Pin protocol versions and add conformance fixtures so upstream changes fail visibly instead of silently degrading behavior.
 
+## Direct Open-Source Integration
+
+- When the user selects a specific open-source technology for TALOS/AVM, integrate the upstream project directly through its supported package, API, MCP server, executable, or isolated sidecar boundary. Do not replace it with a home-grown imitation.
+- Pin the upstream version or commit, preserve required notices and source/distribution obligations, record the license and provenance, and add security, compatibility, health, upgrade, and rollback gates.
+- Keep upstream-specific behavior behind an AVM-owned adapter so policy, ownership, evidence, replay, and provider-neutral contracts remain under TALOS control.
+- A direct integration is complete only when the real upstream component is exercised end to end; mocks may support tests but cannot substitute for the integration gate.
+
 ## Regression Prevention
 
 - Treat every established, working user flow as a compatibility contract. Before changing adjacent behavior, identify the affected contracts and the tests that prove them.
@@ -76,6 +83,8 @@ Any claim that AVM improves model behavior must be benchmarked against AVM OFF u
 - Parse structured responses by type and schema, not by array position.
 - Prefer JSON/Zod/PHP value objects over regex.
 - If parsing model JSON, strip code fences defensively, validate shape, and handle parse failure as a validation fault.
+- External canonical tool JSON must enter PHP through the shape-preserving `fromJson()` boundary. Never pass `json_decode(..., true)` output directly to a tool contract `fromArray()` method; associative decoding destroys the object/list distinction.
+- Tool contract `fromArray()` methods are for server-constructed or already shape-validated canonical values only.
 
 ## Error Handling
 

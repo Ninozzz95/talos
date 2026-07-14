@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { fileURLToPath } from "node:url";
 import { isAbsolute, relative, resolve } from "node:path";
+import ipaddr from "ipaddr.js";
 import type { BrowserContext, Route } from "playwright";
 import { BrowserError } from "./BrowserErrors.js";
 
@@ -21,7 +22,8 @@ export async function assertAllowedBrowserUrl(value: string): Promise<void> {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw invalidUrl();
 
-  const hostname = url.hostname.toLowerCase();
+  const hostname = normalizeHostname(url.hostname);
+  if (hostname === "") throw invalidUrl();
   if (isReservedHostname(hostname)) throw invalidUrl();
   let addresses: Array<{ address: string }>;
   try {
@@ -53,19 +55,26 @@ function isAllowedFixturePath(url: URL): boolean {
 }
 
 export function isReservedHostname(hostname: string): boolean {
-  return hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || hostname === "metadata.google.internal";
+  const normalized = normalizeHostname(hostname);
+  return normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local") || normalized === "metadata.google.internal";
+}
+
+export function normalizeHostname(hostname: string): string {
+  return hostname.trim().toLowerCase().replace(/\.+$/, "");
 }
 
 export function isPrivateOrReservedIp(address: string): boolean {
-  const mappedIpv4 = address.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
-  if (mappedIpv4) return isPrivateOrReservedIp(mappedIpv4);
-  if (isIP(address) === 4) {
-    const octets = address.split(".").map(Number);
-    const [first, second, third] = octets;
-    return first === 0 || first === 10 || first === 127 || first >= 224 || (first === 100 && second >= 64 && second <= 127) || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && (second === 0 || second === 168)) || (first === 192 && second === 2) || (first === 198 && (second === 18 || second === 19 || second === 51)) || (first === 203 && second === 0 && third === 113);
+  try {
+    if (!ipaddr.isValid(address)) return true;
+    const parsed = ipaddr.parse(address);
+    if (parsed.kind() === "ipv6") {
+      const ipv6 = parsed as ipaddr.IPv6;
+      return (ipv6.isIPv4MappedAddress() ? ipv6.toIPv4Address() : ipv6).range() !== "unicast";
+    }
+    return parsed.range() !== "unicast";
+  } catch {
+    return true;
   }
-  const normalized = address.toLowerCase();
-  return normalized === "::" || normalized === "::1" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb") || normalized.startsWith("ff");
 }
 
 function invalidUrl(): BrowserError {

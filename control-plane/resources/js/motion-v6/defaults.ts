@@ -15,7 +15,7 @@ const DEFAULT_CATEGORIES = Object.freeze({
 
 const DEFAULT_INTERFACE = Object.freeze({
     profile: 'preset',
-    duration_scale: 100,
+    duration_scale: 50,
     intensity: 65,
     easing: 'precise',
     stagger: 40,
@@ -30,6 +30,7 @@ export const TALOS_MOTION_V6_DEFAULTS = Object.freeze({
     scene_override: null,
     speed: 100,
     intensity: 65,
+    glow_intensity: 0,
     density: 100,
     depth: 50,
     trails: 35,
@@ -52,6 +53,7 @@ export function createDefaultTalosMotionV6Preferences(): TalosMotionV6Preference
         scene_override: TALOS_MOTION_V6_DEFAULTS.scene_override,
         speed: TALOS_MOTION_V6_DEFAULTS.speed,
         intensity: TALOS_MOTION_V6_DEFAULTS.intensity,
+        glow_intensity: TALOS_MOTION_V6_DEFAULTS.glow_intensity,
         density: TALOS_MOTION_V6_DEFAULTS.density,
         depth: TALOS_MOTION_V6_DEFAULTS.depth,
         trails: TALOS_MOTION_V6_DEFAULTS.trails,

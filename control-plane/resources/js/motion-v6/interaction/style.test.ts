@@ -3,6 +3,31 @@ import { createDefaultTalosMotionV6Preferences } from '../defaults'
 import { talosInteractionMotionStyleV6 } from './style'
 
 describe('talosInteractionMotionStyleV6', () => {
+    it('applies the canonical 50 percent duration scale to runtime motion tokens', () => {
+        const defaults = createDefaultTalosMotionV6Preferences()
+        const defaultStyle = talosInteractionMotionStyleV6({
+            themeId: 'forge',
+            preferences: defaults,
+            reducedMotion: false,
+            paused: false,
+        })
+        const explicitFullScale = createDefaultTalosMotionV6Preferences()
+        explicitFullScale.interface.duration_scale = 100
+        const fullScaleStyle = talosInteractionMotionStyleV6({
+            themeId: 'forge',
+            preferences: explicitFullScale,
+            reducedMotion: false,
+            paused: false,
+        })
+
+        const milliseconds = (value: string) => Number(value.replace('ms', ''))
+        expect(defaults.interface.duration_scale).toBe(50)
+        expect(milliseconds(defaultStyle['--talos-motion-duration-window-open']))
+            .toBeLessThan(milliseconds(fullScaleStyle['--talos-motion-duration-window-open']))
+        expect(milliseconds(defaultStyle['--talos-motion-duration-menu']))
+            .toBeLessThan(milliseconds(fullScaleStyle['--talos-motion-duration-menu']))
+    })
+
     it('projects the selected V6 profile into the shared product motion tokens', () => {
         const preferences = createDefaultTalosMotionV6Preferences()
         preferences.interface.duration_scale = 150
@@ -19,6 +44,8 @@ describe('talosInteractionMotionStyleV6', () => {
         expect(style['--talos-motion-duration-message-insert']).toBe('188ms')
         expect(style['--talos-motion-intensity']).toBe('0.8')
         expect(style['--talos-motion-ease']).toContain('cubic-bezier')
+        expect(style['--talos-motion-ease-exit']).toContain('cubic-bezier')
+        expect(style['--talos-motion-ease-exit']).not.toBe(style['--talos-motion-ease'])
     })
 
     it('sets disabled categories and paused runtime to immediate final-state tokens', () => {
@@ -31,7 +58,7 @@ describe('talosInteractionMotionStyleV6', () => {
             paused: false,
         })
         expect(active['--talos-motion-duration-menu']).toBe('0ms')
-        expect(active['--talos-motion-duration-message-insert']).toBe('160ms')
+        expect(active['--talos-motion-duration-message-insert']).toBe('80ms')
 
         const paused = talosInteractionMotionStyleV6({
             themeId: 'forge',

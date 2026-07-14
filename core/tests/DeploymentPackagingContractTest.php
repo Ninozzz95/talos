@@ -104,7 +104,7 @@ function testDockerfilesAndRootLauncherExist(): void
         'talos dev',
         'talos doctor',
         'doctor --repair',
-        'docker compose up -d --build',
+        'compose up -d --build',
         'maybe_boot',
         'TALOS_NO_BOOT',
         '--no-boot',
@@ -240,9 +240,137 @@ function testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations(): voi
     assertDeploymentFileContains($root.'/Dockerfile.browser-worker', [
         'browser-worker',
         'playwright install',
+        'ENV NODE_ENV=production',
         'TALOS_BROWSER_WORKER_TOKEN',
         'USER node',
         'PLAYWRIGHT_BROWSERS_PATH',
+    ]);
+}
+
+function testProductionBrowserWorkerCannotBeSilentlyOmitted(): void
+{
+    $root = dirname(__DIR__, 2);
+    $compose = (string) file_get_contents($root.'/docker-compose.yml');
+
+    assertDeploymentFileContains($root.'/control-plane/app/Providers/AppServiceProvider.php', [
+        'BrowserWorkerConfiguration',
+        'assertReadyFor($this->app->environment())',
+    ]);
+    assertDeploymentFileContains($root.'/control-plane/app/Services/Talos/Browser/BrowserWorkerConfiguration.php', [
+        "environment !== 'production'",
+        'TALOS_BROWSER_WORKER_URL is required in production',
+        'TALOS_BROWSER_WORKER_TOKEN is required in production',
+        'must contain at least 32 characters',
+        '128 bits of estimated entropy',
+        'TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT',
+    ]);
+
+    foreach (['talos', 'talos-queue'] as $serviceName) {
+        assertTrue(
+            (bool) preg_match('/\n  '.preg_quote($serviceName, '/').':\n(?<service>.*?)(?=\n  [a-z][a-z0-9-]*:\n|\nvolumes:)/s', $compose, $matches),
+            "docker-compose.yml should contain a parseable {$serviceName} service."
+        );
+        assertTrue(
+            str_contains($matches['service'], 'TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}'),
+            "{$serviceName} must fail Compose expansion when the browser-worker secret is missing."
+        );
+        assertTrue(
+            str_contains($matches['service'], 'TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true'),
+            "{$serviceName} must explicitly opt into its private HTTP browser-worker bridge."
+        );
+        assertTrue(
+            (bool) preg_match('/browser-worker:\s+condition: service_healthy/s', $matches['service']),
+            "{$serviceName} must wait for a healthy browser worker."
+        );
+    }
+
+    assertDeploymentFileContains($root.'/docs/deployment.md', [
+        'Native browser-worker service',
+        'TALOS_BROWSER_WORKER_URL=http://127.0.0.1:3100',
+        'TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret>',
+        'TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true',
+        'HTTPS worker URLs are accepted by default.',
+        'until `/readyz` reports `browser_worker.status=healthy`',
+    ]);
+}
+
+function testOptionalSearxngIntegrationIsPinnedInternalAndJsonOnly(): void
+{
+    $root = dirname(__DIR__, 2);
+    $compose = (string) file_get_contents($root.'/docker-compose.yml');
+
+    assertDeploymentFileContains($root.'/.env.example', [
+        'TALOS_WEB_SEARCH_PROVIDER=unavailable',
+        'TALOS_SEARXNG_URL=http://searxng:8080',
+        'TALOS_SEARXNG_SECRET=',
+        'TALOS_BROWSER_SEARCH_ENABLED=false',
+        'TALOS_BROWSER_SEARCH_ORIGIN=',
+    ]);
+    assertDeploymentFileContains($root.'/docker-compose.yml', [
+        'searxng:',
+        'profiles: ["search"]',
+        'docker.io/searxng/searxng:2026.7.12-c19d86faa@sha256:f433294b46a93564993c4371005341e013d94aa8ea4662d8ee521cd2cccb08e8',
+        './deploy/searxng/settings.yml:/etc/searxng/settings.yml:ro',
+        'TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}',
+        'TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}',
+        'test: ["CMD", "wget", "--spider", "--quiet", "--timeout=5", "--tries=1", "http://127.0.0.1:8080/healthz"]',
+        'interval: 10s',
+        'timeout: 5s',
+        'retries: 12',
+        'start_period: 20s',
+    ]);
+    assertDeploymentFileContains($root.'/deploy/searxng/settings.yml', [
+        'use_default_settings: true',
+        'formats:',
+        '- json',
+        'limiter: false',
+        'public_instance: false',
+    ]);
+    assertTrue(
+        preg_match('/\n  searxng:\n(?<service>.*?)(?=\n  [a-z][a-z0-9-]*:\n|\nvolumes:)/s', $compose, $matches) === 1,
+        'docker-compose.yml should contain a parseable SearXNG service block.'
+    );
+    assertTrue(
+        ! str_contains($matches['service'], 'ports:'),
+        'The optional SearXNG API must stay internal and must not publish a host port.'
+    );
+    assertDeploymentFileContains($root.'/talos', [
+        'TALOS_WEB_SEARCH_PROVIDER',
+        'COMPOSE_PROFILES',
+        '--profile search',
+        'reconcile_stale_search_service',
+        'rm -sf searxng',
+        'wait_for_search_ready',
+        'compose_all_profiles',
+        'search_health_url="http://127.0.0.1:8080/healthz"',
+        'wget --spider --quiet --timeout=5 --tries=1',
+        'search_json_url="http://127.0.0.1:8080/search?q=talos&format=json"',
+        'seq 1 3',
+        'results',
+        'python3 -c',
+    ]);
+    assertDeploymentFileContains($root.'/scripts/tests/talos-clean-clone-launcher.sh', [
+        'The unavailable search provider did not reconcile a stale SearXNG service',
+        'Provider switch to unavailable did not reconcile stale SearXNG before up',
+        'SearXNG launcher command did not activate the search profile',
+        'Explicit COMPOSE_PROFILES=search intent was not preserved',
+        'SearXNG launcher did not wait for the internal /healthz endpoint',
+        'SearXNG launcher did not remove all Compose profiles during down',
+    ]);
+    assertDeploymentFileContains($root.'/docs/deployment.md', [
+        'TALOS_WEB_SEARCH_PROVIDER=searxng',
+        'Bash launcher automatically',
+        'enables the Compose `search` profile',
+        'bounded JSON API readiness probe',
+        'stale auto-managed SearXNG service',
+        'COMPOSE_PROFILES',
+    ]);
+    assertDeploymentFileContains($root.'/THIRD_PARTY_NOTICES.md', [
+        'SearXNG 2026.7.12-c19d86faa',
+        'https://github.com/searxng/searxng/commit/c19d86faa393bdd696a5708e3c294f956d750683',
+        'AGPL-3.0-or-later',
+        'sha256:f433294b46a93564993c4371005341e013d94aa8ea4662d8ee521cd2cccb08e8',
+        'optional isolated sidecar',
     ]);
 }
 
@@ -293,12 +421,42 @@ function testDockerFirstCleanCloneDoesNotRequireHostPhp(): void
 function testRealDockerIntegrationContractIsWiredIntoCi(): void
 {
     $root = dirname(__DIR__, 2);
+    $integration = (string) file_get_contents($root.'/scripts/tests/talos-docker-integration.sh');
+    $tokenAssignment = 'export TALOS_BROWSER_WORKER_TOKEN="$(generate_strong_token)"';
+    $configInvocation = 'docker compose --profile search config';
+    $tokenPosition = strpos($integration, $tokenAssignment);
+    $configPosition = strpos($integration, $configInvocation);
+
+    assertTrue(
+        str_contains($integration, $tokenAssignment),
+        'The Docker integration must generate a fresh strong browser-worker token.'
+    );
+    assertTrue(
+        is_int($tokenPosition) && is_int($configPosition) && $tokenPosition < $configPosition,
+        'The browser-worker token must be exported before Compose config is evaluated.'
+    );
+    assertTrue(
+        str_contains($integration, 'openssl rand -hex 32')
+        && str_contains($integration, '/dev/urandom')
+        && str_contains($integration, 'A cryptographically secure random generator is required.'),
+        'The Docker integration token generator must fail closed without a cryptographically secure source.'
+    );
 
     assertDeploymentFileContains($root.'/scripts/tests/talos-docker-integration.sh', [
         'docker compose',
+        'COMPOSE_PROJECT_NAME="talos-integration-$$"',
+        'COMPOSE_PROFILES=search',
+        'docker compose --profile search config',
+        'python3 -c',
+        '/search?q=talos&format=json',
+        '/healthz',
         '/readyz',
         'integration-marker',
-        'down -v',
+        'docker compose --profile "*" down -v --remove-orphans',
+        'ps -q searxng',
+        'SearXNG is still running after all-profile teardown.',
+        'cp -p',
+        'trap cleanup EXIT',
     ]);
     assertDeploymentFileContains($root.'/.github/workflows/ci.yml', [
         'docker-integration:',
@@ -390,6 +548,15 @@ function testTalosDoctorAcceptsHealthyNativeProfileWhenDockerIsMissing(): void
     assertTrue(! str_contains($text, 'compose config      FAIL invalid'), 'talos doctor should not call missing Docker a compose config error.');
 }
 
+function testCoreKeepsConformanceSdkOutOfProductionRuntime(): void
+{
+    $root = dirname(__DIR__, 2);
+    $composer = json_decode((string) file_get_contents($root.'/core/composer.json'), true, flags: JSON_THROW_ON_ERROR);
+
+    assertTrue(! isset($composer['require']['mcp/sdk']), 'The MCP conformance SDK must not inflate the core production runtime.');
+    assertTrue(($composer['require-dev']['mcp/sdk'] ?? null) === '0.6.0', 'The pinned MCP SDK should remain available to conformance tests.');
+}
+
 $tests = [
     'testRootEnvironmentContractExists',
     'testDockerComposeDefinesTalosQueueAndValidator',
@@ -397,6 +564,8 @@ $tests = [
     'testTrackedLaunchersAreRelocatable',
     'testNativeToolchainBootstrapIsPinnedAndVerifiable',
     'testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations',
+    'testProductionBrowserWorkerCannotBeSilentlyOmitted',
+    'testOptionalSearxngIntegrationIsPinnedInternalAndJsonOnly',
     'testRuntimeStateIsIgnored',
     'testRootLauncherHelpWorksFromRenamedPathWithSpaces',
     'testDockerFirstCleanCloneDoesNotRequireHostPhp',
@@ -404,6 +573,7 @@ $tests = [
     'testTalosWebContainerSupervisesBothProcesses',
     'testWindowsLauncherWorksFromPathWithSpacesAndPropagatesExitCode',
     'testTalosDoctorAcceptsHealthyNativeProfileWhenDockerIsMissing',
+    'testCoreKeepsConformanceSdkOutOfProductionRuntime',
 ];
 
 foreach ($tests as $test) {

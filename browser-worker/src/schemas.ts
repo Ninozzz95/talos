@@ -1,10 +1,17 @@
 import { z } from "zod";
 
+const MAX_BROWSER_URL_BYTES = 2_048;
+const navigableUrlSchema = z.string()
+  .max(MAX_BROWSER_URL_BYTES)
+  .url()
+  .refine((value) => Buffer.byteLength(value, "utf8") <= MAX_BROWSER_URL_BYTES, "Browser URL exceeds the UTF-8 byte limit.");
+
 export const capabilitiesSchema = z.object({
   navigation: z.boolean(),
   screenshots: z.boolean(),
   accessibilitySnapshot: z.boolean(),
   actions: z.literal(false),
+  hmiActions: z.boolean().optional(),
   downloads: z.literal(false),
   uploads: z.literal(false),
 });
@@ -18,7 +25,7 @@ export const createSessionSchema = z.object({
 });
 
 export const navigateSchema = z.object({
-  url: z.string().url(),
+  url: navigableUrlSchema,
   waitUntil: z.enum(["load", "domcontentloaded", "networkidle", "commit"]).default("domcontentloaded"),
   timeoutMs: z.number().int().positive().max(120_000).default(15_000),
 });

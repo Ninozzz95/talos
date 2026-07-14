@@ -16,6 +16,8 @@ import {
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import Tabs from '../../ui/Tabs.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosNodeGraph from './TalosNodeGraph.vue'
 import TalosNodeInspector from './TalosNodeInspector.vue'
 import TalosRecoveryPanel from './TalosRecoveryPanel.vue'
@@ -689,24 +691,34 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
 
                 <section class="overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
                     <div class="border-b border-[var(--talos-border)] bg-[var(--talos-active)] p-2">
-                        <div class="flex flex-wrap gap-1" role="tablist" aria-label="Runtime panels">
-                            <Button
-                                v-for="tab in runtimeTabs"
-                                :key="tab.id"
-                                type="button"
-                                :variant="activeRuntimeTab === tab.id ? 'secondary' : 'ghost'"
-                                size="sm"
-                                role="tab"
-                                :aria-selected="activeRuntimeTab === tab.id"
-                                @click="activeRuntimeTab = tab.id"
-                            >
-                                <component :is="tab.icon" class="h-4 w-4" />
-                                {{ tab.label }}
-                            </Button>
-                        </div>
+                        <Tabs
+                            :model-value="activeRuntimeTab"
+                            :items="runtimeTabs"
+                            label="Runtime panels"
+                            tab-id-prefix="talos-runtime-tab"
+                            panel-id-prefix="talos-runtime-panel"
+                            @update:model-value="activeRuntimeTab = $event as RuntimeTab"
+                        >
+                            <template #tab="{ item }">
+                                <component :is="item.icon" class="h-4 w-4" />
+                                <span>{{ item.label }}</span>
+                            </template>
+                            <template #item-action="{ item }">
+                                <TalosGuideInfoButton
+                                    :guide-id="`runtime.${item.id}`"
+                                    compact
+                                    side="bottom"
+                                />
+                            </template>
+                        </Tabs>
                     </div>
 
-                    <div class="p-3">
+                    <div
+                        :id="`talos-runtime-panel-${activeRuntimeTab}`"
+                        role="tabpanel"
+                        :aria-labelledby="`talos-runtime-tab-${activeRuntimeTab}`"
+                        class="p-3"
+                    >
                         <section v-if="activeRuntimeTab === 'timeline'" class="space-y-3" aria-label="Run timeline">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">

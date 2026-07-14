@@ -3,6 +3,12 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import concurrently from 'concurrently'
+import {
+    acquireDevStackLease,
+    assertBrowserWorkerCanStart,
+    inspectBrowserWorkerOwnership,
+    releaseDevStackLease,
+} from './browser-worker-ownership.mjs'
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultWorkspaceRoot = path.resolve(scriptDirectory, '..', '..')
@@ -50,6 +56,7 @@ export function createDevStackConfig({
     }
 
     return {
+        workspaceRoot,
         sharedEnv,
         commands: [
             {
@@ -89,18 +96,45 @@ export function createDevStackConfig({
     }
 }
 
-async function main() {
-    const config = createDevStackConfig()
-    const { result } = concurrently(config.commands, {
-        prefix: 'name',
-        prefixColors: ['#86efac', '#93c5fd', '#c4b5fd', '#fdba74', '#67e8f9'],
-        killOthersOn: ['failure'],
-        cwd: path.resolve(scriptDirectory, '..'),
+export async function runDevStack({
+    config = createDevStackConfig(),
+    inspectOwnership = inspectBrowserWorkerOwnership,
+    assertCanStart = assertBrowserWorkerCanStart,
+    acquireLease = acquireDevStackLease,
+    releaseLease = releaseDevStackLease,
+    runCommands = concurrently,
+} = {}) {
+    const expectedUrl = config.sharedEnv.TALOS_BROWSER_WORKER_URL
+    const ownership = await inspectOwnership({
+        expectedUrl,
+        workspaceRoot: config.workspaceRoot,
+    })
+    assertCanStart(ownership)
+    const lease = acquireLease({
+        expectedUrl,
+        workspaceRoot: config.workspaceRoot,
     })
 
     try {
+        const { result } = runCommands(config.commands, {
+            prefix: 'name',
+            prefixColors: ['#86efac', '#93c5fd', '#c4b5fd', '#fdba74', '#67e8f9'],
+            killOthersOn: ['failure'],
+            cwd: path.resolve(scriptDirectory, '..'),
+        })
         await result
-    } catch {
+    } finally {
+        releaseLease(lease)
+    }
+}
+
+async function main() {
+    try {
+        await runDevStack()
+    } catch (error) {
+        if (error instanceof Error && /TALOS_BROWSER_WORKER|Browser worker ownership/.test(error.message)) {
+            process.stderr.write(`${error.message}\n`)
+        }
         process.exitCode = 1
     }
 }

@@ -1,0 +1,22 @@
+{
+  "name": "latency_parallelism",
+  "difficulty": 4,
+  "description": "One slow node (simulated 5s delay) + two fast parallel nodes — fast nodes must complete before slow one",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "slow", "node_type": "HTTP_REQUEST" },
+      { "action": "SPAWN_NODE", "node_id": "fast_a", "node_type": "HTTP_REQUEST" },
+      { "action": "SPAWN_NODE", "node_id": "fast_b", "node_type": "QUERY_DATABASE" }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "slow", "payload": { "url": "https://slow.example.com", "method": "GET", "simulated_delay_ms": 5000 } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "fast_a", "payload": { "url": "https://fast.example.com/a", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "fast_b", "payload": { "query": "SELECT 1" } },
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": null,
+  "expected_nodes": 3,
+  "expected_all_success": true,
+  "measure_latency": true
+}

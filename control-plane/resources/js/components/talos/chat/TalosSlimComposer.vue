@@ -30,7 +30,7 @@ import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComp
 
 const prompt = defineModel<string>('prompt', { required: true })
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     commands: TalosCommand[]
     canSend: boolean
     sending: boolean
@@ -44,9 +44,12 @@ const props = defineProps<{
     visibility: Record<string, boolean>
     browserMode: TalosBrowserMode
     browserCurrentPage?: TalosBrowserCurrentPage | null
+    devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
     chatLayoutLocked: boolean
-}>()
+}>(), {
+    devBrowserEvidence: false,
+})
 
 const emit = defineEmits<{
     send: []
@@ -83,13 +86,15 @@ const activeSlashCommand = computed(() => slashCommands.value[activeSlashIndex.v
 const browseStatus = computed(() => {
     if (!props.browserMode.enabled) return 'Off'
     if (props.browserMode.status === 'starting') return 'Starting'
+    if (props.browserMode.status === 'recovery_required') return 'Recovery required'
     if (props.browserMode.status === 'failed') return 'Needs attention'
     if (props.browserMode.status === 'stopped') return 'Stopped'
     if (props.browserMode.status === 'active') return 'Active'
     return 'Ready'
 })
+const browserNeedsRetry = computed(() => ['recovery_required', 'stopped', 'failed'].includes(props.browserMode.status))
 const screenshotDisabled = computed(() => !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status) || !props.browserMode.capabilities.includes('screenshot'))
-const snapshotDisabled = computed(() => !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status) || !props.browserMode.capabilities.includes('snapshot'))
+const snapshotDisabled = computed(() => !props.devBrowserEvidence || !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status) || !props.browserMode.capabilities.includes('snapshot'))
 const stopDisabled = computed(() => !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status))
 
 watch(slashCommands, (commands) => {
@@ -140,9 +145,9 @@ function handleKeydown(event: KeyboardEvent) {
             return
         }
     }
-    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing) {
         event.preventDefault()
-        if (props.canSend) emit('send')
+        if (prompt.value.trim() && !props.sending) emit('send')
     }
 }
 
@@ -298,9 +303,9 @@ onBeforeUnmount(() => {
                             <div class="truncate font-medium text-[var(--talos-text)]" :title="browserCurrentPage.title">{{ browserCurrentPage.title }}</div>
                             <div class="mt-0.5 truncate text-[var(--talos-muted)]" :title="browserCurrentPage.url">{{ browserCurrentPage.host }}</div>
                         </div>
-                        <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="snapshotDisabled" :title="snapshotDisabled ? 'Page structure capability is unavailable.' : 'Capture page structure'" @click="browseMenuOpen = false; emit('captureSnapshot')"><ScanSearch class="h-4 w-4" />Capture page structure</button>
+                        <button v-if="devBrowserEvidence" type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="snapshotDisabled" :title="snapshotDisabled ? 'Page structure capability is unavailable.' : 'Capture page structure'" @click="browseMenuOpen = false; emit('captureSnapshot')"><ScanSearch class="h-4 w-4" />Capture page structure</button>
                         <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="stopDisabled" :title="stopDisabled ? 'The browser session is not running.' : 'Stop the current browser session'" @click="browseMenuOpen = false; emit('stopBrowse')"><Square class="h-4 w-4" />Stop browser</button>
-                        <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" :title="browserMode.status === 'stopped' || browserMode.status === 'failed' ? 'Start a fresh browser session' : 'Restart the current browser session'" @click="browseMenuOpen = false; emit('restartBrowse')"><RefreshCw class="h-4 w-4" />{{ browserMode.status === 'stopped' || browserMode.status === 'failed' ? 'Retry browser' : 'Restart browser' }}</button>
+                        <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" :title="browserNeedsRetry ? 'Start a fresh browser session' : 'Restart the current browser session'" @click="browseMenuOpen = false; emit('restartBrowse')"><RefreshCw class="h-4 w-4" />{{ browserNeedsRetry ? 'Retry browser' : 'Restart browser' }}</button>
                         <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" @click="browseMenuOpen = false; emit('disableBrowse')"><X class="h-4 w-4" />Disable Browse</button>
                     </div>
                 </div>

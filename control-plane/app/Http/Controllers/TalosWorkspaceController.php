@@ -6,13 +6,20 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosWorkspaceSetting;
 use App\Services\TalosFirstRunService;
+use App\Services\Talos\Browser\TalosBrowserEvidenceEnvironment;
 use App\Support\TalosThemeContrast;
+use Illuminate\Foundation\Vite;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 
 final class TalosWorkspaceController extends Controller
 {
+    public function __construct(
+        private readonly Vite $vite,
+        private readonly TalosBrowserEvidenceEnvironment $browserEvidenceEnvironment,
+    ) {}
+
     public function __invoke(TalosFirstRunService $firstRun): Response|RedirectResponse
     {
         return $this->renderSurface($firstRun, 'workspace');
@@ -43,6 +50,8 @@ final class TalosWorkspaceController extends Controller
         return response()->view('workspace', [
             'surface' => $surface,
             'bootAccent' => TalosThemeContrast::resolveAccent($preferences),
+            'devBrowserEvidence' => $this->browserEvidenceEnvironment->rawEvidenceEnabled(),
+            'developmentMode' => app()->environment(['local', 'testing']),
         ])->withHeaders([
             'Cache-Control' => 'private, no-store, max-age=0, must-revalidate',
             'Pragma' => 'no-cache',
@@ -55,7 +64,7 @@ final class TalosWorkspaceController extends Controller
             return;
         }
 
-        $hotFile = public_path('hot');
+        $hotFile = $this->vite->hotFile();
 
         if (! is_file($hotFile)) {
             return;

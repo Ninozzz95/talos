@@ -7,6 +7,11 @@ import {
 
 export type TalosShortcutHandlers = Partial<Record<TalosShortcutActionId, (event: KeyboardEvent) => void>>
 
+function hasOpenDismissableLayer() {
+    return typeof document !== 'undefined'
+        && document.querySelector('[data-dismissable-layer][data-state="open"]') !== null
+}
+
 export function useTalosShortcuts(
     shortcuts: ComputedRef<Record<TalosShortcutActionId, string>>,
     handlers: TalosShortcutHandlers,
@@ -21,6 +26,10 @@ export function useTalosShortcuts(
             .find(([, candidate]) => candidate && candidate.toLowerCase() === binding.toLowerCase())?.[0] as TalosShortcutActionId | undefined
 
         if (!action) {
+            return
+        }
+
+        if (action === 'cancel_close' && hasOpenDismissableLayer()) {
             return
         }
 

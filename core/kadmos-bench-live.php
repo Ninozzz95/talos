@@ -20,7 +20,11 @@ use Kadmos\Workers\WorkerRegistry;
 use Kadmos\Workers\NodeWorkerInterface;
 
 $scenarioFile = $argv[1] ?? null;
-$apiKey = $argv[2] ?? '';
+$apiKey = getenv('DEEPSEEK_API_KEY');
+if (!is_string($apiKey) || $apiKey === '') {
+    $apiKey = getenv('KADMOS_API_KEY');
+}
+$apiKey = is_string($apiKey) ? $apiKey : '';
 
 if (!$scenarioFile || !file_exists($scenarioFile)) {
     echo json_encode(['error' => 'not found']) . "\n"; exit(1);

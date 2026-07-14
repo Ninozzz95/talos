@@ -45,8 +45,10 @@ function dependencies() {
         persistUserMessage: vi.fn(async () => userMessage),
         sendPersistentChat,
         createMessage: vi.fn(async (_sessionId, payload) => ({ ...userMessage, ...payload, id: 'message-2' })),
+        acceptPersistedMessage: vi.fn(),
         centerMessage: vi.fn(async () => undefined),
         recordBrowserActivities: vi.fn(),
+        recordPendingToolApprovals: vi.fn(),
         openSettings: vi.fn(),
         closePopover: vi.fn(),
         openModelPopover: vi.fn(),
@@ -88,6 +90,67 @@ describe('useTalosWorkspaceChatActions', () => {
 
         expect(deps.sendPersistentChat).toHaveBeenCalled()
         expect(deps.setFeedback).toHaveBeenCalledWith('Message resent through TALOS chat.')
+    })
+
+    it('publishes a server-persisted procedural answer immediately without a duplicate POST', async () => {
+        const deps = dependencies()
+        const activity = {
+            id: 'browser-command-1',
+            operation: 'screenshot',
+            status: 'succeeded',
+            label: 'Screenshot',
+            run_id: 'run-1',
+            browser_session_id: 'browser-1',
+            artifact_ids: ['artifact-1'],
+            occurred_at: '2026-07-14T10:00:01Z',
+        }
+        const assistant: TalosMessage = {
+            id: 'assistant-1',
+            session_id: session.id,
+            role: 'assistant',
+            content: 'Screenshot captured.',
+            run_id: 'run-1',
+            metadata: { browser_activities: [activity] },
+            created_at: '2026-07-14T10:00:01Z',
+        }
+        deps.sendPersistentChat.mockResolvedValue({ assistantMessage: assistant } as never)
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        await expect(actions.sendChatText('Cattura screenshot.')).resolves.toBe(true)
+
+        expect(deps.acceptPersistedMessage).toHaveBeenCalledOnce()
+        expect(deps.acceptPersistedMessage).toHaveBeenCalledWith(assistant)
+        expect(deps.recordBrowserActivities).toHaveBeenCalledWith([activity])
+        expect(deps.createMessage).not.toHaveBeenCalledWith(session.id, expect.objectContaining({ role: 'assistant' }))
+    })
+
+    it('publishes pending procedural approvals and browser activity directly from a 202 response', async () => {
+        const deps = dependencies()
+        const activity = {
+            id: 'snapshot-1',
+            operation: 'snapshot',
+            status: 'succeeded',
+            label: 'Page structure capture succeeded',
+            run_id: 'run-1',
+            browser_session_id: 'browser-1',
+            artifact_ids: ['artifact-1'],
+            occurred_at: '2026-07-14T10:00:01Z',
+        }
+        const pending = [{ id: 'call-1', turn_id: 'turn-1', plan_hash: `sha256:${'a'.repeat(64)}` }]
+        deps.sendPersistentChat.mockResolvedValue({
+            assistantMessage: null,
+            response: {
+                agent_turn: { id: 'turn-1', status: 'awaiting_approval' },
+                browser_activities: [activity],
+                pending_approvals: pending,
+            },
+        } as never)
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        await expect(actions.sendChatText('Accept the cookie banner.')).resolves.toBe(true)
+
+        expect(deps.recordBrowserActivities).toHaveBeenCalledWith([activity])
+        expect(deps.recordPendingToolApprovals).toHaveBeenCalledWith(pending)
     })
 
     it('creates a benchmark for a run, persists the system notice, and opens Compare', async () => {

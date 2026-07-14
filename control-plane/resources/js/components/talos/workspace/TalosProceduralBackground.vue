@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, shallowRef, watch, type PropType } from 'vue'
+import { computed, onBeforeUnmount, onMounted, shallowRef, watch, type PropType } from 'vue'
 import TalosMotionStage from '../motion/TalosMotionStage.vue'
 import { createTalosBrowserProductSceneRegistry } from '../../../motion-v6/productRegistry'
 import type { ComplexRendererFrameMetric } from '../../../motion-v6/renderers/complexRenderer'
@@ -14,6 +14,7 @@ import type {
 } from '../../../motion-v6/runtimeGovernor'
 import type { SceneId, SceneInput, SceneRegistry } from '../../../motion-v6/sceneRegistry'
 import type { TalosMotionStageFaultEvent } from '../../../motion-v6/stageController'
+import { resolveTalosBackgroundPresentation } from '../../../motion-v6/backgroundPresentation'
 
 const RECOVERY_PROBE_MS = 1_000
 
@@ -29,6 +30,7 @@ const props = defineProps({
     sceneId: { type: String as PropType<SceneId>, required: true },
     input: { type: Object as PropType<SceneInput>, required: true },
     backgroundEnabled: { type: Boolean, required: true },
+    glowIntensity: { type: Number, default: 0 },
     paused: { type: Boolean, required: true },
     runtimeReason: { type: String as PropType<TalosMotionRuntimeReason>, default: 'requested' },
     degradationStage: { type: Number, default: 0 },
@@ -38,6 +40,7 @@ const props = defineProps({
 
 const productRegistry = shallowRef<SceneRegistry | null>(props.registry ?? null)
 const registryFault = shallowRef(false)
+const presentation = computed(() => resolveTalosBackgroundPresentation(props.input.parameters, props.glowIntensity))
 let recoveryProbe: ReturnType<typeof setInterval> | null = null
 let nextRecoveryProbeAtMs = 0
 
@@ -112,7 +115,11 @@ onBeforeUnmount(stopRecoveryProbe)
     <div
         data-testid="talos-motion-background"
         class="talos-background-procedural pointer-events-none absolute inset-0 overflow-hidden"
+        :style="presentation.style"
         :data-scene-id="sceneId"
+        :data-background-intensity="String(presentation.intensity)"
+        :data-background-glow-intensity="String(presentation.glowIntensity)"
+        :data-background-contrast="String(presentation.contrast)"
         :data-motion-disabled="effectiveMode === 'static' || effectiveMode === 'off' || paused ? 'true' : 'false'"
         :data-performance-mode="effectiveMode === 'simple' || effectiveMode === 'complex' ? 'motion' : 'static'"
         :data-performance-fps-cap="String(input.effectiveQuality.fpsCap)"
@@ -136,6 +143,7 @@ onBeforeUnmount(stopRecoveryProbe)
             :on-fault="handleStageFault"
         />
         <div v-else-if="backgroundEnabled" class="absolute inset-0 bg-[var(--talos-background)]" data-talos-motion-solid-fallback />
-        <div class="talos-theme-background-scrim absolute inset-0" />
+        <div v-if="backgroundEnabled" class="talos-theme-background-glow pointer-events-none absolute inset-0" data-talos-background-glow />
+        <div v-if="backgroundEnabled" class="talos-theme-background-scrim pointer-events-none absolute inset-0" data-talos-background-scrim />
     </div>
 </template>

@@ -1,0 +1,21 @@
+{
+  "name": "parallel_branches",
+  "difficulty": 3,
+  "description": "Root node with two parallel children",
+  "steps": [
+    { "cycle": 1, "mutations": [
+      { "action": "SPAWN_NODE", "node_id": "root", "node_type": "HTTP_REQUEST" },
+      { "action": "SPAWN_NODE", "node_id": "left", "node_type": "HTTP_REQUEST", "dependencies": ["root"] },
+      { "action": "SPAWN_NODE", "node_id": "right", "node_type": "QUERY_DATABASE", "dependencies": ["root"] }
+    ]},
+    { "cycle": 2, "mutations": [
+      { "action": "MUTATE_PAYLOAD", "node_id": "root", "payload": { "url": "https://api.example.com/root", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "left", "payload": { "url": "https://api.example.com/left", "method": "GET" } },
+      { "action": "MUTATE_PAYLOAD", "node_id": "right", "payload": { "query": "SELECT * FROM data WHERE source = 'right'" } },
+      { "action": "YIELD_EXECUTION" }
+    ]}
+  ],
+  "inject_error_at": null,
+  "expected_nodes": 3,
+  "expected_all_success": true
+}

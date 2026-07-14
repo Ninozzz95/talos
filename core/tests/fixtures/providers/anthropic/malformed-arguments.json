@@ -1,0 +1,16 @@
+{
+  "provider_response": {
+    "id": "msg-malformed-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_bad",
+        "name": "browser_navigate",
+        "input": "{\"url\":\"https://example.com\"}"
+      }
+    ],
+    "stop_reason": "tool_use"
+  }
+}

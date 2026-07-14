@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Kadmos;
 
+use InvalidArgumentException;
+use Kadmos\Provider\PinnedProviderHttpTransport;
+use Kadmos\Security\ExecutionPolicy;
+use RuntimeException;
+
 /**
  * LLM client for Anthropic's Claude API.
  */
@@ -13,6 +18,9 @@ final class AnthropicClient implements LLMClientInterface
     private string $model;
     private string $systemPrompt;
     private int $timeoutMs;
+    private ?\Closure $transport;
+    private ?\Closure $curlTransport;
+    private ExecutionPolicy $executionPolicy;
 
     /** @var list<array{role: string, content: string}> */
     private array $conversation = [];
@@ -24,10 +32,31 @@ final class AnthropicClient implements LLMClientInterface
         string $apiKey,
         string $model = 'claude-sonnet-4-20250514',
         int $timeoutMs = 30000,
+        ?callable $transport = null,
+        ?ExecutionPolicy $executionPolicy = null,
+        ?callable $curlTransport = null,
     ) {
+        if (trim($apiKey) === '') {
+            throw new InvalidArgumentException('Anthropic provider requires an API key.');
+        }
         $this->apiKey = $apiKey;
         $this->model = $model;
         $this->timeoutMs = $timeoutMs;
+        $this->transport = $transport !== null ? \Closure::fromCallable($transport) : null;
+        $this->curlTransport = $curlTransport !== null ? \Closure::fromCallable($curlTransport) : null;
+        $this->executionPolicy = $executionPolicy ?? new ExecutionPolicy(
+            allowedHosts: ['api.anthropic.com'],
+            maxTimeoutMs: max(1, $timeoutMs),
+        );
+        $decision = $this->executionPolicy->inspectUrl(
+            'https://api.anthropic.com/v1/messages',
+            $timeoutMs,
+            requireResolution: false,
+            rejectQueryAndFragment: true,
+        );
+        if (! $decision->allowed) {
+            throw new RuntimeException('Anthropic endpoint blocked by execution policy: '.$decision->reason);
+        }
         $this->systemPrompt = SystemPromptBuilder::build();
     }
 
@@ -47,7 +76,7 @@ final class AnthropicClient implements LLMClientInterface
             'temperature' => 0.0,
             'system' => $this->systemPrompt,
             'messages' => $messages,
-        ]);
+        ], JSON_THROW_ON_ERROR);
 
         $response = $this->callApi('https://api.anthropic.com/v1/messages', $body);
 
@@ -90,47 +119,31 @@ final class AnthropicClient implements LLMClientInterface
      */
     private function callApi(string $url, string $body): array
     {
-        $insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
-        if ($insecureSsl) {
-            fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
-        }
-
-        $ch = \curl_init($url);
-        $options = [
-            \CURLOPT_RETURNTRANSFER => true,
-            \CURLOPT_POST => true,
-            \CURLOPT_POSTFIELDS => $body,
-            \CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                "x-api-key: {$this->apiKey}",
-                'anthropic-version: 2023-06-01',
-            ],
-            \CURLOPT_TIMEOUT_MS => $this->timeoutMs,
+        $headers = [
+            'Content-Type: application/json',
+            "x-api-key: {$this->apiKey}",
+            'anthropic-version: 2023-06-01',
         ];
+        if ($this->transport !== null) {
+            $response = ($this->transport)($url, $body, $headers, $this->timeoutMs);
+            if (! is_array($response)) {
+                throw new RuntimeException('Anthropic custom transport returned an invalid response.');
+            }
 
-        if ($insecureSsl) {
-            $options[\CURLOPT_SSL_VERIFYPEER] = false;
-            $options[\CURLOPT_SSL_VERIFYHOST] = 0;
-        } else {
-            $options[\CURLOPT_SSL_VERIFYPEER] = true;
-            $options[\CURLOPT_SSL_VERIFYHOST] = 2;
+            return $response;
         }
-
-        \curl_setopt_array($ch, $options);
-
-        $response = \curl_exec($ch);
-        $error = \curl_error($ch);
-        $httpCode = \curl_getinfo($ch, \CURLINFO_HTTP_CODE);
-
-        if ($response === false) {
-            throw new \RuntimeException("Anthropic API unreachable: {$error}");
+        $payload = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
+        if (! is_array($payload)) {
+            throw new RuntimeException('Anthropic request body must be a JSON object.');
         }
+        $transport = new PinnedProviderHttpTransport(
+            provider: 'anthropic',
+            executionPolicy: $this->executionPolicy,
+            curlTransport: $this->curlTransport,
+            maxTimeoutMs: $this->timeoutMs,
+        );
 
-        if ($httpCode >= 400) {
-            throw new \RuntimeException("Anthropic API error HTTP {$httpCode}: {$response}");
-        }
-
-        return \json_decode($response, true, flags: \JSON_THROW_ON_ERROR);
+        return $transport($url, $payload, $headers, $this->timeoutMs);
     }
 
     /**

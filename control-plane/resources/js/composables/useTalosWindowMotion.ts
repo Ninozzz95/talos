@@ -27,6 +27,7 @@ import {
 } from '../motion-v6/interaction/windowGeometry'
 import type { TalosThemeId } from '../lib/talosThemes'
 import type { TalosWindowId } from '../lib/talosWindowRegistry'
+import type { TalosWindowTileBounds, TalosWindowTileTarget } from '../lib/talosWindowTilePolicy'
 import type { TalosWindowLaunchOrigin } from './useTalosWindowLaunchOrigins'
 
 type WindowMap<T> = Partial<Record<TalosWindowId, T>>
@@ -39,6 +40,7 @@ export type TalosWindowLifecycleState =
     | 'restoring'
     | 'maximizing'
     | 'unmaximizing'
+    | 'snapping'
 
 type UseTalosWindowMotionOptions = {
     visibleWindowIds: Readonly<Ref<TalosWindowId[]>>
@@ -56,6 +58,11 @@ type UseTalosWindowMotionOptions = {
     closeWindow: (id: TalosWindowId) => void
     minimizeWindow: (id: TalosWindowId) => void
     fullscreenWindow: (id: TalosWindowId) => void
+    tileWindow: (
+        id: TalosWindowId,
+        target: Exclude<TalosWindowTileTarget, 'none'>,
+        restoreBounds?: TalosWindowTileBounds,
+    ) => void
     restoreWindow: (id: TalosWindowId) => void
 }
 
@@ -306,6 +313,29 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
         runTransition(id, revision, updatedTarget, plan)
     }
 
+    async function requestWindowTile(
+        id: TalosWindowId,
+        tileTarget: Exclude<TalosWindowTileTarget, 'none'>,
+        restoreBounds?: TalosWindowTileBounds,
+    ) {
+        const revision = beginTransition(id, 'snapping')
+        const target = targetFor(id)
+        const before = target ? rectOf(target) : null
+        options.tileWindow(id, tileTarget, restoreBounds)
+        await nextTick()
+        if (!isCurrent(id, revision)) return
+        const updatedTarget = targetFor(id)
+        if (!before || !updatedTarget) {
+            completeTransition(id, revision)
+            return
+        }
+        const plan = createTalosWindowFlipPlan(resolvePlan('window-open'), {
+            before,
+            after: rectOf(updatedTarget),
+        })
+        runTransition(id, revision, updatedTarget, plan)
+    }
+
     function restoreMinimizedWindow(id: TalosWindowId, event: MouseEvent) {
         const origin = originFromElement(event.currentTarget, 'dock')
         pendingRestoreWindowIds.value = [...pendingRestoreWindowIds.value.filter((candidate) => candidate !== id), id]
@@ -387,6 +417,7 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
         requestWindowClose,
         requestWindowMinimize,
         requestWindowFullscreen,
+        requestWindowTile,
         restoreMinimizedWindow,
     }
 }

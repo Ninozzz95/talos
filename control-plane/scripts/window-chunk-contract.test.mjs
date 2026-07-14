@@ -24,14 +24,15 @@ test('production manifest keeps every registered window behind a dynamic boundar
     assert.ok(entry?.isEntry, 'resources/js/app.js must remain the production entry')
     const importTargets = [...registrySource.matchAll(/loader:\s*\(\)\s*=>\s*import\('\.\.\/components\/talos\/window\/modules\/([^']+)'\)/g)]
         .map((match) => match[1])
-    assert.equal(importTargets.length, 15, 'the registry must expose exactly 15 dynamic window loaders')
-    assert.equal(new Set(entry.dynamicImports ?? []).size, 15, 'the app entry must retain 15 distinct dynamic boundaries')
+    assert.ok(importTargets.length > 0, 'the registry must expose dynamic window loaders')
 
     const staticEntries = staticClosure(entryKey)
+    const dynamicEntries = new Set(entry.dynamicImports ?? [])
     for (const target of importTargets) {
         const moduleName = basename(target, '.vue')
         const manifestEntry = Object.entries(manifest).find(([, value]) => value.name === moduleName)
         assert.ok(manifestEntry, `${moduleName} must have a generated chunk`)
+        assert.ok(dynamicEntries.has(manifestEntry[0]), `${moduleName} must remain reachable through a dynamic boundary`)
         assert.ok(!staticEntries.has(manifestEntry[0]), `${moduleName} leaked into the initial static import closure`)
     }
 })
@@ -39,4 +40,11 @@ test('production manifest keeps every registered window behind a dynamic boundar
 test('initial application chunk stays below the warning threshold', () => {
     const bytes = statSync(resolve(root, 'public/build', entry.file)).size
     assert.ok(bytes < 500 * 1024, `initial app chunk is ${bytes} bytes; expected less than 512000`)
+})
+
+test('interactive browser evidence remains outside the initial static closure', () => {
+    const evidenceKey = 'resources/js/components/talos/chat/TalosBrowserScreenshotEvidence.vue'
+    assert.ok(manifest[evidenceKey]?.isDynamicEntry, 'browser evidence must remain a dynamic entry')
+    assert.ok((entry.dynamicImports ?? []).includes(evidenceKey), 'app must load browser evidence through a dynamic boundary')
+    assert.ok(!staticClosure(entryKey).has(evidenceKey), 'browser evidence leaked into the initial static import closure')
 })
