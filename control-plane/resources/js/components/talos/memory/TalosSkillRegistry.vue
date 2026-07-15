@@ -2,18 +2,33 @@
 import { computed, ref, watch } from 'vue'
 import { BrainCircuit } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosSkillAudit from './TalosSkillAudit.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosSkill, TalosSkillPlanningContext } from '../../../lib/talosTypes'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     skills: TalosSkill[]
     planningContext: TalosSkillPlanningContext | null
-}>()
+    loading?: boolean
+    error?: string | null
+    requested?: boolean
+}>(), {
+    loading: false,
+    error: null,
+    requested: true,
+})
 
 const selectedSkillId = ref<string | null>(null)
 const planningSkillNames = computed(() => new Set(props.planningContext?.skills.map((skill) => skill.name) ?? []))
 const excludedReasonByName = computed(() => new Map((props.planningContext?.excluded_skills ?? []).map((skill) => [skill.name, skill.reason])))
 const selectedSkill = computed(() => props.skills.find((skill) => skill.id === selectedSkillId.value) ?? props.skills[0] ?? null)
+const skillsState = computed(() => resolveTalosCollectionState({
+    itemCount: props.skills.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 const selectedSkillExclusionReason = computed(() => {
     if (!selectedSkill.value) {
         return null
@@ -39,12 +54,17 @@ watch(() => props.skills, (skills) => {
     <div class="space-y-4">
         <div class="flex items-center gap-2">
             <BrainCircuit class="h-4 w-4 text-[var(--talos-muted)]" />
-            <div class="text-sm font-semibold text-[var(--talos-text)]">Skill Registry</div>
+            <h3 class="text-sm font-semibold text-[var(--talos-text)]">Skill Registry</h3>
+            <TalosGuideInfoButton guide-id="brain.skills" compact side="bottom" />
             <Badge tone="neutral">{{ skills.length }} skills</Badge>
             <Badge tone="success">{{ planningContext?.skills.length ?? 0 }} planning</Badge>
         </div>
 
-        <div class="grid gap-3">
+        <div v-if="skillsState === 'loading'" role="status" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm leading-6 text-[var(--talos-muted)]">
+            Loading skills
+        </div>
+
+        <div v-else-if="skillsState === 'ready'" class="grid gap-3">
             <button
                 v-for="skill in skills"
                 :key="skill.id"
@@ -66,12 +86,14 @@ watch(() => props.skills, (skills) => {
                 </div>
                 <p class="mt-2 line-clamp-2 text-xs leading-5 text-[var(--talos-muted)]">{{ skill.content_preview }}</p>
             </button>
-            <div v-if="!skills.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm leading-6 text-[var(--talos-muted)]">
-                No skills are registered in the control plane.
-            </div>
+        </div>
+
+        <div v-else-if="skillsState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm leading-6 text-[var(--talos-muted)]">
+            No skills are registered in the control plane.
         </div>
 
         <TalosSkillAudit
+            v-if="skillsState === 'ready'"
             :skill="selectedSkill"
             :planning-enabled="selectedSkill ? planningSkillNames.has(selectedSkill.name) : false"
             :exclusion-reason="selectedSkillExclusionReason"

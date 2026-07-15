@@ -4,6 +4,7 @@ import { AlertCircle, BookOpen, ChevronDown, FileSearch, Loader2, Play, Plus, Re
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosSourceTable from './TalosSourceTable.vue'
 import TalosClaimVerifier from './TalosClaimVerifier.vue'
 import TalosResearchQueue from './TalosResearchQueue.vue'
@@ -11,6 +12,7 @@ import TalosResearchSettingsPanel, { type TalosResearchSettings } from './TalosR
 import TalosClaimSourceGraph from './TalosClaimSourceGraph.vue'
 import { useTalosResearch } from '../../../composables/useTalosResearch'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosResearchReport } from '../../../lib/talosTypes'
 
 type SubmitMode = 'queued'
@@ -57,6 +59,7 @@ const actionMessage = ref('')
 const submitMode = ref<SubmitMode | null>(null)
 const exportingReportId = ref<string | null>(null)
 const historyRef = ref<HTMLElement | null>(null)
+const researchReportsRequested = ref(false)
 const settings = ref<TalosResearchSettings>({
     rounds: 1,
     format: 'briefing',
@@ -67,6 +70,12 @@ const settings = ref<TalosResearchSettings>({
 
 const selectedReport = computed(() => researchReportById(selectedReportId.value))
 const visibleError = computed(() => actionError.value || researchError.value)
+const researchReportsState = computed(() => resolveTalosCollectionState({
+    itemCount: researchReports.value.length,
+    loading: loadingResearchReports.value,
+    error: researchError.value,
+    requested: researchReportsRequested.value,
+}))
 const canQueue = computed(() => {
     return title.value.trim().length > 0
         && query.value.trim().length > 0
@@ -114,6 +123,7 @@ const benchmarkDisabledReason = computed(() => {
 })
 
 async function refreshReports() {
+    researchReportsRequested.value = true
     actionError.value = null
 
     try {
@@ -299,7 +309,10 @@ onMounted(() => {
                         <FileSearch class="h-4 w-4 text-[var(--talos-accent)]" />
                         Deep research
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Deep Research V3</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Deep Research V3</h3>
+                        <TalosGuideInfoButton guide-id="rail.research" compact side="bottom" />
+                    </div>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
                         Queue source-backed draft reports without pretending that manual sources were fetched or claims were verified.
                     </p>
@@ -350,7 +363,7 @@ onMounted(() => {
                         >
                     </label>
 
-                    <div class="flex items-end gap-2">
+                    <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                         <Button type="button" variant="secondary" size="sm" class="flex-1" @click="settingsOpen = !settingsOpen">
                             <ChevronDown class="h-4 w-4" :class="settingsOpen ? 'rotate-180' : ''" />
                             Research settings
@@ -437,6 +450,9 @@ onMounted(() => {
                     <TalosResearchQueue
                         :reports="researchReports"
                         :selected-report-id="selectedReportId"
+                        :loading="loadingResearchReports"
+                        :error="researchError"
+                        :requested="researchReportsRequested"
                         @select="selectReport"
                     />
                 </div>
@@ -447,11 +463,15 @@ onMounted(() => {
                         Loading research report
                     </div>
 
-                    <div v-else-if="!selectedReport" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                    <div v-else-if="researchReportsState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                         Queue or select a report to inspect source status, claims, graph evidence, and artifacts.
                     </div>
 
-                    <div v-else class="space-y-4">
+                    <div v-else-if="researchReportsState === 'ready' && !selectedReport" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                        Select a persisted report to inspect source status, claims, graph evidence, and artifacts.
+                    </div>
+
+                    <div v-else-if="researchReportsState === 'ready'" class="space-y-4">
                         <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                 <div class="min-w-0">

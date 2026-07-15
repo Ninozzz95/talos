@@ -24,8 +24,43 @@ This file defines how agentic coding work must be done in this repository. It is
 4. Prefer existing project patterns over new abstractions.
 5. Keep the edit aligned with the subsystem boundary above.
 
+## Code-Level Planning Ledger
+
+- Every feature, refactor and bugfix requires a lowest-level execution ledger
+  before product code is edited.
+- Enumerate every file to create, modify or delete; do not use directory
+  wildcards or phrases such as "related files".
+- Name every public class, function, method, interface, schema and migration,
+  including compatibility symbols that must remain stable.
+- Name the RED test and expected failure, focused GREEN commands, affected
+  regression suites, real-upstream gate, human-visible proof and rollback.
+- Attach the task-specific in-depth web-research dossier and exact upstream pin.
+- If current inspection invalidates a planned path, amend the ledger and record
+  the reason before editing.
+- Every discovered regression becomes a permanent named ledger scenario and
+  automated test.
+- The main agent implements and owns complex architecture/security review.
+  Subagents may run only simple focused tests or mechanical consistency review;
+  they never implement or edit plans.
+
 ## Standards-First Engineering
 
+- Web research is a blocking prerequisite for every implementation, refactor,
+  and bugfix. After enough local inspection to name the problem precisely, but
+  before proposing an implementation plan or editing behavior, search current
+  official standards, primary documentation, maintained upstream libraries,
+  and mature reference implementations. A bug that appears local is not exempt.
+- Record an explicit upstream decision in the working plan or progress record:
+  adopt directly, adapt behind an AVM-owned adapter, or reject with concrete
+  compatibility, security, license, maintenance, or product-boundary reasons.
+  "No suitable upstream exists" requires the alternatives inspected and the
+  missing capability to be named.
+- When a maintained upstream package, SDK, protocol, executable, MCP server, or
+  sidecar is the best fit, integrate it directly and pin its version. Do not
+  spend implementation time reproducing tried-and-tested behavior locally.
+- If current web research cannot be performed, stop before the plan or behavior
+  change and report the research gate as blocked. Do not silently substitute
+  model memory for current source verification.
 - Before designing a protocol, tool contract, transport, state format, or agent loop, inspect current official standards and mature primary-source implementations that solve the same problem.
 - Prefer adopting or adapting established, versioned contracts over reproducing their semantics from scratch. Preserve AVM's differentiation in deterministic orchestration, policy, recovery, evidence, and benchmarking.
 - Keep provider-specific wire formats behind adapters and normalize them into an AVM-owned canonical contract. Do not make one vendor protocol the internal domain model.

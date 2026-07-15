@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { BrowserSessionManager } from "./BrowserSessionManager.js";
 import { BrowserError, errorPayload } from "./BrowserErrors.js";
@@ -16,6 +16,7 @@ import { BrowserHmiService } from "./BrowserHmiService.js";
 import { assertWorkerTokenConfiguration, workerTokensEqual } from "./BrowserWorkerAuth.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createBrowserMcpServer } from "./BrowserMcpAdapter.js";
+import { browserWorkerProtocols, TALOS_BROWSER_SESSION_BOOTSTRAP_PATH } from "./BrowserWorkerProtocol.js";
 
 export interface BrowserWorkerUnexpectedErrorEvent {
   correlationId: string;
@@ -74,31 +75,51 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     if (!workerTokensEqual(token, internalToken)) throw new BrowserError("Worker token is invalid.", "TALOS_BROWSER_WORKER_TOKEN_INVALID", 401);
   });
 
-  app.get("/health", async () => ({ data: { status: "ok", service: "talos-browser-worker" } }));
+  app.get("/health", async () => ({
+    data: {
+      status: "ok",
+      service: "talos-browser-worker",
+      protocols: browserWorkerProtocols(),
+    },
+  }));
 
   app.get("/ready", async (_request, reply) => {
     try {
       await sessions.assertRuntimeReady();
     } catch {
       return reply.code(503).send({
-        data: { status: "degraded", service: "talos-browser-worker", runtime: "chromium" },
+        data: {
+          status: "degraded",
+          service: "talos-browser-worker",
+          runtime: "chromium",
+          protocols: browserWorkerProtocols(),
+        },
       });
     }
 
     return {
-      data: { status: "ready", service: "talos-browser-worker", runtime: "chromium" },
+      data: {
+        status: "ready",
+        service: "talos-browser-worker",
+        runtime: "chromium",
+        protocols: browserWorkerProtocols(),
+      },
     };
   });
 
   app.get("/tools", async () => ({ data: { tools: BrowserToolDefinitions } }));
 
-  app.post("/sessions", async (request, reply) => {
+  const createSession = async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = createSessionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "Invalid browser session payload.", code: "TALOS_BROWSER_INVALID_SESSION_PAYLOAD", details: parsed.error.flatten() });
     const ownerRef = ownerFromRequest(request);
     if (ownerRef !== parsed.data.ownerRef) throw new BrowserError("Session owner does not match request owner.", "TALOS_BROWSER_OWNER_MISMATCH", 403);
-    return reply.code(201).send({ data: await sessions.create(parsed.data) });
-  });
+    const session = await sessions.create(parsed.data);
+    return reply.code(201).send({ data: { ...session, protocols: browserWorkerProtocols() } });
+  };
+
+  app.post("/sessions", createSession);
+  app.post(TALOS_BROWSER_SESSION_BOOTSTRAP_PATH, createSession);
 
   app.get<{ Params: { id: string } }>("/sessions/:id", async (request) => ({ data: sessionsSummary(await ownedSession(sessions, request)) }));
 

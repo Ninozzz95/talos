@@ -1062,7 +1062,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
     }
   });
 
-  it("requires screenshot and accessibility evidence to describe one stable post-action frame", async () => {
+  it("commits exactly one canonical post-action frame instead of comparing volatile pixels", async () => {
     const sessionId = await createSession();
     try {
       await navigate(sessionId);
@@ -1073,9 +1073,57 @@ describe("TALOS Browser HMI pointer boundary", () => {
       Object.defineProperty(session.page, "screenshot", {
         configurable: true,
         value: async (options: Parameters<typeof originalScreenshot>[0]) => {
-          screenshotCalls += 1;
           const image = await originalScreenshot(options);
-          return screenshotCalls >= 4 ? Buffer.concat([image, Buffer.from([screenshotCalls])]) : image;
+          screenshotCalls += 1;
+          if (screenshotCalls === 3) {
+            await session.page.evaluate(() => {
+              document.documentElement.style.setProperty("--talos-capture-probe", String(performance.now()));
+            });
+          }
+          return screenshotCalls === 4
+            ? Buffer.concat([image, Buffer.from([screenshotCalls])])
+            : image;
+        },
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/hmi/pointer/execute`,
+        headers: ownerHeaders,
+        payload: executionPayload(inspected.json()),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data).toMatchObject({
+        state_version: 2,
+        target: { name: "Reject optional cookies" },
+        screenshot: { mime_type: "image/png" },
+      });
+      expect(screenshotCalls).toBe(3);
+      expect(await session.page.locator("#cookie-banner").count()).toBe(0);
+      expect((await sessions.get(sessionId)).status).toBe("active");
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("requires recovery when the DOM changes between post-action screenshot and accessibility capture", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const inspected = await preflight(sessionId);
+      const session = await sessions.get(sessionId);
+      const originalScreenshot = session.page.screenshot.bind(session.page);
+      let screenshotCalls = 0;
+      Object.defineProperty(session.page, "screenshot", {
+        configurable: true,
+        value: async (options: Parameters<typeof originalScreenshot>[0]) => {
+          const image = await originalScreenshot(options);
+          screenshotCalls += 1;
+          if (screenshotCalls === 3) {
+            await session.page.evaluate(() => document.body.setAttribute("data-evidence-race", "changed"));
+          }
+          return image;
         },
       });
 

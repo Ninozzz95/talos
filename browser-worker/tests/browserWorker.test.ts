@@ -6,6 +6,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { BrowserSessionManager, CLICK_COMMAND_TTL_MS, MAX_CLICK_COMMAND_RECORDS } from "../src/BrowserSessionManager.js";
 import { MAX_HMI_COMMAND_RECORDS } from "../src/BrowserHmiCommandLedger.js";
 import { captureSnapshot } from "../src/BrowserSnapshot.js";
+import { TALOS_BROWSER_HMI_RUNTIME_PROTOCOL } from "../src/BrowserWorkerProtocol.js";
 import type { CreateSessionInput } from "../src/schemas.js";
 import { buildServer } from "../src/server.js";
 import { startBrowserWorker } from "../src/startBrowserWorker.js";
@@ -41,7 +42,11 @@ describe("TALOS browser worker", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      data: { status: "ok", service: "talos-browser-worker" },
+      data: {
+        status: "ok",
+        service: "talos-browser-worker",
+        protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+      },
     });
   });
 
@@ -56,8 +61,35 @@ describe("TALOS browser worker", () => {
     expect(unauthenticated.statusCode).toBe(401);
     expect(authenticated.statusCode).toBe(200);
     expect(authenticated.json()).toEqual({
-      data: { status: "ready", service: "talos-browser-worker", runtime: "chromium" },
+      data: {
+        status: "ready",
+        service: "talos-browser-worker",
+        runtime: "chromium",
+        protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+      },
     });
+  });
+
+  it("bootstraps operational sessions through the exact HMI runtime protocol", async () => {
+    const supported = await ownedInject({
+      method: "POST",
+      url: `/protocols/${TALOS_BROWSER_HMI_RUNTIME_PROTOCOL}/sessions`,
+      payload: createPayload,
+    });
+    const unsupported = await ownedInject({
+      method: "POST",
+      url: "/protocols/talos_browser_hmi_runtime_v2.0.0/sessions",
+      payload: createPayload,
+    });
+
+    expect(supported.statusCode).toBe(201);
+    expect(supported.json().data).toMatchObject({
+      status: "ready",
+      protocols: { hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL },
+    });
+    expect(unsupported.statusCode).toBe(404);
+
+    await ownedInject({ method: "DELETE", url: `/sessions/${supported.json().data.sessionId}` });
   });
 
   it("rejects an invalid session payload", async () => {
@@ -388,7 +420,11 @@ describe("TALOS browser worker process entrypoint", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
-        data: { status: "ok", service: "talos-browser-worker" },
+        data: {
+          status: "ok",
+          service: "talos-browser-worker",
+          protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+        },
       });
     } finally {
       await app.close();
@@ -532,7 +568,12 @@ describe("BrowserSessionManager resource lifecycle", () => {
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({
-      data: { status: "degraded", service: "talos-browser-worker", runtime: "chromium" },
+      data: {
+        status: "degraded",
+        service: "talos-browser-worker",
+        runtime: "chromium",
+        protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+      },
     });
     await app.close();
   });

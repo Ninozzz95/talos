@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import TalosLeftRail from './TalosLeftRail.vue'
 
@@ -66,25 +66,31 @@ function mountRail(collapsed: boolean) {
     return { mountPoint, portalRoot, opened }
 }
 
-describe('TalosLeftRail guide actions', () => {
-    it.each([false, true])('renders the exhaustive guide inventory when collapsed=%s', (collapsed) => {
-        const mounted = mountRail(collapsed)
-        expect(mounted.mountPoint.querySelectorAll('[data-guide-available="true"]')).toHaveLength(17)
-        expect(mounted.mountPoint.querySelector('button button')).toBeNull()
-        expect(mounted.mountPoint.querySelector('[aria-label="Information about Advanced"]')).not.toBeNull()
-        expect(mounted.mountPoint.querySelector('[aria-label="Information about Browse"]')).not.toBeNull()
-        expect(mounted.mountPoint.querySelector('[aria-label="Information about Theme"]')).not.toBeNull()
+describe('TalosLeftRail guide placement', () => {
+    it('ports the collapsed Advanced menu outside the scroll container', async () => {
+        const mounted = mountRail(true)
+
+        expect(mounted.mountPoint.querySelector('.talos-advanced-rail-popover')).toBeNull()
+
+        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Advanced"]')?.click()
+        await nextTick()
+        await vi.waitFor(() => {
+            expect(mounted.portalRoot.querySelector('.talos-advanced-rail-popover')).not.toBeNull()
+        })
+
+        expect(mounted.mountPoint.querySelector('.talos-advanced-rail-popover')).toBeNull()
+        expect(mounted.portalRoot.querySelector('.talos-advanced-rail-popover')).not.toBeNull()
     })
 
-    it('opens information without emitting the module open command', async () => {
-        const mounted = mountRail(false)
-        const info = mounted.mountPoint.querySelector<HTMLButtonElement>('[aria-label="Information about Runtime"]')
-        info?.click()
-        await nextTick()
-        await nextTick()
+    it.each([false, true])('keeps contextual information out of navigation when collapsed=%s', (collapsed) => {
+        const mounted = mountRail(collapsed)
 
-        expect(mounted.opened).toEqual([])
-        expect(mounted.portalRoot.textContent).toContain('Inspect persisted runs, events and execution evidence.')
+        expect(mounted.mountPoint.querySelectorAll('[data-guide-id]')).toHaveLength(0)
+        expect(mounted.mountPoint.querySelector('button button')).toBeNull()
+    })
+
+    it('keeps the module command available after guide actions leave the rail', () => {
+        const mounted = mountRail(false)
 
         mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Runtime"]')?.click()
         expect(mounted.opened).toEqual(['runtime'])

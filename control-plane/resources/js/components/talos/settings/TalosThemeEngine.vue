@@ -165,7 +165,10 @@ onMounted(async () => {
     <Card>
         <div class="flex flex-col gap-4">
             <div>
-                <h3 class="text-base font-semibold text-[var(--talos-text)]">Theme Engine</h3>
+                <div class="flex items-center gap-1.5">
+                    <h3 class="text-base font-semibold text-[var(--talos-text)]">Theme Engine</h3>
+                    <TalosGuideInfoButton guide-id="rail.theme" compact side="bottom" />
+                </div>
                 <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">Presets, custom themes, motion and area tokens are persisted through the TALOS settings API.</p>
             </div>
 
@@ -183,15 +186,7 @@ onMounted(async () => {
                 tab-id-prefix="talos-theme-control-tab"
                 panel-id-prefix="talos-theme-control-panel"
                 @update:model-value="activateTab($event as ThemeTab)"
-            >
-                <template #item-action="{ item }">
-                    <TalosGuideInfoButton
-                        :guide-id="`theme.${item.id}`"
-                        compact
-                        side="bottom"
-                    />
-                </template>
-            </Tabs>
+            />
 
             <!-- Existing automation expects data-testid="talos-theme-preset" on every preset trigger; ownership lives in TalosThemePresets. -->
             <TalosThemePresets

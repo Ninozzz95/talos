@@ -41,6 +41,21 @@ generate_strong_token() {
   return 1
 }
 
+generate_app_key() {
+  if command -v openssl >/dev/null 2>&1; then
+    printf 'base64:'
+    openssl rand -base64 32 | tr -d '\r\n'
+    return
+  fi
+  if [ -r /dev/urandom ] && command -v base64 >/dev/null 2>&1; then
+    printf 'base64:'
+    head -c 32 /dev/urandom | base64 | tr -d '\r\n'
+    return
+  fi
+  echo "A cryptographically secure random generator is required for APP_KEY." >&2
+  return 1
+}
+
 terminate_worker() {
   [ -n "$WORKER_PID" ] || return 0
   if ! kill -0 "$WORKER_PID" >/dev/null 2>&1; then
@@ -101,6 +116,11 @@ if [ ! -f "$ROOT_DIR/control-plane/vendor/bin/phpunit" ]; then
   echo "Control-plane dependencies are missing; run composer install in control-plane." >&2
   exit 1
 fi
+if [ ! -x "$ROOT_DIR/control-plane/node_modules/.bin/playwright" ] \
+  && [ ! -f "$ROOT_DIR/control-plane/node_modules/.bin/playwright.cmd" ]; then
+  echo "Control-plane dependencies are missing; run npm ci in control-plane." >&2
+  exit 1
+fi
 if ! command -v "$CURL_BIN" >/dev/null 2>&1; then
   echo "curl is required for the live browser-worker readiness gate." >&2
   exit 1
@@ -112,7 +132,14 @@ if [[ ! "$TALOS_LIVE_BROWSER_WORKER_TOKEN" =~ ^[a-f0-9]{64}$ ]]; then
   exit 1
 fi
 export TALOS_LIVE_BROWSER_WORKER_URL="$WORKER_URL"
+export TALOS_BROWSER_WORKER_URL="$WORKER_URL"
+export TALOS_BROWSER_WORKER_TOKEN="$TALOS_LIVE_BROWSER_WORKER_TOKEN"
 export TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+export TALOS_E2E_REAL_BROWSER=1
+export TALOS_E2E_LIVE_BROWSER_TARGET="${TALOS_E2E_LIVE_BROWSER_TARGET:-https://example.com/}"
+export TALOS_E2E_LIVE_BROWSER_X="${TALOS_E2E_LIVE_BROWSER_X:-0.6173}"
+export TALOS_E2E_LIVE_BROWSER_Y="${TALOS_E2E_LIVE_BROWSER_Y:-0.3679}"
+export APP_KEY="${APP_KEY:-$(generate_app_key)}"
 
 start_worker() {
   cd "$ROOT_DIR/browser-worker"
@@ -150,7 +177,8 @@ for _ in $(seq 1 60); do
       --max-time 3 \
       -H "X-Talos-Worker-Token: $TALOS_LIVE_BROWSER_WORKER_TOKEN" \
       "$WORKER_URL/ready" 2>/dev/null)" \
-    && grep -Fq '"status":"ready"' <<<"$response"; then
+    && grep -Fq '"status":"ready"' <<<"$response" \
+    && grep -Fq '"hmi":"talos_browser_hmi_runtime_v2.1.0"' <<<"$response"; then
     ready=1
     break
   fi
@@ -180,5 +208,15 @@ echo "Live browser worker ready at $WORKER_URL"
     tests/Feature/LiveBrowserWorkerHmiIntegrationTest.php
 )
 
+(
+  cd "$ROOT_DIR/control-plane"
+  npm run build
+  ./node_modules/.bin/playwright test \
+    tests/e2e/talosBrowserHmi.e2e.spec.ts \
+    --project=chromium \
+    --grep "renders the exact verified frame"
+)
+
 echo "Official MCP Streamable HTTP round-trip passed against the live browser worker"
 echo "LiveBrowserWorkerHmiIntegrationTest passed against real Chromium"
+echo "TALOS browser HMI Playwright gate rendered the exact worker artifact"

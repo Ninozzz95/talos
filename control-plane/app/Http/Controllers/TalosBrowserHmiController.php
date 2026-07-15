@@ -543,7 +543,15 @@ final class TalosBrowserHmiController extends Controller
                 return $this->error($exception->errorCode, $exception->getMessage(), 422);
             }
 
-            return $this->recoveryRequired($session, $commandId, $approvalId, $exception->errorCode, $executionLeaseToken);
+            $reason = $exception->errorCode;
+            $workerReason = $exception->details['reason_code'] ?? null;
+            if ($exception->errorCode === 'TALOS_BROWSER_HMI_RECOVERY_REQUIRED'
+                && is_string($workerReason)
+                && preg_match('/^[a-z][a-z0-9_]{0,95}$/D', $workerReason) === 1) {
+                $reason = $workerReason;
+            }
+
+            return $this->recoveryRequired($session, $commandId, $approvalId, $reason, $executionLeaseToken);
         } catch (Throwable) {
             return $this->recoveryRequired($session, $commandId, $approvalId, 'TALOS_BROWSER_EXECUTION_OUTCOME_UNKNOWN', $executionLeaseToken);
         }

@@ -4,14 +4,20 @@ import { AlertCircle, CheckCircle2, CloudDownload, Database, Layers, Loader2, Pl
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosFileDropzone from './TalosFileDropzone.vue'
 import TalosFileStatusList from './TalosFileStatusList.vue'
 import TalosSourceDrawer from './TalosSourceDrawer.vue'
 import { useTalosContextVault } from '../../../composables/useTalosContextVault'
 import { useTalosGoogle } from '../../../composables/useTalosGoogle'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosContextSet, TalosFile, TalosFileChunk, TalosGoogleDriveFile } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
+
+const props = withDefaults(defineProps<{ guideId?: string }>(), {
+    guideId: 'search.context',
+})
 
 const emit = defineEmits<{
     contextSetCreated: [contextSet: TalosContextSet]
@@ -62,6 +68,9 @@ const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
 const latestBenchmarkScenarioRef = ref<string | null>(null)
 const latestBenchmarkFileName = ref<string | null>(null)
+const filesRequested = ref(false)
+const contextSetsRequested = ref(false)
+const driveFilesRequested = ref(false)
 
 const selectedFiles = computed(() => {
     const ids = new Set(selectedFileIds.value)
@@ -86,6 +95,18 @@ const importedGoogleFiles = computed(() => files.value.filter((file) => {
 }))
 const visibleError = computed(() => actionError.value || fileError.value || contextSetError.value || googleErrorMessage.value)
 const visibleActionMessage = computed(() => actionMessage.value || googleActionMessage.value)
+const contextSetsState = computed(() => resolveTalosCollectionState({
+    itemCount: contextSets.value.length,
+    loading: loadingContextSets.value,
+    error: contextSetError.value,
+    requested: contextSetsRequested.value,
+}))
+const driveFilesState = computed(() => resolveTalosCollectionState({
+    itemCount: googleDriveFiles.value.length,
+    loading: googleLoading.value,
+    error: googleErrorMessage.value,
+    requested: driveFilesRequested.value,
+}))
 const canCreateContextSet = computed(() => {
     return contextSetName.value.trim().length > 0
         && selectedFileIds.value.length > 0
@@ -172,6 +193,7 @@ function toggleChunk(chunk: TalosFileChunk) {
 }
 
 async function refreshFiles() {
+    filesRequested.value = true
     actionError.value = null
 
     try {
@@ -182,6 +204,7 @@ async function refreshFiles() {
 }
 
 async function refreshContextSets() {
+    contextSetsRequested.value = true
     actionError.value = null
 
     try {
@@ -195,6 +218,7 @@ async function refreshGoogleDrive() {
     try {
         const accounts = await loadGoogleAccounts()
         if (accounts.some((account) => account.provider === 'google' && account.status === 'connected')) {
+            driveFilesRequested.value = true
             await loadGoogleDriveFiles()
         }
     } catch {
@@ -236,8 +260,18 @@ async function openDriveImport() {
     }
 
     if (!googleDriveFiles.value.length) {
+        driveFilesRequested.value = true
         await loadGoogleDriveFiles(connectedGoogleAccount.value.id).catch(() => null)
     }
+}
+
+async function refreshDriveFiles() {
+    if (!connectedGoogleAccount.value) {
+        return
+    }
+
+    driveFilesRequested.value = true
+    await loadGoogleDriveFiles(connectedGoogleAccount.value.id).catch(() => null)
 }
 
 async function handleDriveImport(file: TalosGoogleDriveFile) {
@@ -351,7 +385,10 @@ onMounted(() => {
                         <Database class="h-4 w-4 text-[var(--talos-accent)]" />
                         Context Vault
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Files and grounded context</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Files and grounded context</h3>
+                        <TalosGuideInfoButton :guide-id="props.guideId" compact side="bottom" />
+                    </div>
                 </div>
                 <Button type="button" variant="ghost" size="sm" :disabled="loadingFiles || loadingContextSets" @click="refreshVault">
                     <Loader2 v-if="loadingFiles || loadingContextSets" class="h-4 w-4 animate-spin" />
@@ -408,21 +445,21 @@ onMounted(() => {
                 <div v-if="driveImportOpen" class="mt-3 overflow-hidden rounded-md border border-[var(--talos-border)]">
                     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-active)] px-3 py-2">
                         <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">{{ connectedGoogleAccount.email ?? 'Google account' }}</div>
-                        <Button type="button" variant="ghost" size="sm" :disabled="googleLoading" @click="loadGoogleDriveFiles(connectedGoogleAccount.id)">
+                        <Button type="button" variant="ghost" size="sm" :disabled="googleLoading" @click="refreshDriveFiles">
                             <Loader2 v-if="googleLoading" class="h-4 w-4 animate-spin" />
                             <RefreshCw v-else class="h-4 w-4" />
                             Sync
                         </Button>
                     </div>
 
-                    <div v-if="googleLoading && !googleDriveFiles.length" class="flex items-center gap-2 bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                    <div v-if="driveFilesState === 'loading'" role="status" class="flex items-center gap-2 bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
                         <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                         Loading Drive files
                     </div>
-                    <div v-else-if="!googleDriveFiles.length" class="bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                    <div v-else-if="driveFilesState === 'empty'" class="bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
                         No importable Drive files returned by `/api/talos/google/drive/files`.
                     </div>
-                    <div v-else class="divide-y divide-[var(--talos-border)]">
+                    <div v-else-if="driveFilesState === 'ready'" class="divide-y divide-[var(--talos-border)]">
                         <article v-for="file in googleDriveFiles" :key="file.id" class="flex flex-col gap-3 bg-[var(--talos-panel)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="min-w-0">
                                 <div class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ file.name }}</div>
@@ -493,6 +530,7 @@ onMounted(() => {
                 :loading="loadingFiles"
                 :busy-file-id="loadingFileId"
                 :error="fileError"
+                :requested="filesRequested"
                 @refresh="refreshFiles"
                 @toggle-file="toggleFile"
                 @inspect-file="inspectFile"
@@ -519,16 +557,16 @@ onMounted(() => {
                     </Button>
                 </div>
 
-                <div v-if="loadingContextSets && !contextSets.length" class="flex items-center gap-2 bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <div v-if="contextSetsState === 'loading'" role="status" class="flex items-center gap-2 bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                     Loading context sets
                 </div>
 
-                <div v-else-if="!contextSets.length" class="bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                <div v-else-if="contextSetsState === 'empty'" class="bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                     No context sets returned by `/api/talos/context-sets`.
                 </div>
 
-                <div v-else class="divide-y divide-[var(--talos-border)]">
+                <div v-else-if="contextSetsState === 'ready'" class="divide-y divide-[var(--talos-border)]">
                     <article v-for="contextSet in contextSets" :key="contextSet.id" class="bg-[var(--talos-panel-soft)] px-3 py-3">
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">

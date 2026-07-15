@@ -127,6 +127,7 @@ button {
     --talos-motion-duration-surface-enter: 167ms;
     --talos-motion-duration-surface-exit: 83ms;
     --talos-motion-duration-window-open: 250ms;
+    --talos-motion-duration-window-close: 250ms;
     --talos-motion-duration-window-restore: 250ms;
     --talos-motion-duration-window-minimize: 333ms;
     --talos-motion-duration-window-focus: 83ms;
@@ -704,6 +705,10 @@ button {
     color: var(--talos-composer-text);
 }
 
+.talos-chat-composer-shell .talos-composer-textarea {
+    field-sizing: content;
+}
+
 .talos-chat-composer-shell button {
     background-color: var(--talos-composer-surface);
 }
@@ -921,6 +926,56 @@ button {
 
 .talos-tool-window-docked {
     width: 100%;
+    min-width: 0;
+}
+
+.talos-right-dock {
+    container: talos-right-dock / inline-size;
+}
+
+.talos-mobile-sheet-body {
+    container: talos-mobile-sheet-body / inline-size;
+}
+
+@container talos-mobile-sheet-body (inline-size <= 440px) {
+    .talos-mobile-sheet-body :where(
+        [class*="sm:grid-cols-"],
+        [class*="md:grid-cols-"],
+        [class*="lg:grid-cols-"],
+        [class*="xl:grid-cols-"]
+    ) {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .talos-mobile-sheet-body :where(section, article, form, fieldset, [role="tabpanel"]) {
+        min-width: 0;
+        max-width: 100%;
+    }
+}
+
+@container talos-right-dock (inline-size <= 440px) {
+    .talos-tool-window-docked .talos-tool-window-body {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .talos-tool-window-docked :where(
+        [class*="sm:grid-cols-"],
+        [class*="md:grid-cols-"],
+        [class*="lg:grid-cols-"],
+        [class*="xl:grid-cols-"]
+    ) {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .talos-tool-window-docked :where(
+        [class*="sm:flex-row"],
+        [class*="md:flex-row"],
+        [class*="lg:flex-row"],
+        [class*="xl:flex-row"]
+    ) {
+        flex-direction: column !important;
+    }
 }
 
 .talos-floating-window {

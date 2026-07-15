@@ -291,7 +291,11 @@ one terminates, allowing the restart policy to recover the complete web tier.
 `/readyz` is stricter than process liveness: it verifies Laravel, database,
 migrations, storage, queue configuration, validator health, and the authenticated
 browser-worker `/ready` endpoint. That endpoint launches Chromium and reports
-failure when the browser runtime is missing or cannot start.
+failure when the browser runtime is missing or cannot start. TALOS also requires
+the exact Browser HMI runtime protocol advertised by the current control-plane
+release. A worker from an older checkout may still answer HTTP health checks,
+but `/readyz` rejects it as incompatible instead of allowing interactions to
+fail later in the screenshot lightbox.
 
 ### Browser deployment gates
 
@@ -544,6 +548,12 @@ The Docker-first `./talos up` path performs the secret generation, service
 wiring, dependency ordering and readiness check automatically and remains the
 recommended production installation.
 
+`./talos doctor` returns a non-zero status when browser-worker ownership or the
+required HMI protocol is incompatible, even when Docker or the native toolchain
+is otherwise available. CI validates the parsed workflow and Compose service
+model, requires Docker's canonical `docker compose config --format json`, and
+runs an authenticated UI-to-worker artifact gate against real Chromium.
+
 Configure TALOS:
 
 ```env
@@ -675,6 +685,13 @@ endpoint additionally rejects every browser `Origin` header and validates the
 HTTP host against `TALOS_BROWSER_MCP_ALLOWED_HOSTS`. Keep that allowlist limited
 to the Compose service name and explicit loopback names. Never publish port
 `3100`; TALOS remains the only browser-facing entrypoint.
+
+The REST health and readiness envelopes advertise the pinned
+`talos_browser_hmi_runtime_v2.1.0` compatibility identifier. Native launchers,
+Doctor, CI, Docker health checks, and Laravel `/readyz` require an exact match.
+After updating Browser Worker or control-plane code, restart the complete
+managed stack rather than leaving a pre-update worker process alive. A protocol
+mismatch is an incompatible deployment, not a retryable page interaction.
 
 Browser navigation uses a DNS-pinning egress proxy that rejects private,
 loopback, link-local, metadata, reserved, and disallowed resolved addresses.

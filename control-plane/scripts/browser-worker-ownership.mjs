@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultWorkspaceRoot = path.resolve(scriptDirectory, '..', '..')
 const workerServiceName = 'talos-browser-worker'
+export const requiredBrowserHmiProtocol = 'talos_browser_hmi_runtime_v2.1.0'
 
 export function evaluateBrowserWorkerOwnership({ expectedUrl, lease, probes }) {
     const expectedProbe = probes.find((probe) => probe.url === expectedUrl) ?? { url: expectedUrl, state: 'closed' }
@@ -38,6 +39,13 @@ export function evaluateBrowserWorkerOwnership({ expectedUrl, lease, probes }) {
                 blocking: true,
             })
         }
+    } else if (expectedProbe.state === 'incompatible') {
+        expectedState = 'incompatible'
+        issues.push({
+            code: 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
+            url: expectedUrl,
+            blocking: true,
+        })
     } else if (expectedProbe.state === 'conflict') {
         expectedState = 'conflict'
         issues.push({
@@ -55,12 +63,20 @@ export function evaluateBrowserWorkerOwnership({ expectedUrl, lease, probes }) {
     }
 
     for (const probe of probes) {
-        if (probe.url === expectedUrl || probe.state !== 'talos') continue
-        issues.push({
-            code: 'TALOS_BROWSER_WORKER_ORPHANED',
-            url: probe.url,
-            blocking: true,
-        })
+        if (probe.url === expectedUrl) continue
+        if (probe.state === 'talos') {
+            issues.push({
+                code: 'TALOS_BROWSER_WORKER_ORPHANED',
+                url: probe.url,
+                blocking: true,
+            })
+        } else if (probe.state === 'incompatible') {
+            issues.push({
+                code: 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
+                url: probe.url,
+                blocking: true,
+            })
+        }
     }
 
     return {
@@ -80,6 +96,15 @@ export function assertBrowserWorkerCanStart(report) {
     throw new Error(`Browser worker ownership check failed.\n${details}`)
 }
 
+export function isBrowserWorkerOwnershipHealthy(report) {
+    if (report.expectedState !== 'available' && report.expectedState !== 'managed') return false
+
+    return !report.issues.some((issue) => (
+        issue.blocking
+        && issue.code !== 'TALOS_BROWSER_WORKER_STACK_ALREADY_RUNNING'
+    ))
+}
+
 export function formatBrowserWorkerDoctor(report) {
     const lines = []
     if (report.expectedState === 'available') {
@@ -90,6 +115,8 @@ export function formatBrowserWorkerDoctor(report) {
         lines.push(`browser worker slot WARN orphaned worker at ${report.expectedUrl}`)
     } else if (report.expectedState === 'conflict') {
         lines.push(`browser worker slot FAIL conflicting service at ${report.expectedUrl}`)
+    } else if (report.expectedState === 'incompatible') {
+        lines.push(`browser worker slot FAIL protocol mismatch at ${report.expectedUrl}`)
     } else {
         lines.push(`browser worker slot WARN managed endpoint missing at ${report.expectedUrl}`)
     }
@@ -99,6 +126,8 @@ export function formatBrowserWorkerDoctor(report) {
             lines.push(`browser worker lease WARN stale lease for ${issue.url}`)
         } else if (issue.code === 'TALOS_BROWSER_WORKER_ORPHANED' && issue.url !== report.expectedUrl) {
             lines.push(`browser worker extra WARN orphaned worker at ${issue.url}`)
+        } else if (issue.code === 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH' && issue.url !== report.expectedUrl) {
+            lines.push(`browser worker extra FAIL protocol mismatch at ${issue.url}`)
         }
     }
 
@@ -172,7 +201,10 @@ export async function probeBrowserWorkerEndpoint(url, {
         })
         if (!response.ok) return 'conflict'
         const payload = await response.json()
-        return payload?.data?.service === workerServiceName ? 'talos' : 'conflict'
+        if (payload?.data?.service !== workerServiceName) return 'conflict'
+        return payload?.data?.protocols?.hmi === requiredBrowserHmiProtocol
+            ? 'talos'
+            : 'incompatible'
     } catch {
         return 'conflict'
     }
@@ -234,7 +266,7 @@ function isTcpEndpointOpen(url) {
 async function main() {
     const report = await inspectBrowserWorkerOwnership()
     process.stdout.write(`${formatBrowserWorkerDoctor(report)}\n`)
-    if (report.issues.some((issue) => issue.blocking)) process.exitCode = 1
+    if (!isBrowserWorkerOwnershipHealthy(report)) process.exitCode = 1
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : ''

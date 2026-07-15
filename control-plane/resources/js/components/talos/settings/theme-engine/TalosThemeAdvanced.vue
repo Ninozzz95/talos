@@ -2,6 +2,7 @@
 import Button from '../../../ui/Button.vue'
 import Input from '../../../ui/Input.vue'
 import Select from '../../../ui/Select.vue'
+import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_THEME_AREA_OPTIONS,
     TALOS_THEME_AREA_TOKEN_OPTIONS,
@@ -39,7 +40,10 @@ function updateToken(key: TalosThemeAreaTokenKey, value: unknown) {
         class="space-y-4"
     >
         <div>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Advanced area tokens</h4>
+            <div class="flex items-center gap-1.5">
+                <h4 class="text-sm font-semibold text-[var(--talos-text)]">Advanced area tokens</h4>
+                <TalosGuideInfoButton guide-id="theme.advanced" compact side="bottom" />
+            </div>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Override specific interface zones through explicit, safe CSS variables.</p>
         </div>
         <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">

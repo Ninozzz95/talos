@@ -3,17 +3,23 @@ import { computed } from 'vue'
 import { Database, FileText, Loader2, RefreshCw, Search } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosFile } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     files: TalosFile[]
     selectedFileIds: string[]
     loading: boolean
     busyFileId?: string | null
     error?: string | null
-}>()
+    requested?: boolean
+}>(), {
+    busyFileId: null,
+    error: null,
+    requested: true,
+})
 
 const emit = defineEmits<{
     refresh: []
@@ -22,6 +28,12 @@ const emit = defineEmits<{
 }>()
 
 const selectedCount = computed(() => props.selectedFileIds.length)
+const filesState = computed(() => resolveTalosCollectionState({
+    itemCount: props.files.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 
 function statusTone(status: TalosFile['status']): BadgeTone {
     if (status === 'available' || status === 'embedded' || status === 'chunked') {
@@ -86,16 +98,16 @@ function isSelected(file: TalosFile) {
             {{ error }}
         </div>
 
-        <div v-if="loading && !files.length" class="flex items-center gap-2 bg-[var(--talos-panel-soft)] px-3 py-5 text-sm text-[var(--talos-muted)]">
+        <div v-if="filesState === 'loading'" role="status" class="flex items-center gap-2 bg-[var(--talos-panel-soft)] px-3 py-5 text-sm text-[var(--talos-muted)]">
             <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
             Loading files from `/api/talos/files`
         </div>
 
-        <div v-else-if="!files.length" class="bg-[var(--talos-panel-soft)] px-3 py-5 text-sm leading-6 text-[var(--talos-muted)]">
+        <div v-else-if="filesState === 'empty'" class="bg-[var(--talos-panel-soft)] px-3 py-5 text-sm leading-6 text-[var(--talos-muted)]">
             No files returned by `/api/talos/files`.
         </div>
 
-        <div v-else class="divide-y divide-[var(--talos-border)]">
+        <div v-else-if="filesState === 'ready'" class="divide-y divide-[var(--talos-border)]">
             <article v-for="file in files" :key="file.id" class="bg-[var(--talos-panel-soft)]">
                 <div class="grid gap-3 px-3 py-3 md:grid-cols-[minmax(0,1fr)_auto]">
                     <button

@@ -64,4 +64,11 @@ describe('TalosWindowLayer Motion V6 integration', () => {
         expect(appCssSource).toMatch(/\.talos-tool-window-peek\s*\{[\s\S]*?55%[\s\S]*?backdrop-filter:\s*none/)
         expect(appCssSource).not.toMatch(/\.talos-tool-window-peek\s*\{[^}]*opacity:/)
     })
+
+    it('uses the manager-owned dock width and a narrow container context', () => {
+        expect(source).toContain('TALOS_RIGHT_DOCK_WIDTH')
+        expect(source).toContain(':style="{ width: `${TALOS_RIGHT_DOCK_WIDTH}px` }"')
+        expect(source).not.toContain('w-[420px]')
+        expect(appCssSource).toMatch(/\.talos-right-dock\s*\{[\s\S]*?container:\s*talos-right-dock\s*\/\s*inline-size/)
+    })
 })

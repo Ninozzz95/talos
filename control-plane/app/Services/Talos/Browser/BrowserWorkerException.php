@@ -8,7 +8,12 @@ use RuntimeException;
 
 final class BrowserWorkerException extends RuntimeException
 {
-    public function __construct(public readonly string $errorCode, string $message)
+    /** @param array<string, string> $details */
+    public function __construct(
+        public readonly string $errorCode,
+        string $message,
+        public readonly array $details = [],
+    )
     {
         parent::__construct($message);
     }

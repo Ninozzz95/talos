@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { sanitizeTalosChatLayout } from '../lib/talosChatLayout'
-import type { TalosChatBubbleScale, TalosComposerMode } from '../lib/talosTypes'
+import type { TalosChatBubbleScale, TalosComposerMode, TalosMobileWindowPresentation } from '../lib/talosTypes'
 import type { TalosWorkspaceSettings, UpdateTalosSettingsPayload } from './useTalosSettings'
 
 type UpdateSettings = (payload: UpdateTalosSettingsPayload) => Promise<TalosWorkspaceSettings>
@@ -13,6 +13,7 @@ export function useTalosChatLayoutPreferences(
     const bubbleScale = ref<TalosChatBubbleScale>('balanced')
     const composerMode = ref<TalosComposerMode>('full')
     const advancedRailExpanded = ref(false)
+    const mobileWindowPresentation = ref<TalosMobileWindowPresentation>('drawer')
     const policyLocked = computed(() => workspaceSettings.value?.preferences?.theme_policy_locked === true)
     const bubbleScaleLabel = computed(() => bubbleScale.value[0].toUpperCase() + bubbleScale.value.slice(1))
 
@@ -21,6 +22,7 @@ export function useTalosChatLayoutPreferences(
         bubbleScale.value = layout.bubble_scale
         composerMode.value = layout.composer_mode
         advancedRailExpanded.value = layout.advanced_rail_expanded
+        mobileWindowPresentation.value = layout.mobile_window_presentation
     }
 
     function persist(includeVisualPreferences = true) {
@@ -37,6 +39,7 @@ export function useTalosChatLayoutPreferences(
                     ...(includeVisualPreferences ? {
                         bubble_scale: bubbleScale.value,
                         composer_mode: composerMode.value,
+                        mobile_window_presentation: mobileWindowPresentation.value,
                     } : {}),
                     advanced_rail_expanded: advancedRailExpanded.value,
                 },
@@ -80,6 +83,7 @@ export function useTalosChatLayoutPreferences(
         bubbleScaleLabel,
         composerMode,
         advancedRailExpanded,
+        mobileWindowPresentation,
         policyLocked,
         apply,
         decrementBubbleScale,

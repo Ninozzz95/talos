@@ -47,30 +47,29 @@ const emit = defineEmits<{
             </div>
             <Badge v-if="temporarySession" class="hidden sm:inline-flex" tone="warning">Temporary session</Badge>
             <Tooltip content="Commands" align="end">
-                <template #default="{ describedBy }">
-                    <Button type="button" variant="secondary" size="sm" class="w-11 px-0 md:h-8 md:min-h-8 md:w-auto md:px-3" aria-label="Open command palette" :aria-describedby="describedBy" @click="emit('openCommands')">
+                <template #default>
+                    <Button type="button" variant="secondary" size="sm" class="w-11 px-0 md:h-8 md:min-h-8 md:w-auto md:px-3" aria-label="Open command palette" @click="emit('openCommands')">
                         <Command class="h-4 w-4" />
                         <span class="hidden md:inline">Commands</span>
                     </Button>
                 </template>
             </Tooltip>
             <Tooltip content="Export session" align="end">
-                <template #default="{ describedBy }">
-                    <Button type="button" variant="ghost" size="sm" class="w-11 px-0 md:h-8 md:min-h-8 md:w-auto md:px-3" aria-label="Export session" :aria-describedby="describedBy" :disabled="!hasActiveSession || exportingSession" @click="emit('openExport')">
+                <template #default>
+                    <Button type="button" variant="ghost" size="sm" class="w-11 px-0 md:h-8 md:min-h-8 md:w-auto md:px-3" aria-label="Export session" :disabled="!hasActiveSession || exportingSession" @click="emit('openExport')">
                         <Download class="h-4 w-4" />
                         <span class="hidden md:inline">Export</span>
                     </Button>
                 </template>
             </Tooltip>
             <Tooltip v-if="authenticated" content="Account settings" align="end">
-                <template #default="{ describedBy }">
+                <template #default>
                     <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         class="md:hidden"
                         :aria-label="`Open account settings for ${authLabel}`"
-                        :aria-describedby="describedBy"
                         @click="emit('openAccount')"
                     >
                         <UserRound class="h-4 w-4" />

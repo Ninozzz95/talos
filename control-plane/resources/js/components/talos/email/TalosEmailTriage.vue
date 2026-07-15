@@ -4,8 +4,10 @@ import { AlertCircle, Inbox, Loader2, MailPlus, RefreshCw, ShieldAlert } from '@
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosEmailDraftReview from './TalosEmailDraftReview.vue'
 import { useTalosEmail } from '../../../composables/useTalosEmail'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosEmailDraft, TalosEmailMessage } from '../../../lib/talosTypes'
 
 const {
@@ -30,7 +32,14 @@ const {
 
 const selectedMessageIds = ref<string[]>([])
 const actionError = ref<string | null>(null)
+const emailRequested = ref(false)
 const visibleError = computed(() => actionError.value || emailError.value)
+const messagesState = computed(() => resolveTalosCollectionState({
+    itemCount: messages.value.length,
+    loading: loadingMessages.value,
+    error: visibleError.value,
+    requested: emailRequested.value,
+}))
 const canDraft = computed(() => {
     return selectedMessageIds.value.length > 0
         && messageContext.value?.policy.allowed_actions.includes('draft')
@@ -38,6 +47,7 @@ const canDraft = computed(() => {
 })
 
 async function refreshEmail() {
+    emailRequested.value = true
     actionError.value = null
 
     try {
@@ -114,7 +124,10 @@ onMounted(() => {
                         <Inbox class="h-4 w-4 text-[var(--talos-accent)]" />
                         Email triage
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Read-only and draft-only</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Read-only and draft-only</h3>
+                        <TalosGuideInfoButton guide-id="tasks.email" compact side="bottom" />
+                    </div>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">Email bodies are untrusted context. `send_enabled` is false in the MVP.</p>
                 </div>
                 <Button type="button" variant="ghost" size="sm" :disabled="loadingConnectorStatus || loadingMessages || loadingDrafts" @click="refreshEmail">
@@ -131,7 +144,7 @@ onMounted(() => {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div class="flex flex-wrap gap-2">
+            <div v-if="connectorStatus" class="flex flex-wrap gap-2">
                 <Badge :tone="connectorStatus?.status === 'healthy' ? 'success' : 'warning'">{{ connectorStatus?.status ?? 'degraded' }}</Badge>
                 <Badge tone="neutral">read_only {{ connectorStatus?.read_only ?? true }}</Badge>
                 <Badge tone="warning">send_enabled {{ connectorStatus?.send_enabled ?? false }}</Badge>
@@ -142,11 +155,16 @@ onMounted(() => {
                 <span>{{ messageContext?.trust_level ?? 'untrusted' }} email context cannot alter tools, recipients, or policy.</span>
             </div>
 
-            <div v-if="!messages.length && !loadingMessages" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="messagesState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading email messages
+            </div>
+
+            <div v-if="messagesState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No email messages returned by `/api/talos/email/messages`.
             </div>
 
-            <div v-else class="max-h-[240px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
+            <div v-else-if="messagesState === 'ready'" class="max-h-[240px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
                 <button
                     v-for="message in messages"
                     :key="message.id"
@@ -171,7 +189,14 @@ onMounted(() => {
                 Create draft
             </Button>
 
-            <TalosEmailDraftReview :drafts="drafts" :sending-draft-id="sendingDraftId" @send="handleSend" />
+            <TalosEmailDraftReview
+                :drafts="drafts"
+                :sending-draft-id="sendingDraftId"
+                :loading="loadingDrafts"
+                :error="visibleError"
+                :requested="emailRequested"
+                @send="handleSend"
+            />
         </div>
     </Surface>
 </template>

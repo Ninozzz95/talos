@@ -4,6 +4,7 @@ import Badge from '../../../ui/Badge.vue'
 import Button from '../../../ui/Button.vue'
 import Input from '../../../ui/Input.vue'
 import Textarea from '../../../ui/Textarea.vue'
+import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import type { TalosNamedTheme } from '../../../../lib/talosThemes'
 
 const props = defineProps<{
@@ -48,7 +49,10 @@ const deletingTheme = () => props.library.find((theme) => theme.id === props.del
     >
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h4 class="text-sm font-semibold text-[var(--talos-text)]">Custom theme library</h4>
+                <div class="flex items-center gap-1.5">
+                    <h4 class="text-sm font-semibold text-[var(--talos-text)]">Custom theme library</h4>
+                    <TalosGuideInfoButton guide-id="theme.library" compact side="bottom" />
+                </div>
                 <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Saved themes are personal preference objects, not executable assets.</p>
             </div>
             <div class="flex flex-wrap gap-2">

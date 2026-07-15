@@ -55,7 +55,15 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
 
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array
     {
-        return $this->request('post', '/sessions', $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => $ttlSeconds, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false]], $timeoutMilliseconds);
+        $session = $this->request('post', TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH, $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => $ttlSeconds, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false]], $timeoutMilliseconds);
+        if (($session['protocols']['hmi'] ?? null) !== TalosBrowserWorkerProtocol::HMI_RUNTIME) {
+            throw new BrowserWorkerException(
+                'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
+                'Browser worker HMI protocol is incompatible with this TALOS control plane.',
+            );
+        }
+
+        return $session;
     }
 
     public function inspect(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array
@@ -424,6 +432,17 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         if ($code === 'TALOS_BROWSER_WORKER_FAILURE' || $message === '') {
             $message = 'Browser worker failed to complete the request.';
         }
-        throw new BrowserWorkerException($code, mb_substr($message, 0, 512));
+        $details = [];
+        $reasonCode = is_array($body)
+            && $code === 'TALOS_BROWSER_HMI_RECOVERY_REQUIRED'
+            && is_array($body['details'] ?? null)
+            && is_string($body['details']['reason_code'] ?? null)
+                ? $body['details']['reason_code']
+                : null;
+        if (is_string($reasonCode) && preg_match('/^[a-z][a-z0-9_]{0,95}$/D', $reasonCode) === 1) {
+            $details['reason_code'] = $reasonCode;
+        }
+
+        throw new BrowserWorkerException($code, mb_substr($message, 0, 512), $details);
     }
 }

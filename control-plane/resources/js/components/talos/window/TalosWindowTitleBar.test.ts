@@ -94,6 +94,15 @@ describe('TalosWindowTitleBar', () => {
         expect(events.every((event) => event.args[0] === 'runtime')).toBe(true)
     })
 
+    it('names the explicit right-sidebar dock separately from geometric snap actions', () => {
+        const floating = mountTitleBar()
+        expect(floating.container.querySelector('[aria-label="Dock Runtime in right sidebar"]')).toBeTruthy()
+        expect(floating.container.querySelector('[aria-label="Dock Runtime"]')).toBeNull()
+
+        const docked = mountTitleBar({ docked: true })
+        expect(docked.container.querySelector('[aria-label="Undock Runtime from right sidebar"]')).toBeTruthy()
+    })
+
     it('exposes an accessible transient Peek toggle only for eligible windows', () => {
         const hidden = mountTitleBar()
         expect(hidden.container.querySelector('[aria-label^="Peek behind"]')).toBeNull()

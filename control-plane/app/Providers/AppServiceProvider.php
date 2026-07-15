@@ -14,6 +14,7 @@ use App\Services\Talos\Web\WebSearchProviderFactory;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Vite;
 use Illuminate\Support\ServiceProvider;
+use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,8 +34,20 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->bind(BrowserSessionClient::class, function (Application $app): BrowserSessionClient {
-            if ($this->app->environment('testing')) {
+            $configuredDriver = config('services.talos.browser.client_driver');
+            $driver = is_string($configuredDriver) && trim($configuredDriver) !== ''
+                ? strtolower(trim($configuredDriver))
+                : ($app->environment('testing') ? 'fake' : 'http');
+
+            if ($driver === 'fake') {
+                if (! $app->environment('testing')) {
+                    throw new RuntimeException('The fake TALOS browser client is restricted to the testing environment.');
+                }
+
                 return new FakeBrowserSessionClient;
+            }
+            if ($driver !== 'http') {
+                throw new RuntimeException("Unsupported TALOS browser client driver [{$driver}].");
             }
 
             $configuration = $app->make(BrowserWorkerConfiguration::class);

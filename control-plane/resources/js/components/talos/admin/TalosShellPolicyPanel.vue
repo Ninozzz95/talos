@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { AlertTriangle, Loader2, SquareTerminal } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import Surface from '../../ui/Surface.vue'
 import Textarea from '../../ui/Textarea.vue'
 import { useTalosAdmin } from '../../../composables/useTalosAdmin'
@@ -43,7 +44,10 @@ async function previewPolicy() {
                         <SquareTerminal class="h-4 w-4 text-[var(--talos-accent)]" />
                         Shell policy
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Audited host boundary</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Audited host boundary</h3>
+                        <TalosGuideInfoButton guide-id="doctor.shell" compact side="bottom" />
+                    </div>
                 </div>
                 <Badge tone="warning">default deny</Badge>
             </div>

@@ -38,7 +38,7 @@ function forwardSnap(windowId: string, side: 'left' | 'right') {
 
 const windowClass = computed(() => {
     if (props.docked) {
-        return 'talos-tool-window talos-tool-window-docked lg:max-h-full lg:w-[420px]'
+        return 'talos-tool-window talos-tool-window-docked w-full lg:max-h-full'
     }
 
     if (props.fullscreen) {
@@ -71,6 +71,7 @@ onMounted(() => {
         :data-window-id="id"
         :data-window-active="active ? 'true' : 'false'"
         :data-window-fullscreen="fullscreen ? 'true' : 'false'"
+        :data-window-presentation="docked ? 'right-dock' : fullscreen ? 'fullscreen' : 'floating'"
         :data-window-peeking="peeking ? 'true' : 'false'"
         :data-window-width="width ? String(Math.round(width)) : undefined"
         :data-window-height="height ? String(Math.round(height)) : undefined"

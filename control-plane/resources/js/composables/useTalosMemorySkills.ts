@@ -27,25 +27,34 @@ export function useTalosMemorySkills() {
     const memoryRetrievalContext = ref<TalosMemoryRetrievalContext | null>(null)
     const skills = ref<TalosSkill[]>([])
     const skillPlanningContext = ref<TalosSkillPlanningContext | null>(null)
-    const loadingMemorySkills = ref(false)
+    const pendingMemorySkillRequests = ref(0)
+    const loadingMemorySkills = computed(() => pendingMemorySkillRequests.value > 0)
     const memorySkillError = ref<string | null>(null)
 
     const approvedSkillCount = computed(() => skillPlanningContext.value?.skills.length ?? 0)
     const retrievedMemoryCount = computed(() => memoryRetrievalContext.value?.memories.length ?? 0)
 
+    async function trackMemorySkillRequest<T>(request: () => Promise<T>) {
+        pendingMemorySkillRequests.value += 1
+        try {
+            return await request()
+        } finally {
+            pendingMemorySkillRequests.value = Math.max(0, pendingMemorySkillRequests.value - 1)
+        }
+    }
+
     async function loadMemories(includeInactive = true) {
-        loadingMemorySkills.value = true
         memorySkillError.value = null
 
         try {
-            const response = await talosFetch<ApiEnvelope<TalosMemory[]>>(`/api/talos/memories${includeInactive ? '?include_inactive=1' : ''}`)
-            memories.value = response.data
-            return response.data
+            return await trackMemorySkillRequest(async () => {
+                const response = await talosFetch<ApiEnvelope<TalosMemory[]>>(`/api/talos/memories${includeInactive ? '?include_inactive=1' : ''}`)
+                memories.value = response.data
+                return response.data
+            })
         } catch (error) {
             memorySkillError.value = error instanceof Error ? error.message : 'TALOS could not load memories.'
             throw error
-        } finally {
-            loadingMemorySkills.value = false
         }
     }
 
@@ -77,54 +86,51 @@ export function useTalosMemorySkills() {
     }
 
     async function loadMemoryRetrievalContext(scopeType = 'project', scopeId = 'avm') {
-        loadingMemorySkills.value = true
         memorySkillError.value = null
 
         try {
-            const params = new URLSearchParams({ scope_type: scopeType })
-            if (scopeId) {
-                params.set('scope_id', scopeId)
-            }
-            const response = await talosFetch<ApiEnvelope<TalosMemoryRetrievalContext>>(`/api/talos/memories/retrieval-context?${params}`)
-            memoryRetrievalContext.value = response.data
-            return response.data
+            return await trackMemorySkillRequest(async () => {
+                const params = new URLSearchParams({ scope_type: scopeType })
+                if (scopeId) {
+                    params.set('scope_id', scopeId)
+                }
+                const response = await talosFetch<ApiEnvelope<TalosMemoryRetrievalContext>>(`/api/talos/memories/retrieval-context?${params}`)
+                memoryRetrievalContext.value = response.data
+                return response.data
+            })
         } catch (error) {
             memorySkillError.value = error instanceof Error ? error.message : 'TALOS could not load memory retrieval context.'
             throw error
-        } finally {
-            loadingMemorySkills.value = false
         }
     }
 
     async function loadSkills(includeDisabled = true) {
-        loadingMemorySkills.value = true
         memorySkillError.value = null
 
         try {
-            const response = await talosFetch<ApiEnvelope<TalosSkill[]>>(`/api/talos/skills${includeDisabled ? '?include_disabled=1' : ''}`)
-            skills.value = response.data
-            return response.data
+            return await trackMemorySkillRequest(async () => {
+                const response = await talosFetch<ApiEnvelope<TalosSkill[]>>(`/api/talos/skills${includeDisabled ? '?include_disabled=1' : ''}`)
+                skills.value = response.data
+                return response.data
+            })
         } catch (error) {
             memorySkillError.value = error instanceof Error ? error.message : 'TALOS could not load skills.'
             throw error
-        } finally {
-            loadingMemorySkills.value = false
         }
     }
 
     async function loadSkillPlanningContext() {
-        loadingMemorySkills.value = true
         memorySkillError.value = null
 
         try {
-            const response = await talosFetch<ApiEnvelope<TalosSkillPlanningContext>>('/api/talos/skills/planning-context')
-            skillPlanningContext.value = response.data
-            return response.data
+            return await trackMemorySkillRequest(async () => {
+                const response = await talosFetch<ApiEnvelope<TalosSkillPlanningContext>>('/api/talos/skills/planning-context')
+                skillPlanningContext.value = response.data
+                return response.data
+            })
         } catch (error) {
             memorySkillError.value = error instanceof Error ? error.message : 'TALOS could not load skill planning context.'
             throw error
-        } finally {
-            loadingMemorySkills.value = false
         }
     }
 

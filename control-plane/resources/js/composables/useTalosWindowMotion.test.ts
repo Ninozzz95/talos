@@ -182,6 +182,33 @@ describe('useTalosWindowMotion V6 lifecycle', () => {
         h.scope.stop()
     })
 
+    it('keeps a minimized window recoverable and exposes a controlled retry when close fails', () => {
+        const h = createHarness()
+        h.minimizedWindowIds.value = ['theme']
+        document.querySelector('[data-window-id="theme"]')?.remove()
+        h.callbacks.closeWindow
+            .mockImplementationOnce(() => { throw new Error('private manager failure') })
+            .mockImplementationOnce((id: TalosWindowId) => {
+                h.minimizedWindowIds.value = h.minimizedWindowIds.value.filter((candidate) => candidate !== id)
+            })
+
+        h.motion.requestWindowClose('theme')
+
+        expect(h.minimizedWindowIds.value).toEqual(['theme'])
+        expect(h.motion.windowActionFaultFor('theme')).toEqual({
+            code: 'TALOS_WINDOW_CLOSE_FAILED',
+            message: 'TALOS could not close this window. Retry the action.',
+        })
+        expect(JSON.stringify(h.motion.windowActionFaultFor('theme'))).not.toContain('private manager failure')
+
+        h.motion.retryWindowClose('theme')
+
+        expect(h.callbacks.closeWindow).toHaveBeenCalledTimes(2)
+        expect(h.minimizedWindowIds.value).toEqual([])
+        expect(h.motion.windowActionFaultFor('theme')).toBeNull()
+        h.scope.stop()
+    })
+
     it('lands focus inside the opened window instead of restoring the launcher focus', async () => {
         const h = createHarness()
         const launcher = document.createElement('button')

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import Badge from '../../../ui/Badge.vue'
 import Select from '../../../ui/Select.vue'
+import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
     type TalosThemeId,
@@ -30,6 +31,14 @@ const emit = defineEmits<{
         aria-label="Theme presets"
         class="space-y-4"
     >
+        <div>
+            <div class="flex items-center gap-1.5">
+                <h4 class="text-sm font-semibold text-[var(--talos-text)]">Theme presets</h4>
+                <TalosGuideInfoButton guide-id="theme.presets" compact side="bottom" />
+            </div>
+            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Choose a complete visual identity, then select its light or dark mode.</p>
+        </div>
+
         <div class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 md:grid-cols-[minmax(0,240px)_1fr]">
             <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                 <span>Color mode</span>

@@ -132,17 +132,17 @@ onBeforeUnmount(() => interactions.dispose())
             <div class="flex items-center gap-1">
                 <div class="flex overflow-hidden rounded-md border border-[var(--talos-border)]" role="group" aria-label="Preview color mode">
                     <Tooltip content="Light preview">
-                        <template #default="{ describedBy }"><Button size="icon" variant="ghost" aria-label="Light preview" :aria-describedby="describedBy" :aria-pressed="colorMode === 'light'" @click="colorMode = 'light'"><Sun class="h-4 w-4" aria-hidden="true" /></Button></template>
+                        <template #default><Button size="icon" variant="ghost" aria-label="Light preview" :aria-pressed="colorMode === 'light'" @click="colorMode = 'light'"><Sun class="h-4 w-4" aria-hidden="true" /></Button></template>
                     </Tooltip>
                     <Tooltip content="Dark preview">
-                        <template #default="{ describedBy }"><Button size="icon" variant="ghost" aria-label="Dark preview" :aria-describedby="describedBy" :aria-pressed="colorMode === 'dark'" @click="colorMode = 'dark'"><Moon class="h-4 w-4" aria-hidden="true" /></Button></template>
+                        <template #default><Button size="icon" variant="ghost" aria-label="Dark preview" :aria-pressed="colorMode === 'dark'" @click="colorMode = 'dark'"><Moon class="h-4 w-4" aria-hidden="true" /></Button></template>
                     </Tooltip>
                 </div>
                 <Tooltip :content="paused ? 'Resume preview' : 'Pause preview'">
-                    <template #default="{ describedBy }"><Button size="icon" variant="ghost" :aria-label="paused ? 'Resume preview' : 'Pause preview'" :aria-describedby="describedBy" @click="togglePaused"><Play v-if="paused" class="h-4 w-4" aria-hidden="true" /><Pause v-else class="h-4 w-4" aria-hidden="true" /></Button></template>
+                    <template #default><Button size="icon" variant="ghost" :aria-label="paused ? 'Resume preview' : 'Pause preview'" @click="togglePaused"><Play v-if="paused" class="h-4 w-4" aria-hidden="true" /><Pause v-else class="h-4 w-4" aria-hidden="true" /></Button></template>
                 </Tooltip>
                 <Tooltip content="Restart preview">
-                    <template #default="{ describedBy }"><Button size="icon" variant="ghost" aria-label="Restart preview" :aria-describedby="describedBy" @click="restart"><RefreshCcw class="h-4 w-4" aria-hidden="true" /></Button></template>
+                    <template #default><Button size="icon" variant="ghost" aria-label="Restart preview" @click="restart"><RefreshCcw class="h-4 w-4" aria-hidden="true" /></Button></template>
                 </Tooltip>
             </div>
         </header>

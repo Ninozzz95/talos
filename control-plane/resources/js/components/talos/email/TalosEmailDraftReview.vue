@@ -3,12 +3,21 @@ import { computed, ref } from 'vue'
 import { AlertCircle, Loader2, Send } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosEmailDraft } from '../../../lib/talosTypes'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     drafts: TalosEmailDraft[]
     sendingDraftId?: string | null
-}>()
+    loading?: boolean
+    error?: string | null
+    requested?: boolean
+}>(), {
+    sendingDraftId: null,
+    loading: false,
+    error: null,
+    requested: true,
+})
 
 const emit = defineEmits<{
     send: [draft: TalosEmailDraft]
@@ -18,6 +27,12 @@ const selectedDraftId = ref<string | null>(null)
 const selectedDraft = computed(() => {
     return props.drafts.find((draft) => draft.id === selectedDraftId.value) ?? props.drafts[0] ?? null
 })
+const draftsState = computed(() => resolveTalosCollectionState({
+    itemCount: props.drafts.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 </script>
 
 <template>
@@ -33,12 +48,21 @@ const selectedDraft = computed(() => {
         </div>
 
         <div class="space-y-3 p-3">
-            <div v-if="!drafts.length" class="text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="draftsState === 'loading'" role="status" class="flex items-center gap-2 text-sm leading-6 text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading email drafts
+            </div>
+
+            <div v-else-if="draftsState === 'error'" class="text-sm leading-6 text-[var(--talos-warning)]">
+                Draft review is unavailable until email sync succeeds.
+            </div>
+
+            <div v-else-if="draftsState === 'empty'" class="text-sm leading-6 text-[var(--talos-muted)]">
                 No drafts returned by `/api/talos/email/drafts`.
             </div>
 
-            <div v-else class="grid gap-2">
-                <select v-model="selectedDraftId" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none">
+            <div v-else-if="draftsState === 'ready'" class="grid gap-2">
+                <select v-model="selectedDraftId" aria-label="Email draft" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none">
                     <option v-for="draft in drafts" :key="draft.id" :value="draft.id">{{ draft.subject }}</option>
                 </select>
 

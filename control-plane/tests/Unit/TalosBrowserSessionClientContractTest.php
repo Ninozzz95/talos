@@ -12,6 +12,7 @@ use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
 use App\Services\Talos\Browser\LegacyBrowserSnapshot;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserWorkerProtocol;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -209,7 +210,11 @@ final class TalosBrowserSessionClientContractTest extends TestCase
 
             return $request->method() === 'DELETE'
                 ? Http::response([], 204)
-                : Http::response(['data' => ['sessionId' => 'worker-1', 'mode' => 'read_only']]);
+                : Http::response(['data' => [
+                    'sessionId' => 'worker-1',
+                    'mode' => 'read_only',
+                    'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
+                ]]);
         });
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token', 15);
 
@@ -217,6 +222,39 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $client->close('owner-1', 'worker-1', 75);
 
         $this->assertSame([0.9, 0.075], $timeouts);
+    }
+
+    public function test_http_client_bootstraps_sessions_through_the_exact_worker_protocol(): void
+    {
+        $url = 'http://browser-worker.test/protocols/'.TalosBrowserWorkerProtocol::HMI_RUNTIME.'/sessions';
+        Http::fake([$url => Http::response(['data' => [
+            'sessionId' => 'worker-1',
+            'mode' => 'read_only',
+            'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
+        ]])]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        $session = $client->create('owner-1', 1280, 800);
+
+        $this->assertSame('worker-1', $session['sessionId']);
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request->url() === $url);
+    }
+
+    public function test_http_client_rejects_a_mismatched_worker_protocol_during_session_bootstrap(): void
+    {
+        Http::fake(['*' => Http::response(['data' => [
+            'sessionId' => 'worker-1',
+            'mode' => 'read_only',
+            'protocols' => ['hmi' => 'talos_browser_hmi_runtime_v2.0.0'],
+        ]])]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        try {
+            $client->create('owner-1', 1280, 800);
+            $this->fail('A mismatched browser worker protocol was accepted.');
+        } catch (BrowserWorkerException $exception) {
+            $this->assertSame('TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH', $exception->errorCode);
+        }
     }
 
     public function test_http_client_forwards_navigate_deadline_to_worker_payload(): void
@@ -236,15 +274,19 @@ final class TalosBrowserSessionClientContractTest extends TestCase
 
     public function test_http_client_forwards_an_explicit_create_ttl_to_the_worker(): void
     {
-        Http::fake(['http://browser-worker.test/sessions' => Http::response([
-            'data' => ['sessionId' => 'worker-1', 'mode' => 'read_only'],
+        Http::fake(['http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH => Http::response([
+            'data' => [
+                'sessionId' => 'worker-1',
+                'mode' => 'read_only',
+                'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
+            ],
         ])]);
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
 
         $client->create('owner-1', 1280, 800, 731, 15);
 
         Http::assertSent(fn ($request): bool => $request->method() === 'POST'
-            && $request->url() === 'http://browser-worker.test/sessions'
+            && $request->url() === 'http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH
             && $request['ttlSeconds'] === 15);
     }
 
@@ -336,7 +378,10 @@ final class TalosBrowserSessionClientContractTest extends TestCase
 
     public function test_http_client_create_enables_hmi_actions_without_enabling_model_actions(): void
     {
-        Http::fake(['http://browser-worker.test/sessions' => Http::response(['data' => ['sessionId' => 'worker-1']])]);
+        Http::fake(['http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH => Http::response(['data' => [
+            'sessionId' => 'worker-1',
+            'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
+        ]])]);
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
 
         $client->create('owner-1', 1280, 800);
@@ -365,6 +410,41 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             'button' => 'left',
             'click_count' => 1,
         ]);
+    }
+
+    public function test_http_client_preserves_only_a_bounded_worker_recovery_reason(): void
+    {
+        Http::fake(['http://browser-worker.test/sessions/worker-1/hmi/pointer/execute' => Http::response([
+            'code' => 'TALOS_BROWSER_HMI_RECOVERY_REQUIRED',
+            'message' => 'The browser action may have taken effect.',
+            'details' => [
+                'reason_code' => 'evidence_frame_changed',
+                'state_version' => 2,
+                'internal' => 'must not cross the adapter boundary',
+            ],
+        ], 409)]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        try {
+            $client->executePointer('owner-1', 'worker-1', [
+                'schema_version' => 'talos_browser_hmi_pointer_v2',
+                'interaction_id' => self::HMI_INTERACTION_ID,
+                'state_version' => 1,
+                'expected_frame_sha256' => 'sha256:'.str_repeat('c', 64),
+                'normalized_x' => 0.5,
+                'normalized_y' => 0.5,
+                'button' => 'left',
+                'click_count' => 1,
+                'command_id' => 'hmi_reason_contract',
+                'expected_fingerprint' => 'sha256:'.str_repeat('d', 64),
+                'effect_classification' => 'sensitive',
+                'sensitive_effect_authorized' => true,
+            ]);
+            self::fail('Expected the worker recovery exception.');
+        } catch (BrowserWorkerException $exception) {
+            self::assertSame('TALOS_BROWSER_HMI_RECOVERY_REQUIRED', $exception->errorCode);
+            self::assertSame(['reason_code' => 'evidence_frame_changed'], $exception->details);
+        }
     }
 
     public function test_http_client_rejects_an_unbounded_or_malformed_hmi_success_envelope(): void

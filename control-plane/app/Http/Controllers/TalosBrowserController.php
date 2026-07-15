@@ -17,6 +17,7 @@ use App\Services\Talos\Browser\TalosBrowserArtifactReader;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserEvidenceEnvironment;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBoundedBase64Decoder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -241,8 +242,10 @@ final class TalosBrowserController extends Controller
         } catch (BrowserWorkerException $exception) {
             return $this->workerError($exception);
         }
-        $base64 = $worker['base64'] ?? null;
-        $bytes = is_string($base64) && $base64 !== '' ? base64_decode($base64, true) : false;
+        $bytes = TalosBoundedBase64Decoder::decode(
+            $worker['base64'] ?? null,
+            TalosBrowserArtifactStore::MAX_SCREENSHOT_BYTES,
+        );
         $stateVersion = $worker['stateVersion'] ?? null;
         $width = $worker['width'] ?? null;
         $height = $worker['height'] ?? null;
@@ -256,7 +259,6 @@ final class TalosBrowserController extends Controller
             || $height !== (int) $browserSession->viewport_height
             || ! is_string($bytes)
             || $bytes === ''
-            || strlen($bytes) > TalosBrowserArtifactStore::MAX_SCREENSHOT_BYTES
             || ! is_string($worker['sha256'] ?? null)
             || ! hash_equals(hash('sha256', $bytes), $worker['sha256'])) {
             return $this->failure('Browser worker returned an invalid screenshot.');

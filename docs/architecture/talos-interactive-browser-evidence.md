@@ -101,6 +101,13 @@ HTTP endpoint implemented by the pinned official TypeScript SDK. The pinned
 official PHP SDK exercises a live conformance round trip in CI; mocks do not
 replace this gate.
 
+The worker advertises the exact HMI runtime compatibility identifier
+`talos_browser_hmi_runtime_v2.1.0` from authenticated readiness and public
+liveness envelopes. Laravel, the native launcher, Doctor, Docker and CI fail
+closed when that identifier is absent or different. This prevents an old but
+still-running worker from accepting sessions and failing only when a user
+clicks the current screenshot frame.
+
 ## Verification
 
 From the repository root, use the repo-local toolchain:
@@ -112,12 +119,19 @@ cd browser-worker
 
 cd ../control-plane
 ../.tools/bin/php.cmd artisan test
+../.tools/bin/npm.cmd run test:browser-gates-config
 ../.tools/bin/npm.cmd run test:unit
 ../.tools/bin/npm.cmd run build
 
 cd ..
 bash scripts/tests/talos-live-browser-worker-ci.sh
 ```
+
+The live script starts one production-mode worker and requires the official MCP
+round trip, Laravel integration, and authenticated Playwright UI click to pass
+against that same worker. The UI gate decodes the owner-scoped artifact and
+compares sampled RGBA pixels with the frame TALOS rendered; deterministic UI
+mocks are kept in a separate non-live path and cannot satisfy this gate.
 
 The E2E matrix covers desktop and mobile interaction, sensitive confirmation,
 stale and unavailable states, artifact reload, development disclosure,

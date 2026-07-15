@@ -1,12 +1,28 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Clock3 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosResearchReport } from '../../../lib/talosTypes'
 
-defineProps<{
+const props = withDefaults(defineProps<{
     reports: TalosResearchReport[]
     selectedReportId: string | null
-}>()
+    loading?: boolean
+    error?: string | null
+    requested?: boolean
+}>(), {
+    loading: false,
+    error: null,
+    requested: true,
+})
+
+const reportsState = computed(() => resolveTalosCollectionState({
+    itemCount: props.reports.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 
 const emit = defineEmits<{
     select: [report: TalosResearchReport]
@@ -45,11 +61,19 @@ function statusTone(status: string) {
             <Badge tone="neutral">{{ reports.length }} reports</Badge>
         </div>
 
-        <div v-if="!reports.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+        <div v-if="reportsState === 'loading'" role="status" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            Loading research reports
+        </div>
+
+        <div v-else-if="reportsState === 'error'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-warning)]">
+            Research history is unavailable. Use Sync to retry.
+        </div>
+
+        <div v-else-if="reportsState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
             No research reports returned by the research API yet.
         </div>
 
-        <div v-else class="max-h-[260px] divide-y divide-[var(--talos-border)] overflow-y-auto">
+        <div v-else-if="reportsState === 'ready'" class="max-h-[260px] divide-y divide-[var(--talos-border)] overflow-y-auto">
             <button
                 v-for="report in reports"
                 :key="report.id"

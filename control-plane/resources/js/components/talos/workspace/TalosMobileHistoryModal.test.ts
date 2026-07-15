@@ -14,4 +14,10 @@ describe('TalosLeftRail mobile chat history modal', () => {
         expect(source).toContain("background.setAttribute('inert', '')")
         expect(source).toContain('returnFocusTarget.focus()')
     })
+
+    it('presents the mobile surface as complete TALOS navigation rather than chat history', () => {
+        expect(source).toContain('>TALOS navigation</h2>')
+        expect(source).toContain("mobileOpen ? 'Close navigation menu'")
+        expect(source).not.toContain('id="talos-mobile-history-title"')
+    })
 })

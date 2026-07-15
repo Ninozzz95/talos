@@ -457,27 +457,27 @@ test('Browse actions close on Escape and click outside', async ({ page }) => {
     await expect(page.getByRole('menuitem', { name: 'Restart browser' })).toBeHidden()
 })
 
-test('minimal composer keeps prompt, send, active model and Browse indicators, and expand', async ({ page }) => {
+test('Browse keeps every composer capability while the retired density toggle stays absent', async ({ page }) => {
     await page.getByRole('button', { name: 'Browse', exact: true }).click()
-    await page.getByRole('button', { name: 'Use minimal composer' }).click()
 
-    const composer = page.locator('[data-composer-mode="minimal"]')
+    const composer = page.locator('[data-composer-mode="full"]')
     await expect(composer).toBeVisible()
     await expect(composer.getByTestId('talos-browse-mode')).toHaveAttribute('aria-label', 'Browse status: Active')
-    const controls = await composer.evaluate((element) => Array.from(element.querySelectorAll('button')).map((button) => ({
-        label: button.getAttribute('aria-label'),
-        text: button.textContent?.trim(),
-    })))
-
-    expect(controls.map((control) => control.label)).toEqual([
-        'Send',
+    for (const accessibleName of [
         'Choose model profile',
-        'Use full composer',
-    ])
-    expect(controls[0].text).toBe('')
-    await expect(composer.getByTestId('talos-composer-minimal-indicators')).toContainText('E2E server-side profile')
-    await expect(composer.getByTestId('talos-composer-minimal-indicators')).toContainText('Browse Active')
+        'Choose grounding context',
+        'Temporary chat',
+        'Capture browser screenshot',
+        'Browse actions',
+        'Improve prompt',
+        'Open settings',
+        'Send',
+    ]) {
+        await expect(composer.getByRole('button', { name: accessibleName, exact: true })).toBeVisible()
+    }
     await expect(composer.getByLabel('Message TALOS')).toBeVisible()
+    await expect(composer.getByRole('button', { name: 'Use minimal composer' })).toHaveCount(0)
+    await expect(composer.getByRole('button', { name: 'Use full composer' })).toHaveCount(0)
 })
 
 test('Browse deep links hydrate as the normal chat and normalize the URL', async ({ page }) => {

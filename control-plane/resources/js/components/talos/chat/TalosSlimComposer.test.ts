@@ -79,6 +79,19 @@ describe('TalosSlimComposer', () => {
         expect(send).not.toHaveBeenCalled()
     })
 
+    it('grows a long prompt up to a viewport-safe composer limit', () => {
+        const container = mountComposer('full')
+        const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+
+        expect(composer).not.toBeNull()
+        Object.defineProperty(composer!, 'scrollHeight', { configurable: true, value: 220 })
+        composer!.dispatchEvent(new Event('input', { bubbles: true }))
+
+        expect(composer?.style.height).toBe('220px')
+        expect(composer?.className).toContain('max-h-[min(16rem,35vh)]')
+        expect(composer?.className).toContain('overflow-y-auto')
+    })
+
     it('organizes full mode into one prompt row and one quiet capability row', () => {
         const container = mountComposer('full')
         const promptRow = container.querySelector('[data-testid="talos-composer-prompt-row"]')
@@ -93,17 +106,55 @@ describe('TalosSlimComposer', () => {
         expect(container.querySelector('[data-testid="talos-composer-status"]')?.textContent).toContain('DeepSeek profile')
     })
 
-    it('keeps minimal mode to prompt, send, active indicators, and expansion', () => {
+    it('keeps capability labels desktop-only while preserving accessible icon commands on mobile', () => {
+        const container = mountComposer('full')
+
+        for (const testId of [
+            'talos-composer-model-label',
+            'talos-composer-context-label',
+            'talos-composer-browse-label',
+        ]) {
+            const label = container.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+            expect(label).not.toBeNull()
+            expect(label?.classList.contains('hidden')).toBe(true)
+            expect(label?.classList.contains('sm:inline')).toBe(true)
+        }
+
+        expect(container.querySelector('[aria-label="Choose model profile"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Choose grounding context"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Enable Browse"]')).not.toBeNull()
+    })
+
+    it.each(['full', 'minimal'] as const)('does not expose the retired compact composer toggle in %s mode', (mode) => {
+        const container = mountComposer(mode, mode === 'minimal')
+
+        expect(container.querySelector('[aria-label="Use minimal composer"]')).toBeNull()
+        expect(container.querySelector('[aria-label="Use full composer"]')).toBeNull()
+    })
+
+    it('keeps every composer capability available when compact icon density is selected', () => {
         const container = mountComposer('minimal', true)
-        const indicators = container.querySelector('[data-testid="talos-composer-minimal-indicators"]')
 
         expect(container.querySelector('[data-testid="talos-composer-prompt-row"] [aria-label="Send"]')).not.toBeNull()
-        expect(indicators?.textContent).toContain('DeepSeek Chat')
-        expect(indicators?.textContent).toContain('Browse Active')
-        expect(container.querySelector('[aria-label="Use full composer"]')).not.toBeNull()
-        expect(container.querySelector('[aria-label="Choose grounding context"]')).toBeNull()
-        expect(container.querySelector('[aria-label="Improve prompt"]')).toBeNull()
-        expect(container.querySelector('[aria-label="Open settings"]')).toBeNull()
+        expect(container.querySelector('[aria-label="Choose model profile"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Choose grounding context"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Temporary chat"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Browse status: Active"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Capture browser screenshot"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Improve prompt"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Open settings"]')).not.toBeNull()
+        expect(container.querySelector('[aria-label="Use full composer"]')).toBeNull()
+        expect(container.querySelector('[data-testid="talos-composer-minimal-indicators"]')).toBeNull()
+
+        for (const testId of [
+            'talos-composer-model-label',
+            'talos-composer-context-label',
+            'talos-composer-browse-label',
+        ]) {
+            const label = container.querySelector<HTMLElement>(`[data-testid="${testId}"]`)
+            expect(label?.classList.contains('hidden')).toBe(true)
+            expect(label?.classList.contains('sm:inline')).toBe(false)
+        }
     })
 
     it('shows current-page identity and exposes a real stop command while Browse is active', async () => {

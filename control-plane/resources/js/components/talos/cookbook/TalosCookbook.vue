@@ -48,6 +48,7 @@ const selectedModelId = ref('')
 const selectedRuntime = ref('')
 const downloadPreview = ref<TalosCookbookCommandPreview | null>(null)
 const servePreview = ref<TalosCookbookCommandPreview | null>(null)
+const cookbookRequested = ref(false)
 
 const runtimes = computed(() => overview.value?.runtimes ?? [])
 const profile = computed(() => overview.value?.profile ?? null)
@@ -117,6 +118,15 @@ async function runDependencyPreview() {
     await previewDependencyPlan(payload)
 }
 
+async function loadInitialCookbook() {
+    cookbookRequested.value = true
+    await Promise.all([
+        loadOverview(),
+        loadDependencies(),
+        loadCookbookPolicy(),
+    ])
+}
+
 watch(models, (nextModels) => {
     if (!nextModels.length) {
         selectedModelId.value = ''
@@ -135,9 +145,7 @@ watch(runtimes, () => {
 }, { immediate: true })
 
 onMounted(() => {
-    void loadOverview()
-    void loadDependencies()
-    void loadCookbookPolicy()
+    void loadInitialCookbook()
 })
 </script>
 
@@ -150,15 +158,22 @@ onMounted(() => {
                         <Cpu class="h-4 w-4 text-[var(--talos-accent)]" />
                         Cookbook
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Local model lab</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Local model lab</h3>
+                        <TalosGuideInfoButton guide-id="model_lab.cookbook" compact side="bottom" />
+                    </div>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
                         Hardware fit scoring and preview-only local runtime commands backed by `/api/talos/cookbook/*`.
                     </p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
+                <div v-if="cookbookRequested && !loading && !errorMessage" class="flex flex-wrap items-center gap-2">
                     <Badge :tone="profile ? 'success' : 'warning'">{{ profile ? 'hardware scanned' : 'no scan' }}</Badge>
                     <Badge tone="neutral">{{ runtimeCount }} runtimes</Badge>
                     <Badge tone="neutral">{{ modelCount }} models</Badge>
+                </div>
+                <div v-else-if="loading" role="status" class="flex items-center gap-2 text-xs text-[var(--talos-muted)]">
+                    <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                    Loading Cookbook
                 </div>
             </div>
         </div>
@@ -187,13 +202,6 @@ onMounted(() => {
                         <component :is="item.icon" class="h-4 w-4" />
                         <span>{{ item.label }}</span>
                     </template>
-                    <template #item-action="{ item }">
-                        <TalosGuideInfoButton
-                            :guide-id="`cookbook.${item.id}`"
-                            compact
-                            side="bottom"
-                        />
-                    </template>
                 </Tabs>
                 <div v-if="loading" class="flex shrink-0 items-center gap-2 px-2 text-xs text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
@@ -211,6 +219,8 @@ onMounted(() => {
                     :overview="overview"
                     :models="models"
                     :loading="loading"
+                    :error="errorMessage"
+                    :requested="cookbookRequested"
                     @scan="runHardwareScan"
                     @refresh="loadModels"
                 />
@@ -222,7 +232,10 @@ onMounted(() => {
                     :runtimes="runtimes"
                     :preview="downloadPreview"
                     :loading="loading"
+                    :error="errorMessage"
+                    :requested="cookbookRequested"
                     @preview="runDownloadPreview"
+                    @refresh="loadOverview"
                 />
                 <TalosCookbookDependencies
                     v-else-if="activeTab === 'dependencies'"
@@ -230,6 +243,8 @@ onMounted(() => {
                     :dependency-catalog="dependencyCatalog"
                     :dependency-preview="dependencyPreview"
                     :loading="loading"
+                    :error="errorMessage"
+                    :requested="cookbookRequested"
                     @preview="runDependencyPreview"
                 />
                 <TalosCookbookSettings
@@ -240,7 +255,10 @@ onMounted(() => {
                     :runtimes="runtimes"
                     :preview="servePreview"
                     :loading="loading"
+                    :error="errorMessage"
+                    :requested="cookbookRequested"
                     @preview="runServePreview"
+                    @refresh="loadOverview"
                 />
             </div>
         </div>

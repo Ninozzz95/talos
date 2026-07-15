@@ -260,6 +260,11 @@ final class TalosWorkspaceSetting extends Model
         'minimal' => true,
     ];
 
+    private const CHAT_MOBILE_WINDOW_PRESENTATION_VALUES = [
+        'drawer' => true,
+        'fullscreen' => true,
+    ];
+
     public $incrementing = false;
 
     protected $keyType = 'string';
@@ -900,6 +905,14 @@ final class TalosWorkspaceSetting extends Model
                 if (! is_bool($layoutValue)) {
                     self::addThemeWriteError($errors, $layoutPath, 'Advanced rail setting must be a boolean.');
                 }
+            } elseif ($key === 'mobile_window_presentation') {
+                self::validateThemeEnum(
+                    $layoutValue,
+                    self::CHAT_MOBILE_WINDOW_PRESENTATION_VALUES,
+                    $layoutPath,
+                    'Mobile tool window presentation must be drawer or fullscreen.',
+                    $errors,
+                );
             } else {
                 self::addThemeWriteError($errors, $layoutPath, 'Unknown chat layout key.');
             }
@@ -1251,6 +1264,11 @@ final class TalosWorkspaceSetting extends Model
 
         if (isset($value['advanced_rail_expanded']) && is_bool($value['advanced_rail_expanded'])) {
             $safe['advanced_rail_expanded'] = $value['advanced_rail_expanded'];
+        }
+
+        $mobileWindowPresentation = $value['mobile_window_presentation'] ?? null;
+        if (is_string($mobileWindowPresentation) && isset(self::CHAT_MOBILE_WINDOW_PRESENTATION_VALUES[$mobileWindowPresentation])) {
+            $safe['mobile_window_presentation'] = $mobileWindowPresentation;
         }
 
         return $safe;

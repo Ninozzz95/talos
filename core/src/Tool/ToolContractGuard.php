@@ -236,11 +236,25 @@ final class ToolContractGuard
             'refresh_token',
             'client_secret',
             'private_key',
+            'credential',
+            'set_cookie',
+            'connection_string',
+            'database_url',
+            'dsn',
+            'storage_path',
+            'local_path',
+            'absolute_path',
+            'filesystem_path',
+            'file_path',
+            'temporary_path',
+            'private_path',
+            'working_directory',
+            'cwd',
         ], true)) {
             return true;
         }
 
-        return preg_match('/_(?:secret|password|api_key|access_token|refresh_token|private_key)$/D', $normalized) === 1;
+        return preg_match('/_(?:secret|token|password|api_key|access_token|refresh_token|private_key|credential|cookie|connection_string|storage_path|local_path|absolute_path|filesystem_path|file_path|temporary_path|private_path)$/D', $normalized) === 1;
     }
 
     private static function redactString(string $value): string
@@ -248,6 +262,8 @@ final class ToolContractGuard
         $value = preg_replace('/\b(Bearer\s+)[^\s,;]+/i', '$1[REDACTED]', $value) ?? $value;
         $value = preg_replace('/\bsk-[A-Za-z0-9_-]{12,}\b/', '[REDACTED]', $value) ?? $value;
         $value = preg_replace('/(?<=:\/\/)[^\/@\s]+:[^\/@\s]+@/', '[REDACTED]@', $value) ?? $value;
+        $value = preg_replace('~(?<![A-Za-z0-9])(?:[A-Za-z]:[\\\\/]|\\\\\\\\)[^\s"\'<>]+~', '[REDACTED]', $value) ?? $value;
+        $value = preg_replace('~(?<![A-Za-z0-9:])/(?:home|Users|var|tmp|opt|srv|etc|root|mnt|private|app)(?:/[^\s"\'<>]*)?~i', '[REDACTED]', $value) ?? $value;
 
         return preg_replace_callback(
             '/([?&#])([^=&#\s]+)=([^&#\s]*)/',

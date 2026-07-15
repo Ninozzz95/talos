@@ -32,6 +32,11 @@ import type { TalosWindowLaunchOrigin } from './useTalosWindowLaunchOrigins'
 
 type WindowMap<T> = Partial<Record<TalosWindowId, T>>
 
+export type TalosWindowActionFault = Readonly<{
+    code: 'TALOS_WINDOW_CLOSE_FAILED'
+    message: string
+}>
+
 export type TalosWindowLifecycleState =
     | 'idle'
     | 'opening'
@@ -85,6 +90,7 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
     const consumedLaunchRevisions: WindowMap<number> = {}
     const lifecycleRevisions: WindowMap<number> = {}
     const pendingSemanticCompletions: WindowMap<() => void> = {}
+    const windowActionFaults = ref<WindowMap<TalosWindowActionFault>>({})
     const motionRoot = ref<HTMLElement | null>(null)
     const controller = createInteractionMotionController(createDomInteractionMotionPlatform())
 
@@ -212,6 +218,32 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
         semanticCompletion?.()
     }
 
+    function windowActionFaultFor(id: TalosWindowId): TalosWindowActionFault | null {
+        return windowActionFaults.value[id] ?? null
+    }
+
+    function clearWindowActionFault(id: TalosWindowId) {
+        if (!windowActionFaults.value[id]) return
+        const next = { ...windowActionFaults.value }
+        delete next[id]
+        windowActionFaults.value = next
+    }
+
+    function commitWindowClose(id: TalosWindowId) {
+        try {
+            options.closeWindow(id)
+            clearWindowActionFault(id)
+        } catch {
+            windowActionFaults.value = {
+                ...windowActionFaults.value,
+                [id]: {
+                    code: 'TALOS_WINDOW_CLOSE_FAILED',
+                    message: 'TALOS could not close this window. Retry the action.',
+                },
+            }
+        }
+    }
+
     function runTransition(
         id: TalosWindowId,
         revision: number,
@@ -254,6 +286,7 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
     }
 
     function requestWindowClose(id: TalosWindowId) {
+        clearWindowActionFault(id)
         const revision = beginTransition(id, 'closing', rawTransitionOriginFor(id))
         const target = targetFor(id)
         const base = resolvePlan('window-close')
@@ -264,7 +297,11 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
                 point: viewportPointFor(rawTransitionOriginFor(id)),
             })
             : base
-        runTransition(id, revision, target, plan, () => options.closeWindow(id), false)
+        runTransition(id, revision, target, plan, () => commitWindowClose(id), false)
+    }
+
+    function retryWindowClose(id: TalosWindowId) {
+        requestWindowClose(id)
     }
 
     async function requestWindowMinimize(id: TalosWindowId) {
@@ -415,6 +452,8 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
         transitionStateFor,
         transitionOriginFor,
         requestWindowClose,
+        retryWindowClose,
+        windowActionFaultFor,
         requestWindowMinimize,
         requestWindowFullscreen,
         requestWindowTile,

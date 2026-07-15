@@ -3,6 +3,7 @@ import Badge from '../../../ui/Badge.vue'
 import Button from '../../../ui/Button.vue'
 import Input from '../../../ui/Input.vue'
 import Select from '../../../ui/Select.vue'
+import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_THEME_DENSITY_OPTIONS,
     TALOS_THEME_FONT_OPTIONS,
@@ -55,7 +56,10 @@ function updateChatLayout(key: keyof TalosChatLayoutPreferences, value: unknown)
     >
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
-                <h4 class="text-sm font-semibold text-[var(--talos-text)]">Workspace customization</h4>
+                <div class="flex items-center gap-1.5">
+                    <h4 class="text-sm font-semibold text-[var(--talos-text)]">Workspace customization</h4>
+                    <TalosGuideInfoButton guide-id="theme.customize" compact side="bottom" />
+                </div>
                 <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                     Draft edits preview immediately. Saving persists controlled TALOS tokens.
                 </p>

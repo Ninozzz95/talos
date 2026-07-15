@@ -15,6 +15,7 @@ defineProps<{ context: TalosWindowModuleContext }>()
         :data-testid="`talos-window-section-${context.id}-context`"
     >
         <TalosContextVault
+            :guide-id="`${context.id}.context`"
             @context-set-created="context.contextSetCreated"
             @benchmark-scenario-selected="context.benchmarkScenarioSelected"
         />
@@ -26,6 +27,6 @@ defineProps<{ context: TalosWindowModuleContext }>()
         role="tabpanel"
         :data-testid="`talos-window-section-${context.id}-documents`"
     >
-        <TalosDocuments />
+        <TalosDocuments :guide-id="`${context.id}.documents`" />
     </section>
 </template>

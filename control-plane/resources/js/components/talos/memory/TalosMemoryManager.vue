@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { BookMarked, RefreshCw, Save } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosSkillRegistry from './TalosSkillRegistry.vue'
 import { useTalosMemorySkills } from '../../../composables/useTalosMemorySkills'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosMemory } from '../../../lib/talosTypes'
 
 const {
@@ -31,8 +33,16 @@ const form = reactive({
 const actionMessage = ref<string | null>(null)
 const savingMemory = ref(false)
 const disablingMemoryId = ref<string | null>(null)
+const memorySkillsRequested = ref(false)
+const memoryDisclosureState = computed(() => resolveTalosCollectionState({
+    itemCount: memoryRetrievalContext.value?.memories.length ?? 0,
+    loading: loadingMemorySkills.value,
+    error: memorySkillError.value,
+    requested: memorySkillsRequested.value,
+}))
 
 async function refresh() {
+    memorySkillsRequested.value = true
     actionMessage.value = null
     await refreshMemorySkills()
 }
@@ -90,6 +100,7 @@ onMounted(() => {
                     <div class="flex items-center gap-2">
                         <BookMarked class="h-4 w-4 text-[var(--talos-muted)]" />
                         <h3 class="text-base font-semibold text-[var(--talos-text)]">Memory & Skills</h3>
+                        <TalosGuideInfoButton guide-id="brain.memory" compact side="bottom" />
                     </div>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                         Inspectable memories and skills. Used memory is disclosed and treated as untrusted context.
@@ -99,7 +110,7 @@ onMounted(() => {
                     <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loadingMemorySkills }" />
                 </Button>
             </div>
-            <div class="mt-3 flex flex-wrap gap-2">
+            <div v-if="memorySkillsRequested && (!memorySkillError || memories.length || skills.length)" class="mt-3 flex flex-wrap gap-2">
                 <Badge tone="neutral">{{ memories.length }} memories</Badge>
                 <Badge tone="warning">{{ retrievedMemoryCount }} used memory</Badge>
                 <Badge tone="success">{{ skillPlanningContext?.skills.length ?? 0 }} approved skills</Badge>
@@ -114,7 +125,12 @@ onMounted(() => {
                 {{ actionMessage }}
             </div>
 
-            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4">
+            <div v-if="memoryDisclosureState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm text-[var(--talos-muted)]">
+                <RefreshCw class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading memory disclosure
+            </div>
+
+            <div v-if="memoryDisclosureState === 'ready' || memoryDisclosureState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4">
                 <div class="text-sm font-semibold text-[var(--talos-text)]">Add memory</div>
                 <div class="mt-3 grid gap-2">
                     <input v-model="form.title" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none" placeholder="Memory title" aria-label="Memory title">
@@ -159,7 +175,7 @@ onMounted(() => {
                         </div>
                         <p class="mt-2 line-clamp-3 text-xs leading-5 text-[var(--talos-muted)]">{{ memory.content_preview }}</p>
                     </div>
-                    <div v-if="!(memoryRetrievalContext?.memories?.length)" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
+                    <div v-if="memoryDisclosureState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
                         No active memories are retrieved for the current project scope.
                     </div>
                 </div>
@@ -168,6 +184,9 @@ onMounted(() => {
             <TalosSkillRegistry
                 :skills="skills"
                 :planning-context="skillPlanningContext"
+                :loading="loadingMemorySkills"
+                :error="memorySkillError"
+                :requested="memorySkillsRequested"
             />
         </div>
     </Surface>

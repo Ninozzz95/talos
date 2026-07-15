@@ -23,6 +23,7 @@ import TalosNodeInspector from './TalosNodeInspector.vue'
 import TalosRecoveryPanel from './TalosRecoveryPanel.vue'
 import TalosTraceReplay from './TalosTraceReplay.vue'
 import { useTalosRuns } from '../../../composables/useTalosRuns'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type {
     NodeStatus,
     RunStatus,
@@ -82,16 +83,17 @@ const {
     runReplays,
     runArtifacts,
     loadingRuns,
-    loadingRunId,
-    loadingEventsRunId,
-    loadingReplayRunId,
-    loadingArtifactsRunId,
-    recoveringRunId,
     runError,
-    eventError,
-    replayError,
-    artifactError,
-    recoveryError,
+    isRunLoading,
+    isRunEventsLoading,
+    isRunReplayLoading,
+    isRunArtifactsLoading,
+    isRunRecovering,
+    runErrorForRun,
+    eventErrorForRun,
+    replayErrorForRun,
+    artifactErrorForRun,
+    recoveryErrorForRun,
     loadRuns,
     loadRun,
     loadRunEvents,
@@ -108,6 +110,11 @@ const activeRuntimeTab = ref<RuntimeTab>(props.requestedTab)
 const eventFilter = ref<RuntimeEventFilter>('all')
 const recoveryAuditMessage = ref<string | null>(null)
 const actionError = ref<string | null>(null)
+const runsRequested = ref(false)
+const requestedRunDataIds = ref<Record<string, true>>({})
+let selectedRunDataRequestRevision = 0
+let runListRequestRevision = 0
+let selectionRevision = 0
 
 const selectedRun = computed(() => {
     if (!selectedRunId.value) {
@@ -167,15 +174,42 @@ const selectedNode = computed(() => {
 
 const selectedRunLoading = computed(() => {
     return Boolean(selectedRunId.value && (
-        loadingRunId.value === selectedRunId.value
-        || loadingEventsRunId.value === selectedRunId.value
-        || loadingReplayRunId.value === selectedRunId.value
-        || loadingArtifactsRunId.value === selectedRunId.value
-        || recoveringRunId.value === selectedRunId.value
+        isRunLoading(selectedRunId.value)
+        || isRunEventsLoading(selectedRunId.value)
+        || isRunReplayLoading(selectedRunId.value)
+        || isRunArtifactsLoading(selectedRunId.value)
+        || isRunRecovering(selectedRunId.value)
     ))
 })
 
-const visibleError = computed(() => actionError.value || runError.value || eventError.value || replayError.value || artifactError.value || recoveryError.value)
+const selectedRunError = computed(() => {
+    if (!selectedRunId.value) return null
+
+    return runErrorForRun(selectedRunId.value)
+        || eventErrorForRun(selectedRunId.value)
+        || replayErrorForRun(selectedRunId.value)
+        || artifactErrorForRun(selectedRunId.value)
+        || recoveryErrorForRun(selectedRunId.value)
+})
+const visibleError = computed(() => actionError.value || selectedRunError.value || (!selectedRunId.value ? runError.value : null))
+const runsState = computed(() => resolveTalosCollectionState({
+    itemCount: runs.value.length,
+    loading: loadingRuns.value,
+    error: runError.value,
+    requested: runsRequested.value,
+}))
+const selectedEventsState = computed(() => resolveTalosCollectionState({
+    itemCount: selectedRunEvents.value.length,
+    loading: isRunEventsLoading(selectedRunId.value),
+    error: eventErrorForRun(selectedRunId.value),
+    requested: Boolean(selectedRunId.value && requestedRunDataIds.value[selectedRunId.value]),
+}))
+const selectedArtifactsState = computed(() => resolveTalosCollectionState({
+    itemCount: selectedRunArtifacts.value.length,
+    loading: isRunArtifactsLoading(selectedRunId.value),
+    error: artifactErrorForRun(selectedRunId.value),
+    requested: Boolean(selectedRunId.value && requestedRunDataIds.value[selectedRunId.value]),
+}))
 
 const filteredRunEvents = computed(() => {
     if (eventFilter.value === 'all') {
@@ -443,12 +477,17 @@ function clearSelectionToRun() {
 }
 
 async function loadSelectedRunData(runId: string) {
+    const requestRevision = ++selectedRunDataRequestRevision
+    requestedRunDataIds.value = { ...requestedRunDataIds.value, [runId]: true }
     const results = await Promise.allSettled([
         loadRun(runId),
         loadRunEvents(runId),
         loadRunReplay(runId),
         loadRunArtifacts(runId),
     ])
+    if (requestRevision !== selectedRunDataRequestRevision || selectedRunId.value !== runId) {
+        return
+    }
     const failure = results.find((result) => result.status === 'rejected')
 
     if (failure && failure.status === 'rejected') {
@@ -459,10 +498,16 @@ async function loadSelectedRunData(runId: string) {
 }
 
 async function refreshRuns() {
+    const requestRevision = ++runListRequestRevision
+    const selectionAtRequestStart = selectionRevision
+    runsRequested.value = true
     actionError.value = null
 
     try {
         const loadedRuns = await loadRuns()
+        if (requestRevision !== runListRequestRevision || selectionAtRequestStart !== selectionRevision) {
+            return
+        }
         const currentRunStillExists = selectedRunId.value
             ? loadedRuns.some((run) => run.id === selectedRunId.value)
             : false
@@ -480,6 +525,7 @@ async function refreshRuns() {
 }
 
 async function selectRun(run: TalosRun) {
+    selectionRevision += 1
     if (selectedRunId.value !== run.id) {
         selectedRunId.value = run.id
         clearSelectionToRun()
@@ -570,7 +616,10 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                         <Activity class="h-4 w-4 text-[var(--talos-accent)]" />
                         Runtime
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Runtime cockpit</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Runtime cockpit</h3>
+                        <TalosGuideInfoButton guide-id="rail.runtime" compact side="bottom" />
+                    </div>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
                         Inspect persisted runs, replay traces, recovery decisions, and artifacts from the TALOS control plane.
                     </p>
@@ -645,8 +694,8 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                 </div>
             </section>
 
-            <div class="grid gap-4 2xl:grid-cols-[280px_minmax(0,1fr)_minmax(280px,360px)]">
-                <section class="overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
+            <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 2xl:grid-cols-[280px_minmax(0,1fr)_minmax(280px,360px)]">
+                <section class="min-w-0 overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
                     <div class="flex items-center justify-between gap-3 border-b border-[var(--talos-border)] bg-[var(--talos-active)] px-3 py-2">
                         <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                             <Route class="h-4 w-4 text-[var(--talos-accent)]" />
@@ -655,23 +704,23 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                         <Badge tone="neutral">/api/talos/runs</Badge>
                     </div>
 
-                    <div v-if="loadingRuns && !runs.length" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
+                    <div v-if="runsState === 'loading'" role="status" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
                         <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                         Loading runs
                     </div>
 
-                    <div v-else-if="!runs.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                    <div v-else-if="runsState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                         No execution runs returned by the run API yet.
                     </div>
 
-                    <div v-else class="max-h-[620px] divide-y divide-[var(--talos-border)] overflow-y-auto">
+                    <div v-else-if="runsState === 'ready'" class="max-h-[620px] divide-y divide-[var(--talos-border)] overflow-y-auto">
                         <button
                             v-for="run in runs"
                             :key="run.id"
                             type="button"
                             class="w-full px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--talos-accent)]"
                             :class="selectedRunId === run.id ? 'bg-[var(--talos-panel)]' : 'hover:bg-[var(--talos-active)]'"
-                            :disabled="loadingRunId === run.id || loadingEventsRunId === run.id"
+                            :disabled="isRunLoading(run.id) || isRunEventsLoading(run.id)"
                             @click="selectRun(run)"
                         >
                             <div class="flex items-start justify-between gap-3">
@@ -689,7 +738,7 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                     </div>
                 </section>
 
-                <section class="overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
+                <section class="min-w-0 overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)]">
                     <div class="border-b border-[var(--talos-border)] bg-[var(--talos-active)] p-2">
                         <Tabs
                             :model-value="activeRuntimeTab"
@@ -702,13 +751,6 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                             <template #tab="{ item }">
                                 <component :is="item.icon" class="h-4 w-4" />
                                 <span>{{ item.label }}</span>
-                            </template>
-                            <template #item-action="{ item }">
-                                <TalosGuideInfoButton
-                                    :guide-id="`runtime.${item.id}`"
-                                    compact
-                                    side="bottom"
-                                />
                             </template>
                         </Tabs>
                     </div>
@@ -724,6 +766,7 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                                 <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                                     <Clock3 class="h-4 w-4 text-[var(--talos-accent)]" />
                                     Timeline
+                                    <TalosGuideInfoButton guide-id="runtime.timeline" compact side="bottom" />
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2">
                                     <Badge tone="neutral">{{ eventCountLabel }}</Badge>
@@ -745,20 +788,24 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                                 </div>
                             </div>
 
-                            <div v-if="selectedRunLoading && !selectedRunEvents.length" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
+                            <div v-if="!selectedRun" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                                Select a run to load persisted events.
+                            </div>
+
+                            <div v-else-if="selectedEventsState === 'loading'" role="status" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
                                 <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                                 Loading run events
                             </div>
 
-                            <div v-else-if="!selectedRun" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
-                                Select a run to load persisted events.
+                            <div v-else-if="selectedEventsState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                                No persisted events were returned for this run.
                             </div>
 
-                            <div v-else-if="!filteredRunEvents.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                            <div v-else-if="selectedEventsState === 'ready' && !filteredRunEvents.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                                 No events match the selected filter.
                             </div>
 
-                            <div v-else class="max-h-[460px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
+                            <div v-else-if="selectedEventsState === 'ready'" class="max-h-[460px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
                                 <button
                                     v-for="event in filteredRunEvents"
                                     :key="event.id"
@@ -785,7 +832,9 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                             v-else-if="activeRuntimeTab === 'dag'"
                             :nodes="nodeSummaries"
                             :selected-node-id="selectedNodeId"
-                            :loading="selectedRunLoading"
+                            :loading="isRunEventsLoading(selectedRunId)"
+                            :error="eventErrorForRun(selectedRunId)"
+                            :requested="Boolean(selectedRunId && requestedRunDataIds[selectedRunId])"
                             @select-node="selectNode"
                         />
 
@@ -793,8 +842,8 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                             v-else-if="activeRuntimeTab === 'replay'"
                             :run="selectedRun"
                             :replay="selectedRunReplay"
-                            :loading="Boolean(selectedRunId && loadingReplayRunId === selectedRunId)"
-                            :error="replayError"
+                            :loading="isRunReplayLoading(selectedRunId)"
+                            :error="replayErrorForRun(selectedRunId)"
                             @refresh="refreshSelectedReplay"
                         />
 
@@ -803,8 +852,8 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                             :run="selectedRun"
                             :event="selectedEvent"
                             :node="selectedNode"
-                            :loading="Boolean(selectedRunId && recoveringRunId === selectedRunId)"
-                            :error="recoveryError"
+                            :loading="isRunRecovering(selectedRunId)"
+                            :error="recoveryErrorForRun(selectedRunId)"
                             @recover="submitRecovery"
                         />
 
@@ -813,24 +862,25 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                                 <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                                     <Archive class="h-4 w-4 text-[var(--talos-accent)]" />
                                     Artifacts
+                                    <TalosGuideInfoButton guide-id="runtime.artifacts" compact side="bottom" />
                                 </div>
                                 <Badge tone="neutral">{{ selectedRunArtifacts.length }} artifacts</Badge>
                             </div>
 
-                            <div v-if="loadingArtifactsRunId === selectedRunId && !selectedRunArtifacts.length" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
+                            <div v-if="!selectedRun" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                                Select a run to load persisted run artifacts.
+                            </div>
+
+                            <div v-else-if="selectedArtifactsState === 'loading'" role="status" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
                                 <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                                 Loading artifacts
                             </div>
 
-                            <div v-else-if="!selectedRun" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
-                                Select a run to load persisted run artifacts.
-                            </div>
-
-                            <div v-else-if="!selectedRunArtifacts.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                            <div v-else-if="selectedArtifactsState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                                 No artifacts were returned for this run.
                             </div>
 
-                            <div v-else class="divide-y divide-[var(--talos-border)]">
+                            <div v-else-if="selectedArtifactsState === 'ready'" class="divide-y divide-[var(--talos-border)]">
                                 <article
                                     v-for="artifact in selectedRunArtifacts"
                                     :key="artifact.id"
@@ -855,7 +905,7 @@ watch(() => [props.requestedTab, props.requestedTabRevision] as const, ([tab]) =
                     </div>
                 </section>
 
-                <section class="space-y-4">
+                <section class="min-w-0 space-y-4">
                     <TalosNodeInspector
                         :run="selectedRun"
                         :event="selectedEvent"

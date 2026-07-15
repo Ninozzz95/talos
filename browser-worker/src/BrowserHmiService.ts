@@ -180,15 +180,19 @@ export class BrowserHmiService {
         if (downloadObserved) throw new Error("download_started");
         this.sessions.assertSinglePage(sessionId);
 
-        const mutationCountBeforeCapture = await readDomProbe(current.page, domProbeKey);
+        const mutationCountBeforeCapture = await readEvidenceDomProbe(current.page, domProbeKey);
         const documentBeforeCapture = await currentMainDocumentIdentity(current.page);
-        const screenshot = await captureCanonicalBrowserFrame(current.page);
+        await suppressCapturePresentationMutations(current.page, domProbeKey, true);
+        let screenshot: Buffer;
+        try {
+          screenshot = await captureCanonicalBrowserFrame(current.page);
+        } finally {
+          await suppressCapturePresentationMutations(current.page, domProbeKey, false);
+        }
         const snapshot = await captureSnapshot(current.page);
-        const verificationScreenshot = await captureCanonicalBrowserFrame(current.page);
         const documentAfterCapture = await currentMainDocumentIdentity(current.page);
-        const mutationCountAfterCapture = await readDomProbe(current.page, domProbeKey);
-        if (sha256(screenshot) !== sha256(verificationScreenshot)
-          || mutationCountBeforeCapture === null
+        const mutationCountAfterCapture = await readEvidenceDomProbe(current.page, domProbeKey);
+        if (mutationCountBeforeCapture === null
           || mutationCountBeforeCapture !== mutationCountAfterCapture
           || documentBeforeCapture.frameId !== documentAfterCapture.frameId
           || documentBeforeCapture.loaderId !== documentAfterCapture.loaderId
@@ -547,8 +551,20 @@ async function installDomProbe(page: Page, key: string): Promise<void> {
     const host = window as unknown as Record<string, unknown>;
     const previous = host[probeKey] as { observer?: MutationObserver } | undefined;
     previous?.observer?.disconnect();
-    const state: { count: number; observer?: MutationObserver } = { count: 0 };
-    state.observer = new MutationObserver(() => { state.count += 1; });
+    const state: {
+      count: number;
+      evidenceCount: number;
+      suppressCapturePresentationMutations: boolean;
+      observer?: MutationObserver;
+    } = { count: 0, evidenceCount: 0, suppressCapturePresentationMutations: false };
+    state.observer = new MutationObserver((records) => {
+      state.count += 1;
+      if (records.some((record) => !(state.suppressCapturePresentationMutations
+        && record.type === "attributes"
+        && record.attributeName === "style"))) {
+        state.evidenceCount += 1;
+      }
+    });
     if (document.documentElement) {
       state.observer.observe(document.documentElement, { attributes: true, childList: true, characterData: true, subtree: true });
     }
@@ -561,6 +577,25 @@ async function readDomProbe(page: Page, key: string): Promise<number | null> {
     const state = (window as unknown as Record<string, unknown>)[probeKey] as { count?: unknown } | undefined;
     return typeof state?.count === "number" ? state.count : null;
   }, key).catch(() => null);
+}
+
+async function readEvidenceDomProbe(page: Page, key: string): Promise<number | null> {
+  return page.evaluate((probeKey) => {
+    const state = (window as unknown as Record<string, unknown>)[probeKey] as { evidenceCount?: unknown } | undefined;
+    return typeof state?.evidenceCount === "number" ? state.evidenceCount : null;
+  }, key).catch(() => null);
+}
+
+async function suppressCapturePresentationMutations(page: Page, key: string, suppressed: boolean): Promise<void> {
+  await page.evaluate(({ probeKey, value }) => {
+    const state = (window as unknown as Record<string, unknown>)[probeKey] as {
+      suppressCapturePresentationMutations?: boolean;
+    } | undefined;
+    if (!state || typeof state.suppressCapturePresentationMutations !== "boolean") {
+      throw new Error("dom_probe_missing");
+    }
+    state.suppressCapturePresentationMutations = value;
+  }, { probeKey: key, value: suppressed });
 }
 
 async function removeDomProbe(page: Page, key: string): Promise<void> {

@@ -3,8 +3,10 @@ import { computed, ref } from 'vue'
 import { AlertCircle, Archive, Loader2, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import Surface from '../../ui/Surface.vue'
 import { useTalosAdmin } from '../../../composables/useTalosAdmin'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 
 const props = defineProps<{
     token: string
@@ -20,9 +22,17 @@ const {
 } = useTalosAdmin()
 
 const localError = ref<string | null>(null)
+const manifestRequested = ref(false)
 const visibleError = computed(() => localError.value || adminError.value)
+const manifestState = computed(() => resolveTalosCollectionState({
+    itemCount: backupManifest.value ? 1 : 0,
+    loading: loadingAdmin.value,
+    error: visibleError.value,
+    requested: manifestRequested.value,
+}))
 
 async function refreshManifest() {
+    manifestRequested.value = true
     localError.value = null
 
     try {
@@ -56,9 +66,12 @@ async function validateDryRun() {
                         <Archive class="h-4 w-4 text-[var(--talos-accent)]" />
                         Backup
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Dry-run restore policy</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Dry-run restore policy</h3>
+                        <TalosGuideInfoButton guide-id="doctor.backup" compact side="bottom" />
+                    </div>
                 </div>
-                <Button type="button" variant="ghost" size="sm" :disabled="loadingAdmin || !token" @click="refreshManifest">
+                <Button type="button" variant="ghost" size="sm" aria-label="Load backup manifest" title="Load backup manifest" :disabled="loadingAdmin || !token" @click="refreshManifest">
                     <Loader2 v-if="loadingAdmin" class="h-4 w-4 animate-spin" />
                     <Archive v-else class="h-4 w-4" />
                 </Button>
@@ -71,12 +84,25 @@ async function validateDryRun() {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div class="flex flex-wrap gap-2">
-                <Badge tone="neutral">{{ backupManifest?.schema_version ?? 'talos-backup-v1' }}</Badge>
-                <Badge tone="warning">dry_run_required {{ backupManifest?.restore_policy.dry_run_required ?? true }}</Badge>
+            <div v-if="manifestState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading backup manifest
             </div>
 
-            <div v-if="backupManifest" class="max-h-[180px] overflow-auto rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+            <div v-if="manifestState === 'idle'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                Enter an admin token and load the persisted backup manifest.
+            </div>
+
+            <div v-if="manifestState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                The backup endpoint returned no manifest. Retry and inspect Audit if it repeats.
+            </div>
+
+            <div v-if="manifestState === 'ready'" class="flex flex-wrap gap-2">
+                <Badge tone="neutral">{{ backupManifest?.schema_version }}</Badge>
+                <Badge tone="warning">dry_run_required {{ backupManifest?.restore_policy.dry_run_required }}</Badge>
+            </div>
+
+            <div v-if="manifestState === 'ready'" class="max-h-[180px] overflow-auto rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                 <div class="flex flex-wrap gap-2">
                     <Badge v-for="(_, domain) in backupManifest.domains" :key="domain" tone="neutral">{{ domain }}</Badge>
                 </div>

@@ -12,6 +12,7 @@ import {
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import type { TalosRun, TalosRunReplay, TalosRunReplayStep } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
@@ -165,6 +166,7 @@ onUnmounted(() => {
             <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                 <Film class="h-4 w-4 text-[var(--talos-accent)]" />
                 Trace replay
+                <TalosGuideInfoButton guide-id="runtime.replay" compact side="bottom" />
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <Badge tone="neutral">{{ progressLabel }}</Badge>

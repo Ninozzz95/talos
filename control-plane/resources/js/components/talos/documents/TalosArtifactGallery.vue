@@ -4,8 +4,10 @@ import { AlertCircle, Boxes, Eye, Loader2, RefreshCw } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosArtifactPreview from './TalosArtifactPreview.vue'
 import { useTalosDocuments } from '../../../composables/useTalosDocuments'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosArtifactPreview as TalosArtifactPreviewType, TalosRunArtifact } from '../../../lib/talosTypes'
 
 const {
@@ -19,9 +21,17 @@ const {
 
 const selectedPreview = ref<TalosArtifactPreviewType | null>(null)
 const actionError = ref<string | null>(null)
+const artifactsRequested = ref(false)
 const visibleError = computed(() => actionError.value || artifactError.value)
+const artifactsState = computed(() => resolveTalosCollectionState({
+    itemCount: artifacts.value.length,
+    loading: loadingArtifacts.value,
+    error: visibleError.value,
+    requested: artifactsRequested.value,
+}))
 
 async function refreshArtifacts() {
+    artifactsRequested.value = true
     actionError.value = null
 
     try {
@@ -63,7 +73,10 @@ onMounted(() => {
                         <Boxes class="h-4 w-4 text-[var(--talos-accent)]" />
                         Artifact gallery
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Evidence artifacts</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Evidence artifacts</h3>
+                        <TalosGuideInfoButton guide-id="rail.gallery" compact side="bottom" />
+                    </div>
                 </div>
                 <Button type="button" variant="ghost" size="sm" :disabled="loadingArtifacts" @click="refreshArtifacts">
                     <Loader2 v-if="loadingArtifacts" class="h-4 w-4 animate-spin" />
@@ -79,7 +92,12 @@ onMounted(() => {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div v-if="!artifacts.length && !loadingArtifacts" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="artifactsState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading artifacts
+            </div>
+
+            <div v-if="artifactsState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No artifacts returned by `/api/talos/artifacts`.
             </div>
 

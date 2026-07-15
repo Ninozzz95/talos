@@ -8,6 +8,7 @@ import TalosComparisonLane from './TalosComparisonLane.vue'
 import TalosComparisonScorecard from './TalosComparisonScorecard.vue'
 import { useTalosModelProfiles } from '../../../composables/useTalosModelProfiles'
 import { useTalosModelComparisons } from '../../../composables/useTalosModelComparisons'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosBenchmarkGroup } from '../../../lib/talosTypes'
 
 const emit = defineEmits<{
@@ -49,8 +50,15 @@ const scorecard = ref<Record<string, number | null>>({
 })
 const actionMessage = ref('')
 const actionError = ref<string | null>(null)
+const modelProfilesRequested = ref(false)
 
 const visibleError = computed(() => actionError.value || comparisonError.value || modelProfileError.value)
+const modelProfilesState = computed(() => resolveTalosCollectionState({
+    itemCount: callableModelProfiles.value.length,
+    loading: loadingModelProfiles.value,
+    error: modelProfileError.value,
+    requested: modelProfilesRequested.value,
+}))
 const selectedProfileIds = computed(() => [slotA.value, slotB.value, slotC.value].filter(Boolean))
 const canStart = computed(() => {
     return prompt.value.trim().length > 0
@@ -66,6 +74,7 @@ const completedScorecard = computed<Record<string, number>>(() => Object.fromEnt
 ))
 
 async function refreshProfiles() {
+    modelProfilesRequested.value = true
     try {
         const profiles = await loadModelProfiles()
         slotA.value = slotA.value || profiles.find((profile) => profile.status !== 'disabled' && profile.has_secret)?.id || ''
@@ -172,7 +181,16 @@ onMounted(() => {
                 {{ actionMessage }}
             </div>
 
-            <section class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+            <div v-if="modelProfilesState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading callable model profiles
+            </div>
+
+            <div v-else-if="modelProfilesState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
+                No callable model profiles are configured. Add and test at least two profiles in Model Center.
+            </div>
+
+            <section v-else-if="modelProfilesState === 'ready'" class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                 <label class="grid gap-1">
                     <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Prompt</span>
                     <textarea
@@ -238,7 +256,7 @@ onMounted(() => {
                 </div>
             </section>
 
-            <TalosComparisonScorecard v-model="scorecard" />
+            <TalosComparisonScorecard v-if="modelProfilesState === 'ready'" v-model="scorecard" />
 
             <section v-if="comparison" class="space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">

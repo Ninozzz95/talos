@@ -25,7 +25,11 @@ final class TalosReadinessTest extends TestCase
         Http::fake([
             'http://validator.test/health' => Http::response(['status' => 'healthy'], 200),
             'http://browser-worker.test/ready' => Http::response([
-                'data' => ['status' => 'ready', 'runtime' => 'chromium'],
+                'data' => [
+                    'status' => 'ready',
+                    'runtime' => 'chromium',
+                    'protocols' => ['hmi' => 'talos_browser_hmi_runtime_v2.1.0'],
+                ],
             ], 200),
         ]);
 
@@ -83,5 +87,41 @@ final class TalosReadinessTest extends TestCase
             ->assertJsonPath('ready', false)
             ->assertJsonPath('checks.browser_worker.status', 'failed')
             ->assertJsonPath('checks.browser_worker.detail', 'browser worker readiness returned HTTP 503.');
+    }
+
+    public function test_readyz_fails_closed_when_browser_worker_hmi_runtime_is_stale(): void
+    {
+        config([
+            'app.key' => 'base64:'.base64_encode(str_repeat('a', 32)),
+            'queue.default' => 'database',
+            'services.talos.validator_health_url' => 'http://validator.test/health',
+            'services.talos.browser.worker_url' => 'http://browser-worker.test',
+            'services.talos.browser.worker_token' => 'test-browser-token',
+        ]);
+
+        Http::fake([
+            'http://validator.test/health' => Http::response(['status' => 'healthy'], 200),
+            'http://browser-worker.test/ready' => Http::response([
+                'data' => [
+                    'status' => 'ready',
+                    'runtime' => 'chromium',
+                    'protocols' => ['hmi' => 'talos_browser_hmi_runtime_v2.0.0'],
+                ],
+            ], 200),
+        ]);
+
+        $this->getJson('/readyz')
+            ->assertStatus(503)
+            ->assertJsonPath('ready', false)
+            ->assertJsonPath('checks.browser_worker.status', 'failed')
+            ->assertJsonPath('checks.browser_worker.detail', 'browser worker HMI protocol is incompatible.');
+    }
+
+    public function test_production_browser_worker_healthcheck_pins_the_hmi_runtime_contract(): void
+    {
+        $compose = file_get_contents(base_path('../docker-compose.yml'));
+
+        $this->assertIsString($compose);
+        $this->assertStringContainsString('talos_browser_hmi_runtime_v2.1.0', $compose);
     }
 }

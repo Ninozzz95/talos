@@ -5,6 +5,21 @@ import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
+    build: {
+        rolldownOptions: {
+            output: {
+                codeSplitting: {
+                    groups: [
+                        {
+                            name: 'markdown-runtime',
+                            test: /node_modules[\\/](?:dompurify|markdown-it|linkify-it|mdurl|uc\.micro|entities)[\\/]/,
+                            priority: 20,
+                        },
+                    ],
+                },
+            },
+        },
+    },
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./resources/js', import.meta.url)),

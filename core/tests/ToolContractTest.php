@@ -499,6 +499,8 @@ function testToolCallRedactedSerializationProtectsSecretsWithoutHidingBudgets():
         'authorization' => 'Bearer provider-secret',
         'message' => 'Provider returned Bearer provider-secret in diagnostics.',
         'clientSecret' => 'provider-secret-camel',
+        'storage_path' => 'C:\\Users\\operator\\AppData\\Local\\TALOS\\artifact.json',
+        'diagnostic' => 'Worker copied /var/lib/talos/private/artifact.json before exit.',
         'safe_value' => 'visible',
     ];
 
@@ -512,6 +514,8 @@ function testToolCallRedactedSerializationProtectsSecretsWithoutHidingBudgets():
     assertToolContract(($redacted['provider_metadata']['nested']['authorization'] ?? null) === '[REDACTED]', 'Nested authorization must be redacted.');
     assertToolContract(($redacted['provider_metadata']['nested']['message'] ?? null) === 'Provider returned Bearer [REDACTED] in diagnostics.', 'Bearer values in diagnostics must be redacted.');
     assertToolContract(($redacted['provider_metadata']['nested']['clientSecret'] ?? null) === '[REDACTED]', 'Camel-case client secrets must be redacted.');
+    assertToolContract(($redacted['provider_metadata']['nested']['storage_path'] ?? null) === '[REDACTED]', 'Local storage path fields must be redacted.');
+    assertToolContract(($redacted['provider_metadata']['nested']['diagnostic'] ?? null) === 'Worker copied [REDACTED] before exit.', 'Local paths embedded in diagnostics must be redacted.');
     assertToolContract(($redacted['provider_metadata']['nested']['safe_value'] ?? null) === 'visible', 'Safe metadata must remain inspectable.');
 }
 

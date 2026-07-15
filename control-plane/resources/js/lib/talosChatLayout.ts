@@ -2,6 +2,7 @@ import type {
     TalosChatBubbleScale,
     TalosChatLayoutPreferences,
     TalosComposerMode,
+    TalosMobileWindowPresentation,
 } from './talosTypes'
 
 export const TALOS_CHAT_BUBBLE_SCALE_OPTIONS: Array<{
@@ -18,13 +19,22 @@ export const TALOS_CHAT_COMPOSER_MODE_OPTIONS: Array<{
     label: string
 }> = [
     { value: 'full', label: 'Full controls' },
-    { value: 'minimal', label: 'Minimal' },
+    { value: 'minimal', label: 'Icon controls' },
+]
+
+export const TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS: Array<{
+    value: TalosMobileWindowPresentation
+    label: string
+}> = [
+    { value: 'drawer', label: 'Drawer' },
+    { value: 'fullscreen', label: 'Fullscreen modal' },
 ]
 
 export const TALOS_DEFAULT_CHAT_LAYOUT: TalosChatLayoutPreferences = {
     bubble_scale: 'balanced',
     composer_mode: 'full',
     advanced_rail_expanded: false,
+    mobile_window_presentation: 'drawer',
 }
 
 export function sanitizeTalosChatLayout(value: unknown): TalosChatLayoutPreferences {
@@ -41,5 +51,6 @@ export function sanitizeTalosChatLayout(value: unknown): TalosChatLayoutPreferen
             : 'balanced',
         composer_mode: layout.composer_mode === 'minimal' ? 'minimal' : 'full',
         advanced_rail_expanded: layout.advanced_rail_expanded === true,
+        mobile_window_presentation: layout.mobile_window_presentation === 'fullscreen' ? 'fullscreen' : 'drawer',
     }
 }

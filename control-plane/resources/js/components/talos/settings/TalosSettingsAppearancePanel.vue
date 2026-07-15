@@ -15,11 +15,13 @@ import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../l
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_COMPOSER_MODE_OPTIONS,
+    TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '../../../lib/talosChatLayout'
 import type {
     TalosChatBubbleScale,
     TalosChatLayoutPreferences,
     TalosComposerMode,
+    TalosMobileWindowPresentation,
 } from '../../../lib/talosTypes'
 
 const emit = defineEmits<{
@@ -29,6 +31,7 @@ const emit = defineEmits<{
     updateChatBubbleScale: [scale: TalosChatBubbleScale]
     updateChatComposerMode: [mode: TalosComposerMode]
     updateAdvancedRailExpanded: [expanded: boolean]
+    updateMobileWindowPresentation: [presentation: TalosMobileWindowPresentation]
     updateAppearance: [group: TalosAppearanceGroup, key: string, enabled: boolean]
     resetAppearanceGroup: [group: TalosAppearanceGroup]
     resetAllAppearance: []
@@ -117,6 +120,19 @@ function selectThemeMode(value: unknown) {
                 </option>
             </Select>
         </label>
+        <label class="block">
+            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Mobile tool windows</span>
+            <Select
+                :model-value="chatLayout.mobile_window_presentation"
+                class="mt-2"
+                aria-label="Mobile tool window presentation"
+                @update:model-value="(value) => emit('updateMobileWindowPresentation', value as TalosMobileWindowPresentation)"
+            >
+                <option v-for="option in TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                </option>
+            </Select>
+        </label>
         <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 md:col-span-2">
             <span>
                 <span class="block text-sm font-semibold text-[var(--talos-text)]">Expand Advanced by default</span>
@@ -188,18 +204,17 @@ function selectThemeMode(value: unknown) {
         >
             <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h5 class="text-sm font-semibold text-[var(--talos-text)]">{{ group.label }}</h5>
+                    <div class="flex items-center gap-1.5">
+                        <h5 class="text-sm font-semibold text-[var(--talos-text)]">{{ group.label }}</h5>
+                        <TalosGuideInfoButton
+                            :guide-id="`settings.appearance.${group.id}`"
+                            compact
+                            side="bottom"
+                        />
+                    </div>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ group.description }}</p>
                 </div>
-                <div class="flex items-center gap-1">
-                    <TalosGuideInfoButton
-                        :guide-id="`settings.appearance.${group.id}`"
-                        :aria-label="`Information about ${group.label}`"
-                        compact
-                        side="left"
-                    />
-                    <Button type="button" size="sm" variant="ghost" @click="emit('resetAppearanceGroup', group.id)">Reset group</Button>
-                </div>
+                <Button type="button" size="sm" variant="ghost" @click="emit('resetAppearanceGroup', group.id)">Reset group</Button>
             </div>
             <div class="grid gap-2 md:grid-cols-2">
                 <label

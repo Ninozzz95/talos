@@ -164,6 +164,7 @@ final class TalosSettingsApiTest extends TestCase
                     'bubble_scale' => 'expanded',
                     'composer_mode' => 'minimal',
                     'advanced_rail_expanded' => true,
+                    'mobile_window_presentation' => 'fullscreen',
                 ],
             ],
         ]);
@@ -172,13 +173,15 @@ final class TalosSettingsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.preferences.chat_layout.bubble_scale', 'expanded')
             ->assertJsonPath('data.preferences.chat_layout.composer_mode', 'minimal')
-            ->assertJsonPath('data.preferences.chat_layout.advanced_rail_expanded', true);
+            ->assertJsonPath('data.preferences.chat_layout.advanced_rail_expanded', true)
+            ->assertJsonPath('data.preferences.chat_layout.mobile_window_presentation', 'fullscreen');
 
         $layout = $response->json('data.preferences.chat_layout');
         $this->assertSame([
             'bubble_scale' => 'expanded',
             'composer_mode' => 'minimal',
             'advanced_rail_expanded' => true,
+            'mobile_window_presentation' => 'fullscreen',
         ], $layout);
 
         $response = $this->patchJson('/api/talos/settings', [
@@ -187,6 +190,7 @@ final class TalosSettingsApiTest extends TestCase
                     'bubble_scale' => 'giant',
                     'composer_mode' => 'hidden',
                     'advanced_rail_expanded' => 'yes',
+                    'mobile_window_presentation' => 'side-sheet',
                 ],
             ],
         ])
@@ -195,6 +199,7 @@ final class TalosSettingsApiTest extends TestCase
                 'preferences.chat_layout.bubble_scale',
                 'preferences.chat_layout.composer_mode',
                 'preferences.chat_layout.advanced_rail_expanded',
+                'preferences.chat_layout.mobile_window_presentation',
             ]);
     }
 

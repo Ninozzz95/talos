@@ -21,9 +21,42 @@ Build AVM as a deterministic, inspectable execution system. Chat and UI are prod
 
 1. Identify the owner: `core`, `validator`, `control-plane`, `TALOS UI`, `docs`, `benchmarks`, or `security`.
 2. Read the smallest relevant files and tests.
-3. For behavior changes, write or update the failing test first.
-4. Keep the edit inside the owner boundary unless the task explicitly crosses layers.
-5. Do not commit. Never commit on behalf of the user.
+3. Inspect enough runtime evidence to state the feature or bug precisely.
+4. Before proposing a plan or editing behavior, research the current web for official standards, primary documentation, maintained upstream libraries, and mature reference implementations. This gate is mandatory for every feature, refactor, and bugfix, including apparently local regressions.
+5. Record the upstream decision: direct integration, AVM adapter, or rejection with concrete compatibility, security, license, maintenance, or boundary reasons. If nothing fits, name the inspected alternatives and exact missing capability.
+6. Prefer and pin the real upstream package, SDK, protocol, executable, MCP server, or sidecar when it is the best solution. Never imitate a tried-and-tested upstream implementation merely to keep the change local.
+7. For behavior changes, write or update the failing test first.
+8. Keep the edit inside the owner boundary unless the task explicitly crosses layers.
+9. Do not commit. Never commit on behalf of the user.
+
+## Code-Level Planning Ledger
+
+Before implementing any feature, refactor or bugfix, create or update a
+code-level ledger for the lowest-level task. Phase prose is not executable
+planning. The ledger must enumerate, without wildcards:
+
+- every file to create, modify or delete;
+- every public class, function, method, interface, schema and migration added or
+  changed, plus compatibility symbols that must remain stable;
+- the named RED test and its expected failure;
+- focused GREEN commands, affected regression suites and real-upstream gate;
+- final-user UI/CLI proof, including desktop/mobile/physical-device coverage
+  where applicable;
+- failure, cancellation, reload/restart, recovery and rollback evidence;
+- the task-specific in-depth web-research dossier, selected upstream exact pin
+  and adopt/adapt/reject rationale.
+
+Do not begin product edits while a ledger row says "related files", contains a
+directory wildcard, omits a public symbol, or defers exact tests/commands until
+implementation. If current inspection invalidates a planned path, amend the
+ledger and record why before editing. Every discovered regression becomes a
+permanent named ledger scenario and automated test.
+
+The main agent owns implementation and complex architecture/security review.
+Subagents may run only simple focused tests or mechanical consistency reviews;
+they do not implement, edit plans or make architecture decisions.
+
+If live web research is unavailable, stop before planning or implementation and report the research gate as blocked. Model memory is not a substitute for current source verification.
 
 ## User-Provided Artifact Fidelity
 

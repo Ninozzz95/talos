@@ -3,8 +3,10 @@ import { computed, ref } from 'vue'
 import { AlertCircle, ClipboardList, Loader2, Search } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import Surface from '../../ui/Surface.vue'
 import { useTalosAdmin } from '../../../composables/useTalosAdmin'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 
 const props = defineProps<{
     token: string
@@ -19,9 +21,17 @@ const {
 
 const eventType = ref('')
 const localError = ref<string | null>(null)
+const auditRequested = ref(false)
 const visibleError = computed(() => localError.value || adminError.value)
+const auditState = computed(() => resolveTalosCollectionState({
+    itemCount: auditEvents.value.length,
+    loading: loadingAdmin.value,
+    error: visibleError.value,
+    requested: auditRequested.value,
+}))
 
 async function refreshAudit() {
+    auditRequested.value = true
     localError.value = null
 
     try {
@@ -41,11 +51,14 @@ async function refreshAudit() {
                         <ClipboardList class="h-4 w-4 text-[var(--talos-accent)]" />
                         Audit log
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Redacted security events</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Redacted security events</h3>
+                        <TalosGuideInfoButton guide-id="doctor.audit" compact side="bottom" />
+                    </div>
                 </div>
                 <div class="flex gap-2">
-                    <input v-model="eventType" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none" placeholder="event_type">
-                    <Button type="button" variant="ghost" size="sm" :disabled="loadingAdmin || !token" @click="refreshAudit">
+                    <input v-model="eventType" aria-label="Audit event type filter" class="h-9 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none" placeholder="event_type">
+                    <Button type="button" variant="ghost" size="sm" aria-label="Search audit events" title="Search audit events" :disabled="loadingAdmin || !token" @click="refreshAudit">
                         <Loader2 v-if="loadingAdmin" class="h-4 w-4 animate-spin" />
                         <Search v-else class="h-4 w-4" />
                     </Button>
@@ -59,7 +72,16 @@ async function refreshAudit() {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div v-if="!auditEvents.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="auditState === 'idle'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                Enter an admin token and run Search to load persisted audit events.
+            </div>
+
+            <div v-if="auditState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading audit events
+            </div>
+
+            <div v-if="auditState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No persisted audit events returned by `/api/talos/admin/audit-events`.
             </div>
 

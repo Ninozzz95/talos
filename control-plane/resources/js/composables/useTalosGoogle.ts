@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { talosFetch } from '../lib/api'
 import type {
     TalosCalendarDraft,
@@ -33,13 +33,18 @@ export function useTalosGoogle() {
     const accounts = ref<TalosGoogleAccount[]>([])
     const driveFiles = ref<TalosGoogleDriveFile[]>([])
     const calendars = ref<TalosGoogleCalendar[]>([])
-    const loading = ref(false)
+    const pendingRequests = ref(0)
+    const loading = computed(() => pendingRequests.value > 0)
     const actionMessage = ref<string | null>(null)
     const errorMessage = ref<string | null>(null)
 
     function beginAction() {
-        loading.value = true
+        pendingRequests.value += 1
         errorMessage.value = null
+    }
+
+    function finishAction() {
+        pendingRequests.value = Math.max(0, pendingRequests.value - 1)
     }
 
     function fail(error: unknown, fallback: string) {
@@ -57,7 +62,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not load Google accounts.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 
@@ -80,7 +85,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not disconnect this Google account.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 
@@ -96,7 +101,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not load Google Drive files.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 
@@ -119,7 +124,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not import this Google Drive file.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 
@@ -135,7 +140,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not load Google calendars.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 
@@ -158,7 +163,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not sync Google Calendar.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 
@@ -182,7 +187,7 @@ export function useTalosGoogle() {
         } catch (error) {
             return fail(error, 'TALOS could not publish this calendar draft.')
         } finally {
-            loading.value = false
+            finishAction()
         }
     }
 

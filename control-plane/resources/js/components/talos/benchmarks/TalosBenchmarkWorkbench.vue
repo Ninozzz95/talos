@@ -4,11 +4,13 @@ import { AlertCircle, BarChart3, Download, Loader2, Play, RefreshCw, Scale } fro
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosBenchmarkLane from './TalosBenchmarkLane.vue'
 import TalosDiffViewer from './TalosDiffViewer.vue'
 import TalosModelComparison from '../compare/TalosModelComparison.vue'
 import { useTalosBenchmarks } from '../../../composables/useTalosBenchmarks'
 import { talosFetch } from '../../../lib/api'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosBenchmarkGroup, TalosBenchmarkResult } from '../../../lib/talosTypes'
 
 const props = withDefaults(defineProps<{
@@ -48,9 +50,16 @@ const activeWorkbenchTab = ref<'avm' | 'model'>('avm')
 const actionError = ref<string | null>(null)
 const actionMessage = ref('')
 const exportingBenchmark = ref(false)
+const benchmarkGroupsRequested = ref(false)
 
 const selectedGroup = computed(() => benchmarkGroupById(selectedGroupId.value))
 const visibleError = computed(() => actionError.value || benchmarkError.value)
+const benchmarkGroupsState = computed(() => resolveTalosCollectionState({
+    itemCount: benchmarkGroups.value.length,
+    loading: loadingBenchmarkGroups.value,
+    error: benchmarkError.value,
+    requested: benchmarkGroupsRequested.value,
+}))
 const canRun = computed(() => {
     return Boolean(scenarioRef.value.trim()) && !runningBenchmarkComparison.value
 })
@@ -146,6 +155,7 @@ function shortHash(value: string | null | undefined) {
 }
 
 async function refreshGroups() {
+    benchmarkGroupsRequested.value = true
     actionError.value = null
 
     try {
@@ -167,6 +177,7 @@ async function loadInitialBenchmarkGroup(groupId: string | null | undefined) {
     }
 
     selectedGroupId.value = groupId
+    benchmarkGroupsRequested.value = true
     actionError.value = null
 
     try {
@@ -283,7 +294,10 @@ watch(() => props.initialScenarioRef, (scenarioReference) => {
                         <BarChart3 class="h-4 w-4 text-[var(--talos-accent)]" />
                         Benchmark workbench
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">AVM ON/OFF evidence</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">AVM ON/OFF evidence</h3>
+                        <TalosGuideInfoButton guide-id="rail.compare" compact side="bottom" />
+                    </div>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
                         Runs and reads persisted benchmark groups from {{ compareEndpoint }} and {{ groupsEndpoint }}.
                     </p>
@@ -384,11 +398,16 @@ watch(() => props.initialScenarioRef, (scenarioReference) => {
                 </Button>
             </div>
 
-            <div v-if="!benchmarkGroups.length && !loadingBenchmarkGroups" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="benchmarkGroupsState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading benchmark groups
+            </div>
+
+            <div v-else-if="benchmarkGroupsState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
                 No persisted benchmark groups returned by `/api/talos/benchmark-groups` yet.
             </div>
 
-            <div v-else class="max-h-[180px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
+            <div v-else-if="benchmarkGroupsState === 'ready'" class="max-h-[180px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
                 <button
                     v-for="group in benchmarkGroups"
                     :key="group.id"

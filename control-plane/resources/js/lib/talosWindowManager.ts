@@ -14,6 +14,7 @@ import {
 
 export const TALOS_WINDOW_LAYOUT_V1_KEY = 'talos.windowLayout.v1'
 export const TALOS_WINDOW_LAYOUT_V2_KEY = 'talos.windowLayout.v2'
+export const TALOS_RIGHT_DOCK_WIDTH = 420
 
 export type TalosWindowBreakpoint = 'desktop' | 'tablet' | 'mobile'
 export type TalosWindowVisibility = 'closed' | 'open' | 'minimized'
@@ -168,15 +169,16 @@ function defaultBounds(id: TalosWindowId, index: number, area: TalosWindowArea):
     }, area)
 }
 
-function dockBounds(id: TalosWindowId, area: TalosWindowArea): TalosWindowBounds {
-    const availableWidth = area.right - area.left
-    const width = Math.min(Math.max(TALOS_WINDOW_MIN_SIZES[id].width, 420), availableWidth)
-    return clampBounds(id, {
-        x: area.right - width,
-        y: area.top,
+function dockBounds(area: TalosWindowArea): TalosWindowBounds {
+    const normalized = validArea(area)
+    const availableWidth = normalized.right - normalized.left
+    const width = Math.min(TALOS_RIGHT_DOCK_WIDTH, availableWidth)
+    return {
+        x: Math.round(normalized.right - width),
+        y: Math.round(normalized.top),
         width,
-        height: area.bottom - area.top,
-    }, area)
+        height: Math.round(normalized.bottom - normalized.top),
+    }
 }
 
 function tilePresentation(target: TalosWindowTileTarget): TalosWindowPresentation {
@@ -302,7 +304,7 @@ export function createTalosWindowManagerState(
                 : presentation === 'fullscreen'
                     ? fullAreaBounds(normalizedFullscreenArea)
                 : presentation === 'docked'
-                    ? dockBounds(id, normalizedArea)
+                    ? dockBounds(normalizedArea)
                     : clampBounds(id, baseBounds, normalizedArea)),
             restoreBounds: persisted?.restore_bounds ? clampBounds(id, persisted.restore_bounds, normalizedArea) : null,
             tileTarget,
@@ -355,7 +357,7 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
                 : target.presentation === 'fullscreen'
                     ? fullAreaBounds(state.fullscreenArea)
             : target.presentation === 'docked'
-                ? dockBounds(action.id, state.area)
+                ? dockBounds(state.area)
                 : clampBounds(action.id, target.bounds, state.area))
         target.launchOrigin = action.launchOrigin ?? target.launchOrigin
         if ('returnFocusId' in action) target.returnFocusId = action.returnFocusId ?? null
@@ -442,7 +444,7 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
             next.previousPresentation = target.presentation === 'mobile-sheet' ? 'floating' : target.presentation
             next.presentation = 'docked'
             next.tileTarget = 'none'
-            next.bounds = dockBounds(action.id, state.area)
+            next.bounds = dockBounds(state.area)
         }
         return focusWindow({ ...state, windows }, action.id)
     }
@@ -536,7 +538,7 @@ export function reduceTalosWindowState(state: TalosWindowManagerState, action: T
                 : tileBounds(target.tileTarget, tileArea, maximizeArea, fullscreenArea)
             if (target.presentation === 'mobile-sheet') target.bounds = fullAreaBounds(area)
             else if (resolvedTileBounds) target.bounds = resolvedTileBounds
-            else if (target.presentation === 'docked') target.bounds = dockBounds(id, area)
+            else if (target.presentation === 'docked') target.bounds = dockBounds(area)
             else target.bounds = clampBounds(id, target.bounds, area)
             if (target.restoreBounds) target.restoreBounds = clampBounds(id, target.restoreBounds, area)
         }

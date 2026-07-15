@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { AlertTriangle, Loader2, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import type {
     TalosRecoveryAction,
     TalosRecoveryRequest,
@@ -186,6 +187,7 @@ watch(selectedAction, () => {
                 <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                     <ShieldCheck class="h-4 w-4 text-[var(--talos-accent)]" />
                     HMI recovery
+                    <TalosGuideInfoButton guide-id="runtime.recovery" compact side="bottom" />
                 </div>
                 <Badge :tone="selectedNodeId ? 'warning' : 'neutral'">{{ selectedNodeId || 'no node' }}</Badge>
             </div>

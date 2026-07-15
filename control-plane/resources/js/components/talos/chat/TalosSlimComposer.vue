@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     BrainCircuit,
     Camera,
@@ -7,8 +7,6 @@ import {
     Database,
     Globe2,
     Loader2,
-    Maximize2,
-    Minimize2,
     MoreHorizontal,
     RefreshCw,
     ScanSearch,
@@ -46,7 +44,6 @@ const props = withDefaults(defineProps<{
     browserCurrentPage?: TalosBrowserCurrentPage | null
     devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
-    chatLayoutLocked: boolean
 }>(), {
     devBrowserEvidence: false,
 })
@@ -58,7 +55,6 @@ const emit = defineEmits<{
     openSettings: []
     enhance: []
     toggleTemporary: []
-    toggleComposerMode: []
     enableBrowse: []
     disableBrowse: []
     stopBrowse: []
@@ -72,6 +68,7 @@ const emit = defineEmits<{
 const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve prompt')
 const sendTitle = computed(() => props.sendDisabledReason || 'Send message')
 const browseMenuOpen = ref(false)
+const promptRow = ref<HTMLElement | null>(null)
 const activeSlashIndex = ref(0)
 const slashQuery = computed(() => {
     const value = prompt.value
@@ -100,6 +97,21 @@ const stopDisabled = computed(() => !props.browserMode.enabled || !['ready', 'ac
 watch(slashCommands, (commands) => {
     if (activeSlashIndex.value >= commands.length) activeSlashIndex.value = 0
 })
+
+function resizePromptField(event?: Event) {
+    const eventTarget = event?.target
+    const field = eventTarget instanceof HTMLTextAreaElement
+        ? eventTarget
+        : promptRow.value?.querySelector<HTMLTextAreaElement>('textarea')
+
+    if (!field) return
+    field.style.height = 'auto'
+    field.style.height = `${field.scrollHeight}px`
+}
+
+watch(prompt, () => {
+    void nextTick(() => resizePromptField())
+}, { flush: 'post' })
 
 function selectSlashCommand(command: TalosCommand) {
     if (!isTalosCommandEnabled(command)) return
@@ -172,6 +184,7 @@ watch(browseMenuOpen, (open) => {
         document.removeEventListener('keydown', handleDocumentKeydown)
     }
 })
+onMounted(() => resizePromptField())
 onBeforeUnmount(() => {
     document.removeEventListener('click', handleDocumentClick)
     document.removeEventListener('keydown', handleDocumentKeydown)
@@ -196,14 +209,15 @@ onBeforeUnmount(() => {
             }"
         />
 
-        <div data-testid="talos-composer-prompt-row" class="relative min-w-0">
+        <div ref="promptRow" data-testid="talos-composer-prompt-row" class="relative min-w-0">
             <Textarea
                 v-model="prompt"
                 rows="1"
-                class="max-h-32 min-h-14 min-w-0 resize-none border-0 bg-transparent px-2 py-2 pr-14 shadow-none focus-visible:ring-0"
+                class="talos-composer-textarea max-h-[min(16rem,35vh)] min-h-14 min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 pr-14 shadow-none focus-visible:ring-0"
                 placeholder="Message TALOS..."
                 aria-label="Message TALOS"
                 :disabled="sending"
+                @input="resizePromptField"
                 @keydown="handleKeydown"
             />
             <Button
@@ -221,53 +235,61 @@ onBeforeUnmount(() => {
         </div>
 
         <div data-testid="talos-composer-capability-row" class="mt-1 flex min-w-0 items-end justify-between gap-2 px-1 pb-1">
-            <div v-if="composerMode === 'full'" class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                 <button
                     type="button"
-                    class="inline-flex min-h-11 max-w-[min(13rem,45vw)] min-w-0 items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    :class="composerMode === 'full' ? 'sm:max-w-[min(13rem,45vw)] sm:justify-start sm:px-2.5' : ''"
                     aria-label="Choose model profile"
                     @click="emit('openModel')"
                 >
                     <TalosProviderIcon v-if="modelProvider" :provider="modelProvider" class="h-6 w-6 border-0 bg-transparent" />
                     <BrainCircuit v-else class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
-                    <span class="truncate">{{ modelLabel }}</span>
+                    <span data-testid="talos-composer-model-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ modelLabel }}</span>
                 </button>
                 <button
                     v-if="visibility.attach_files !== false"
                     type="button"
-                    class="inline-flex min-h-11 max-w-[min(13rem,45vw)] min-w-0 items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    :class="composerMode === 'full' ? 'sm:max-w-[min(13rem,45vw)] sm:justify-start sm:px-2.5' : ''"
                     aria-label="Choose grounding context"
                     @click="emit('openContext')"
                 >
                     <Database class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
-                    <span class="truncate">{{ contextLabel }}</span>
+                    <span data-testid="talos-composer-context-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ contextLabel }}</span>
                 </button>
                 <button
                     v-if="visibility.agent_mode_switcher !== false"
                     type="button"
-                    class="inline-flex min-h-11 items-center gap-1.5 rounded-md border px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                    :class="temporaryMode ? 'border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
+                    class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    :class="[
+                        temporaryMode ? 'border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]',
+                        composerMode === 'full' ? 'px-2' : 'px-0',
+                    ]"
                     aria-label="Temporary chat"
                     :aria-pressed="temporaryMode"
                     @click="emit('toggleTemporary')"
                 >
                     <ShieldAlert class="h-3.5 w-3.5 shrink-0" />
-                    <span class="hidden sm:inline">{{ temporaryMode ? 'Temporary' : 'Persistent' }}</span>
+                    <span :class="composerMode === 'full' ? 'hidden sm:inline' : 'hidden'">{{ temporaryMode ? 'Temporary' : 'Persistent' }}</span>
                 </button>
                 <button
                     v-if="!browserMode.enabled"
                     type="button"
-                    class="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                    :class="composerMode === 'full' ? 'sm:px-2' : 'sm:px-0'"
                     aria-label="Enable Browse"
                     title="Enable Browse"
                     @click="emit('enableBrowse')"
                 >
-                    <Globe2 class="h-3.5 w-3.5" />Browse
+                    <Globe2 class="h-3.5 w-3.5" />
+                    <span data-testid="talos-composer-browse-label" :class="composerMode === 'full' ? 'hidden sm:inline' : 'hidden'">Browse</span>
                 </button>
                 <div v-else class="relative flex shrink-0 items-center gap-1">
                     <button
                         type="button"
-                        class="inline-flex min-h-11 max-w-36 items-center gap-1.5 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-2 text-xs text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-1.5 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-0 text-xs text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="composerMode === 'full' ? 'sm:max-w-36 sm:justify-start sm:px-2' : 'sm:max-w-11 sm:justify-center sm:px-0'"
                         data-testid="talos-browse-mode"
                         :data-enabled="browserMode.enabled"
                         :aria-label="`Browse status: ${browseStatus}`"
@@ -276,8 +298,8 @@ onBeforeUnmount(() => {
                         @click="toggleBrowseMenu"
                     >
                         <Globe2 class="h-3.5 w-3.5 shrink-0" />
-                        <span class="truncate">{{ browseStatus }}</span>
-                        <ChevronDown class="h-3.5 w-3.5 shrink-0" />
+                        <span data-testid="talos-composer-browse-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ browseStatus }}</span>
+                        <ChevronDown :class="composerMode === 'full' ? 'hidden h-3.5 w-3.5 shrink-0 sm:block' : 'hidden'" />
                     </button>
                     <Button
                         type="button"
@@ -311,25 +333,10 @@ onBeforeUnmount(() => {
                 </div>
                 <span data-testid="talos-composer-status" class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
             </div>
-            <div v-else data-testid="talos-composer-minimal-indicators" class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[11px] text-[var(--talos-muted)]">
-                <button type="button" class="inline-flex min-h-11 min-w-0 max-w-44 items-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8" aria-label="Choose model profile" @click="emit('openModel')">
-                    <TalosProviderIcon v-if="modelProvider" :provider="modelProvider" class="h-5 w-5 border-0 bg-transparent" />
-                    <BrainCircuit v-else class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
-                    <span class="truncate">{{ modelLabel }}</span>
-                </button>
-                <span v-if="browserMode.enabled" role="status" class="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-2 text-[var(--talos-text)] lg:min-h-8" data-testid="talos-browse-mode" :data-enabled="browserMode.enabled" :aria-label="`Browse status: ${browseStatus}`">
-                    <Globe2 class="h-3.5 w-3.5" />Browse {{ browseStatus }}
-                </span>
-                <span v-if="temporaryMode" class="inline-flex min-h-11 shrink-0 items-center lg:min-h-8" aria-label="Temporary chat active"><ShieldAlert class="h-3.5 w-3.5" /></span>
-            </div>
 
             <div class="flex shrink-0 items-center gap-1">
-                <template v-if="composerMode === 'full'">
-                    <Button type="button" variant="ghost" size="icon" aria-label="Improve prompt" :title="enhanceTitle" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
-                    <Button v-if="visibility.more_tools !== false" type="button" variant="ghost" size="icon" aria-label="Open settings" title="Open settings" @click="emit('openSettings')"><SlidersHorizontal class="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" aria-label="Use minimal composer" :title="chatLayoutLocked ? 'Chat appearance is locked by workspace policy.' : 'Use minimal composer'" :disabled="chatLayoutLocked" @click="emit('toggleComposerMode')"><Minimize2 class="h-4 w-4" /></Button>
-                </template>
-                <Button v-else type="button" variant="ghost" size="icon" aria-label="Use full composer" :title="chatLayoutLocked ? 'Chat appearance is locked by workspace policy.' : 'Use full composer'" :disabled="chatLayoutLocked" @click="emit('toggleComposerMode')"><Maximize2 class="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" aria-label="Improve prompt" :title="enhanceTitle" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
+                <Button v-if="visibility.more_tools !== false" type="button" variant="ghost" size="icon" aria-label="Open settings" title="Open settings" @click="emit('openSettings')"><SlidersHorizontal class="h-4 w-4" /></Button>
             </div>
         </div>
     </Card>
