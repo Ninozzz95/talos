@@ -53,7 +53,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: browser-worker/package-lock.json
+          cache-dependency-path: |
+            browser-worker/package-lock.json
+            control-plane/package-lock.json
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
@@ -63,8 +65,23 @@ jobs:
       - run: cd control-plane && composer install --no-interaction --prefer-dist
         env:
           APP_ENV: testing
+      - run: cd control-plane && npm ci
+      - run: cd control-plane && npm run test:browser-gates-config
+        env:
+          TALOS_REQUIRE_DOCKER_COMPOSE_CONFIG: '1'
+      - run: cd control-plane && npx playwright install chromium
       - name: Run mandatory Laravel-to-Chromium HMI integration
         run: bash scripts/tests/talos-live-browser-worker-ci.sh
+      - name: Upload browser HMI Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talos-browser-hmi-playwright-diagnostics
+          path: |
+            control-plane/storage/playwright-report
+            control-plane/test-results
+          if-no-files-found: warn
+          retention-days: 7
 
   control-plane:
     runs-on: windows-latest

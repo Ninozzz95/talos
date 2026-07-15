@@ -90,7 +90,7 @@ function updateTooltip(open: boolean) {
                 :side="side"
                 :align="align"
                 :side-offset="6"
-                class="z-[120] border-[var(--talos-border)] bg-[var(--talos-card)] text-xs text-[var(--talos-text)]"
+                class="z-[120] border-neutral-700 bg-neutral-950 text-xs text-neutral-50"
             >
                 {{ triggerLabel }}
             </TooltipContent>

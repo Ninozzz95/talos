@@ -2,6 +2,7 @@ import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_COMPOSER_MODE_OPTIONS,
     TALOS_DEFAULT_CHAT_LAYOUT,
+    TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
     sanitizeTalosChatLayout,
 } from '../../../../lib/talosChatLayout'
 import {
@@ -56,7 +57,7 @@ const THEME_CUSTOMIZATION_KEYS = [
     'effect_intensity', 'scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover', 'scrollbar_width',
 ] as const
 const UI_ANIMATION_KEYS = ['open_close', 'surface_transition', 'feedback', 'hover', 'duration_scale', 'intensity', 'easing', 'stagger'] as const
-const CHAT_LAYOUT_KEYS = ['bubble_scale', 'composer_mode', 'advanced_rail_expanded'] as const
+const CHAT_LAYOUT_KEYS = ['bubble_scale', 'composer_mode', 'advanced_rail_expanded', 'mobile_window_presentation'] as const
 const COLOR_CUSTOMIZATION_KEYS = new Set(['background', 'panel', 'text', 'accent', 'secondary', 'border', 'scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover'])
 const values = <T extends { value: string }>(options: readonly T[]) => new Set(options.map((option) => option.value))
 const FONT_VALUES = values(TALOS_THEME_FONT_OPTIONS)
@@ -75,6 +76,7 @@ const UI_HOVER_VALUES = values(TALOS_UI_ANIMATION_HOVER_OPTIONS)
 const UI_EASING_VALUES = values(TALOS_UI_ANIMATION_EASING_OPTIONS)
 const BUBBLE_VALUES = values(TALOS_CHAT_BUBBLE_SCALE_OPTIONS)
 const COMPOSER_VALUES = values(TALOS_CHAT_COMPOSER_MODE_OPTIONS)
+const MOBILE_WINDOW_PRESENTATION_VALUES = values(TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS)
 
 function strictInteger(value: unknown, min: number, max: number) {
     return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
@@ -136,6 +138,9 @@ function strictChatLayout(value: unknown) {
     return (value.bubble_scale === undefined || (typeof value.bubble_scale === 'string' && BUBBLE_VALUES.has(value.bubble_scale)))
         && (value.composer_mode === undefined || (typeof value.composer_mode === 'string' && COMPOSER_VALUES.has(value.composer_mode)))
         && (value.advanced_rail_expanded === undefined || typeof value.advanced_rail_expanded === 'boolean')
+        && (value.mobile_window_presentation === undefined
+            || (typeof value.mobile_window_presentation === 'string'
+                && MOBILE_WINDOW_PRESENTATION_VALUES.has(value.mobile_window_presentation)))
 }
 
 function strictTimestamp(value: unknown) {

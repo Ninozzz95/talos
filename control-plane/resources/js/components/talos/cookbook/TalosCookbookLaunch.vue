@@ -3,15 +3,22 @@ import { computed } from 'vue'
 import { Cpu, Loader2, RefreshCw, Radar } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosCookbookModel, TalosCookbookOverview } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     overview: TalosCookbookOverview | null
     models: TalosCookbookModel[]
     loading: boolean
-}>()
+    error?: string | null
+    requested?: boolean
+}>(), {
+    error: null,
+    requested: true,
+})
 
 const emit = defineEmits<{
     scan: []
@@ -21,6 +28,24 @@ const emit = defineEmits<{
 const profile = computed(() => props.overview?.profile ?? null)
 const runtimes = computed(() => props.overview?.runtimes ?? [])
 const visibleModels = computed(() => props.models.slice(0, 4))
+const profileState = computed(() => resolveTalosCollectionState({
+    itemCount: profile.value ? 1 : 0,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
+const runtimesState = computed(() => resolveTalosCollectionState({
+    itemCount: runtimes.value.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
+const modelsState = computed(() => resolveTalosCollectionState({
+    itemCount: props.models.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 
 function formatMb(value: number | null | undefined) {
     if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -78,6 +103,7 @@ function runtimeTone(status: string): BadgeTone {
                         <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                             <Radar class="h-4 w-4 text-[var(--talos-accent)]" />
                             Hardware scan
+                            <TalosGuideInfoButton guide-id="cookbook.launch" compact side="bottom" />
                         </div>
                         <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
                             Local evidence comes from the Cookbook API and is used only for deterministic fit scoring.
@@ -90,7 +116,12 @@ function runtimeTone(status: string): BadgeTone {
                     </Button>
                 </div>
 
-                <div v-if="profile" class="mt-3 grid gap-2 md:grid-cols-4">
+                <div v-if="profileState === 'loading'" role="status" class="mt-3 flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                    <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                    Loading hardware profile
+                </div>
+
+                <div v-else-if="profileState === 'ready' && profile" class="mt-3 grid gap-2 md:grid-cols-4">
                     <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2">
                         <div class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">CPU</div>
                         <div class="mt-1 truncate text-sm font-semibold text-[var(--talos-text)]">{{ profile.cpu_model || 'unknown' }}</div>
@@ -113,7 +144,7 @@ function runtimeTone(status: string): BadgeTone {
                     </div>
                 </div>
 
-                <div v-else class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <div v-else-if="profileState === 'empty'" class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-4 text-sm text-[var(--talos-muted)]">
                     No local hardware profile has been scanned yet.
                 </div>
             </section>
@@ -123,7 +154,11 @@ function runtimeTone(status: string): BadgeTone {
                     <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Runtime readiness</div>
                     <Badge tone="neutral">{{ runtimes.length }} runtimes</Badge>
                 </div>
-                <div v-if="runtimes.length" class="mt-3 space-y-2">
+                <div v-if="runtimesState === 'loading'" role="status" class="mt-3 flex items-center gap-2 text-sm text-[var(--talos-muted)]">
+                    <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                    Loading runtime readiness
+                </div>
+                <div v-else-if="runtimesState === 'ready'" class="mt-3 space-y-2">
                     <article
                         v-for="runtime in runtimes"
                         :key="runtime.kind"
@@ -138,7 +173,7 @@ function runtimeTone(status: string): BadgeTone {
                         </div>
                     </article>
                 </div>
-                <p v-else class="mt-3 text-sm leading-6 text-[var(--talos-muted)]">
+                <p v-else-if="runtimesState === 'empty'" class="mt-3 text-sm leading-6 text-[var(--talos-muted)]">
                     No local runtime readiness has been returned.
                 </p>
             </section>
@@ -154,7 +189,12 @@ function runtimeTone(status: string): BadgeTone {
                 </Button>
             </div>
 
-            <div v-if="visibleModels.length" class="divide-y divide-[var(--talos-border)]">
+            <div v-if="modelsState === 'loading'" role="status" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading Cookbook models
+            </div>
+
+            <div v-else-if="modelsState === 'ready'" class="divide-y divide-[var(--talos-border)]">
                 <article
                     v-for="model in visibleModels"
                     :key="model.id"
@@ -178,7 +218,7 @@ function runtimeTone(status: string): BadgeTone {
                 </article>
             </div>
 
-            <p v-else class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <p v-else-if="modelsState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No Cookbook models returned by `/api/talos/cookbook/models`.
             </p>
         </section>

@@ -111,22 +111,22 @@ onBeforeUnmount(() => document.removeEventListener('click', handleOutsideClick))
 <template>
     <div ref="actionsRoot" class="relative flex min-h-11 flex-wrap items-center gap-1" aria-label="Message actions">
         <Tooltip content="Copy message">
-            <template #default="{ describedBy }">
-                <Button data-primary-action type="button" variant="ghost" size="icon" aria-label="Copy message" :aria-describedby="describedBy" @click="emit('copy', message)">
+            <template #default>
+                <Button data-primary-action type="button" variant="ghost" size="icon" aria-label="Copy message" @click="emit('copy', message)">
                     <Copy class="h-3.5 w-3.5" />
                 </Button>
             </template>
         </Tooltip>
         <Tooltip v-if="message.role === 'user'" content="Resend message">
-            <template #default="{ describedBy }">
-                <Button data-primary-action type="button" variant="ghost" size="icon" aria-label="Resend message" :aria-describedby="describedBy" :disabled="busy" @click="emit('resend', message)">
+            <template #default>
+                <Button data-primary-action type="button" variant="ghost" size="icon" aria-label="Resend message" :disabled="busy" @click="emit('resend', message)">
                     <RefreshCcw class="h-3.5 w-3.5" />
                 </Button>
             </template>
         </Tooltip>
         <Tooltip v-if="message.role === 'assistant'" content="Retry response">
-            <template #default="{ describedBy }">
-                <Button data-primary-action type="button" variant="ghost" size="icon" aria-label="Retry assistant response" :aria-describedby="describedBy" :disabled="busy || !props.canRetry" @click="emit('retry', message)">
+            <template #default>
+                <Button data-primary-action type="button" variant="ghost" size="icon" aria-label="Retry assistant response" :disabled="busy || !props.canRetry" @click="emit('retry', message)">
                     <RotateCcw class="h-3.5 w-3.5" />
                 </Button>
             </template>
@@ -150,22 +150,22 @@ onBeforeUnmount(() => document.removeEventListener('click', handleOutsideClick))
         </Button>
         <div class="hidden items-center gap-1 lg:flex" data-secondary-inline>
             <Tooltip v-if="message.role === 'user'" content="Reuse prompt">
-                <template #default="{ describedBy }">
-                    <Button type="button" variant="ghost" size="icon" aria-label="Reuse prompt" :aria-describedby="describedBy" @click="emit('edit', message)">
+                <template #default>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Reuse prompt" @click="emit('edit', message)">
                         <Pencil class="h-3.5 w-3.5" />
                     </Button>
                 </template>
             </Tooltip>
             <Tooltip v-if="message.role === 'assistant' && hasEvidence" :content="evidenceOpen ? 'Close evidence' : 'Open evidence'">
-                <template #default="{ describedBy }">
-                    <Button type="button" variant="ghost" size="icon" :aria-label="evidenceOpen ? 'Close evidence' : 'Open evidence'" :aria-describedby="describedBy" :aria-expanded="evidenceOpen" @click="emit('toggleEvidence', message)">
+                <template #default>
+                    <Button type="button" variant="ghost" size="icon" :aria-label="evidenceOpen ? 'Close evidence' : 'Open evidence'" :aria-expanded="evidenceOpen" @click="emit('toggleEvidence', message)">
                         <ShieldCheck class="h-3.5 w-3.5" />
                     </Button>
                 </template>
             </Tooltip>
             <Tooltip v-if="message.role === 'assistant' && hasBenchmark" content="Compare AVM ON/OFF">
-                <template #default="{ describedBy }">
-                    <Button type="button" variant="ghost" size="icon" aria-label="Compare AVM ON/OFF" :aria-describedby="describedBy" :loading="benchmarking" @click="emit('benchmark', message)">
+                <template #default>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Compare AVM ON/OFF" :loading="benchmarking" @click="emit('benchmark', message)">
                         <Loader2 v-if="benchmarking" class="h-3.5 w-3.5 animate-spin" />
                         <BarChart3 v-else class="h-3.5 w-3.5" />
                     </Button>

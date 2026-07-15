@@ -4,9 +4,11 @@ import { RefreshCw, Wrench } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosConnectorHealth from './TalosConnectorHealth.vue'
 import TalosToolSchemaViewer from './TalosToolSchemaViewer.vue'
 import { useTalosTools } from '../../../composables/useTalosTools'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosConnector, TalosTool } from '../../../lib/talosTypes'
 
 const {
@@ -22,6 +24,7 @@ const {
 const selectedConnectorId = ref<string | null>(null)
 const selectedToolId = ref<string | null>(null)
 const showExcluded = ref(true)
+const registryRequested = ref(false)
 
 const selectedConnector = computed(() => connectors.value.find((connector) => connector.id === selectedConnectorId.value) ?? null)
 const visibleTools = computed(() => {
@@ -40,6 +43,12 @@ const visibleTools = computed(() => {
 const selectedTool = computed(() => visibleTools.value.find((tool) => tool.id === selectedToolId.value) ?? visibleTools.value[0] ?? null)
 const planningCount = computed(() => planningContext.value?.tools.length ?? 0)
 const excludedCount = computed(() => Math.max(0, tools.value.length - planningCount.value))
+const registryState = computed(() => resolveTalosCollectionState({
+    itemCount: connectors.value.length + tools.value.length,
+    loading: loadingToolRegistry.value,
+    error: toolRegistryError.value,
+    requested: registryRequested.value,
+}))
 
 function selectConnector(connector: TalosConnector) {
     selectedConnectorId.value = connector.id
@@ -51,6 +60,7 @@ function selectTool(tool: TalosTool) {
 }
 
 async function refresh() {
+    registryRequested.value = true
     await refreshToolRegistry()
 
     if (!selectedConnectorId.value && connectors.value.length > 0) {
@@ -80,9 +90,10 @@ onMounted(() => {
         <div class="border-b border-[var(--talos-border)] p-4">
             <div class="flex items-start justify-between gap-3">
                 <div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1.5">
                         <Wrench class="h-4 w-4 text-[var(--talos-muted)]" />
                         <h3 class="text-base font-semibold text-[var(--talos-text)]">Tool Registry</h3>
+                        <TalosGuideInfoButton guide-id="rail.tools" compact side="bottom" />
                     </div>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                         Server-side connectors and AVM tools available to planning.
@@ -92,7 +103,7 @@ onMounted(() => {
                     <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loadingToolRegistry }" />
                 </Button>
             </div>
-            <div class="mt-3 flex flex-wrap gap-2">
+            <div v-if="registryState === 'ready' || registryState === 'empty'" class="mt-3 flex flex-wrap gap-2">
                 <Badge tone="neutral">{{ connectors.length }} connectors</Badge>
                 <Badge tone="success">{{ planningCount }} planning tools</Badge>
                 <Badge :tone="excludedCount > 0 ? 'warning' : 'neutral'">{{ excludedCount }} excluded</Badge>
@@ -104,7 +115,16 @@ onMounted(() => {
                 {{ toolRegistryError }}
             </div>
 
-            <div class="flex items-center justify-between gap-3">
+            <div v-if="registryState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm text-[var(--talos-muted)]">
+                <RefreshCw class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading tool registry
+            </div>
+
+            <div v-if="registryState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm leading-6 text-[var(--talos-muted)]">
+                No connectors or tools are registered in the control plane.
+            </div>
+
+            <div v-if="registryState === 'ready'" class="flex items-center justify-between gap-3">
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">connectors</div>
                 <label class="flex items-center gap-2 text-xs text-[var(--talos-muted)]">
                     <input v-model="showExcluded" type="checkbox" class="h-4 w-4 rounded border-[var(--talos-border)] bg-[var(--talos-panel)]">
@@ -113,16 +133,17 @@ onMounted(() => {
             </div>
 
             <TalosConnectorHealth
+                v-if="registryState === 'ready'"
                 :connectors="connectors"
                 :selected-connector-id="selectedConnectorId"
                 @select="selectConnector"
             />
 
-            <div v-if="!connectors.length && !loadingToolRegistry" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="registryState === 'ready' && !connectors.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No connectors are registered in the control plane.
             </div>
 
-            <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+            <div v-if="registryState === 'ready'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
                 <div class="mb-3 flex items-center justify-between gap-3">
                     <div>
                         <div class="text-sm font-semibold text-[var(--talos-text)]">Tools</div>
@@ -149,13 +170,14 @@ onMounted(() => {
                         </div>
                         <div class="mt-1 truncate text-xs text-[var(--talos-muted)]">{{ tool.display_name }}</div>
                     </button>
-                    <div v-if="!visibleTools.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
+                     <div v-if="registryState === 'ready' && !visibleTools.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-sm leading-6 text-[var(--talos-muted)]">
                         No tools match the current registry filter.
                     </div>
                 </div>
             </div>
 
             <TalosToolSchemaViewer
+                v-if="registryState === 'ready'"
                 :tool="selectedTool"
                 :planning-enabled="selectedTool ? planningToolNames.has(selectedTool.name) : false"
             />

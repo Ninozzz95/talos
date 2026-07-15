@@ -88,7 +88,7 @@ function handleTitleKeydown(event: KeyboardEvent) {
                 <Minimize2 v-if="fullscreen" class="h-4 w-4" />
                 <Maximize2 v-else class="h-4 w-4" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" :aria-label="docked ? `Undock ${title}` : `Dock ${title}`" @pointerdown.stop @click.stop="emit('dock', id)">
+            <Button type="button" variant="ghost" size="icon" :aria-label="docked ? `Undock ${title} from right sidebar` : `Dock ${title} in right sidebar`" @pointerdown.stop @click.stop="emit('dock', id)">
                 <Dock v-if="!docked" class="h-4 w-4" />
                 <Maximize2 v-else class="h-4 w-4" />
             </Button>

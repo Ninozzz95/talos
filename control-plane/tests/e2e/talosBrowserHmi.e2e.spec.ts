@@ -1,16 +1,18 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { PNG } from 'pngjs'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { browserFramePoint, livePointerCoordinate } from '../../resources/js/lib/talosBrowserHmiCoordinates'
 
 const setupEmail = 'talos-e2e@example.test'
 const setupPassword = 'talos-e2e-password-123'
 const loginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const loginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
 const devEvidence = process.env.TALOS_E2E_DEV_BROWSER_EVIDENCE === '1'
-const paintableFrames = new Map<string, Buffer>()
+const realBrowserIntegration = process.env.TALOS_E2E_REAL_BROWSER === '1'
+const mockBrowserFrames = new Map<string, Buffer>()
 
-function paintableFrame(artifactId: string) {
-    const cached = paintableFrames.get(artifactId)
+function mockBrowserFrame(artifactId: string) {
+    const cached = mockBrowserFrames.get(artifactId)
     if (cached) return cached
 
     const seed = [...artifactId].reduce((value, character) => ((value * 33) ^ character.charCodeAt(0)) >>> 0, 5381)
@@ -24,9 +26,15 @@ function paintableFrame(artifactId: string) {
             png.data[offset + 3] = 255
         }
     }
+
     const frame = PNG.sync.write(png)
-    paintableFrames.set(artifactId, frame)
+    mockBrowserFrames.set(artifactId, frame)
     return frame
+}
+
+function configuredLivePointerCoordinate(name: 'X' | 'Y', fallback: number) {
+    const label = `TALOS_E2E_LIVE_BROWSER_${name}`
+    return livePointerCoordinate(process.env[label], fallback, label)
 }
 
 async function isAuthenticatedWorkspace(page: Page) {
@@ -116,19 +124,23 @@ async function findRealChat(page: Page) {
     return payload.data.find((session) => session.title === 'Browser HMI E2E') ?? null
 }
 
-async function installRealBrowserBackend(page: Page) {
+async function installBrowserBackend(page: Page) {
     await page.route('**/api/talos/browser/**', async (route) => {
-        const url = new URL(route.request().url())
-        if (route.request().method() === 'GET' && url.pathname.endsWith('/preview')) {
-            const response = await route.fetch()
-            const contentType = response.headers()['content-type'] ?? ''
-            if (contentType.includes('image/png')) {
-                const artifactId = url.pathname.match(/\/artifacts\/([^/]+)\/preview$/)?.[1] ?? 'unknown-artifact'
-                await route.fulfill({ response, body: paintableFrame(artifactId) })
-            } else {
-                await route.fulfill({ response })
+        if (!realBrowserIntegration && route.request().method() === 'GET') {
+            const url = new URL(route.request().url())
+            const artifactId = url.pathname.match(/\/artifacts\/([^/]+)\/preview$/)?.[1]
+            if (artifactId) {
+                const response = await route.fetch()
+                await route.fulfill({
+                    response,
+                    body: mockBrowserFrame(artifactId),
+                    headers: {
+                        ...response.headers(),
+                        'content-type': 'image/png',
+                    },
+                })
+                return
             }
-            return
         }
 
         await route.continue()
@@ -153,7 +165,7 @@ async function prepareChat(page: Page) {
     await installTalosApiMocks(page, {
         initialSessions: [{ id: sessionId, title: 'Browser HMI E2E' }],
     })
-    await installRealBrowserBackend(page)
+    await installBrowserBackend(page)
     await realApi(page, 'PATCH', '/api/talos/settings', {
         preferences: { browser_hmi_mode: 'confirm_sensitive' },
     })
@@ -208,12 +220,42 @@ async function openScreenshotDialog(page: Page) {
     await expect.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
     await expect.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBe(1280)
     await expect.poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalHeight)).toBe(800)
+    if (realBrowserIntegration) await expectRenderedPreviewMatchesArtifact(page, image)
 
     return { artifactId, dialog, image }
 }
 
-async function sampleImagePixel(image: Locator) {
-    return image.evaluate((element) => {
+async function samplePreviewPixels(page: Page, image: Locator) {
+    const source = await image.getAttribute('src')
+    if (!source) throw new Error('Browser HMI image has no authenticated preview source.')
+
+    const response = await page.context().request.get(new URL(source, page.url()).toString(), {
+        headers: { Accept: 'image/png' },
+    })
+    expect(response.ok(), await response.text()).toBe(true)
+    expect(response.headers()['content-type'] ?? '').toContain('image/png')
+
+    const png = PNG.sync.read(await response.body())
+    const points = [
+        [17, 23],
+        [Math.floor(png.width / 4), Math.floor(png.height / 4)],
+        [Math.floor(png.width / 2), Math.floor(png.height / 2)],
+        [Math.floor((png.width * 3) / 4), Math.floor((png.height * 3) / 4)],
+        [Math.max(0, png.width - 18), Math.max(0, png.height - 24)],
+    ] as const
+
+    return {
+        width: png.width,
+        height: png.height,
+        pixels: points.map(([x, y]) => {
+            const offset = ((y * png.width) + x) * 4
+            return [...png.data.subarray(offset, offset + 4)]
+        }),
+    }
+}
+
+async function sampleRenderedPixels(image: Locator, points: ReadonlyArray<readonly [number, number]>) {
+    return image.evaluate((element, coordinates) => {
         const source = element as HTMLImageElement
         const canvas = document.createElement('canvas')
         canvas.width = source.naturalWidth
@@ -221,8 +263,21 @@ async function sampleImagePixel(image: Locator) {
         const context = canvas.getContext('2d')
         if (!context) throw new Error('Canvas 2D context is unavailable.')
         context.drawImage(source, 0, 0)
-        return [...context.getImageData(17, 23, 1, 1).data]
-    })
+        return coordinates.map(([x, y]) => [...context.getImageData(x, y, 1, 1).data])
+    }, points)
+}
+
+async function expectRenderedPreviewMatchesArtifact(page: Page, image: Locator) {
+    const preview = await samplePreviewPixels(page, image)
+    const points = [
+        [17, 23],
+        [Math.floor(preview.width / 4), Math.floor(preview.height / 4)],
+        [Math.floor(preview.width / 2), Math.floor(preview.height / 2)],
+        [Math.floor((preview.width * 3) / 4), Math.floor((preview.height * 3) / 4)],
+        [Math.max(0, preview.width - 18), Math.max(0, preview.height - 24)],
+    ] as const
+
+    expect(await sampleRenderedPixels(image, points)).toEqual(preview.pixels)
 }
 
 async function stageCenter(page: Page) {
@@ -233,12 +288,19 @@ async function stagePoint(page: Page, normalizedX: number, normalizedY: number) 
     const stage = page.getByTestId('browser-evidence-stage')
     const box = await stage.boundingBox()
     if (!box) throw new Error('Browser HMI stage has no painted surface.')
+    const image = stage.locator('img[data-browser-artifact-id]').last()
+    const naturalSize = await image.evaluate((element) => ({
+        width: (element as HTMLImageElement).naturalWidth,
+        height: (element as HTMLImageElement).naturalHeight,
+    }))
     return {
         stage,
-        position: {
-            x: Math.max(1, Math.floor(box.width * normalizedX)),
-            y: Math.max(1, Math.floor(box.height * normalizedY)),
-        },
+        position: browserFramePoint(
+            { left: box.x, top: box.y, width: box.width, height: box.height },
+            naturalSize,
+            normalizedX,
+            normalizedY,
+        ),
     }
 }
 
@@ -248,12 +310,16 @@ test.beforeEach(async ({ page }) => {
     await prepareChat(page)
 })
 
-test('authenticated desktop sends a fractional lightbox click through Laravel HMI and renders the verified frame', async ({ page, isMobile }) => {
+test('authenticated desktop sends a fractional lightbox click through Laravel HMI and renders the exact verified frame', async ({ page, isMobile }) => {
+    test.skip(!realBrowserIntegration, 'Requires the real browser-worker integration gate')
     test.skip(isMobile, 'Desktop coverage')
 
-    const { artifactId: initialArtifactId, image: initialImage } = await openScreenshotDialog(page)
-    const initialPixel = await sampleImagePixel(initialImage)
-    const { stage, position } = await stagePoint(page, 0.6173, 0.3679)
+    const { artifactId: initialArtifactId } = await openScreenshotDialog(page)
+    const { stage, position } = await stagePoint(
+        page,
+        configuredLivePointerCoordinate('X', 0.6173),
+        configuredLivePointerCoordinate('Y', 0.3679),
+    )
     const pointerRequest = page.waitForRequest((request) => (
         request.method() === 'POST'
         && /\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/pointer$/.test(new URL(request.url()).pathname)
@@ -305,7 +371,7 @@ test('authenticated desktop sends a fractional lightbox click through Laravel HM
     await expect(updatedImage).toBeVisible()
     await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBe(1280)
     await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalHeight)).toBe(800)
-    expect(await sampleImagePixel(updatedImage)).not.toEqual(initialPixel)
+    await expectRenderedPreviewMatchesArtifact(page, updatedImage)
     expect(await page.locator('a[target="_blank"]').count()).toBe(0)
 })
 

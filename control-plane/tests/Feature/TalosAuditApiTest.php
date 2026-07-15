@@ -46,6 +46,25 @@ final class TalosAuditApiTest extends TestCase
         $this->assertNotContains('sk-secret-value', $event->payload);
     }
 
+    public function test_audit_payloads_use_the_core_redaction_boundary_before_display(): void
+    {
+        $redacted = TalosAuditEvent::redact([
+            'authorization' => 'Bearer provider-secret',
+            'storage_path' => 'C:\\Users\\operator\\AppData\\Local\\TALOS\\artifact.json',
+            'nested' => [
+                'clientSecret' => 'provider-secret-camel',
+                'diagnostic' => 'Worker copied /var/lib/talos/private/artifact.json before exit.',
+                'safe_value' => 'visible',
+            ],
+        ]);
+
+        $this->assertSame('[redacted]', $redacted['authorization'] ?? null);
+        $this->assertSame('[redacted]', $redacted['storage_path'] ?? null);
+        $this->assertSame('[redacted]', $redacted['nested']['clientSecret'] ?? null);
+        $this->assertSame('Worker copied [redacted] before exit.', $redacted['nested']['diagnostic'] ?? null);
+        $this->assertSame('visible', $redacted['nested']['safe_value'] ?? null);
+    }
+
     public function test_audit_api_filters_by_event_type(): void
     {
         TalosAuditEvent::record('model_profile.created', 'model_profile', 'profile-1', ['provider' => 'openai']);

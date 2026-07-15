@@ -3,18 +3,25 @@ import { computed } from 'vue'
 import { Box, Loader2, PackageCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosCookbookDependencyCatalog, TalosCookbookDependencyPreview, TalosCookbookRuntime } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
 const disabledReason = 'Cookbook V1 is preview-only.'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     runtimes: TalosCookbookRuntime[]
     dependencyCatalog: TalosCookbookDependencyCatalog | null
     dependencyPreview: TalosCookbookDependencyPreview | null
     loading: boolean
-}>()
+    error?: string | null
+    requested?: boolean
+}>(), {
+    error: null,
+    requested: true,
+})
 
 const emit = defineEmits<{
     preview: []
@@ -22,6 +29,12 @@ const emit = defineEmits<{
 
 const dependencies = computed(() => props.dependencyCatalog?.dependencies ?? [])
 const policy = computed(() => props.dependencyCatalog?.policy ?? props.dependencyPreview?.policy ?? null)
+const dependencyState = computed(() => resolveTalosCollectionState({
+    itemCount: dependencies.value.length + props.runtimes.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 
 function runtimeTone(status: string): BadgeTone {
     if (status === 'available') {
@@ -44,6 +57,7 @@ function runtimeTone(status: string): BadgeTone {
                     <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                         <PackageCheck class="h-4 w-4 text-[var(--talos-accent)]" />
                         Dependencies
+                        <TalosGuideInfoButton guide-id="cookbook.dependencies" compact side="bottom" />
                     </div>
                     <p class="mt-1 text-sm leading-6 text-[var(--talos-muted)]">
                         Cookbook V1 reports runtime readiness only. Dependency installation stays disabled until explicit host execution policy exists.
@@ -54,10 +68,10 @@ function runtimeTone(status: string): BadgeTone {
                     Install dependency
                 </Button>
             </div>
-            <div class="mt-3 flex flex-wrap items-center gap-2">
+            <div v-if="policy" class="mt-3 flex flex-wrap items-center gap-2">
                 <Badge tone="warning">execution_allowed {{ policy?.execution_allowed ? 'true' : 'false' }}</Badge>
                 <Badge tone="neutral">required {{ policy?.required_scope ?? 'talos.shell.exec' }}</Badge>
-                <Button type="button" size="sm" variant="outline" :disabled="loading" @click="emit('preview')">
+                <Button type="button" size="sm" variant="outline" :disabled="loading || Boolean(error)" @click="emit('preview')">
                     <Loader2 v-if="loading" class="h-4 w-4 animate-spin" />
                     Preview dependency plan
                 </Button>
@@ -65,7 +79,12 @@ function runtimeTone(status: string): BadgeTone {
             <p class="mt-2 text-xs text-[var(--talos-muted)]">{{ disabledReason }}</p>
         </section>
 
-        <div v-if="dependencies.length" class="grid gap-3 md:grid-cols-2">
+        <div v-if="dependencyState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+            <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+            Loading runtime dependency evidence
+        </div>
+
+        <div v-else-if="dependencyState === 'ready' && dependencies.length" class="grid gap-3 md:grid-cols-2">
             <article
                 v-for="dependency in dependencies"
                 :key="dependency.runtime"
@@ -96,7 +115,7 @@ function runtimeTone(status: string): BadgeTone {
             </article>
         </div>
 
-        <div v-else-if="runtimes.length" class="grid gap-3 md:grid-cols-2">
+        <div v-else-if="dependencyState === 'ready' && runtimes.length" class="grid gap-3 md:grid-cols-2">
             <article
                 v-for="runtime in runtimes"
                 :key="runtime.kind"
@@ -126,7 +145,7 @@ function runtimeTone(status: string): BadgeTone {
             </ol>
         </div>
 
-        <p v-if="!dependencies.length && !runtimes.length" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+        <p v-if="dependencyState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
             No runtime dependency evidence returned by `/api/talos/cookbook/overview`.
         </p>
     </section>

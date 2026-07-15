@@ -1,39 +1,37 @@
 <script setup lang="ts">
-import { computed, useId } from 'vue'
+import { inject, ref } from 'vue'
+import TooltipRoot from './tooltip/Tooltip.vue'
+import TooltipContent from './tooltip/TooltipContent.vue'
+import TooltipProvider from './tooltip/TooltipProvider.vue'
+import TooltipTrigger from './tooltip/TooltipTrigger.vue'
+import { tooltipPortalTargetKey } from './tooltip/portalTarget'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
     content: string
     align?: 'start' | 'center' | 'end'
 }>(), {
     align: 'center',
 })
 
-const tooltipId = `talos-tooltip-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-const positionClass = computed(() => {
-    if (props.align === 'start') {
-        return 'left-0'
-    }
+const portalTarget = inject(tooltipPortalTargetKey, ref('#talos-portal-root'))
 
-    if (props.align === 'end') {
-        return 'right-0'
-    }
-
-    return 'left-1/2 -translate-x-1/2'
-})
 </script>
 
 <template>
-    <span class="group/talos-tooltip relative inline-flex">
-        <slot v-bind="{ describedBy: tooltipId }" />
-        <span
-            :id="tooltipId"
-            role="tooltip"
-            :class="[
-                positionClass,
-                'pointer-events-none invisible absolute top-full z-[90] mt-2 w-max max-w-56 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] px-2 py-1 text-xs leading-5 text-[var(--talos-text)] opacity-0 shadow-lg transition-[opacity,visibility] duration-150 group-hover/talos-tooltip:visible group-hover/talos-tooltip:opacity-100 group-focus-within/talos-tooltip:visible group-focus-within/talos-tooltip:opacity-100',
-            ]"
-        >
-            {{ content }}
-        </span>
-    </span>
+    <TooltipProvider :delay-duration="250" :skip-delay-duration="100">
+        <TooltipRoot>
+            <TooltipTrigger as-child>
+                <slot />
+            </TooltipTrigger>
+            <TooltipContent
+                :to="portalTarget"
+                :align="align"
+                :side-offset="8"
+                :collision-padding="8"
+                class="pointer-events-auto z-[120] max-w-56 border-neutral-700 bg-neutral-950 px-2 py-1 text-xs leading-5 text-neutral-50"
+            >
+                {{ content }}
+            </TooltipContent>
+        </TooltipRoot>
+    </TooltipProvider>
 </template>

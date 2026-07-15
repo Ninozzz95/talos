@@ -10,60 +10,67 @@ export function useTalosTools() {
     const connectors = ref<TalosConnector[]>([])
     const tools = ref<TalosTool[]>([])
     const planningContext = ref<TalosToolPlanningContext | null>(null)
-    const loadingToolRegistry = ref(false)
+    const pendingToolRegistryRequests = ref(0)
+    const loadingToolRegistry = computed(() => pendingToolRegistryRequests.value > 0)
     const toolRegistryError = ref<string | null>(null)
 
     const planningToolNames = computed(() => new Set(
         planningContext.value?.tools.map((tool) => tool.name) ?? [],
     ))
 
+    async function trackToolRegistryRequest<T>(request: () => Promise<T>) {
+        pendingToolRegistryRequests.value += 1
+        try {
+            return await request()
+        } finally {
+            pendingToolRegistryRequests.value = Math.max(0, pendingToolRegistryRequests.value - 1)
+        }
+    }
+
     async function loadConnectors(includeTools = false) {
-        loadingToolRegistry.value = true
         toolRegistryError.value = null
 
         try {
-            const query = includeTools ? '?include_tools=1' : ''
-            const response = await talosFetch<ApiEnvelope<TalosConnector[]>>(`/api/talos/connectors${query}`)
-            connectors.value = response.data
-            return response.data
+            return await trackToolRegistryRequest(async () => {
+                const query = includeTools ? '?include_tools=1' : ''
+                const response = await talosFetch<ApiEnvelope<TalosConnector[]>>(`/api/talos/connectors${query}`)
+                connectors.value = response.data
+                return response.data
+            })
         } catch (error) {
             toolRegistryError.value = error instanceof Error ? error.message : 'TALOS could not load connectors.'
             throw error
-        } finally {
-            loadingToolRegistry.value = false
         }
     }
 
     async function loadTools(includeDisabled = true) {
-        loadingToolRegistry.value = true
         toolRegistryError.value = null
 
         try {
-            const query = includeDisabled ? '?include_disabled=1' : ''
-            const response = await talosFetch<ApiEnvelope<TalosTool[]>>(`/api/talos/tools${query}`)
-            tools.value = response.data
-            return response.data
+            return await trackToolRegistryRequest(async () => {
+                const query = includeDisabled ? '?include_disabled=1' : ''
+                const response = await talosFetch<ApiEnvelope<TalosTool[]>>(`/api/talos/tools${query}`)
+                tools.value = response.data
+                return response.data
+            })
         } catch (error) {
             toolRegistryError.value = error instanceof Error ? error.message : 'TALOS could not load tools.'
             throw error
-        } finally {
-            loadingToolRegistry.value = false
         }
     }
 
     async function loadPlanningContext() {
-        loadingToolRegistry.value = true
         toolRegistryError.value = null
 
         try {
-            const response = await talosFetch<ApiEnvelope<TalosToolPlanningContext>>('/api/talos/tools/planning-context')
-            planningContext.value = response.data
-            return response.data
+            return await trackToolRegistryRequest(async () => {
+                const response = await talosFetch<ApiEnvelope<TalosToolPlanningContext>>('/api/talos/tools/planning-context')
+                planningContext.value = response.data
+                return response.data
+            })
         } catch (error) {
             toolRegistryError.value = error instanceof Error ? error.message : 'TALOS could not load tool planning context.'
             throw error
-        } finally {
-            loadingToolRegistry.value = false
         }
     }
 

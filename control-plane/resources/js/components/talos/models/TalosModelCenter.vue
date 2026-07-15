@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, KeyRound, Loader2, PlugZap, RefreshCw, Save,
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosModelQuickAdd from './TalosModelQuickAdd.vue'
 import TalosProviderIcon from './TalosProviderIcon.vue'
 import {
@@ -12,6 +13,7 @@ import {
 } from '../../../composables/useTalosModelProfiles'
 import type { TalosModelProfile } from '../../../lib/talosTypes'
 import { talosProviderById, talosProviderCatalog } from '../../../lib/talosProviders'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 type CapabilityKey = 'json' | 'tools' | 'vision' | 'embeddings' | 'local' | 'remote'
@@ -75,6 +77,7 @@ const pendingDeleteProfile = ref<TalosModelProfile | null>(null)
 const deleteDialog = ref<HTMLElement | null>(null)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
+const modelProfilesRequested = ref(false)
 let deleteReturnFocusTarget: HTMLElement | null = null
 
 const selectedProfile = computed(() => {
@@ -84,6 +87,13 @@ const selectedProviderDefinition = computed(() => talosProviderById(editForm.pro
 const selectedProfileIsBusy = computed(() => {
     return selectedProfile.value ? profileIsBusy(selectedProfile.value.id) : false
 })
+const visibleError = computed(() => actionError.value || modelProfileError.value)
+const modelProfilesState = computed(() => resolveTalosCollectionState({
+    itemCount: modelProfiles.value.length,
+    loading: loadingModelProfiles.value,
+    error: visibleError.value,
+    requested: modelProfilesRequested.value,
+}))
 const canUpdateProfile = computed(() => {
     return Boolean(
         selectedProfile.value
@@ -304,6 +314,7 @@ function handleQuickAdded(profile: TalosModelProfile) {
 }
 
 async function refreshProfiles(selectFirst = false) {
+    modelProfilesRequested.value = true
     actionError.value = null
 
     try {
@@ -470,7 +481,10 @@ onMounted(() => {
                         <KeyRound class="h-4 w-4 text-[var(--talos-accent)]" />
                         Model Center
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Server-side provider profiles</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Server-side provider profiles</h3>
+                        <TalosGuideInfoButton guide-id="model_lab.models" compact side="bottom" />
+                    </div>
                 </div>
                 <Button variant="ghost" size="sm" :disabled="loadingModelProfiles" @click="refreshProfiles()">
                     <Loader2 v-if="loadingModelProfiles" class="h-4 w-4 animate-spin" />
@@ -481,9 +495,9 @@ onMounted(() => {
         </div>
 
         <div class="space-y-4 p-4">
-            <div v-if="actionError || modelProfileError" class="flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
+            <div v-if="visibleError" class="flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-warning)]" />
-                <span>{{ actionError || modelProfileError }}</span>
+                <span>{{ visibleError }}</span>
             </div>
 
             <div v-if="actionMessage" class="flex items-start gap-2 rounded-md border border-[var(--talos-success-border)] bg-[var(--talos-success-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
@@ -499,18 +513,18 @@ onMounted(() => {
                     <span class="sm:text-right">Readiness</span>
                 </div>
 
-                <div v-if="loadingModelProfiles && !modelProfiles.length" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <div v-if="modelProfilesState === 'loading'" role="status" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
                     <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                     Loading model profiles
                 </div>
 
-                <div v-else-if="!modelProfiles.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+                <div v-else-if="modelProfilesState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                     No server-side profiles returned by `/api/talos/model-profiles`.
                 </div>
 
                 <article
                     v-for="profile in modelProfiles"
-                    v-else
+                    v-else-if="modelProfilesState === 'ready'"
                     :key="profile.id"
                     class="border-t border-[var(--talos-border)]"
                 >

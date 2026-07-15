@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { talosFetch } from '../lib/api'
 import type {
     TalosCookbookCommandPreview,
@@ -26,7 +26,8 @@ export function useTalosCookbook() {
     const dependencyCatalog = ref<TalosCookbookDependencyCatalog | null>(null)
     const dependencyPreview = ref<TalosCookbookDependencyPreview | null>(null)
     const dependencyPolicy = ref<TalosCookbookDependencyPolicy | null>(null)
-    const loading = ref(false)
+    const pendingRequests = ref(0)
+    const loading = computed(() => pendingRequests.value > 0)
     const actionMessage = ref<string | null>(null)
     const errorMessageRef = ref<string | null>(null)
 
@@ -35,9 +36,17 @@ export function useTalosCookbook() {
         errorMessageRef.value = null
     }
 
-    async function loadOverview() {
-        loading.value = true
+    function beginRequest() {
+        pendingRequests.value += 1
         clearMessages()
+    }
+
+    function finishRequest() {
+        pendingRequests.value = Math.max(0, pendingRequests.value - 1)
+    }
+
+    async function loadOverview() {
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookOverview>>('/api/talos/cookbook/overview')
@@ -48,13 +57,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not load the Cookbook overview.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function scanHardware() {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookScanResponse>>('/api/talos/cookbook/hardware-scan', {
@@ -72,13 +80,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not complete the hardware scan.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function loadModels() {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookModel[]>>('/api/talos/cookbook/models')
@@ -97,13 +104,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not load Cookbook models.')
             return []
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function createModel(payload: TalosCookbookCreateModelPayload) {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookModel>>('/api/talos/cookbook/models', {
@@ -129,13 +135,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not add this Cookbook model.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function previewDownload(payload: TalosCookbookPreviewRequest) {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookCommandPreview>>('/api/talos/cookbook/download-preview', {
@@ -149,13 +154,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not preview this download command.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function previewServe(payload: TalosCookbookPreviewRequest) {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookCommandPreview>>('/api/talos/cookbook/serve-preview', {
@@ -169,13 +173,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not preview this serve command.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function loadDependencies() {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookDependencyCatalog>>('/api/talos/cookbook/dependencies')
@@ -186,13 +189,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not load Cookbook dependency catalog.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function previewDependencyPlan(payload: TalosCookbookPreviewRequest) {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookDependencyPreview>>('/api/talos/cookbook/dependencies/preview', {
@@ -207,13 +209,12 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not preview this dependency plan.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 
     async function loadCookbookPolicy() {
-        loading.value = true
-        clearMessages()
+        beginRequest()
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosCookbookDependencyPolicy>>('/api/talos/cookbook/policy')
@@ -223,7 +224,7 @@ export function useTalosCookbook() {
             errorMessageRef.value = errorMessage(error, 'TALOS could not load Cookbook policy.')
             return null
         } finally {
-            loading.value = false
+            finishRequest()
         }
     }
 

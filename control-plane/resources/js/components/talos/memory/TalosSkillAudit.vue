@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ShieldCheck, ShieldAlert } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import type { TalosSkill } from '../../../lib/talosTypes'
 
 const props = defineProps<{
@@ -18,7 +19,8 @@ const allowedToolsText = computed(() => props.skill?.allowed_tools?.join(', ') |
         <div class="flex items-center gap-2 text-sm font-semibold text-[var(--talos-text)]">
             <ShieldCheck v-if="planningEnabled" class="h-4 w-4 text-[var(--talos-success)]" />
             <ShieldAlert v-else class="h-4 w-4 text-[var(--talos-warning)]" />
-            Skill audit
+            <h3>Skill audit</h3>
+            <TalosGuideInfoButton guide-id="brain.skill_audit" compact side="bottom" />
         </div>
 
         <div v-if="skill" class="mt-3 space-y-3">

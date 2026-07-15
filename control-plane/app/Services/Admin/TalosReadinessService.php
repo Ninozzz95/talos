@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Admin;
 
+use App\Services\Talos\Browser\TalosBrowserWorkerProtocol;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -174,6 +175,10 @@ final class TalosReadinessService
 
         if ($response->json('data.status') !== 'ready' || $response->json('data.runtime') !== 'chromium') {
             return $this->check('failed', 'browser worker readiness returned an invalid payload.');
+        }
+
+        if ($response->json('data.protocols.hmi') !== TalosBrowserWorkerProtocol::HMI_RUNTIME) {
+            return $this->check('failed', 'browser worker HMI protocol is incompatible.');
         }
 
         return $this->check('healthy', $readinessUrl);

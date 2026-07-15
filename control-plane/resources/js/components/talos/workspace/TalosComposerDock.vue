@@ -17,7 +17,6 @@ const props = withDefaults(defineProps<{
     browserCurrentPage?: TalosBrowserCurrentPage | null
     devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
-    chatLayoutLocked: boolean
     viewport: TalosChatViewportController
     commands: TalosCommand[]
     canSend: boolean
@@ -69,7 +68,6 @@ const emit = defineEmits<{
     insertEnhancedPromptBelow: []
     clearPromptEnhancement: []
     detachBrowserContext: []
-    toggleComposerMode: []
     enableBrowse: []
     disableBrowse: []
     stopBrowse: []
@@ -293,7 +291,6 @@ onBeforeUnmount(() => {
                 :browser-current-page="browserCurrentPage"
                 :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
-                :chat-layout-locked="chatLayoutLocked"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
                 :visibility="visibility"
@@ -305,7 +302,6 @@ onBeforeUnmount(() => {
                 @enhance="emit('enhance')"
                 @slash-command="emit('slashCommand', $event)"
                 @browse-open="emit('browseOpen', $event)"
-                @toggle-composer-mode="emit('toggleComposerMode')"
                 @enable-browse="emit('enableBrowse')"
                 @disable-browse="emit('disableBrowse')"
                 @stop-browse="emit('stopBrowse')"

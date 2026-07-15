@@ -20,6 +20,7 @@ export function createTalosPlaywrightWebServer(baseURL: string, reuseExistingSer
             QUEUE_CONNECTION: 'sync',
             SESSION_DRIVER: 'file',
             VITE_HOT_FILE: hotFilePath,
+            TALOS_BROWSER_CLIENT_DRIVER: process.env.TALOS_E2E_REAL_BROWSER === '1' ? 'http' : 'fake',
             TALOS_DEV_BROWSER_EVIDENCE: process.env.TALOS_E2E_DEV_BROWSER_EVIDENCE === '1' ? 'true' : 'false',
         },
     }

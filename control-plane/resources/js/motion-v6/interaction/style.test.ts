@@ -24,6 +24,8 @@ describe('talosInteractionMotionStyleV6', () => {
         expect(defaults.interface.duration_scale).toBe(50)
         expect(milliseconds(defaultStyle['--talos-motion-duration-window-open']))
             .toBeLessThan(milliseconds(fullScaleStyle['--talos-motion-duration-window-open']))
+        expect(milliseconds(defaultStyle['--talos-motion-duration-window-close']))
+            .toBeLessThan(milliseconds(fullScaleStyle['--talos-motion-duration-window-close']))
         expect(milliseconds(defaultStyle['--talos-motion-duration-menu']))
             .toBeLessThan(milliseconds(fullScaleStyle['--talos-motion-duration-menu']))
     })
@@ -40,6 +42,7 @@ describe('talosInteractionMotionStyleV6', () => {
         })
 
         expect(style['--talos-motion-duration-window-open']).toBe('521ms')
+        expect(style['--talos-motion-duration-window-close']).toMatch(/^\d+ms$/)
         expect(style['--talos-motion-duration-menu']).toBe('176ms')
         expect(style['--talos-motion-duration-message-insert']).toBe('188ms')
         expect(style['--talos-motion-intensity']).toBe('0.8')

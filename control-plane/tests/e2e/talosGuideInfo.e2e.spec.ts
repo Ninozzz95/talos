@@ -71,7 +71,31 @@ async function expectGuideAccessible(page: Page) {
         .include('#talos-portal-root')
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
         .analyze()
-    expect(result.violations.map((violation) => violation.id)).toEqual([])
+    const violations = result.violations.map((violation) => ({
+        id: violation.id,
+        nodes: violation.nodes.map((node) => ({
+            target: node.target,
+            html: node.html,
+            summary: node.failureSummary,
+        })),
+    }))
+    const portalSurfaces = violations.length === 0
+        ? []
+        : await page.locator('#talos-portal-root .shadow-md').evaluateAll((elements) => elements.map((element) => {
+            const style = window.getComputedStyle(element)
+            return {
+                className: element.className,
+                text: element.textContent?.trim(),
+                state: element.getAttribute('data-state'),
+                backgroundColor: style.backgroundColor,
+                color: style.color,
+                display: style.display,
+                opacity: style.opacity,
+                visibility: style.visibility,
+            }
+        }))
+
+    expect({ violations, portalSurfaces }).toEqual({ violations: [], portalSurfaces: [] })
 }
 
 async function openGuide(page: Page, guideId: string, title: string) {
@@ -145,47 +169,49 @@ test('desktop branding promotes the rail mark and keeps the chat lockup compact'
 test('contextual Info is non-activating, contained and focus-safe across desktop and mobile', async ({ page, isMobile }, testInfo: TestInfo) => {
     await expect(page.locator('button button')).toHaveCount(0)
     await expect(page.locator('[data-window-id="runtime"]')).toHaveCount(0)
+    const rail = page.locator('[aria-label="TALOS workspace rail"]').filter({ visible: true }).first()
+    await expect(rail.locator('[data-guide-id]')).toHaveCount(0)
 
-    const railGuide = await openGuide(page, 'rail.runtime', 'Runtime')
-    await expect(page.locator('[data-window-id="runtime"]')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Runtime', exact: true }).filter({ visible: true }).first().click()
+    let runtimeWindow = page.locator('[data-window-id="runtime"]')
+    await expect(runtimeWindow).toBeVisible()
+    const timelineTab = runtimeWindow.getByRole('tab', { name: 'Timeline', exact: true })
+    await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
+
+    const runtimeGuide = await openGuide(page, 'rail.runtime', 'Runtime')
+    await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('Escape')
-    await expect(railGuide.trigger).toBeFocused()
+    await expect(runtimeGuide.trigger).toBeFocused()
 
     if (isMobile) {
-        await page.getByRole('button', { name: 'Runtime', exact: true }).filter({ visible: true }).first().click()
-        const runtimeWindow = page.locator('[data-window-id="runtime"]')
-        await expect(runtimeWindow).toBeVisible()
-        const timelineTab = runtimeWindow.getByRole('tab', { name: 'Timeline', exact: true })
-        await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
+        await runtimeWindow.getByRole('tab', { name: 'Recovery', exact: true }).click()
+        const recoveryTab = runtimeWindow.getByRole('tab', { name: 'Recovery', exact: true })
+        await expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
 
         const recoveryGuide = await openGuide(page, 'runtime.recovery', 'Recovery')
-        await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
+        await expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
         await page.keyboard.press('Escape')
         await expect(recoveryGuide.trigger).toBeFocused()
     } else {
-        const rail = page.locator('[aria-label="TALOS workspace rail"]').filter({ visible: true }).first()
         await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
         await expect(rail).toHaveAttribute('data-sidebar-state', 'collapsed')
-        const collapsedGuide = await openGuide(page, 'rail.theme', 'Theme')
-        await page.keyboard.press('Escape')
-        await expect(collapsedGuide.trigger).toBeFocused()
+        await expect(rail.locator('[data-guide-id]')).toHaveCount(0)
 
-        await page.getByRole('button', { name: 'Runtime', exact: true }).filter({ visible: true }).first().click()
-        let runtimeWindow = page.locator('[data-window-id="runtime"]')
-        await expect(runtimeWindow).toBeVisible()
-        const timelineTab = runtimeWindow.getByRole('tab', { name: 'Timeline', exact: true })
-        await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
+        await runtimeWindow.getByRole('tab', { name: 'Recovery', exact: true }).click()
+        const recoveryTab = runtimeWindow.getByRole('tab', { name: 'Recovery', exact: true })
+        await expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
 
         const recoveryGuide = await openGuide(page, 'runtime.recovery', 'Recovery')
-        await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
+        await expect(recoveryTab).toHaveAttribute('aria-selected', 'true')
         await page.keyboard.press('Escape')
         await expect(recoveryGuide.trigger).toBeFocused()
 
-        await runtimeWindow.getByRole('button', { name: 'Dock Runtime', exact: true }).click()
+        await runtimeWindow.getByRole('button', { name: 'Dock Runtime in right sidebar', exact: true }).click()
         const dock = page.getByTestId('talos-right-dock')
         await expect(dock).toBeVisible()
         runtimeWindow = dock.locator('[data-window-id="runtime"]')
         await expect(runtimeWindow).toBeVisible()
+        await runtimeWindow.getByRole('tab', { name: 'Artifacts', exact: true }).click()
         const dockedGuide = await openGuide(page, 'runtime.artifacts', 'Run artifacts')
         await page.keyboard.press('Escape')
         await expect(dockedGuide.trigger).toBeFocused()
@@ -198,12 +224,16 @@ test('contextual Info is non-activating, contained and focus-safe across desktop
 })
 
 test('contextual Info survives hard reload and reduced-motion without stale overlays', async ({ page }) => {
+    await page.getByRole('button', { name: 'Settings', exact: true }).filter({ visible: true }).first().click()
     await openGuide(page, 'rail.settings', 'Settings')
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForTalosWorkspaceReady(page)
     await expect(page.locator('#talos-portal-root [role="dialog"]')).toHaveCount(0)
 
     await page.emulateMedia({ reducedMotion: 'reduce' })
+    if (!await page.locator('[data-window-id="settings"]').isVisible().catch(() => false)) {
+        await page.getByRole('button', { name: 'Settings', exact: true }).filter({ visible: true }).first().click()
+    }
     const settingsGuide = await openGuide(page, 'rail.settings', 'Settings')
     await page.keyboard.press('Escape')
     await expect(settingsGuide.trigger).toBeFocused()

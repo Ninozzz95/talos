@@ -31,6 +31,27 @@ No Odysseus AGPL source code is copied into TALOS. Odysseus behavior was used
 only as an external product reference; the implementation uses the independent
 MIT-licensed upstream package and TALOS-owned policy/state adapters.
 
+### Dependency patch gate
+
+TALOS uses the official `reka-ui` 2.10.1 Drawer and Dialog primitives. That
+release can invoke its `aria-hidden` restoration callback once when the modal
+target disappears and again during component unmount. The upstream callback is
+not idempotent, so repeated mobile-window cycles can leave the workspace hidden
+from accessibility APIs and unable to receive focus.
+
+`control-plane/patches/reka-ui+2.10.1.patch` makes that restoration one-shot
+without replacing the upstream modal implementation. `patch-package` 8.0.1 is
+pinned exactly and runs after a normal install and before both development and
+production builds, including installs performed with lifecycle scripts
+disabled. The patch file, package version, and lifecycle commands are enforced
+by the responsive-window upstream contract test.
+
+Any Reka UI upgrade must first be tested without this patch. The patch may be
+removed only when three or more consecutive modal lifecycles restore focus and
+leave no `aria-hidden` residue in the real Playwright workspace flow. If the
+patch no longer applies cleanly, installation and build fail instead of silently
+shipping an unverified modal implementation.
+
 ## Operational Gates
 
 ### Health gate

@@ -44,4 +44,15 @@ describe('TalosToolWindow', () => {
         expect(events).toEqual([{ name: 'peek', args: ['theme'] }])
         app.unmount()
     })
+
+    it('marks a right-docked surface as narrow and lets its container own the width', () => {
+        const { app, root } = mountWindow({ docked: true })
+        const surface = root.querySelector<HTMLElement>('[data-window-id="theme"]')!
+
+        expect(surface.dataset.windowPresentation).toBe('right-dock')
+        expect(surface.classList.contains('talos-tool-window-docked')).toBe(true)
+        expect(surface.className).toContain('w-full')
+        expect(surface.className).not.toContain('w-[420px]')
+        app.unmount()
+    })
 })

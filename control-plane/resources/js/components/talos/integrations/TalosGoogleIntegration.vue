@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { AlertCircle, CheckCircle2, ExternalLink, Loader2, RefreshCw, Unplug } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import { useTalosGoogle } from '../../../composables/useTalosGoogle'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosGoogleAccount } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
@@ -18,6 +19,13 @@ const {
 } = useTalosGoogle()
 
 const googleAccounts = computed(() => accounts.value.filter((account) => account.provider === 'google'))
+const accountsRequested = ref(false)
+const accountsState = computed(() => resolveTalosCollectionState({
+    itemCount: googleAccounts.value.length,
+    loading: loading.value,
+    error: errorMessage.value,
+    requested: accountsRequested.value,
+}))
 
 function statusTone(status: string): BadgeTone {
     if (status === 'connected') {
@@ -65,6 +73,7 @@ function formatDate(value?: string | null) {
 }
 
 async function refreshAccounts() {
+    accountsRequested.value = true
     await loadAccounts().catch(() => null)
 }
 
@@ -111,16 +120,16 @@ onMounted(() => {
             <span>{{ actionMessage }}</span>
         </div>
 
-        <div v-if="loading && !googleAccounts.length" class="mt-3 flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-3 text-sm text-[var(--talos-muted)]">
+         <div v-if="accountsState === 'loading'" role="status" class="mt-3 flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-3 text-sm text-[var(--talos-muted)]">
             <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
             Loading Google accounts
         </div>
 
-        <div v-else-if="!googleAccounts.length" class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+         <div v-else-if="accountsState === 'empty'" class="mt-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
             No connected Google account returned by `/api/talos/google/accounts`.
         </div>
 
-        <div v-else class="mt-3 grid gap-2">
+         <div v-else-if="accountsState === 'ready'" class="mt-3 grid gap-2">
             <article v-for="account in googleAccounts" :key="account.id" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
                 <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div class="min-w-0">

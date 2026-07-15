@@ -36,7 +36,6 @@ import {
     X,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
-import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
 import { sessionChatState } from '../../../composables/useTalosSessions'
 import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
@@ -46,7 +45,6 @@ type RailItem = {
     id: string
     label: string
     description: string
-    guideId: string
     icon: unknown
     disabledReason?: string
 }
@@ -71,28 +69,28 @@ const emit = defineEmits<{
 }>()
 
 const primaryItems: RailItem[] = [
-    { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', guideId: 'rail.runtime', icon: Activity },
-    { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', guideId: 'rail.calendar', icon: CalendarDays },
-    { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', guideId: 'rail.compare', icon: BarChart3 },
-    { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', guideId: 'rail.model_lab', icon: FlaskConical },
-    { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', guideId: 'rail.research', icon: BookOpen },
-    { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', guideId: 'rail.gallery', icon: Image },
-    { id: 'library', label: 'Library', description: 'Documents and file context.', guideId: 'rail.library', icon: FileArchive },
-    { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', guideId: 'rail.browse', icon: Globe2 },
+    { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', icon: Activity },
+    { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', icon: CalendarDays },
+    { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
+    { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', icon: FlaskConical },
+    { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', icon: BookOpen },
+    { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', icon: Image },
+    { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },
+    { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', icon: Globe2 },
 ]
 
 const advancedItems: TalosAdvancedRailItem[] = [
-    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', guideId: 'rail.tasks', icon: ListTodo },
-    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', guideId: 'rail.notes', icon: NotebookPen },
-    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', guideId: 'rail.search', icon: Search },
-    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', guideId: 'rail.brain', icon: Brain },
-    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', guideId: 'rail.tools', icon: Wrench },
-    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', guideId: 'rail.doctor', icon: Stethoscope },
+    { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
+    { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
+    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
+    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
+    { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
+    { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
 ]
 
 const systemItems: RailItem[] = [
-    { id: 'settings', label: 'Settings', description: 'Workspace setup and appearance.', guideId: 'rail.settings', icon: Settings },
-    { id: 'theme', label: 'Theme', description: 'Local theme switcher.', guideId: 'rail.theme', icon: Palette },
+    { id: 'settings', label: 'Settings', description: 'Workspace setup and appearance.', icon: Settings },
+    { id: 'theme', label: 'Theme', description: 'Local theme switcher.', icon: Palette },
 ]
 
 const props = defineProps<{
@@ -124,9 +122,11 @@ const movingRowKey = ref<string | null>(null)
 const renameValue = ref('')
 const folderValue = ref('')
 const collapsedGroups = ref<Record<string, boolean>>({})
+const collapsedAdvancedOpen = ref(false)
 const lightThemeActive = computed(() => talosThemeIsLight(props.theme))
 let returnFocusTarget: HTMLElement | null = null
 let backgroundIsolation: { element: HTMLElement; ariaHidden: string | null; hadInert: boolean } | null = null
+let desktopMediaQuery: MediaQueryList | null = null
 const visiblePrimaryItems = computed(() => primaryItems.filter((item) => {
     if (item.id === 'search') {
         return props.visibility.search !== false || props.visibility.library !== false
@@ -352,10 +352,20 @@ function focusableElements() {
 
     return Array.from(railElement.value.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    )).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
+    )).filter((element) => isVisibleFocusTarget(element))
 }
 
-function isolateMobileHistoryBackground() {
+function isVisibleFocusTarget(element: HTMLElement | null): element is HTMLElement {
+    if (!element?.isConnected || element.hasAttribute('disabled') || element.closest('[hidden]')) return false
+
+    const style = window.getComputedStyle(element)
+    if (style.display === 'none' || style.visibility === 'hidden') return false
+
+    const browserHasLayout = document.documentElement.getClientRects().length > 0
+    return !browserHasLayout || element.getClientRects().length > 0
+}
+
+function isolateMobileNavigationBackground() {
     const background = document.querySelector<HTMLElement>('.talos-chat-scroll-root')
     if (!background || backgroundIsolation) return
 
@@ -368,7 +378,7 @@ function isolateMobileHistoryBackground() {
     background.setAttribute('aria-hidden', 'true')
 }
 
-function restoreMobileHistoryBackground() {
+function restoreMobileNavigationBackground() {
     if (!backgroundIsolation) return
 
     const { element, ariaHidden, hadInert } = backgroundIsolation
@@ -382,19 +392,32 @@ watch(() => props.mobileOpen, async (open) => {
     if (open) {
         returnFocusTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null
         await nextTick()
-        isolateMobileHistoryBackground()
-        railElement.value?.querySelector<HTMLElement>('[aria-label="Close chat history"]')?.focus()
+        isolateMobileNavigationBackground()
+        railElement.value?.querySelector<HTMLElement>('[aria-label="Close navigation menu"]')?.focus()
         return
     }
 
-    restoreMobileHistoryBackground()
+    restoreMobileNavigationBackground()
     await nextTick()
-    if (returnFocusTarget?.isConnected) returnFocusTarget.focus()
+    if (isVisibleFocusTarget(returnFocusTarget)) {
+        returnFocusTarget.focus()
+    } else {
+        const fallback = Array.from(document.querySelectorAll<HTMLElement>(
+            'button[aria-label="Open navigation menu"], button[aria-label="Collapse sidebar"], button[aria-label="Expand sidebar"]',
+        )).find(isVisibleFocusTarget)
+        fallback?.focus()
+    }
     returnFocusTarget = null
 })
 
 function handleViewportChange() {
     closeSessionMenu()
+    if (!desktopMediaQuery && window.innerWidth >= 1024 && props.mobileOpen) emit('closeMobile')
+}
+
+function handleDesktopBreakpointChange(event: MediaQueryListEvent | MediaQueryList) {
+    closeSessionMenu()
+    if (event.matches && props.mobileOpen) emit('closeMobile')
 }
 
 onMounted(() => {
@@ -402,14 +425,21 @@ onMounted(() => {
     document.addEventListener('keydown', handleGlobalKeyDown)
     window.addEventListener('scroll', handleViewportChange, true)
     window.addEventListener('resize', handleViewportChange)
+    if (typeof window.matchMedia === 'function') {
+        desktopMediaQuery = window.matchMedia('(min-width: 1024px)')
+        desktopMediaQuery.addEventListener('change', handleDesktopBreakpointChange)
+        handleDesktopBreakpointChange(desktopMediaQuery)
+    }
 })
 
 onBeforeUnmount(() => {
-    restoreMobileHistoryBackground()
+    restoreMobileNavigationBackground()
     document.removeEventListener('pointerdown', handleGlobalPointerDown)
     document.removeEventListener('keydown', handleGlobalKeyDown)
     window.removeEventListener('scroll', handleViewportChange, true)
     window.removeEventListener('resize', handleViewportChange)
+    desktopMediaQuery?.removeEventListener('change', handleDesktopBreakpointChange)
+    desktopMediaQuery = null
 })
 
 function startRename(session: TalosSession, rowKey: string) {
@@ -446,9 +476,30 @@ function selectChatSession(session: TalosSession) {
     if (props.mobileOpen) emit('closeMobile')
 }
 
-function openRailItem(id: string, event?: PointerEvent) {
+async function openRailItem(id: string, event?: PointerEvent) {
+    if (props.mobileOpen) {
+        const navigationLauncher = returnFocusTarget
+        returnFocusTarget = null
+        emit('closeMobile')
+        await nextTick()
+        if (navigationLauncher?.isConnected) navigationLauncher.focus()
+    }
+
     emit('open', id, event)
-    if (props.mobileOpen) emit('closeMobile')
+}
+
+function toggleAdvancedGroup() {
+    if (effectiveCollapsed.value) {
+        collapsedAdvancedOpen.value = !collapsedAdvancedOpen.value
+        return
+    }
+
+    emit('toggleAdvanced')
+}
+
+function openAdvancedItem(id: string, event?: PointerEvent) {
+    collapsedAdvancedOpen.value = false
+    openRailItem(id, event)
 }
 
 function startNewChat() {
@@ -472,12 +523,12 @@ function startNewChat() {
         :data-sidebar-state="effectiveCollapsed ? 'collapsed' : 'expanded'"
         :role="mobileOpen ? 'dialog' : undefined"
         :aria-modal="mobileOpen ? 'true' : undefined"
-        :aria-labelledby="mobileOpen ? 'talos-mobile-history-title' : undefined"
+        :aria-labelledby="mobileOpen ? 'talos-mobile-navigation-title' : undefined"
         :tabindex="mobileOpen ? -1 : undefined"
         data-testid="talos-mobile-history-dialog"
         aria-label="TALOS workspace rail"
     >
-        <h2 v-if="mobileOpen" id="talos-mobile-history-title" class="sr-only">Chat history</h2>
+        <h2 v-if="mobileOpen" id="talos-mobile-navigation-title" class="sr-only">TALOS navigation</h2>
         <div class="flex items-center gap-2 px-1" :class="effectiveCollapsed ? 'justify-center' : 'justify-between'">
             <div v-if="!effectiveCollapsed && visibility.brand_name !== false" data-testid="talos-rail-brand" class="flex min-w-0 flex-1 items-center gap-2">
                 <span data-testid="talos-rail-brand-logo" class="talos-short-logo talos-short-logo-compact talos-rail-brand-logo" aria-hidden="true">
@@ -491,7 +542,7 @@ function startNewChat() {
             <button
                 type="button"
                 class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] transition hover:border-[var(--talos-accent-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :aria-label="mobileOpen ? 'Close chat history' : effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                :aria-label="mobileOpen ? 'Close navigation menu' : effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="mobileOpen ? emit('closeMobile') : effectiveCollapsed ? emit('expand') : emit('collapse')"
             >
                 <X v-if="mobileOpen" class="h-4 w-4" />
@@ -625,7 +676,7 @@ function startNewChat() {
             <p v-else class="px-1 text-xs leading-5 text-[var(--talos-muted)]">No chats yet.</p>
         </section>
 
-        <Teleport to="body">
+        <Teleport to="body" :disabled="mobileOpen">
             <div
                 v-if="openMenuRowKey && openMenuSession"
                 ref="menuElement"
@@ -686,17 +737,19 @@ function startNewChat() {
                         <span class="sr-only">{{ item.description }}</span>
                     </span>
                 </button>
-                <TalosGuideInfoButton :guide-id="item.guideId" :compact="effectiveCollapsed" side="right" />
             </div>
             <TalosAdvancedRailGroup
                 v-if="visibleAdvancedItems.length"
                 :items="visibleAdvancedItems"
                 :active-ids="activeIds"
                 :collapsed="effectiveCollapsed"
-                :expanded="Boolean(advancedExpanded || activeAdvanced)"
+                :expanded="effectiveCollapsed ? collapsedAdvancedOpen : Boolean(advancedExpanded || activeAdvanced)"
+                :presentation="effectiveCollapsed ? 'popover' : 'inline'"
+                side="right"
+                align="start"
                 id="talos-advanced-items-desktop"
-                @toggle="emit('toggleAdvanced')"
-                @open="openRailItem"
+                @toggle="toggleAdvancedGroup"
+                @open="openAdvancedItem"
             />
         </nav>
 
@@ -720,7 +773,6 @@ function startNewChat() {
                         <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                         <span v-if="!effectiveCollapsed" class="truncate">{{ item.label }}</span>
                     </button>
-                    <TalosGuideInfoButton :guide-id="item.guideId" :compact="effectiveCollapsed" side="right" />
                 </div>
             </div>
 

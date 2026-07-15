@@ -571,6 +571,7 @@ final class TalosBrowserHmiApiTest extends TestCase
                 $this->client->failure = new BrowserWorkerException(
                     'TALOS_BROWSER_HMI_RECOVERY_REQUIRED',
                     'The physical effect may have occurred.',
+                    ['reason_code' => 'evidence_frame_changed'],
                 );
             }
         };
@@ -585,10 +586,12 @@ final class TalosBrowserHmiApiTest extends TestCase
         $this->assertSame(['preflightPointer', 'executePointer'], array_column($this->client->requests, 'method'));
         $this->assertSame('recovery_required', $this->browser->fresh()->status);
         $this->assertDatabaseCount('talos_browser_artifacts', 1);
-        $this->assertDatabaseHas('talos_browser_events', [
-            'browser_session_id' => $this->browser->id,
-            'type' => 'hmi.recovery_required',
-        ]);
+        $event = TalosBrowserEvent::query()
+            ->where('browser_session_id', $this->browser->id)
+            ->where('type', 'hmi.recovery_required')
+            ->latest()
+            ->firstOrFail();
+        $this->assertSame('evidence_frame_changed', $event->payload['reason'] ?? null);
     }
 
     public function test_an_unexpected_execute_exception_enters_recovery_instead_of_leaking_a_500(): void

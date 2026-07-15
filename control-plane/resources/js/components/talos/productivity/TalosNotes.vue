@@ -4,10 +4,12 @@ import { AlertCircle, Loader2, NotebookText, Plus, RefreshCw, ShieldAlert } from
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import Field from '../../ui/Field.vue'
 import Input from '../../ui/Input.vue'
 import Textarea from '../../ui/Textarea.vue'
 import { useTalosProductivity } from '../../../composables/useTalosProductivity'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 
 const {
     notes,
@@ -24,10 +26,18 @@ const title = ref('')
 const content = ref('')
 const scopeId = ref('avm')
 const actionError = ref<string | null>(null)
+const notesRequested = ref(false)
 const visibleError = computed(() => actionError.value || productivityError.value)
+const notesState = computed(() => resolveTalosCollectionState({
+    itemCount: notes.value.length,
+    loading: loadingNotes.value,
+    error: visibleError.value,
+    requested: notesRequested.value,
+}))
 const canCreate = computed(() => title.value.trim().length > 0 && content.value.trim().length > 0 && !creatingNote.value)
 
 async function refreshNotes() {
+    notesRequested.value = true
     actionError.value = null
 
     try {
@@ -77,7 +87,10 @@ onMounted(() => {
                         <NotebookText class="h-4 w-4 text-[var(--talos-accent)]" />
                         Notes
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Untrusted workspace notes</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Untrusted workspace notes</h3>
+                        <TalosGuideInfoButton guide-id="rail.notes" compact side="bottom" />
+                    </div>
                 </div>
                 <Button type="button" variant="ghost" size="sm" :disabled="loadingNotes" @click="refreshNotes">
                     <Loader2 v-if="loadingNotes" class="h-4 w-4 animate-spin" />
@@ -117,7 +130,12 @@ onMounted(() => {
                 </div>
             </div>
 
-            <div v-if="!notes.length && !loadingNotes" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="notesState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading notes
+            </div>
+
+            <div v-if="notesState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No notes returned by `/api/talos/notes`.
             </div>
 

@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { exerciseResponsiveSubsections } from './helpers/talosResponsivePanelAudit'
 import { waitForTalosWorkspaceReady as waitForWorkspaceReady } from './helpers/talosWorkspaceReady'
 import { TALOS_WINDOW_IDS, TALOS_WINDOW_REGISTRY, type TalosWindowId } from '../../resources/js/lib/talosWindowRegistry'
 
@@ -8,6 +9,13 @@ const e2eSetupPassword = 'talos-e2e-password-123'
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
 const ADVANCED_WINDOW_IDS = new Set<TalosWindowId>(['search', 'brain', 'tasks', 'notes', 'tools', 'doctor'])
+const requestedWindowId = process.env.TALOS_E2E_WINDOW_ID
+if (requestedWindowId && !TALOS_WINDOW_IDS.includes(requestedWindowId as TalosWindowId)) {
+    throw new Error(`Unknown TALOS_E2E_WINDOW_ID: ${requestedWindowId}`)
+}
+const WINDOW_IDS_UNDER_TEST: readonly TalosWindowId[] = requestedWindowId
+    ? [requestedWindowId as TalosWindowId]
+    : TALOS_WINDOW_IDS
 
 async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
@@ -80,23 +88,43 @@ function mobileRailLabel(id: TalosWindowId) {
 async function openMobileWindow(page: Page, id: TalosWindowId) {
     const rail = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
     const label = mobileRailLabel(id)
-    const railButton = rail.getByRole('button', { name: label, exact: true })
+    let launcher = rail.getByRole('button', { name: label, exact: true })
 
-    if (!await railButton.isVisible().catch(() => false)) {
-        const advanced = rail.getByRole('button', { name: 'Advanced', exact: true })
-        if (await advanced.getAttribute('aria-expanded') !== 'true') {
-            await advanced.click()
+    if (await launcher.count() === 0) {
+        const compactMobileRailVisible = await page.locator('.talos-mobile-rail:visible').count() > 0
+        if (compactMobileRailVisible) {
+            await rail.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
+            const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
+            await expect(navigation).toBeVisible()
+            const advanced = navigation.getByRole('button', { name: 'Advanced', exact: true })
+            if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
+            launcher = navigation.getByRole('button', { name: label, exact: true })
+        } else {
+            const advanced = rail.getByRole('button', { name: 'Advanced', exact: true })
+            if (await advanced.getAttribute('aria-expanded') !== 'true') {
+                await advanced.click()
+            }
+
+            const inlineLauncher = rail.getByRole('button', { name: label, exact: true })
+            launcher = await inlineLauncher.count() > 0
+                ? inlineLauncher
+                : page.locator('.talos-advanced-rail-popover:visible')
+                    .getByRole('button', { name: label, exact: true })
         }
     }
 
-    await expect(rail.getByRole('button', { name: label, exact: true })).toBeVisible()
-    await rail.getByRole('button', { name: label, exact: true }).click()
+    await launcher.scrollIntoViewIfNeeded()
+    await expect(launcher).toBeVisible()
+    await launcher.click()
 
     const sheet = page.getByTestId('talos-mobile-tool-sheet')
     await expect(sheet).toHaveCount(1)
     await expect(sheet).toHaveAttribute('data-window-id', id)
     await expect(sheet).toBeVisible()
     await expect(sheet.getByRole('status', { name: /^Loading / })).toHaveCount(0)
+    await sheet.evaluate(async (element) => {
+        await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => undefined)))
+    })
 
     return sheet
 }
@@ -114,86 +142,94 @@ async function expectMobileSheetContract(page: Page, id: TalosWindowId) {
 
     const geometry = await page.evaluate(() => {
         const sheet = document.querySelector<HTMLElement>('[data-testid="talos-mobile-tool-sheet"]')
-        const header = document.querySelector<HTMLElement>('.talos-workspace-header')
-        const mobileRail = document.querySelector<HTMLElement>('.talos-mobile-rail')
-        const composer = document.querySelector<HTMLElement>('.talos-chat-composer-shell')
         const body = sheet?.querySelector<HTMLElement>('[data-testid="talos-mobile-sheet-body"]')
+        const sheetHeader = sheet?.querySelector<HTMLElement>('header')
 
-        if (!sheet || !header || !composer || !body) {
-            return null
-        }
+        if (!sheet || !body || !sheetHeader) return null
 
         const sheetRect = sheet.getBoundingClientRect()
-        const headerRect = header.getBoundingClientRect()
-        const mobileRailRect = mobileRail?.getBoundingClientRect()
-        const composerRect = composer.getBoundingClientRect()
         const bodyRect = body.getBoundingClientRect()
-        const sheetHeader = sheet.querySelector<HTMLElement>('header')
-        const sheetHeaderStyle = sheetHeader ? window.getComputedStyle(sheetHeader) : null
+        const headerRect = sheetHeader.getBoundingClientRect()
         const bodyStyle = window.getComputedStyle(body)
-        const captionControlsWithinSheet = Array.from(sheet.querySelectorAll<HTMLElement>('header button')).every((control) => {
+        const headerStyle = window.getComputedStyle(sheetHeader)
+        const captionControlsWithinSheet = Array.from(sheetHeader.querySelectorAll<HTMLElement>('button')).every((control) => {
             const rect = control.getBoundingClientRect()
             return rect.left >= sheetRect.left - 0.5
                 && rect.right <= sheetRect.right + 0.5
                 && rect.top >= sheetRect.top - 0.5
                 && rect.bottom <= sheetRect.bottom + 0.5
         })
-        const scrollableDescendants = [sheet, ...Array.from(sheet.querySelectorAll<HTMLElement>('*'))]
-            .filter((element) => {
-                const style = window.getComputedStyle(element)
-                return ['auto', 'scroll'].includes(style.overflowY)
-                    && element.scrollHeight > element.clientHeight + 1
-            })
-            .map((element) => element === body ? 'body' : element.tagName.toLowerCase())
-
-        const interactiveDescendants = Array.from(sheet.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        )).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
-        const interactiveComposerIntersections = interactiveDescendants.flatMap((element) => {
-            const rect = element.getBoundingClientRect()
-            const visibleRect = {
-                top: Math.max(rect.top, bodyRect.top),
-                bottom: Math.min(rect.bottom, bodyRect.bottom),
-                left: Math.max(rect.left, bodyRect.left),
-                right: Math.min(rect.right, bodyRect.right),
-            }
-            const hasVisibleArea = visibleRect.bottom > visibleRect.top && visibleRect.right > visibleRect.left
-            const intersects = hasVisibleArea
-                && visibleRect.bottom > composerRect.top
-                && visibleRect.top < composerRect.bottom
-                && visibleRect.right > composerRect.left
-                && visibleRect.left < composerRect.right
-
-            return intersects ? [{ tag: element.tagName.toLowerCase(), label: element.getAttribute('aria-label') ?? element.textContent?.trim() ?? '' }] : []
-        })
 
         return {
+            presentation: sheet.dataset.windowPresentation,
             viewport: { width: window.innerWidth, height: window.innerHeight },
-            sheet: { top: sheetRect.top, right: sheetRect.right, bottom: sheetRect.bottom, left: sheetRect.left },
-            headerBottom: headerRect.bottom,
-            navigationBottom: mobileRailRect && mobileRailRect.height > 0 ? mobileRailRect.bottom : headerRect.bottom,
-            composerTop: composerRect.top,
+            sheet: {
+                top: sheetRect.top,
+                right: sheetRect.right,
+                bottom: sheetRect.bottom,
+                left: sheetRect.left,
+                height: sheetRect.height,
+            },
+            bodyOverflowX: bodyStyle.overflowX,
             bodyOverflowY: bodyStyle.overflowY,
             bodySafePaddingBottom: Number.parseFloat(bodyStyle.paddingBottom),
-            headerSafePaddingTop: Number.parseFloat(sheetHeaderStyle?.paddingTop ?? '0'),
+            headerSafePaddingTop: Number.parseFloat(headerStyle.paddingTop),
+            bodyWithinSheet: bodyRect.top >= headerRect.bottom - 0.5
+                && bodyRect.right <= sheetRect.right + 0.5
+                && bodyRect.bottom <= sheetRect.bottom + 0.5
+                && bodyRect.left >= sheetRect.left - 0.5,
             captionControlsWithinSheet,
-            scrollableDescendants,
-            interactiveComposerIntersections,
+            pageHorizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
         }
     })
 
     expect(geometry).not.toBeNull()
-    expect(geometry?.sheet.left).toBeGreaterThanOrEqual(0)
-    expect(geometry?.sheet.top).toBeGreaterThanOrEqual(Math.max(geometry?.headerBottom ?? 0, geometry?.navigationBottom ?? 0) - 0.5)
-    expect(geometry?.sheet.right).toBeLessThanOrEqual((geometry?.viewport.width ?? 0) + 0.5)
-    expect(geometry?.sheet.bottom).toBeLessThanOrEqual((geometry?.viewport.height ?? 0) + 0.5)
-    expect(geometry?.sheet.bottom).toBeLessThanOrEqual((geometry?.composerTop ?? 0) - 8)
+    expect(geometry?.sheet.left).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry?.sheet.top).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry?.sheet.right).toBeCloseTo(geometry?.viewport.width ?? 0, 0)
+    expect(geometry?.sheet.bottom).toBeCloseTo(geometry?.viewport.height ?? 0, 0)
+    if (geometry?.presentation === 'drawer') {
+        expect(geometry.sheet.top).toBeGreaterThan(0)
+        expect(geometry.sheet.top).toBeLessThanOrEqual(geometry.viewport.height * 0.16)
+        expect(geometry.sheet.height).toBeGreaterThanOrEqual(geometry.viewport.height * 0.8)
+    } else {
+        expect(geometry?.presentation).toBe('fullscreen')
+        expect(geometry?.sheet.top).toBeCloseTo(0, 0)
+    }
+    expect(geometry?.bodyOverflowX).toBe('hidden')
     expect(geometry?.bodyOverflowY).toBe('auto')
     expect(geometry?.bodySafePaddingBottom).toBeGreaterThanOrEqual(12)
     expect(geometry?.headerSafePaddingTop).toBeGreaterThanOrEqual(8)
+    expect(geometry?.bodyWithinSheet).toBe(true)
     expect(geometry?.captionControlsWithinSheet).toBe(true)
-    expect(geometry?.scrollableDescendants.filter((item) => item !== 'body')).toEqual([])
-    expect(geometry?.interactiveComposerIntersections).toEqual([])
+    expect(geometry?.pageHorizontalOverflow).toBeLessThanOrEqual(1)
+}
+
+async function setMobileWindowPresentation(page: Page, presentation: 'drawer' | 'fullscreen') {
+    const settings = await openMobileWindow(page, 'settings')
+    const activePresentation = await settings.getAttribute('data-window-presentation')
+    await settings.getByRole('tab', { name: 'Appearance', exact: true }).click()
+    await settings.getByLabel('Mobile tool window presentation', { exact: true }).selectOption(presentation)
+    await settings.getByRole('button', { name: 'Save settings', exact: true }).click()
+    await expect(settings.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(settings).toHaveAttribute('data-window-presentation', activePresentation ?? 'drawer')
+    return settings
+}
+
+async function expectGuideFocusRoundTrip(
+    page: Page,
+    surface: Locator,
+    guideId: string,
+    title: string,
+) {
+    const trigger = surface.locator(`[data-guide-id="${guideId}"]`).first()
+    await expect(trigger).toBeVisible()
+    await trigger.click()
+    const dialog = page.locator('#talos-portal-root').getByRole('dialog', { name: `Information about ${title}`, exact: true })
+    await expect(dialog).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeFocused()
 }
 
 test.beforeEach(async ({ page }) => {
@@ -212,29 +248,251 @@ for (const viewport of [
         test.use({ viewport: { width: viewport.width, height: viewport.height } })
 
         test('exercises every registered window through the mobile rail', async ({ page }) => {
+            test.setTimeout(300_000)
             await page.goto('/', { waitUntil: 'domcontentloaded' })
             await waitForWorkspaceReady(page)
-            const contractFailures: string[] = []
 
-            for (const id of TALOS_WINDOW_IDS) {
+            for (const id of WINDOW_IDS_UNDER_TEST) {
                 const sheet = await openMobileWindow(page, id)
-                try {
-                    await expectMobileSheetContract(page, id)
-                } catch (error) {
-                    contractFailures.push(`${id}: ${error instanceof Error ? error.message : String(error)}`)
-                } finally {
-                    const rail = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
-                    const compactMobileRailVisible = await page.locator('.talos-mobile-rail:visible').count() > 0
-                    const returnTarget = ADVANCED_WINDOW_IDS.has(id) && compactMobileRailVisible
-                        ? rail.getByRole('button', { name: 'Advanced', exact: true })
-                        : rail.getByRole('button', { name: mobileRailLabel(id), exact: true })
-                    await sheet.getByRole('button', { name: `Close ${mobileRailLabel(id)}`, exact: true }).click()
-                    await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
-                    await expect(returnTarget).toBeFocused()
-                }
-            }
+                await expectMobileSheetContract(page, id)
+                await exerciseResponsiveSubsections(
+                    sheet,
+                    sheet.getByTestId('talos-mobile-sheet-body'),
+                    `${viewport.name} / ${mobileRailLabel(id)}`,
+                )
 
-            expect(contractFailures).toEqual([])
+                const rail = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
+                const compactMobileRailVisible = await page.locator('.talos-mobile-rail:visible').count() > 0
+                const returnTarget = ADVANCED_WINDOW_IDS.has(id) && compactMobileRailVisible
+                    ? rail.locator('button[aria-label="Open navigation menu"]')
+                    : rail.locator(`button[aria-label="${mobileRailLabel(id)}"]`)
+                await sheet.getByRole('button', { name: `Close ${mobileRailLabel(id)}`, exact: true }).click()
+                await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+                await expect.poll(async () => returnTarget.evaluate((target) => {
+                    const values: string[] = []
+                    let current: Element | null = target
+                    while (current) {
+                        if (current.getAttribute('aria-hidden') === 'true' || current.getAttribute('data-aria-hidden') === 'true') {
+                            values.push(`${current.tagName.toLowerCase()}#${current.id || '(no-id)'}`)
+                        }
+                        current = current.parentElement
+                    }
+                    return values
+                })).toEqual([])
+                await expect(returnTarget).toBeFocused()
+            }
         })
     })
 }
+
+test.describe('TALOS mobile presentation preference', () => {
+    test.use({ viewport: { width: 375, height: 812 } })
+
+    test('changes presentation through Appearance and preserves keyboard, reload, reduced-motion, and 200% text reflow', async ({ page }) => {
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        let settings = await setMobileWindowPresentation(page, 'fullscreen')
+        await expectMobileSheetContract(page, 'settings')
+        await settings.getByRole('button', { name: 'Close Settings', exact: true }).click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+
+        let theme = await openMobileWindow(page, 'theme')
+        await expect(theme).toHaveAttribute('data-window-presentation', 'fullscreen')
+        await expectMobileSheetContract(page, 'theme')
+        await theme.getByRole('button', { name: 'Close Theme', exact: true }).click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+        await page.emulateMedia({ reducedMotion: 'reduce' })
+        theme = await openMobileWindow(page, 'theme')
+        await expect(theme).toHaveAttribute('data-window-presentation', 'fullscreen')
+        await expectMobileSheetContract(page, 'theme')
+        const reducedMotionStyle = await theme.evaluate((element) => {
+            const style = window.getComputedStyle(element)
+            return { animationName: style.animationName, transitionDuration: style.transitionDuration }
+        })
+        expect(reducedMotionStyle.animationName).toBe('none')
+        expect(reducedMotionStyle.transitionDuration).toBe('0s')
+
+        const themeLauncher = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
+            .getByRole('button', { name: 'Theme', exact: true })
+        await page.keyboard.press('Escape')
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+        await expect(themeLauncher).toBeFocused()
+
+        await page.evaluate(() => {
+            document.documentElement.style.fontSize = '200%'
+        })
+        const notes = await openMobileWindow(page, 'notes')
+        await expect(notes).toHaveAttribute('data-window-presentation', 'fullscreen')
+        await expectMobileSheetContract(page, 'notes')
+        await expectGuideFocusRoundTrip(page, notes, 'rail.notes', 'Notes')
+        await notes.getByRole('button', { name: 'Close Notes', exact: true }).click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+        await page.evaluate(() => {
+            document.documentElement.style.fontSize = ''
+        })
+
+        settings = await setMobileWindowPresentation(page, 'drawer')
+        await expectMobileSheetContract(page, 'settings')
+        await settings.getByRole('button', { name: 'Close Settings', exact: true }).click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+
+        const drawer = await openMobileWindow(page, 'notes')
+        await expect(drawer).toHaveAttribute('data-window-presentation', 'drawer')
+        await expectMobileSheetContract(page, 'notes')
+        await expectGuideFocusRoundTrip(page, drawer, 'rail.notes', 'Notes')
+        await drawer.getByRole('button', { name: 'Back to chat', exact: true }).click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+        const advancedLauncher = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
+            .getByRole('button', { name: 'Open navigation menu', exact: true })
+        await expect(advancedLauncher).toBeFocused()
+    })
+})
+
+test.describe('TALOS mobile modal lifecycle regressions', () => {
+    test.use({ viewport: { width: 375, height: 812 } })
+
+    test('keeps chat actions inside the navigation dialog focus scope', async ({ page }) => {
+        await page.unroute('**/api/**')
+        await installTalosApiMocks(page, {
+            initialSessions: [{ id: 'session-mobile-actions', title: 'Actionable chat' }],
+        })
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        await page.locator('.talos-mobile-rail:visible')
+            .getByRole('button', { name: 'Open navigation menu', exact: true })
+            .click()
+        const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
+        await expect(navigation).toBeVisible()
+
+        const trigger = navigation.locator('[data-talos-session-menu-trigger="true"]').first()
+        await expect(trigger).toBeVisible()
+        await trigger.click()
+        const menu = page.getByRole('menu', { name: 'Chat actions', exact: true })
+        await expect(menu).toBeVisible()
+        await expect.poll(() => menu.evaluate((element) => (
+            element.closest('[role="dialog"][aria-modal="true"]')?.getAttribute('aria-label')
+                || element.closest('[role="dialog"][aria-modal="true"]')?.getAttribute('aria-labelledby')
+                || null
+        ))).not.toBeNull()
+
+        await menu.getByRole('menuitem', { name: 'Delete', exact: true }).focus()
+        await page.keyboard.press('Tab')
+        await expect.poll(() => navigation.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+    })
+
+    test('releases mobile navigation isolation when crossing the desktop breakpoint', async ({ page }) => {
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        await page.locator('.talos-mobile-rail:visible')
+            .getByRole('button', { name: 'Open navigation menu', exact: true })
+            .click()
+        const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
+        const chat = page.locator('.talos-chat-scroll-root')
+        await expect(navigation).toBeVisible()
+        await expect(chat).toHaveAttribute('inert', '')
+
+        await page.setViewportSize({ width: 1100, height: 800 })
+
+        await expect(navigation).toHaveCount(0)
+        await expect(chat).not.toHaveAttribute('inert', '')
+        await expect(chat).not.toHaveAttribute('aria-hidden', 'true')
+    })
+
+    test('restores focus to a visible launcher after responsive rail replacement', async ({ page }) => {
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        const sheet = await openMobileWindow(page, 'theme')
+        await expect.poll(() => page.locator('[data-aria-hidden="true"]').count()).toBeGreaterThan(0)
+
+        await page.setViewportSize({ width: 1100, height: 800 })
+        const desktopLauncher = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
+            .locator('button[aria-label="Theme"]')
+        await expect(desktopLauncher).toBeVisible()
+        await sheet.getByRole('button', { name: 'Close Theme', exact: true }).click()
+
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+        await expect(desktopLauncher).toBeFocused()
+        await expect(page.locator('[data-aria-hidden="true"]')).toHaveCount(0)
+    })
+
+    test('renders Theme preview tooltips above the active tool sheet', async ({ page }) => {
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        const sheet = await openMobileWindow(page, 'theme')
+        await sheet.getByRole('tab', { name: 'Motion', exact: true }).click()
+        const trigger = sheet.getByRole('button', { name: 'Light preview', exact: true })
+        await trigger.focus()
+        const describedBy = await trigger.getAttribute('aria-describedby')
+        expect(describedBy).toBeTruthy()
+        const accessibleTooltip = page.locator(`#${describedBy}`)
+        await expect(accessibleTooltip).toHaveAttribute('role', 'tooltip')
+        await expect(accessibleTooltip).toHaveText('Light preview')
+
+        const tooltip = page.locator('#talos-mobile-tooltip-root [data-state="instant-open"], #talos-mobile-tooltip-root [data-state="delayed-open"]')
+            .filter({ hasText: 'Light preview' })
+            .first()
+        await expect(tooltip).toBeVisible()
+        const blockingAncestors = await tooltip.evaluate((element) => {
+            const values: string[] = []
+            let current: Element | null = element
+            while (current) {
+                if (current.getAttribute('aria-hidden') === 'true' || current.hasAttribute('inert')) {
+                    values.push(`${current.tagName.toLowerCase()}#${current.id || '(no-id)'}.${current.className || '(no-class)'}`)
+                }
+                current = current.parentElement
+            }
+            return values
+        })
+        expect(blockingAncestors).toEqual([])
+
+        const stacking = await page.evaluate(() => {
+            const sheet = document.querySelector<HTMLElement>('[data-testid="talos-mobile-tool-sheet"]')
+            const tooltip = document.querySelector<HTMLElement>('#talos-mobile-tooltip-root [data-state="instant-open"], #talos-mobile-tooltip-root [data-state="delayed-open"]')
+            if (!sheet || !tooltip) return null
+            const rect = tooltip.getBoundingClientRect()
+            const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+
+            return {
+                sheetZ: Number.parseInt(window.getComputedStyle(sheet).zIndex, 10),
+                tooltipZ: Number.parseInt(window.getComputedStyle(tooltip).zIndex, 10),
+                topmost: topmost === tooltip || Boolean(topmost && tooltip.contains(topmost)),
+            }
+        })
+
+        expect(stacking).not.toBeNull()
+        expect(stacking?.tooltipZ).toBeGreaterThan(stacking?.sheetZ ?? 0)
+        expect(stacking?.topmost).toBe(true)
+    })
+})
+
+test.describe('TALOS mobile quick navigation', () => {
+    test.use({ viewport: { width: 375, height: 812 } })
+
+    test('keeps Chat focus separate from the complete navigation sidebar', async ({ page }) => {
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        const rail = page.locator('.talos-mobile-rail:visible')
+        await expect(rail.getByRole('button', { name: 'Chat', exact: true })).toBeVisible()
+        await expect(rail.getByRole('button', { name: 'Open navigation menu', exact: true })).toBeVisible()
+        await expect(rail.getByRole('button', { name: 'Advanced', exact: true })).toHaveCount(0)
+
+        await rail.getByRole('button', { name: 'Chat', exact: true }).click()
+        await expect(page.getByLabel('Message TALOS')).toBeFocused()
+        await expect(page.getByRole('dialog', { name: 'TALOS navigation', exact: true })).toHaveCount(0)
+
+        await rail.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
+        const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
+        await expect(navigation).toBeVisible()
+        await expect(navigation.getByRole('button', { name: 'Advanced', exact: true })).toBeVisible()
+        await expect(navigation.getByRole('button', { name: 'Close navigation menu', exact: true })).toBeFocused()
+    })
+})

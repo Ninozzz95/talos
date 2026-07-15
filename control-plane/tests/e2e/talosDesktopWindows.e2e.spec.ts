@@ -1,5 +1,6 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
+import { exerciseResponsiveSubsections } from './helpers/talosResponsivePanelAudit'
 import { capturePaintedTransition, expectPaintedTransition } from './helpers/talosVisibleMotion'
 import { waitForTalosWorkspaceReady as waitForWorkspaceReady } from './helpers/talosWorkspaceReady'
 import { createDefaultTalosMotionV6Preferences } from '../../resources/js/motion-v6/defaults'
@@ -9,6 +10,13 @@ const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
+const requestedDockWindowId = process.env.TALOS_E2E_WINDOW_ID
+if (requestedDockWindowId && !TALOS_WINDOW_IDS.includes(requestedDockWindowId as TalosWindowId)) {
+    throw new Error(`Unknown TALOS_E2E_WINDOW_ID: ${requestedDockWindowId}`)
+}
+const DOCK_WINDOW_IDS_UNDER_TEST: readonly TalosWindowId[] = requestedDockWindowId
+    ? [requestedDockWindowId as TalosWindowId]
+    : TALOS_WINDOW_IDS
 
 async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
@@ -98,6 +106,7 @@ async function openDesktopWindow(page: Page, id: TalosWindowId) {
     await expect(window).toHaveCount(1)
     await expect(window).toBeVisible()
     await expect.poll(async () => window.getAttribute('data-window-transition')).toBe('idle')
+    await expect(window).toHaveAttribute('data-window-load-state', 'success', { timeout: 20_000 })
     await expect(window.getByRole('status', { name: /^Loading / })).toHaveCount(0)
     await expect.poll(async () => window.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 
@@ -278,6 +287,29 @@ async function enableExpressiveWindowMotion(page: Page) {
     }, preferences)
 }
 
+async function disableWindowMotion(page: Page) {
+    const preferences = createDefaultTalosMotionV6Preferences()
+    preferences.mode = 'adaptive'
+    preferences.background_enabled = false
+    preferences.interface_enabled = false
+
+    await page.evaluate(async (motion) => {
+        const current = await fetch('/api/talos/settings', { headers: { Accept: 'application/json' } })
+        const currentPayload = await current.json() as { data?: { revision?: unknown } }
+        const revision = currentPayload.data?.revision
+        if (!Number.isSafeInteger(revision)) throw new Error('Window motion gate requires a settings revision.')
+        const response = await fetch('/api/talos/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({
+                expected_revision: revision,
+                preferences: { theme_motion_v6: motion },
+            }),
+        })
+        if (!response.ok) throw new Error(`Window motion setup failed with ${response.status}.`)
+    }, preferences)
+}
+
 function expectMatchingWindowBounds(
     actual: { x: number; y: number; width: number; height: number } | null,
     expected: { x: number; y: number; width: number; height: number } | null,
@@ -341,6 +373,249 @@ for (const viewport of [
         })
     })
 }
+
+test.describe('TALOS right-sidebar dock', () => {
+    test.use({ viewport: { width: 1440, height: 900 } })
+
+    test('keeps every module in one narrow dock column and reflows the chat to its exact edge', async ({ page, isMobile }) => {
+        test.skip(isMobile, 'the right-sidebar dock is a desktop presentation')
+        test.setTimeout(600_000)
+
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        for (const id of DOCK_WINDOW_IDS_UNDER_TEST) {
+            const title = windowTitle(id)
+            const opened = await openDesktopWindow(page, id)
+            await opened.window.getByRole('button', { name: `Dock ${title} in right sidebar`, exact: true }).click()
+
+            const dock = page.getByTestId('talos-right-dock')
+            const dockedWindow = dock.locator(`[data-window-id="${id}"]`)
+            await expect(dock).toBeVisible()
+            await expect(dockedWindow).toBeVisible()
+            await expect(dockedWindow).toHaveAttribute('data-window-presentation', 'right-dock')
+            await expect(page.locator('.talos-chat-scroll-root')).toHaveAttribute('data-window-reflow', 'right')
+            await exerciseResponsiveSubsections(
+                dockedWindow,
+                dockedWindow.locator('.talos-tool-window-body'),
+                `right dock / ${title}`,
+            )
+
+            const geometry = await page.evaluate((windowId) => {
+                const dockElement = document.querySelector<HTMLElement>('[data-testid="talos-right-dock"]')
+                const dockedElement = dockElement?.querySelector<HTMLElement>(`[data-window-id="${windowId}"]`)
+                const body = dockedElement?.querySelector<HTMLElement>('.talos-tool-window-body')
+                const chatRoot = document.querySelector<HTMLElement>('.talos-chat-scroll-root')
+                const surfaces = [
+                    document.querySelector<HTMLElement>('.talos-workspace-header'),
+                    document.querySelector<HTMLElement>('.talos-chat-thread'),
+                    document.querySelector<HTMLElement>('.talos-composer-area'),
+                ].filter((element): element is HTMLElement => Boolean(element))
+
+                if (!dockElement || !dockedElement || !body || !chatRoot) return null
+
+                const dockRect = dockElement.getBoundingClientRect()
+                const dockedRect = dockedElement.getBoundingClientRect()
+                return {
+                    viewportWidth: window.innerWidth,
+                    dock: { left: dockRect.left, right: dockRect.right, width: dockRect.width },
+                    docked: { left: dockedRect.left, right: dockedRect.right, width: dockedRect.width },
+                    bodyClientWidth: body.clientWidth,
+                    bodyScrollWidth: body.scrollWidth,
+                    reflowWidth: chatRoot.style.getPropertyValue('--talos-window-reflow-right'),
+                    surfaceRights: surfaces.map((surface) => surface.getBoundingClientRect().right),
+                    documentScrollWidth: document.documentElement.scrollWidth,
+                }
+            }, id)
+
+            expect(geometry, id).not.toBeNull()
+            expect(Math.abs((geometry?.dock.width ?? 0) - 420), id).toBeLessThanOrEqual(1)
+            expect(Math.abs((geometry?.dock.right ?? 0) - (geometry?.viewportWidth ?? 0)), id).toBeLessThanOrEqual(1)
+            expect(geometry?.reflowWidth, id).toBe('420px')
+            expect(geometry?.bodyScrollWidth ?? 0, id).toBeLessThanOrEqual((geometry?.bodyClientWidth ?? 0) + 1)
+            expect(geometry?.documentScrollWidth ?? 0, id).toBeLessThanOrEqual((geometry?.viewportWidth ?? 0) + 1)
+            for (const right of geometry?.surfaceRights ?? []) {
+                expect(right, id).toBeLessThanOrEqual((geometry?.dock.left ?? 0) + 1)
+            }
+
+            await dockedWindow.getByRole('button', { name: `Undock ${title} from right sidebar`, exact: true }).click()
+            await expect(dock).toHaveCount(0)
+            await opened.window.getByRole('button', { name: `Close ${title}`, exact: true }).click()
+            await expect(opened.window).toHaveCount(0)
+        }
+    })
+
+    test('shares one dock column across multiple windows and preserves it through reload', async ({ page, isMobile }) => {
+        test.skip(isMobile, 'the right-sidebar dock is a desktop presentation')
+
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+        const runtime = await openDesktopWindow(page, 'runtime')
+        await runtime.window.getByRole('button', { name: 'Dock Runtime in right sidebar', exact: true }).click()
+        const calendar = await openDesktopWindow(page, 'calendar')
+        await calendar.window.getByRole('button', { name: 'Dock Calendar in right sidebar', exact: true }).click()
+
+        const dock = page.getByTestId('talos-right-dock')
+        await expect(dock.locator('[data-window-presentation="right-dock"]')).toHaveCount(2)
+        expect(Math.abs((await dock.boundingBox())!.width - 420)).toBeLessThanOrEqual(1)
+        await expect(page.locator('.talos-chat-scroll-root')).toHaveCSS('--talos-window-reflow-right', '420px')
+
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+        await openDesktopWindow(page, 'runtime')
+        await openDesktopWindow(page, 'calendar')
+        await expect(dock.locator('[data-window-presentation="right-dock"]')).toHaveCount(2)
+        expect(Math.abs((await dock.boundingBox())!.width - 420)).toBeLessThanOrEqual(1)
+        await expect(page.locator('.talos-chat-scroll-root')).toHaveCSS('--talos-window-reflow-right', '420px')
+    })
+
+    test('keeps a multi-window dock operable at compact desktop height', async ({ page, isMobile }) => {
+        test.skip(isMobile, 'the right-sidebar dock is a desktop presentation')
+        await page.setViewportSize({ width: 1280, height: 720 })
+        await page.goto('/', { waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        const runtime = await openDesktopWindow(page, 'runtime')
+        await runtime.window.getByRole('button', { name: 'Dock Runtime in right sidebar', exact: true }).click()
+        const calendar = await openDesktopWindow(page, 'calendar')
+        await calendar.window.getByRole('button', { name: 'Dock Calendar in right sidebar', exact: true }).click()
+
+        const dock = page.getByTestId('talos-right-dock')
+        const dockedWindows = dock.locator('[data-window-presentation="right-dock"]')
+        await expect(dockedWindows).toHaveCount(2)
+        const geometry = await dock.evaluate((element) => {
+            const rect = element.getBoundingClientRect()
+            const windows = Array.from(element.querySelectorAll<HTMLElement>('[data-window-presentation="right-dock"]'))
+            const bodies = Array.from(element.querySelectorAll<HTMLElement>('.talos-tool-window-body'))
+
+            return {
+                viewport: { width: window.innerWidth, height: window.innerHeight },
+                dock: {
+                    right: rect.right,
+                    bottom: rect.bottom,
+                    clientHeight: element.clientHeight,
+                    scrollHeight: element.scrollHeight,
+                },
+                windowHeights: windows.map((windowElement) => windowElement.getBoundingClientRect().height),
+                bodyOverflowX: bodies.map((body) => window.getComputedStyle(body).overflowX),
+                bodyWidths: bodies.map((body) => ({ client: body.clientWidth, scroll: body.scrollWidth })),
+                pageOverflowX: document.documentElement.scrollWidth - window.innerWidth,
+            }
+        })
+
+        expect(Math.abs(geometry.dock.right - geometry.viewport.width)).toBeLessThanOrEqual(1)
+        expect(geometry.dock.bottom).toBeLessThanOrEqual(geometry.viewport.height + 1)
+        expect(geometry.dock.scrollHeight).toBeGreaterThan(geometry.dock.clientHeight)
+        expect(geometry.windowHeights.every((height) => height >= 359)).toBe(true)
+        expect(geometry.bodyOverflowX.every((overflow) => overflow === 'auto')).toBe(true)
+        expect(geometry.bodyWidths.every(({ client, scroll }) => scroll <= client + 1)).toBe(true)
+        expect(geometry.pageOverflowX).toBeLessThanOrEqual(1)
+
+        const dockedCalendar = dock.locator('[data-window-id="calendar"]')
+        await dockedCalendar.scrollIntoViewIfNeeded()
+        await expect(dockedCalendar.getByRole('button', { name: 'Undock Calendar from right sidebar', exact: true })).toBeVisible()
+    })
+})
+
+test.describe('TALOS minimized window controls', () => {
+    test.use({ viewport: { width: 1440, height: 900 } })
+
+    test('every registered chip has independent keyboard Restore and Close actions with motion off', async ({ page, isMobile }) => {
+        test.skip(isMobile, 'the minimized chip contract is desktop-only')
+        test.setTimeout(300_000)
+
+        await disableWindowMotion(page)
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+
+        for (const [index, id] of TALOS_WINDOW_IDS.entries()) {
+            const title = windowTitle(id)
+            const opened = await openDesktopWindow(page, id)
+            await opened.window.getByRole('button', { name: `Minimize ${title}`, exact: true }).click()
+            await expect(opened.window).toHaveCount(0)
+
+            const group = page.getByRole('group', { name: `${title} minimized window controls`, exact: true })
+            const restore = page.getByTestId(`talos-restore-window-${id}`)
+            const close = page.getByTestId(`talos-close-minimized-window-${id}`)
+            await expect(group).toBeVisible()
+            await expect(restore).toHaveAttribute('aria-label', `Restore ${title}`)
+            await expect(close).toHaveAttribute('aria-label', `Close minimized ${title}`)
+
+            const targets = await group.locator('button').evaluateAll((buttons) => buttons.map((button) => {
+                const rect = button.getBoundingClientRect()
+                const hit = document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2))
+                return {
+                    width: rect.width,
+                    height: rect.height,
+                    hit: hit === button || button.contains(hit),
+                }
+            }))
+            expect(targets).toHaveLength(2)
+            for (const target of targets) {
+                expect(target.width).toBeGreaterThanOrEqual(24)
+                expect(target.height).toBeGreaterThanOrEqual(24)
+                expect(target.hit).toBe(true)
+            }
+
+            await restore.focus()
+            await page.keyboard.press('Enter')
+            await expect(opened.window).toBeVisible()
+            await expect.poll(async () => opened.window.getAttribute('data-window-transition')).toBe('idle')
+            await expect(opened.window).toBeFocused()
+
+            await opened.window.getByRole('button', { name: `Minimize ${title}`, exact: true }).click()
+            await expect(opened.window).toHaveCount(0)
+            await close.focus()
+            await page.keyboard.press(index % 2 === 0 ? 'Enter' : 'Space')
+            await expect(group).toHaveCount(0)
+            await expect(opened.window).toHaveCount(0)
+            await expect(opened.launcher).toBeFocused()
+        }
+    })
+
+    test('closing one of two minimized windows preserves its peer and reloadable geometry under reduced motion', async ({ page, isMobile }) => {
+        test.skip(isMobile, 'the minimized chip contract is desktop-only')
+        await page.emulateMedia({ reducedMotion: 'reduce' })
+
+        const theme = await openDesktopWindow(page, 'theme')
+        const titleSpace = page.getByLabel('Drag Theme window')
+        const handle = await titleSpace.boundingBox()
+        expect(handle).toBeTruthy()
+        await page.mouse.move(handle!.x + 36, handle!.y + 12)
+        await page.mouse.down()
+        await page.mouse.move(handle!.x + 96, handle!.y + 52)
+        await page.mouse.up()
+        const persistedBounds = await theme.window.boundingBox()
+        expect(persistedBounds).toBeTruthy()
+
+        const notes = await openDesktopWindow(page, 'notes')
+        await theme.window.getByRole('button', { name: 'Minimize Theme', exact: true }).click()
+        await notes.window.getByRole('button', { name: 'Minimize Notes', exact: true }).click()
+        const themeGroup = page.getByRole('group', { name: 'Theme minimized window controls', exact: true })
+        const notesGroup = page.getByRole('group', { name: 'Notes minimized window controls', exact: true })
+        await expect(themeGroup).toBeVisible()
+        await expect(notesGroup).toBeVisible()
+
+        await page.getByTestId('talos-close-minimized-window-theme').focus()
+        await page.keyboard.press('Enter')
+        await expect(themeGroup).toHaveCount(0)
+        await expect(notesGroup).toBeVisible()
+        await expect(theme.launcher).toBeFocused()
+
+        await page.getByTestId('talos-restore-window-notes').focus()
+        await page.keyboard.press('Space')
+        await expect(notes.window).toBeVisible()
+        await expect(notes.window).toBeFocused()
+        await notes.window.getByRole('button', { name: 'Close Notes', exact: true }).click()
+
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await waitForWorkspaceReady(page)
+        await expect(page.getByTestId('talos-minimized-window-dock')).toHaveCount(0)
+        const reopenedTheme = await openDesktopWindow(page, 'theme')
+        expectMatchingWindowBounds(await reopenedTheme.window.boundingBox(), persistedBounds)
+        await reopenedTheme.window.getByRole('button', { name: 'Close Theme', exact: true }).click()
+    })
+})
 
 test.describe('TALOS complete desktop window painted lifecycle', () => {
     test.use({ viewport: { width: 1440, height: 900 } })

@@ -62,7 +62,8 @@ final class TalosRunTimelineTest extends TestCase
         $this->assertStringContainsString('<TalosTraceReplay', $timeline);
         $this->assertStringContainsString('<TalosRecoveryPanel', $timeline);
         $this->assertStringContainsString('Runtime cockpit', $timeline);
-        $this->assertStringContainsString('role="tablist"', $timeline);
+        $this->assertStringContainsString('<Tabs', $timeline);
+        $this->assertStringContainsString('label="Runtime panels"', $timeline);
         $this->assertStringContainsString('Run summary', $timeline);
         $this->assertStringContainsString('Artifacts', $timeline);
         $this->assertStringContainsString('artifact.id', $timeline);

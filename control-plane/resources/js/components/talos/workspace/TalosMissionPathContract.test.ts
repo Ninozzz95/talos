@@ -12,9 +12,10 @@ describe('Mission Path environment and viewport gate', () => {
     })
 
     it('requires development, a non-mobile viewport, and the user visibility preference', () => {
-        expect(workspaceSource).toContain('props.developmentMode')
-        expect(workspaceSource).toContain("breakpoint.value !== 'mobile'")
-        expect(workspaceSource).toContain('workspaceAppearanceVisibility.value.chat_area.mission_path')
+        expect(workspaceSource).toContain('resolveTalosMissionPathVisibility({')
+        expect(workspaceSource).toContain('developmentMode: props.developmentMode')
+        expect(workspaceSource).toContain('breakpoint: breakpoint.value')
+        expect(workspaceSource).toContain('preferenceEnabled: workspaceAppearanceVisibility.value.chat_area.mission_path')
         expect(workspaceSource).toContain(':show-mission-path="showMissionPath"')
         expect(chatSurfaceSource).toContain('showMissionPath: boolean')
         expect(chatSurfaceSource).toContain('v-if="showMissionPath"')

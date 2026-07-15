@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick } from 'vue'
 import TalosMobileRail from './TalosMobileRail.vue'
 
@@ -13,6 +13,8 @@ afterEach(() => {
 
 function mountRail() {
     const opened: string[] = []
+    const focusChat = vi.fn()
+    const openNavigation = vi.fn()
     const shell = document.createElement('div')
     shell.className = 'talos-shell'
     const portalRoot = document.createElement('div')
@@ -26,10 +28,11 @@ function mountRail() {
             return () => h(TalosMobileRail, {
                 creatingSession: false,
                 visibility: {},
-                advancedExpanded: true,
                 activeIds: [],
-                historyOpen: false,
+                navigationOpen: false,
                 onOpenWindow: (id: string) => opened.push(id),
+                onFocusChat: focusChat,
+                onOpenNavigation: openNavigation,
             })
         },
     }))
@@ -37,27 +40,46 @@ function mountRail() {
     apps.push(app)
     app.mount(mountPoint)
 
-    return { mountPoint, portalRoot, opened }
+    return { mountPoint, portalRoot, opened, focusChat, openNavigation }
 }
 
-describe('TalosMobileRail guide actions', () => {
-    it('renders a separate canonical Info action for every mobile module entry', () => {
+describe('TalosMobileRail guide placement', () => {
+    it('keeps Chat and the complete-navigation hamburger as independent commands', () => {
         const mounted = mountRail()
 
-        expect(mounted.mountPoint.querySelectorAll('[data-guide-available="true"]')).toHaveLength(17)
-        expect(mounted.mountPoint.querySelector('button button')).toBeNull()
-        expect(mounted.mountPoint.querySelector('[aria-label="Information about Runtime"]')).not.toBeNull()
-        expect(mounted.mountPoint.querySelector('[aria-label="Information about Doctor"]')).not.toBeNull()
+        const chat = mounted.mountPoint.querySelector<HTMLButtonElement>('[aria-label="Chat"]')
+        const menu = mounted.mountPoint.querySelector<HTMLButtonElement>('[aria-label="Open navigation menu"]')
+        expect(chat).not.toBeNull()
+        expect(menu).not.toBeNull()
+        expect(mounted.mountPoint.querySelector('[aria-label="Open navigation menu"]')).not.toBeNull()
+        expect(mounted.mountPoint.querySelector('[aria-label="Open chat history"]')).toBeNull()
+
+        chat?.click()
+        expect(mounted.focusChat).toHaveBeenCalledOnce()
+        expect(mounted.openNavigation).not.toHaveBeenCalled()
+
+        menu?.click()
+        expect(mounted.openNavigation).toHaveBeenCalledOnce()
+        expect(mounted.focusChat).toHaveBeenCalledOnce()
     })
 
-    it('opens information without emitting the mobile module command', async () => {
+    it('keeps Advanced out of the quick rail so it remains inside the complete sidebar', async () => {
         const mounted = mountRail()
-        mounted.mountPoint.querySelector<HTMLButtonElement>('[aria-label="Information about Runtime"]')?.click()
-        await nextTick()
-        await nextTick()
 
-        expect(mounted.opened).toEqual([])
-        expect(mounted.portalRoot.textContent).toContain('Inspect persisted runs, events and execution evidence.')
+        expect(mounted.mountPoint.querySelector('.talos-advanced-rail-popover')).toBeNull()
+        expect(mounted.portalRoot.querySelector('.talos-advanced-rail-popover')).toBeNull()
+        expect(mounted.mountPoint.querySelector('button[aria-label="Advanced"]')).toBeNull()
+    })
+
+    it('keeps contextual information out of mobile navigation', () => {
+        const mounted = mountRail()
+
+        expect(mounted.mountPoint.querySelectorAll('[data-guide-id]')).toHaveLength(0)
+        expect(mounted.mountPoint.querySelector('button button')).toBeNull()
+    })
+
+    it('keeps the module command available after guide actions leave the rail', () => {
+        const mounted = mountRail()
 
         mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Runtime"]')?.click()
         expect(mounted.opened).toEqual(['runtime'])

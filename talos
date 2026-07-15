@@ -467,7 +467,7 @@ browser_worker_ownership_doctor() {
     return 0
   fi
 
-  "$node_bin" "$ROOT_DIR/control-plane/scripts/browser-worker-ownership.mjs" --doctor || true
+  "$node_bin" "$ROOT_DIR/control-plane/scripts/browser-worker-ownership.mjs" --doctor
 }
 
 doctor() {
@@ -476,6 +476,7 @@ doctor() {
   local compose_available=0
   local docker_ready=0
   local native_ready=0
+  local browser_ownership_ready=0
   echo "TALOS Doctor"
   echo "------------"
 
@@ -549,7 +550,9 @@ doctor() {
     echo "native toolchain    WARN run ./talos dev or ./talos doctor --repair"
   fi
 
-  browser_worker_ownership_doctor
+  if browser_worker_ownership_doctor; then
+    browser_ownership_ready=1
+  fi
 
   if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ] && compose ps >/dev/null 2>&1; then
     compose ps
@@ -570,7 +573,8 @@ doctor() {
     fi
   fi
 
-  if [ "$docker_ready" -eq 1 ] || [ "$native_ready" -eq 1 ]; then
+  if { [ "$docker_ready" -eq 1 ] || [ "$native_ready" -eq 1 ]; } \
+    && [ "$browser_ownership_ready" -eq 1 ]; then
     return 0
   fi
   return 1

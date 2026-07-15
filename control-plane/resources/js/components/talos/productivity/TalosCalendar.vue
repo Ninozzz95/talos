@@ -4,6 +4,7 @@ import { AlertCircle, CalendarClock, CheckCircle2, Loader2, RefreshCw, ShieldChe
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import { useTalosProductivity, type TalosCreateCalendarDraftInput } from '../../../composables/useTalosProductivity'
 import { useTalosGoogle } from '../../../composables/useTalosGoogle'
 import {
@@ -16,6 +17,7 @@ import {
     type TalosCalendarDay,
     type TalosCalendarViewMode,
 } from '../../../lib/talosCalendar'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosCalendarDraft } from '../../../lib/talosTypes'
 import TalosCalendarEventEditor from './TalosCalendarEventEditor.vue'
 import TalosCalendarEventList from './TalosCalendarEventList.vue'
@@ -57,10 +59,24 @@ const quickAddError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const selectedGoogleCalendarId = ref<string | null>(null)
 const searchTerm = ref('')
+const calendarDraftsRequested = ref(false)
+const googleAccountsRequested = ref(false)
 
 const quickAddErrorMessage = `Could not parse quick add. Try "${TALOS_CALENDAR_QUICK_ADD_EXAMPLES[0]}", "${TALOS_CALENDAR_QUICK_ADD_EXAMPLES[1]}", or "${TALOS_CALENDAR_QUICK_ADD_EXAMPLES[2]}".`
 const visibleError = computed(() => actionError.value || productivityError.value || googleErrorMessage.value)
 const visibleActionMessage = computed(() => googleActionMessage.value)
+const calendarDraftsState = computed(() => resolveTalosCollectionState({
+    itemCount: calendarDrafts.value.length,
+    loading: loadingCalendarDrafts.value,
+    error: productivityError.value || actionError.value,
+    requested: calendarDraftsRequested.value,
+}))
+const googleAccountsState = computed(() => resolveTalosCollectionState({
+    itemCount: googleAccounts.value.length,
+    loading: googleLoading.value,
+    error: googleErrorMessage.value,
+    requested: googleAccountsRequested.value,
+}))
 const monthDays = computed(() => buildMonthGrid(currentMonth.value))
 const selectedDateKey = computed(() => dateKey(selectedDate.value))
 const currentMonthLabel = computed(() => monthLabel(currentMonth.value))
@@ -142,6 +158,7 @@ const selectedListLabel = computed(() => {
 })
 
 async function refreshDrafts() {
+    calendarDraftsRequested.value = true
     actionError.value = null
 
     try {
@@ -152,6 +169,7 @@ async function refreshDrafts() {
 }
 
 async function refreshGoogleCalendar() {
+    googleAccountsRequested.value = true
     try {
         const accounts = await loadGoogleAccounts()
         const account = accounts.find((item) => item.provider === 'google' && item.status === 'connected')
@@ -291,7 +309,10 @@ onMounted(() => {
                         <CalendarClock class="h-4 w-4 text-[var(--talos-accent)]" />
                         Calendar
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Calendar V3</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Calendar V3</h3>
+                        <TalosGuideInfoButton guide-id="rail.calendar" compact side="bottom" />
+                    </div>
                     <p class="mt-1 max-w-2xl text-xs leading-5 text-[var(--talos-muted)]">
                         Draft-first scheduling with explicit HMI confirmation before external provider writes; new events keep confirmation_required true until reviewed.
                     </p>
@@ -341,7 +362,7 @@ onMounted(() => {
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <a
-                            v-if="!connectedGoogleAccount"
+                            v-if="googleAccountsState === 'empty' || (googleAccountsState === 'ready' && !connectedGoogleAccount)"
                             href="/integrations/google/redirect"
                             class="inline-flex h-8 items-center justify-center rounded-md border border-[var(--talos-accent-border)] bg-[var(--talos-accent)] px-3 text-sm font-medium text-[var(--talos-accent-text)]"
                         >
@@ -376,7 +397,11 @@ onMounted(() => {
 
                 <div class="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,auto)]">
                     <div class="min-w-0 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
-                        <div v-if="connectedGoogleAccount" class="space-y-2">
+                        <div v-if="googleAccountsState === 'loading'" role="status" class="flex items-center gap-2 text-sm text-[var(--talos-muted)]">
+                            <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                            Loading Google account
+                        </div>
+                        <div v-else-if="googleAccountsState === 'ready' && connectedGoogleAccount" class="space-y-2">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ connectedGoogleAccount.email ?? connectedGoogleAccount.display_name ?? 'Google account' }}</span>
                                 <Badge tone="success">{{ connectedGoogleAccount.status }}</Badge>
@@ -396,8 +421,8 @@ onMounted(() => {
                                 </select>
                             </label>
                         </div>
-                        <p v-else class="text-sm leading-6 text-[var(--talos-muted)]">
-                            No Google account returned by `/api/talos/google/accounts`.
+                        <p v-else-if="googleAccountsState === 'empty' || (googleAccountsState === 'ready' && !connectedGoogleAccount)" class="text-sm leading-6 text-[var(--talos-muted)]">
+                            No connected Google account returned by `/api/talos/google/accounts`.
                         </p>
                     </div>
                     <div class="rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3 text-sm leading-6 text-[var(--talos-text)]">
@@ -426,11 +451,16 @@ onMounted(() => {
                 @create="submitManualDraft"
             />
 
-            <div v-if="!calendarDrafts.length && !loadingCalendarDrafts" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="calendarDraftsState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading calendar drafts
+            </div>
+
+            <div v-if="calendarDraftsState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No calendar drafts returned by `/api/talos/calendar-drafts`.
             </div>
 
-            <div class="grid gap-4 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+            <div v-if="calendarDraftsState === 'ready' || calendarDraftsState === 'empty'" class="grid gap-4 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
                 <TalosCalendarGrid
                     :days="monthDays"
                     :events-by-day="eventsByDay"

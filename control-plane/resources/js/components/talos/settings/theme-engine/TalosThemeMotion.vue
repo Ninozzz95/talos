@@ -5,6 +5,7 @@ import Button from '../../../ui/Button.vue'
 import InfoPopover from '../../../ui/InfoPopover.vue'
 import Select from '../../../ui/Select.vue'
 import Switch from '../../../ui/Switch.vue'
+import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_INTERFACE_EASINGS,
     TALOS_INTERFACE_PROFILES,
@@ -171,6 +172,7 @@ function title(value: string): string {
             <div class="min-w-0">
                 <div class="flex items-center gap-2">
                     <h4 class="text-sm font-semibold text-[var(--talos-text)]">Motion Engine V6</h4>
+                    <TalosGuideInfoButton guide-id="theme.motion" compact side="bottom" />
                     <span class="rounded-sm border border-[var(--talos-border)] px-1.5 py-0.5 text-[10px] uppercase text-[var(--talos-muted)]">{{ source }}</span>
                 </div>
                 <div class="mt-1 flex items-start gap-2 text-xs leading-5 text-[var(--talos-muted)]">

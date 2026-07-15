@@ -18,6 +18,7 @@ const props = defineProps({
   asChild: { type: Boolean, required: false },
   as: { type: null, required: false },
   to: { type: null, required: false, default: "#talos-portal-root" },
+  showClose: { type: Boolean, required: false, default: true },
   class: {
     type: [Boolean, null, String, Object, Array],
     required: false,
@@ -33,7 +34,7 @@ const emits = defineEmits([
   "closeAutoFocus",
 ]);
 
-const delegatedProps = reactiveOmit(props, "class", "to");
+const delegatedProps = reactiveOmit(props, "class", "to", "showClose");
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
@@ -55,6 +56,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
       <slot />
 
       <DialogClose
+        v-if="showClose"
         class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
       >
         <X class="w-4 h-4" />

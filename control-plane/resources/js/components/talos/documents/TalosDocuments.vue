@@ -4,8 +4,14 @@ import { AlertCircle, Download, FileText, Loader2, RefreshCw } from '@lucide/vue
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import { useTalosDocuments } from '../../../composables/useTalosDocuments'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosDocument } from '../../../lib/talosTypes'
+
+const props = withDefaults(defineProps<{ guideId?: string }>(), {
+    guideId: 'search.documents',
+})
 
 const {
     documents,
@@ -18,9 +24,17 @@ const {
 
 const exportedDocument = ref<TalosDocument | null>(null)
 const actionError = ref<string | null>(null)
+const documentsRequested = ref(false)
 const visibleError = computed(() => actionError.value || documentError.value)
+const documentsState = computed(() => resolveTalosCollectionState({
+    itemCount: documents.value.length,
+    loading: loadingDocuments.value,
+    error: visibleError.value,
+    requested: documentsRequested.value,
+}))
 
 async function refreshDocuments() {
+    documentsRequested.value = true
     actionError.value = null
 
     try {
@@ -62,7 +76,10 @@ onMounted(() => {
                         <FileText class="h-4 w-4 text-[var(--talos-accent)]" />
                         Documents
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Run-linked documents</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Run-linked documents</h3>
+                        <TalosGuideInfoButton :guide-id="props.guideId" compact side="bottom" />
+                    </div>
                 </div>
                 <Button type="button" variant="ghost" size="sm" :disabled="loadingDocuments" @click="refreshDocuments">
                     <Loader2 v-if="loadingDocuments" class="h-4 w-4 animate-spin" />
@@ -78,7 +95,12 @@ onMounted(() => {
                 <span>{{ visibleError }}</span>
             </div>
 
-            <div v-if="!documents.length && !loadingDocuments" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="documentsState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading documents
+            </div>
+
+            <div v-if="documentsState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No documents returned by `/api/talos/documents`.
             </div>
 

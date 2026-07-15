@@ -4,10 +4,12 @@ import { AlertCircle, CheckSquare, Loader2, Plus, RefreshCw } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import Field from '../../ui/Field.vue'
 import Input from '../../ui/Input.vue'
 import Textarea from '../../ui/Textarea.vue'
 import { useTalosProductivity } from '../../../composables/useTalosProductivity'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 
 const {
     tasks,
@@ -22,10 +24,18 @@ const title = ref('')
 const description = ref('')
 const runId = ref('')
 const actionError = ref<string | null>(null)
+const tasksRequested = ref(false)
 const visibleError = computed(() => actionError.value || productivityError.value)
+const tasksState = computed(() => resolveTalosCollectionState({
+    itemCount: tasks.value.length,
+    loading: loadingTasks.value,
+    error: visibleError.value,
+    requested: tasksRequested.value,
+}))
 const canCreate = computed(() => title.value.trim().length > 0 && !creatingTask.value)
 
 async function refreshTasks() {
+    tasksRequested.value = true
     actionError.value = null
 
     try {
@@ -75,7 +85,10 @@ onMounted(() => {
                         <CheckSquare class="h-4 w-4 text-[var(--talos-accent)]" />
                         Tasks
                     </div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">Run-linked tasks</h3>
+                    <div class="mt-1 flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Run-linked tasks</h3>
+                        <TalosGuideInfoButton guide-id="tasks.tasks" compact side="bottom" />
+                    </div>
                 </div>
                 <Button type="button" variant="ghost" size="sm" :disabled="loadingTasks" @click="refreshTasks">
                     <Loader2 v-if="loadingTasks" class="h-4 w-4 animate-spin" />
@@ -114,7 +127,12 @@ onMounted(() => {
                 </Button>
             </div>
 
-            <div v-if="!tasks.length && !loadingTasks" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+            <div v-if="tasksState === 'loading'" role="status" class="flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm text-[var(--talos-muted)]">
+                <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
+                Loading tasks
+            </div>
+
+            <div v-if="tasksState === 'empty'" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
                 No tasks returned by `/api/talos/tasks`.
             </div>
 

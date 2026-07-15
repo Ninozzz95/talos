@@ -107,7 +107,7 @@ docker compose --profile search exec -T searxng wget --spider --quiet --timeout=
 docker compose --profile search exec -T searxng python3 -c \
   'import json,urllib.request; payload=json.load(urllib.request.urlopen("http://127.0.0.1:8080/search?q=talos&format=json", timeout=5)); assert isinstance(payload, dict) and isinstance(payload.get("results"), list)'
 docker compose exec -T browser-worker node -e \
-  'fetch("http://127.0.0.1:3100/ready",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=await response.json();if(!response.ok||payload?.data?.status!=="ready"||payload?.data?.runtime!=="chromium")process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
+  'fetch("http://127.0.0.1:3100/ready",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=await response.json();if(!response.ok||payload?.data?.status!=="ready"||payload?.data?.runtime!=="chromium"||payload?.data?.protocols?.hmi!=="talos_browser_hmi_runtime_v2.1.0")process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
 
 SMOKE_STATE="$(docker compose exec -T \
   -e TALOS_SMOKE_MODE=exercise \

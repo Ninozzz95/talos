@@ -41,7 +41,10 @@ describe('Theme Engine persistence contract', () => {
 
         const nextPreferences = applyTalosNamedThemePreferences(currentPreferences, namedTheme)
 
-        expect(nextPreferences.chat_layout).toEqual(namedTheme.chat_layout)
+        expect(nextPreferences.chat_layout).toEqual({
+            ...namedTheme.chat_layout,
+            mobile_window_presentation: 'drawer',
+        })
         expect(nextPreferences.theme_motion_v6).toEqual(motionV6)
         expect(nextPreferences.unrelated_preference).toBe('preserve-me')
     })
@@ -149,7 +152,10 @@ describe('Theme Engine persistence contract', () => {
             },
         }
 
-        expect(parseStrictTalosThemeImport(validExport)?.chat_layout).toEqual(validExport.theme.chat_layout)
+        expect(parseStrictTalosThemeImport(validExport)?.chat_layout).toEqual({
+            ...validExport.theme.chat_layout,
+            mobile_window_presentation: 'drawer',
+        })
         expect(parseStrictTalosThemeImport(validExport)?.motion_v6).toEqual(createDefaultTalosMotionV6Preferences())
         const motionV6 = createDefaultTalosMotionV6Preferences()
         motionV6.mode = 'complex'
@@ -157,8 +163,16 @@ describe('Theme Engine persistence contract', () => {
         const v2 = {
             ...validExport,
             schema: 'talos_theme_export_v2',
-            theme: { ...validExport.theme, motion_v6: motionV6 },
+            theme: {
+                ...validExport.theme,
+                chat_layout: {
+                    ...validExport.theme.chat_layout,
+                    mobile_window_presentation: 'fullscreen',
+                },
+                motion_v6: motionV6,
+            },
         }
+        expect(parseStrictTalosThemeImport(v2)?.chat_layout.mobile_window_presentation).toBe('fullscreen')
         expect(parseStrictTalosThemeImport(v2)?.motion_v6).toEqual(motionV6)
         expect(parseStrictTalosThemeImport({ ...v2, theme: { ...v2.theme, motion: 'cinematic' } })).toBeNull()
         expect(parseStrictTalosThemeImport({ ...v2, theme: { ...v2.theme, ui_animation_profile: 'custom' } })).toBeNull()
@@ -210,6 +224,10 @@ describe('Theme Engine persistence contract', () => {
             name: 'V2 Round Trip',
             base_theme: 'signal' as const,
             tokens: {},
+            chat_layout: {
+                ...TALOS_DEFAULT_CHAT_LAYOUT,
+                mobile_window_presentation: 'fullscreen' as const,
+            },
             motion_v6: motionV6,
         }
 
@@ -300,6 +318,7 @@ describe('Theme Engine persistence contract', () => {
         ['invalid animation profile', { ui_animation_profile: 'warp' }],
         ['invalid animation customization', { ui_animation_customization: { intensity: 999 } }],
         ['invalid chat layout', { chat_layout: { bubble_scale: 'giant' } }],
+        ['invalid mobile window presentation', { chat_layout: { mobile_window_presentation: 'side-sheet' } }],
     ])('rejects strict import nested %s instead of sanitizing it', (_label, invalidFields) => {
         const imported = {
             schema: 'talos_theme_export_v1',

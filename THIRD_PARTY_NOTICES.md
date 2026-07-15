@@ -145,7 +145,7 @@ SOFTWARE.
 - License: MIT License
 - License text: https://raw.githubusercontent.com/unovue/shadcn-vue/v2.7.4/LICENSE
 - Copyright: Copyright (c) 2023 unovue
-- TALOS use: upstream-generated Dialog, AlertDialog, Collapsible, and Button
+- TALOS use: upstream-generated Drawer, Dialog, AlertDialog, Collapsible, and Button
   Vue primitives. AVM-owned portal-target wiring and token integration are
   layered at the consumer boundary.
 
@@ -179,11 +179,43 @@ SOFTWARE.
 - License text: https://raw.githubusercontent.com/unovue/reka-ui/v2.10.1/LICENSE
 - Copyright: Copyright (c) 2023 UnoVue <https://github.com/unovue>
 - TALOS use: upstream Dialog, AlertDialog, Collapsible, and Primitive
-  behavior used by the generated components.
+  behavior used by the generated components. TALOS carries the version-scoped
+  `control-plane/patches/reka-ui+2.10.1.patch` to make modal accessibility
+  cleanup idempotent across repeated Drawer/Dialog lifecycles. The patch is
+  removed when an upstream release passes the repeated-modal regression gate.
 
 MIT License
 
 Copyright (c) 2023 UnoVue <https://github.com/unovue>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## patch-package 8.0.1
+
+- Upstream: https://github.com/ds300/patch-package
+- Pinned package: https://www.npmjs.com/package/patch-package/v/8.0.1
+- Integrity: `sha512-VsKRIA8f5uqHQ7NGhwIna6Bx6D9s/1iXlA1hthBVBEbkq+t4kXD0HHt+rJhf/Z+Ci0F/HCB2hvn0qLdLG+Qxlw==`
+- License: MIT License
+- Copyright: Copyright (c) 2017-Present David Sheldrick
+- TALOS use: build-time application and verification of the version-scoped
+  Reka UI modal accessibility cleanup patch. It is not part of the browser
+  runtime and receives no TALOS data, credentials, or network authority.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

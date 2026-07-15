@@ -1,15 +1,31 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { GitBranch, Loader2 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
+import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
+import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 import type { TalosRunNodeStatus, TalosRunNodeSummary } from '../../../lib/talosTypes'
 
 type BadgeTone = 'success' | 'danger' | 'warning' | 'neutral'
 
-defineProps<{
+const props = withDefaults(defineProps<{
     nodes: TalosRunNodeSummary[]
     selectedNodeId: string | null
     loading?: boolean
-}>()
+    error?: string | null
+    requested?: boolean
+}>(), {
+    loading: false,
+    error: null,
+    requested: true,
+})
+
+const nodesState = computed(() => resolveTalosCollectionState({
+    itemCount: props.nodes.length,
+    loading: props.loading,
+    error: props.error,
+    requested: props.requested,
+}))
 
 const emit = defineEmits<{
     (event: 'select-node', node: TalosRunNodeSummary): void
@@ -76,20 +92,25 @@ function blockedDependency(node: TalosRunNodeSummary) {
             <div class="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
                 <GitBranch class="h-4 w-4 text-[var(--talos-accent)]" />
                 Node graph
+                <TalosGuideInfoButton guide-id="runtime.dag" compact side="bottom" />
             </div>
             <Badge tone="neutral">{{ nodes.length }} nodes</Badge>
         </div>
 
-        <div v-if="loading && !nodes.length" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
+        <div v-if="nodesState === 'loading'" role="status" class="flex items-center gap-2 px-3 py-4 text-sm text-[var(--talos-muted)]">
             <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
             Loading nodes from run events
         </div>
 
-        <div v-else-if="!nodes.length" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
+        <div v-else-if="nodesState === 'error'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-warning)]">
+            {{ error }}
+        </div>
+
+        <div v-else-if="nodesState === 'empty'" class="px-3 py-4 text-sm leading-6 text-[var(--talos-muted)]">
             No node events were returned for this run.
         </div>
 
-        <div v-else class="divide-y divide-[var(--talos-border)]">
+        <div v-else-if="nodesState === 'ready'" class="divide-y divide-[var(--talos-border)]">
             <button
                 v-for="node in nodes"
                 :key="node.id"

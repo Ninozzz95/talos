@@ -493,7 +493,7 @@ final class TalosChatBrowserModeTest extends TestCase
             'api_key' => 'sk-test',
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
         ])->assertOk()
-            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('text', 'Screenshot captured and attached as verified TALOS evidence.')
             ->assertJsonPath('browser_activities.0.operation', 'screenshot')
             ->assertJsonPath('browser_activities.0.status', 'succeeded');
 
@@ -522,7 +522,7 @@ final class TalosChatBrowserModeTest extends TestCase
             'api_key' => 'sk-test',
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
         ])->assertOk()
-            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('text', 'Screenshot captured and attached as verified TALOS evidence.')
             ->assertJsonPath('browser_activities.0.operation', 'screenshot')
             ->assertJsonPath('browser_activities.0.status', 'succeeded');
 
@@ -550,7 +550,7 @@ final class TalosChatBrowserModeTest extends TestCase
             'api_key' => 'sk-test',
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
         ])->assertOk()
-            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('text', 'Screenshot captured and attached as verified TALOS evidence.')
             ->assertJsonPath('browser_activities.0.operation', 'screenshot')
             ->assertJsonPath('browser_activities.0.status', 'succeeded');
 
@@ -585,7 +585,7 @@ final class TalosChatBrowserModeTest extends TestCase
             'api_key' => 'sk-test',
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
         ])->assertOk()
-            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('text', 'Screenshot captured and attached as verified TALOS evidence.')
             ->assertJsonPath('browser_activities.0.operation', 'screenshot');
 
         Http::assertNothingSent();
@@ -654,7 +654,7 @@ final class TalosChatBrowserModeTest extends TestCase
             'api_key' => 'sk-test',
             'browser_mode' => ['enabled' => true, 'browser_session_id' => $browser->id],
         ])->assertOk()
-            ->assertJsonPath('text', 'Screenshot captured and attached as browser evidence.')
+            ->assertJsonPath('text', 'Screenshot captured and attached as verified TALOS evidence.')
             ->assertJsonPath('browser_activities.0.operation', 'screenshot')
             ->assertJsonPath('browser_activities.0.status', 'succeeded');
 

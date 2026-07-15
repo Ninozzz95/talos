@@ -89,6 +89,25 @@ describe('TALOS pure window manager', () => {
         expect(state.windows.tasks.bounds).toEqual({ x: 840, y: 56, width: 600, height: 664 })
     })
 
+    it('uses the narrow right-dock width even when a window has a wider floating minimum', () => {
+        let state = createTalosWindowManagerState(['runtime'], 'desktop', area)
+        const original = { ...state.windows.runtime.bounds }
+
+        state = reduceTalosWindowState(state, { type: 'toggle-dock', id: 'runtime' })
+
+        expect(state.windows.runtime.presentation).toBe('docked')
+        expect(state.windows.runtime.bounds).toEqual({
+            x: area.right - 420,
+            y: area.top,
+            width: 420,
+            height: area.bottom - area.top,
+        })
+
+        state = reduceTalosWindowState(state, { type: 'toggle-dock', id: 'runtime' })
+        expect(state.windows.runtime.presentation).toBe('floating')
+        expect(state.windows.runtime.bounds).toEqual(original)
+    })
+
     it('owns named tile targets and restores the original floating rectangle after re-tiling', () => {
         const maximizeArea = { left: 240, top: 56, right: 1440, bottom: 900 }
         const fullscreenArea = { left: 0, top: 0, right: 1440, bottom: 900 }

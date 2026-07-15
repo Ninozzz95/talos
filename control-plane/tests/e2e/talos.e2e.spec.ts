@@ -135,6 +135,12 @@ async function expectNoHorizontalOverflow(page: Page) {
     expect(result.overflow, JSON.stringify(result.offenders, null, 2)).toBeLessThanOrEqual(1)
 }
 
+async function expectComposerMode(page: Page, mode: 'full' | 'minimal') {
+    await expect(page.locator('.talos-chat-composer-shell')).toHaveAttribute('data-composer-mode', mode)
+    await expect(page.getByRole('button', { name: 'Use minimal composer' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Use full composer' })).toHaveCount(0)
+}
+
 async function expectProceduralBackgroundComposition(page: Page) {
     const composition = await page.getByTestId('talos-motion-background').evaluate((root) => {
         const canvas = root.querySelector('.talos-procedural-canvas') as HTMLElement | null
@@ -667,13 +673,13 @@ test('workspace exposes real persistent chat history', async ({ page, isMobile }
     await page.getByRole('button', { name: 'New Chat', exact: true }).click()
     const openMobileHistory = async () => {
         if (!isMobile) return
-        await page.getByRole('button', { name: 'Open chat history' }).click()
-        await expect(page.getByRole('button', { name: 'Close chat history' })).toBeVisible()
+        await page.getByRole('button', { name: 'Open navigation menu' }).click()
+        await expect(page.getByRole('button', { name: 'Close navigation menu' })).toBeVisible()
     }
     const closeMobileHistory = async () => {
         if (!isMobile) return
-        await page.getByRole('button', { name: 'Close chat history' }).click()
-        await expect(page.getByRole('button', { name: 'Close chat history' })).toHaveCount(0)
+        await page.getByRole('button', { name: 'Close navigation menu' }).click()
+        await expect(page.getByRole('button', { name: 'Close navigation menu' })).toHaveCount(0)
     }
     const history = page.getByTestId('talos-session-history')
     await openMobileHistory()
@@ -944,11 +950,20 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
     if (isMobile) {
         await expect(page.getByRole('region', { name: 'TALOS guided start' })).toHaveCount(0)
     } else {
-        await expect(page.getByRole('region', { name: 'TALOS guided start' })).toBeVisible()
-        await expect(page.getByText('Model linked', { exact: true })).toBeVisible()
-        await expect(page.getByText('Context optional', { exact: true })).toBeVisible()
-        await expect(page.getByText('Session staged', { exact: true })).toBeVisible()
-        await expect(page.getByText('Evidence pending', { exact: true })).toBeVisible()
+        const missionPath = page.getByRole('region', { name: 'TALOS guided start' })
+        await expect(missionPath).toBeVisible()
+        await expect(missionPath).toContainText('Mission Path')
+        await expect(missionPath).toContainText('Ground the task, run it through TALOS, then benchmark the proof.')
+        await expect(missionPath.getByRole('button', { name: 'Model', exact: true })).toBeVisible()
+        await expect(missionPath.getByRole('button', { name: 'Context', exact: true })).toBeVisible()
+        await expect(missionPath.getByText('Model linked', { exact: true })).toBeVisible()
+        await expect(missionPath).toContainText('Server-side profile, no browser secret.')
+        await expect(missionPath.getByText('Context optional', { exact: true })).toBeVisible()
+        await expect(missionPath).toContainText('Files stay bounded and untrusted.')
+        await expect(missionPath.getByText('Session staged', { exact: true })).toBeVisible()
+        await expect(missionPath).toContainText('The first send opens a persisted turn.')
+        await expect(missionPath.getByText('Evidence pending', { exact: true })).toBeVisible()
+        await expect(missionPath).toContainText('Run evidence unlocks replay and compare.')
     }
     await expect(page.getByLabel('Message TALOS')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Choose model profile' })).toContainText('E2E server-side profile')
@@ -968,6 +983,7 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
 
     await expect(page.locator('p').filter({ hasText: 'Create a replayable file audit workflow.' })).toBeVisible()
     await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
+    await expect(page.getByRole('region', { name: 'TALOS guided start' })).toHaveCount(0)
     await expect(page.getByText('1 JMP')).toBeVisible()
     await expect(page.getByText('Persisted', { exact: true })).toBeVisible()
     await clickMessageAction(page, 'Open evidence')
@@ -1001,6 +1017,52 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
         body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
         contentType: 'image/png',
     })
+})
+
+test('Mission Path persists the user opt-out and remains hidden on mobile', async ({ page, isMobile }) => {
+    await openWorkspace(page)
+    const missionPath = page.getByRole('region', { name: 'TALOS guided start' })
+    if (isMobile) {
+        await expect(missionPath).toHaveCount(0)
+        return
+    }
+
+    await expect(missionPath).toBeVisible()
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await page.getByRole('tab', { name: 'Visibility' }).click()
+    await page.getByRole('switch', { name: 'Mission Path' }).click()
+    const preferenceAck = page.waitForResponse((response) => (
+        response.url().endsWith('/api/talos/settings')
+        && response.request().method() === 'PATCH'
+        && response.ok()
+    ))
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await preferenceAck
+    await expect(missionPath).toHaveCount(0)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(missionPath).toHaveCount(0)
+})
+
+test('server-owned production policy hides a stale enabled Mission Path preference', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), 'the production policy is viewport-independent and runs once in desktop Chromium')
+    await page.route(/^https?:\/\/[^/]+\/(?:\?.*)?$/, async (route) => {
+        const response = await route.fetch()
+        const developmentBody = await response.text()
+        expect(developmentBody).toContain('data-development-mode="true"')
+        const productionBody = developmentBody.replace(
+            'data-development-mode="true"',
+            'data-development-mode="false"',
+        )
+        await route.fulfill({ response, body: productionBody })
+    })
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(page.locator('#talos-workspace-root')).toHaveAttribute('data-development-mode', 'false')
+    await expect(page.getByRole('region', { name: 'TALOS guided start' })).toHaveCount(0)
 })
 
 test('chat repairs a stale local model selection and submits with Enter', async ({ page }) => {
@@ -1880,7 +1942,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     })
     await expect(page.getByText('Imported Mint', { exact: true })).toBeVisible()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
-    await expect(page.getByRole('button', { name: 'Use full composer' })).toBeVisible()
+    await expectComposerMode(page, 'minimal')
 
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
@@ -2008,7 +2070,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await page.getByRole('button', { name: 'Save customization', exact: true }).click()
     await conflictingLayoutRequest
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
-    await expect(page.getByRole('button', { name: 'Use full composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'minimal')
 
     await page.getByLabel('Theme chat message size').selectOption('expanded')
     await page.getByLabel('Theme chat composer mode').selectOption('full')
@@ -2030,12 +2092,12 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await createRequest
     await expect(page.getByText('Lifecycle Theme', { exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Expanded')
-    await expect(page.getByRole('button', { name: 'Use minimal composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'full')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Expanded')
-    await expect(page.getByRole('button', { name: 'Use minimal composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'full')
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Library' }).click()
 
@@ -2163,7 +2225,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await activeDeleteRequest
     await expect(page.getByText('Lifecycle Renamed', { exact: true })).toHaveCount(0)
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
-    await expect(page.getByRole('button', { name: 'Use minimal composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'full')
 
     const beforeInvalidImport = themePatchCount
     await page.getByLabel('Import theme JSON').fill(JSON.stringify({ schema: 'talos_theme_export_v2' }))
@@ -2233,7 +2295,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await importRequest
     await expect(page.getByText('Imported Lifecycle', { exact: true })).toBeVisible()
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
-    await expect(page.getByRole('button', { name: 'Use full composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'minimal')
 
     const beforeDuplicateImport = themePatchCount
     await page.getByLabel('Import theme JSON').fill(JSON.stringify({
@@ -2248,7 +2310,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
-    await expect(page.getByRole('button', { name: 'Use full composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'minimal')
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Customize' }).click()
 
@@ -2273,7 +2335,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     expect(resetPreferences).not.toHaveProperty('ui_animation_profile')
     expect(resetPreferences).not.toHaveProperty('ui_animation_customization')
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
-    await expect(page.getByRole('button', { name: 'Use minimal composer', exact: true })).toBeVisible()
+    await expectComposerMode(page, 'full')
     await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible()
     const settingsAfterReset = await page.evaluate(async () => {
         const response = await fetch('/api/talos/settings', { headers: { Accept: 'application/json' } })
@@ -3096,7 +3158,7 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     await waitForWorkspaceReady(page)
     await expect(page.getByRole('button', { name: 'Decrease message size' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Increase message size' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Use minimal composer' })).toBeDisabled()
+    await expectComposerMode(page, 'full')
 
     const advancedRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
@@ -4641,6 +4703,20 @@ test('mobile sheet open and close produce a perceptible painted-frame trajectory
 
     const workspace = page.getByTestId('talos-workspace')
     const sheet = page.getByTestId('talos-mobile-tool-sheet')
+    const expectedDurations = await workspace.evaluate((element) => {
+        const style = getComputedStyle(element)
+        const milliseconds = (property: string) => {
+            const value = style.getPropertyValue(property).trim()
+            const match = value.match(/^([0-9]+(?:\.[0-9]+)?)ms$/)
+            if (!match) throw new Error(`Expected ${property} to resolve to milliseconds, received "${value}".`)
+            return Number(match[1])
+        }
+
+        return {
+            open: milliseconds('--talos-motion-duration-window-open'),
+            close: milliseconds('--talos-motion-duration-window-close'),
+        }
+    })
     const opening = await capturePaintedTransition({
         page,
         target: sheet,
@@ -4649,8 +4725,10 @@ test('mobile sheet open and close produce a perceptible painted-frame trajectory
         waitForFinal: () => expect(sheet).toHaveAttribute('data-window-transition', 'idle'),
     })
     expect(opening.presentation.lifecycle).toBe('opening')
-    expectPaintedTransition(opening, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    expectPaintedTransition(opening, { minimumDurationMs: Math.max(1, expectedDurations.open - 1), minimumPixelRatio: 0.01 })
     await expect(sheet.getByRole('button', { name: 'Back to chat' })).toBeFocused()
+    await expect(sheet.getByRole('button', { name: 'Minimize Theme', exact: true })).toHaveCount(0)
+    await expect(page.getByTestId('talos-minimized-window-dock')).toHaveCount(0)
 
     const closing = await capturePaintedTransition({
         page,
@@ -4660,7 +4738,11 @@ test('mobile sheet open and close produce a perceptible painted-frame trajectory
         waitForFinal: () => expect(sheet).toHaveCount(0),
     })
     expect(closing.presentation.lifecycle).toBe('closing')
-    expectPaintedTransition(closing, { minimumDurationMs: 288, minimumPixelRatio: 0.01, midpointInteractive: false })
+    expectPaintedTransition(closing, {
+        minimumDurationMs: Math.max(1, expectedDurations.close - 1),
+        minimumPixelRatio: 0.01,
+        midpointInteractive: false,
+    })
     await expect(sheet).toHaveCount(0)
 })
 
@@ -4863,16 +4945,16 @@ test('chat surfaces unseen evidence updates and returns to the live edge', async
     ))).toBeLessThanOrEqual(56)
 })
 
-test('mobile chat history is an isolated focus-trapped dialog that restores its launcher focus', async ({ page, isMobile }) => {
-    test.skip(!isMobile, 'mobile history modal contract runs in the mobile project')
+test('mobile navigation is an isolated focus-trapped dialog that restores its launcher focus', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'mobile navigation modal contract runs in the mobile project')
     await openWorkspace(page)
 
-    const launcher = page.getByRole('button', { name: 'Open chat history' })
+    const launcher = page.getByRole('button', { name: 'Open navigation menu' })
     await launcher.click()
-    const dialog = page.getByRole('dialog', { name: 'Chat history' })
+    const dialog = page.getByRole('dialog', { name: 'TALOS navigation' })
     await expect(dialog).toBeVisible()
     await expect(dialog).toHaveAttribute('aria-modal', 'true')
-    await expect(dialog.getByRole('button', { name: 'Close chat history' })).toBeFocused()
+    await expect(dialog.getByRole('button', { name: 'Close navigation menu' })).toBeFocused()
     await expect(page.locator('.talos-chat-scroll-root')).toHaveAttribute('inert', '')
 
     await page.keyboard.press('Shift+Tab')
@@ -4928,7 +5010,7 @@ test('model profile deletion uses the theme dialog and keeps the API deletion be
     await expect(modelCenter.getByText('E2E server-side profile', { exact: true })).toHaveCount(0)
 })
 
-test('chat layout controls persist bubble scale, composer mode, and Advanced disclosure', async ({ page }) => {
+test('chat layout controls persist bubble scale, settings-owned composer density, and Advanced disclosure', async ({ page }) => {
     await openWorkspace(page)
     const settingsRequests: Record<string, unknown>[] = []
     page.on('request', (request) => {
@@ -4939,10 +5021,13 @@ test('chat layout controls persist bubble scale, composer mode, and Advanced dis
 
     await page.getByRole('button', { name: 'Increase message size' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
-    await page.getByRole('button', { name: 'Use minimal composer' }).click()
-    await expect(page.getByRole('button', { name: 'Use full composer' })).toBeVisible()
     await page.getByRole('button', { name: 'Advanced', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('minimal')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expectComposerMode(page, 'minimal')
 
     await expect.poll(() => settingsRequests.some((request) => {
         if (!hasSettingsExpectedRevision(request)) return false
@@ -4956,6 +5041,52 @@ test('chat layout controls persist bubble scale, composer mode, and Advanced dis
 
         return layout?.advanced_rail_expanded === true
     })).toBe(true)
+})
+
+test('composer exposes every real capability on desktop and mobile', async ({ page, isMobile }) => {
+    await openWorkspace(page)
+
+    for (const accessibleName of [
+        'Choose model profile',
+        'Choose grounding context',
+        'Temporary chat',
+        'Enable Browse',
+        'Improve prompt',
+        'Open settings',
+    ]) {
+        await expect(page.getByRole('button', { name: accessibleName, exact: true })).toBeVisible()
+    }
+
+    for (const testId of [
+        'talos-composer-model-label',
+        'talos-composer-context-label',
+        'talos-composer-browse-label',
+    ]) {
+        const label = page.getByTestId(testId)
+        if (isMobile) {
+            await expect(label).toBeHidden()
+        } else {
+            await expect(label).toBeVisible()
+        }
+    }
+
+    await expect(page.getByRole('button', { name: 'Use minimal composer' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Use full composer' })).toHaveCount(0)
+
+    await page.getByLabel('Message TALOS').fill(Array.from({ length: 12 }, (_, index) => `Constraint ${index + 1}: preserve this verified requirement.`).join('\n'))
+    const promptGeometry = await page.getByLabel('Message TALOS').evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return {
+            height: rect.height,
+            viewportHeight: window.innerHeight,
+            scrollHeight: (element as HTMLTextAreaElement).scrollHeight,
+        }
+    })
+    expect(promptGeometry.height, JSON.stringify(promptGeometry)).toBeGreaterThan(128)
+    expect(promptGeometry.height, JSON.stringify(promptGeometry)).toBeLessThanOrEqual(Math.min(256, promptGeometry.viewportHeight * 0.35) + 1)
+    expect(promptGeometry.scrollHeight, JSON.stringify(promptGeometry)).toBeGreaterThanOrEqual(promptGeometry.height)
+    await expect(page.getByRole('button', { name: 'Improve prompt', exact: true })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
 })
 
 test('Appearance and Theme Engine share the persisted chat layout contract', async ({ page }) => {
@@ -4984,7 +5115,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
             && layout?.advanced_rail_expanded === true
     })).toBe(true)
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
-    await expect(page.getByRole('button', { name: 'Use full composer' })).toBeVisible()
+    await expectComposerMode(page, 'minimal')
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Customize' }).click()
@@ -5001,7 +5132,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
             && layout?.advanced_rail_expanded === true
     })).toBe(true)
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
-    await expect(page.getByRole('button', { name: 'Use minimal composer' })).toBeVisible()
+    await expectComposerMode(page, 'full')
 })
 
 test('Settings opens Doctor directly on the Backup section', async ({ page, isMobile }) => {
@@ -5048,7 +5179,7 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
-    await expect(page.getByRole('button', { name: 'Use minimal composer' })).toBeVisible()
+    await expectComposerMode(page, 'full')
 
     await page.getByRole('button', { name: 'Theme', exact: true }).click()
     await page.getByRole('tab', { name: 'Library' }).click()
@@ -5063,10 +5194,10 @@ test('named theme chat layout overrides current layout and reset returns to pres
         composer_mode: 'minimal',
     })
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
-    await expect(page.getByRole('button', { name: 'Use full composer' })).toBeVisible()
+    await expectComposerMode(page, 'minimal')
 
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByRole('button', { name: 'Reset to preset' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Balanced')
-    await expect(page.getByRole('button', { name: 'Use minimal composer' })).toBeVisible()
+    await expectComposerMode(page, 'full')
 })

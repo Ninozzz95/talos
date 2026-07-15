@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import { X } from '@lucide/vue'
-import { computed, toRef, watch, type ComponentPublicInstance } from 'vue'
-import Button from '../../ui/Button.vue'
+import { computed, provide, toRef, watch, type ComponentPublicInstance } from 'vue'
+import { tooltipPortalTargetKey } from '../../ui/tooltip/portalTarget'
 import TalosMobileToolSheet from '../window/TalosMobileToolSheet.vue'
+import TalosMinimizedWindowChip from '../window/TalosMinimizedWindowChip.vue'
 import TalosToolWindow from '../window/TalosToolWindow.vue'
-import TalosWindowErrorState from '../window/TalosWindowErrorState.vue'
-import TalosWindowLoadingState from '../window/TalosWindowLoadingState.vue'
-import TalosWindowSectionTabs from '../window/TalosWindowSectionTabs.vue'
+import TalosWindowModuleSurface from '../window/TalosWindowModuleSurface.vue'
 import TalosWindowSnapPreview from '../window/TalosWindowSnapPreview.vue'
 import {
     TALOS_WINDOW_IDS,
@@ -24,10 +22,10 @@ import { useTalosWindowMotion } from '../../../composables/useTalosWindowMotion'
 import { useTalosWindowPeek } from '../../../composables/useTalosWindowPeek'
 import type { TalosWindowLaunchOrigin } from '../../../composables/useTalosWindowLaunchOrigins'
 import type { TalosWindowModuleContext } from '../../../lib/talosWindowModuleContext'
-import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
+import type { TalosContextSet, TalosMobileWindowPresentation, TalosModelProfile } from '../../../lib/talosTypes'
 import type { TalosThemeCustomization, TalosThemeId } from '../../../lib/talosThemes'
 import type { TalosMotionV6Preferences } from '../../../motion-v6/contracts'
-import type { TalosWindowArea, TalosWindowBounds } from '../../../lib/talosWindowManager'
+import { TALOS_RIGHT_DOCK_WIDTH, type TalosWindowArea, type TalosWindowBounds } from '../../../lib/talosWindowManager'
 import type { TalosWindowTileTarget } from '../../../lib/talosWindowTilePolicy'
 
 const props = defineProps<{
@@ -66,6 +64,7 @@ const props = defineProps<{
     motionPreferences: TalosMotionV6Preferences
     reducedMotion: boolean
     uiMotionDisabled: boolean
+    mobileWindowPresentation: TalosMobileWindowPresentation
     requestedWindowSections?: Partial<Record<TalosWindowId, string>>
     requestedWindowSectionRevision?: number
 }>()
@@ -117,6 +116,8 @@ const {
     transitionStateFor,
     transitionOriginFor,
     requestWindowClose,
+    retryWindowClose,
+    windowActionFaultFor,
     requestWindowMinimize,
     requestWindowFullscreen,
     requestWindowTile,
@@ -155,6 +156,10 @@ const mobileWindowId = computed<TalosWindowId | null>(() => {
 
     return props.visibleWindowIds[0] ?? null
 })
+const tooltipPortalTarget = computed(() => props.breakpoint !== 'desktop' && mobileWindowId.value
+    ? '#talos-mobile-tooltip-root'
+    : '#talos-portal-root')
+provide(tooltipPortalTargetKey, tooltipPortalTarget)
 
 function isWindowId(value: string): value is TalosWindowId {
     return isTalosWindowId(value)
@@ -343,29 +348,25 @@ function resetFloatingWindowSize(id: string) {
         :key="mobileWindowId"
         :title="TALOS_WINDOW_REGISTRY[mobileWindowId].title"
         :description="TALOS_WINDOW_REGISTRY[mobileWindowId].description"
+        :presentation="mobileWindowPresentation"
+        :return-focus-labels="[TALOS_WINDOW_REGISTRY[mobileWindowId].title, 'Advanced']"
         :data-window-transition="transitionStateFor(mobileWindowId)"
         :data-window-motion-state="transitionStateFor(mobileWindowId)"
+        :data-window-load-state="windowLoadStates[mobileWindowId].status"
         @close="emitWindow('closeWindow', $event)"
     >
-        <TalosWindowSectionTabs
-            v-if="sectionTabsFor(mobileWindowId).length"
-            :window-id="mobileWindowId"
-            :tabs="sectionTabsFor(mobileWindowId)"
-            :active-tab="activeSectionFor(mobileWindowId)"
-            @select="setActiveWindowSection(mobileWindowId, $event)"
-        />
-        <component
-            :is="windowModuleComponent(mobileWindowId)"
-            v-if="windowLoadStates[mobileWindowId].status === 'success' && windowModuleComponent(mobileWindowId)"
-            :context="moduleContextFor(mobileWindowId)"
-        />
-        <TalosWindowErrorState
-            v-else-if="windowLoadStates[mobileWindowId].status === 'error'"
+        <TalosWindowModuleSurface
+            :id="mobileWindowId"
             :title="TALOS_WINDOW_REGISTRY[mobileWindowId].title"
-            :message="windowModuleErrorMessage(mobileWindowId)"
+            :tabs="sectionTabsFor(mobileWindowId)"
+            :active-section="activeSectionFor(mobileWindowId)"
+            :load-state="windowLoadStates[mobileWindowId]"
+            :module-component="windowModuleComponent(mobileWindowId)"
+            :module-context="moduleContextFor(mobileWindowId)"
+            :error-message="windowModuleErrorMessage(mobileWindowId)"
+            @select-section="setActiveWindowSection(mobileWindowId, $event)"
             @retry="requestWindowModule(mobileWindowId, true)"
         />
-        <TalosWindowLoadingState v-else :title="TALOS_WINDOW_REGISTRY[mobileWindowId].title" />
     </TalosMobileToolSheet>
 
     <div v-if="breakpoint === 'desktop'" ref="motionRoot" data-testid="talos-desktop-window-stage" :data-window-interaction="interactingWindowKind ?? 'idle'" class="pointer-events-none absolute inset-0 z-50 hidden overflow-hidden xl:block">
@@ -398,6 +399,7 @@ function resetFloatingWindowSize(id: string) {
                 class="h-full pointer-events-auto"
                 :data-window-transition="transitionStateFor(id)"
                 :data-window-motion-state="transitionStateFor(id)"
+                :data-window-load-state="windowLoadStates[id].status"
                 @close="emitWindow('closeWindow', $event)"
                 @minimize="emitWindow('minimizeWindow', $event)"
                 @dock="emitWindow('dockWindow', $event)"
@@ -408,34 +410,29 @@ function resetFloatingWindowSize(id: string) {
                 @peek="togglePeek"
                 @cancel-interaction="cancelWindowInteraction"
             >
-                <TalosWindowSectionTabs
-                    v-if="sectionTabsFor(id).length"
-                    :window-id="id"
+                <TalosWindowModuleSurface
+                    :id="id"
+                    :title="TALOS_WINDOW_REGISTRY[id].title"
                     :tabs="sectionTabsFor(id)"
-                    :active-tab="activeSectionFor(id)"
-                    @select="setActiveWindowSection(id, $event)"
-                />
-                <component
-                    :is="windowModuleComponent(id)"
-                    v-if="windowLoadStates[id].status === 'success' && windowModuleComponent(id)"
-                    :context="moduleContextFor(id)"
-                />
-                <TalosWindowErrorState
-                    v-else-if="windowLoadStates[id].status === 'error'"
-                    :title="TALOS_WINDOW_REGISTRY[id].title"
-                    :message="windowModuleErrorMessage(id)"
+                    :active-section="activeSectionFor(id)"
+                    :load-state="windowLoadStates[id]"
+                    :module-component="windowModuleComponent(id)"
+                    :module-context="moduleContextFor(id)"
+                    :error-message="windowModuleErrorMessage(id)"
+                    @select-section="setActiveWindowSection(id, $event)"
                     @retry="requestWindowModule(id, true)"
-                />
-                <TalosWindowLoadingState
-                    v-else
-                    :title="TALOS_WINDOW_REGISTRY[id].title"
                 />
             </TalosToolWindow>
         </div>
         <TalosWindowSnapPreview :target="previewTarget" :bounds="previewBounds" />
     </div>
 
-    <aside v-if="breakpoint === 'desktop' && hasDockedWindows" data-testid="talos-right-dock" class="pointer-events-none absolute inset-y-14 right-0 z-30 hidden w-[420px] flex-col gap-3 overflow-y-auto border-l border-[var(--talos-border)] bg-[var(--talos-sidebar)]/92 p-3 backdrop-blur xl:flex">
+    <aside
+        v-if="breakpoint === 'desktop' && hasDockedWindows"
+        data-testid="talos-right-dock"
+        class="talos-right-dock pointer-events-none absolute inset-y-14 right-0 z-30 hidden flex-col gap-3 overflow-y-auto border-l border-[var(--talos-border)] bg-[var(--talos-sidebar)]/92 p-3 backdrop-blur xl:flex"
+        :style="{ width: `${TALOS_RIGHT_DOCK_WIDTH}px` }"
+    >
         <TalosToolWindow
             v-for="id in dockedVisibleWindowIds"
             :id="id"
@@ -449,61 +446,39 @@ function resetFloatingWindowSize(id: string) {
             class="pointer-events-auto"
             :data-window-transition="transitionStateFor(id)"
             :data-window-motion-state="transitionStateFor(id)"
+            :data-window-load-state="windowLoadStates[id].status"
             @close="emitWindow('closeWindow', $event)"
             @minimize="emitWindow('minimizeWindow', $event)"
             @dock="emitWindow('dockWindow', $event)"
             @focus="emitWindow('focusWindow', $event)"
             @peek="togglePeek"
         >
-            <TalosWindowSectionTabs
-                v-if="sectionTabsFor(id).length"
-                :window-id="id"
-                :tabs="sectionTabsFor(id)"
-                :active-tab="activeSectionFor(id)"
-                @select="setActiveWindowSection(id, $event)"
-            />
-            <component
-                :is="windowModuleComponent(id)"
-                v-if="windowLoadStates[id].status === 'success' && windowModuleComponent(id)"
-                :context="moduleContextFor(id)"
-            />
-            <TalosWindowErrorState
-                v-else-if="windowLoadStates[id].status === 'error'"
+            <TalosWindowModuleSurface
+                :id="id"
                 :title="TALOS_WINDOW_REGISTRY[id].title"
-                :message="windowModuleErrorMessage(id)"
+                :tabs="sectionTabsFor(id)"
+                :active-section="activeSectionFor(id)"
+                :load-state="windowLoadStates[id]"
+                :module-component="windowModuleComponent(id)"
+                :module-context="moduleContextFor(id)"
+                :error-message="windowModuleErrorMessage(id)"
+                @select-section="setActiveWindowSection(id, $event)"
                 @retry="requestWindowModule(id, true)"
             />
-            <TalosWindowLoadingState v-else :title="TALOS_WINDOW_REGISTRY[id].title" />
         </TalosToolWindow>
     </aside>
 
     <div v-if="breakpoint === 'desktop' && minimizeDockWindowIds.length" data-testid="talos-minimized-window-dock" class="absolute bottom-[calc(var(--talos-composer-height,168px)+1.5rem)] left-6 z-40 hidden flex-wrap gap-2 xl:flex" aria-label="Minimized windows">
         <template v-for="id in minimizeDockWindowIds" :key="`min-${id}`">
-            <div
+            <TalosMinimizedWindowChip
                 v-if="minimizedWindowIds.includes(id)"
-                class="pointer-events-auto inline-flex overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] shadow"
-            >
-                <button
-                    type="button"
-                    class="px-3 py-2 text-xs font-medium text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)]"
-                    :aria-label="`Restore ${TALOS_WINDOW_REGISTRY[id].title}`"
-                    :data-testid="`talos-restore-window-${id}`"
-                    @click="restoreMinimizedWindow(id, $event)"
-                >
-                    {{ TALOS_WINDOW_REGISTRY[id].title }}
-                </button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    class="h-auto min-h-8 w-9 rounded-none border-l border-[var(--talos-border)] text-[var(--talos-muted)] hover:text-[var(--talos-text)]"
-                    :aria-label="`Close minimized ${TALOS_WINDOW_REGISTRY[id].title}`"
-                    :data-testid="`talos-close-minimized-window-${id}`"
-                    @click.stop="requestWindowClose(id)"
-                >
-                    <X class="h-3.5 w-3.5" aria-hidden="true" />
-                </Button>
-            </div>
+                :id="id"
+                :title="TALOS_WINDOW_REGISTRY[id].title"
+                :close-fault="windowActionFaultFor(id)"
+                @restore="restoreMinimizedWindow(id, $event)"
+                @close="requestWindowClose(id)"
+                @retry-close="retryWindowClose(id)"
+            />
             <button
                 v-else
                 type="button"

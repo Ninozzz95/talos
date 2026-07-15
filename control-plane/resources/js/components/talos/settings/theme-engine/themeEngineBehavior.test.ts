@@ -171,6 +171,30 @@ describe('Theme Engine behavior', () => {
         expect(container.textContent).toContain('Effective')
     })
 
+    it('shows the canonical 50 percent interface duration on first run and after interface reset', async () => {
+        const customized = createDefaultTalosMotionV6Preferences()
+        customized.interface.duration_scale = 125
+        const freshContainer = mountTheme()
+        await nextTick()
+        await clickByText(freshContainer, 'Motion')
+
+        const freshDuration = freshContainer.querySelector<HTMLInputElement>('[aria-label="Interface duration"]')
+        expect(freshDuration?.value).toBe('50')
+        expect(freshDuration?.closest('label')?.querySelector('output')?.textContent?.trim()).toBe('50%')
+
+        const customizedContainer = mountTheme({ theme_motion_v6: customized })
+        await nextTick()
+        await clickByText(customizedContainer, 'Motion')
+        const duration = customizedContainer.querySelector<HTMLInputElement>('[aria-label="Interface duration"]')
+        expect(duration?.value).toBe('125')
+        expect(duration?.closest('label')?.querySelector('output')?.textContent?.trim()).toBe('125%')
+
+        await clickByText(customizedContainer, 'Reset interface')
+        expect(duration?.value).toBe('50')
+        expect(duration?.closest('label')?.querySelector('output')?.textContent?.trim()).toBe('50%')
+        expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
+    })
+
     it('shows renderer-off background as disabled and restores Adaptive when the user enables it', async () => {
         const motion = createDefaultTalosMotionV6Preferences()
         motion.mode = 'off'

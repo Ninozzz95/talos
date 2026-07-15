@@ -120,9 +120,9 @@ test('conversation, evidence, menus, composer popovers, and mobile history pass 
     await page.keyboard.press('Escape')
 
     if (isMobile) {
-        await page.getByRole('button', { name: 'Open chat history' }).click()
-        await expect(page.getByRole('dialog', { name: 'Chat history' })).toBeVisible()
-        await expectNoAccessibilityViolations(page, 'mobile chat history dialog')
+        await page.getByRole('button', { name: 'Open navigation menu' }).click()
+        await expect(page.getByRole('dialog', { name: 'TALOS navigation' })).toBeVisible()
+        await expectNoAccessibilityViolations(page, 'mobile navigation dialog')
     }
 })
 

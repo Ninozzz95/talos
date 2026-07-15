@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Kadmos\Tool\ToolContractGuard;
 
 final class TalosAuditEvent extends Model
 {
@@ -65,29 +66,29 @@ final class TalosAuditEvent extends Model
      */
     public static function redact(array $payload): array
     {
-        $redacted = [];
+        return self::normalizeRedactionMarkers(ToolContractGuard::redact($payload));
+    }
 
+    /**
+     * Keep the established lowercase API marker while the core owns redaction semantics.
+     *
+     * @param array<string, mixed>|list<mixed> $payload
+     * @return array<string, mixed>|list<mixed>
+     */
+    private static function normalizeRedactionMarkers(array $payload): array
+    {
         foreach ($payload as $key => $value) {
-            $normalizedKey = strtolower((string) $key);
-            if (str_contains($normalizedKey, 'secret')
-                || str_contains($normalizedKey, 'token')
-                || str_contains($normalizedKey, 'password')
-                || str_contains($normalizedKey, 'api_key')
-            ) {
-                $redacted[$key] = '[redacted]';
-                continue;
-            }
-
             if (is_array($value)) {
-                /** @var array<string, mixed> $value */
-                $redacted[$key] = self::redact($value);
+                $payload[$key] = self::normalizeRedactionMarkers($value);
                 continue;
             }
 
-            $redacted[$key] = $value;
+            if (is_string($value)) {
+                $payload[$key] = str_replace('[REDACTED]', '[redacted]', $value);
+            }
         }
 
-        return $redacted;
+        return $payload;
     }
 
     /**

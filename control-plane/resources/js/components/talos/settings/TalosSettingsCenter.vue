@@ -436,7 +436,10 @@ watch(
         <div class="flex min-h-[540px] flex-col md:flex-row">
             <aside class="border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/80 p-3 md:w-56 md:border-b-0 md:border-r" aria-label="Settings categories">
                 <div class="px-2 pb-3">
-                    <h3 class="text-base font-semibold text-[var(--talos-text)]">Settings Center</h3>
+                    <div class="flex items-center gap-1.5">
+                        <h3 class="text-base font-semibold text-[var(--talos-text)]">Settings Center</h3>
+                        <TalosGuideInfoButton guide-id="rail.settings" compact side="bottom" />
+                    </div>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                         Workspace defaults, model behavior and operator preferences from /api/talos/settings.
                     </p>
@@ -455,13 +458,6 @@ watch(
                         <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                         <span>{{ item.label }}</span>
                     </template>
-                    <template #item-action="{ item }">
-                        <TalosGuideInfoButton
-                            :guide-id="`settings.${item.id}`"
-                            compact
-                            side="right"
-                        />
-                    </template>
                 </Tabs>
             </aside>
 
@@ -477,7 +473,10 @@ watch(
                             <Database class="h-3.5 w-3.5 text-[var(--talos-accent)]" />
                             Protected preferences
                         </div>
-                        <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">{{ selectedTab.label }}</h3>
+                        <div class="mt-1 flex items-center gap-1.5">
+                            <h3 class="text-base font-semibold text-[var(--talos-text)]">{{ selectedTab.label }}</h3>
+                            <TalosGuideInfoButton :guide-id="`settings.${selectedTab.id}`" compact side="bottom" />
+                        </div>
                     </div>
                     <Button size="sm" :disabled="savingSettings" @click="saveWorkspaceDefaults">
                         <Loader2 v-if="savingSettings" class="h-4 w-4 animate-spin" />
@@ -610,6 +609,7 @@ watch(
                             @open-theme-engine="openModule('theme', 'motion')"
                             @update-chat-bubble-scale="preferences.chat_layout.bubble_scale = $event"
                             @update-chat-composer-mode="preferences.chat_layout.composer_mode = $event"
+                            @update-mobile-window-presentation="preferences.chat_layout.mobile_window_presentation = $event"
                             @update-advanced-rail-expanded="preferences.chat_layout.advanced_rail_expanded = $event"
                             @update-appearance="updateAppearancePreference"
                             @reset-appearance-group="resetAppearanceGroup"

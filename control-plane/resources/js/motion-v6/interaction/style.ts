@@ -53,6 +53,7 @@ export function talosInteractionMotionStyleV6(request: TalosInteractionMotionSty
     const plans = {
         control: resolve('window-focus'),
         windowOpen: resolve('window-open'),
+        windowClose: resolve('window-close'),
         windowRestore: resolve('window-restore'),
         windowMinimize: resolve('window-minimize'),
         disclosure: resolve('disclosure-open'),
@@ -76,6 +77,7 @@ export function talosInteractionMotionStyleV6(request: TalosInteractionMotionSty
         '--talos-motion-duration-surface-enter': duration(plans.menuOpen),
         '--talos-motion-duration-surface-exit': duration(plans.menuClose),
         '--talos-motion-duration-window-open': duration(plans.windowOpen),
+        '--talos-motion-duration-window-close': duration(plans.windowClose),
         '--talos-motion-duration-window-restore': duration(plans.windowRestore),
         '--talos-motion-duration-window-minimize': duration(plans.windowMinimize),
         '--talos-motion-duration-window-focus': duration(plans.control),

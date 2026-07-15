@@ -10,6 +10,7 @@ use App\Models\TalosBrowserSession;
 use App\Models\TalosSession;
 use App\Models\User;
 use App\Services\Talos\Browser\BrowserSessionClient;
+use App\Services\Talos\Browser\BrowserWorkerConfiguration;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
@@ -1612,6 +1613,17 @@ final class TalosBrowserApiTest extends TestCase
         $this->app->forgetInstance(BrowserSessionClient::class);
 
         $this->assertInstanceOf(FakeBrowserSessionClient::class, $this->app->make(BrowserSessionClient::class));
+    }
+
+    public function test_testing_container_can_use_the_real_http_browser_client_for_live_integration_gates(): void
+    {
+        config()->set('services.talos.browser.client_driver', 'http');
+        config()->set('services.talos.browser.worker_url', 'http://127.0.0.1:3110');
+        config()->set('services.talos.browser.worker_token', 'integration-worker-token');
+        $this->app->forgetInstance(BrowserWorkerConfiguration::class);
+        $this->app->forgetInstance(BrowserSessionClient::class);
+
+        $this->assertInstanceOf(HttpBrowserSessionClient::class, $this->app->make(BrowserSessionClient::class));
     }
 
     public function test_http_browser_client_accepts_a_successful_no_content_close_response(): void

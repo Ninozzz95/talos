@@ -71,6 +71,21 @@ describe('useTalosWindowManager', () => {
         expect(document.activeElement).toBe(launcher)
     })
 
+    it('closes a minimized window idempotently without deleting its persisted geometry', () => {
+        const manager = useTalosWindowManager(['theme'], { area: ref(initialArea), breakpoint: ref('desktop') })
+        const expectedBounds = { x: 410, y: 130, width: 610, height: 430 }
+        manager.setWindowBounds('theme', expectedBounds)
+        manager.saveWindowLayout()
+        manager.minimizeWindow('theme')
+
+        manager.closeWindow('theme')
+        manager.closeWindow('theme')
+
+        expect(manager.state.value.windows.theme.visibility).toBe('closed')
+        expect(manager.state.value.windows.theme.bounds).toEqual(expectedBounds)
+        expect(JSON.parse(localStorage.getItem(TALOS_WINDOW_LAYOUT_V2_KEY) ?? '{}').layouts.desktop.windows.theme.bounds).toEqual(expectedBounds)
+    })
+
     it.each(['close', 'minimize'] as const)('assigns a stable focus target when the launcher has no id and restores it after %s', async (action) => {
         const launcher = document.createElement('button')
         launcher.textContent = 'Theme launcher'

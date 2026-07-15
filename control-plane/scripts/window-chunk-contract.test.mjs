@@ -42,6 +42,12 @@ test('initial application chunk stays below the warning threshold', () => {
     assert.ok(bytes < 500 * 1024, `initial app chunk is ${bytes} bytes; expected less than 512000`)
 })
 
+test('the stable Markdown sanitizer stack has an explicit cacheable chunk', () => {
+    const markdownRuntime = Object.values(manifest).find((value) => value.name === 'markdown-runtime')
+    assert.ok(markdownRuntime, 'the production manifest must contain the markdown-runtime chunk')
+    assert.ok((entry.imports ?? []).some((key) => manifest[key]?.file === markdownRuntime.file), 'the app entry must import the markdown runtime')
+})
+
 test('interactive browser evidence remains outside the initial static closure', () => {
     const evidenceKey = 'resources/js/components/talos/chat/TalosBrowserScreenshotEvidence.vue'
     assert.ok(manifest[evidenceKey]?.isDynamicEntry, 'browser evidence must remain a dynamic entry')

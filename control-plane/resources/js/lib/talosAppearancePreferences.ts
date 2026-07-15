@@ -1,4 +1,15 @@
 export type TalosAppearanceGroup = 'chat_area' | 'chat_bar' | 'sidebar'
+export type TalosWorkspaceBreakpoint = 'mobile' | 'tablet' | 'desktop'
+
+export function resolveTalosMissionPathVisibility(input: {
+    developmentMode: boolean
+    breakpoint: TalosWorkspaceBreakpoint
+    preferenceEnabled: boolean
+}) {
+    return input.developmentMode
+        && input.breakpoint !== 'mobile'
+        && input.preferenceEnabled
+}
 
 export type TalosAppearanceVisibility = {
     chat_area: {

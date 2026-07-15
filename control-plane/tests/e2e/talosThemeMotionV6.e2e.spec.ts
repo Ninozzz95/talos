@@ -110,11 +110,7 @@ async function bootstrap(page: Page, options: InstallTalosApiMocksOptions = {}) 
 }
 
 async function openThemeMotion(page: Page, isMobile: boolean) {
-    if (isMobile) {
-        await page.getByRole('button', { name: 'Open chat history' }).click()
-    }
-
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await page.getByRole('button', { name: 'Theme', exact: true }).filter({ visible: true }).first().click()
     await expect(page.locator('#talos-theme-control-tab-motion')).toBeVisible()
     await page.locator('#talos-theme-control-tab-motion').click()
     await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
@@ -126,6 +122,19 @@ async function setRange(page: Page, label: string, value: number) {
         input.value = String(nextValue)
         input.dispatchEvent(new Event('input', { bubbles: true }))
     }, value)
+}
+
+async function openThemeMotionResponsive(page: Page) {
+    await page.getByRole('button', { name: 'Theme', exact: true }).filter({ visible: true }).first().click()
+    await expect(page.locator('#talos-theme-control-tab-motion')).toBeVisible()
+    await page.locator('#talos-theme-control-tab-motion').click()
+    await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
+}
+
+async function expectInterfaceDuration(page: Page, value: number) {
+    const slider = page.getByRole('slider', { name: 'Interface duration' })
+    await expect(slider).toHaveValue(String(value))
+    await expect(page.locator('label', { has: slider }).locator('output')).toHaveText(`${value}%`)
 }
 
 function visiblePixelDifference(before: Buffer, after: Buffer) {
@@ -187,6 +196,53 @@ async function readPreviewCanvas(page: Page) {
 }
 
 test.describe.configure({ mode: 'serial' })
+
+for (const viewport of [
+    { name: '320x800', width: 320, height: 800 },
+    { name: '375x812', width: 375, height: 812 },
+    { name: '1280x800', width: 1280, height: 800 },
+    { name: '1440x900', width: 1440, height: 900 },
+] as const) {
+    test.describe(`interface duration contract at ${viewport.name}`, () => {
+        test.use({ viewport: { width: viewport.width, height: viewport.height } })
+
+        test('keeps first-run, saved, reduced-motion and reset values human-visible', async ({ page, isMobile }) => {
+            test.skip(isMobile, 'the exact viewport matrix runs once in the desktop Chromium project')
+            const ledger = await bootstrap(page)
+            await openThemeMotionResponsive(page)
+            ledger.clear()
+
+            await expectInterfaceDuration(page, 50)
+            await setRange(page, 'Interface duration', 125)
+            await expectInterfaceDuration(page, 125)
+            const savedAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 1 })
+            await page.getByRole('button', { name: 'Save motion' }).click()
+            await savedAck
+
+            await page.reload({ waitUntil: 'domcontentloaded' })
+            await waitForWorkspaceReady(page)
+            await openThemeMotionResponsive(page)
+            await expectInterfaceDuration(page, 125)
+
+            await page.emulateMedia({ reducedMotion: 'reduce' })
+            await page.reload({ waitUntil: 'domcontentloaded' })
+            await waitForWorkspaceReady(page)
+            await openThemeMotionResponsive(page)
+            await expectInterfaceDuration(page, 125)
+
+            await page.getByRole('button', { name: 'Reset interface', exact: true }).click()
+            await expectInterfaceDuration(page, 50)
+            const resetAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 2 })
+            await page.getByRole('button', { name: 'Save motion' }).click()
+            await resetAck
+
+            await page.reload({ waitUntil: 'domcontentloaded' })
+            await waitForWorkspaceReady(page)
+            await openThemeMotionResponsive(page)
+            await expectInterfaceDuration(page, 50)
+        })
+    })
+}
 
 test('saves only a complete Motion V6 payload and preserves it across reload', async ({ page, isMobile }) => {
     const initialMotion = cloneMotion()
@@ -472,6 +528,23 @@ test('migrates strict V1 theme motion and round-trips strict V2 without legacy f
     expect(roundTripped).not.toHaveProperty('motion')
     expect(roundTripped).not.toHaveProperty('ui_animation_profile')
     expect(roundTripped).not.toHaveProperty('ui_animation_customization')
+
+    const patchesBeforeInvalidImport = ledger.patches.length
+    const invalidV2 = structuredClone(v2)
+    invalidV2.theme.id = 'invalid-motion-v2-import'
+    invalidV2.theme.name = 'Invalid Motion V2 Import'
+    ;(invalidV2.theme.motion_v6 as ReturnType<typeof migratedV1Motion>).interface.duration_scale = 151
+    await page.getByLabel('Import theme JSON').fill(JSON.stringify(invalidV2))
+    await page.getByRole('button', { name: 'Import theme', exact: true }).click()
+    await expect(page.getByText(/rejected/i)).toBeVisible()
+    expect(ledger.patches).toHaveLength(patchesBeforeInvalidImport)
+
+    await page.locator('#talos-theme-control-tab-motion').click()
+    await expectInterfaceDuration(page, 125)
+    const settingsAfterInvalidImport = await page.evaluate(async () => (await fetch('/api/talos/settings')).json()) as {
+        data: { preferences: { theme_motion_v6: ReturnType<typeof migratedV1Motion> } }
+    }
+    expect(settingsAfterInvalidImport.data.preferences.theme_motion_v6.interface.duration_scale).toBe(125)
 })
 
 test('mounts the real product preview and proves mode controls and supported canvas motion', async ({ page, isMobile }) => {

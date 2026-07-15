@@ -50,6 +50,7 @@ return [
 
     'talos' => [
         'browser' => [
+            'client_driver' => env('TALOS_BROWSER_CLIENT_DRIVER'),
             'worker_url' => env('TALOS_BROWSER_WORKER_URL'),
             'worker_token' => env('TALOS_BROWSER_WORKER_TOKEN'),
             'allow_insecure_internal_transport' => env('TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT', false),

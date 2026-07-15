@@ -23,6 +23,7 @@ function mountAppearance(withVisibilityGroups = false) {
     document.body.append(shell)
 
     let themeEngineOpenCount = 0
+    const mobilePresentationUpdates: string[] = []
     const app = createApp(defineComponent({
         setup() {
             return () => h(TalosSettingsAppearancePanel, {
@@ -35,6 +36,7 @@ function mountAppearance(withVisibilityGroups = false) {
                 onOpenThemeEngine: () => {
                     themeEngineOpenCount += 1
                 },
+                onUpdateMobileWindowPresentation: (value: string) => mobilePresentationUpdates.push(value),
             })
         },
     }))
@@ -42,7 +44,7 @@ function mountAppearance(withVisibilityGroups = false) {
     mounted.push(app)
     app.mount(container)
 
-    return { container, portalRoot, themeEngineOpenCount: () => themeEngineOpenCount }
+    return { container, portalRoot, themeEngineOpenCount: () => themeEngineOpenCount, mobilePresentationUpdates }
 }
 
 describe('TalosSettingsAppearancePanel tabs', () => {
@@ -107,5 +109,20 @@ describe('TalosSettingsAppearancePanel tabs', () => {
         openButton?.click()
         await nextTick()
         expect(themeEngineOpenCount()).toBe(1)
+    })
+
+    it('offers the persisted Drawer/fullscreen choice in Appearance design settings', async () => {
+        const { container, mobilePresentationUpdates } = mountAppearance()
+        const presentation = container.querySelector<HTMLSelectElement>('[aria-label="Mobile tool window presentation"]')
+
+        expect(presentation?.value).toBe('drawer')
+        expect(Array.from(presentation?.options ?? []).map((option) => option.value)).toEqual(['drawer', 'fullscreen'])
+
+        if (presentation) {
+            presentation.value = 'fullscreen'
+            presentation.dispatchEvent(new Event('change', { bubbles: true }))
+            await nextTick()
+        }
+        expect(mobilePresentationUpdates).toEqual(['fullscreen'])
     })
 })

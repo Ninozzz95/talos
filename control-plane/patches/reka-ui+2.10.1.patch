@@ -1,0 +1,94 @@
+diff --git a/node_modules/reka-ui/dist/shared/useHideOthers.cjs b/node_modules/reka-ui/dist/shared/useHideOthers.cjs
+index d029675..8551d96 100644
+--- a/node_modules/reka-ui/dist/shared/useHideOthers.cjs
++++ b/node_modules/reka-ui/dist/shared/useHideOthers.cjs
+@@ -13,17 +13,20 @@ const aria_hidden = require_rolldown_runtime.__toESM(require("aria-hidden"));
+ */
+ function useHideOthers(target) {
+ 	let undo;
++	const restoreOthers = () => {
++		const restore = undo;
++		undo = void 0;
++		restore?.();
++	};
+ 	(0, vue.watch)(() => (0, __vueuse_core.unrefElement)(target), (el) => {
+ 		let isInsideClosedPopover = false;
+ 		try {
+ 			isInsideClosedPopover = !!el?.closest("[popover]:not(:popover-open)");
+ 		} catch {}
++		restoreOthers();
+ 		if (el && !isInsideClosedPopover) undo = (0, aria_hidden.hideOthers)(el);
+-		else if (undo) undo();
+-	});
+-	(0, vue.onUnmounted)(() => {
+-		if (undo) undo();
+ 	});
++	(0, vue.onUnmounted)(restoreOthers);
+ }
+ 
+ //#endregion
+diff --git a/node_modules/reka-ui/dist/shared/useHideOthers.js b/node_modules/reka-ui/dist/shared/useHideOthers.js
+index c9e22b7..483801d 100644
+--- a/node_modules/reka-ui/dist/shared/useHideOthers.js
++++ b/node_modules/reka-ui/dist/shared/useHideOthers.js
+@@ -12,17 +12,20 @@ import { hideOthers } from "aria-hidden";
+ */
+ function useHideOthers(target) {
+ 	let undo;
++	const restoreOthers = () => {
++		const restore = undo;
++		undo = void 0;
++		restore?.();
++	};
+ 	watch(() => unrefElement(target), (el) => {
+ 		let isInsideClosedPopover = false;
+ 		try {
+ 			isInsideClosedPopover = !!el?.closest("[popover]:not(:popover-open)");
+ 		} catch {}
++		restoreOthers();
+ 		if (el && !isInsideClosedPopover) undo = hideOthers(el);
+-		else if (undo) undo();
+-	});
+-	onUnmounted(() => {
+-		if (undo) undo();
+ 	});
++	onUnmounted(restoreOthers);
+ }
+ 
+ //#endregion
+diff --git a/node_modules/reka-ui/src/shared/useHideOthers.ts b/node_modules/reka-ui/src/shared/useHideOthers.ts
+index 1c90678..1ccc8b5 100644
+--- a/node_modules/reka-ui/src/shared/useHideOthers.ts
++++ b/node_modules/reka-ui/src/shared/useHideOthers.ts
+@@ -11,7 +11,13 @@ import { onUnmounted, watch } from 'vue'
+  * to hide other elements when it is clicked or focused.
+  */
+ export function useHideOthers(target: MaybeElementRef) {
+-  let undo: ReturnType<typeof hideOthers>
++  let undo: ReturnType<typeof hideOthers> | undefined
++  const restoreOthers = () => {
++    const restore = undo
++    undo = undefined
++    restore?.()
++  }
++
+   watch(() => unrefElement(target), (el) => {
+     // disable hideOthers on test mode
+     if (import.meta.env.MODE === 'test')
+@@ -23,14 +29,10 @@ export function useHideOthers(target: MaybeElementRef) {
+       isInsideClosedPopover = !!el?.closest('[popover]:not(:popover-open)')
+     }
+     catch {}
++    restoreOthers()
+     if (el && !isInsideClosedPopover)
+       undo = hideOthers(el)
+-    else if (undo)
+-      undo()
+   })
+ 
+-  onUnmounted(() => {
+-    if (undo)
+-      undo()
+-  })
++  onUnmounted(restoreOthers)
+ }
