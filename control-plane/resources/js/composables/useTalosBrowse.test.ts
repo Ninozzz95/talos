@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TalosApiError, talosFetch } from '../lib/api'
-import type { TalosBrowserArtifact, TalosBrowserSession } from '../lib/talosTypes'
+import type { TalosBrowserArtifact, TalosBrowserSession, TalosBrowserTask } from '../lib/talosTypes'
 import { useTalosBrowse } from './useTalosBrowse'
 
 vi.mock('../lib/api', async (importOriginal) => ({
@@ -29,6 +29,28 @@ function browserSession(talosSessionId: string): TalosBrowserSession {
     }
 }
 
+function browserTask(talosSessionId: string, status: TalosBrowserTask['status'] = 'running'): TalosBrowserTask {
+    return {
+        id: `task-${talosSessionId}`,
+        talos_session_id: talosSessionId,
+        origin_message_id: 'message-1',
+        browser_session_id: `browser-${talosSessionId}`,
+        goal: 'Inspect the requested page.',
+        status,
+        autonomy_profile: 'assist',
+        budget: { actions: 12 },
+        state_version: status === 'cancelled' ? 4 : 3,
+        requested_at: '2026-07-16T08:00:00Z',
+        started_at: '2026-07-16T08:00:01Z',
+        completed_at: null,
+        failed_at: null,
+        cancelled_at: status === 'cancelled' ? '2026-07-16T08:00:02Z' : null,
+        reconciled_at: null,
+        created_at: '2026-07-16T08:00:00Z',
+        updated_at: '2026-07-16T08:00:02Z',
+    }
+}
+
 describe('useTalosBrowse chat isolation', () => {
     beforeEach(() => {
         talosFetchMock.mockReset()
@@ -44,6 +66,7 @@ describe('useTalosBrowse chat isolation', () => {
         browse.latestSnapshot.value = {
             snapshot: { untrusted: true, nodes: [] },
         }
+        browse.browserTasks.value = [browserTask('chat-a')]
 
         browse.bindTalosSession('chat-b')
 
@@ -53,7 +76,189 @@ describe('useTalosBrowse chat isolation', () => {
         expect(browse.events.value).toEqual([])
         expect(browse.latestScreenshot.value).toBeNull()
         expect(browse.latestSnapshot.value).toBeNull()
+        expect(browse.browserTasks.value).toEqual([])
+        expect(browse.activeBrowserTask.value).toBeNull()
         expect(browse.browserMode.value).toMatchObject({ enabled: false, session_id: null, status: 'disconnected' })
+    })
+
+    it('loads the latest durable task after reload and clears it on chat change', async () => {
+        const running = browserTask('chat-a')
+        talosFetchMock.mockResolvedValue({ data: [running] } as never)
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+
+        await browse.loadBrowserTasks()
+
+        expect(talosFetchMock).toHaveBeenCalledWith(
+            '/api/talos/browser/tasks?talos_session_id=chat-a',
+            { headers: { 'X-Talos-Session-Id': 'chat-a' } },
+        )
+        expect(browse.activeBrowserTask.value).toEqual(running)
+
+        browse.bindTalosSession('chat-b')
+        expect(browse.browserTasks.value).toEqual([])
+        expect(browse.activeBrowserTask.value).toBeNull()
+    })
+
+    it('cancels the active task with its current version and a stable command id across retry', async () => {
+        const running = browserTask('chat-a')
+        const cancelled = browserTask('chat-a', 'cancelled')
+        const cancellationBodies: Array<Record<string, unknown>> = []
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/tasks?talos_session_id=chat-a') return { data: [running] } as never
+            if (url === `/api/talos/browser/tasks/${running.id}/cancel`) {
+                cancellationBodies.push(JSON.parse(String(options?.body)) as Record<string, unknown>)
+                if (cancellationBodies.length === 1) throw new TalosApiError('Connection interrupted.')
+                return { data: { task: cancelled } } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+        await browse.loadBrowserTasks()
+
+        await expect(browse.cancelActiveBrowserTask()).rejects.toThrow('Connection interrupted.')
+        await expect(browse.cancelActiveBrowserTask()).resolves.toEqual(cancelled)
+
+        expect(cancellationBodies).toHaveLength(2)
+        expect(cancellationBodies[0]).toMatchObject({
+            expected_state_version: running.state_version,
+            reason: 'The user stopped this Browser task.',
+        })
+        expect(cancellationBodies[0]?.command_id).toMatch(/^[0-9a-f-]{36}$/)
+        expect(cancellationBodies[1]?.command_id).toBe(cancellationBodies[0]?.command_id)
+        expect(browse.activeBrowserTask.value?.status).toBe('cancelled')
+    })
+
+    it('BREG-020 cancels the exact non-primary task selected by its card', async () => {
+        const primary = browserTask('chat-a')
+        const selected = {
+            ...browserTask('chat-a'),
+            id: 'task-chat-a-selected',
+            browser_session_id: 'browser-chat-a-selected',
+        }
+        const cancelled = {
+            ...selected,
+            status: 'cancelled' as const,
+            state_version: selected.state_version + 1,
+            cancelled_at: '2026-07-16T08:00:03Z',
+        }
+        const requestedUrls: string[] = []
+        talosFetchMock.mockImplementation(async (url) => {
+            requestedUrls.push(url)
+            if (url === '/api/talos/browser/tasks?talos_session_id=chat-a') {
+                return { data: [primary, selected] } as never
+            }
+            if (url === `/api/talos/browser/tasks/${selected.id}/cancel`) {
+                return { data: { task: cancelled } } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+        await browse.loadBrowserTasks()
+
+        expect(browse.activeBrowserTask.value?.id).toBe(primary.id)
+        await expect(browse.cancelBrowserTask(selected.id)).resolves.toEqual(cancelled)
+
+        expect(requestedUrls).toContain(`/api/talos/browser/tasks/${selected.id}/cancel`)
+        expect(requestedUrls).not.toContain(`/api/talos/browser/tasks/${primary.id}/cancel`)
+        expect(browse.browserTaskCommandTargetId.value).toBe(selected.id)
+        expect(browse.browserTasks.value.find((task) => task.id === primary.id)?.status).toBe('running')
+        expect(browse.browserTasks.value.find((task) => task.id === selected.id)?.status).toBe('cancelled')
+
+        const requestCount = requestedUrls.length
+        await expect(browse.cancelBrowserTask('missing-task')).resolves.toBeNull()
+        await expect(browse.cancelBrowserTask(selected.id)).resolves.toBeNull()
+        browse.browserTasks.value.push({
+            ...primary,
+            id: 'task-foreign-session',
+            talos_session_id: 'chat-b',
+        })
+        await expect(browse.cancelBrowserTask('task-foreign-session')).resolves.toBeNull()
+        expect(requestedUrls).toHaveLength(requestCount)
+    })
+
+    it('BREG-020 rejects a cancellation response projected from another same-chat task', async () => {
+        const selected = browserTask('chat-a')
+        const other = { ...browserTask('chat-a'), id: 'task-chat-a-other' }
+        talosFetchMock.mockImplementation(async (url) => {
+            if (url === '/api/talos/browser/tasks?talos_session_id=chat-a') {
+                return { data: [selected, other] } as never
+            }
+            if (url === `/api/talos/browser/tasks/${selected.id}/cancel`) {
+                return {
+                    data: {
+                        task: { ...other, status: 'cancelled', state_version: other.state_version + 1 },
+                    },
+                } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+        await browse.loadBrowserTasks()
+
+        await expect(browse.cancelBrowserTask(selected.id)).rejects.toThrow('another Browser task')
+
+        expect(browse.browserTasks.value.find((task) => task.id === selected.id)?.status).toBe('running')
+        expect(browse.browserTasks.value.find((task) => task.id === other.id)?.status).toBe('running')
+        expect(browse.browserTaskCommandTargetId.value).toBe(selected.id)
+    })
+
+    it('refreshes after a cancellation conflict without exposing an internal code', async () => {
+        const running = browserTask('chat-a')
+        const cancelled = browserTask('chat-a', 'cancelled')
+        let listCount = 0
+        talosFetchMock.mockImplementation(async (url) => {
+            if (url === '/api/talos/browser/tasks?talos_session_id=chat-a') {
+                listCount += 1
+                return { data: [listCount === 1 ? running : cancelled] } as never
+            }
+            if (url === `/api/talos/browser/tasks/${running.id}/cancel`) {
+                throw new TalosApiError('TALOS_BROWSER_TASK_TRANSITION_INVALID', {
+                    status: 409,
+                    details: { code: 'TALOS_BROWSER_TASK_TRANSITION_INVALID' },
+                })
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+        await browse.loadBrowserTasks()
+
+        await expect(browse.cancelActiveBrowserTask()).resolves.toBeNull()
+
+        expect(browse.activeBrowserTask.value?.status).toBe('cancelled')
+        expect(browse.browserTaskError.value).toBe('The Browser task changed before cancellation. TALOS refreshed its current state.')
+        expect(browse.browserTaskError.value).not.toContain('TALOS_BROWSER_')
+    })
+
+    it('does not claim that a cancellation conflict was refreshed when the refresh failed', async () => {
+        const running = browserTask('chat-a')
+        let listCount = 0
+        talosFetchMock.mockImplementation(async (url) => {
+            if (url === '/api/talos/browser/tasks?talos_session_id=chat-a') {
+                listCount += 1
+                if (listCount === 1) return { data: [running] } as never
+                throw new TalosApiError('Connection unavailable.')
+            }
+            if (url === `/api/talos/browser/tasks/${running.id}/cancel`) {
+                throw new TalosApiError('Conflict', {
+                    status: 409,
+                    details: { code: 'TALOS_BROWSER_TASK_VERSION_CONFLICT' },
+                })
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+        await browse.loadBrowserTasks()
+
+        await expect(browse.cancelActiveBrowserTask()).resolves.toBeNull()
+
+        expect(browse.browserTaskError.value).toBe('The Browser task changed before cancellation, but TALOS could not refresh it. Check the connection and try again.')
+        expect(browse.browserTaskError.value).not.toContain('TALOS_BROWSER_')
     })
 
     it('lists and creates browser sessions only inside the bound chat', async () => {

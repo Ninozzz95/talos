@@ -11,6 +11,7 @@ use App\Models\TalosBrowserSession;
 use App\Models\TalosSession;
 use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
+use App\Services\Talos\Browser\BrowserActionAuthorization;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
@@ -120,6 +121,12 @@ final class TalosBrowserHmiApiTest extends TestCase
         $this->assertSame('ordinary', $this->client->requests[1]['payload']['effect_classification'] ?? null);
         $this->assertFalse($this->client->requests[1]['payload']['sensitive_effect_authorized'] ?? true);
         $this->assertSame($this->preflight()['target']['fingerprint'], $this->client->requests[1]['payload']['expected_fingerprint']);
+        $authorization = $this->client->requests[1]['authorization'] ?? null;
+        $this->assertInstanceOf(BrowserActionAuthorization::class, $authorization);
+        $this->assertSame(
+            $this->client->requests[1]['payload']['command_id'],
+            $authorization->actionId(),
+        );
 
         $fresh = $this->browser->fresh();
         $this->assertSame(8, $fresh->worker_state_version);
@@ -127,6 +134,16 @@ final class TalosBrowserHmiApiTest extends TestCase
         $this->assertSame($response->json('data.snapshot.id'), $fresh->last_snapshot_artifact_id);
         $this->assertDatabaseCount('talos_browser_artifacts', 3);
         $command = TalosBrowserHmiApproval::query()->sole();
+        $this->assertSame([
+            'kind' => 'user_approval',
+            'approval_id' => (string) $command->id,
+            'approval_request_sha256' => (string) $command->request_hash,
+            'execution_lease_sha256' => $authorization->toCapabilityAttestation()['execution_lease_sha256'],
+        ], $authorization->toCapabilityAttestation());
+        $this->assertMatchesRegularExpression(
+            '/^sha256:[a-f0-9]{64}$/D',
+            $authorization->toCapabilityAttestation()['execution_lease_sha256'],
+        );
         $this->assertSame('consumed', $command->status);
         $this->assertSame($interactionId, $command->interaction_id);
         $this->assertSame(1, $command->execution_attempts);

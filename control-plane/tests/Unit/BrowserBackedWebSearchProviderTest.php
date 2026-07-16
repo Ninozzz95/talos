@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Services\Security\PublicHttpUrlPolicy;
+use App\Services\Talos\Browser\BrowserActionAuthorization;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserToolResult;
+use App\Services\Talos\Browser\FakeBrowserSessionClient;
+use App\Services\Talos\Browser\TalosBrowserWorkerHandshake;
 use App\Services\Talos\Web\BrowserBackedWebSearchProvider;
 use Tests\TestCase;
 
@@ -349,13 +352,25 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
     /** @var list<int> */
     public array $createTtls = [];
 
+    public function handshake(string $ownerRef, int $timeoutMilliseconds = 5000): TalosBrowserWorkerHandshake
+    {
+        return (new FakeBrowserSessionClient)->handshake($ownerRef, $timeoutMilliseconds);
+    }
+
     public function toolDefinitions(string $ownerRef): array
     {
         throw new \LogicException('Browser search must not use tool definitions.');
     }
 
-    public function callTool(string $ownerRef, string $workerSessionId, string $toolUseId, string $name, array $arguments, int $timeoutMs = 15000): BrowserToolResult
-    {
+    public function callTool(
+        string $ownerRef,
+        string $workerSessionId,
+        string $toolUseId,
+        string $name,
+        array $arguments,
+        int $timeoutMs = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): BrowserToolResult {
         throw new \LogicException('Browser search must use the session lifecycle API.');
     }
 
@@ -372,6 +387,17 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
             'mode' => 'read_only',
             'status' => 'ready',
         ];
+    }
+
+    public function createIdempotent(
+        string $ownerRef,
+        int $width,
+        int $height,
+        string $idempotencyKey,
+        int $timeoutMilliseconds = 15000,
+        int $ttlSeconds = 3600,
+    ): array {
+        return $this->create($ownerRef, $width, $height, $timeoutMilliseconds, $ttlSeconds);
     }
 
     public function inspect(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array
@@ -409,8 +435,13 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
         throw new \LogicException('Browser search must not use HMI pointer preflight.');
     }
 
-    public function executePointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
-    {
+    public function executePointer(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array {
         throw new \LogicException('Browser search must not use HMI pointer execution.');
     }
 
@@ -419,6 +450,11 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
         $this->timeouts['close'][] = $timeoutMilliseconds;
         $this->record('close', compact('ownerRef', 'workerSessionId'));
         $this->afterCall('close');
+    }
+
+    public function cancel(string $ownerRef, string $workerSessionId, string $reason, int $timeoutMilliseconds = 15000): void
+    {
+        throw new \LogicException('Browser search must not cancel a durable Browser task.');
     }
 
     /** @param array<string, mixed> $arguments */

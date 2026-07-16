@@ -13,7 +13,11 @@ export function useTalosWorkspaceBrowse(
     activeTalosSessionId: Ref<string | null>,
     ensureTalosSessionId: () => Promise<string>,
     persistence: TalosBrowsePersistence = {},
-    options: { devBrowserEvidence?: boolean } = {},
+    options: {
+        devBrowserEvidence?: boolean
+        taskActivity?: Readonly<Ref<boolean>>
+        taskPollingIntervalMs?: number
+    } = {},
 ) {
     const enabled = ref(initiallyEnabled)
     const browse = useTalosBrowse({ devBrowserEvidence: options.devBrowserEvidence === true })
@@ -261,6 +265,45 @@ export function useTalosWorkspaceBrowse(
         return browse.confirmScreenshotInteraction(decision)
     }
 
+    async function cancelBrowserTask(taskId: string) {
+        return browse.cancelBrowserTask(taskId)
+    }
+
+    async function cancelActiveBrowserTask() {
+        return browse.cancelActiveBrowserTask()
+    }
+
+    if (options.taskActivity) {
+        const pollingInterval = Math.max(5, options.taskPollingIntervalMs ?? 750)
+        watch(
+            [options.taskActivity, enabled, activeTalosSessionId],
+            ([requestActive, browseEnabled, talosSessionId], _previous, onCleanup) => {
+                if (!talosSessionId) return
+                browse.bindTalosSession(talosSessionId)
+
+                let disposed = false
+                let timer: ReturnType<typeof setTimeout> | null = null
+                const poll = async () => {
+                    try {
+                        await browse.loadBrowserTasks({ quiet: true })
+                    } catch {
+                        // Session and chat errors remain independent from the compact task monitor.
+                    }
+                    if (!disposed && browseEnabled && requestActive) {
+                        timer = setTimeout(() => void poll(), pollingInterval)
+                    }
+                }
+
+                void poll()
+                onCleanup(() => {
+                    disposed = true
+                    if (timer !== null) clearTimeout(timer)
+                })
+            },
+            { immediate: true, flush: 'post' },
+        )
+    }
+
     return {
         browseModeEnabled: enabled,
         isBrowseSurface,
@@ -271,6 +314,11 @@ export function useTalosWorkspaceBrowse(
         visibleBrowserActivities: visibleActivities,
         latestBrowserScreenshot: browse.latestScreenshot,
         latestBrowserSnapshot: browse.latestSnapshot,
+        browserTasks: browse.browserTasks,
+        activeBrowserTask: browse.activeBrowserTask,
+        browserTaskBusy: browse.browserTaskBusy,
+        browserTaskError: browse.browserTaskError,
+        browserTaskCommandTargetId: browse.browserTaskCommandTargetId,
         browserInteractionPending: browse.interactionPending,
         browserInteractionError: browse.interactionError,
         pendingBrowserInteractionApproval: browse.pendingInteractionApproval,
@@ -287,5 +335,7 @@ export function useTalosWorkspaceBrowse(
         initializeBrowse: initialize,
         interactWithBrowserFrame,
         confirmBrowserFrameInteraction,
+        cancelBrowserTask,
+        cancelActiveBrowserTask,
     }
 }

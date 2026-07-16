@@ -1,0 +1,22 @@
+{
+  "schema_version": "talos.browser.action.v1",
+  "action_id": "44444444-4444-4444-8444-444444444444",
+  "task_id": "11111111-1111-4111-8111-111111111111",
+  "intent_id": "55555555-5555-4555-8555-555555555555",
+  "sequence": 1,
+  "kind": "navigate",
+  "arguments": {
+    "url": "https://example.test/vehicles?id=42#details"
+  },
+  "expected_state_version": 3,
+  "risk": "read",
+  "idempotency_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "preconditions": [
+    {
+      "kind": "task_state_version",
+      "value": 3
+    }
+  ],
+  "status": "evidence_committed",
+  "created_at": "2026-07-15T12:00:01Z"
+}

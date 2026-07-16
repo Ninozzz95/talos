@@ -45,26 +45,72 @@ export class BrowserToolDispatcher {
     }
 
     const call = parsedCall.data;
-    if (call.name === "browser_click") return this.clickWithIdempotency(sessionId, call, context);
     let session: BrowserSession | undefined;
     try {
-      return await this.sessions.runExclusive(sessionId, async (current) => {
-        session = current;
-        switch (call.name) {
-          case "browser_navigate": return await this.navigate(current, call);
-          case "browser_snapshot": return await this.snapshot(current, call);
-          case "browser_read": return await this.read(current, call);
-          case "browser_take_screenshot": return await this.screenshot(current, call);
-          case "browser_wait_for": return await this.waitFor(current, call);
-          default: return this.errorResult(call.tool_use_id, "TALOS_BROWSER_UNSUPPORTED_TOOL", `Unsupported browser tool: ${call.name}.`);
-        }
+      session = await this.sessions.get(sessionId);
+      const idempotencyKey = context.idempotencyKey ?? call.tool_use_id;
+      const requestedStateVersion = call.arguments.state_version;
+      const claim = session.actionLedger.claim<CanonicalToolResult>({
+        actionId: call.tool_use_id,
+        idempotencyKey,
+        operation: call.name,
+        preconditionStateVersion: typeof requestedStateVersion === "number" && Number.isInteger(requestedStateVersion)
+          ? requestedStateVersion
+          : session.stateVersion,
+        request: { name: call.name, arguments: call.arguments },
+        consequential: call.name === "browser_click",
       });
+      if (claim.kind === "result") return BrowserToolResultSchema.parse(claim.result);
+      if (claim.kind === "error") return this.errorResult(call.tool_use_id, claim.error.code, claim.error.message, claim.error.details);
+
+      let dispatched = false;
+      try {
+        const result = await this.sessions.runExclusive(sessionId, async (current) => {
+          session = current;
+          if (call.name === "browser_click") {
+            return this.click(current, call, () => {
+              current.actionLedger.markDispatched(idempotencyKey);
+              dispatched = true;
+            });
+          }
+          current.actionLedger.markDispatched(idempotencyKey);
+          dispatched = true;
+          switch (call.name) {
+            case "browser_navigate": return await this.navigate(current, call);
+            case "browser_snapshot": return await this.snapshot(current, call);
+            case "browser_read": return await this.read(current, call);
+            case "browser_take_screenshot": return await this.screenshot(current, call);
+            case "browser_wait_for": return await this.waitFor(current, call);
+            default: return this.errorResult(call.tool_use_id, "TALOS_BROWSER_UNSUPPORTED_TOOL", `Unsupported browser tool: ${call.name}.`);
+          }
+        });
+        if (!dispatched) session.actionLedger.markDispatched(idempotencyKey);
+        session.actionLedger.commit(idempotencyKey, result);
+        return result;
+      } catch (error) {
+        const controlled = error instanceof BrowserError
+          ? error
+          : new BrowserError("The browser tool failed.", "TALOS_BROWSER_TOOL_EXECUTION_FAILED", 500);
+        if (!dispatched) {
+          session.actionLedger.rejectIfPending(idempotencyKey, controlled);
+        } else if (call.name === "browser_click") {
+          session.actionLedger.markAmbiguous(idempotencyKey, controlled);
+        } else {
+          const result = this.errorResult(call.tool_use_id, controlled.code, controlled.message, controlled.details);
+          session.actionLedger.commit(idempotencyKey, result);
+          return result;
+        }
+        return this.errorResult(call.tool_use_id, controlled.code, controlled.message, controlled.details);
+      }
     } catch (error) {
+      const controlled = error instanceof BrowserError && call.name === "browser_click" && error.code === "TALOS_BROWSER_ACTION_CONFLICT"
+        ? new BrowserError(error.message, "TALOS_BROWSER_CLICK_COMMAND_CONFLICT", error.statusCode, error.details)
+        : error;
       return this.errorResult(
         call.tool_use_id,
-        error instanceof BrowserError ? error.code : "TALOS_BROWSER_TOOL_EXECUTION_FAILED",
-        error instanceof BrowserError ? error.message : "The browser tool failed.",
-        error instanceof BrowserError ? { ...error.details, state_version: session?.stateVersion } : { state_version: session?.stateVersion },
+        controlled instanceof BrowserError ? controlled.code : "TALOS_BROWSER_TOOL_EXECUTION_FAILED",
+        controlled instanceof BrowserError ? controlled.message : "The browser tool failed.",
+        controlled instanceof BrowserError ? { ...controlled.details, state_version: session?.stateVersion } : { state_version: session?.stateVersion },
       );
     }
   }
@@ -177,7 +223,7 @@ export class BrowserToolDispatcher {
     return this.success(call.tool_use_id, call.name, structured, "Browser wait completed.", "wait", structured);
   }
 
-  private async click(session: BrowserSession, call: BrowserToolCall): Promise<CanonicalToolResult> {
+  private async click(session: BrowserSession, call: BrowserToolCall, onDispatch: () => void): Promise<CanonicalToolResult> {
     const parsed = ClickToolArgumentsSchema.safeParse(call.arguments);
     if (!parsed.success) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_INVALID_TOOL_ARGUMENTS", "Invalid browser_click arguments.");
     if (session.capabilities.hmiActions !== true) {
@@ -352,6 +398,7 @@ export class BrowserToolDispatcher {
     try {
       this.sessions.armHmiDispatchFence(session.sessionId, dispatchStateVersion);
       dispatchThresholdReached = true;
+      onDispatch();
       await binding.click({ button: "left", clickCount: 1 });
       const current = session.recovery ? session : this.sessions.advanceState(session.sessionId);
       stateAdvanced = !session.recovery;
@@ -415,37 +462,6 @@ export class BrowserToolDispatcher {
       session.context.off("page", pageListener);
       session.page.off("download", downloadListener);
       session.page.off("filechooser", fileChooserListener);
-    }
-  }
-
-  private async clickWithIdempotency(sessionId: string, call: BrowserToolCall, context: BrowserToolRequestContext): Promise<CanonicalToolResult> {
-    const key = context.idempotencyKey ?? call.tool_use_id;
-    const requestHash = sha256(JSON.stringify({ name: call.name, arguments: call.arguments }));
-    const claim = this.sessions.claimClickCommand(sessionId, key, requestHash);
-    if (claim.kind === "conflict") {
-      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_CLICK_COMMAND_CONFLICT", "The browser click id is already bound to a different request.");
-    }
-    if (claim.kind === "replay") return BrowserToolResultSchema.parse(claim.result);
-
-    try {
-      const result = await this.sessions.runExclusive(sessionId, async (session) => this.click(session, call));
-      if (result.isError) this.sessions.releaseClickCommand(sessionId, key, requestHash);
-      else this.sessions.commitClickCommand(sessionId, key, requestHash, result);
-      return result;
-    } catch (error) {
-      if (error instanceof BrowserError && ["TALOS_BROWSER_CLICK_RECOVERY_REQUIRED", "TALOS_BROWSER_HMI_RECOVERY_REQUIRED"].includes(error.code)) {
-        const result = this.errorResult(call.tool_use_id, error.code, error.message, error.details);
-        this.sessions.commitClickCommand(sessionId, key, requestHash, result);
-        return result;
-      } else {
-        this.sessions.releaseClickCommand(sessionId, key, requestHash);
-        return this.errorResult(
-          call.tool_use_id,
-          error instanceof BrowserError ? error.code : "TALOS_BROWSER_TOOL_EXECUTION_FAILED",
-          error instanceof BrowserError ? error.message : "The browser tool failed.",
-          error instanceof BrowserError ? error.details : {},
-        );
-      }
     }
   }
 

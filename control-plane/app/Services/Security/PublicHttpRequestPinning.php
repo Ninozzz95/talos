@@ -66,20 +66,16 @@ final class PublicHttpRequestPinning
      */
     private function inspectTrustedLocal(string $url): array
     {
-        $parts = parse_url($url);
-        $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
-        $host = is_array($parts)
-            ? strtolower(rtrim(trim((string) ($parts['host'] ?? ''), "[] \t\n\r\0\x0B"), '.'))
-            : '';
-        $port = is_array($parts) ? ($parts['port'] ?? null) : null;
-        $valid = is_array($parts)
-            && ! isset($parts['user'])
-            && ! isset($parts['pass'])
-            && ! isset($parts['query'])
-            && ! isset($parts['fragment'])
-            && in_array($scheme, ['http', 'https'], true)
-            && in_array($host, ['localhost', '127.0.0.1', '::1'], true)
-            && ($port === null || (is_int($port) && $port >= 1 && $port <= 65535));
+        try {
+            $canonical = CanonicalHttpUrl::fromString($url);
+            $host = $canonical->asciiHost;
+            $valid = $canonical->query === null
+                && $canonical->fragment === null
+                && in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+        } catch (\InvalidArgumentException) {
+            $host = '';
+            $valid = false;
+        }
 
         if (! $valid) {
             return [
@@ -154,12 +150,13 @@ final class PublicHttpRequestPinning
      */
     private function resolveEntries(string $url, array $ips): array
     {
-        $host = (string) parse_url($url, PHP_URL_HOST);
-        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-        $port = parse_url($url, PHP_URL_PORT) ?: ($scheme === 'https' ? 443 : 80);
-        if ($host === '' || ! is_int($port) && ! is_numeric($port)) {
+        try {
+            $canonical = CanonicalHttpUrl::fromString($url);
+        } catch (\InvalidArgumentException) {
             return [];
         }
+        $host = $canonical->asciiHost;
+        $port = $canonical->port ?? ($canonical->scheme === 'https' ? 443 : 80);
 
         return array_values(array_map(
             static fn (string $ip): string => sprintf('%s:%d:%s', $host, (int) $port, str_contains($ip, ':') ? "[{$ip}]" : $ip),

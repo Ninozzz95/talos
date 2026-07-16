@@ -208,11 +208,70 @@ random_base64_32() {
   return 1
 }
 
+resolve_browser_action_node() {
+  local candidates=(
+    "$ROOT_DIR/.tools/node/node.exe"
+    "$ROOT_DIR/.tools/node/bin/node"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [ -x "$candidate" ] && "$candidate" --version >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  if command -v node >/dev/null 2>&1 && node --version >/dev/null 2>&1; then
+    command -v node
+    return 0
+  fi
+  return 1
+}
+
+provision_browser_action_keypair() {
+  local env_file="$1"
+  local generator="$ROOT_DIR/control-plane/scripts/browser-action-keypair.mjs"
+  if [ ! -f "$generator" ]; then
+    echo "Browser action keypair generator is missing: $generator" >&2
+    return 1
+  fi
+
+  local node_bin
+  if node_bin="$(resolve_browser_action_node)"; then
+    "$node_bin" "$generator" --env-file "$env_file"
+    return
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Node.js or Docker is required to provision browser action capabilities." >&2
+    return 1
+  fi
+
+  local relative_path="${env_file#"$ROOT_DIR"/}"
+  local mount_root="$ROOT_DIR"
+  local docker_user=()
+  local docker_environment=()
+  if command -v cygpath >/dev/null 2>&1; then
+    mount_root="$(cygpath -w "$ROOT_DIR")"
+    docker_environment+=(MSYS_NO_PATHCONV=1)
+  elif command -v id >/dev/null 2>&1; then
+    docker_user=(--user "$(id -u):$(id -g)")
+  fi
+
+  TALOS_BROWSER_ACTION_ENV_FILE="$env_file" env "${docker_environment[@]}" docker run --rm \
+    "${docker_user[@]}" \
+    --volume "$mount_root:/workspace" \
+    --workdir /workspace/control-plane \
+    node:24.18.0-bookworm-slim \
+    node scripts/browser-action-keypair.mjs --env-file "/workspace/$relative_path"
+}
+
 ensure_env() {
   if [ ! -f .env ]; then
     (umask 077 && cp .env.example .env)
     echo "Created .env from .env.example"
   fi
+
+  provision_browser_action_keypair "$ROOT_DIR/.env"
 
   local browser_token
   browser_token="$(env_value TALOS_BROWSER_WORKER_TOKEN || true)"

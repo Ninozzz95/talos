@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Services\Talos\Browser\BrowserActionAuthorization;
+use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
+use App\Services\Talos\Browser\TalosBrowserActionCapabilityIssuer;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Group;
 use Tests\TestCase;
@@ -12,19 +15,67 @@ use Tests\TestCase;
 #[Group('live-browser-worker')]
 final class LiveBrowserWorkerHmiIntegrationTest extends TestCase
 {
-    public function test_laravel_client_executes_a_real_chromium_hmi_transition(): void
+    public function test_laravel_client_cancels_a_real_chromium_session_and_fences_future_inspection(): void
     {
         $baseUrl = trim((string) getenv('TALOS_LIVE_BROWSER_WORKER_URL'));
         $token = trim((string) getenv('TALOS_LIVE_BROWSER_WORKER_TOKEN'));
         if ($baseUrl === '' || $token === '') {
-            $this->markTestSkipped('Set TALOS_LIVE_BROWSER_WORKER_URL and TALOS_LIVE_BROWSER_WORKER_TOKEN to run the live Chromium integration gate.');
+            $this->markTestSkipped('Set the live worker URL and token to run the live Chromium cancellation gate.');
+        }
+
+        $client = new HttpBrowserSessionClient($baseUrl, $token, 20);
+        $ownerRef = 'talos-live-cancel:'.bin2hex(random_bytes(8));
+        $workerSessionId = null;
+        $sessionFenced = false;
+
+        try {
+            $created = $client->create($ownerRef, 800, 600, 20_000, 300);
+            $workerSessionId = $created['sessionId'] ?? null;
+            $this->assertIsString($workerSessionId);
+            $this->assertNotSame('', $workerSessionId);
+
+            $client->cancel($ownerRef, $workerSessionId, 'Live Chromium cancellation gate.', 20_000);
+
+            try {
+                $client->inspect($ownerRef, $workerSessionId, 20_000);
+                $this->fail('A cancelled Chromium session must be removed or fenced from future inspection.');
+            } catch (BrowserWorkerException $exception) {
+                $this->assertSame('TALOS_BROWSER_SESSION_NOT_FOUND', $exception->errorCode);
+                $sessionFenced = true;
+            }
+        } finally {
+            if (! $sessionFenced && is_string($workerSessionId) && $workerSessionId !== '') {
+                try {
+                    $client->close($ownerRef, $workerSessionId, 20_000);
+                } catch (BrowserWorkerException $exception) {
+                    if ($exception->errorCode !== 'TALOS_BROWSER_SESSION_NOT_FOUND') {
+                        throw $exception;
+                    }
+                }
+            }
+        }
+    }
+
+    public function test_laravel_client_executes_a_real_chromium_hmi_transition(): void
+    {
+        $baseUrl = trim((string) getenv('TALOS_LIVE_BROWSER_WORKER_URL'));
+        $token = trim((string) getenv('TALOS_LIVE_BROWSER_WORKER_TOKEN'));
+        $actionPrivateKey = trim((string) getenv('TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'));
+        $actionKeyId = trim((string) getenv('TALOS_BROWSER_ACTION_KEY_ID'));
+        if ($baseUrl === '' || $token === '' || $actionPrivateKey === '' || $actionKeyId === '') {
+            $this->markTestSkipped('Set the live worker URL/token and browser action capability key configuration to run the live Chromium integration gate.');
         }
 
         $fixture = realpath(base_path('../browser-worker/tests/fixtures/hmi-page.html'));
         $this->assertNotFalse($fixture, 'The Browser Worker HMI fixture must exist.');
         $fixtureUrl = 'file:///'.str_replace('\\', '/', ltrim((string) $fixture, '/'));
 
-        $client = new HttpBrowserSessionClient($baseUrl, $token, 20);
+        $client = new HttpBrowserSessionClient(
+            $baseUrl,
+            $token,
+            20,
+            new TalosBrowserActionCapabilityIssuer($actionPrivateKey, $actionKeyId),
+        );
         $ownerRef = 'talos-live-hmi:'.bin2hex(random_bytes(8));
         $workerSessionId = null;
 
@@ -68,13 +119,26 @@ final class LiveBrowserWorkerHmiIntegrationTest extends TestCase
             $this->assertContains($effectClassification, ['ordinary', 'sensitive']);
             $commandId = 'hmi_live_'.bin2hex(random_bytes(16));
 
-            $result = $client->executePointer($ownerRef, $workerSessionId, [
+            $command = [
                 ...$pointer,
                 'command_id' => $commandId,
                 'expected_fingerprint' => data_get($preflight, 'target.fingerprint'),
                 'effect_classification' => $effectClassification,
                 'sensitive_effect_authorized' => $effectClassification === 'sensitive',
-            ], 20_000);
+            ];
+            $authorization = BrowserActionAuthorization::userApproval(
+                $commandId,
+                (string) Str::uuid(),
+                'sha256:'.hash('sha256', json_encode($command, JSON_THROW_ON_ERROR)),
+                'live-hmi-execution-lease-'.bin2hex(random_bytes(16)),
+            );
+            $result = $client->executePointer(
+                $ownerRef,
+                $workerSessionId,
+                $command,
+                20_000,
+                $authorization,
+            );
 
             $this->assertSame('talos_browser_hmi_result_v2', $result['schema_version'] ?? null);
             $this->assertSame($interactionId, $result['interaction_id'] ?? null);
@@ -85,6 +149,15 @@ final class LiveBrowserWorkerHmiIntegrationTest extends TestCase
             $this->assertMatchesRegularExpression('/^sha256:[a-f0-9]{64}$/', (string) data_get($result, 'screenshot.sha256'));
             $this->assertSame('accessibility_refs_v1', data_get($result, 'snapshot.format'));
             $this->assertNotSame('', (string) data_get($result, 'snapshot.snapshot_id'));
+
+            $replayed = $client->executePointer(
+                $ownerRef,
+                $workerSessionId,
+                $command,
+                20_000,
+                $authorization,
+            );
+            $this->assertSame($result, $replayed, 'A fresh JWT with the same command id must replay the committed result without a second click.');
 
             $inspected = $client->inspect($ownerRef, $workerSessionId, 20_000);
             $this->assertSame($sourceStateVersion + 1, $inspected['stateVersion'] ?? null);

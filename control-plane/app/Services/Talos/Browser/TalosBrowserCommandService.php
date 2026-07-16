@@ -15,6 +15,7 @@ use Throwable;
 final class TalosBrowserCommandService
 {
     private const MAX_SNAPSHOT_BYTES = 60000;
+
     private const MAX_SNAPSHOT_NODES = 120;
 
     public function __construct(
@@ -22,11 +23,13 @@ final class TalosBrowserCommandService
         private readonly TalosBrowserPolicy $policy,
         private readonly TalosBrowserArtifactStore $artifacts,
         private readonly TalosBrowserArtifactReader $artifactReader,
-    ) {
-    }
+        private readonly TalosBrowserLegacyWriteGate $legacyWrites,
+    ) {}
 
     public function reconcile(TalosBrowserSession $session, ?TalosBrowserDeadline $deadline = null): void
     {
+        $this->legacyWrites->assertEnabled('browser.command.reconcile');
+
         if ($deadline?->expired()) {
             throw new TalosBrowserCommandException('TALOS_BROWSER_WALL_TIME_EXHAUSTED', 'Browser read wall-clock budget exhausted.');
         }
@@ -67,6 +70,8 @@ final class TalosBrowserCommandService
     /** @return array<string, mixed> */
     public function execute(TalosBrowserSession $session, TalosRun $run, array $rawCommand, RunEventNormalizer $normalizer, int $remainingEvidenceBytes = PHP_INT_MAX, ?TalosBrowserDeadline $deadline = null): array
     {
+        $this->legacyWrites->assertEnabled('browser.command.execute');
+
         try {
             $this->assertActive($run, $deadline);
             $command = TalosBrowserCommand::fromArray($rawCommand);
@@ -170,6 +175,7 @@ final class TalosBrowserCommandService
 
         $safeFinalUrl = TalosBrowserRedactor::url($finalUrl) ?? '[redacted-url]';
         $session->update(['status' => 'active', 'current_url' => $safeFinalUrl, 'current_title' => $worker['title'] ?? null, 'policy' => $finalDecision, 'last_snapshot_artifact_id' => null, 'last_seen_at' => now()]);
+
         return [
             'observation' => ['operation' => 'navigate', 'url' => $safeFinalUrl, 'title' => (string) ($worker['title'] ?? ''), 'untrusted' => true],
             'used_browser_context' => ['browser_session_id' => $session->id, 'url' => $safeFinalUrl, 'title' => (string) ($worker['title'] ?? ''), 'untrusted' => true],
@@ -221,6 +227,7 @@ final class TalosBrowserCommandService
         }
         $session->refresh();
         $context = ['browser_session_id' => $session->id, 'snapshot_artifact_id' => $artifact->id, 'url' => TalosBrowserRedactor::url($safe['url']), 'title' => $safe['title'], 'text_digest' => $safe['textDigest'], 'evidence_hash' => 'sha256:'.$artifact->sha256, 'untrusted' => true];
+
         return ['artifact_ids' => [$artifact->id], 'observation' => ['operation' => 'snapshot', 'url' => $safe['url'], 'title' => $safe['title'], 'text_digest' => $safe['textDigest'], 'evidence_hash' => 'sha256:'.$artifact->sha256, 'nodes' => $safe['nodes'], 'untrusted' => true], 'used_browser_context' => $context, 'event_payload' => ['artifact_id' => $artifact->id, 'worker_evidence' => $workerEvidence], 'worker_evidence' => $workerEvidence, 'evidence_bytes' => strlen($contents)];
     }
 
@@ -253,6 +260,7 @@ final class TalosBrowserCommandService
         }
         $artifact = $this->storeAndLinkArtifact($session, $run, $normalizer, $command, 'screenshot', 'image/png', $bytes, ['url' => TalosBrowserRedactor::url((string) ($worker['url'] ?? $session->current_url ?? '')), 'title' => (string) ($worker['title'] ?? $session->current_title ?? ''), 'state_version' => $worker['state_version'] ?? (int) $session->worker_state_version, 'width' => $worker['width'] ?? null, 'height' => $worker['height'] ?? null, 'worker_evidence' => $workerEvidence], [], $deadline);
         $session->update(['last_screenshot_artifact_id' => $artifact->id, 'last_seen_at' => now()]);
+
         return ['artifact_ids' => [$artifact->id], 'observation' => ['operation' => 'screenshot', 'artifact_id' => $artifact->id, 'untrusted' => true], 'event_payload' => ['artifact_id' => $artifact->id, 'worker_evidence' => $workerEvidence], 'worker_evidence' => $workerEvidence, 'evidence_bytes' => $observationBytes];
     }
 
@@ -264,7 +272,9 @@ final class TalosBrowserCommandService
         if (! $artifact instanceof TalosBrowserArtifact) {
             throw new TalosBrowserCommandException('TALOS_BROWSER_STALE_EVIDENCE', 'Current snapshot evidence is required before reading page content.');
         }
-        if ($command->expectedEvidenceHash !== 'sha256:'.$artifact->sha256) throw new TalosBrowserCommandException('TALOS_BROWSER_STALE_EVIDENCE', 'Browser read evidence does not match the current snapshot.');
+        if ($command->expectedEvidenceHash !== 'sha256:'.$artifact->sha256) {
+            throw new TalosBrowserCommandException('TALOS_BROWSER_STALE_EVIDENCE', 'Browser read evidence does not match the current snapshot.');
+        }
         try {
             $contents = $this->artifactReader->read($artifact);
         } catch (TalosBrowserArtifactIntegrityException $exception) {
@@ -287,8 +297,12 @@ final class TalosBrowserCommandService
         $ref = isset($command->arguments['ref']) ? (string) $command->arguments['ref'] : null;
         $query = isset($command->arguments['query']) ? mb_strtolower((string) $command->arguments['query']) : null;
         $arguments = ['snapshot_id' => $raw['snapshotId']];
-        if ($ref !== null) $arguments['ref'] = $ref;
-        if ($query !== null) $arguments['query'] = $query;
+        if ($ref !== null) {
+            $arguments['ref'] = $ref;
+        }
+        if ($query !== null) {
+            $arguments['query'] = $query;
+        }
         $workerResult = $this->invokeToolResult($session, $command, 'browser_read', $arguments, 0, $deadline);
         $worker = $workerResult->structuredContent ?? [];
         $sourceEvidence = is_array($artifact->metadata['worker_evidence'] ?? null) ? $artifact->metadata['worker_evidence'] : [];
@@ -418,12 +432,17 @@ final class TalosBrowserCommandService
         }
         $nodes = [];
         foreach (array_slice($raw['nodes'], 0, self::MAX_SNAPSHOT_NODES) as $node) {
-            if (! is_array($node) || ! is_string($node['ref'] ?? null) || ! is_string($node['role'] ?? null) || ! is_string($node['name'] ?? null) || ! is_bool($node['visible'] ?? null)) continue;
+            if (! is_array($node) || ! is_string($node['ref'] ?? null) || ! is_string($node['role'] ?? null) || ! is_string($node['name'] ?? null) || ! is_bool($node['visible'] ?? null)) {
+                continue;
+            }
             $nodes[] = ['ref' => mb_substr($node['ref'], 0, 128), 'role' => mb_substr($node['role'], 0, 128), 'name' => mb_substr($node['name'], 0, 512), 'visible' => $node['visible']];
         }
         $snapshotUrl = TalosBrowserRedactor::url(mb_substr($raw['url'], 0, 2048)) ?? '[redacted-url]';
         $safe = ['format' => 'accessibility_refs_v1', 'snapshotId' => $raw['snapshotId'], 'url' => $snapshotUrl, 'title' => mb_substr($raw['title'], 0, 512), 'textDigest' => mb_substr($raw['textDigest'], 0, 4000), 'nodes' => $nodes];
-        if (strlen(json_encode($safe, JSON_THROW_ON_ERROR)) > self::MAX_SNAPSHOT_BYTES) throw new TalosBrowserCommandException('TALOS_BROWSER_EVIDENCE_BUDGET', 'Browser snapshot exceeded the evidence budget.');
+        if (strlen(json_encode($safe, JSON_THROW_ON_ERROR)) > self::MAX_SNAPSHOT_BYTES) {
+            throw new TalosBrowserCommandException('TALOS_BROWSER_EVIDENCE_BUDGET', 'Browser snapshot exceeded the evidence budget.');
+        }
+
         return $safe;
     }
 
@@ -447,7 +466,22 @@ final class TalosBrowserCommandService
         try {
             DB::transaction(function () use (&$artifact, $session, $run, $normalizer, $command, $type, $mime, $contents, $metadata, $eventPayload, $deadline): void {
                 $this->assertActive($run, $deadline);
-                $artifact = $this->artifacts->store($session, $type, $mime, $contents, $metadata);
+                $stateVersion = is_int($metadata['state_version'] ?? null)
+                    ? $metadata['state_version']
+                    : (int) $session->worker_state_version;
+                $artifact = $this->artifacts->store(
+                    $session,
+                    $type,
+                    $mime,
+                    $contents,
+                    $metadata,
+                    [
+                        'source_command_id' => $command->commandId,
+                        'source_state_version' => (int) $session->worker_state_version,
+                        'state_version' => $stateVersion,
+                        'trust_boundary' => 'untrusted_browser_content',
+                    ],
+                );
                 $run->artifacts()->create([
                     'artifact_type' => 'browser_'.$type,
                     'uri' => 'talos-browser-artifact://'.$artifact->id,
@@ -495,8 +529,12 @@ final class TalosBrowserCommandService
 
     private function remainingTimeout(?TalosBrowserDeadline $deadline): int
     {
-        if ($deadline === null) return 15000;
-        if ($deadline->expired()) throw new TalosBrowserCommandException('TALOS_BROWSER_WALL_TIME_EXHAUSTED', 'Browser read wall-clock budget exhausted.');
+        if ($deadline === null) {
+            return 15000;
+        }
+        if ($deadline->expired()) {
+            throw new TalosBrowserCommandException('TALOS_BROWSER_WALL_TIME_EXHAUSTED', 'Browser read wall-clock budget exhausted.');
+        }
 
         return $deadline->remainingMilliseconds();
     }
@@ -508,6 +546,7 @@ final class TalosBrowserCommandService
         $operation = is_string($rawCommand['operation'] ?? null) ? $rawCommand['operation'] : 'unknown';
         $this->browserEvent($session, $exception->errorCode === 'TALOS_BROWSER_POLICY_DENIED' ? 'policy.denied' : 'command.failed', 'policy', ['operation' => $operation, 'command_id' => $commandId, 'reason' => $exception->getMessage()]);
         $this->runEvent($run, $normalizer, 'browser.command.failed', ['command_id' => $commandId, 'browser_session_id' => $session->id, 'operation' => $operation, 'error_code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details, 'origin' => $exception->origin]);
+
         return ['error' => ['code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details, 'status' => $exception->status, 'origin' => $exception->origin], 'activity' => ['id' => $commandId, 'operation' => $operation, 'status' => 'failed', 'label' => ucfirst($operation), 'run_id' => $run->id, 'browser_session_id' => $session->id, 'artifact_ids' => [], 'occurred_at' => now()->toJSON()]];
     }
 

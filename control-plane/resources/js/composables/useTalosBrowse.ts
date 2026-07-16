@@ -10,6 +10,7 @@ import type {
     TalosBrowserPointerFrame,
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
+    TalosBrowserTask,
 } from '../lib/talosTypes'
 
 type ApiEnvelope<T> = { data: T }
@@ -40,6 +41,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     const events = ref<TalosBrowserEvent[]>([])
     const latestScreenshot = ref<string | null>(null)
     const latestSnapshot = ref<TalosBrowserSnapshotPreview | null>(null)
+    const browserTasks = ref<TalosBrowserTask[]>([])
     const browserMode = ref<TalosBrowserMode>({
         enabled: false,
         session_id: null,
@@ -55,8 +57,17 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     const interactionPending = ref(false)
     const interactionError = ref<string | null>(null)
     const pendingInteractionApproval = ref<TalosBrowserHmiChallenge | null>(null)
+    const browserTaskBusy = ref(false)
+    const browserTaskError = ref<string | null>(null)
+    const browserTaskCommandTargetId = ref<string | null>(null)
     let scopeRevision = 0
+    let taskLoadRevision = 0
     let browseIntentRevision = 0
+    let cancellationCommand: {
+        taskId: string
+        stateVersion: number
+        commandId: string
+    } | null = null
     let enableOperation: {
         talosSessionId: string
         revision: number
@@ -88,17 +99,23 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     }
 
     function resetScopedState() {
+        taskLoadRevision += 1
         sessions.value = []
         activeSession.value = null
         events.value = []
         latestScreenshot.value = null
         latestSnapshot.value = null
+        browserTasks.value = []
         collectionError.value = null
         sessionError.value = null
         mutationError.value = null
         interactionPending.value = false
         interactionError.value = null
         pendingInteractionApproval.value = null
+        browserTaskBusy.value = false
+        browserTaskError.value = null
+        browserTaskCommandTargetId.value = null
+        cancellationCommand = null
         loadingCollection.value = false
         loadingSession.value = false
         mutating.value = false
@@ -135,6 +152,125 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         if (session.talos_session_id !== talosSessionId) {
             throw new Error('TALOS rejected browser state from another chat session.')
         }
+    }
+
+    function assertScopedTask(task: TalosBrowserTask, talosSessionId: string) {
+        if (task.talos_session_id !== talosSessionId) {
+            throw new Error('TALOS rejected Browser task state from another chat session.')
+        }
+    }
+
+    const activeBrowserTask = computed<TalosBrowserTask | null>(() => {
+        const nonTerminal = browserTasks.value.find((task) => !['completed', 'failed', 'cancelled'].includes(task.status))
+        return nonTerminal ?? browserTasks.value[0] ?? null
+    })
+
+    async function loadBrowserTasks(options: { quiet?: boolean } = {}) {
+        const talosSessionId = requiredTalosSessionId()
+        const revision = scopeRevision
+        const loadRevision = ++taskLoadRevision
+        if (!options.quiet) browserTaskError.value = null
+        try {
+            const query = new URLSearchParams({ talos_session_id: talosSessionId }).toString()
+            const response = await talosFetch<ApiEnvelope<TalosBrowserTask[]>>(`/api/talos/browser/tasks?${query}`, {
+                headers: scopedHeaders(talosSessionId),
+            })
+            response.data.forEach((task) => assertScopedTask(task, talosSessionId))
+            if (!scopeIsCurrent(talosSessionId, revision) || loadRevision !== taskLoadRevision) return []
+            browserTasks.value = response.data
+            if (cancellationCommand && !response.data.some((task) => (
+                task.id === cancellationCommand?.taskId
+                && task.state_version === cancellationCommand.stateVersion
+                && !['completed', 'failed', 'cancelled'].includes(task.status)
+            ))) {
+                cancellationCommand = null
+            }
+            return response.data
+        } catch (error) {
+            if (scopeIsCurrent(talosSessionId, revision) && loadRevision === taskLoadRevision && !options.quiet) {
+                browserTaskError.value = 'TALOS could not refresh the Browser task. Check the connection and try again.'
+            }
+            throw error
+        }
+    }
+
+    function cancellationCommandFor(task: TalosBrowserTask) {
+        if (cancellationCommand
+            && cancellationCommand.taskId === task.id
+            && cancellationCommand.stateVersion === task.state_version) {
+            return cancellationCommand.commandId
+        }
+
+        const commandId = browserInteractionId()
+        cancellationCommand = { taskId: task.id, stateVersion: task.state_version, commandId }
+        return commandId
+    }
+
+    async function cancelBrowserTask(taskId: string) {
+        const normalizedTaskId = taskId.trim()
+        if (!normalizedTaskId || browserTaskBusy.value) return null
+        const task = browserTasks.value.find((candidate) => candidate.id === normalizedTaskId) ?? null
+        if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return null
+        const talosSessionId = requiredTalosSessionId()
+        if (task.talos_session_id !== talosSessionId) return null
+        const revision = scopeRevision
+        const commandId = cancellationCommandFor(task)
+        browserTaskCommandTargetId.value = task.id
+        browserTaskBusy.value = true
+        browserTaskError.value = null
+        try {
+            const response = await talosFetch<ApiEnvelope<{ task: TalosBrowserTask }>>(`/api/talos/browser/tasks/${idPath(task.id)}/cancel`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    expected_state_version: task.state_version,
+                    command_id: commandId,
+                    reason: 'The user stopped this Browser task.',
+                }),
+                headers: scopedHeaders(talosSessionId),
+            })
+            assertScopedTask(response.data.task, talosSessionId)
+            if (response.data.task.id !== task.id) {
+                throw new Error('TALOS rejected cancellation state for another Browser task.')
+            }
+            if (!scopeIsCurrent(talosSessionId, revision)) return response.data.task
+            browserTasks.value = [
+                response.data.task,
+                ...browserTasks.value.filter((candidate) => candidate.id !== response.data.task.id),
+            ]
+            cancellationCommand = null
+            return response.data.task
+        } catch (error) {
+            const code = interactionErrorCode(error)
+            if (scopeIsCurrent(talosSessionId, revision) && (error instanceof TalosApiError && error.status === 409
+                || code === 'TALOS_BROWSER_TASK_TRANSITION_INVALID'
+                || code === 'TALOS_BROWSER_TASK_VERSION_CONFLICT')) {
+                let refreshed = false
+                try {
+                    await loadBrowserTasks({ quiet: true })
+                    refreshed = true
+                } catch {
+                    // The cancellation fault remains actionable even if refresh is unavailable.
+                }
+                if (scopeIsCurrent(talosSessionId, revision)) {
+                    cancellationCommand = null
+                    browserTaskError.value = refreshed
+                        ? 'The Browser task changed before cancellation. TALOS refreshed its current state.'
+                        : 'The Browser task changed before cancellation, but TALOS could not refresh it. Check the connection and try again.'
+                }
+                return null
+            }
+            if (scopeIsCurrent(talosSessionId, revision)) {
+                browserTaskError.value = 'TALOS could not cancel the Browser task. Check the connection and try again.'
+            }
+            throw error
+        } finally {
+            if (scopeIsCurrent(talosSessionId, revision)) browserTaskBusy.value = false
+        }
+    }
+
+    async function cancelActiveBrowserTask() {
+        const task = activeBrowserTask.value
+        return task ? cancelBrowserTask(task.id) : null
     }
 
     async function loadEvents(session: TalosBrowserSession, revision: number) {
@@ -616,6 +752,11 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         browserActivities,
         latestScreenshot,
         latestSnapshot,
+        browserTasks,
+        activeBrowserTask,
+        browserTaskBusy,
+        browserTaskError,
+        browserTaskCommandTargetId,
         loadingCollection,
         loadingSession,
         mutating,
@@ -626,6 +767,9 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         interactionError,
         pendingInteractionApproval,
         bindTalosSession,
+        loadBrowserTasks,
+        cancelBrowserTask,
+        cancelActiveBrowserTask,
         loadSessions,
         selectSession,
         createSession,

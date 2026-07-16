@@ -30,6 +30,9 @@ function testRootEnvironmentContractExists(): void
         'TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health',
         'TALOS_BROWSER_WORKER_URL=http://browser-worker:3100',
         'TALOS_BROWSER_WORKER_TOKEN=',
+        'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=',
+        'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=',
+        'TALOS_BROWSER_ACTION_KEY_ID=',
         'TALOS_ADMIN_EMAIL=',
         'TALOS_MODEL_PROVIDER_ALLOWED_HOSTS=',
     ]);
@@ -112,6 +115,9 @@ function testDockerfilesAndRootLauncherExist(): void
         '.talos/state.json',
         'TALOS bootstrap',
         'TALOS_BROWSER_WORKER_TOKEN',
+        'provision_browser_action_keypair',
+        'browser-action-keypair.mjs',
+        'node:24.18.0-bookworm-slim',
         'random_hex_32',
         'active_talos_url',
         'http://127.0.0.1:8000',
@@ -182,6 +188,13 @@ function testNativeToolchainBootstrapIsPinnedAndVerifiable(): void
         'artifact destination escapes the downloads directory',
         'curl.cainfo',
         'openssl.cafile',
+        'OPENSSL_CONF',
+        'openssl.cnf',
+        'OPENSSL_KEYTYPE_EC',
+        'prime256v1',
+        'opcache.file_cache',
+        'opcache.file_cache_fallback',
+        'var\opcache',
         '${TALOS_PHP_ROOT}',
     ]);
     assertDeploymentFileContains($root.'/browser-worker/package.json', [
@@ -205,6 +218,12 @@ function testNativeToolchainBootstrapIsPinnedAndVerifiable(): void
             "{$artifact} should pin a lowercase SHA-256 digest."
         );
     }
+
+    $requiredExtensions = $manifest['windows_x64']['required_php_extensions'] ?? null;
+    assertTrue(
+        is_array($requiredExtensions) && in_array('sodium', $requiredExtensions, true),
+        'The pinned Windows PHP profile must enable Sodium for signed action capabilities.'
+    );
 }
 
 function testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations(): void
@@ -457,6 +476,18 @@ function testRealDockerIntegrationContractIsWiredIntoCi(): void
         'SearXNG is still running after all-profile teardown.',
         'cp -p',
         'trap cleanup EXIT',
+        'assert_container_env_present talos TALOS_BROWSER_ACTION_PRIVATE_KEY_B64',
+        'assert_container_env_absent talos TALOS_BROWSER_ACTION_PUBLIC_KEY_B64',
+        'assert_container_env_present talos-queue TALOS_BROWSER_ACTION_PRIVATE_KEY_B64',
+        'assert_container_env_absent talos-queue TALOS_BROWSER_ACTION_PUBLIC_KEY_B64',
+        'assert_container_env_present browser-worker TALOS_BROWSER_ACTION_PUBLIC_KEY_B64',
+        'assert_container_env_absent browser-worker TALOS_BROWSER_ACTION_PRIVATE_KEY_B64',
+        'assert_container_env_absent validator TALOS_BROWSER_ACTION_PRIVATE_KEY_B64',
+        'assert_container_env_absent validator TALOS_BROWSER_ACTION_PUBLIC_KEY_B64',
+        'assert_container_env_absent validator TALOS_BROWSER_WORKER_TOKEN',
+        '/protocols/talos.browser.worker.v2/handshake',
+        'service_token_and_signed_action_capability',
+        'action?.algorithm!=="ES256"',
     ]);
     assertDeploymentFileContains($root.'/.github/workflows/ci.yml', [
         'docker-integration:',

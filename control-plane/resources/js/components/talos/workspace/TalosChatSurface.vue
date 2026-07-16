@@ -4,6 +4,8 @@ import { AlertCircle, Loader2 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
+import TalosBrowserCard from '../chat/TalosBrowserCard.vue'
+import TalosBrowserClarificationChoices from '../chat/TalosBrowserClarificationChoices.vue'
 import TalosMessageContent from '../chat/TalosMessageContent.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosRunActivity from '../chat/TalosRunActivity.vue'
@@ -11,14 +13,25 @@ import TalosStatusMessage from '../chat/TalosStatusMessage.vue'
 import TalosGuidedStart from './TalosGuidedStart.vue'
 import TalosLiveEdgeControl from './TalosLiveEdgeControl.vue'
 import { resolveTalosWelcomePrompt } from '../../../lib/talosWelcomePrompts'
+import {
+    activitiesForBrowserCard,
+    buildTalosBrowserCardPlacements,
+    unplacedBrowserActivities,
+    unplacedBrowserApprovals,
+    type TalosBrowserCardPlacement,
+} from '../../../lib/talosBrowserCardPlacement'
 import type { TalosMessage } from '../../../lib/talosTypes'
 import type {
     TalosBrowserActivity as TalosBrowserActivityItem,
+    TalosBrowserClarificationChoice,
+    TalosBrowserCurrentPage,
     TalosBrowserHmiChallenge,
     TalosBrowserPointerFrame,
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
+    TalosBrowserTask,
     TalosChatBubbleScale,
+    TalosMobileWindowPresentation,
     TalosPendingToolApproval,
 } from '../../../lib/talosTypes'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
@@ -67,8 +80,14 @@ const props = defineProps<{
     pendingBrowserInteractionApproval: TalosBrowserHmiChallenge | null
     pendingToolApprovals: TalosPendingToolApproval[]
     decidingToolApprovalIds: string[]
+    browserTasks: TalosBrowserTask[]
+    browserTaskBusy: boolean
+    browserTaskError: string | null
+    browserTaskCommandTargetId: string | null
     devBrowserEvidence: boolean
     activeTalosSessionId: string | null
+    mobile: boolean
+    mobileWindowPresentation: TalosMobileWindowPresentation
     viewport: TalosChatViewportController
 }>()
 
@@ -86,6 +105,7 @@ const emit = defineEmits<{
     interactBrowserFrame: [frame: TalosBrowserPointerFrame]
     confirmBrowserFrameInteraction: [decision: 'approve' | 'reject']
     decideToolApproval: [approval: TalosPendingToolApproval, decision: 'approve' | 'reject']
+    cancelBrowserTask: [taskId: string]
 }>()
 
 const chatThreadEl = ref<HTMLElement | null>(null)
@@ -122,15 +142,126 @@ function messageBrowserActivities(message: TalosMessage): TalosBrowserActivityIt
     })
 }
 
+function messageBrowserClarificationChoices(message: TalosMessage): TalosBrowserClarificationChoice[] {
+    const followUp = message.metadata?.browser_follow_up
+    if (message.role !== 'assistant'
+        || !followUp
+        || typeof followUp !== 'object'
+        || Array.isArray(followUp)) return []
+
+    const record = followUp as Record<string, unknown>
+    if (record.schema_version !== 'talos_browser_follow_up_v1'
+        || record.operation !== 'clarify'
+        || !Array.isArray(record.choices)) return []
+
+    return record.choices.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
+        const choice = candidate as Record<string, unknown>
+        if (!Number.isInteger(choice.index)
+            || typeof choice.url !== 'string'
+            || typeof choice.host !== 'string'
+            || typeof choice.label !== 'string') return []
+
+        return [{
+            index: choice.index as number,
+            url: choice.url,
+            host: choice.host,
+            label: choice.label,
+        }]
+    }).sort((left, right) => left.index - right.index)
+}
+
 const currentBrowserScreenshotActivity = computed(() => [...props.browserActivities].reverse().find((activity) => (
     activity.operation === 'screenshot'
     && activity.status === 'succeeded'
     && activity.artifact_ids.length > 0
 )) ?? null)
 
-const messageScreenshotArtifactIds = computed(() => [...new Set(
-    props.messages.flatMap((message) => messageBrowserActivities(message).flatMap((activity) => activity.artifact_ids)),
-)])
+const browserCardPlacements = computed(() => buildTalosBrowserCardPlacements(props.messages, props.browserTasks))
+const persistedMessageBrowserActivityIds = computed(() => props.messages
+    .flatMap(messageBrowserActivities)
+    .map((activity) => activity.id))
+const unplacedCurrentBrowserActivities = computed(() => unplacedBrowserActivities(
+    browserCardPlacements.value,
+    props.browserActivities,
+    persistedMessageBrowserActivityIds.value,
+    props.activeBrowserSession?.id ?? null,
+))
+const unplacedCurrentBrowserApprovals = computed(() => unplacedBrowserApprovals(
+    browserCardPlacements.value,
+    props.pendingToolApprovals,
+    props.activeBrowserSession?.id ?? null,
+))
+const hasUnplacedBrowserSessionActivity = computed(() => (
+    unplacedCurrentBrowserActivities.value.length > 0
+    || unplacedCurrentBrowserApprovals.value.length > 0
+))
+const currentBrowserSessionActivityTime = computed(() => unplacedCurrentBrowserActivities.value.at(-1)?.occurred_at ?? null)
+
+function responseBrowserPlacements(message: TalosMessage): TalosBrowserCardPlacement[] {
+    return browserCardPlacements.value.filter((placement) => placement.responseMessage?.id === message.id)
+}
+
+function transientBrowserPlacements(message: TalosMessage): TalosBrowserCardPlacement[] {
+    return browserCardPlacements.value.filter((placement) => (
+        placement.needsTransientAssistantShell && placement.originMessage.id === message.id
+    ))
+}
+
+function browserActivitiesForPlacement(placement: TalosBrowserCardPlacement): TalosBrowserActivityItem[] {
+    const persisted = props.messages
+        .filter((message) => message.run_id === placement.originMessage.run_id)
+        .flatMap(messageBrowserActivities)
+    return activitiesForBrowserCard(placement, [...props.browserActivities, ...persisted])
+}
+
+function browserSessionForPlacement(placement: TalosBrowserCardPlacement): TalosBrowserSession | null {
+    return props.activeBrowserSession?.id === placement.task.browser_session_id
+        ? props.activeBrowserSession
+        : null
+}
+
+function browserPageForPlacement(placement: TalosBrowserCardPlacement): TalosBrowserCurrentPage | null {
+    const session = browserSessionForPlacement(placement)
+    const url = session?.current_url?.trim()
+    if (!session || !url) return null
+
+    try {
+        const parsed = new URL(url)
+        return {
+            host: parsed.host,
+            title: session.current_title?.trim() || parsed.host,
+            url,
+        }
+    } catch {
+        return {
+            host: 'Current page',
+            title: session.current_title?.trim() || 'Current page',
+            url,
+        }
+    }
+}
+
+function browserSnapshotForPlacement(placement: TalosBrowserCardPlacement): TalosBrowserSnapshotPreview | null {
+    return browserSessionForPlacement(placement) ? props.browserSnapshot : null
+}
+
+function pendingApprovalsForPlacement(placement: TalosBrowserCardPlacement): TalosPendingToolApproval[] {
+    const runId = placement.originMessage.run_id
+    const browserSessionId = placement.task.browser_session_id
+    if (!runId || !browserSessionId) return []
+    return props.pendingToolApprovals.filter((approval) => (
+        approval.run_id === runId && approval.browser_session_id === browserSessionId
+    ))
+}
+
+function placementOwnsActiveSession(placement: TalosBrowserCardPlacement): boolean {
+    return browserSessionForPlacement(placement) !== null
+}
+
+function placementOwnsTaskCommand(placement: TalosBrowserCardPlacement): boolean {
+    return props.browserTaskCommandTargetId === placement.task.id
+}
 
 function scrollToBottom() {
     void props.viewport.followLatest()
@@ -307,23 +438,6 @@ defineExpose({ scrollToBottom })
             />
         </Teleport>
         <div class="mx-auto flex min-h-full min-w-0 w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
-            <TalosBrowserActivity
-                :activities="browserActivities"
-                :snapshot="browserSnapshot"
-                :talos-session-id="activeTalosSessionId"
-                :active-browser-session="activeBrowserSession"
-                :interaction-pending="browserInteractionPending"
-                :interaction-locked="browserInteractionLocked"
-                :interaction-error="browserInteractionError"
-                :pending-interaction-approval="pendingBrowserInteractionApproval"
-                :pending-tool-approvals="pendingToolApprovals"
-                :deciding-tool-approval-ids="decidingToolApprovalIds"
-                :dev-browser-evidence="devBrowserEvidence"
-                :excluded-screenshot-artifact-ids="messageScreenshotArtifactIds"
-                @interact="emit('interactBrowserFrame', $event)"
-                @confirm="emit('confirmBrowserFrameInteraction', $event)"
-                @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
-            />
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                 <span>{{ uiError || sessionError || messageError }}</span>
@@ -342,7 +456,7 @@ defineExpose({ scrollToBottom })
                 Loading messages
             </div>
 
-            <div v-else-if="!messages.length" class="flex flex-1 flex-col items-center justify-center text-center">
+            <div v-else-if="!messages.length && !hasUnplacedBrowserSessionActivity" class="flex flex-1 flex-col items-center justify-center text-center">
                 <div data-testid="talos-empty-brand" class="talos-chat-empty-brand mb-4 flex items-center justify-center gap-3" aria-label="TALOS">
                     <span class="talos-short-logo talos-short-logo-hero talos-chat-brand-logo" aria-hidden="true">
                         <span class="talos-short-logo-mark"></span>
@@ -380,14 +494,13 @@ defineExpose({ scrollToBottom })
             </div>
 
             <div v-else class="space-y-5">
-                <article
-                    v-for="message in messages"
-                    :key="message.id"
-                    class="talos-chat-message flex"
-                    :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
-                    :data-message-role="message.role"
-                    :data-message-id="message.id"
-                >
+                <template v-for="message in messages" :key="message.id">
+                    <article
+                        class="talos-chat-message flex"
+                        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+                        :data-message-role="message.role"
+                        :data-message-id="message.id"
+                    >
                     <div
                         class="talos-message-bubble min-w-0 max-w-full rounded-md border"
                         :data-message-kind="message.role"
@@ -412,8 +525,39 @@ defineExpose({ scrollToBottom })
                             :content="message.content"
                             :sensitive="sensitiveBlur && messageContainsSensitiveText(message.content)"
                         />
+                        <TalosBrowserClarificationChoices
+                            v-if="messageBrowserClarificationChoices(message).length"
+                            :choices="messageBrowserClarificationChoices(message)"
+                            @select="emit('setPrompt', $event)"
+                        />
+                        <TalosBrowserCard
+                            v-for="placement in responseBrowserPlacements(message)"
+                            :key="placement.task.id"
+                            :task="placement.task"
+                            :activities="browserActivitiesForPlacement(placement)"
+                            :snapshot="browserSnapshotForPlacement(placement)"
+                            :talos-session-id="activeTalosSessionId"
+                            :current-page="browserPageForPlacement(placement)"
+                            :active-browser-session="browserSessionForPlacement(placement)"
+                            :interaction-pending="placementOwnsActiveSession(placement) && browserInteractionPending"
+                            :interaction-locked="placementOwnsActiveSession(placement) && browserInteractionLocked"
+                            :interaction-error="placementOwnsActiveSession(placement) ? browserInteractionError : null"
+                            :pending-interaction-approval="placementOwnsActiveSession(placement) ? pendingBrowserInteractionApproval : null"
+                            :pending-tool-approvals="pendingApprovalsForPlacement(placement)"
+                            :deciding-tool-approval-ids="decidingToolApprovalIds"
+                            :browser-task-busy="placementOwnsTaskCommand(placement) && browserTaskBusy"
+                            :browser-task-error="placementOwnsTaskCommand(placement) ? browserTaskError : null"
+                            :browser-task-command-pending="browserTaskBusy"
+                            :dev-browser-evidence="devBrowserEvidence"
+                            :mobile="mobile"
+                            :mobile-window-presentation="mobileWindowPresentation"
+                            @interact="emit('interactBrowserFrame', $event)"
+                            @confirm="emit('confirmBrowserFrameInteraction', $event)"
+                            @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
+                            @cancel-task="emit('cancelBrowserTask', $event)"
+                        />
                         <TalosBrowserScreenshotEvidence
-                            v-if="message.role === 'assistant'"
+                            v-if="message.role === 'assistant' && responseBrowserPlacements(message).length === 0"
                             :activities="messageBrowserActivities(message)"
                             :current-frame-activity="currentBrowserScreenshotActivity"
                             :talos-session-id="activeTalosSessionId"
@@ -422,6 +566,8 @@ defineExpose({ scrollToBottom })
                             :interaction-locked="browserInteractionLocked"
                             :interaction-error="browserInteractionError"
                             :pending-interaction-approval="pendingBrowserInteractionApproval"
+                            :mobile="mobile"
+                            :mobile-window-presentation="mobileWindowPresentation"
                             loading-strategy="eager"
                             @interact="emit('interactBrowserFrame', $event)"
                             @confirm="emit('confirmBrowserFrameInteraction', $event)"
@@ -474,6 +620,91 @@ defineExpose({ scrollToBottom })
                                 </article>
                             </div>
                         </div>
+                    </div>
+                    </article>
+
+                    <article
+                        v-for="placement in transientBrowserPlacements(message)"
+                        :key="`browser-task-${placement.task.id}`"
+                        class="talos-chat-message flex justify-start"
+                        data-message-role="assistant"
+                        :data-browser-task-id="placement.task.id"
+                    >
+                        <div
+                            class="talos-message-bubble min-w-0 max-w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]"
+                            data-message-kind="assistant"
+                            :data-bubble-scale="bubbleScale"
+                        >
+                            <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase opacity-75">
+                                <span class="font-semibold">TALOS</span>
+                                <span>browser task</span>
+                                <span>{{ formatTime(placement.task.updated_at ?? placement.task.created_at ?? message.created_at) }}</span>
+                            </div>
+                            <TalosBrowserCard
+                                :task="placement.task"
+                                :activities="browserActivitiesForPlacement(placement)"
+                                :snapshot="browserSnapshotForPlacement(placement)"
+                                :talos-session-id="activeTalosSessionId"
+                                :current-page="browserPageForPlacement(placement)"
+                                :active-browser-session="browserSessionForPlacement(placement)"
+                                :interaction-pending="placementOwnsActiveSession(placement) && browserInteractionPending"
+                                :interaction-locked="placementOwnsActiveSession(placement) && browserInteractionLocked"
+                                :interaction-error="placementOwnsActiveSession(placement) ? browserInteractionError : null"
+                                :pending-interaction-approval="placementOwnsActiveSession(placement) ? pendingBrowserInteractionApproval : null"
+                                :pending-tool-approvals="pendingApprovalsForPlacement(placement)"
+                                :deciding-tool-approval-ids="decidingToolApprovalIds"
+                                :browser-task-busy="placementOwnsTaskCommand(placement) && browserTaskBusy"
+                                :browser-task-error="placementOwnsTaskCommand(placement) ? browserTaskError : null"
+                                :browser-task-command-pending="browserTaskBusy"
+                                :dev-browser-evidence="devBrowserEvidence"
+                                :mobile="mobile"
+                                :mobile-window-presentation="mobileWindowPresentation"
+                                @interact="emit('interactBrowserFrame', $event)"
+                                @confirm="emit('confirmBrowserFrameInteraction', $event)"
+                                @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
+                                @cancel-task="emit('cancelBrowserTask', $event)"
+                            />
+                        </div>
+                    </article>
+                </template>
+
+                <article
+                    v-if="hasUnplacedBrowserSessionActivity"
+                    class="talos-chat-message flex justify-start"
+                    data-message-role="browser"
+                    data-browser-session-activity
+                    data-testid="talos-browser-session-activity"
+                    aria-label="Current Browser session activity"
+                >
+                    <div
+                        class="talos-message-bubble min-w-0 max-w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]"
+                        data-message-kind="browser"
+                        :data-bubble-scale="bubbleScale"
+                    >
+                        <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase opacity-75">
+                            <span class="font-semibold">TALOS</span>
+                            <span>current Browser session</span>
+                            <span v-if="currentBrowserSessionActivityTime">{{ formatTime(currentBrowserSessionActivityTime) }}</span>
+                        </div>
+                        <TalosBrowserActivity
+                            embedded
+                            :activities="unplacedCurrentBrowserActivities"
+                            :snapshot="browserSnapshot"
+                            :talos-session-id="activeTalosSessionId"
+                            :active-browser-session="activeBrowserSession"
+                            :interaction-pending="browserInteractionPending"
+                            :interaction-locked="browserInteractionLocked"
+                            :interaction-error="browserInteractionError"
+                            :pending-interaction-approval="pendingBrowserInteractionApproval"
+                            :pending-tool-approvals="unplacedCurrentBrowserApprovals"
+                            :deciding-tool-approval-ids="decidingToolApprovalIds"
+                            :dev-browser-evidence="devBrowserEvidence"
+                            :mobile="mobile"
+                            :mobile-window-presentation="mobileWindowPresentation"
+                            @interact="emit('interactBrowserFrame', $event)"
+                            @confirm="emit('confirmBrowserFrameInteraction', $event)"
+                            @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
+                        />
                     </div>
                 </article>
 

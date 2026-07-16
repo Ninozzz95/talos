@@ -26,6 +26,34 @@ generate_strong_token() {
   return 1
 }
 
+assert_container_env_present() {
+  local service="$1"
+  local variable="$2"
+  for _ in $(seq 1 12); do
+    if docker compose exec -T "$service" sh -lc \
+      'test -n "$(printenv "$1" 2>/dev/null)"' sh "$variable" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "$service must receive $variable." >&2
+  return 1
+}
+
+assert_container_env_absent() {
+  local service="$1"
+  local variable="$2"
+  for _ in $(seq 1 12); do
+    if docker compose exec -T "$service" sh -lc \
+      'test -z "$(printenv "$1" 2>/dev/null)"' sh "$variable" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "$service must not receive $variable." >&2
+  return 1
+}
+
 preserve_env() {
   if [ -f .env ]; then
     ENV_EXISTED=1
@@ -47,6 +75,12 @@ prepare_env() {
   sed -i "s/^TALOS_ADMIN_NAME=.*/TALOS_ADMIN_NAME=TALOS Docker Smoke/" .env
   sed -i "s/^TALOS_ADMIN_EMAIL=.*/TALOS_ADMIN_EMAIL=talos-docker-smoke@example.test/" .env
   sed -i "s/^TALOS_ADMIN_PASSWORD=.*/TALOS_ADMIN_PASSWORD=${TALOS_ADMIN_PASSWORD}/" .env
+  docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --volume "$ROOT_DIR:/workspace" \
+    --workdir /workspace/control-plane \
+    node:24.18.0-bookworm-slim \
+    node scripts/browser-action-keypair.mjs --env-file /workspace/.env >/dev/null
   chmod 600 .env
 }
 
@@ -107,7 +141,20 @@ docker compose --profile search exec -T searxng wget --spider --quiet --timeout=
 docker compose --profile search exec -T searxng python3 -c \
   'import json,urllib.request; payload=json.load(urllib.request.urlopen("http://127.0.0.1:8080/search?q=talos&format=json", timeout=5)); assert isinstance(payload, dict) and isinstance(payload.get("results"), list)'
 docker compose exec -T browser-worker node -e \
-  'fetch("http://127.0.0.1:3100/ready",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=await response.json();if(!response.ok||payload?.data?.status!=="ready"||payload?.data?.runtime!=="chromium"||payload?.data?.protocols?.hmi!=="talos_browser_hmi_runtime_v2.1.0")process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
+  'fetch("http://127.0.0.1:3100/ready",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=await response.json();if(!response.ok||payload?.data?.status!=="ready"||payload?.data?.runtime!=="chromium"||payload?.data?.protocols?.worker!=="talos.browser.worker.v2"||payload?.data?.protocols?.hmi!=="talos_browser_hmi_runtime_v2.1.0")process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
+
+assert_container_env_present talos TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
+assert_container_env_absent talos TALOS_BROWSER_ACTION_PUBLIC_KEY_B64
+assert_container_env_present talos-queue TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
+assert_container_env_absent talos-queue TALOS_BROWSER_ACTION_PUBLIC_KEY_B64
+assert_container_env_present browser-worker TALOS_BROWSER_ACTION_PUBLIC_KEY_B64
+assert_container_env_absent browser-worker TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
+assert_container_env_absent validator TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
+assert_container_env_absent validator TALOS_BROWSER_ACTION_PUBLIC_KEY_B64
+assert_container_env_absent validator TALOS_BROWSER_WORKER_TOKEN
+
+docker compose exec -T browser-worker node -e \
+  'fetch("http://127.0.0.1:3100/protocols/talos.browser.worker.v2/handshake",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=(await response.json())?.data;const action=payload?.authentication?.action_capability;if(!response.ok||payload?.schema_version!=="talos.browser.worker-handshake.v2"||payload?.protocol_version!=="talos.browser.worker.v2"||payload?.authentication?.mode!=="service_token_and_signed_action_capability"||payload?.authentication?.owner_binding!==true||action?.algorithm!=="ES256")process.exit(1);if(action?.schema_version!=="talos.browser.action-capability.v1"||action?.type!=="talos-browser-action+jwt"||action?.issuer!=="urn:talos:control-plane"||action?.audience!=="urn:talos:browser-worker"||action?.key_id!==process.env.TALOS_BROWSER_ACTION_KEY_ID||action?.max_ttl_seconds!==30)process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
 
 SMOKE_STATE="$(docker compose exec -T \
   -e TALOS_SMOKE_MODE=exercise \

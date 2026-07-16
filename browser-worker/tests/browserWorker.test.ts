@@ -1,15 +1,26 @@
 import { resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import { BrowserSessionManager, CLICK_COMMAND_TTL_MS, MAX_CLICK_COMMAND_RECORDS } from "../src/BrowserSessionManager.js";
+import { BrowserSessionManager } from "../src/BrowserSessionManager.js";
+import { MAX_BROWSER_ACTION_RECORDS } from "../src/BrowserActionLedger.js";
 import { MAX_HMI_COMMAND_RECORDS } from "../src/BrowserHmiCommandLedger.js";
 import { captureSnapshot } from "../src/BrowserSnapshot.js";
-import { TALOS_BROWSER_HMI_RUNTIME_PROTOCOL } from "../src/BrowserWorkerProtocol.js";
+import {
+  TALOS_BROWSER_ADAPTER_NAME,
+  TALOS_BROWSER_ADAPTER_VERSION,
+  BrowserWorkerHandshakeSchema,
+  TALOS_BROWSER_HMI_RUNTIME_PROTOCOL,
+  TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH,
+  TALOS_BROWSER_WORKER_HANDSHAKE_PATH,
+  TALOS_BROWSER_WORKER_PROTOCOL,
+  TALOS_BROWSER_WORKER_VERSION,
+} from "../src/BrowserWorkerProtocol.js";
 import type { CreateSessionInput } from "../src/schemas.js";
 import { buildServer } from "../src/server.js";
 import { startBrowserWorker } from "../src/startBrowserWorker.js";
+import type { BrowserAutomationAdapter } from "../src/adapters/BrowserAutomationAdapter.js";
 
 const fixtureUrl = `file://${resolve("tests/fixtures/read-only-page.html").replaceAll("\\", "/")}`;
 const execFileAsync = promisify(execFile);
@@ -45,7 +56,10 @@ describe("TALOS browser worker", () => {
       data: {
         status: "ok",
         service: "talos-browser-worker",
-        protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+        protocols: {
+          worker: TALOS_BROWSER_WORKER_PROTOCOL,
+          hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL,
+        },
       },
     });
   });
@@ -65,9 +79,96 @@ describe("TALOS browser worker", () => {
         status: "ready",
         service: "talos-browser-worker",
         runtime: "chromium",
-        protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+        protocols: {
+          worker: TALOS_BROWSER_WORKER_PROTOCOL,
+          hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL,
+        },
       },
     });
+  });
+
+  it("advertises a strict authenticated versioned handshake before session bootstrap", async () => {
+    const unauthenticated = await app.inject({ method: "GET", url: TALOS_BROWSER_WORKER_HANDSHAKE_PATH });
+    const first = await app.inject({
+      method: "GET",
+      url: TALOS_BROWSER_WORKER_HANDSHAKE_PATH,
+      headers: { "x-talos-worker-token": "test-worker-token" },
+    });
+    const second = await app.inject({
+      method: "GET",
+      url: TALOS_BROWSER_WORKER_HANDSHAKE_PATH,
+      headers: { "x-talos-worker-token": "test-worker-token" },
+    });
+
+    expect(unauthenticated.statusCode).toBe(401);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    const handshake = first.json().data;
+    expect(handshake).toEqual({
+      schema_version: "talos.browser.worker-handshake.v2",
+      protocol_version: TALOS_BROWSER_WORKER_PROTOCOL,
+      worker: {
+        name: "talos-browser-worker",
+        version: TALOS_BROWSER_WORKER_VERSION,
+        instance_id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+      },
+      adapter: { name: TALOS_BROWSER_ADAPTER_NAME, version: TALOS_BROWSER_ADAPTER_VERSION },
+      browser: { engine: "chromium", version: expect.any(String) },
+      capability_manifest: {
+        schema_version: "talos.browser.capabilities.v1",
+        protocol_version: TALOS_BROWSER_WORKER_PROTOCOL,
+        adapter_name: TALOS_BROWSER_ADAPTER_NAME,
+        adapter_version: TALOS_BROWSER_ADAPTER_VERSION,
+        capabilities: ["navigate", "snapshot", "screenshot", "read", "click", "interactive_frame", "semantic_locator", "tabs"],
+        limits: {
+          max_tabs: 1,
+          max_viewport_width: 3840,
+          max_viewport_height: 2160,
+          max_artifact_bytes: 5_000_000,
+        },
+        degraded_reason: null,
+      },
+      authentication: {
+        mode: "service_token_and_signed_action_capability",
+        owner_binding: true,
+        action_capability: {
+          schema_version: "talos.browser.action-capability.v1",
+          algorithm: "ES256",
+          type: "talos-browser-action+jwt",
+          issuer: "urn:talos:control-plane",
+          audience: "urn:talos:browser-worker",
+          key_id: "test-ephemeral-browser-action-key",
+          max_ttl_seconds: 30,
+        },
+      },
+      status: "ready",
+      degraded_reason: null,
+    });
+    expect(handshake.browser.version.length).toBeGreaterThan(0);
+    expect(second.json().data.worker.instance_id).toBe(handshake.worker.instance_id);
+    const nonV4Identity = structuredClone(handshake);
+    nonV4Identity.worker.instance_id = "019f64f7-2261-7c31-aba5-d88251b17b6b";
+    expect(BrowserWorkerHandshakeSchema.safeParse(nonV4Identity).success).toBe(false);
+  });
+
+  it("binds the server-generated worker identity to session bootstrap", async () => {
+    const handshake = await app.inject({
+      method: "GET",
+      url: TALOS_BROWSER_WORKER_HANDSHAKE_PATH,
+      headers: { "x-talos-worker-token": "test-worker-token" },
+    });
+    const created = await ownedInject({
+      method: "POST",
+      url: `/protocols/${TALOS_BROWSER_HMI_RUNTIME_PROTOCOL}/sessions`,
+      payload: createPayload,
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().data.sessionId).toMatch(/^brw_[0-9a-f-]{36}$/);
+    expect(created.json().data.workerInstanceId).toBe(handshake.json().data.worker.instance_id);
+    expect(created.json().data.protocols.worker).toBe(TALOS_BROWSER_WORKER_PROTOCOL);
+
+    await ownedInject({ method: "DELETE", url: `/sessions/${created.json().data.sessionId}` });
   });
 
   it("bootstraps operational sessions through the exact HMI runtime protocol", async () => {
@@ -85,7 +186,10 @@ describe("TALOS browser worker", () => {
     expect(supported.statusCode).toBe(201);
     expect(supported.json().data).toMatchObject({
       status: "ready",
-      protocols: { hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL },
+      protocols: {
+        worker: TALOS_BROWSER_WORKER_PROTOCOL,
+        hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL,
+      },
     });
     expect(unsupported.statusCode).toBe(404);
 
@@ -318,6 +422,64 @@ describe("TALOS browser worker", () => {
     await manager.close();
     expect(proxyClosed).toBe(1);
   });
+
+  it("replays one live session for a caller-owned bootstrap idempotency key and rejects changed intent", async () => {
+    let contextCreates = 0;
+    const page = { on: () => undefined } as unknown as Page;
+    const context = {
+      route: async () => undefined,
+      newPage: async () => page,
+      close: async () => undefined,
+    } as unknown as BrowserContext;
+    const browser = {
+      newContext: async () => {
+        contextCreates += 1;
+        return context;
+      },
+      close: async () => undefined,
+    } as unknown as Browser;
+    const manager = new BrowserSessionManager({
+      browserFactory: async () => browser,
+      scheduleCleanup: () => ({}),
+      cancelCleanup: () => undefined,
+    });
+    const idempotencyKey = "123e4567-e89b-42d3-a456-426614174222";
+
+    const [first, concurrent] = await Promise.all([
+      manager.create(createPayload as CreateSessionInput, idempotencyKey),
+      manager.create(createPayload as CreateSessionInput, idempotencyKey),
+    ]);
+    const replay = await manager.create(createPayload as CreateSessionInput, idempotencyKey);
+
+    expect(first.sessionId).toBe(concurrent.sessionId);
+    expect(first.sessionId).toBe(replay.sessionId);
+    expect(contextCreates).toBe(1);
+    await expect(manager.create({
+      ...createPayload,
+      viewport: { width: 1280, height: 800 },
+    } as CreateSessionInput, idempotencyKey)).rejects.toMatchObject({
+      code: "TALOS_BROWSER_SESSION_IDEMPOTENCY_CONFLICT",
+      statusCode: 422,
+    });
+
+    await manager.delete(first.sessionId);
+    const replacement = await manager.create(createPayload as CreateSessionInput, idempotencyKey);
+    expect(replacement.sessionId).not.toBe(first.sessionId);
+    expect(contextCreates).toBe(2);
+
+    await manager.close();
+  });
+
+  it("requires the structured Idempotency-Key header on the versioned recovery bootstrap route", async () => {
+    const missing = await ownedInject({
+      method: "POST",
+      url: TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH,
+      payload: createPayload,
+    });
+
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json()).toMatchObject({ code: "TALOS_BROWSER_IDEMPOTENCY_KEY_REQUIRED" });
+  });
 });
 
 describe("TALOS browser snapshot security", () => {
@@ -423,12 +585,97 @@ describe("TALOS browser worker process entrypoint", () => {
         data: {
           status: "ok",
           service: "talos-browser-worker",
-          protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+          protocols: {
+            worker: TALOS_BROWSER_WORKER_PROTOCOL,
+            hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL,
+          },
         },
       });
     } finally {
       await app.close();
     }
+  });
+});
+
+describe("Playwright MCP worker lifecycle", () => {
+  it("closes the session adapter before deletion and drains the adapter before browser shutdown", async () => {
+    const events: string[] = [];
+    const sessions = {
+      get: async () => ({ ownerRef: "user:lifecycle" }),
+      delete: async () => { events.push("session:delete"); },
+      close: async () => { events.push("sessions:close"); },
+    } as unknown as BrowserSessionManager;
+    const adapter: BrowserAutomationAdapter = {
+      handshake: async () => { throw new Error("Not used by lifecycle test."); },
+      callTool: async () => { throw new Error("Not used by lifecycle test."); },
+      cancelSession: async () => { events.push("adapter:cancel-session"); },
+      closeSession: async () => { events.push("adapter:close-session"); },
+      close: async () => { events.push("adapter:close"); },
+    };
+    const app = buildServer({
+      internalToken: "lifecycle-test-token",
+      runtimeEnvironment: "test",
+      sessions,
+      automationAdapter: adapter,
+    });
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: "/sessions/brw_lifecycle",
+      headers: {
+        "x-talos-worker-token": "lifecycle-test-token",
+        "x-talos-owner-ref": "user:lifecycle",
+      },
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(events).toEqual(["adapter:close-session", "session:delete"]);
+
+    await app.close();
+    expect(events).toEqual([
+      "adapter:close-session",
+      "session:delete",
+      "adapter:close",
+      "sessions:close",
+    ]);
+  });
+
+  it("uses the dedicated cancellation path to abort the adapter before closing the context", async () => {
+    const events: string[] = [];
+    const sessions = {
+      get: async () => ({ ownerRef: "user:lifecycle" }),
+      cancel: async (_sessionId: string, reason: string) => { events.push(`session:cancel:${reason}`); },
+      close: async () => undefined,
+    } as unknown as BrowserSessionManager;
+    const adapter: BrowserAutomationAdapter = {
+      handshake: async () => { throw new Error("Not used by cancellation test."); },
+      callTool: async () => { throw new Error("Not used by cancellation test."); },
+      cancelSession: async (_sessionId, reason) => { events.push(`adapter:cancel:${reason}`); },
+      closeSession: async () => { events.push("adapter:close-session"); },
+      close: async () => undefined,
+    };
+    const app = buildServer({
+      internalToken: "lifecycle-cancel-token",
+      runtimeEnvironment: "test",
+      sessions,
+      automationAdapter: adapter,
+    });
+
+    const cancelled = await app.inject({
+      method: "POST",
+      url: "/sessions/brw_lifecycle/cancel",
+      headers: {
+        "x-talos-worker-token": "lifecycle-cancel-token",
+        "x-talos-owner-ref": "user:lifecycle",
+      },
+      payload: { reason: "User cancelled the Browser task." },
+    });
+
+    expect(cancelled.statusCode).toBe(204);
+    expect(events).toEqual([
+      "adapter:cancel:User cancelled the Browser task.",
+      "session:cancel:User cancelled the Browser task.",
+    ]);
+    await app.close();
   });
 });
 
@@ -472,6 +719,27 @@ describe("BrowserSessionManager resource lifecycle", () => {
     await manager.close();
   });
 
+  it("cancels an in-flight session without waiting for the queued operation", async () => {
+    const fake = fakeBrowser();
+    const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => 1_000 });
+    const created = await manager.create(createPayload as CreateSessionInput);
+    let release!: () => void;
+    const blocker = new Promise<void>((resolve) => { release = resolve; });
+    const inFlight = manager.runExclusive(created.sessionId, async () => blocker);
+    await Promise.resolve();
+
+    const cancelled = manager.cancel(created.sessionId, "User cancelled the Browser task.");
+    await expect(Promise.race([
+      cancelled.then(() => "cancelled"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("timed-out"), 100)),
+    ])).resolves.toBe("cancelled");
+    await expect(manager.get(created.sessionId)).rejects.toMatchObject({ code: "TALOS_BROWSER_SESSION_NOT_FOUND" });
+
+    release();
+    await expect(inFlight).rejects.toMatchObject({ code: "TALOS_BROWSER_SESSION_NOT_FOUND" });
+    await manager.close();
+  });
+
   it("bounds per-session HMI command retention and clears records when the session closes", async () => {
     const fake = fakeBrowser();
     const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => 1_000 });
@@ -490,32 +758,47 @@ describe("BrowserSessionManager resource lifecycle", () => {
     await manager.close();
   });
 
-  it("bounds and expires semantic click records, then clears cached evidence on session close", async () => {
+  it("bounds action records without live-session TTL reuse and clears retained evidence on close", async () => {
     const fake = fakeBrowser();
     let now = 1_000;
     const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => now });
     const created = await manager.create(createPayload as CreateSessionInput);
     const session = await manager.get(created.sessionId);
 
-    expect(manager.claimClickCommand(created.sessionId, "click-ttl", "sha256:one")).toEqual({ kind: "new" });
-    manager.commitClickCommand(created.sessionId, "click-ttl", "sha256:one", { content: [{ type: "image", data: "retained-screenshot" }] });
-    expect(session.clickCommands.size).toBe(1);
-    now += CLICK_COMMAND_TTL_MS + 1;
+    const retained = {
+      actionId: "click-retained",
+      idempotencyKey: "click-retained",
+      operation: "browser_click",
+      preconditionStateVersion: 0,
+      request: { name: "browser_click", arguments: { target: "r1" } },
+      consequential: true,
+    } as const;
+    expect(session.actionLedger.claim(retained)).toEqual({ kind: "new" });
+    session.actionLedger.markDispatched(retained.idempotencyKey);
+    session.actionLedger.commit(retained.idempotencyKey, { content: [{ type: "image", data: "retained-screenshot" }] });
+    expect(session.actionLedger.size).toBe(1);
+    now += 10 * 60 * 1_000;
     await manager.get(created.sessionId);
-    expect(session.clickCommands.size).toBe(0);
-    expect(manager.claimClickCommand(created.sessionId, "click-ttl", "sha256:two")).toEqual({ kind: "new" });
-
-    const remainingSlots = MAX_CLICK_COMMAND_RECORDS - session.clickCommands.size;
-    for (let index = 0; index < remainingSlots; index += 1) {
-      expect(manager.claimClickCommand(created.sessionId, `click-bound-${index}`, `sha256:${index}`)).toEqual({ kind: "new" });
-    }
-    expect(() => manager.claimClickCommand(created.sessionId, "click-overflow", "sha256:overflow")).toThrowError(expect.objectContaining({
-      code: "TALOS_BROWSER_CLICK_COMMAND_RETENTION_EXHAUSTED",
+    expect(session.actionLedger.size).toBe(1);
+    expect(() => session.actionLedger.claim({ ...retained, request: { name: "browser_click", arguments: { target: "r2" } } })).toThrowError(expect.objectContaining({
+      code: "TALOS_BROWSER_ACTION_CONFLICT",
     }));
 
-    const cache = session.clickCommands;
+    const remainingSlots = MAX_BROWSER_ACTION_RECORDS - session.actionLedger.size;
+    for (let index = 0; index < remainingSlots; index += 1) {
+      expect(session.actionLedger.claim({
+        ...retained,
+        actionId: `click-bound-${index}`,
+        idempotencyKey: `click-bound-${index}`,
+      })).toEqual({ kind: "new" });
+    }
+    expect(() => session.actionLedger.claim({ ...retained, actionId: "click-overflow", idempotencyKey: "click-overflow" })).toThrowError(expect.objectContaining({
+      code: "TALOS_BROWSER_ACTION_RETENTION_EXHAUSTED",
+    }));
+
+    const ledger = session.actionLedger;
     await manager.delete(created.sessionId);
-    expect(cache.size).toBe(0);
+    expect(ledger.size).toBe(0);
     await manager.close();
   });
 
@@ -572,10 +855,44 @@ describe("BrowserSessionManager resource lifecycle", () => {
         status: "degraded",
         service: "talos-browser-worker",
         runtime: "chromium",
-        protocols: { hmi: "talos_browser_hmi_runtime_v2.1.0" },
+        protocols: {
+          worker: TALOS_BROWSER_WORKER_PROTOCOL,
+          hmi: TALOS_BROWSER_HMI_RUNTIME_PROTOCOL,
+        },
       },
     });
     await app.close();
+  });
+
+  it("returns a bounded degraded handshake when Chromium cannot launch", async () => {
+    const manager = new BrowserSessionManager({
+      browserFactory: async () => {
+        throw new Error("private launch path C:/runtime/chromium.exe");
+      },
+    });
+    const degradedApp = buildServer({
+      sessions: manager,
+      internalToken: "test-worker-token",
+      workerInstanceId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+
+    const response = await degradedApp.inject({
+      method: "GET",
+      url: TALOS_BROWSER_WORKER_HANDSHAKE_PATH,
+      headers: { "x-talos-worker-token": "test-worker-token" },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().data).toMatchObject({
+      protocol_version: TALOS_BROWSER_WORKER_PROTOCOL,
+      worker: { instance_id: "123e4567-e89b-42d3-a456-426614174000" },
+      browser: { engine: "chromium", version: null },
+      status: "degraded",
+      degraded_reason: "browser_runtime_unavailable",
+      capability_manifest: { degraded_reason: "browser_runtime_unavailable" },
+    });
+    expect(JSON.stringify(response.json())).not.toContain("private launch path");
+    await degradedApp.close();
   });
 
   it("returns a correlation-safe typed diagnostic for unexpected HMI protocol failures", async () => {
@@ -634,6 +951,48 @@ describe("BrowserSessionManager resource lifecycle", () => {
     });
 
     await isolatedApp.close();
+  });
+
+  it("never writes action capabilities or private key material to production diagnostics", async () => {
+    const actionCapability = `eyJhbGciOiJFUzI1NiIsInR5cCI6InRhbG9zLWJyb3dzZXItYWN0aW9uK2p3dCJ9.eyJzdWIiOiJ0ZXN0In0.${"a".repeat(86)}`;
+    const privateKeyMaterial = "synthetic-private-key-material";
+    const sessions = {
+      get: async () => {
+        throw new Error(`Unexpected ${actionCapability} ${privateKeyMaterial}`);
+      },
+      close: async () => undefined,
+    } as unknown as BrowserSessionManager;
+    const writes: string[] = [];
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    const isolatedApp = buildServer({
+      sessions,
+      internalToken: "test-worker-token",
+      runtimeEnvironment: "test",
+    });
+
+    try {
+      const response = await isolatedApp.inject({
+        method: "GET",
+        url: "/sessions/worker-secret-diagnostic",
+        headers: {
+          "x-talos-worker-token": "test-worker-token",
+          "x-talos-owner-ref": "user:1",
+        },
+      });
+      const output = writes.join("");
+
+      expect(response.statusCode).toBe(500);
+      expect(output).toContain('"event":"unexpected_worker_error"');
+      expect(output).toMatch(/"error_fingerprint":"[a-f0-9]{16}"/u);
+      expect(output).not.toContain(actionCapability);
+      expect(output).not.toContain(privateKeyMaterial);
+    } finally {
+      await isolatedApp.close();
+      stderr.mockRestore();
+    }
   });
 });
 

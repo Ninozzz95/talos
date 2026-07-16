@@ -10,9 +10,24 @@ import {
     probeBrowserWorkerEndpoint,
 } from './browser-worker-ownership.mjs'
 
-test('development stack config starts the browser worker with shared ephemeral credentials', () => {
+test('development stack routes ephemeral browser credentials only to their owning processes', () => {
     const token = 'a'.repeat(64)
-    const config = createDevStackConfig({ token, inheritedEnv: { APP_ENV: 'local' } })
+    const actionKeypair = {
+        keyId: 'dev-browser-action-key',
+        privateKeyBase64: 'private-key-material',
+        publicKeyBase64: 'public-key-material',
+    }
+    const config = createDevStackConfig({
+        token,
+        actionKeypair,
+        inheritedEnv: {
+            APP_ENV: 'local',
+            TALOS_BROWSER_WORKER_TOKEN: 'stale-token',
+            TALOS_BROWSER_ACTION_KEY_ID: 'stale-key-id',
+            TALOS_BROWSER_ACTION_PRIVATE_KEY_B64: 'stale-private-key',
+            TALOS_BROWSER_ACTION_PUBLIC_KEY_B64: 'stale-public-key',
+        },
+    })
 
     assert.deepEqual(config.commands.map((command) => command.name), [
         'validator',
@@ -24,7 +39,10 @@ test('development stack config starts the browser worker with shared ephemeral c
     assert.equal(config.sharedEnv.AVM_VALIDATOR_URL, 'http://127.0.0.1:3000')
     assert.equal(config.sharedEnv.TALOS_VALIDATOR_HEALTH_URL, 'http://127.0.0.1:3000/health')
     assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_URL, 'http://127.0.0.1:3100')
-    assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_TOKEN, token)
+    assert.equal(config.sharedEnv.TALOS_BROWSER_WORKER_TOKEN, undefined)
+    assert.equal(config.sharedEnv.TALOS_BROWSER_ACTION_KEY_ID, undefined)
+    assert.equal(config.sharedEnv.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
+    assert.equal(config.sharedEnv.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
 
     const server = config.commands.find((command) => command.name === 'server')
     const queue = config.commands.find((command) => command.name === 'queue')
@@ -32,9 +50,21 @@ test('development stack config starts the browser worker with shared ephemeral c
     assert.equal(server.env.TALOS_BROWSER_WORKER_TOKEN, token)
     assert.equal(queue.env.TALOS_BROWSER_WORKER_TOKEN, token)
     assert.equal(vite.env.TALOS_BROWSER_WORKER_TOKEN, undefined)
+    assert.equal(server.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, actionKeypair.privateKeyBase64)
+    assert.equal(server.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
+    assert.equal(server.env.TALOS_BROWSER_ACTION_KEY_ID, actionKeypair.keyId)
+    assert.equal(queue.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, actionKeypair.privateKeyBase64)
+    assert.equal(queue.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
+    assert.equal(queue.env.TALOS_BROWSER_ACTION_KEY_ID, actionKeypair.keyId)
+    assert.equal(vite.env.TALOS_BROWSER_ACTION_KEY_ID, undefined)
+    assert.equal(vite.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
+    assert.equal(vite.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
 
     const browser = config.commands.find((command) => command.name === 'browser')
     assert.equal(browser.env.TALOS_BROWSER_WORKER_TOKEN, token)
+    assert.equal(browser.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, actionKeypair.publicKeyBase64)
+    assert.equal(browser.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
+    assert.equal(browser.env.TALOS_BROWSER_ACTION_KEY_ID, actionKeypair.keyId)
     assert.equal(browser.env.HOST, '127.0.0.1')
     assert.equal(browser.env.PORT, '3100')
     assert.match(browser.command, /browser-worker/)
@@ -47,6 +77,10 @@ test('development stack config starts the browser worker with shared ephemeral c
     assert.equal(validator.env.TALOS_PHP_ROOT, path.resolve('..', '.tools', 'php'))
     assert.equal(validator.env.CURL_CA_BUNDLE, path.resolve('..', '.tools', 'php', 'extras', 'ssl', 'cacert.pem'))
     assert.equal(validator.env.SSL_CERT_FILE, path.resolve('..', '.tools', 'php', 'extras', 'ssl', 'cacert.pem'))
+    assert.equal(validator.env.TALOS_BROWSER_WORKER_TOKEN, undefined)
+    assert.equal(validator.env.TALOS_BROWSER_ACTION_KEY_ID, undefined)
+    assert.equal(validator.env.TALOS_BROWSER_ACTION_PRIVATE_KEY_B64, undefined)
+    assert.equal(validator.env.TALOS_BROWSER_ACTION_PUBLIC_KEY_B64, undefined)
 })
 
 test('development stack falls back to PATH runtimes when repo-local tools are absent', () => {
@@ -149,8 +183,20 @@ test('browser worker ownership blocks ambiguous startup and never renders creden
     assert.doesNotMatch(output, /token|secret|credential/i)
 })
 
-test('browser worker probe distinguishes the required HMI runtime from a stale TALOS worker', async () => {
+test('browser worker probe requires worker v2 as well as the stable HMI runtime', async () => {
     const compatible = await probeBrowserWorkerEndpoint('http://127.0.0.1:3100', {
+        portOpen: async () => true,
+        fetchImpl: async () => new Response(JSON.stringify({
+            data: {
+                service: 'talos-browser-worker',
+                protocols: {
+                    worker: 'talos.browser.worker.v2',
+                    hmi: 'talos_browser_hmi_runtime_v2.1.0',
+                },
+            },
+        }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    })
+    const staleWithoutWorkerV2 = await probeBrowserWorkerEndpoint('http://127.0.0.1:3100', {
         portOpen: async () => true,
         fetchImpl: async () => new Response(JSON.stringify({
             data: {
@@ -159,15 +205,9 @@ test('browser worker probe distinguishes the required HMI runtime from a stale T
             },
         }), { status: 200, headers: { 'content-type': 'application/json' } }),
     })
-    const stale = await probeBrowserWorkerEndpoint('http://127.0.0.1:3100', {
-        portOpen: async () => true,
-        fetchImpl: async () => new Response(JSON.stringify({
-            data: { service: 'talos-browser-worker' },
-        }), { status: 200, headers: { 'content-type': 'application/json' } }),
-    })
 
     assert.equal(compatible, 'talos')
-    assert.equal(stale, 'incompatible')
+    assert.equal(staleWithoutWorkerV2, 'incompatible')
 })
 
 test('browser worker ownership reports a managed endpoint with a stale protocol explicitly', () => {

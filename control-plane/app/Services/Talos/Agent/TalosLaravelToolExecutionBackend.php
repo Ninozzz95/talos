@@ -13,13 +13,14 @@ use App\Models\TalosToolTurn;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\Talos\Browser\TalosBrowserCommand;
 use App\Services\Talos\Browser\TalosBrowserCommandService;
+use App\Services\Talos\Browser\TalosBrowserRunArtifactCorrelator;
 use App\Services\Talos\Browser\TalosBrowserSemanticClickService;
 use App\Services\Talos\Web\TalosWebFetchException;
 use App\Services\Talos\Web\TalosWebFetchService;
 use App\Services\Talos\Web\WebSearchProviderFactory;
 use InvalidArgumentException;
-use Kadmos\Tool\ProceduralNode;
 use Kadmos\Tool\ProceduralLoopGuard;
+use Kadmos\Tool\ProceduralNode;
 use Kadmos\Tool\ToolResult;
 use Throwable;
 
@@ -42,6 +43,7 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
         private readonly WebSearchProviderFactory $searchProviders,
         private readonly TalosWebFetchService $webFetch,
         private readonly TalosAgentBudgetService $budgets,
+        private readonly TalosBrowserRunArtifactCorrelator $browserRunArtifacts,
         private readonly ?RunEventNormalizer $normalizer = null,
     ) {}
 
@@ -229,6 +231,7 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
                 arguments: $this->canonicalBrowserArguments($node->call->arguments, $operation),
                 expectedEvidenceHash: $expectedEvidenceHash,
                 nodeId: $node->id,
+                commandId: $node->call->providerCallId,
             );
         } catch (InvalidArgumentException) {
             return ToolResult::error($node->call->providerCallId, 'TALOS_BROWSER_COMMAND_MALFORMED', 'Browser tool arguments are malformed.');
@@ -415,21 +418,7 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
                 if (! $artifact instanceof TalosBrowserArtifact || ! is_string($artifact->sha256)) {
                     throw new InvalidArgumentException('Browser evidence artifact is not owned by the current turn.');
                 }
-                TalosRunArtifact::query()->firstOrCreate(
-                    ['run_id' => $turn->run_id, 'uri' => 'talos-browser-artifact://'.$artifact->id],
-                    [
-                        'artifact_type' => 'browser_'.$artifact->type,
-                        'mime_type' => $artifact->mime,
-                        'metadata' => [
-                            'browser_artifact_id' => $artifact->id,
-                            'browser_session_id' => $browserSession->id,
-                            'tool_turn_id' => $turn->id,
-                            'provider_call_id' => $providerCallId,
-                            'sha256' => $artifact->sha256,
-                            'trust' => 'untrusted',
-                        ],
-                    ],
-                );
+                $this->browserRunArtifacts->correlate($turn, $browserSession, $artifact, $providerCallId);
                 $evidence[] = [
                     'artifact_id' => (string) $artifact->id,
                     'kind' => $operation === 'read' ? 'snapshot_read' : (string) $artifact->type,

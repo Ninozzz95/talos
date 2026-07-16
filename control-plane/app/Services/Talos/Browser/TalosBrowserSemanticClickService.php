@@ -25,6 +25,7 @@ final class TalosBrowserSemanticClickService
         private readonly TalosBrowserPolicy $policy,
         private readonly TalosBrowserArtifactStore $artifacts,
         private readonly TalosBrowserArtifactReader $artifactReader,
+        private readonly TalosBrowserLegacyWriteGate $legacyWrites,
     ) {}
 
     /**
@@ -38,8 +39,7 @@ final class TalosBrowserSemanticClickService
         ?string $expectedEvidenceHash = null,
         ?string $expectedSnapshotId = null,
         ?int $expectedStateVersion = null,
-    ): array
-    {
+    ): array {
         if (! $session->isOperable() || ! $session->supportsBrowserOperation('interact')) {
             throw new TalosBrowserCommandException('TALOS_BROWSER_CAPABILITY_DENIED', 'Semantic browser interaction is not available for this session.', status: 422);
         }
@@ -81,6 +81,8 @@ final class TalosBrowserSemanticClickService
         ?string $expectedSnapshotId = null,
         ?int $expectedStateVersion = null,
     ): array {
+        $this->legacyWrites->assertEnabled('browser.semantic_click.execute');
+
         $rawCommand = ['command_id' => $commandId, 'operation' => 'click'];
 
         try {
@@ -253,8 +255,7 @@ final class TalosBrowserSemanticClickService
         ?string $expectedEvidenceHash = null,
         ?string $expectedSnapshotId = null,
         ?int $expectedStateVersion = null,
-    ): array
-    {
+    ): array {
         $artifactId = $expectedSnapshotArtifactId ?? $session->last_snapshot_artifact_id;
         if ($expectedSnapshotArtifactId !== null
             && (string) $session->last_snapshot_artifact_id !== $expectedSnapshotArtifactId) {
@@ -330,6 +331,7 @@ final class TalosBrowserSemanticClickService
                 $commandId,
                 'browser_click',
                 $arguments,
+                authorization: BrowserActionAuthorization::policy($commandId),
             );
         } catch (BrowserWorkerException $exception) {
             $this->markRecovery($session, (int) $session->worker_state_version);
@@ -363,7 +365,7 @@ final class TalosBrowserSemanticClickService
     }
 
     /**
-     * @param array{ref: string, role: string, name: string, visible: bool} $ownedTarget
+     * @param  array{ref: string, role: string, name: string, visible: bool}  $ownedTarget
      * @return array{source_state_version: int, state_version: int, url: string, title: string, target: array<string, mixed>, screenshot_bytes: string, screenshot_sha256: string, width: int, height: int, snapshot: array<string, mixed>, snapshot_json: string, snapshot_sha256: string, worker_evidence: list<array<string, mixed>>, evidence_bytes: int}
      */
     private function validatedCapture(TalosBrowserSession $session, BrowserToolResult $result, int $sourceStateVersion, array $ownedTarget): array
@@ -502,8 +504,7 @@ final class TalosBrowserSemanticClickService
         BrowserToolResult $result,
         string $kind,
         string $expectedHash,
-    ): array
-    {
+    ): array {
         $ids = is_array($result->structuredContent['evidence_ids'] ?? null)
             ? $result->structuredContent['evidence_ids']
             : [];
@@ -522,7 +523,7 @@ final class TalosBrowserSemanticClickService
     }
 
     /**
-     * @param array{source_state_version: int, state_version: int, url: string, title: string, target: array<string, mixed>, screenshot_bytes: string, screenshot_sha256: string, width: int, height: int, snapshot: array<string, mixed>, snapshot_json: string, snapshot_sha256: string, worker_evidence: list<array<string, mixed>>, evidence_bytes: int} $capture
+     * @param  array{source_state_version: int, state_version: int, url: string, title: string, target: array<string, mixed>, screenshot_bytes: string, screenshot_sha256: string, width: int, height: int, snapshot: array<string, mixed>, snapshot_json: string, snapshot_sha256: string, worker_evidence: list<array<string, mixed>>, evidence_bytes: int}  $capture
      * @return array{screenshot: TalosBrowserArtifact, snapshot: TalosBrowserArtifact, replayed: bool}
      */
     private function persistCapture(TalosBrowserSession $session, TalosRun $run, RunEventNormalizer $normalizer, string $commandId, string $nodeId, array $capture): array
@@ -645,8 +646,8 @@ final class TalosBrowserSemanticClickService
     }
 
     /**
-     * @param array<string, mixed> $capture
-     * @param list<TalosBrowserArtifact> $artifacts
+     * @param  array<string, mixed>  $capture
+     * @param  list<TalosBrowserArtifact>  $artifacts
      * @return array{screenshot: TalosBrowserArtifact, snapshot: TalosBrowserArtifact, replayed: bool}
      */
     private function replayedCapture(TalosBrowserSession $session, array $capture, array $artifacts): array

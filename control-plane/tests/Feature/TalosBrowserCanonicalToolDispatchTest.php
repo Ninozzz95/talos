@@ -24,6 +24,23 @@ final class TalosBrowserCanonicalToolDispatchTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_canonical_read_input_can_bind_the_physical_command_to_a_persisted_tool_call_id(): void
+    {
+        $command = TalosBrowserCommand::canonicalReadInput(
+            runId: 'run-1',
+            browserSessionId: 'browser-1',
+            operation: 'snapshot',
+            arguments: [],
+            commandId: 'provider-call-1',
+        );
+
+        self::assertSame('provider-call-1', $command['command_id']);
+        self::assertSame(
+            TalosBrowserCommand::canonicalReadInput('run-1', 'browser-1', 'snapshot', [])['idempotency_key'],
+            $command['idempotency_key'],
+        );
+    }
+
     public function test_navigation_uses_the_canonical_worker_tool_and_persists_its_state_version(): void
     {
         $user = User::factory()->create();

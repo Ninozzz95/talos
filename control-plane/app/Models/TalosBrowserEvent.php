@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsLegacyBrowserWrites;
 use App\Services\Talos\Browser\TalosBrowserRedactor;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 final class TalosBrowserEvent extends Model
 {
-    use HasUuids;
+    use GuardsLegacyBrowserWrites, HasUuids;
 
     public $incrementing = false;
 

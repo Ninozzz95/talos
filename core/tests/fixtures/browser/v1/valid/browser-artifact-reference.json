@@ -1,0 +1,11 @@
+{
+  "schema_version": "talos.browser.artifact.v1",
+  "artifact_id": "77777777-7777-4777-8777-777777777777",
+  "kind": "screenshot",
+  "mime": "image/png",
+  "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "byte_size": 4096,
+  "width": 1280,
+  "height": 800,
+  "redaction_status": "none"
+}

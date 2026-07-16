@@ -7,11 +7,23 @@ import {
   BrowserHmiTargetDescriptorSchema,
 } from "../src/BrowserHmiContracts.js";
 import { buildServer } from "../src/server.js";
+import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
+import { createTestActionCapabilityKeypair, signTestActionCapability } from "./support/browserActionCapability.js";
 
 const viewport = { width: 800, height: 600 };
 const fixtureUrl = new URL(`file://${resolve("tests/fixtures/hmi-page.html").replaceAll("\\", "/")}`).href;
 const sessions = new BrowserSessionManager();
-const app = buildServer({ sessions, internalToken: "hmi-test-token" });
+const actionKeys = createTestActionCapabilityKeypair("hmi-action-test-key");
+const actionNowSeconds = 1_750_000_010;
+const app = buildServer({
+  sessions,
+  internalToken: "hmi-test-token",
+  actionCapabilityVerifier: BrowserActionCapabilityVerifier.forTest(
+    actionKeys.publicKeyPem,
+    actionKeys.keyId,
+    () => actionNowSeconds,
+  ),
+});
 const ownerHeaders = { "x-talos-worker-token": "hmi-test-token", "x-talos-owner-ref": "user:1" };
 const otherOwnerHeaders = { "x-talos-worker-token": "hmi-test-token", "x-talos-owner-ref": "user:2" };
 let commandSequence = 0;
@@ -98,6 +110,41 @@ function executionPayload(
   };
 }
 
+async function executePointer(
+  sessionId: string,
+  payload: ReturnType<typeof executionPayload>,
+  headers = ownerHeaders,
+  authorizeAction = true,
+) {
+  const requestHeaders = authorizeAction
+    ? {
+        ...headers,
+        authorization: `Bearer ${await signTestActionCapability(actionKeys, {
+          ownerRef: headers["x-talos-owner-ref"],
+          workerSessionId: sessionId,
+          actionId: payload.command_id,
+          operation: "hmi_pointer_execute",
+          preconditionStateVersion: payload.state_version,
+          request: payload,
+        }, {
+          attestation: {
+            kind: "user_approval",
+            approval_id: `approval-${payload.command_id}`,
+            approval_request_sha256: `sha256:${"a".repeat(64)}`,
+            execution_lease_sha256: `sha256:${"b".repeat(64)}`,
+          },
+        })}`,
+      }
+    : headers;
+
+  return app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/hmi/pointer/execute`,
+    headers: requestHeaders,
+    payload,
+  });
+}
+
 describe("TALOS Browser HMI pointer boundary", () => {
   it("requires the dedicated HMI capability without enabling model actions", async () => {
     const sessionId = await createSession(false);
@@ -110,6 +157,24 @@ describe("TALOS Browser HMI pointer boundary", () => {
 
       const summary = await app.inject({ method: "GET", url: `/sessions/${sessionId}`, headers: ownerHeaders });
       expect(summary.json().data.capabilities).toMatchObject({ actions: false, hmiActions: false });
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("rejects HMI execution authenticated only with the worker service token", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const inspected = await preflight(sessionId);
+      expect(inspected.statusCode).toBe(200);
+
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders, false);
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        code: "TALOS_BROWSER_ACTION_CAPABILITY_REQUIRED",
+      });
     } finally {
       await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
     }
@@ -252,17 +317,12 @@ describe("TALOS Browser HMI pointer boundary", () => {
       });
 
       const commandId = "hmi_cmd_ordinary_no_sensitive_auth";
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(
+      const response = await executePointer(sessionId, executionPayload(
           inspected.json(),
           pointerPayload(0.05, 0.05),
           "ordinary",
           commandId,
-        ),
-      });
+        ), ownerHeaders);
 
       expect(response.statusCode).toBe(200);
       const result = response.json().data;
@@ -336,12 +396,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         document.body.style.backgroundColor = "rgb(255, 0, 0)";
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_FRAME_STALE" });
@@ -381,12 +436,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const inspected = await preflight(sessionId);
       const target = inspected.json().data.target;
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
       const data = response.json().data;
 
       expect(response.statusCode).toBe(200);
@@ -416,12 +466,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const session = await app.inject({ method: "GET", url: `/sessions/${sessionId}`, headers: ownerHeaders });
       expect(session.json().data.stateVersion).toBe(2);
 
-      const replay = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const replay = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
       expect(replay.statusCode).toBe(409);
       expect(replay.json()).toMatchObject({ code: "TALOS_BROWSER_STALE_STATE" });
     } finally {
@@ -453,18 +498,8 @@ describe("TALOS Browser HMI pointer boundary", () => {
         "hmi_cmd_duplicate_same",
       );
 
-      const first = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload,
-      });
-      const second = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload,
-      });
+      const first = await executePointer(sessionId, payload, ownerHeaders);
+      const second = await executePointer(sessionId, payload, ownerHeaders);
 
       expect(first.statusCode).toBe(200);
       expect(first.json().data.command_id).toBe("hmi_cmd_duplicate_same");
@@ -496,20 +531,10 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
       const commandId = "hmi_cmd_duplicate_different";
       const firstPayload = executionPayload(inspected.json(), pointerPayload(0.05, 0.05), "sensitive", commandId);
-      const first = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: firstPayload,
-      });
+      const first = await executePointer(sessionId, firstPayload, ownerHeaders);
       expect(first.statusCode).toBe(200);
 
-      const conflict = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: { ...firstPayload, click_count: 2 },
-      });
+      const conflict = await executePointer(sessionId, { ...firstPayload, click_count: 2 }, ownerHeaders);
 
       expect(conflict.statusCode).toBe(409);
       expect(conflict.json()).toMatchObject({
@@ -557,18 +582,8 @@ describe("TALOS Browser HMI pointer boundary", () => {
         },
       });
 
-      const first = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload,
-      });
-      const retry = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload,
-      });
+      const first = await executePointer(sessionId, payload, ownerHeaders);
+      const retry = await executePointer(sessionId, payload, ownerHeaders);
 
       expect(first.statusCode).toBe(409);
       expect(first.json()).toMatchObject({
@@ -601,12 +616,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         document.body.append(button);
       });
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().data.state_version).toBe(2);
@@ -625,12 +635,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const session = await sessions.get(sessionId);
       await session.page.locator("#changing-target").evaluate((element) => element.setAttribute("aria-label", "Changed target"));
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.6, 0.2066666667)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.6, 0.2066666667)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_TARGET_STALE" });
@@ -665,23 +670,13 @@ describe("TALOS Browser HMI pointer boundary", () => {
         required_effect_classification: "sensitive",
       });
 
-      const ordinary = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05), "ordinary"),
-      });
+      const ordinary = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05), "ordinary"), ownerHeaders);
       expect(ordinary.statusCode).toBe(403);
       expect(ordinary.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_SENSITIVE_EFFECT_REQUIRED" });
 
       const unauthorized = executionPayload(inspected.json(), pointerPayload(0.05, 0.05));
       unauthorized.sensitive_effect_authorized = false;
-      const sensitive = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: unauthorized,
-      });
+      const sensitive = await executePointer(sessionId, unauthorized, ownerHeaders);
       expect(sensitive.statusCode).toBe(403);
       expect(sensitive.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_SENSITIVE_EFFECT_AUTHORIZATION_REQUIRED" });
       expect(await session.page.locator("body").getAttribute("data-effect")).toBeNull();
@@ -708,12 +703,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         element.replaceWith(replacement);
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.6, 0.2066666667)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.6, 0.2066666667)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_TARGET_STALE" });
@@ -732,12 +722,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const session = await sessions.get(sessionId);
       await session.page.evaluate(() => history.pushState({}, "", "#changed-before-execute"));
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.6, 0.2066666667)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.6, 0.2066666667)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_TARGET_STALE" });
@@ -766,12 +751,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         (element as HTMLAnchorElement).href = "https://example.com/reset/secret-path?token=second";
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_TARGET_STALE" });
@@ -795,12 +775,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         disabled: true,
       });
 
-      const denied = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.6, 0.3733333333)),
-      });
+      const denied = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.6, 0.3733333333)), ownerHeaders);
       expect(denied.statusCode).toBe(403);
       expect(denied.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_TARGET_DENIED" });
       expect((await sessions.get(sessionId)).stateVersion).toBe(1);
@@ -830,23 +805,13 @@ describe("TALOS Browser HMI pointer boundary", () => {
 
       const uploadPreflight = await preflight(sessionId, pointerPayload(0.05, 0.05));
       expect(uploadPreflight.statusCode).toBe(200);
-      const uploadResponse = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(uploadPreflight.json(), pointerPayload(0.05, 0.05)),
-      });
+      const uploadResponse = await executePointer(sessionId, executionPayload(uploadPreflight.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
       expect(uploadResponse.statusCode).toBe(403);
       expect(uploadResponse.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_UPLOAD_DENIED" });
 
       const downloadPreflight = await preflight(sessionId, pointerPayload(0.2, 0.05));
       expect(downloadPreflight.statusCode).toBe(200);
-      const downloadResponse = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(downloadPreflight.json(), pointerPayload(0.2, 0.05)),
-      });
+      const downloadResponse = await executePointer(sessionId, executionPayload(downloadPreflight.json(), pointerPayload(0.2, 0.05)), ownerHeaders);
       expect(downloadResponse.statusCode).toBe(403);
       expect(downloadResponse.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_DOWNLOAD_DENIED" });
       expect(session.stateVersion).toBe(1);
@@ -874,12 +839,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       });
 
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
@@ -925,12 +885,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         [named, pointerPayload(0.05, 0.05)],
         [form, pointerPayload(0.2, 0.05)],
       ] as const) {
-        const denied = await app.inject({
-          method: "POST",
-          url: `/sessions/${sessionId}/hmi/pointer/execute`,
-          headers: ownerHeaders,
-          payload: executionPayload(inspected.json(), payload),
-        });
+        const denied = await executePointer(sessionId, executionPayload(inspected.json(), payload), ownerHeaders);
         expect(denied.statusCode).toBe(403);
         expect(denied.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_NEW_CONTEXT_DENIED" });
       }
@@ -949,12 +904,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       expect(sensitiveLink.href).toBe("https://example.com");
 
       const inspected = await preflight(sessionId, pointerPayload(0.2, 0.4733333333));
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.2, 0.4733333333)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.2, 0.4733333333)), ownerHeaders);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().data.snapshot).toMatchObject({ text_digest: "", nodes: [] });
@@ -1044,12 +994,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         },
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
@@ -1086,12 +1031,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         },
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
 
       expect(response.statusCode).toBe(200);
       expect(response.json().data).toMatchObject({
@@ -1127,12 +1067,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         },
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
@@ -1162,12 +1097,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         },
       });
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json()),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
@@ -1184,12 +1114,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
     try {
       await navigate(sessionId);
       const inspected = await preflight(sessionId, pointerPayload(0.6, 0.54));
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.6, 0.54)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.6, 0.54)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_HMI_RECOVERY_REQUIRED" });
@@ -1215,12 +1140,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         document.body.append(button);
       });
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({
@@ -1271,12 +1191,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       }, effect);
 
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
-      const executed = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05)),
-      });
+      const executed = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
       expect(executed.statusCode).toBe(200);
 
       await session.page.waitForTimeout(1_750);
@@ -1318,12 +1233,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         document.body.append(button);
       });
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
-      const response = await app.inject({
-        method: "POST",
-        url: `/sessions/${sessionId}/hmi/pointer/execute`,
-        headers: ownerHeaders,
-        payload: executionPayload(inspected.json(), pointerPayload(0.05, 0.05)),
-      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsLegacyBrowserWrites;
+use App\Services\Talos\Browser\TalosBrowserRedactor;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,11 +13,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class TalosBrowserSession extends Model
 {
-    use HasUuids;
+    use GuardsLegacyBrowserWrites, HasUuids;
 
     public $incrementing = false;
+
     protected $keyType = 'string';
+
     protected $attributes = ['worker_state_version' => 0];
+
     protected $fillable = ['user_id', 'talos_session_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'worker_state_version', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
 
     protected function casts(): array
@@ -24,11 +29,22 @@ final class TalosBrowserSession extends Model
     }
 
     /** @return HasMany<TalosBrowserEvent, $this> */
-    public function events(): HasMany { return $this->hasMany(TalosBrowserEvent::class, 'browser_session_id'); }
+    public function events(): HasMany
+    {
+        return $this->hasMany(TalosBrowserEvent::class, 'browser_session_id');
+    }
+
     /** @return HasMany<TalosBrowserArtifact, $this> */
-    public function artifacts(): HasMany { return $this->hasMany(TalosBrowserArtifact::class, 'browser_session_id'); }
+    public function artifacts(): HasMany
+    {
+        return $this->hasMany(TalosBrowserArtifact::class, 'browser_session_id');
+    }
+
     /** @return BelongsTo<TalosSession, $this> */
-    public function talosSession(): BelongsTo { return $this->belongsTo(TalosSession::class, 'talos_session_id'); }
+    public function talosSession(): BelongsTo
+    {
+        return $this->belongsTo(TalosSession::class, 'talos_session_id');
+    }
 
     public function toApiArray(): array
     {
@@ -76,6 +92,6 @@ final class TalosBrowserSession extends Model
 
     public function setCurrentUrlAttribute(?string $value): void
     {
-        $this->attributes['current_url'] = \App\Services\Talos\Browser\TalosBrowserRedactor::url($value);
+        $this->attributes['current_url'] = TalosBrowserRedactor::url($value);
     }
 }

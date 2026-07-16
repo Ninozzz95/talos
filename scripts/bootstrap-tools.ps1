@@ -203,6 +203,8 @@ function Write-PortablePhpIni($Profile) {
     if (-not (Test-Path -LiteralPath $template)) {
         throw 'PHP configuration template is missing.'
     }
+    $opcacheDirectory = Join-Path $ToolsRoot 'php\var\opcache'
+    New-Item -ItemType Directory -Force -Path $opcacheDirectory | Out-Null
     $ini = Get-Content -LiteralPath $template -Raw
     $ini = $ini -replace '(?m)^;extension_dir = "ext"\s*$', 'extension_dir = "ext"'
     $ini = [regex]::Replace(
@@ -215,6 +217,17 @@ function Write-PortablePhpIni($Profile) {
         '(?m)^;?openssl\.cafile\s*=.*$',
         'openssl.cafile = "${TALOS_PHP_ROOT}/extras/ssl/cacert.pem"'
     )
+    $opcacheFileCache = 'opcache.file_cache = "${TALOS_PHP_ROOT}/var/opcache"'
+    if ($ini -match '(?m)^;?opcache\.file_cache\s*=.*$') {
+        $ini = [regex]::Replace($ini, '(?m)^;?opcache\.file_cache\s*=.*$', $opcacheFileCache)
+    } else {
+        $ini += "`r`n$opcacheFileCache`r`n"
+    }
+    if ($ini -match '(?m)^;?opcache\.file_cache_fallback\s*=.*$') {
+        $ini = [regex]::Replace($ini, '(?m)^;?opcache\.file_cache_fallback\s*=.*$', 'opcache.file_cache_fallback = 1')
+    } else {
+        $ini += "opcache.file_cache_fallback = 1`r`n"
+    }
     foreach ($extension in $Profile.required_php_extensions) {
         $escaped = [regex]::Escape([string]$extension)
         $ini = [regex]::Replace($ini, "(?m)^;extension=$escaped\s*$", "extension=$extension")
@@ -232,6 +245,7 @@ setlocal
 for %%I in ("%~dp0..\php") do set "TALOS_PHP_ROOT=%%~fI"
 set "CURL_CA_BUNDLE=%TALOS_PHP_ROOT%\extras\ssl\cacert.pem"
 set "SSL_CERT_FILE=%TALOS_PHP_ROOT%\extras\ssl\cacert.pem"
+set "OPENSSL_CONF=%TALOS_PHP_ROOT%\extras\ssl\openssl.cnf"
 "%TALOS_PHP_ROOT%\php.exe" %*
 exit /b %ERRORLEVEL%
 '@
@@ -244,6 +258,7 @@ set "COMPOSER_HOME=%TOOLS_ROOT%\composer\home"
 set "COMPOSER_CAFILE=%TOOLS_ROOT%\php\extras\ssl\cacert.pem"
 set "CURL_CA_BUNDLE=%COMPOSER_CAFILE%"
 set "SSL_CERT_FILE=%COMPOSER_CAFILE%"
+set "OPENSSL_CONF=%TOOLS_ROOT%\php\extras\ssl\openssl.cnf"
 set "PATH=%TOOLS_ROOT%\node;%TOOLS_ROOT%\bin;%PATH%"
 "%TOOLS_ROOT%\php\php.exe" "%TOOLS_ROOT%\composer\composer.phar" %*
 exit /b %ERRORLEVEL%
@@ -277,6 +292,7 @@ $env:TALOS_PHP_ROOT = "$ToolsRoot\php"
 $env:COMPOSER_HOME = "$ToolsRoot\composer\home"
 $env:CURL_CA_BUNDLE = "$ToolsRoot\php\extras\ssl\cacert.pem"
 $env:SSL_CERT_FILE = "$ToolsRoot\php\extras\ssl\cacert.pem"
+$env:OPENSSL_CONF = "$ToolsRoot\php\extras\ssl\openssl.cnf"
 $env:PATH = "$ToolsRoot\bin;$ToolsRoot\php;$ToolsRoot\node;$env:PATH"
 Write-Host "TALOS local tools enabled from $ToolsRoot"
 '@
@@ -310,9 +326,25 @@ function Assert-ToolchainHealthy($Profile) {
             throw "PHP configuration does not bind $directive to the pinned CA bundle."
         }
     }
+    $opcachePath = Join-Path $ToolsRoot 'php\var\opcache'
+    if (-not (Test-Path -LiteralPath $opcachePath -PathType Container)) {
+        throw 'Writable PHP OPcache file-cache directory is missing.'
+    }
+    foreach ($directive in @(
+        'opcache.file_cache = "${TALOS_PHP_ROOT}/var/opcache"',
+        'opcache.file_cache_fallback = 1'
+    )) {
+        if (-not $ini.Contains($directive)) {
+            throw "PHP configuration is missing required Windows ASLR fallback: $directive"
+        }
+    }
     $caPath = Join-Path $ToolsRoot 'php\extras\ssl\cacert.pem'
     if (-not (Test-Path -LiteralPath $caPath)) {
         throw 'Pinned PHP CA bundle is missing.'
+    }
+    $opensslConfigPath = Join-Path $ToolsRoot 'php\extras\ssl\openssl.cnf'
+    if (-not (Test-Path -LiteralPath $opensslConfigPath)) {
+        throw 'Bundled PHP OpenSSL configuration is missing.'
     }
     $iniProbe = Invoke-NativeCapture $php @('-i')
     if ($iniProbe.ExitCode -ne 0 -or -not $iniProbe.Output.Contains($caPath)) {
@@ -328,6 +360,13 @@ function Assert-ToolchainHealthy($Profile) {
         if ($loadedModules -notcontains [string]$extension) {
             throw "Required PHP extension '$extension' is not loaded."
         }
+    }
+    $ecProbe = Invoke-NativeCapture $php @(
+        '-r',
+        '$key = openssl_pkey_new([''private_key_type'' => OPENSSL_KEYTYPE_EC, ''curve_name'' => ''prime256v1'']); exit($key === false ? 1 : 0);'
+    )
+    if ($ecProbe.ExitCode -ne 0) {
+        throw "PHP OpenSSL cannot generate a P-256 key with the bundled configuration.`n$($ecProbe.Output)"
     }
     $nodeProbe = Invoke-NativeCapture $node @('--version')
     if ($nodeProbe.ExitCode -ne 0 -or -not $nodeProbe.Output.Contains([string]$Profile.node.version)) {

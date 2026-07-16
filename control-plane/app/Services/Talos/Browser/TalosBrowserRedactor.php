@@ -29,6 +29,9 @@ final class TalosBrowserRedactor
         if ($value === null || $value === '') {
             return $value;
         }
+        if ($value === 'about:blank') {
+            return $value;
+        }
 
         $parts = parse_url($value);
         if ($parts === false || ! isset($parts['scheme'], $parts['host'])) {

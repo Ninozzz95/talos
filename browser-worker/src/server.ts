@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { BrowserSessionManager } from "./BrowserSessionManager.js";
 import { BrowserError, errorPayload } from "./BrowserErrors.js";
 import { assertAllowedBrowserUrl } from "./BrowserUrlPolicy.js";
@@ -15,8 +15,22 @@ import {
 import { BrowserHmiService } from "./BrowserHmiService.js";
 import { assertWorkerTokenConfiguration, workerTokensEqual } from "./BrowserWorkerAuth.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createBrowserMcpServer } from "./BrowserMcpAdapter.js";
-import { browserWorkerProtocols, TALOS_BROWSER_SESSION_BOOTSTRAP_PATH } from "./BrowserWorkerProtocol.js";
+import { createBrowserMcpServer, mcpActionCapabilityExpectation } from "./BrowserMcpAdapter.js";
+import {
+  BrowserSessionCancellationSchema,
+  browserWorkerProtocols,
+  createBrowserWorkerHandshake,
+  TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH,
+  TALOS_BROWSER_SESSION_BOOTSTRAP_PATH,
+  TALOS_BROWSER_SESSION_CANCEL_SUFFIX,
+  TALOS_BROWSER_WORKER_HANDSHAKE_PATH,
+} from "./BrowserWorkerProtocol.js";
+import type { BrowserAutomationAdapter } from "./adapters/BrowserAutomationAdapter.js";
+import { PlaywrightMcpAdapter } from "./adapters/PlaywrightMcpAdapter.js";
+import {
+  BrowserActionCapabilityVerifier,
+  type BrowserActionCapabilityExpectation,
+} from "./BrowserActionCapability.js";
 
 export interface BrowserWorkerUnexpectedErrorEvent {
   correlationId: string;
@@ -25,22 +39,32 @@ export interface BrowserWorkerUnexpectedErrorEvent {
   error: unknown;
 }
 
-interface BrowserWorkerServerOptions {
+export interface BrowserWorkerServerOptions {
   sessions?: BrowserSessionManager;
   internalToken?: string;
   runtimeEnvironment?: string;
   mcpAllowedHosts?: string[];
   onUnexpectedError?: (event: BrowserWorkerUnexpectedErrorEvent) => void;
+  workerInstanceId?: string;
+  automationAdapter?: BrowserAutomationAdapter;
+  actionCapabilityVerifier?: BrowserActionCapabilityVerifier;
 }
 
 export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyInstance {
+  const runtimeEnvironment = options.runtimeEnvironment ?? process.env.NODE_ENV;
   const internalToken = options.internalToken ?? process.env.TALOS_BROWSER_WORKER_TOKEN;
-  assertWorkerTokenConfiguration(internalToken, options.runtimeEnvironment ?? process.env.NODE_ENV);
+  assertWorkerTokenConfiguration(internalToken, runtimeEnvironment);
   const app = Fastify({ logger: false });
   const sessions = options.sessions ?? new BrowserSessionManager();
   const browserTools = new BrowserToolDispatcher(sessions);
+  const browserAutomation = options.automationAdapter ?? new PlaywrightMcpAdapter(sessions, {
+    allowTestFixtureFileAccess: runtimeEnvironment === "test",
+  });
   const browserHmi = new BrowserHmiService(sessions);
   const mcpAllowedHosts = allowedMcpHosts(options.mcpAllowedHosts, process.env.TALOS_BROWSER_MCP_ALLOWED_HOSTS);
+  const workerInstanceId = options.workerInstanceId ?? randomUUID();
+  const actionCapabilityVerifier = options.actionCapabilityVerifier
+    ?? BrowserActionCapabilityVerifier.fromEnvironment(process.env, runtimeEnvironment);
 
   const reportUnexpectedError = options.onUnexpectedError ?? reportUnexpectedWorkerError;
 
@@ -107,6 +131,19 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     };
   });
 
+  app.get(TALOS_BROWSER_WORKER_HANDSHAKE_PATH, async (_request, reply) => {
+    try {
+      const runtime = await sessions.runtimeDescriptor();
+      return reply.code(200).send({
+        data: createBrowserWorkerHandshake(workerInstanceId, runtime, null, actionCapabilityVerifier.descriptor()),
+      });
+    } catch {
+      return reply.code(503).send({
+        data: createBrowserWorkerHandshake(workerInstanceId, null, "browser_runtime_unavailable", actionCapabilityVerifier.descriptor()),
+      });
+    }
+  });
+
   app.get("/tools", async () => ({ data: { tools: BrowserToolDefinitions } }));
 
   const createSession = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -115,11 +152,31 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     const ownerRef = ownerFromRequest(request);
     if (ownerRef !== parsed.data.ownerRef) throw new BrowserError("Session owner does not match request owner.", "TALOS_BROWSER_OWNER_MISMATCH", 403);
     const session = await sessions.create(parsed.data);
-    return reply.code(201).send({ data: { ...session, protocols: browserWorkerProtocols() } });
+    return reply.code(201).send({
+      data: { ...session, workerInstanceId, protocols: browserWorkerProtocols() },
+    });
   };
 
   app.post("/sessions", createSession);
   app.post(TALOS_BROWSER_SESSION_BOOTSTRAP_PATH, createSession);
+  app.post(TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH, async (request, reply) => {
+    const parsed = createSessionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ message: "Invalid browser session payload.", code: "TALOS_BROWSER_INVALID_SESSION_PAYLOAD", details: parsed.error.flatten() });
+    const ownerRef = ownerFromRequest(request);
+    if (ownerRef !== parsed.data.ownerRef) throw new BrowserError("Session owner does not match request owner.", "TALOS_BROWSER_OWNER_MISMATCH", 403);
+    const rawKey = request.headers["idempotency-key"];
+    if (typeof rawKey !== "string") {
+      throw new BrowserError("The versioned Browser session bootstrap requires Idempotency-Key.", "TALOS_BROWSER_IDEMPOTENCY_KEY_REQUIRED", 400);
+    }
+    const keyMatch = /^"([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})"$/iu.exec(rawKey);
+    if (!keyMatch) {
+      throw new BrowserError("Browser session Idempotency-Key is invalid.", "TALOS_BROWSER_IDEMPOTENCY_KEY_INVALID", 400);
+    }
+    const session = await sessions.create(parsed.data, keyMatch[1]);
+    return reply.code(201).send({
+      data: { ...session, workerInstanceId, protocols: browserWorkerProtocols() },
+    });
+  });
 
   app.get<{ Params: { id: string } }>("/sessions/:id", async (request) => ({ data: sessionsSummary(await ownedSession(sessions, request)) }));
 
@@ -139,16 +196,37 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
   app.post<{ Params: { id: string } }>("/sessions/:id/tools/call", async (request, reply) => {
     const parsed = BrowserToolCallSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "Invalid browser tool call payload.", code: "TALOS_BROWSER_INVALID_TOOL_CALL", details: parsed.error.flatten() });
-    await ownedSession(sessions, request);
+    const session = await ownedSession(sessions, request);
+    if (parsed.data.name === "browser_click") {
+      await actionCapabilityVerifier.verifyAndConsume(
+        authorizationFromRequest(request),
+        restClickActionExpectation(ownerFromRequest(request), request.params.id, session.stateVersion, parsed.data),
+      );
+    }
     const result = BrowserToolResultSchema.parse(await browserTools.call(request.params.id, parsed.data));
     return reply.code(200).send(result);
   });
 
   app.post<{ Params: { id: string } }>("/sessions/:id/mcp", async (request, reply) => {
     assertMcpTransportRequest(request.headers, mcpAllowedHosts);
-    await ownedSession(sessions, request);
+    const session = await ownedSession(sessions, request);
+    const currentActionExpectation = mcpActionCapabilityExpectation(
+      request.body,
+      ownerFromRequest(request),
+      request.params.id,
+      session.stateVersion,
+    );
+    const retainedAction = currentActionExpectation
+      ? session.actionLedger.record(currentActionExpectation.actionId)
+      : undefined;
+    const actionExpectation = currentActionExpectation && retainedAction
+      ? { ...currentActionExpectation, preconditionStateVersion: retainedAction.precondition_state_version }
+      : currentActionExpectation;
+    const verifiedAction = actionExpectation
+      ? await actionCapabilityVerifier.verifyAndConsume(authorizationFromRequest(request), actionExpectation)
+      : undefined;
 
-    const server = createBrowserMcpServer(request.params.id, browserTools);
+    const server = createBrowserMcpServer(request.params.id, browserAutomation, sessions, { verifiedAction });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     let closed = false;
     const close = (): void => {
@@ -219,6 +297,14 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
       });
     }
     await ownedSession(sessions, request);
+    await actionCapabilityVerifier.verifyAndConsume(authorizationFromRequest(request), {
+      ownerRef: ownerFromRequest(request),
+      workerSessionId: request.params.id,
+      actionId: parsed.data.command_id,
+      operation: "hmi_pointer_execute",
+      preconditionStateVersion: parsed.data.state_version,
+      request: parsed.data,
+    });
     return reply.code(200).send({ data: await browserHmi.execute(request.params.id, parsed.data) });
   });
 
@@ -243,11 +329,30 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
 
   app.delete<{ Params: { id: string } }>("/sessions/:id", async (request, reply) => {
     await ownedSession(sessions, request);
+    await browserAutomation.closeSession(request.params.id);
     await sessions.delete(request.params.id);
     return reply.code(204).send();
   });
 
-  app.addHook("onClose", async () => sessions.close());
+  app.post<{ Params: { id: string } }>(`/sessions/:id${TALOS_BROWSER_SESSION_CANCEL_SUFFIX}`, async (request, reply) => {
+    const parsed = BrowserSessionCancellationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        message: "Invalid Browser cancellation payload.",
+        code: "TALOS_BROWSER_INVALID_CANCELLATION",
+        details: parsed.error.flatten(),
+      });
+    }
+    await ownedSession(sessions, request);
+    await browserAutomation.cancelSession(request.params.id, parsed.data.reason).catch(() => undefined);
+    await sessions.cancel(request.params.id, parsed.data.reason);
+    return reply.code(204).send();
+  });
+
+  app.addHook("onClose", async () => {
+    await browserAutomation.close();
+    await sessions.close();
+  });
   return app;
 }
 
@@ -256,6 +361,30 @@ function ownerFromRequest(request: { headers: Record<string, string | string[] |
   const ownerRef = request.headers["x-talos-owner-ref"];
   if (typeof ownerRef !== "string" || ownerRef.length === 0) throw new BrowserError("Request owner header is required.", "TALOS_BROWSER_OWNER_REQUIRED", 401);
   return ownerRef;
+}
+
+function authorizationFromRequest(request: { headers: Record<string, string | string[] | undefined> }): string | undefined {
+  const authorization = request.headers.authorization;
+  return typeof authorization === "string" ? authorization : undefined;
+}
+
+function restClickActionExpectation(
+  ownerRef: string,
+  sessionId: string,
+  currentStateVersion: number,
+  request: { tool_use_id: string; name: string; arguments: Record<string, unknown> },
+): BrowserActionCapabilityExpectation {
+  const requestedStateVersion = request.arguments.state_version;
+  return {
+    ownerRef,
+    workerSessionId: sessionId,
+    actionId: request.tool_use_id,
+    operation: "browser_click",
+    preconditionStateVersion: Number.isInteger(requestedStateVersion) && typeof requestedStateVersion === "number"
+      ? requestedStateVersion
+      : currentStateVersion,
+    request,
+  };
 }
 
 function allowedMcpHosts(configured: string[] | undefined, environmentValue: string | undefined): Set<string> {

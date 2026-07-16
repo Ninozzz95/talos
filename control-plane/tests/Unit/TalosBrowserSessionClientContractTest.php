@@ -5,16 +5,23 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Models\TalosBrowserSession;
+use App\Providers\AppServiceProvider;
+use App\Services\Talos\Browser\BrowserActionAuthorization;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserToolResult;
+use App\Services\Talos\Browser\BrowserWorkerConfiguration;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
 use App\Services\Talos\Browser\LegacyBrowserSnapshot;
+use App\Services\Talos\Browser\TalosBrowserActionCapabilityIssuer;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserWorkerHandshake;
 use App\Services\Talos\Browser\TalosBrowserWorkerProtocol;
+use Illuminate\Foundation\Vite;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 final class TalosBrowserSessionClientContractTest extends TestCase
@@ -23,10 +30,189 @@ final class TalosBrowserSessionClientContractTest extends TestCase
 
     public function test_browser_session_client_declares_the_versioned_hmi_operations(): void
     {
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'handshake'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'preflightPointer'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'executePointer'));
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'cancel'));
         $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'preflightPointer'))->getDeclaringClass()->getName());
         $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'executePointer'))->getDeclaringClass()->getName());
+    }
+
+    public function test_http_client_negotiates_the_worker_handshake_before_session_creation(): void
+    {
+        $requests = [];
+        Http::fake(function ($request) use (&$requests) {
+            $requests[] = ['method' => $request->method(), 'url' => $request->url(), 'body' => $request->data()];
+            if ($request->method() === 'GET') {
+                return Http::response($this->validHandshake());
+            }
+
+            return Http::response(['data' => [
+                'sessionId' => 'brw_123e4567-e89b-42d3-a456-426614174001',
+                'workerInstanceId' => '123e4567-e89b-42d3-a456-426614174000',
+                'status' => 'ready',
+                'mode' => 'read_only',
+                'protocols' => [
+                    'worker' => TalosBrowserWorkerProtocol::WORKER,
+                    'hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME,
+                ],
+                'capabilities' => [
+                    'navigation' => true,
+                    'screenshots' => true,
+                    'accessibilitySnapshot' => true,
+                    'actions' => false,
+                    'hmiActions' => true,
+                    'downloads' => false,
+                    'uploads' => false,
+                ],
+            ]]);
+        });
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        $session = $client->create('owner-1', 1280, 800);
+
+        $this->assertSame('brw_123e4567-e89b-42d3-a456-426614174001', $session['sessionId']);
+        $this->assertSame('GET', $requests[0]['method']);
+        $this->assertSame('http://browser-worker.test'.TalosBrowserWorkerProtocol::HANDSHAKE_PATH, $requests[0]['url']);
+        $this->assertSame('POST', $requests[1]['method']);
+        $this->assertTrue($requests[1]['body']['capabilities']['hmiActions']);
+        $this->assertFalse($requests[1]['body']['capabilities']['actions']);
+    }
+
+    public function test_worker_handshake_accepts_only_the_v2_dual_authentication_descriptor(): void
+    {
+        $payload = $this->validHandshake();
+        $payload['data']['schema_version'] = 'talos.browser.worker-handshake.v2';
+        $payload['data']['protocol_version'] = 'talos.browser.worker.v2';
+        $payload['data']['capability_manifest']['protocol_version'] = 'talos.browser.worker.v2';
+        $payload['data']['authentication'] = [
+            'mode' => 'service_token_and_signed_action_capability',
+            'owner_binding' => true,
+            'action_capability' => [
+                'schema_version' => 'talos.browser.action-capability.v1',
+                'algorithm' => 'ES256',
+                'type' => 'talos-browser-action+jwt',
+                'issuer' => 'urn:talos:control-plane',
+                'audience' => 'urn:talos:browser-worker',
+                'key_id' => 'browser-action-key-2026-07',
+                'max_ttl_seconds' => 30,
+            ],
+        ];
+
+        $handshake = TalosBrowserWorkerHandshake::fromJson(json_encode($payload, JSON_THROW_ON_ERROR));
+        $handshake->assertUsable();
+
+        $this->assertSame($payload['data']['authentication']['action_capability'], $handshake->actionCapability);
+        $this->assertSame($payload['data']['authentication'], $handshake->toArray()['authentication']);
+    }
+
+    #[DataProvider('unusableHandshakeProvider')]
+    public function test_http_client_rejects_incompatible_handshakes_before_session_creation(string $case, string $expectedCode, int $httpStatus): void
+    {
+        $payload = $this->validHandshake();
+        if ($case === 'protocol') {
+            $payload['data']['protocol_version'] = 'talos.browser.worker.v1';
+        } elseif ($case === 'capability') {
+            $payload['data']['capability_manifest']['capabilities'] = ['navigate', 'snapshot', 'screenshot', 'read'];
+        } elseif ($case === 'adapter_name') {
+            $payload['data']['adapter']['name'] = 'playwright-mcp-drift';
+            $payload['data']['capability_manifest']['adapter_name'] = 'playwright-mcp-drift';
+        } elseif ($case === 'adapter_version') {
+            $payload['data']['adapter']['version'] = '0.0.79';
+            $payload['data']['capability_manifest']['adapter_version'] = '0.0.79';
+        } else {
+            $payload['data']['status'] = 'degraded';
+            $payload['data']['degraded_reason'] = 'browser_runtime_unavailable';
+            $payload['data']['browser']['version'] = null;
+            $payload['data']['capability_manifest']['degraded_reason'] = 'browser_runtime_unavailable';
+        }
+        Http::fake(['*' => Http::response($payload, $httpStatus)]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        try {
+            $client->create('owner-1', 1280, 800);
+            $this->fail("The {$case} handshake was accepted.");
+        } catch (BrowserWorkerException $exception) {
+            $this->assertSame($expectedCode, $exception->errorCode, $case);
+        }
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request): bool => $request->method() === 'GET');
+    }
+
+    /** @return array<string, array{string, string, int}> */
+    public static function unusableHandshakeProvider(): array
+    {
+        return [
+            'protocol' => ['protocol', 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH', 200],
+            'capability' => ['capability', 'TALOS_BROWSER_WORKER_CAPABILITY_MISMATCH', 200],
+            'adapter name' => ['adapter_name', 'TALOS_BROWSER_WORKER_ADAPTER_MISMATCH', 200],
+            'adapter version' => ['adapter_version', 'TALOS_BROWSER_WORKER_ADAPTER_MISMATCH', 200],
+            'degraded' => ['degraded', 'TALOS_BROWSER_WORKER_DEGRADED', 503],
+        ];
+    }
+
+    #[DataProvider('handshakeTransportMismatchProvider')]
+    public function test_http_client_rejects_handshake_transport_status_disagreement(int $httpStatus, bool $degradedPayload): void
+    {
+        $payload = $this->validHandshake();
+        if ($degradedPayload) {
+            $payload['data']['status'] = 'degraded';
+            $payload['data']['degraded_reason'] = 'browser_runtime_unavailable';
+            $payload['data']['browser']['version'] = null;
+            $payload['data']['capability_manifest']['degraded_reason'] = 'browser_runtime_unavailable';
+        }
+        Http::fake(['*' => Http::response($payload, $httpStatus)]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        $this->expectExceptionObject(new BrowserWorkerException(
+            'TALOS_BROWSER_WORKER_HANDSHAKE_INVALID',
+            'Browser worker returned an invalid handshake.',
+        ));
+        $client->handshake('owner-1');
+    }
+
+    /** @return array<string, array{int, bool}> */
+    public static function handshakeTransportMismatchProvider(): array
+    {
+        return [
+            '503 cannot claim ready' => [503, false],
+            '200 cannot claim degraded' => [200, true],
+        ];
+    }
+
+    public function test_http_client_rejects_worker_identity_change_between_handshake_and_session_creation(): void
+    {
+        Http::fakeSequence()
+            ->push($this->validHandshake())
+            ->push(['data' => [
+                'sessionId' => 'brw_123e4567-e89b-42d3-a456-426614174001',
+                'workerInstanceId' => '123e4567-e89b-42d3-a456-426614174999',
+                'protocols' => ['worker' => TalosBrowserWorkerProtocol::WORKER, 'hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
+            ]]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        $this->expectExceptionObject(new BrowserWorkerException(
+            'TALOS_BROWSER_WORKER_IDENTITY_MISMATCH',
+            'Browser worker identity changed during session bootstrap.',
+        ));
+        $client->create('owner-1', 1280, 800);
+    }
+
+    public function test_worker_handshake_rejects_unknown_fields_and_object_list_substitution(): void
+    {
+        $unknown = $this->validHandshake();
+        $unknown['data']['unexpected'] = true;
+        $list = $this->validHandshake();
+        $list['data']['capability_manifest'] = [];
+
+        foreach ([$unknown, $list] as $payload) {
+            try {
+                TalosBrowserWorkerHandshake::fromJson(json_encode($payload, JSON_THROW_ON_ERROR));
+                $this->fail('A malformed worker handshake was accepted.');
+            } catch (BrowserWorkerException $exception) {
+                $this->assertSame('TALOS_BROWSER_WORKER_HANDSHAKE_INVALID', $exception->errorCode);
+            }
+        }
     }
 
     public function test_browser_tool_result_parses_the_canonical_shape_and_correlates_the_call(): void
@@ -165,9 +351,113 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             && $request['name'] === 'browser_snapshot'
             && json_decode($request->body(), false, 512, JSON_THROW_ON_ERROR)->arguments instanceof \stdClass
             && $request->hasHeader('X-Talos-Worker-Token', 'worker-token')
-            && $request->hasHeader('X-Talos-Owner-Ref', 'talos-user:1'));
+            && $request->hasHeader('X-Talos-Owner-Ref', 'talos-user:1')
+            && ! $request->hasHeader('Authorization'));
         $this->assertSame(1.2, $timeouts[1]['timeout']);
         $this->assertSame(1.2, $timeouts[1]['connect_timeout']);
+    }
+
+    public function test_http_client_rejects_consequential_tool_calls_without_action_authorization(): void
+    {
+        Http::fake(['*' => Http::response($this->validResult('unsigned-click'))]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token', 15);
+
+        $this->expectException(BrowserWorkerException::class);
+        $this->expectExceptionMessage('action capability');
+
+        $client->callTool(
+            'talos-user:1',
+            'worker-1',
+            'unsigned-click',
+            'browser_click',
+            ['target' => 'r1', 'snapshot_id' => 'snap_1', 'state_version' => 1],
+        );
+    }
+
+    public function test_http_client_sends_a_signed_action_bearer_only_for_an_authorized_click(): void
+    {
+        Http::fake(['*' => Http::response($this->validResult('signed-click'))]);
+        $client = new HttpBrowserSessionClient(
+            'http://browser-worker.test',
+            'worker-token',
+            15,
+            $this->actionCapabilityIssuer(),
+        );
+
+        $result = $client->callTool(
+            'talos-user:1',
+            'worker-1',
+            'signed-click',
+            'browser_click',
+            ['target' => 'r1', 'snapshot_id' => 'snap_1', 'state_version' => 1],
+            15000,
+            BrowserActionAuthorization::policy('signed-click'),
+        );
+
+        $this->assertSame('signed-click', $result->toolUseId);
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+            && $request['tool_use_id'] === 'signed-click'
+            && $request['name'] === 'browser_click'
+            && $request['arguments']['state_version'] === 1
+            && preg_match('/^Bearer [^.]+\.[^.]+\.[^.]+$/D', $request->header('Authorization')[0] ?? '') === 1);
+    }
+
+    public function test_container_injects_the_configured_action_capability_issuer_into_the_http_client(): void
+    {
+        $keypair = $this->actionCapabilityConfiguration();
+        config([
+            'services.talos.browser.client_driver' => 'http',
+            'services.talos.browser.worker_url' => 'http://browser-worker.test',
+            'services.talos.browser.worker_token' => 'worker-token',
+            'services.talos.browser.action_private_key_b64' => $keypair['privateKeyBase64'],
+            'services.talos.browser.action_key_id' => $keypair['keyId'],
+        ]);
+        $this->app->forgetInstance(BrowserWorkerConfiguration::class);
+        $this->app->forgetInstance(TalosBrowserActionCapabilityIssuer::class);
+        Http::fake(['*' => Http::response($this->validResult('container-signed-click'))]);
+
+        $client = $this->app->make(BrowserSessionClient::class);
+        $result = $client->callTool(
+            'talos-user:1',
+            'worker-1',
+            'container-signed-click',
+            'browser_click',
+            ['target' => 'r1', 'snapshot_id' => 'snap_1', 'state_version' => 1],
+            15000,
+            BrowserActionAuthorization::policy('container-signed-click'),
+        );
+
+        $this->assertSame('container-signed-click', $result->toolUseId);
+        Http::assertSent(fn ($request): bool => preg_match(
+            '/^Bearer [^.]+\.[^.]+\.[^.]+$/D',
+            $request->header('Authorization')[0] ?? '',
+        ) === 1);
+    }
+
+    public function test_production_boot_fails_closed_when_action_capability_issuance_is_not_configured(): void
+    {
+        config([
+            'services.talos.browser.action_private_key_b64' => '',
+            'services.talos.browser.action_key_id' => '',
+        ]);
+        $this->app->forgetInstance(TalosBrowserActionCapabilityIssuer::class);
+        $originalEnvironment = $this->app->environment();
+        $this->app->instance('env', 'production');
+
+        try {
+            (new AppServiceProvider($this->app))->boot(
+                $this->app->make(Vite::class),
+                new BrowserWorkerConfiguration(
+                    'https://browser-worker.internal',
+                    bin2hex(random_bytes(32)),
+                ),
+            );
+            $this->fail('Production boot accepted a missing browser action capability issuer.');
+        } catch (BrowserWorkerException $exception) {
+            $this->assertSame('TALOS_BROWSER_ACTION_CAPABILITY_CONFIGURATION_INVALID', $exception->errorCode);
+        } finally {
+            $this->app->instance('env', $originalEnvironment);
+        }
     }
 
     public function test_http_client_rejects_malformed_success_without_exposing_worker_details(): void
@@ -208,30 +498,49 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         Http::fake(function ($request, array $options) use (&$timeouts) {
             $timeouts[] = $options['timeout'];
 
-            return $request->method() === 'DELETE'
-                ? Http::response([], 204)
-                : Http::response(['data' => [
-                    'sessionId' => 'worker-1',
-                    'mode' => 'read_only',
-                    'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
-                ]]);
+            return match ($request->method()) {
+                'GET' => Http::response($this->validHandshake()),
+                'POST' => Http::response($this->validSessionBootstrap()),
+                'DELETE' => Http::response([], 204),
+                default => Http::response([], 405),
+            };
         });
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token', 15);
 
         $client->create('owner-1', 1280, 800, 900);
         $client->close('owner-1', 'worker-1', 75);
 
-        $this->assertSame([0.9, 0.075], $timeouts);
+        $this->assertSame([0.9, 0.9, 0.075], $timeouts);
+    }
+
+    public function test_http_client_and_fake_use_the_dedicated_worker_cancellation_contract(): void
+    {
+        Http::fake([
+            'http://browser-worker.test/sessions/worker-1/cancel' => Http::response([], 204),
+        ]);
+        $http = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+        $http->cancel('owner-1', 'worker-1', 'User cancelled the Browser task.', 250);
+
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+            && $request->url() === 'http://browser-worker.test/sessions/worker-1/cancel'
+            && $request['reason'] === 'User cancelled the Browser task.');
+
+        $fake = new FakeBrowserSessionClient;
+        $created = $fake->create('owner-1', 1280, 800);
+        $fake->cancel('owner-1', $created['sessionId'], 'User cancelled the Browser task.', 250);
+
+        $this->assertSame('cancel', $fake->requests[1]['method']);
+        $this->assertSame('User cancelled the Browser task.', $fake->requests[1]['reason']);
+        $this->assertSame(250, $fake->requests[1]['timeoutMilliseconds']);
     }
 
     public function test_http_client_bootstraps_sessions_through_the_exact_worker_protocol(): void
     {
         $url = 'http://browser-worker.test/protocols/'.TalosBrowserWorkerProtocol::HMI_RUNTIME.'/sessions';
-        Http::fake([$url => Http::response(['data' => [
-            'sessionId' => 'worker-1',
-            'mode' => 'read_only',
-            'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
-        ]])]);
+        Http::fake([
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::HANDSHAKE_PATH => Http::response($this->validHandshake()),
+            $url => Http::response($this->validSessionBootstrap()),
+        ]);
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
 
         $session = $client->create('owner-1', 1280, 800);
@@ -240,13 +549,51 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request->url() === $url);
     }
 
+    public function test_http_client_uses_the_versioned_idempotent_bootstrap_path_and_structured_header(): void
+    {
+        Http::fake([
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::HANDSHAKE_PATH => Http::response($this->validHandshake()),
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::IDEMPOTENT_SESSION_BOOTSTRAP_PATH => Http::response($this->validSessionBootstrap()),
+        ]);
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+        $key = '123e4567-e89b-42d3-a456-426614174444';
+
+        $session = $client->createIdempotent('owner-1', 1280, 800, $key);
+
+        $this->assertSame('worker-1', $session['sessionId']);
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+            && $request->url() === 'http://browser-worker.test'.TalosBrowserWorkerProtocol::IDEMPOTENT_SESSION_BOOTSTRAP_PATH
+            && $request->header('Idempotency-Key') === ['"'.$key.'"']);
+    }
+
+    public function test_fake_idempotent_bootstrap_replays_live_session_rejects_changed_intent_and_expires_on_close(): void
+    {
+        $client = new FakeBrowserSessionClient;
+        $key = '123e4567-e89b-42d3-a456-426614174555';
+
+        $first = $client->createIdempotent('owner-1', 1280, 800, $key);
+        $replay = $client->createIdempotent('owner-1', 1280, 800, $key);
+
+        $this->assertSame($first['sessionId'], $replay['sessionId']);
+        try {
+            $client->createIdempotent('owner-1', 1440, 900, $key);
+            $this->fail('A changed Browser bootstrap intent reused an idempotency key.');
+        } catch (BrowserWorkerException $exception) {
+            $this->assertSame('TALOS_BROWSER_SESSION_IDEMPOTENCY_CONFLICT', $exception->errorCode);
+        }
+
+        $client->close('owner-1', $first['sessionId']);
+        $replacement = $client->createIdempotent('owner-1', 1280, 800, $key);
+        $this->assertNotSame($first['sessionId'], $replacement['sessionId']);
+    }
+
     public function test_http_client_rejects_a_mismatched_worker_protocol_during_session_bootstrap(): void
     {
-        Http::fake(['*' => Http::response(['data' => [
-            'sessionId' => 'worker-1',
-            'mode' => 'read_only',
-            'protocols' => ['hmi' => 'talos_browser_hmi_runtime_v2.0.0'],
-        ]])]);
+        Http::fakeSequence()
+            ->push($this->validHandshake())
+            ->push($this->validSessionBootstrap([
+                'protocols' => ['hmi' => 'talos_browser_hmi_runtime_v2.0.0'],
+            ]));
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
 
         try {
@@ -274,13 +621,10 @@ final class TalosBrowserSessionClientContractTest extends TestCase
 
     public function test_http_client_forwards_an_explicit_create_ttl_to_the_worker(): void
     {
-        Http::fake(['http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH => Http::response([
-            'data' => [
-                'sessionId' => 'worker-1',
-                'mode' => 'read_only',
-                'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
-            ],
-        ])]);
+        Http::fake([
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::HANDSHAKE_PATH => Http::response($this->validHandshake()),
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH => Http::response($this->validSessionBootstrap()),
+        ]);
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
 
         $client->create('owner-1', 1280, 800, 731, 15);
@@ -341,7 +685,12 @@ final class TalosBrowserSessionClientContractTest extends TestCase
                     'captured_at' => now()->toJSON(),
                 ]]);
         });
-        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+        $client = new HttpBrowserSessionClient(
+            'http://browser-worker.test',
+            'worker-token',
+            15,
+            $this->actionCapabilityIssuer(),
+        );
         $preflight = $client->preflightPointer('owner-1', 'worker-1', [
             'schema_version' => 'talos_browser_hmi_pointer_v2',
             'interaction_id' => self::HMI_INTERACTION_ID,
@@ -352,7 +701,7 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             'button' => 'left',
             'click_count' => 1,
         ]);
-        $result = $client->executePointer('owner-1', 'worker-1', [
+        $executePayload = [
             'schema_version' => 'talos_browser_hmi_pointer_v2',
             'interaction_id' => self::HMI_INTERACTION_ID,
             'command_id' => 'hmi-contract-1',
@@ -365,7 +714,19 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             'expected_fingerprint' => $preflight['target']['fingerprint'],
             'effect_classification' => 'ordinary',
             'sensitive_effect_authorized' => false,
-        ]);
+        ];
+        $result = $client->executePointer(
+            'owner-1',
+            'worker-1',
+            $executePayload,
+            15000,
+            BrowserActionAuthorization::userApproval(
+                'hmi-contract-1',
+                'approval-1',
+                'sha256:'.str_repeat('e', 64),
+                'execution-lease-1',
+            ),
+        );
 
         $this->assertSame('sha256:'.str_repeat('a', 64), $preflight['target']['fingerprint']);
         $this->assertInstanceOf(\stdClass::class, $result['snapshot']['empty_object']);
@@ -374,19 +735,22 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             && $request->hasHeader('X-Talos-Owner-Ref', 'owner-1')
             && $request['schema_version'] === 'talos_browser_hmi_pointer_v2'
             && $request['expected_frame_sha256'] === 'sha256:'.str_repeat('c', 64));
+        Http::assertSent(fn ($request): bool => str_ends_with($request->url(), '/hmi/pointer/execute')
+            && preg_match('/^Bearer [^.]+\.[^.]+\.[^.]+$/D', $request->header('Authorization')[0] ?? '') === 1);
     }
 
     public function test_http_client_create_enables_hmi_actions_without_enabling_model_actions(): void
     {
-        Http::fake(['http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH => Http::response(['data' => [
-            'sessionId' => 'worker-1',
-            'protocols' => ['hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME],
-        ]])]);
+        Http::fake([
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::HANDSHAKE_PATH => Http::response($this->validHandshake()),
+            'http://browser-worker.test'.TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH => Http::response($this->validSessionBootstrap()),
+        ]);
         $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
 
         $client->create('owner-1', 1280, 800);
 
-        Http::assertSent(fn ($request): bool => $request['capabilities']['hmiActions'] === true
+        Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+            && $request['capabilities']['hmiActions'] === true
             && $request['capabilities']['actions'] === false);
     }
 
@@ -423,10 +787,15 @@ final class TalosBrowserSessionClientContractTest extends TestCase
                 'internal' => 'must not cross the adapter boundary',
             ],
         ], 409)]);
-        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+        $client = new HttpBrowserSessionClient(
+            'http://browser-worker.test',
+            'worker-token',
+            15,
+            $this->actionCapabilityIssuer(),
+        );
 
         try {
-            $client->executePointer('owner-1', 'worker-1', [
+            $payload = [
                 'schema_version' => 'talos_browser_hmi_pointer_v2',
                 'interaction_id' => self::HMI_INTERACTION_ID,
                 'state_version' => 1,
@@ -439,7 +808,19 @@ final class TalosBrowserSessionClientContractTest extends TestCase
                 'expected_fingerprint' => 'sha256:'.str_repeat('d', 64),
                 'effect_classification' => 'sensitive',
                 'sensitive_effect_authorized' => true,
-            ]);
+            ];
+            $client->executePointer(
+                'owner-1',
+                'worker-1',
+                $payload,
+                15000,
+                BrowserActionAuthorization::userApproval(
+                    'hmi_reason_contract',
+                    'approval-reason',
+                    'sha256:'.str_repeat('e', 64),
+                    'execution-lease-reason',
+                ),
+            );
             self::fail('Expected the worker recovery exception.');
         } catch (BrowserWorkerException $exception) {
             self::assertSame('TALOS_BROWSER_HMI_RECOVERY_REQUIRED', $exception->errorCode);
@@ -706,6 +1087,33 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $this->assertSame($custom, $client->screenshot('owner-1', 'worker-42'));
     }
 
+    private function actionCapabilityIssuer(): TalosBrowserActionCapabilityIssuer
+    {
+        $keypair = $this->actionCapabilityConfiguration();
+
+        return new TalosBrowserActionCapabilityIssuer(
+            $keypair['privateKeyBase64'],
+            $keypair['keyId'],
+        );
+    }
+
+    /** @return array{privateKeyBase64: string, keyId: string} */
+    private function actionCapabilityConfiguration(): array
+    {
+        $key = openssl_pkey_new([
+            'private_key_type' => OPENSSL_KEYTYPE_EC,
+            'curve_name' => 'prime256v1',
+        ]);
+        $this->assertNotFalse($key);
+        $privateKey = '';
+        $this->assertTrue(openssl_pkey_export($key, $privateKey));
+
+        return [
+            'privateKeyBase64' => base64_encode($privateKey),
+            'keyId' => 'browser-action-test-key',
+        ];
+    }
+
     /** @return array<string, mixed> */
     private function validResult(string $toolUseId): array
     {
@@ -717,5 +1125,65 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             'structuredContent' => null,
             'evidence' => [],
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function validHandshake(): array
+    {
+        return ['data' => [
+            'schema_version' => TalosBrowserWorkerProtocol::HANDSHAKE_SCHEMA,
+            'protocol_version' => TalosBrowserWorkerProtocol::WORKER,
+            'worker' => [
+                'name' => 'talos-browser-worker',
+                'version' => '0.1.0',
+                'instance_id' => '123e4567-e89b-42d3-a456-426614174000',
+            ],
+            'adapter' => ['name' => TalosBrowserWorkerProtocol::ADAPTER_NAME, 'version' => TalosBrowserWorkerProtocol::ADAPTER_VERSION],
+            'browser' => ['engine' => 'chromium', 'version' => '149.0.7827.55'],
+            'capability_manifest' => [
+                'schema_version' => 'talos.browser.capabilities.v1',
+                'protocol_version' => TalosBrowserWorkerProtocol::WORKER,
+                'adapter_name' => TalosBrowserWorkerProtocol::ADAPTER_NAME,
+                'adapter_version' => TalosBrowserWorkerProtocol::ADAPTER_VERSION,
+                'capabilities' => TalosBrowserWorkerProtocol::REQUIRED_CAPABILITIES,
+                'limits' => [
+                    'max_tabs' => 1,
+                    'max_viewport_width' => 3840,
+                    'max_viewport_height' => 2160,
+                    'max_artifact_bytes' => 5_000_000,
+                ],
+                'degraded_reason' => null,
+            ],
+            'authentication' => [
+                'mode' => 'service_token_and_signed_action_capability',
+                'owner_binding' => true,
+                'action_capability' => [
+                    'schema_version' => TalosBrowserActionCapabilityIssuer::SCHEMA_VERSION,
+                    'algorithm' => 'ES256',
+                    'type' => TalosBrowserActionCapabilityIssuer::TYPE,
+                    'issuer' => TalosBrowserActionCapabilityIssuer::ISSUER,
+                    'audience' => TalosBrowserActionCapabilityIssuer::AUDIENCE,
+                    'key_id' => 'browser-action-test-key',
+                    'max_ttl_seconds' => TalosBrowserActionCapabilityIssuer::MAX_TTL_SECONDS,
+                ],
+            ],
+            'status' => 'ready',
+            'degraded_reason' => null,
+        ]];
+    }
+
+    /** @param array<string, mixed> $overrides @return array<string, mixed> */
+    private function validSessionBootstrap(array $overrides = []): array
+    {
+        return ['data' => array_replace_recursive([
+            'sessionId' => 'worker-1',
+            'workerInstanceId' => '123e4567-e89b-42d3-a456-426614174000',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'protocols' => [
+                'worker' => TalosBrowserWorkerProtocol::WORKER,
+                'hmi' => TalosBrowserWorkerProtocol::HMI_RUNTIME,
+            ],
+        ], $overrides)];
     }
 }

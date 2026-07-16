@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Talos\Browser;
 
+use Illuminate\Support\Str;
+
 final class FakeBrowserSessionClient implements BrowserSessionClient
 {
     /** @var list<array<string, mixed>> */
@@ -16,6 +18,9 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
 
     /** @var array<string, mixed>|null */
     public ?array $createResponse = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $handshakeResponse = null;
 
     /** @var array<string, mixed>|null */
     public ?array $navigateResponse = null;
@@ -52,14 +57,63 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
     /** @var array<string, array<string, mixed>> */
     private array $sessionState = [];
 
+    /** @var array<string, array{fingerprint: string, session_id: string, response: array<string, mixed>}> */
+    private array $createClaims = [];
+
     /** @return list<array<string, mixed>> */
     public function toolDefinitions(string $ownerRef): array
     {
         return $this->respond('toolDefinitions', compact('ownerRef'), $this->toolDefinitionsResponse ?? []);
     }
 
-    public function callTool(string $ownerRef, string $workerSessionId, string $toolUseId, string $name, array $arguments, int $timeoutMs = 15000): BrowserToolResult
+    public function handshake(string $ownerRef, int $timeoutMilliseconds = 5000): TalosBrowserWorkerHandshake
     {
+        $payload = $this->respond('handshake', compact('ownerRef', 'timeoutMilliseconds'), $this->handshakeResponse ?? [
+            'data' => [
+                'schema_version' => TalosBrowserWorkerProtocol::HANDSHAKE_SCHEMA,
+                'protocol_version' => TalosBrowserWorkerProtocol::WORKER,
+                'worker' => ['name' => 'talos-browser-worker', 'version' => '0.1.0', 'instance_id' => '00000000-0000-4000-8000-000000000001'],
+                'adapter' => ['name' => TalosBrowserWorkerProtocol::ADAPTER_NAME, 'version' => TalosBrowserWorkerProtocol::ADAPTER_VERSION],
+                'browser' => ['engine' => 'chromium', 'version' => 'fake-chromium'],
+                'capability_manifest' => [
+                    'schema_version' => 'talos.browser.capabilities.v1',
+                    'protocol_version' => TalosBrowserWorkerProtocol::WORKER,
+                    'adapter_name' => TalosBrowserWorkerProtocol::ADAPTER_NAME,
+                    'adapter_version' => TalosBrowserWorkerProtocol::ADAPTER_VERSION,
+                    'capabilities' => TalosBrowserWorkerProtocol::REQUIRED_CAPABILITIES,
+                    'limits' => ['max_tabs' => 1, 'max_viewport_width' => 3840, 'max_viewport_height' => 2160, 'max_artifact_bytes' => 5_000_000],
+                    'degraded_reason' => null,
+                ],
+                'authentication' => [
+                    'mode' => 'service_token_and_signed_action_capability',
+                    'owner_binding' => true,
+                    'action_capability' => [
+                        'schema_version' => TalosBrowserActionCapabilityIssuer::SCHEMA_VERSION,
+                        'algorithm' => 'ES256',
+                        'type' => TalosBrowserActionCapabilityIssuer::TYPE,
+                        'issuer' => TalosBrowserActionCapabilityIssuer::ISSUER,
+                        'audience' => TalosBrowserActionCapabilityIssuer::AUDIENCE,
+                        'key_id' => 'test-ephemeral-browser-action-key',
+                        'max_ttl_seconds' => TalosBrowserActionCapabilityIssuer::MAX_TTL_SECONDS,
+                    ],
+                ],
+                'status' => 'ready',
+                'degraded_reason' => null,
+            ],
+        ]);
+
+        return TalosBrowserWorkerHandshake::fromJson(json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+    }
+
+    public function callTool(
+        string $ownerRef,
+        string $workerSessionId,
+        string $toolUseId,
+        string $name,
+        array $arguments,
+        int $timeoutMs = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): BrowserToolResult {
         $method = match ($name) {
             'browser_navigate' => 'navigate',
             'browser_snapshot' => 'snapshot',
@@ -69,7 +123,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'browser_click' => 'click',
             default => 'tool',
         };
-        $request = compact('ownerRef', 'workerSessionId', 'toolUseId', 'name', 'arguments', 'timeoutMs');
+        $request = compact('ownerRef', 'workerSessionId', 'toolUseId', 'name', 'arguments', 'timeoutMs', 'authorization');
         $request['transport_method'] = 'callTool';
         if ($name === 'browser_navigate' && is_string($arguments['url'] ?? null)) {
             $request['url'] = $arguments['url'];
@@ -80,7 +134,66 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
 
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array
     {
-        $response = $this->respond('create', compact('ownerRef', 'width', 'height', 'timeoutMilliseconds', 'ttlSeconds') + ['capabilities' => ['actions' => false, 'hmiActions' => true]], $this->createResponse ?? ['sessionId' => 'worker-'.$this->nextSession++, 'status' => 'ready', 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false], 'stateVersion' => 0, 'expiresAt' => now()->addSeconds($ttlSeconds)->toJSON()]);
+        return $this->materializeCreate($ownerRef, $width, $height, $timeoutMilliseconds, $ttlSeconds);
+    }
+
+    public function createIdempotent(
+        string $ownerRef,
+        int $width,
+        int $height,
+        string $idempotencyKey,
+        int $timeoutMilliseconds = 15000,
+        int $ttlSeconds = 3600,
+    ): array {
+        if (! Str::isUuid($idempotencyKey)
+            || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/Di', $idempotencyKey) !== 1) {
+            throw new \InvalidArgumentException('Browser session idempotency key must be a UUID.');
+        }
+        $claimKey = $ownerRef.':'.strtolower($idempotencyKey);
+        $fingerprint = hash('sha256', json_encode([
+            'owner_ref' => $ownerRef,
+            'width' => $width,
+            'height' => $height,
+            'ttl_seconds' => $ttlSeconds,
+        ], JSON_THROW_ON_ERROR));
+        $claim = $this->createClaims[$claimKey] ?? null;
+        if (is_array($claim)) {
+            if (! hash_equals($claim['fingerprint'], $fingerprint)) {
+                throw new BrowserWorkerException(
+                    'TALOS_BROWSER_SESSION_IDEMPOTENCY_CONFLICT',
+                    'Browser session idempotency key was already used for another create intent.',
+                );
+            }
+            if (isset($this->sessionState[$claim['session_id']])) {
+                return $this->respond('create', compact('ownerRef', 'width', 'height', 'timeoutMilliseconds', 'ttlSeconds', 'idempotencyKey'), $claim['response']);
+            }
+            unset($this->createClaims[$claimKey]);
+        }
+
+        $response = $this->materializeCreate($ownerRef, $width, $height, $timeoutMilliseconds, $ttlSeconds, strtolower($idempotencyKey));
+        $this->createClaims[$claimKey] = [
+            'fingerprint' => $fingerprint,
+            'session_id' => (string) $response['sessionId'],
+            'response' => $response,
+        ];
+
+        return $response;
+    }
+
+    /** @return array<string, mixed> */
+    private function materializeCreate(
+        string $ownerRef,
+        int $width,
+        int $height,
+        int $timeoutMilliseconds,
+        int $ttlSeconds,
+        ?string $idempotencyKey = null,
+    ): array {
+        $request = compact('ownerRef', 'width', 'height', 'timeoutMilliseconds', 'ttlSeconds');
+        if (is_string($idempotencyKey)) {
+            $request['idempotencyKey'] = $idempotencyKey;
+        }
+        $response = $this->respond('create', $request + ['capabilities' => ['actions' => false, 'hmiActions' => true]], $this->createResponse ?? ['sessionId' => 'worker-'.$this->nextSession++, 'status' => 'ready', 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false], 'stateVersion' => 0, 'expiresAt' => now()->addSeconds($ttlSeconds)->toJSON()]);
         if (is_string($response['sessionId'] ?? null) && $response['sessionId'] !== '') {
             $this->sessionState[$response['sessionId']] = $response;
         }
@@ -116,11 +229,13 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
 
     public function screenshot(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array
     {
-        $bytes = 'fake png bytes';
         $session = $this->sessionState[$workerSessionId] ?? [];
         $viewport = is_array($session['viewport'] ?? null) ? $session['viewport'] : [];
+        $width = is_int($viewport['width'] ?? null) ? $viewport['width'] : 1280;
+        $height = is_int($viewport['height'] ?? null) ? $viewport['height'] : 800;
+        $bytes = self::pngBytes($width, $height);
 
-        return $this->respond('screenshot', compact('ownerRef', 'workerSessionId', 'timeoutMilliseconds'), $this->screenshotResponse ?? ['sessionId' => $workerSessionId, 'stateVersion' => is_int($session['stateVersion'] ?? null) ? $session['stateVersion'] : $this->screenshotStateVersion, 'mime' => 'image/png', 'width' => is_int($viewport['width'] ?? null) ? $viewport['width'] : 1280, 'height' => is_int($viewport['height'] ?? null) ? $viewport['height'] : 800, 'base64' => base64_encode($bytes), 'sha256' => hash('sha256', $bytes)]);
+        return $this->respond('screenshot', compact('ownerRef', 'workerSessionId', 'timeoutMilliseconds'), $this->screenshotResponse ?? ['sessionId' => $workerSessionId, 'stateVersion' => is_int($session['stateVersion'] ?? null) ? $session['stateVersion'] : $this->screenshotStateVersion, 'mime' => 'image/png', 'width' => $width, 'height' => $height, 'base64' => base64_encode($bytes), 'sha256' => hash('sha256', $bytes)]);
     }
 
     public function snapshot(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array
@@ -144,9 +259,14 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         return $this->respond('preflightPointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
     }
 
-    public function executePointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
-    {
-        $screenshotBytes = 'fake png bytes';
+    public function executePointer(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array {
+        $screenshotBytes = self::pngBytes(1280, 800);
         $snapshot = ['snapshot_id' => 'snap_fake-hmi-1', 'format' => 'accessibility_refs_v1', 'text_digest' => '', 'nodes' => []];
         $snapshotCanonical = ['format' => 'accessibility_refs_v1', 'nodes' => [], 'snapshot_id' => 'snap_fake-hmi-1', 'text_digest' => ''];
         $response = $this->executePointerResponse ?? [
@@ -174,7 +294,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             $response['target']['required_effect_classification'] = $response['effect_classification'];
         }
 
-        $result = $this->respond('executePointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
+        $result = $this->respond('executePointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds', 'authorization'), $response);
         if (isset($this->sessionState[$workerSessionId]) && is_int($result['state_version'] ?? null)) {
             $this->sessionState[$workerSessionId]['stateVersion'] = $result['state_version'];
             $this->sessionState[$workerSessionId]['status'] = 'active';
@@ -214,6 +334,27 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
     {
         $this->respond('close', compact('ownerRef', 'workerSessionId', 'timeoutMilliseconds'), []);
         unset($this->sessionState[$workerSessionId]);
+        $this->forgetCreateClaims($workerSessionId);
+    }
+
+    public function cancel(
+        string $ownerRef,
+        string $workerSessionId,
+        string $reason,
+        int $timeoutMilliseconds = 15000,
+    ): void {
+        $this->respond('cancel', compact('ownerRef', 'workerSessionId', 'reason', 'timeoutMilliseconds'), []);
+        unset($this->sessionState[$workerSessionId]);
+        $this->forgetCreateClaims($workerSessionId);
+    }
+
+    private function forgetCreateClaims(string $workerSessionId): void
+    {
+        foreach ($this->createClaims as $key => $claim) {
+            if (hash_equals($claim['session_id'], $workerSessionId)) {
+                unset($this->createClaims[$key]);
+            }
+        }
     }
 
     /** @param array<string,mixed> $request @param array<string,mixed> $response @return array<string,mixed> */
@@ -253,12 +394,12 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         };
         if (in_array($name, ['browser_take_screenshot', 'browser_click'], true)) {
             $bytes = $name === 'browser_click'
-                ? 'fake png bytes after click'
-                : base64_decode((string) ($this->screenshotResponse['base64'] ?? base64_encode('fake png bytes')), true);
-            $content[] = ['type' => 'image', 'data' => base64_encode(is_string($bytes) ? $bytes : 'fake png bytes'), 'mimeType' => 'image/png'];
+                ? self::pngBytes(1280, 800)
+                : base64_decode((string) ($this->screenshotResponse['base64'] ?? base64_encode(self::pngBytes(1280, 800))), true);
+            $content[] = ['type' => 'image', 'data' => base64_encode(is_string($bytes) ? $bytes : self::pngBytes(1280, 800)), 'mimeType' => 'image/png'];
         }
         if ($name === 'browser_click') {
-            $screenshotBytes = base64_decode((string) ($content[1]['data'] ?? ''), true) ?: 'fake png bytes after click';
+            $screenshotBytes = base64_decode((string) ($content[1]['data'] ?? ''), true) ?: self::pngBytes(1280, 800);
             $snapshot = is_array($structured['snapshot'] ?? null) ? $structured['snapshot'] : [];
             $snapshotSource = [
                 'snapshot_id' => $snapshot['snapshot_id'] ?? null,
@@ -294,7 +435,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         [$evidenceKind, $evidenceSource] = match ($name) {
             'browser_navigate' => ['navigation', $structured],
             'browser_snapshot', 'browser_read' => ['snapshot', $this->fakeSnapshotEvidenceSource()],
-            'browser_take_screenshot' => ['screenshot', base64_decode((string) ($content[1]['data'] ?? ''), true) ?: 'fake png bytes'],
+            'browser_take_screenshot' => ['screenshot', base64_decode((string) ($content[1]['data'] ?? ''), true) ?: self::pngBytes(1280, 800)],
             'browser_wait_for' => ['wait', $structured],
             default => [null, null],
         };
@@ -377,12 +518,12 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
     /** @return array<string, mixed> */
     private function fakeScreenshotStructured(int $stateVersion): array
     {
-        $bytes = base64_decode((string) ($this->screenshotResponse['base64'] ?? base64_encode('fake png bytes')), true);
-        $bytes = is_string($bytes) ? $bytes : 'fake png bytes';
+        $bytes = base64_decode((string) ($this->screenshotResponse['base64'] ?? base64_encode(self::pngBytes(1280, 800))), true);
+        $bytes = is_string($bytes) ? $bytes : self::pngBytes(1280, 800);
 
         return [
-            'url' => 'https://example.com',
-            'title' => 'Example page',
+            'url' => (string) ($this->screenshotResponse['url'] ?? 'https://example.com'),
+            'title' => (string) ($this->screenshotResponse['title'] ?? 'Example page'),
             'state_version' => $stateVersion,
             'mime_type' => 'image/png',
             'width' => (int) ($this->screenshotResponse['width'] ?? 1280),
@@ -411,7 +552,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'nodes' => [['ref' => 'r1', 'role' => 'heading', 'name' => 'Browser action completed', 'visible' => true]],
         ];
         $snapshot['sha256'] = 'sha256:'.hash('sha256', json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
-        $bytes = 'fake png bytes after click';
+        $bytes = self::pngBytes(1280, 800);
         $this->latestToolSnapshot = [
             'snapshot_id' => $snapshot['snapshot_id'],
             'nodes' => $snapshot['nodes'],
@@ -454,5 +595,32 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'nodes' => is_array($snapshot['nodes']) ? $snapshot['nodes'] : [],
             'textDigest' => (string) $snapshot['text_digest'],
         ];
+    }
+
+    private static function pngBytes(int $width, int $height): string
+    {
+        static $cache = [];
+
+        $key = $width.'x'.$height;
+        if (isset($cache[$key])) {
+            return $cache[$key];
+        }
+        if ($width < 1 || $height < 1) {
+            throw new \InvalidArgumentException('Fake PNG dimensions must be positive.');
+        }
+
+        $chunk = static function (string $type, string $data): string {
+            return pack('N', strlen($data)).$type.$data.hash('crc32b', $type.$data, true);
+        };
+        $scanline = "\x00".str_repeat("\x00", intdiv($width + 7, 8));
+        $compressed = gzcompress(str_repeat($scanline, $height), 9);
+        if (! is_string($compressed)) {
+            throw new \RuntimeException('Fake PNG compression failed.');
+        }
+
+        return $cache[$key] = "\x89PNG\r\n\x1a\n"
+            .$chunk('IHDR', pack('NNCCCCC', $width, $height, 1, 0, 0, 0, 0))
+            .$chunk('IDAT', $compressed)
+            .$chunk('IEND', '');
     }
 }

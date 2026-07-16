@@ -11,9 +11,10 @@ use App\Http\Controllers\TalosAdminDoctorController;
 use App\Http\Controllers\TalosAdminPolicyController;
 use App\Http\Controllers\TalosAdminShellController;
 use App\Http\Controllers\TalosArtifactController;
+use App\Http\Controllers\TalosBenchmarkGroupController;
 use App\Http\Controllers\TalosBrowserController;
 use App\Http\Controllers\TalosBrowserHmiController;
-use App\Http\Controllers\TalosBenchmarkGroupController;
+use App\Http\Controllers\TalosBrowserTaskController;
 use App\Http\Controllers\TalosCalendarDraftController;
 use App\Http\Controllers\TalosChatController;
 use App\Http\Controllers\TalosConnectorController;
@@ -27,9 +28,9 @@ use App\Http\Controllers\TalosGoogleDriveController;
 use App\Http\Controllers\TalosGoogleOAuthController;
 use App\Http\Controllers\TalosMemoryController;
 use App\Http\Controllers\TalosMessageController;
+use App\Http\Controllers\TalosModelComparisonController;
 use App\Http\Controllers\TalosModelProfileController;
 use App\Http\Controllers\TalosModelRoutingProfileController;
-use App\Http\Controllers\TalosModelComparisonController;
 use App\Http\Controllers\TalosNoteController;
 use App\Http\Controllers\TalosPromptEnhancementController;
 use App\Http\Controllers\TalosRecoveryController;
@@ -53,13 +54,17 @@ use Illuminate\Support\Facades\Route;
 
 Route::bind('browserSession', function (string $value): TalosBrowserSession {
     $session = TalosBrowserSession::query()->find($value);
-    if ($session instanceof TalosBrowserSession) return $session;
+    if ($session instanceof TalosBrowserSession) {
+        return $session;
+    }
     throw new HttpResponseException(response()->json(['code' => 'TALOS_BROWSER_NOT_FOUND', 'message' => 'Browser resource was not found.', 'details' => []], 404));
 });
 
 Route::bind('browserArtifact', function (string $value): TalosBrowserArtifact {
     $artifact = TalosBrowserArtifact::query()->find($value);
-    if ($artifact instanceof TalosBrowserArtifact) return $artifact;
+    if ($artifact instanceof TalosBrowserArtifact) {
+        return $artifact;
+    }
     throw new HttpResponseException(response()->json(['code' => 'TALOS_BROWSER_NOT_FOUND', 'message' => 'Browser resource was not found.', 'details' => []], 404));
 });
 
@@ -78,6 +83,15 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::get('/browser/sessions/{browserSession}/events', [TalosBrowserController::class, 'events']);
         Route::get('/browser/artifacts/{browserArtifact}', [TalosBrowserController::class, 'artifact']);
         Route::get('/browser/artifacts/{browserArtifact}/preview', [TalosBrowserController::class, 'preview']);
+        Route::get('/browser/tasks', [TalosBrowserTaskController::class, 'index']);
+        Route::get('/browser/tasks/{browserTask}', [TalosBrowserTaskController::class, 'show']);
+        Route::get('/browser/tasks/{browserTask}/events', [TalosBrowserTaskController::class, 'events']);
+        Route::post('/browser/tasks/{browserTask}/takeover', [TalosBrowserTaskController::class, 'takeover']);
+        Route::post('/browser/tasks/{browserTask}/takeover/renew', [TalosBrowserTaskController::class, 'renew']);
+        Route::post('/browser/tasks/{browserTask}/takeover/return', [TalosBrowserTaskController::class, 'returnControl']);
+        Route::post('/browser/tasks/{browserTask}/cancel', [TalosBrowserTaskController::class, 'cancel']);
+        Route::post('/browser/tasks/{browserTask}/recover', [TalosBrowserTaskController::class, 'recover']);
+        Route::post('/browser/tasks/{browserTask}/fork', [TalosBrowserTaskController::class, 'fork']);
         Route::post('/agent-turns/{toolTurn}/approvals/{toolCall}', [TalosChatController::class, 'decideToolApproval']);
         Route::post('/web/search', [TalosWebToolController::class, 'search'])->middleware('throttle:30,1');
         Route::post('/web/fetch', [TalosWebToolController::class, 'fetch'])->middleware('throttle:30,1');

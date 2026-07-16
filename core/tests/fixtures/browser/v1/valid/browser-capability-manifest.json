@@ -1,0 +1,21 @@
+{
+  "schema_version": "talos.browser.capabilities.v1",
+  "protocol_version": "talos.browser.worker.v2",
+  "adapter_name": "playwright-mcp",
+  "adapter_version": "0.0.78",
+  "capabilities": [
+    "navigate",
+    "snapshot",
+    "screenshot",
+    "read",
+    "click",
+    "tabs"
+  ],
+  "limits": {
+    "max_tabs": 8,
+    "max_viewport_width": 3840,
+    "max_viewport_height": 2160,
+    "max_artifact_bytes": 26214400
+  },
+  "degraded_reason": null
+}

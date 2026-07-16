@@ -7,10 +7,23 @@ trap 'rm -rf "$FIXTURE_ROOT"' EXIT
 
 mkdir -p "$FIXTURE_ROOT/fakebin"
 cp "$ROOT_DIR/talos" "$ROOT_DIR/.env.example" "$ROOT_DIR/docker-compose.yml" "$FIXTURE_ROOT/"
+mkdir -p "$FIXTURE_ROOT/control-plane/scripts"
+cp "$ROOT_DIR/control-plane/scripts/browser-action-keypair.mjs" "$FIXTURE_ROOT/control-plane/scripts/"
+REAL_NODE="$(command -v node)"
 
 cat > "$FIXTURE_ROOT/fakebin/docker" <<'SH'
 #!/usr/bin/env bash
 echo "profiles=${COMPOSE_PROFILES-} docker $*" >> "$TALOS_FAKE_LOG"
+if [ "${1:-}" = "run" ]; then
+  keypair_script="$TALOS_TEST_KEYPAIR_SCRIPT"
+  keypair_env_file="$TALOS_BROWSER_ACTION_ENV_FILE"
+  if command -v cygpath >/dev/null 2>&1; then
+    keypair_script="$(cygpath -w "$keypair_script")"
+    keypair_env_file="$(cygpath -w "$keypair_env_file")"
+  fi
+  "$TALOS_TEST_NODE" "$keypair_script" --env-file "$keypair_env_file" >/dev/null
+  exit $?
+fi
 if [ "${TALOS_FAKE_SEARCH_UNHEALTHY:-0}" = "1" ] \
   && [[ " $* " == *" exec -T searxng wget "* || " $* " == *" exec -T searxng python3 "* ]]; then
   exit 1
@@ -39,11 +52,16 @@ printf '1\n'
 SH
 chmod +x "$FIXTURE_ROOT/fakebin/seq"
 export TALOS_FAKE_LOG="$FIXTURE_ROOT/calls.log"
+export TALOS_TEST_NODE="$REAL_NODE"
+export TALOS_TEST_KEYPAIR_SCRIPT="$FIXTURE_ROOT/control-plane/scripts/browser-action-keypair.mjs"
 export PATH="$FIXTURE_ROOT/fakebin:/usr/bin:/bin"
 
 "$FIXTURE_ROOT/talos" --plain up >/dev/null
 
 grep -Eq '^TALOS_BROWSER_WORKER_TOKEN=[a-f0-9]{64}$' "$FIXTURE_ROOT/.env"
+grep -Eq '^TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=[A-Za-z0-9+/]+={0,2}$' "$FIXTURE_ROOT/.env"
+grep -Eq '^TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=[A-Za-z0-9+/]+={0,2}$' "$FIXTURE_ROOT/.env"
+grep -Eq '^TALOS_BROWSER_ACTION_KEY_ID=[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' "$FIXTURE_ROOT/.env"
 grep -Eq '^TALOS_SEARXNG_SECRET=[a-f0-9]{64}$' "$FIXTURE_ROOT/.env"
 grep -Eq '^APP_KEY=base64:[A-Za-z0-9+/]{43}=$' "$FIXTURE_ROOT/.env"
 case "$(uname -s 2>/dev/null || true)" in

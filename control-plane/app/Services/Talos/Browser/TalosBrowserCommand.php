@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Talos\Browser;
 
 use InvalidArgumentException;
+use Kadmos\Tool\ProceduralLoopGuard;
 
 final readonly class TalosBrowserCommand
 {
@@ -105,6 +106,7 @@ final readonly class TalosBrowserCommand
         array $arguments,
         ?string $expectedEvidenceHash = null,
         string $nodeId = 'browser_direct',
+        ?string $commandId = null,
     ): array {
         $intent = [
             'schema_version' => 'talos_browser_command_v1',
@@ -121,12 +123,29 @@ final readonly class TalosBrowserCommand
         $fingerprint = hash('sha256', is_string($encoded) ? $encoded : serialize($intent));
         $input = [
             ...$intent,
-            'command_id' => 'bc_'.substr($fingerprint, 0, 24),
+            'command_id' => $commandId ?? 'bc_'.substr($fingerprint, 0, 24),
             'idempotency_key' => 'sha256:'.$fingerprint,
         ];
 
         self::fromArray($input);
 
         return $input;
+    }
+
+    public function intentFingerprint(): string
+    {
+        $intent = [
+            'schema_version' => $this->schemaVersion,
+            'run_id' => $this->runId,
+            'node_id' => $this->nodeId,
+            'browser_session_id' => $this->browserSessionId,
+            'operation' => $this->operation,
+            'arguments' => $this->arguments,
+            'observation_request' => $this->observationRequest,
+            'risk' => 'read',
+            'expected_evidence_hash' => $this->expectedEvidenceHash,
+        ];
+
+        return 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($intent));
     }
 }

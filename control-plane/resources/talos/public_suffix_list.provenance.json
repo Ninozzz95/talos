@@ -1,0 +1,9 @@
+{
+    "schema_version": "talos.public_suffix_list.provenance.v1",
+    "source": "https://publicsuffix.org/list/public_suffix_list.dat",
+    "repository": "https://github.com/publicsuffix/list",
+    "commit": "9b5c814414374aa19a93dc6dd7e47c01909524cc",
+    "sha256": "d2ae7d02585e00b8cb5427dc660d3d45e2a49f618d61c83344fc80502236194c",
+    "license": "MPL-2.0",
+    "license_file": "public_suffix_list.LICENSE"
+}

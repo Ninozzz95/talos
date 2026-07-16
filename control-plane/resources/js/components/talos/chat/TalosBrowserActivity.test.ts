@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, nextTick } from 'vue'
 import TalosBrowserActivity from './TalosBrowserActivity.vue'
-import type { TalosBrowserActivity as TalosBrowserActivityItem, TalosBrowserSnapshotPreview, TalosPendingToolApproval } from '../../../lib/talosTypes'
+import type { TalosBrowserActivity as TalosBrowserActivityItem, TalosBrowserSnapshotPreview, TalosBrowserTask, TalosPendingToolApproval } from '../../../lib/talosTypes'
 
 const activities: TalosBrowserActivityItem[] = [
     {
@@ -39,6 +39,30 @@ const snapshot: TalosBrowserSnapshotPreview = {
     },
 }
 
+function task(status: TalosBrowserTask['status']): TalosBrowserTask {
+    return {
+        id: 'task-1',
+        talos_session_id: 'chat-1',
+        origin_message_id: 'message-1',
+        browser_session_id: 'browser-1',
+        runtime_id: 'browser-1',
+        active_tab_id: 'tab-1',
+        goal: 'Inspect the requested page.',
+        status,
+        autonomy_profile: 'assist',
+        budget: {},
+        state_version: 2,
+        requested_at: '2026-07-16T08:00:00Z',
+        started_at: '2026-07-16T08:00:01Z',
+        completed_at: null,
+        failed_at: null,
+        cancelled_at: status === 'cancelled' ? '2026-07-16T08:00:02Z' : null,
+        reconciled_at: null,
+        created_at: '2026-07-16T08:00:00Z',
+        updated_at: '2026-07-16T08:00:02Z',
+    }
+}
+
 let app: ReturnType<typeof createApp> | null = null
 
 async function mountActivity(devBrowserEvidence: boolean, activityItems = activities) {
@@ -69,6 +93,116 @@ afterEach(() => {
 })
 
 describe('TalosBrowserActivity raw evidence disclosure', () => {
+    it('renders as an embedded body without a second card shell', async () => {
+        const shell = document.createElement('main')
+        const mountPoint = document.createElement('div')
+        shell.append(mountPoint)
+        document.body.append(shell)
+        app = createApp(TalosBrowserActivity, {
+            activities: [],
+            snapshot: null,
+            talosSessionId: 'chat-1',
+            browserTask: task('running'),
+            embedded: true,
+        })
+        app.mount(mountPoint)
+        await nextTick()
+
+        const activity = mountPoint.querySelector('[data-testid="talos-browser-activity"]')
+        expect(activity?.getAttribute('data-presentation')).toBe('embedded')
+        expect(activity?.classList.contains('border')).toBe(false)
+        expect(activity?.classList.contains('rounded-md')).toBe(false)
+    })
+
+    it('renders accessible compact task state and emits cancellation', async () => {
+        const cancelled: string[] = []
+        const shell = document.createElement('main')
+        const mountPoint = document.createElement('div')
+        shell.append(mountPoint)
+        document.body.append(shell)
+        app = createApp(TalosBrowserActivity, {
+            activities: [],
+            snapshot: null,
+            talosSessionId: 'chat-1',
+            browserTask: task('running'),
+            onCancelTask: (taskId: string) => cancelled.push(taskId),
+        })
+        app.mount(mountPoint)
+        await nextTick()
+
+        const status = mountPoint.querySelector('[data-testid="talos-browser-task-status"]')
+        const button = mountPoint.querySelector<HTMLButtonElement>('[data-testid="talos-browser-task-cancel"]')
+        expect(status?.getAttribute('role')).toBe('status')
+        expect(status?.getAttribute('aria-live')).toBe('polite')
+        expect(status?.textContent).toContain('Browsing in progress')
+        expect(status?.querySelector('button')).toBeNull()
+        expect(button?.textContent).toContain('Cancel')
+
+        button?.click()
+        expect(cancelled).toEqual(['task-1'])
+    })
+
+    it('keeps cancelled state after remount without a cancel control', async () => {
+        const shell = document.createElement('main')
+        const mountPoint = document.createElement('div')
+        shell.append(mountPoint)
+        document.body.append(shell)
+        app = createApp(TalosBrowserActivity, {
+            activities: [],
+            snapshot: null,
+            talosSessionId: 'chat-1',
+            browserTask: task('cancelled'),
+        })
+        app.mount(mountPoint)
+        await nextTick()
+
+        expect(mountPoint.textContent).toContain('Browser task cancelled')
+        expect(mountPoint.querySelector('[data-testid="talos-browser-task-cancel"]')).toBeNull()
+    })
+
+    it('disables a competing task command without presenting the wrong card as cancelling', async () => {
+        const shell = document.createElement('main')
+        const mountPoint = document.createElement('div')
+        shell.append(mountPoint)
+        document.body.append(shell)
+        app = createApp(TalosBrowserActivity, {
+            activities: [],
+            snapshot: null,
+            talosSessionId: 'chat-1',
+            browserTask: task('running'),
+            browserTaskBusy: false,
+            browserTaskCommandPending: true,
+        })
+        app.mount(mountPoint)
+        await nextTick()
+
+        const button = mountPoint.querySelector<HTMLButtonElement>('[data-testid="talos-browser-task-cancel"]')
+        expect(button?.disabled).toBe(true)
+        expect(button?.textContent).toContain('Cancel')
+        expect(button?.textContent).not.toContain('Cancelling')
+    })
+
+    it('shows an actionable cancellation failure without an internal error code', async () => {
+        const shell = document.createElement('main')
+        const mountPoint = document.createElement('div')
+        shell.append(mountPoint)
+        document.body.append(shell)
+        app = createApp(TalosBrowserActivity, {
+            activities: [],
+            snapshot: null,
+            talosSessionId: 'chat-1',
+            browserTask: task('running'),
+            browserTaskError: 'The Browser task changed before cancellation. TALOS refreshed its current state.',
+        })
+        app.mount(mountPoint)
+        await nextTick()
+
+        const alert = mountPoint.querySelector('[data-testid="talos-browser-task-error"]')
+        expect(alert?.getAttribute('role')).toBe('alert')
+        expect(alert?.textContent).toContain('TALOS refreshed its current state')
+        expect(alert?.textContent).not.toContain('TALOS_BROWSER_')
+    })
+
     it('keeps an exact procedural approval visible even when no browser activity is present', async () => {
         const pendingApproval: TalosPendingToolApproval = {
             id: 'call-1',

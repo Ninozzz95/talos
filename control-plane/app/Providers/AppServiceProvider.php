@@ -8,6 +8,7 @@ use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserWorkerConfiguration;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
+use App\Services\Talos\Browser\TalosBrowserActionCapabilityIssuer;
 use App\Services\Talos\Web\UnavailableWebSearchProvider;
 use App\Services\Talos\Web\WebSearchProvider;
 use App\Services\Talos\Web\WebSearchProviderFactory;
@@ -33,6 +34,13 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
+        $this->app->singleton(TalosBrowserActionCapabilityIssuer::class, static function (): TalosBrowserActionCapabilityIssuer {
+            return new TalosBrowserActionCapabilityIssuer(
+                (string) config('services.talos.browser.action_private_key_b64', ''),
+                (string) config('services.talos.browser.action_key_id', ''),
+            );
+        });
+
         $this->app->bind(BrowserSessionClient::class, function (Application $app): BrowserSessionClient {
             $configuredDriver = config('services.talos.browser.client_driver');
             $driver = is_string($configuredDriver) && trim($configuredDriver) !== ''
@@ -52,7 +60,12 @@ class AppServiceProvider extends ServiceProvider
 
             $configuration = $app->make(BrowserWorkerConfiguration::class);
 
-            return new HttpBrowserSessionClient($configuration->url(), $configuration->token());
+            return new HttpBrowserSessionClient(
+                $configuration->url(),
+                $configuration->token(),
+                15,
+                $app->make(TalosBrowserActionCapabilityIssuer::class),
+            );
         });
         $this->app->singleton(WebSearchProviderFactory::class, function (Application $app): WebSearchProviderFactory {
             $configuration = config('services.talos.web.search', []);
@@ -73,6 +86,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(Vite $vite, BrowserWorkerConfiguration $browserWorker): void
     {
         $browserWorker->assertReadyFor($this->app->environment());
+        if ($this->app->environment('production')) {
+            $this->app->make(TalosBrowserActionCapabilityIssuer::class);
+        }
 
         $hotFile = config('app.vite_hot_file');
         if (is_string($hotFile) && trim($hotFile) !== '') {

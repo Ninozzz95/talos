@@ -489,6 +489,9 @@ function testInvalidToolContractFixturesFailClosed(): void
 
 function testToolCallRedactedSerializationProtectsSecretsWithoutHidingBudgets(): void
 {
+    $actionCapability = 'eyJhbGciOiJFUzI1NiIsInR5cCI6InRhbG9zLWJyb3dzZXItYWN0aW9uK2p3dCJ9'
+        .'.eyJzdWIiOiJ0ZXN0In0.'
+        .str_repeat('a', 86);
     $payload = toolContractFixture('valid-call');
     $payload['arguments']['api_key'] = 'provider-secret';
     $payload['arguments']['apiKey'] = 'provider-secret-camel';
@@ -501,6 +504,8 @@ function testToolCallRedactedSerializationProtectsSecretsWithoutHidingBudgets():
         'clientSecret' => 'provider-secret-camel',
         'storage_path' => 'C:\\Users\\operator\\AppData\\Local\\TALOS\\artifact.json',
         'diagnostic' => 'Worker copied /var/lib/talos/private/artifact.json before exit.',
+        'action_diagnostic' => 'Worker rejected '.$actionCapability.' during verification.',
+        'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64' => 'synthetic-private-key-material',
         'safe_value' => 'visible',
     ];
 
@@ -516,6 +521,8 @@ function testToolCallRedactedSerializationProtectsSecretsWithoutHidingBudgets():
     assertToolContract(($redacted['provider_metadata']['nested']['clientSecret'] ?? null) === '[REDACTED]', 'Camel-case client secrets must be redacted.');
     assertToolContract(($redacted['provider_metadata']['nested']['storage_path'] ?? null) === '[REDACTED]', 'Local storage path fields must be redacted.');
     assertToolContract(($redacted['provider_metadata']['nested']['diagnostic'] ?? null) === 'Worker copied [REDACTED] before exit.', 'Local paths embedded in diagnostics must be redacted.');
+    assertToolContract(($redacted['provider_metadata']['nested']['action_diagnostic'] ?? null) === 'Worker rejected [REDACTED] during verification.', 'Compact JWTs embedded in diagnostics must be redacted.');
+    assertToolContract(($redacted['provider_metadata']['nested']['TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'] ?? null) === '[REDACTED]', 'Encoded browser action private keys must be redacted by key name.');
     assertToolContract(($redacted['provider_metadata']['nested']['safe_value'] ?? null) === 'visible', 'Safe metadata must remain inspectable.');
 }
 

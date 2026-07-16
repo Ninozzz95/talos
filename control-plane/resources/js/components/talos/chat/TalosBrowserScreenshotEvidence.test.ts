@@ -129,6 +129,21 @@ afterEach(() => {
 })
 
 describe('TalosBrowserScreenshotEvidence', () => {
+    it('delegates the selected thumbnail to the owned responsive interactive frame', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))
+        const { mountPoint, portal } = await mountEvidence({
+            mobile: true,
+            mobileWindowPresentation: 'drawer',
+        })
+
+        await openViewer(mountPoint)
+
+        const frame = portal.querySelector<HTMLElement>('[data-testid="talos-browser-interactive-frame"]')
+        expect(frame).not.toBeNull()
+        expect(frame?.getAttribute('data-window-presentation')).toBe('drawer')
+        expect(frame?.getAttribute('data-talos-upstream')).toBe('shadcn-vue-reka-drawer')
+    })
+
     it('opens the real artifact in an in-app shadcn Dialog instead of a new browser tab', async () => {
         const warningSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
         const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))

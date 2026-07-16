@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../src/NodeStatus.php';
 require_once __DIR__ . '/../src/ASTOrchestrator.php';
+require_once __DIR__ . '/../src/Workers/NodeWorkerControlException.php';
 require_once __DIR__ . '/../src/Workers/NodeWorkerInterface.php';
 require_once __DIR__ . '/../src/Workers/WorkerRegistry.php';
 
 use Kadmos\ASTOrchestrator;
 use Kadmos\NodeStatus;
 use Kadmos\Workers\NodeWorkerInterface;
+use Kadmos\Workers\NodeWorkerControlException;
 use Kadmos\Workers\WorkerRegistry;
 
 function assertSameValue(mixed $expected, mixed $actual, string $message): void
@@ -146,6 +148,34 @@ function testWorkerExceptionDoesNotLeakIntoDagState(): void
     assertSameValue(NodeStatus::FAILED, $orchestrator->getNodeStatus('A'), 'A controlled worker exception should still fail the node.');
 }
 
+function testMarkedWorkerControlExceptionPropagatesAfterSanitizedFailure(): void
+{
+    $registry = new WorkerRegistry();
+    $registry->register('CONTROL_THROWING', new class implements NodeWorkerInterface {
+        public function execute(array $payload): array
+        {
+            throw new class('api_key=synthetic-control-secret') extends RuntimeException implements NodeWorkerControlException {};
+        }
+    });
+    $orchestrator = new ASTOrchestrator($registry);
+    $orchestrator->addNode('A', [], 'CONTROL_THROWING');
+    $orchestrator->setPayload('A', []);
+
+    $propagated = false;
+    try {
+        $orchestrator->executeNode('A');
+    } catch (NodeWorkerControlException) {
+        $propagated = true;
+    }
+
+    $serialized = $orchestrator->serializeDagState();
+    $exported = json_encode($orchestrator->exportState(), JSON_THROW_ON_ERROR);
+    assertSameValue(true, $propagated, 'Marked worker control exceptions must reach the durable recovery caller.');
+    assertSameValue(NodeStatus::FAILED, $orchestrator->getNodeStatus('A'), 'A propagated control exception must still fail the DAG node.');
+    assertSameValue(false, str_contains($serialized, 'synthetic-control-secret'), 'Model-visible DAG state must sanitize propagated exception details.');
+    assertSameValue(false, str_contains($exported, 'synthetic-control-secret'), 'Persisted DAG state must sanitize propagated exception details.');
+}
+
 $tests = [
     'testFailureCascadesToLinearDescendants',
     'testFailureBlocksSharedChildUntilAllParentsSucceed',
@@ -153,6 +183,7 @@ $tests = [
     'testHmiRetryDoesNotRestoreChildWhileAnotherParentFailed',
     'testExecuteNodeRejectsUnsatisfiedDependencies',
     'testWorkerExceptionDoesNotLeakIntoDagState',
+    'testMarkedWorkerControlExceptionPropagatesAfterSanitizedFailure',
     'testBuildContextReturnsTypeMapping',
     'testBuildContextIgnoresNonMutateActions',
     'testBuildContextIgnoresUnknownNodes',

@@ -34,10 +34,23 @@ function assertComposeModel(compose) {
     assert.equal(environmentValue(services['browser-worker']?.environment, 'HOST'), '0.0.0.0')
     assert.equal(String(environmentValue(services['browser-worker']?.environment, 'PORT')), '3100')
     assert.match(String(environmentValue(services['browser-worker']?.environment, 'TALOS_BROWSER_WORKER_TOKEN')), /TALOS_BROWSER_WORKER_TOKEN|^[a-f0-9]{64}$/)
+    assert.match(String(environmentValue(services['browser-worker']?.environment, 'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64')), /TALOS_BROWSER_ACTION_PUBLIC_KEY_B64|public-key-material/)
+    assert.match(String(environmentValue(services['browser-worker']?.environment, 'TALOS_BROWSER_ACTION_KEY_ID')), /TALOS_BROWSER_ACTION_KEY_ID|browser-action-key/)
+    assert.equal(environmentValue(services['browser-worker']?.environment, 'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'), undefined)
+    assert.match(JSON.stringify(services['browser-worker']?.healthcheck?.test), /talos\.browser\.worker\.v2/)
     assert.match(JSON.stringify(services['browser-worker']?.healthcheck?.test), /talos_browser_hmi_runtime_v2\.1\.0/)
     assert.equal(services.talos?.depends_on?.['browser-worker']?.condition, 'service_healthy')
     assert.equal(environmentValue(services.talos?.environment, 'TALOS_BROWSER_WORKER_URL'), 'http://browser-worker:3100')
     assert.match(String(environmentValue(services.talos?.environment, 'TALOS_BROWSER_WORKER_TOKEN')), /TALOS_BROWSER_WORKER_TOKEN|^[a-f0-9]{64}$/)
+    assert.match(String(environmentValue(services.talos?.environment, 'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64')), /TALOS_BROWSER_ACTION_PRIVATE_KEY_B64|private-key-material/)
+    assert.match(String(environmentValue(services.talos?.environment, 'TALOS_BROWSER_ACTION_KEY_ID')), /TALOS_BROWSER_ACTION_KEY_ID|browser-action-key/)
+    assert.equal(environmentValue(services.talos?.environment, 'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64'), '')
+    assert.match(String(environmentValue(services['talos-queue']?.environment, 'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64')), /TALOS_BROWSER_ACTION_PRIVATE_KEY_B64|private-key-material/)
+    assert.match(String(environmentValue(services['talos-queue']?.environment, 'TALOS_BROWSER_ACTION_KEY_ID')), /TALOS_BROWSER_ACTION_KEY_ID|browser-action-key/)
+    assert.equal(environmentValue(services['talos-queue']?.environment, 'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64'), '')
+    assert.equal(environmentValue(services.validator?.environment, 'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'), undefined)
+    assert.equal(environmentValue(services.validator?.environment, 'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64'), undefined)
+    assert.equal(environmentValue(services.validator?.environment, 'TALOS_BROWSER_ACTION_KEY_ID'), undefined)
     assert.equal(String(environmentValue(services.talos?.environment, 'TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT')), 'true')
 }
 
@@ -95,13 +108,25 @@ test('Docker accepts the canonical browser worker Compose model when the executa
     if (createdEnv) copyFileSync(path.join(workspaceRoot, '.env.example'), envPath)
 
     const workerToken = 'a'.repeat(64)
+    const actionPrivateKey = 'private-key-material'
+    const actionPublicKey = 'public-key-material'
+    const actionKeyId = 'browser-action-key'
     try {
         const result = spawnSync('docker', ['compose', 'config', '--format', 'json'], {
             cwd: workspaceRoot,
             encoding: 'utf8',
-            env: { ...process.env, TALOS_BROWSER_WORKER_TOKEN: workerToken },
+            env: {
+                ...process.env,
+                TALOS_BROWSER_WORKER_TOKEN: workerToken,
+                TALOS_BROWSER_ACTION_PRIVATE_KEY_B64: actionPrivateKey,
+                TALOS_BROWSER_ACTION_PUBLIC_KEY_B64: actionPublicKey,
+                TALOS_BROWSER_ACTION_KEY_ID: actionKeyId,
+            },
         })
-        const diagnostic = `${result.stderr ?? ''}`.replaceAll(workerToken, '[REDACTED]')
+        const diagnostic = `${result.stderr ?? ''}`
+            .replaceAll(workerToken, '[REDACTED]')
+            .replaceAll(actionPrivateKey, '[REDACTED]')
+            .replaceAll(actionPublicKey, '[REDACTED]')
         assert.equal(result.status, 0, diagnostic)
         assertComposeModel(JSON.parse(result.stdout))
     } finally {

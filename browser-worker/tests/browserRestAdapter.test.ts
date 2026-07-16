@@ -5,11 +5,24 @@ import { afterAll, describe, expect, it } from "vitest";
 import { BrowserSessionManager } from "../src/BrowserSessionManager.js";
 import { buildServer } from "../src/server.js";
 import { BrowserToolResultSchema, validateToolStructuredOutput } from "../src/BrowserToolContracts.js";
+import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
+import { TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH } from "../src/BrowserWorkerProtocol.js";
+import { createTestActionCapabilityKeypair, signTestActionCapability } from "./support/browserActionCapability.js";
 
 const fixtureUrl = new URL(`file://${resolve("tests/fixtures/read-only-page.html").replaceAll("\\", "/")}`).href;
 const hmiFixtureUrl = new URL(`file://${resolve("tests/fixtures/hmi-page.html").replaceAll("\\", "/")}`).href;
 const sessions = new BrowserSessionManager();
-const app = buildServer({ sessions, internalToken: "mcp-test-token" });
+const actionKeys = createTestActionCapabilityKeypair("rest-action-test-key");
+const actionNowSeconds = 1_750_000_010;
+const app = buildServer({
+  sessions,
+  internalToken: "mcp-test-token",
+  actionCapabilityVerifier: BrowserActionCapabilityVerifier.forTest(
+    actionKeys.publicKeyPem,
+    actionKeys.keyId,
+    () => actionNowSeconds,
+  ),
+});
 const ownerHeaders = { "x-talos-worker-token": "mcp-test-token", "x-talos-owner-ref": "user:1" };
 const otherOwnerHeaders = { "x-talos-worker-token": "mcp-test-token", "x-talos-owner-ref": "user:2" };
 const createPayload = {
@@ -36,12 +49,33 @@ async function createSession(payload = createPayload): Promise<string> {
   return response.json().data.sessionId as string;
 }
 
-async function callTool(sessionId: string, tool_use_id: string, name: string, arguments_: Record<string, unknown>, headers = ownerHeaders) {
+async function callTool(
+  sessionId: string,
+  tool_use_id: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+  headers = ownerHeaders,
+  authorizeAction = true,
+) {
+  const payload = { tool_use_id, name, arguments: arguments_ };
+  const requestHeaders = name === "browser_click" && authorizeAction
+    ? {
+        ...headers,
+        authorization: `Bearer ${await signTestActionCapability(actionKeys, {
+          ownerRef: headers["x-talos-owner-ref"],
+          workerSessionId: sessionId,
+          actionId: tool_use_id,
+          operation: "browser_click",
+          preconditionStateVersion: typeof arguments_.state_version === "number" ? arguments_.state_version : 0,
+          request: payload,
+        })}`,
+      }
+    : headers;
   return app.inject({
     method: "POST",
     url: `/sessions/${sessionId}/tools/call`,
-    headers,
-    payload: { tool_use_id, name, arguments: arguments_ },
+    headers: requestHeaders,
+    payload,
   });
 }
 
@@ -50,6 +84,27 @@ async function deleteSession(sessionId: string): Promise<void> {
 }
 
 describe("TALOS REST browser tool adapter", () => {
+  it("replays the same bootstrap result for one structured Idempotency-Key and rejects a changed payload", async () => {
+    const idempotencyKey = '"123e4567-e89b-42d3-a456-426614174333"';
+    const request = (payload = createPayload) => app.inject({
+      method: "POST",
+      url: TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH,
+      headers: { ...ownerHeaders, "idempotency-key": idempotencyKey },
+      payload,
+    });
+
+    const first = await request();
+    const replay = await request();
+    const conflict = await request({ ...createPayload, viewport: { width: 1280, height: 800 } });
+
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(201);
+    expect(first.json().data.sessionId).toBe(replay.json().data.sessionId);
+    expect(conflict.statusCode).toBe(422);
+    expect(conflict.json()).toMatchObject({ code: "TALOS_BROWSER_SESSION_IDEMPOTENCY_CONFLICT" });
+    await deleteSession(first.json().data.sessionId as string);
+  });
+
   it("returns the stable six-tool discovery list with closed canonical schemas", async () => {
     const response = await app.inject({ method: "GET", url: "/tools", headers: ownerHeaders });
     const body = response.json();
@@ -176,6 +231,30 @@ describe("TALOS REST browser tool adapter", () => {
 
       const staleRef = await callTool(sessionId, "stale-ref", "browser_read", { ref: "r1", snapshot_id: snapshot.snapshot_id, state_version: 2 });
       expect(staleRef.json()).toMatchObject({ isError: true, structuredContent: { code: "TALOS_BROWSER_STALE_REF" } });
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
+  it("rejects a consequential REST click authenticated only with the worker service token", async () => {
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "unsigned-click-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const snapshot = (await callTool(sessionId, "unsigned-click-snapshot", "browser_snapshot", { state_version: 1 })).json().structuredContent;
+      const target = snapshot.nodes.find((node: { name: string }) => node.name === "Reject optional cookies");
+      expect(target).toEqual(expect.objectContaining({ ref: expect.stringMatching(/^r\d+$/) }));
+
+      const response = await callTool(sessionId, "unsigned-click", "browser_click", {
+        target: target.ref,
+        element: "Reject optional cookies",
+        snapshot_id: snapshot.snapshot_id,
+        state_version: 1,
+      }, ownerHeaders, false);
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        code: "TALOS_BROWSER_ACTION_CAPABILITY_REQUIRED",
+      });
     } finally {
       await deleteSession(sessionId);
     }

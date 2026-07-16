@@ -37,6 +37,37 @@ export type TalosBrowserMode = {
     status: TalosBrowserModeStatus
     capabilities: string[]
 }
+export type TalosBrowserTaskStatus =
+    | 'created'
+    | 'planning'
+    | 'ready'
+    | 'running'
+    | 'waiting_user'
+    | 'recovering'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+export type TalosBrowserTask = {
+    id: string
+    talos_session_id: string
+    origin_message_id: string | null
+    browser_session_id: string | null
+    runtime_id: string | null
+    active_tab_id: string | null
+    goal: string
+    status: TalosBrowserTaskStatus
+    autonomy_profile: 'observe' | 'assist' | 'act' | 'custom' | string
+    budget: Record<string, unknown>
+    state_version: number
+    requested_at: string | null
+    started_at: string | null
+    completed_at: string | null
+    failed_at: string | null
+    cancelled_at: string | null
+    reconciled_at: string | null
+    created_at: string | null
+    updated_at: string | null
+}
 export type TalosBrowserCurrentPage = {
     host: string
     title: string
@@ -387,6 +418,20 @@ export type TalosMessage = {
     run_id?: string | null
     metadata?: Record<string, unknown> | null
     created_at: string
+}
+
+export type TalosBrowserClarificationChoice = {
+    index: number
+    url: string
+    host: string
+    label: string
+}
+
+export type TalosBrowserFollowUpMetadata = {
+    schema_version: 'talos_browser_follow_up_v1'
+    operation: 'clarify'
+    choices: TalosBrowserClarificationChoice[]
+    reason?: string | null
 }
 
 export type TalosRun = {

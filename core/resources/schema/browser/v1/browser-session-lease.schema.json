@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/schema/browser/v1/browser-session-lease.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lease_id", "task_id", "owner_type", "owner_id", "fencing_token", "status", "acquired_at", "expires_at", "released_at"],
+  "properties": {
+    "schema_version": { "const": "talos.browser.lease.v1" },
+    "lease_id": { "$ref": "#/$defs/id" },
+    "task_id": { "$ref": "#/$defs/id" },
+    "owner_type": { "enum": ["model", "human", "system"] },
+    "owner_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "fencing_token": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "status": { "enum": ["active", "released", "expired"] },
+    "acquired_at": { "$ref": "#/$defs/timestamp" },
+    "expires_at": { "$ref": "#/$defs/timestamp" },
+    "released_at": { "oneOf": [{ "$ref": "#/$defs/timestamp" }, { "type": "null" }] }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[0-9A-HJKMNP-TV-Z]{26})$" },
+    "timestamp": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$" }
+  }
+}

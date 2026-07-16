@@ -16,6 +16,9 @@ services:
       - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
       - TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
       - TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+      - TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=${TALOS_BROWSER_ACTION_PRIVATE_KEY_B64:?TALOS_BROWSER_ACTION_PRIVATE_KEY_B64 is required}
+      - TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=
+      - TALOS_BROWSER_ACTION_KEY_ID=${TALOS_BROWSER_ACTION_KEY_ID:?TALOS_BROWSER_ACTION_KEY_ID is required}
       - TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
       - TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}
       - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
@@ -50,6 +53,9 @@ services:
       - TALOS_VALIDATOR_HEALTH_URL=http://validator:3000/health
       - TALOS_BROWSER_WORKER_URL=http://browser-worker:3100
       - TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+      - TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=${TALOS_BROWSER_ACTION_PRIVATE_KEY_B64:?TALOS_BROWSER_ACTION_PRIVATE_KEY_B64 is required}
+      - TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=
+      - TALOS_BROWSER_ACTION_KEY_ID=${TALOS_BROWSER_ACTION_KEY_ID:?TALOS_BROWSER_ACTION_KEY_ID is required}
       - TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
       - TALOS_WEB_SEARCH_PROVIDER=${TALOS_WEB_SEARCH_PROVIDER:-unavailable}
       - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
@@ -95,9 +101,11 @@ services:
       HOST: 0.0.0.0
       PORT: 3100
       TALOS_BROWSER_WORKER_TOKEN: ${TALOS_BROWSER_WORKER_TOKEN:?TALOS_BROWSER_WORKER_TOKEN is required}
+      TALOS_BROWSER_ACTION_PUBLIC_KEY_B64: ${TALOS_BROWSER_ACTION_PUBLIC_KEY_B64:?TALOS_BROWSER_ACTION_PUBLIC_KEY_B64 is required}
+      TALOS_BROWSER_ACTION_KEY_ID: ${TALOS_BROWSER_ACTION_KEY_ID:?TALOS_BROWSER_ACTION_KEY_ID is required}
       TALOS_BROWSER_MCP_ALLOWED_HOSTS: ${TALOS_BROWSER_MCP_ALLOWED_HOSTS:-browser-worker,localhost,127.0.0.1,::1}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/ready',{headers:{'x-talos-worker-token':process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async r => { const p = await r.json(); process.exit(r.ok && p?.data?.protocols?.hmi === 'talos_browser_hmi_runtime_v2.1.0' ? 0 : 1) }).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/ready',{headers:{'x-talos-worker-token':process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async r => { const p = await r.json(); process.exit(r.ok && p?.data?.protocols?.worker === 'talos.browser.worker.v2' && p?.data?.protocols?.hmi === 'talos_browser_hmi_runtime_v2.1.0' ? 0 : 1) }).catch(() => process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12

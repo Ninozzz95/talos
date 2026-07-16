@@ -7,9 +7,8 @@ namespace Tests\Feature;
 use App\Models\TalosApiToken;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosRun;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 final class TalosAuditApiTest extends TestCase
@@ -63,6 +62,26 @@ final class TalosAuditApiTest extends TestCase
         $this->assertSame('[redacted]', $redacted['nested']['clientSecret'] ?? null);
         $this->assertSame('Worker copied [redacted] before exit.', $redacted['nested']['diagnostic'] ?? null);
         $this->assertSame('visible', $redacted['nested']['safe_value'] ?? null);
+    }
+
+    public function test_browser_action_tokens_and_private_keys_never_persist_in_audit_payloads(): void
+    {
+        $actionCapability = 'eyJhbGciOiJFUzI1NiIsInR5cCI6InRhbG9zLWJyb3dzZXItYWN0aW9uK2p3dCJ9'
+            .'.eyJzdWIiOiJ0ZXN0In0.'
+            .str_repeat('a', 86);
+
+        $event = TalosAuditEvent::record('browser.action.rejected', 'browser_action', 'action-1', [
+            'diagnostic' => 'Rejected '.$actionCapability.' during verification.',
+            'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64' => 'synthetic-private-key-material',
+            'reason_code' => 'capability_invalid',
+        ]);
+
+        $payload = $event->fresh()->payload;
+        $this->assertSame('Rejected [redacted] during verification.', $payload['diagnostic'] ?? null);
+        $this->assertSame('[redacted]', $payload['TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'] ?? null);
+        $this->assertSame('capability_invalid', $payload['reason_code'] ?? null);
+        $this->assertStringNotContainsString($actionCapability, json_encode($payload, JSON_THROW_ON_ERROR));
+        $this->assertStringNotContainsString('synthetic-private-key-material', json_encode($payload, JSON_THROW_ON_ERROR));
     }
 
     public function test_audit_api_filters_by_event_type(): void

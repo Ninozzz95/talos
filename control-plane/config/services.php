@@ -53,9 +53,12 @@ return [
             'client_driver' => env('TALOS_BROWSER_CLIENT_DRIVER'),
             'worker_url' => env('TALOS_BROWSER_WORKER_URL'),
             'worker_token' => env('TALOS_BROWSER_WORKER_TOKEN'),
+            'action_private_key_b64' => env('TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'),
+            'action_key_id' => env('TALOS_BROWSER_ACTION_KEY_ID'),
             'allow_insecure_internal_transport' => env('TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT', false),
             'dev_evidence' => env('TALOS_DEV_BROWSER_EVIDENCE', false),
             'hmi_min_mode' => env('TALOS_BROWSER_HMI_MIN_MODE'),
+            'legacy_writes_enabled' => env('TALOS_BROWSER_LEGACY_WRITES_ENABLED', true),
         ],
         'web' => [
             'search' => [
