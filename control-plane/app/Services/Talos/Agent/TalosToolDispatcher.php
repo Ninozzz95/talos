@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Talos\Agent;
 
+use App\Models\TalosBrowserAction;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosBrowserTask;
 use App\Models\TalosToolCall as PersistedToolCall;
 use App\Models\TalosToolResult as PersistedToolResult;
 use App\Models\TalosToolTurn;
 use App\Services\Runs\TalosRunEventRecorder;
+use App\Services\Talos\Browser\TalosBrowserActionPolicy;
+use App\Services\Talos\Browser\TalosBrowserEvidenceException;
+use App\Services\Talos\Browser\TalosBrowserTakeoverService;
+use App\Services\Talos\Browser\TalosBrowserTaskException;
+use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Kadmos\ASTOrchestrator;
@@ -30,6 +37,9 @@ final class TalosToolDispatcher
         private readonly TalosRunEventRecorder $events,
         private readonly TalosExecutionClaimService $claims,
         private readonly TalosToolEvidenceBudgetGate $evidenceBudgets,
+        private readonly TalosBrowserActionPolicy $browserActionPolicy,
+        private readonly TalosBrowserTakeoverService $browserTakeover,
+        private readonly TalosBrowserTaskRuntime $browserTasks,
     ) {}
 
     public function dispatch(
@@ -44,6 +54,7 @@ final class TalosToolDispatcher
         ?string $evidenceHash = null,
         ?string $evidenceSnapshotArtifactId = null,
         ?string $evidenceSnapshotId = null,
+        ?TalosBrowserTask $browserTask = null,
     ): TalosToolDispatchReport {
         if (! in_array($plan->state, [ProceduralPlan::DAG_COMPILED, ProceduralPlan::AWAITING_APPROVAL], true)) {
             throw new InvalidArgumentException('Only executable procedural plans can be dispatched.');
@@ -90,11 +101,123 @@ final class TalosToolDispatcher
         $this->restoreCheckpoint($turn, $orchestrator);
         $this->restorePersistedResults($ownerUserId, $turn, $turnLeaseToken, $calls, $orchestrator);
         $this->applyPersistedApprovals($calls, $orchestrator);
+        $browserTask ??= $this->activeBrowserTask($ownerUserId, $turn, $browserSession);
+        $actions = [];
+        if ($browserTask instanceof TalosBrowserTask) {
+            if (! $browserSession instanceof TalosBrowserSession
+                || (int) $browserTask->user_id !== $ownerUserId
+                || (string) $browserTask->talos_session_id !== (string) $turn->session_id
+                || (string) $browserTask->browser_session_id !== (string) $browserSession->id) {
+                throw new TalosToolRecoveryRequiredException(message: 'Browser task scope does not match the procedural turn.');
+            }
+            if ($browserTask->status === 'running') {
+                try {
+                    $actions = $this->browserTasks->prepareActions($ownerUserId, $browserTask, $plan, $calls);
+                } catch (TalosBrowserTaskException $exception) {
+                    throw new TalosToolRecoveryRequiredException($exception->errorCode, $exception->getMessage());
+                }
+            } elseif ($browserTask->status !== 'waiting_user') {
+                throw new TalosToolRecoveryRequiredException(message: 'Browser task must be recovered before procedural dispatch can continue.');
+            }
+        }
 
         while (($queue = $orchestrator->getExecutionQueue()) !== []) {
             foreach ($queue as $nodeId) {
                 $node = $nodesById[$nodeId];
                 $call = $calls[$nodeId];
+                $action = $actions[$nodeId] ?? null;
+                $browserNode = $node->context->browserSessionId !== null
+                    && str_starts_with($node->call->name, 'browser_');
+                if ($browserNode
+                    && $browserTask instanceof TalosBrowserTask
+                    && $browserSession instanceof TalosBrowserSession) {
+                    try {
+                        $this->browserTakeover->assertModelMayDispatch($browserTask);
+                    } catch (TalosBrowserTaskException $exception) {
+                        $calls[$nodeId] = $this->denyNode(
+                            $ownerUserId,
+                            $turn,
+                            $turnLeaseToken,
+                            $orchestrator,
+                            $node,
+                            $call,
+                            $exception->errorCode,
+                            $exception->getMessage(),
+                            ['source' => 'human_takeover'],
+                            $browserTask,
+                            $action,
+                            $browserSession,
+                        );
+
+                        continue;
+                    }
+                    if (! $action instanceof TalosBrowserAction) {
+                        throw new TalosToolRecoveryRequiredException(
+                            message: 'A dispatchable Browser node is missing its durable action journal row.',
+                        );
+                    }
+                    $decision = $this->browserActionPolicy->evaluate(
+                        $browserTask,
+                        $node,
+                        $browserSession,
+                        $call->refresh(),
+                    );
+                    if (! $decision->allowsModelDispatch()) {
+                        $calls[$nodeId] = $this->denyNode(
+                            $ownerUserId,
+                            $turn,
+                            $turnLeaseToken,
+                            $orchestrator,
+                            $node,
+                            $call,
+                            $decision->reasonCode,
+                            $decision->remediation,
+                            [
+                                'source' => 'browser_action_policy',
+                                'disposition' => $decision->disposition->value,
+                                'risk' => $decision->risk->value,
+                            ],
+                            $browserTask,
+                            $action,
+                            $browserSession,
+                        );
+
+                        continue;
+                    }
+                    try {
+                        $actions[$nodeId] = $action = $this->browserTasks->assertCanDispatch(
+                            $ownerUserId,
+                            $browserTask,
+                            $action,
+                            $call->refresh(),
+                            $browserSession->refresh(),
+                        );
+                    } catch (TalosBrowserTaskException $exception) {
+                        if (in_array($exception->errorCode, [
+                            'TALOS_BROWSER_ACTION_STATE_INVALID',
+                            'TALOS_BROWSER_TASK_STATE_CONFLICT',
+                            'TALOS_BROWSER_TASK_JOURNAL_INVALID',
+                        ], true)) {
+                            throw new TalosToolRecoveryRequiredException($exception->errorCode, $exception->getMessage());
+                        }
+                        $calls[$nodeId] = $this->denyNode(
+                            $ownerUserId,
+                            $turn,
+                            $turnLeaseToken,
+                            $orchestrator,
+                            $node,
+                            $call,
+                            $exception->errorCode,
+                            $exception->getMessage(),
+                            ['source' => 'browser_task_budget'],
+                            $browserTask,
+                            $action,
+                            $browserSession,
+                        );
+
+                        continue;
+                    }
+                }
                 $this->enforceElapsedBudget($ownerUserId, $turn, $turnLeaseToken);
                 $reservationIds = $this->reserveExecutionBudgets(
                     $ownerUserId,
@@ -114,6 +237,28 @@ final class TalosToolDispatcher
                         $this->budgets->release($reservationId, $ownerUserId, $turnLeaseToken);
                     }
                     throw new TalosToolRecoveryRequiredException;
+                }
+                if ($action instanceof TalosBrowserAction
+                    && $browserTask instanceof TalosBrowserTask) {
+                    try {
+                        $actions[$nodeId] = $action = $this->browserTasks->markDispatched(
+                            $ownerUserId,
+                            $browserTask,
+                            $action,
+                            $call->refresh(),
+                        );
+                    } catch (TalosBrowserTaskException $exception) {
+                        $this->claims->releaseCall(
+                            $ownerUserId,
+                            (string) $call->id,
+                            $effectToken,
+                            $turnLeaseToken,
+                        );
+                        foreach (array_reverse($reservationIds) as $reservationId) {
+                            $this->budgets->release($reservationId, $ownerUserId, $turnLeaseToken);
+                        }
+                        throw new TalosToolRecoveryRequiredException($exception->errorCode, $exception->getMessage());
+                    }
                 }
                 $worker->armExecutionFence($nodeId, (string) $call->id, $effectToken);
 
@@ -169,6 +314,9 @@ final class TalosToolDispatcher
                         $effectToken,
                         $result,
                         $node->context->stateVersion,
+                        $browserTask,
+                        $action,
+                        $browserSession,
                     );
                     $calls[$nodeId] = $call;
                 } catch (\Throwable $exception) {
@@ -178,7 +326,37 @@ final class TalosToolDispatcher
                         $effectToken,
                     );
 
+                    if ($action instanceof TalosBrowserAction
+                        && $browserTask instanceof TalosBrowserTask) {
+                        try {
+                            $actions[$nodeId] = $this->browserTasks->markAmbiguous(
+                                $ownerUserId,
+                                $browserTask,
+                                $action,
+                                $call->refresh(),
+                                'TALOS_BROWSER_ACTION_OUTCOME_UNKNOWN',
+                            );
+                        } catch (TalosBrowserTaskException $taskException) {
+                            throw new TalosToolRecoveryRequiredException(
+                                $taskException->errorCode,
+                                $taskException->getMessage(),
+                            );
+                        }
+
+                        throw new TalosToolRecoveryRequiredException(
+                            'TALOS_BROWSER_ACTION_OUTCOME_UNKNOWN',
+                            'The Browser action crossed its execution fence but its physical outcome is unknown.',
+                        );
+                    }
+
                     throw $exception;
+                }
+                if ($browserNode && ! $result->isError) {
+                    try {
+                        $this->browserTasks->resumeEvidenceForCall($ownerUserId, $call->refresh());
+                    } catch (TalosBrowserEvidenceException $exception) {
+                        throw new TalosToolRecoveryRequiredException($exception->faultCode, $exception->getMessage());
+                    }
                 }
                 foreach ($reservationIds as $reservationId) {
                     $this->budgets->settle($reservationId, $ownerUserId, 1, $turnLeaseToken);
@@ -238,12 +416,151 @@ final class TalosToolDispatcher
         return new TalosToolDispatchReport($status, $results, $waiting, $blocked);
     }
 
+    /** @param array<string, mixed> $audit */
+    private function denyNode(
+        int $ownerUserId,
+        TalosToolTurn $turn,
+        string $turnLeaseToken,
+        ASTOrchestrator $orchestrator,
+        ProceduralNode $node,
+        PersistedToolCall $call,
+        string $errorCode,
+        string $message,
+        array $audit,
+        ?TalosBrowserTask $browserTask = null,
+        ?TalosBrowserAction $browserAction = null,
+        ?TalosBrowserSession $browserSession = null,
+    ): PersistedToolCall {
+        $result = ToolResult::error($node->call->providerCallId, $errorCode, $message);
+        $orchestrator->markRunning($node->id);
+        $orchestrator->markFailed($node->id);
+        $call = $this->persistPolicyDenial(
+            $ownerUserId,
+            $turn,
+            $turnLeaseToken,
+            $call,
+            $result,
+            $node->context->stateVersion,
+            $browserTask,
+            $browserAction,
+            $browserSession,
+        );
+        $this->record($ownerUserId, $turn, $turnLeaseToken, 'tool.execution.denied', $node, [
+            'provider_call_id' => $node->call->providerCallId,
+            'tool_name' => $node->call->name,
+            'error_code' => $errorCode,
+            ...$audit,
+        ]);
+        $this->checkpoint($ownerUserId, $turn, $turnLeaseToken, $orchestrator);
+
+        return $call;
+    }
+
+    private function activeBrowserTask(
+        int $ownerUserId,
+        TalosToolTurn $turn,
+        ?TalosBrowserSession $browserSession,
+    ): ?TalosBrowserTask {
+        if (! $browserSession instanceof TalosBrowserSession) {
+            return null;
+        }
+
+        $tasks = TalosBrowserTask::query()
+            ->ownedBy($ownerUserId)
+            ->where('talos_session_id', $turn->session_id)
+            ->where('browser_session_id', $browserSession->id)
+            ->whereNotIn('status', ['completed', 'failed', 'cancelled'])
+            ->orderByDesc('requested_at')
+            ->limit(2)
+            ->get();
+        if ($tasks->count() > 1) {
+            throw new TalosToolRecoveryRequiredException(
+                message: 'Multiple live Browser tasks contend for the same session.',
+            );
+        }
+
+        $task = $tasks->first();
+
+        return $task instanceof TalosBrowserTask ? $task : null;
+    }
+
+    private function persistPolicyDenial(
+        int $ownerUserId,
+        TalosToolTurn $turn,
+        string $turnLeaseToken,
+        PersistedToolCall $call,
+        ToolResult $result,
+        int $stateVersion,
+        ?TalosBrowserTask $browserTask,
+        ?TalosBrowserAction $browserAction,
+        ?TalosBrowserSession $browserSession,
+    ): PersistedToolCall {
+        return DB::transaction(function () use (
+            $ownerUserId,
+            $turn,
+            $turnLeaseToken,
+            $call,
+            $result,
+            $stateVersion,
+            $browserTask,
+            $browserAction,
+            $browserSession,
+        ): PersistedToolCall {
+            $lockedTurn = $this->lockLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
+            $lockedCall = PersistedToolCall::query()
+                ->ownedBy($ownerUserId)
+                ->whereKey($call->id)
+                ->where('tool_turn_id', $lockedTurn->id)
+                ->lockForUpdate()
+                ->first();
+            if (! $lockedCall instanceof PersistedToolCall) {
+                throw new TalosToolRecoveryRequiredException;
+            }
+
+            PersistedToolResult::query()->firstOrCreate(
+                ['tool_call_id' => $lockedCall->id, 'attempt' => $lockedCall->attempt],
+                [
+                    'tool_turn_id' => $lockedTurn->id,
+                    'run_id' => $lockedTurn->run_id,
+                    'user_id' => $lockedTurn->user_id,
+                    'provider_call_id' => $lockedCall->provider_call_id,
+                    'status' => 'failed',
+                    'is_error' => true,
+                    'canonical_result' => $result->toWireArray(),
+                    'error_code' => $this->errorCode($result),
+                    'evidence_ids' => [],
+                    'state_version' => $stateVersion,
+                ],
+            );
+            $lockedCall->forceFill([
+                'status' => 'failed',
+                'effect_status' => 'completed',
+                'execution_token' => null,
+                'execution_lease_expires_at' => null,
+            ])->save();
+            if ($browserTask instanceof TalosBrowserTask
+                && $browserAction instanceof TalosBrowserAction
+                && $browserSession instanceof TalosBrowserSession) {
+                $this->browserTasks->recordResult(
+                    $ownerUserId,
+                    $browserTask,
+                    $browserAction,
+                    $lockedCall,
+                    $result,
+                    $browserSession,
+                    false,
+                );
+            }
+
+            return $lockedCall;
+        }, 3);
+    }
+
     private function enforceElapsedBudget(
         int $ownerUserId,
         TalosToolTurn $turn,
         string $turnLeaseToken,
-    ): void
-    {
+    ): void {
         [$elapsed, $limit] = DB::transaction(function () use ($ownerUserId, $turn, $turnLeaseToken): array {
             $lockedTurn = $this->lockLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
 
@@ -374,8 +691,8 @@ final class TalosToolDispatcher
     }
 
     /**
-     * @param array<string, string> $logicalCallIdsByProviderCallId
-     * @param array<string, int> $repairAttemptsByProviderCallId
+     * @param  array<string, string>  $logicalCallIdsByProviderCallId
+     * @param  array<string, int>  $repairAttemptsByProviderCallId
      * @return array<string, PersistedToolCall>
      */
     private function persistCalls(
@@ -390,8 +707,7 @@ final class TalosToolDispatcher
         ?string $evidenceSnapshotId,
         array $logicalCallIdsByProviderCallId,
         array $repairAttemptsByProviderCallId,
-    ): array
-    {
+    ): array {
         $providerCallIds = array_map(static fn (ProceduralNode $node): string => $node->call->providerCallId, $plan->nodes);
         $this->assertCallMetadata($providerCallIds, $logicalCallIdsByProviderCallId, $repairAttemptsByProviderCallId);
         foreach ($plan->nodes as $node) {
@@ -432,6 +748,7 @@ final class TalosToolDispatcher
                         throw new InvalidArgumentException('Persisted tool call does not match the compiled plan.');
                     }
                     $persisted[$node->id] = $call;
+
                     continue;
                 }
 
@@ -478,9 +795,9 @@ final class TalosToolDispatcher
     }
 
     /**
-     * @param list<string> $providerCallIds
-     * @param array<string, string> $logicalCallIdsByProviderCallId
-     * @param array<string, int> $repairAttemptsByProviderCallId
+     * @param  list<string>  $providerCallIds
+     * @param  array<string, string>  $logicalCallIdsByProviderCallId
+     * @param  array<string, int>  $repairAttemptsByProviderCallId
      */
     private function assertCallMetadata(
         array $providerCallIds,
@@ -562,12 +879,19 @@ final class TalosToolDispatcher
         string $turnLeaseToken,
         array $calls,
         ASTOrchestrator $orchestrator,
-    ): void
-    {
+    ): void {
         foreach ($calls as $nodeId => $call) {
             $persisted = $call->results()->where('attempt', $call->attempt)->first();
             if (! $persisted instanceof PersistedToolResult) {
                 continue;
+            }
+
+            if (! $persisted->is_error && str_starts_with((string) $call->tool_name, 'browser_')) {
+                try {
+                    $this->browserTasks->resumeEvidenceForCall($ownerUserId, $call->refresh());
+                } catch (TalosBrowserEvidenceException $exception) {
+                    throw new TalosToolRecoveryRequiredException($exception->faultCode, $exception->getMessage());
+                }
             }
 
             $status = $orchestrator->getNodeStatus($nodeId);
@@ -605,8 +929,7 @@ final class TalosToolDispatcher
     private function settlePersistedResultReservations(
         PersistedToolCall $call,
         string $turnLeaseToken,
-    ): void
-    {
+    ): void {
         $prefix = 'tool-call:'.$call->id.':'.$call->attempt.':';
         $reservations = $call->turn
             ->budgetReservations()
@@ -634,14 +957,16 @@ final class TalosToolDispatcher
         string $effectToken,
         ToolResult $result,
         int $stateVersion,
-    ): PersistedToolCall
-    {
+        ?TalosBrowserTask $browserTask = null,
+        ?TalosBrowserAction $browserAction = null,
+        ?TalosBrowserSession $browserSession = null,
+    ): PersistedToolCall {
         $evidenceIds = array_values(array_filter(array_map(
             static fn (array $evidence): mixed => $evidence['artifact_id'] ?? null,
             $result->evidence,
         ), 'is_string'));
 
-        return DB::transaction(function () use ($ownerUserId, $turn, $turnLeaseToken, $call, $effectToken, $result, $stateVersion, $evidenceIds): PersistedToolCall {
+        return DB::transaction(function () use ($ownerUserId, $turn, $turnLeaseToken, $call, $effectToken, $result, $stateVersion, $evidenceIds, $browserTask, $browserAction, $browserSession): PersistedToolCall {
             $lockedTurn = $this->lockLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
             $lockedCall = PersistedToolCall::query()
                 ->ownedBy($ownerUserId)
@@ -679,6 +1004,18 @@ final class TalosToolDispatcher
                 'execution_token' => null,
                 'execution_lease_expires_at' => null,
             ])->save();
+            if ($browserTask instanceof TalosBrowserTask
+                && $browserAction instanceof TalosBrowserAction
+                && $browserSession instanceof TalosBrowserSession) {
+                $this->browserTasks->recordResult(
+                    $ownerUserId,
+                    $browserTask,
+                    $browserAction,
+                    $lockedCall,
+                    $result,
+                    $browserSession,
+                );
+            }
 
             return $lockedCall;
         }, 3);
@@ -691,8 +1028,7 @@ final class TalosToolDispatcher
         string $turnLeaseToken,
         array $calls,
         ASTOrchestrator $orchestrator,
-    ): void
-    {
+    ): void {
         DB::transaction(function () use ($ownerUserId, $turn, $turnLeaseToken, $calls, $orchestrator): void {
             $this->lockLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
             foreach ($calls as $nodeId => $call) {
@@ -724,8 +1060,7 @@ final class TalosToolDispatcher
         TalosToolTurn $turn,
         string $turnLeaseToken,
         ASTOrchestrator $orchestrator,
-    ): void
-    {
+    ): void {
         $encoded = TalosDagCheckpointCodec::encode($orchestrator->exportState());
         DB::transaction(function () use ($ownerUserId, $turn, $turnLeaseToken, $encoded): void {
             $lockedTurn = $this->lockLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
@@ -746,8 +1081,7 @@ final class TalosToolDispatcher
         string $eventType,
         ProceduralNode $node,
         array $payload,
-    ): void
-    {
+    ): void {
         DB::transaction(function () use ($ownerUserId, $turn, $turnLeaseToken, $eventType, $node, $payload): void {
             $lockedTurn = $this->lockLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
             $this->events->record(

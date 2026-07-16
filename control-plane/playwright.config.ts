@@ -22,6 +22,7 @@ export default defineConfig({
         timeout: 8_000,
     },
     fullyParallel: false,
+    workers: 1,
     reporter: [
         ['list'],
         ['html', { open: 'never', outputFolder: 'storage/playwright-report' }],

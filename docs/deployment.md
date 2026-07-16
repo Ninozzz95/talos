@@ -62,7 +62,10 @@ No manual runtime or package-manager setup is required on Windows. The command:
 6. installs the pinned Playwright Chromium runtime and verifies its executable
    independently from npm dependency markers;
 7. creates `control-plane/.env` and SQLite when absent;
-8. runs migrations and starts validator, Laravel, queue, Vite, and browser worker.
+8. generates one ephemeral P-256 browser-action keypair for the current stack,
+   giving only the private half to Laravel/queue and only the public half to the
+   Browser Worker;
+9. runs migrations and starts validator, Laravel, queue, Vite, and browser worker.
 
 The command stays attached to the terminal. Stop the complete stack with
 `Ctrl+C`. A second `talos dev` or repair process fails closed while the first is
@@ -291,11 +294,12 @@ one terminates, allowing the restart policy to recover the complete web tier.
 `/readyz` is stricter than process liveness: it verifies Laravel, database,
 migrations, storage, queue configuration, validator health, and the authenticated
 browser-worker `/ready` endpoint. That endpoint launches Chromium and reports
-failure when the browser runtime is missing or cannot start. TALOS also requires
-the exact Browser HMI runtime protocol advertised by the current control-plane
-release. A worker from an older checkout may still answer HTTP health checks,
-but `/readyz` rejects it as incompatible instead of allowing interactions to
-fail later in the screenshot lightbox.
+failure when the browser runtime is missing or cannot start. TALOS requires both
+`talos.browser.worker.v2` and the exact
+`talos_browser_hmi_runtime_v2.1.0` compatibility identifier, plus the ES256
+action-capability descriptor advertised by the authenticated handshake. A
+worker from an older checkout may still answer HTTP health checks, but
+`/readyz` rejects it before a browser session can start.
 
 ### Browser deployment gates
 
@@ -306,8 +310,10 @@ silently skipped by a failure in an unrelated test job:
   dependencies, installs the pinned Playwright Chromium runtime, generates a
   random 256-bit worker token, starts the worker with `NODE_ENV=production`,
   waits for authenticated `/ready`, runs the official MCP Streamable HTTP
-  client round trip against that live worker, and runs
-  `LiveBrowserWorkerHmiIntegrationTest.php` with `--fail-on-skipped`.
+  client round trip against that live worker, and runs real Laravel/HMI and UI
+  gates. It also commits one authorized action, restarts the worker process,
+  and proves that the new worker instance rejects the old session before any
+  action can be redispatched.
 - `docker-integration` builds the production Compose stack under a unique
   project name. It authenticates through the real TALOS login and CSRF flow,
   creates a durable chat and browser session, navigates only to
@@ -507,9 +513,25 @@ HOST=127.0.0.1 PORT=3000 npm run start
 ### Native browser-worker service
 
 The native fallback must run the pinned Playwright worker as a managed private
-service. Generate one strong secret during provisioning, store it in the host
-secret manager or a root-readable environment file, and inject the same value
-into Laravel and the worker. Do not publish port `3100`.
+service. Provision two independent authentication layers:
+
+1. Generate one strong service token and inject the same value into Laravel and
+   the worker.
+2. Generate one P-256 action keypair. Laravel receives the private key and key
+   ID; the worker receives the public key and the same key ID. Never give the
+   private key to the worker or the public key to Laravel/queue.
+
+The tracked generator updates an environment file atomically, applies
+owner-only permissions where supported, and never prints key material:
+
+```bash
+node control-plane/scripts/browser-action-keypair.mjs \
+  --env-file /etc/talos/browser-action-keys.env
+```
+
+Move the generated values into the host secret manager or separate
+root-readable service environment files, then remove the combined provisioning
+file. Do not publish port `3100`.
 
 ```bash
 cd /srv/avm/browser-worker
@@ -521,6 +543,8 @@ HOST=127.0.0.1 \
 PORT=3100 \
 NODE_ENV=production \
 TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret> \
+TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=<public-key-base64> \
+TALOS_BROWSER_ACTION_KEY_ID=<same-key-id> \
 npm run start
 ```
 
@@ -530,6 +554,8 @@ Configure the control plane with the matching internal endpoint and secret:
 TALOS_BROWSER_WORKER_URL=http://127.0.0.1:3100
 TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret>
 TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=<private-key-base64>
+TALOS_BROWSER_ACTION_KEY_ID=<same-key-id>
 ```
 
 Use systemd, Supervisor, or the host's equivalent process manager for the
@@ -562,6 +588,8 @@ TALOS_VALIDATOR_HEALTH_URL=http://127.0.0.1:3000/health
 TALOS_BROWSER_WORKER_URL=http://127.0.0.1:3100
 TALOS_BROWSER_WORKER_TOKEN=<same-strong-secret>
 TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
+TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=<private-key-base64>
+TALOS_BROWSER_ACTION_KEY_ID=<same-key-id>
 APP_ENV=production
 APP_DEBUG=false
 SECURE_COOKIES=true
@@ -680,18 +708,29 @@ internal clients may use the stateless MCP Streamable HTTP endpoint at
 `/sessions/{id}/mcp`, implemented with the pinned official
 `@modelcontextprotocol/sdk` package.
 
-Both surfaces require the worker token and an exact owner reference. The MCP
-endpoint additionally rejects every browser `Origin` header and validates the
-HTTP host against `TALOS_BROWSER_MCP_ALLOWED_HOSTS`. Keep that allowlist limited
-to the Compose service name and explicit loopback names. Never publish port
-`3100`; TALOS remains the only browser-facing entrypoint.
+Both surfaces require the worker service token and an exact owner reference.
+Every consequential action additionally requires a short-lived, one-use ES256
+capability signed by Laravel and bound to the owner, worker session, action ID,
+operation, state version, exact request and approval. Possessing the service
+token alone cannot authorize a click. Compact capabilities and private keys are
+never persisted or logged. The MCP endpoint additionally rejects every browser
+`Origin` header and validates the HTTP host against
+`TALOS_BROWSER_MCP_ALLOWED_HOSTS`. Keep that allowlist limited to the Compose
+service name and explicit loopback names. Never publish port `3100`; TALOS
+remains the only browser-facing entrypoint.
 
-The REST health and readiness envelopes advertise the pinned
-`talos_browser_hmi_runtime_v2.1.0` compatibility identifier. Native launchers,
-Doctor, CI, Docker health checks, and Laravel `/readyz` require an exact match.
-After updating Browser Worker or control-plane code, restart the complete
-managed stack rather than leaving a pre-update worker process alive. A protocol
-mismatch is an incompatible deployment, not a retryable page interaction.
+The REST health and readiness envelopes advertise the pinned worker v2 and HMI
+v2.1 compatibility identifiers. The authenticated handshake also advertises
+the exact ES256 action-capability profile. Native launchers, Doctor, CI, Docker
+health checks, and Laravel `/readyz` require exact matches. After updating
+Browser Worker or control-plane code, restart the complete managed stack rather
+than leaving a pre-update worker process alive. A protocol mismatch is an
+incompatible deployment, not a retryable page interaction.
+
+Worker-local browser contexts and action-result retention are intentionally
+ephemeral. After a worker restart, old session IDs fail closed and are never
+blindly retried. Laravel owns durable product actions; task-level resume and
+checkpoint reconciliation are separate control-plane capabilities.
 
 Browser navigation uses a DNS-pinning egress proxy that rejects private,
 loopback, link-local, metadata, reserved, and disallowed resolved addresses.
@@ -710,6 +749,10 @@ Development:
 
 - [ ] Validator starts on `127.0.0.1:3000`.
 - [ ] Browser worker starts on `127.0.0.1:3100`.
+- [ ] Authenticated worker handshake advertises worker v2, HMI v2.1, and ES256
+      action capabilities.
+- [ ] Laravel/queue receive only the action private key; the worker receives
+      only the public key; validator and Vite receive neither.
 - [ ] TALOS starts on `127.0.0.1:8000`.
 - [ ] `/` redirects guests to `/setup` or `/login`.
 - [ ] `/chat` and `/dashboard` redirect to `/`.

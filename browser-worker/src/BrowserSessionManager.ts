@@ -6,15 +6,8 @@ import { BrowserEgressProxy } from "./BrowserEgressProxy.js";
 import type { BrowserSnapshotResult } from "./BrowserSnapshot.js";
 import { BrowserHmiCommandLedger } from "./BrowserHmiCommandLedger.js";
 import type { Capabilities, CreateSessionInput, NavigateInput } from "./schemas.js";
-
-export const MAX_CLICK_COMMAND_RECORDS = 64;
-export const CLICK_COMMAND_TTL_MS = 5 * 60 * 1_000;
-
-export interface BrowserClickCommandRecord {
-  requestHash: string;
-  createdAt: number;
-  result?: unknown;
-}
+import type { BrowserRuntimeDescriptor } from "./BrowserWorkerProtocol.js";
+import { BrowserActionLedger } from "./BrowserActionLedger.js";
 
 export interface SessionSummary {
   sessionId: string;
@@ -46,13 +39,20 @@ export interface BrowserSession extends SessionSummary {
   downloadGuard?: (download: Download) => void;
   fileChooserGuard?: (fileChooser: FileChooser) => void;
   hmiCommands: BrowserHmiCommandLedger;
-  clickCommands: Map<string, BrowserClickCommandRecord>;
+  actionLedger: BrowserActionLedger;
   hmiDispatchFenceStateVersion?: number;
 }
 
 interface OperationState {
   tail: Promise<void>;
   closing: boolean;
+  closePromise?: Promise<void>;
+}
+
+interface SessionCreateClaim {
+  fingerprint: string;
+  promise: Promise<SessionSummary>;
+  sessionId?: string;
 }
 
 export interface BrowserSessionManagerOptions {
@@ -81,6 +81,7 @@ export class BrowserSessionManager {
   private readonly sessions = new Map<string, BrowserSession>();
   private readonly operationStates = new Map<string, OperationState>();
   private readonly pendingCreates = new Set<Promise<void>>();
+  private readonly createClaims = new Map<string, SessionCreateClaim>();
   private browserPromise?: Promise<Browser>;
   private closePromise?: Promise<void>;
   private accepting = true;
@@ -102,7 +103,45 @@ export class BrowserSessionManager {
     this.cleanupHandle = scheduleCleanup(() => this.pruneExpired(), options.cleanupIntervalMs ?? 1_000);
   }
 
-  async create(input: CreateSessionInput): Promise<SessionSummary> {
+  async create(input: CreateSessionInput, idempotencyKey?: string): Promise<SessionSummary> {
+    if (idempotencyKey === undefined) return this.createFresh(input);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(idempotencyKey)) {
+      throw new BrowserError("Browser session idempotency key is invalid.", "TALOS_BROWSER_IDEMPOTENCY_KEY_INVALID", 400);
+    }
+
+    const claimKey = `${input.ownerRef}\u0000${idempotencyKey.toLowerCase()}`;
+    const fingerprint = createSessionFingerprint(input);
+    const existing = this.createClaims.get(claimKey);
+    if (existing) {
+      if (existing.fingerprint !== fingerprint) {
+        throw new BrowserError(
+          "Browser session idempotency key was already used for another create intent.",
+          "TALOS_BROWSER_SESSION_IDEMPOTENCY_CONFLICT",
+          422,
+        );
+      }
+      const replay = await existing.promise;
+      if (this.sessions.has(replay.sessionId)) return replay;
+      if (this.createClaims.get(claimKey) === existing) this.createClaims.delete(claimKey);
+      return this.create(input, idempotencyKey);
+    }
+
+    const claim: SessionCreateClaim = {
+      fingerprint,
+      promise: this.createFresh(input),
+    };
+    this.createClaims.set(claimKey, claim);
+    try {
+      const session = await claim.promise;
+      claim.sessionId = session.sessionId;
+      return session;
+    } catch (error) {
+      if (this.createClaims.get(claimKey) === claim) this.createClaims.delete(claimKey);
+      throw error;
+    }
+  }
+
+  private async createFresh(input: CreateSessionInput): Promise<SessionSummary> {
     this.assertAccepting();
     let completeCreate!: () => void;
     const pendingCreate = new Promise<void>((resolve) => { completeCreate = resolve; });
@@ -135,7 +174,7 @@ export class BrowserSessionManager {
           singlePageViolation: false,
           hmiIdentityKey: `__talos_hmi_${randomUUID().replaceAll("-", "")}`,
           hmiCommands: new BrowserHmiCommandLedger(),
-          clickCommands: new Map(),
+          actionLedger: new BrowserActionLedger(),
         };
         this.installSessionTripwires(session);
         this.sessions.set(session.sessionId, session);
@@ -247,38 +286,6 @@ export class BrowserSessionManager {
     return this.sessions.get(sessionId)?.latestSnapshot;
   }
 
-  claimClickCommand(sessionId: string, key: string, requestHash: string): { kind: "new" } | { kind: "replay"; result: unknown } | { kind: "conflict" } {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
-    this.pruneClickCommands(session);
-    const existing = session.clickCommands.get(key);
-    if (existing) {
-      if (existing.requestHash !== requestHash) return { kind: "conflict" };
-      if (existing.result !== undefined) return { kind: "replay", result: existing.result };
-      return { kind: "conflict" };
-    }
-    if (session.clickCommands.size >= MAX_CLICK_COMMAND_RECORDS) {
-      throw new BrowserError("Browser click command retention is exhausted.", "TALOS_BROWSER_CLICK_COMMAND_RETENTION_EXHAUSTED", 429, { max_records: MAX_CLICK_COMMAND_RECORDS });
-    }
-    session.clickCommands.set(key, { requestHash, createdAt: this.now() });
-    return { kind: "new" };
-  }
-
-  commitClickCommand(sessionId: string, key: string, requestHash: string, result: unknown): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
-    const existing = session.clickCommands.get(key);
-    if (!existing || existing.requestHash !== requestHash) {
-      throw new BrowserError("Browser click command is not owned by this request.", "TALOS_BROWSER_CLICK_COMMAND_CONFLICT", 409);
-    }
-    existing.result = result;
-  }
-
-  releaseClickCommand(sessionId: string, key: string, requestHash: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session?.clickCommands.get(key)?.requestHash === requestHash) session.clickCommands.delete(key);
-  }
-
   async runExclusive<T>(
     sessionId: string,
     operation: (session: BrowserSession) => Promise<T>,
@@ -322,35 +329,78 @@ export class BrowserSessionManager {
     return session;
   }
 
+  recordAutomationMutation(sessionId: string): BrowserSession {
+    const session = this.advanceState(sessionId);
+    session.status = "active";
+    return session;
+  }
+
   async assertRuntimeReady(): Promise<void> {
+    await this.runtimeDescriptor();
+  }
+
+  async runtimeDescriptor(): Promise<BrowserRuntimeDescriptor> {
     const browser = await this.getBrowser();
     if (!browser.isConnected()) {
       throw new Error("Chromium runtime is not connected.");
     }
+    const version = browser.version().trim();
+    if (version.length === 0 || version.length > 128) {
+      throw new Error("Chromium runtime returned an invalid version.");
+    }
+
+    return { engine: "chromium", version };
   }
 
   async delete(sessionId: string): Promise<void> {
     const state = this.operationStates.get(sessionId) ?? { tail: Promise.resolve(), closing: true };
+    if (state.closePromise) return state.closePromise;
     state.closing = true;
     this.operationStates.set(sessionId, state);
-    await state.tail;
+    state.closePromise = (async () => {
+      await state.tail;
+      await this.disposeSession(sessionId, state);
+    })();
+
+    return state.closePromise;
+  }
+
+  async cancel(sessionId: string, reason: string): Promise<void> {
+    const normalizedReason = reason.trim();
+    if (normalizedReason.length === 0 || normalizedReason.length > 512
+        || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(normalizedReason)) {
+      throw new BrowserError("Browser cancellation reason is invalid.", "TALOS_BROWSER_INVALID_CANCELLATION", 400);
+    }
+    const state = this.operationStates.get(sessionId) ?? { tail: Promise.resolve(), closing: true };
+    if (state.closePromise) return state.closePromise;
+    state.closing = true;
+    this.operationStates.set(sessionId, state);
+    state.closePromise = this.disposeSession(sessionId, state, normalizedReason);
+
+    return state.closePromise;
+  }
+
+  private async disposeSession(sessionId: string, state: OperationState, reason?: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       if (this.operationStates.get(sessionId) === state) this.operationStates.delete(sessionId);
       return;
     }
     session.hmiCommands.clear();
-    session.clickCommands.clear();
+    session.actionLedger.clear();
     await this.disposeSnapshot(session.latestSnapshot?.value);
     session.latestSnapshot = undefined;
     if (session.singlePageGuard && typeof session.context.off === "function") session.context.off("page", session.singlePageGuard);
     if (session.downloadGuard && typeof session.page.off === "function") session.page.off("download", session.downloadGuard);
     if (session.fileChooserGuard && typeof session.page.off === "function") session.page.off("filechooser", session.fileChooserGuard);
     try {
-      await session.context.close();
+      await session.context.close(reason === undefined ? undefined : { reason });
     } finally {
       if (this.sessions.get(sessionId) === session) this.sessions.delete(sessionId);
       if (this.operationStates.get(sessionId) === state) this.operationStates.delete(sessionId);
+      for (const [claimKey, claim] of this.createClaims) {
+        if (claim.sessionId === sessionId) this.createClaims.delete(claimKey);
+      }
     }
   }
 
@@ -406,7 +456,6 @@ export class BrowserSessionManager {
   }
 
   private async pruneExpired(): Promise<void> {
-    for (const session of this.sessions.values()) this.pruneClickCommands(session);
     const expiredIds = [...this.sessions.values()]
       .filter((session) => Date.parse(session.expiresAt) <= this.now() && !this.operationStates.has(session.sessionId))
       .map((session) => session.sessionId);
@@ -490,7 +539,7 @@ export class BrowserSessionManager {
       downloadGuard: _downloadGuard,
       fileChooserGuard: _fileChooserGuard,
       hmiCommands: _hmiCommands,
-      clickCommands: _clickCommands,
+      actionLedger: _actionLedger,
       hmiDispatchFenceStateVersion: _hmiDispatchFenceStateVersion,
       ...summary
     } = session;
@@ -550,15 +599,26 @@ export class BrowserSessionManager {
     });
   }
 
-  private pruneClickCommands(session: BrowserSession): void {
-    const expiresBefore = this.now() - CLICK_COMMAND_TTL_MS;
-    for (const [key, record] of session.clickCommands) {
-      if (record.createdAt <= expiresBefore) session.clickCommands.delete(key);
-    }
-  }
-
   private async disposeSnapshot(snapshot: BrowserSnapshotResult | undefined): Promise<void> {
     if (!snapshot?.refBindings) return;
     await Promise.all([...snapshot.refBindings.values()].map((binding) => binding.dispose().catch(() => undefined)));
   }
+}
+
+function createSessionFingerprint(input: CreateSessionInput): string {
+  return JSON.stringify({
+    ownerRef: input.ownerRef,
+    mode: input.mode,
+    viewport: { width: input.viewport.width, height: input.viewport.height },
+    ttlSeconds: input.ttlSeconds,
+    capabilities: {
+      navigation: input.capabilities.navigation,
+      screenshots: input.capabilities.screenshots,
+      accessibilitySnapshot: input.capabilities.accessibilitySnapshot,
+      actions: input.capabilities.actions,
+      hmiActions: input.capabilities.hmiActions ?? false,
+      downloads: input.capabilities.downloads,
+      uploads: input.capabilities.uploads,
+    },
+  });
 }

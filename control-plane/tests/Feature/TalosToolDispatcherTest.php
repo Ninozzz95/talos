@@ -4,21 +4,30 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosBrowserAction;
+use App\Models\TalosBrowserEvidenceBundle;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosBrowserTask;
+use App\Models\TalosMessage;
 use App\Models\TalosRun;
 use App\Models\TalosSession;
-use App\Models\TalosToolTurn;
 use App\Models\TalosToolCall;
+use App\Models\TalosToolTurn;
 use App\Models\User;
+use App\Services\Talos\Agent\TalosApprovalService;
+use App\Services\Talos\Agent\TalosBudgetExceededException;
+use App\Services\Talos\Agent\TalosExecutionClaimService;
+use App\Services\Talos\Agent\TalosProceduralGuardCheckpoint;
 use App\Services\Talos\Agent\TalosToolDispatcher;
 use App\Services\Talos\Agent\TalosToolExecutionBackend;
 use App\Services\Talos\Agent\TalosToolRecoveryRequiredException;
-use App\Services\Talos\Agent\TalosExecutionClaimService;
-use App\Services\Talos\Agent\TalosProceduralGuardCheckpoint;
-use App\Services\Talos\Agent\TalosBudgetExceededException;
-use App\Services\Talos\Agent\TalosApprovalService;
+use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserRunArtifactCorrelator;
+use App\Services\Talos\Browser\TalosBrowserTakeoverService;
+use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use Kadmos\Tool\ProceduralBudget;
 use Kadmos\Tool\ProceduralCompileContext;
@@ -34,6 +43,134 @@ use Tests\TestCase;
 final class TalosToolDispatcherTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $fake = Storage::fake('dispatcher-evidence-'.str()->uuid());
+        Storage::set('local', $fake);
+    }
+
+    public function test_server_browser_policy_denial_never_reaches_the_physical_backend(): void
+    {
+        [$user, $session, $run, $turn, $browser] = $this->context();
+        $browser->update([
+            'policy' => [
+                'browser_action_policy' => ['allowed_domains' => ['allowed.example']],
+            ],
+        ]);
+        $origin = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Navigate to a blocked domain.',
+        ]);
+        $task = TalosBrowserTask::query()->create([
+            'schema_version' => 'talos.browser.task.v1',
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'origin_message_id' => $origin->id,
+            'browser_session_id' => $browser->id,
+            'goal' => 'Navigate under the server domain policy.',
+            'status' => 'running',
+            'autonomy_profile' => 'observe',
+            'budget' => ['max_actions' => 8, 'max_elapsed_ms' => 60_000, 'max_bytes' => 1_000_000, 'max_tabs' => 4],
+            'state_version' => 3,
+            'requested_at' => now(),
+            'started_at' => now(),
+        ]);
+        [$plan, $checkpoint] = $this->compilePlan(
+            [new ToolCall('provider-policy-denied', 'browser_navigate', ['url' => 'https://blocked.example/'], null, [])],
+            new ProceduralCompileContext(
+                userId: (string) $user->id,
+                chatSessionId: (string) $session->id,
+                runId: (string) $run->id,
+                turnId: (string) $turn->id,
+                browserSessionId: (string) $browser->id,
+                stateVersion: 0,
+                deadlineAt: now()->addMinute()->toIso8601String(),
+                observedAt: now()->toIso8601String(),
+            ),
+        );
+        $backend = new RecordingToolExecutionBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        $report = $this->app->make(TalosToolDispatcher::class)->dispatch(
+            $user->id,
+            $turn,
+            $this->claimTurnLease($user, $turn),
+            $plan,
+            $checkpoint,
+            $browser->refresh(),
+        );
+
+        $this->assertSame([], $backend->executedTools);
+        $this->assertSame('failed', $report->status);
+        $this->assertSame('browser_policy_domain_denied', $turn->results()->firstOrFail()->error_code);
+        $this->assertSame('denied', $task->actions()->firstOrFail()->status);
+        $this->assertDatabaseHas('talos_run_events', [
+            'run_id' => $run->id,
+            'event_type' => 'tool.execution.denied',
+        ]);
+    }
+
+    public function test_active_human_takeover_pauses_model_dispatch_before_the_backend(): void
+    {
+        [$user, $session, $run, $turn, $browser] = $this->context();
+        $origin = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Pause for human takeover.',
+        ]);
+        $task = TalosBrowserTask::query()->create([
+            'schema_version' => 'talos.browser.task.v1',
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'origin_message_id' => $origin->id,
+            'browser_session_id' => $browser->id,
+            'goal' => 'Pause model execution during human control.',
+            'status' => 'running',
+            'autonomy_profile' => 'observe',
+            'budget' => ['max_actions' => 8, 'max_elapsed_ms' => 60_000, 'max_bytes' => 1_000_000, 'max_tabs' => 4],
+            'state_version' => 3,
+            'requested_at' => now(),
+            'started_at' => now(),
+        ]);
+        $this->app->make(TalosBrowserTakeoverService::class)->acquire(
+            $user->id,
+            $task->id,
+            'dispatcher-human',
+            60,
+            'dispatcher-takeover',
+        );
+        [$plan, $checkpoint] = $this->compilePlan(
+            [new ToolCall('provider-paused', 'browser_navigate', ['url' => 'https://example.test/'], null, [])],
+            new ProceduralCompileContext(
+                userId: (string) $user->id,
+                chatSessionId: (string) $session->id,
+                runId: (string) $run->id,
+                turnId: (string) $turn->id,
+                browserSessionId: (string) $browser->id,
+                stateVersion: 0,
+                deadlineAt: now()->addMinute()->toIso8601String(),
+                observedAt: now()->toIso8601String(),
+            ),
+        );
+        $backend = new RecordingToolExecutionBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        $report = $this->app->make(TalosToolDispatcher::class)->dispatch(
+            $user->id,
+            $turn,
+            $this->claimTurnLease($user, $turn),
+            $plan,
+            $checkpoint,
+            $browser,
+        );
+
+        $this->assertSame([], $backend->executedTools);
+        $this->assertSame('failed', $report->status);
+        $this->assertSame('TALOS_BROWSER_HUMAN_TAKEOVER_ACTIVE', $turn->results()->firstOrFail()->error_code);
+    }
 
     public function test_commits_compiled_calls_and_guard_before_the_first_physical_effect(): void
     {
@@ -192,7 +329,8 @@ final class TalosToolDispatcherTest extends TestCase
     public function test_dispatches_a_compiled_dag_in_dependency_order_and_persists_canonical_results(): void
     {
         [$user, $session, $run, $turn, $browser] = $this->context();
-        $backend = new RecordingToolExecutionBackend;
+        $browserTask = $this->beginBrowserTask($user, $session, $run, $browser);
+        $backend = $this->durableRecordingBackend();
         $this->app->instance(TalosToolExecutionBackend::class, $backend);
         [$plan, $checkpoint] = $this->compilePlan(
             [
@@ -221,6 +359,7 @@ final class TalosToolDispatcherTest extends TestCase
             $browser,
             $checkpoint->logicalCallIdsFor(array_map(static fn (ProceduralNode $node): ToolCall => $node->call, $plan->nodes)),
             $checkpoint->repairAttemptsFor(array_map(static fn (ProceduralNode $node): ToolCall => $node->call, $plan->nodes)),
+            browserTask: $browserTask,
         );
 
         $this->assertSame('completed', $report->status);
@@ -240,6 +379,11 @@ final class TalosToolDispatcherTest extends TestCase
             ['tool.execution.started', 'tool.execution.completed', 'tool.execution.started', 'tool.execution.completed'],
             $run->events()->orderBy('sequence')->pluck('event_type')->all(),
         );
+        $this->assertSame(2, $browserTask->actions()->where('status', 'evidence_committed')->count());
+        $this->assertSame(2, TalosBrowserEvidenceBundle::query()
+            ->where('task_id', $browserTask->id)
+            ->whereNotNull('reconciled_at')
+            ->count());
     }
 
     public function test_persists_repaired_provider_calls_under_their_stable_logical_attempt(): void
@@ -292,7 +436,8 @@ final class TalosToolDispatcherTest extends TestCase
     public function test_safe_sibling_completes_while_high_risk_node_waits_then_resume_consumes_exact_approval_once(): void
     {
         [$user, $session, $run, $turn, $browser] = $this->context();
-        $backend = new RecordingToolExecutionBackend;
+        $browserTask = $this->beginBrowserTask($user, $session, $run, $browser);
+        $backend = $this->durableRecordingBackend();
         $this->app->instance(TalosToolExecutionBackend::class, $backend);
         [$plan, $checkpoint] = $this->compilePlan(
             [
@@ -313,7 +458,7 @@ final class TalosToolDispatcherTest extends TestCase
         $dispatcher = $this->app->make(TalosToolDispatcher::class);
         $leaseToken = $this->claimTurnLease($user, $turn);
 
-        $waiting = $dispatcher->dispatch($user->id, $turn, $leaseToken, $plan, $checkpoint, $browser);
+        $waiting = $dispatcher->dispatch($user->id, $turn, $leaseToken, $plan, $checkpoint, $browser, browserTask: $browserTask);
 
         $this->assertSame('awaiting_approval', $waiting->status);
         $this->assertSame(['web_search'], $backend->executedTools);
@@ -335,15 +480,20 @@ final class TalosToolDispatcherTest extends TestCase
         );
         $resumeLeaseToken = $this->claimTurnLease($user, $turn->refresh());
 
-        $completed = $dispatcher->dispatch($user->id, $turn->refresh(), $resumeLeaseToken, $plan, $checkpoint, $browser->refresh());
+        $completed = $dispatcher->dispatch($user->id, $turn->refresh(), $resumeLeaseToken, $plan, $checkpoint, $browser->refresh(), browserTask: $browserTask->refresh());
 
         $this->assertSame('completed', $completed->status);
         $this->assertSame(['web_search', 'browser_click'], $backend->executedTools);
         $this->assertCount(2, $completed->results);
         $this->assertSame(2, $turn->results()->count());
         $this->assertSame('claimed', $approvalCall->refresh()->approval_state);
+        $this->assertSame('evidence_committed', $browserTask->actions()->firstOrFail()->status);
+        $this->assertNotNull(TalosBrowserEvidenceBundle::query()
+            ->where('task_id', $browserTask->id)
+            ->firstOrFail()
+            ->reconciled_at);
 
-        $replayed = $dispatcher->dispatch($user->id, $turn->refresh(), $resumeLeaseToken, $plan, $checkpoint, $browser->refresh());
+        $replayed = $dispatcher->dispatch($user->id, $turn->refresh(), $resumeLeaseToken, $plan, $checkpoint, $browser->refresh(), browserTask: $browserTask->refresh());
         $this->assertSame('completed', $replayed->status);
         $this->assertSame(['web_search', 'browser_click'], $backend->executedTools);
     }
@@ -385,6 +535,71 @@ final class TalosToolDispatcherTest extends TestCase
 
         $this->assertSame([], $backend->executedTools);
         $this->assertSame(0, $turn->budgetReservations()->where('status', 'reserved')->count());
+    }
+
+    public function test_browser_task_budget_denial_persists_denied_action_without_backend_execution(): void
+    {
+        [$user, $session, $run, $turn, $browser] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'run_id' => $run->id,
+            'role' => 'user',
+            'content' => 'Do not cross the Browser task action limit.',
+        ]);
+        $task = $this->app->make(TalosBrowserTaskRuntime::class)->begin($user->id, $run, $browser);
+        $task->forceFill(['budget' => [...$task->budget, 'max_actions' => 1]])->save();
+        TalosBrowserAction::query()->create([
+            'schema_version' => 'talos.browser.action.v1',
+            'task_id' => $task->id,
+            'user_id' => $user->id,
+            'talos_session_id' => $task->talos_session_id,
+            'intent_id' => 'already-consumed-intent',
+            'sequence' => 1,
+            'kind' => 'snapshot',
+            'arguments' => [],
+            'expected_state_version' => $task->state_version,
+            'risk' => 'read',
+            'idempotency_key' => 'sha256:'.hash('sha256', 'already-consumed-action'),
+            'preconditions' => [],
+            'status' => 'committed',
+            'requested_at' => now(),
+            'approved_at' => now(),
+            'started_at' => now(),
+            'committed_at' => now(),
+        ]);
+        [$plan, $checkpoint] = $this->compilePlan(
+            [new ToolCall('provider-task-budget-nav', 'browser_navigate', ['url' => 'https://example.com'], null, [])],
+            new ProceduralCompileContext(
+                userId: (string) $user->id,
+                chatSessionId: (string) $session->id,
+                runId: (string) $run->id,
+                turnId: (string) $turn->id,
+                browserSessionId: (string) $browser->id,
+                stateVersion: 0,
+                deadlineAt: now()->addMinute()->toIso8601String(),
+                observedAt: now()->toIso8601String(),
+            ),
+        );
+        $backend = new RecordingToolExecutionBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        $report = $this->app->make(TalosToolDispatcher::class)->dispatch(
+            $user->id,
+            $turn,
+            $this->claimTurnLease($user, $turn),
+            $plan,
+            $checkpoint,
+            $browser,
+            browserTask: $task->refresh(),
+        );
+
+        $this->assertSame('failed', $report->status);
+        $this->assertSame([], $backend->executedTools);
+        $action = TalosBrowserAction::query()->where('task_id', $task->id)->where('status', 'denied')->firstOrFail();
+        $this->assertSame('denied', $action->status);
+        $this->assertNull($action->started_at);
+        $this->assertSame('TALOS_BROWSER_BUDGET_EXHAUSTED', $action->error_code);
+        $this->assertSame('TALOS_BROWSER_BUDGET_EXHAUSTED', $turn->results()->firstOrFail()->error_code);
     }
 
     public function test_an_expired_in_flight_effect_is_never_executed_again_without_downstream_deduplication(): void
@@ -752,8 +967,8 @@ final class TalosToolDispatcherTest extends TestCase
     }
 
     /**
-     * @param list<ToolCall> $calls
-     * @param list<string> $repairSourceProviderCallIds
+     * @param  list<ToolCall>  $calls
+     * @param  list<string>  $repairSourceProviderCallIds
      * @return array{ProceduralPlan, TalosProceduralGuardCheckpoint}
      */
     private function compilePlan(
@@ -788,6 +1003,31 @@ final class TalosToolDispatcherTest extends TestCase
         $this->assertNotNull($token);
 
         return $token;
+    }
+
+    private function beginBrowserTask(
+        User $user,
+        TalosSession $session,
+        TalosRun $run,
+        TalosBrowserSession $browser,
+    ): TalosBrowserTask {
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'run_id' => $run->id,
+            'role' => 'user',
+            'content' => (string) $run->prompt,
+        ]);
+
+        return $this->app->make(TalosBrowserTaskRuntime::class)->begin($user->id, $run, $browser);
+    }
+
+    private function durableRecordingBackend(?\Closure $afterExecution = null): RecordingToolExecutionBackend
+    {
+        return new RecordingToolExecutionBackend(
+            $afterExecution,
+            $this->app->make(TalosBrowserArtifactStore::class),
+            $this->app->make(TalosBrowserRunArtifactCorrelator::class),
+        );
     }
 
     /** @return array<string, ProceduralToolSpec> */
@@ -870,12 +1110,97 @@ final class RecordingToolExecutionBackend implements TalosToolExecutionBackend
     /** @var list<string> */
     public array $executedTools = [];
 
-    public function __construct(private readonly ?\Closure $afterExecution = null) {}
+    public function __construct(
+        private readonly ?\Closure $afterExecution = null,
+        private readonly ?TalosBrowserArtifactStore $browserArtifacts = null,
+        private readonly ?TalosBrowserRunArtifactCorrelator $browserRunArtifacts = null,
+    ) {}
 
     public function execute(ProceduralNode $node, TalosToolTurn $turn, ?TalosBrowserSession $browserSession = null): ToolResult
     {
         $this->executedTools[] = $node->call->name;
         ($this->afterExecution)?->__invoke(count($this->executedTools));
+        if (str_starts_with($node->call->name, 'browser_')
+            && $this->browserArtifacts instanceof TalosBrowserArtifactStore
+            && $this->browserRunArtifacts instanceof TalosBrowserRunArtifactCorrelator) {
+            if (! $browserSession instanceof TalosBrowserSession) {
+                throw new \LogicException('Durable Browser test evidence requires an owned Browser session.');
+            }
+            $browserSession->refresh();
+            if ((int) $browserSession->worker_state_version !== $node->context->stateVersion) {
+                throw new \LogicException('Durable Browser test evidence received a stale worker state.');
+            }
+            $resultStateVersion = $node->context->stateVersion
+                + (in_array($node->call->name, ['browser_navigate', 'browser_click'], true) ? 1 : 0);
+            $url = 'https://example.com/';
+            $title = 'Dispatcher fixture';
+            $snapshot = [
+                'snapshot_id' => 'snapshot-'.$node->call->providerCallId,
+                'format' => 'accessibility_refs_v1',
+                'url' => $url,
+                'title' => $title,
+                'textDigest' => hash('sha256', $node->call->providerCallId),
+                'nodes' => [],
+            ];
+            $contents = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            $artifact = $this->browserArtifacts->store(
+                $browserSession,
+                'snapshot',
+                'application/json',
+                $contents,
+                [
+                    'url' => $url,
+                    'title' => $title,
+                    'format' => 'accessibility_refs_v1',
+                    'text_digest' => $snapshot['textDigest'],
+                    'node_count' => 0,
+                ],
+                [
+                    'source_command_id' => $node->call->providerCallId,
+                    'source_state_version' => $node->context->stateVersion,
+                    'state_version' => $resultStateVersion,
+                    'trust_boundary' => 'untrusted_browser_content',
+                ],
+            );
+            $this->browserRunArtifacts->correlate(
+                $turn,
+                $browserSession,
+                $artifact,
+                $node->call->providerCallId,
+            );
+            $browserSession->forceFill([
+                'last_snapshot_artifact_id' => $artifact->id,
+                'current_url' => $url,
+                'current_title' => $title,
+                'worker_state_version' => $resultStateVersion,
+                'last_seen_at' => now(),
+            ])->save();
+            $evidence = [[
+                'artifact_id' => (string) $artifact->id,
+                'kind' => 'snapshot',
+                'sha256' => 'sha256:'.$artifact->sha256,
+                'trusted_boundary' => 'untrusted_browser_content',
+            ]];
+
+            return new ToolResult(
+                toolUseId: $node->call->providerCallId,
+                isError: false,
+                content: [['type' => 'text', 'text' => 'ok']],
+                structuredContent: [
+                    'tool' => $node->call->name,
+                    'state_version' => $resultStateVersion,
+                    'observation' => ['url' => $url, 'title' => $title],
+                    'used_browser_context' => [
+                        'url' => $url,
+                        'title' => $title,
+                        'snapshot_artifact_id' => (string) $artifact->id,
+                        'evidence_hash' => 'sha256:'.$artifact->sha256,
+                    ],
+                    'evidence_ids' => [(string) $artifact->id],
+                ],
+                evidence: $evidence,
+            );
+        }
         $artifactId = 'artifact-'.$node->call->providerCallId;
         $evidence = $node->producesEvidence ? [[
             'artifact_id' => $artifactId,

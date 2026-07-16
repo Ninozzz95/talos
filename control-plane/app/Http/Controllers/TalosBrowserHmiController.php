@@ -11,6 +11,7 @@ use App\Models\TalosBrowserSession;
 use App\Models\TalosSession;
 use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
+use App\Services\Talos\Browser\BrowserActionAuthorization;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\TalosBrowserArtifactIntegrityException;
@@ -18,6 +19,7 @@ use App\Services\Talos\Browser\TalosBrowserArtifactReader;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserHmiApprovalService;
 use App\Services\Talos\Browser\TalosBrowserHmiPolicy;
+use App\Services\Talos\Browser\TalosBrowserLegacyWriteGate;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,10 +38,13 @@ final class TalosBrowserHmiController extends Controller
         private readonly TalosBrowserArtifactStore $artifacts,
         private readonly TalosBrowserArtifactReader $artifactReader,
         private readonly TalosBrowserPolicy $navigationPolicy,
+        private readonly TalosBrowserLegacyWriteGate $legacyWrites,
     ) {}
 
     public function pointer(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.hmi.pointer');
+
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
             return $error;
         }
@@ -169,6 +174,8 @@ final class TalosBrowserHmiController extends Controller
 
     public function confirm(Request $request, string $browserHmiApproval): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.hmi.confirm');
+
         $validator = Validator::make($request->all(), [
             'decision' => ['required', 'string', 'in:approve,reject'],
             'request_hash' => ['required', 'string', 'regex:/^sha256:[a-f0-9]{64}$/'],
@@ -478,10 +485,24 @@ final class TalosBrowserHmiController extends Controller
             }
         }
         try {
+            if (! is_string($approvalId)
+                || ! is_string($approvalRequestHash)
+                || ! is_string($executionLeaseToken)) {
+                throw new BrowserWorkerException(
+                    'TALOS_BROWSER_ACTION_CAPABILITY_REQUIRED',
+                    'A signed browser action capability is required.',
+                );
+            }
             $result = $this->client->executePointer(
                 $this->ownerRef((int) $session->user_id),
                 (string) $session->worker_session_id,
                 $payload,
+                authorization: BrowserActionAuthorization::userApproval(
+                    $commandId,
+                    $approvalId,
+                    $approvalRequestHash,
+                    $executionLeaseToken,
+                ),
             );
         } catch (BrowserWorkerException $exception) {
             if ($approvalId !== null && $this->isProvenPreDispatchFailure($exception->errorCode)) {

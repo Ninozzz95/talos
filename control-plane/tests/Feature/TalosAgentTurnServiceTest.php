@@ -4,28 +4,46 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\TalosBrowserAction;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosBrowserTask;
 use App\Models\TalosMessage;
 use App\Models\TalosModelProfile;
 use App\Models\TalosRun;
 use App\Models\TalosRunArtifact;
 use App\Models\TalosSession;
+use App\Models\TalosToolCall;
 use App\Models\TalosToolTurn;
 use App\Models\User;
+use App\Services\Runs\TalosRunEventRecorder;
+use App\Services\Talos\Agent\TalosAgentBudgetService;
 use App\Services\Talos\Agent\TalosAgentTurnService;
 use App\Services\Talos\Agent\TalosExecutionClaimService;
+use App\Services\Talos\Agent\TalosGroundingGate;
+use App\Services\Talos\Agent\TalosProceduralGuardCheckpoint;
+use App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore;
 use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProviderGateway;
 use App\Services\Talos\Agent\TalosProviderOutcomeCodec;
 use App\Services\Talos\Agent\TalosProviderRecoveryRequiredException;
-use App\Services\Talos\Agent\TalosProceduralGuardCheckpoint;
+use App\Services\Talos\Agent\TalosProviderToolArgumentValidator;
+use App\Services\Talos\Agent\TalosToolDispatcher;
 use App\Services\Talos\Agent\TalosToolExecutionBackend;
+use App\Services\Talos\Agent\TalosToolRepairPolicy;
+use App\Services\Talos\Browser\BrowserSessionClient;
+use App\Services\Talos\Browser\FakeBrowserSessionClient;
+use App\Services\Talos\Browser\TalosBrowserArtifactReader;
+use App\Services\Talos\Browser\TalosBrowserFollowUpResolver;
+use App\Services\Talos\Browser\TalosBrowserRecoveryService;
+use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
-use Kadmos\Provider\ProviderFailure;
 use Kadmos\Provider\ProviderCapabilities;
+use Kadmos\Provider\ProviderFailure;
 use Kadmos\Provider\ProviderTurnAdapter;
+use Kadmos\Tool\ProceduralLoopGuard;
 use Kadmos\Tool\ProceduralNode;
+use Kadmos\Tool\ProceduralToolCompiler;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ProviderTurnResponse;
 use Kadmos\Tool\ProviderTurnState;
@@ -64,6 +82,49 @@ final class TalosAgentTurnServiceTest extends TestCase
         $this->assertSame(1, TalosToolTurn::query()->where('run_id', $run->id)->count());
     }
 
+    public function test_agent_turn_appends_a_server_owned_directive_without_replacing_history(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create(['session_id' => $session->id, 'role' => 'user', 'content' => 'Earlier question.', 'metadata' => []]);
+        TalosMessage::query()->create(['session_id' => $session->id, 'role' => 'assistant', 'content' => 'Earlier answer.', 'metadata' => []]);
+        $current = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Cosa vedi qui?',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $run->forceFill(['prompt' => $current->content, 'prompt_hash' => hash('sha256', $current->content)])->save();
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-follow-up-directive',
+            'status' => 'active',
+            'mode' => 'read_only',
+            'current_url' => 'https://example.com/current',
+            'current_title' => 'Current page',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true],
+            'policy' => [],
+            'expires_at' => now()->addHour(),
+        ]);
+        $adapter = new AgentTurnTestAdapter(finalImmediately: true);
+
+        $outcome = $this->service($adapter)->execute($user->id, $run->refresh(), $profile, $browser);
+
+        $this->assertSame('completed', $outcome->status, (string) $outcome->failureCode);
+        $this->assertSame([
+            ['role' => 'user', 'content' => 'Earlier question.'],
+            ['role' => 'assistant', 'content' => 'Earlier answer.'],
+            ['role' => 'user', 'content' => 'Cosa vedi qui?'],
+        ], $adapter->receivedMessages);
+        $this->assertStringContainsString('TALOS_BROWSER_FOLLOW_UP_DIRECTIVE_V1', $adapter->receivedSystemPrompt);
+        $this->assertStringContainsString('browser_snapshot', $adapter->receivedSystemPrompt);
+        $this->assertStringContainsString('https://example.com/current', $adapter->receivedSystemPrompt);
+        $this->assertDatabaseCount('talos_browser_tasks', 0);
+    }
+
     public function test_native_tool_round_crosses_compiler_dispatcher_continuation_and_grounding(): void
     {
         [$user, $session, $run, $profile] = $this->context();
@@ -96,6 +157,241 @@ final class TalosAgentTurnServiceTest extends TestCase
             ['provider.turn.started', 'tool.execution.started', 'tool.execution.completed', 'provider.turn.continued', 'assistant.grounded'],
             $run->events()->orderBy('sequence')->pluck('event_type')->all(),
         );
+    }
+
+    public function test_browser_tool_round_persists_task_action_evidence_and_terminal_state(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        $message = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Navigate to the example page.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-agent-task',
+            'status' => 'active',
+            'mode' => 'read_only',
+            'current_url' => 'https://example.test/start',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $worker = new FakeBrowserSessionClient;
+        $worker->inspectResponse = [
+            'sessionId' => $browser->worker_session_id,
+            'status' => 'active',
+            'mode' => 'read_only',
+            'viewport' => ['width' => 1280, 'height' => 800],
+            'capabilities' => $browser->capabilities,
+            'stateVersion' => 0,
+            'expiresAt' => now()->addHour()->toJSON(),
+        ];
+        $this->app->instance(BrowserSessionClient::class, $worker);
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: false,
+            toolName: 'browser_navigate',
+            toolArguments: ['url' => 'https://example.test/target'],
+        );
+        $backend = new AgentTurnTestBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile, $browser);
+
+        $this->assertSame('completed', $outcome->status, (string) $outcome->failureCode);
+        $this->assertSame(['browser_navigate'], $backend->executedTools);
+        $task = TalosBrowserTask::query()
+            ->where('user_id', $user->id)
+            ->where('origin_message_id', $message->id)
+            ->firstOrFail();
+        $this->assertSame('completed', $task->status);
+        $this->assertSame(5, $task->events()->count());
+        $action = TalosBrowserAction::query()->where('task_id', $task->id)->firstOrFail();
+        $this->assertSame('evidence_committed', $action->status);
+        $this->assertNotNull($action->started_at);
+        $this->assertNotNull($action->committed_at);
+        $this->assertSame(1, $action->evidenceBundles()->count());
+    }
+
+    public function test_browser_result_replays_after_provider_continuation_recovery_without_a_second_dispatch(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Navigate once, then recover the provider continuation.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-agent-provider-recovery',
+            'status' => 'active',
+            'mode' => 'read_only',
+            'current_url' => 'https://example.test/start',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $worker = new FakeBrowserSessionClient;
+        $worker->inspectResponse = [
+            'sessionId' => $browser->worker_session_id,
+            'status' => 'active',
+            'mode' => 'read_only',
+            'viewport' => ['width' => 1280, 'height' => 800],
+            'capabilities' => $browser->capabilities,
+            'stateVersion' => 0,
+            'expiresAt' => now()->addHour()->toJSON(),
+        ];
+        $this->app->instance(BrowserSessionClient::class, $worker);
+        $backend = new AgentTurnTestBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+        $failing = new FailingContinueAgentAdapter(
+            'browser_navigate',
+            ['url' => 'https://example.test/target'],
+        );
+
+        $first = $this->service($failing)->execute($user->id, $run, $profile, $browser);
+
+        $this->assertSame('recovery_required', $first->status);
+        $task = TalosBrowserTask::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame('recovering', $task->status);
+        $this->assertSame(['browser_navigate'], $backend->executedTools);
+        $worker->inspectResponse['stateVersion'] = 1;
+        $this->app->make(TalosBrowserRecoveryService::class)
+            ->reconcile($user->id, $task->id, 'recover-agent-provider-continuation');
+        $turn = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail();
+        $turn->forceFill([
+            'status' => 'awaiting_tool_results',
+            'provider_operation_key' => null,
+            'provider_operation_hash' => null,
+            'provider_operation_status' => null,
+            'execution_lease_token' => null,
+            'execution_lease_expires_at' => null,
+            'execution_lease_phase' => null,
+            'completed_at' => null,
+        ])->save();
+        $run->forceFill(['status' => 'running', 'completed_at' => null])->save();
+        $resuming = new AgentTurnTestAdapter(
+            finalImmediately: false,
+            toolName: 'browser_navigate',
+            toolArguments: ['url' => 'https://example.test/target'],
+        );
+
+        $resumed = $this->service($resuming)->execute($user->id, $run->refresh(), $profile->refresh(), $browser->refresh());
+
+        $this->assertSame('completed', $resumed->status, (string) $resumed->failureCode);
+        $this->assertSame(['browser_navigate'], $backend->executedTools);
+        $this->assertSame(0, $resuming->startCalls);
+        $this->assertSame(1, $resuming->continueCalls);
+        $this->assertSame('completed', $task->refresh()->status);
+        $this->assertSame(1, TalosBrowserTask::query()->where('user_id', $user->id)->count());
+        $this->assertSame(1, $task->actions()->count());
+        $this->assertSame(1, $task->evidenceBundles()->count());
+    }
+
+    public function test_browser_backend_exception_quarantines_the_action_and_requires_recovery(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Navigate once even if the Browser process disconnects.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-agent-process-fault',
+            'status' => 'active',
+            'mode' => 'read_only',
+            'current_url' => 'https://example.test/start',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $backend = new ThrowingBrowserAgentTurnBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: false,
+            toolName: 'browser_navigate',
+            toolArguments: ['url' => 'https://example.test/target'],
+        );
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile, $browser);
+
+        $this->assertSame('recovery_required', $outcome->status);
+        $this->assertSame('TALOS_BROWSER_ACTION_OUTCOME_UNKNOWN', $outcome->failureCode);
+        $this->assertSame(['browser_navigate'], $backend->executedTools);
+        $task = TalosBrowserTask::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame('recovering', $task->status);
+        $action = $task->actions()->firstOrFail();
+        $this->assertSame('ambiguous', $action->status);
+        $this->assertSame('TALOS_BROWSER_ACTION_OUTCOME_UNKNOWN', $action->error_code);
+        $this->assertSame(0, $task->evidenceBundles()->count());
+        $call = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail()->calls()->firstOrFail();
+        $this->assertSame('recovery_required', $call->effect_status);
+    }
+
+    public function test_browser_canonical_error_result_fails_the_action_and_task_without_recovery(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Navigate once and report a deterministic worker rejection.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-agent-canonical-fault',
+            'status' => 'active',
+            'mode' => 'read_only',
+            'current_url' => 'https://example.test/start',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $backend = new FailingBrowserAgentTurnBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: false,
+            toolName: 'browser_navigate',
+            toolArguments: ['url' => 'https://example.test/target'],
+        );
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile, $browser);
+
+        $this->assertSame('failed', $outcome->status);
+        $this->assertSame('TALOS_BROWSER_NAVIGATION_FAILED', $outcome->failureCode);
+        $this->assertSame(['browser_navigate'], $backend->executedTools);
+        $task = TalosBrowserTask::query()->where('user_id', $user->id)->firstOrFail();
+        $this->assertSame('failed', $task->status);
+        $action = $task->actions()->firstOrFail();
+        $this->assertSame('failed', $action->status);
+        $this->assertSame('TALOS_BROWSER_NAVIGATION_FAILED', $action->error_code);
+        $this->assertSame(0, $task->evidenceBundles()->count());
+        $call = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail()->calls()->firstOrFail();
+        $this->assertSame('completed', $call->effect_status);
     }
 
     public function test_grounding_fault_is_returned_as_a_controlled_failed_outcome(): void
@@ -326,13 +622,74 @@ final class TalosAgentTurnServiceTest extends TestCase
         );
         $turn = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail();
         $checkpoint = $this->app
-            ->make(\App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore::class)
+            ->make(TalosProceduralGuardCheckpointStore::class)
             ->load($turn);
         $this->assertSame('provider-invalid-search', $checkpoint->logicalCallId('provider-repaired-search'));
         $this->assertSame(1, $checkpoint->repairAttempt('provider-repaired-search'));
         $persistedCall = $turn->calls()->where('provider_call_id', 'provider-repaired-search')->firstOrFail();
         $this->assertSame('provider-invalid-search', $persistedCall->logical_call_id);
         $this->assertSame(1, $persistedCall->attempt);
+    }
+
+    public function test_a_second_invalid_call_in_the_same_repair_lineage_fails_before_dispatch(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Use one repair opportunity, then fail closed.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new RepeatedInvalidAgentAdapter;
+        $backend = new AgentTurnTestBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile);
+
+        $this->assertSame('failed', $outcome->status);
+        $this->assertSame('TALOS_TOOL_ARGUMENTS_INVALID', $outcome->failureCode);
+        $this->assertSame([], $backend->executedTools);
+        $this->assertSame(1, $adapter->startCalls);
+        $this->assertSame(1, $adapter->continueCalls);
+        $this->assertSame(
+            2,
+            $run->events()->where('event_type', 'provider.tool_arguments.rejected')->count(),
+        );
+    }
+
+    public function test_transient_tool_failures_receive_two_checkpointed_repairs_and_a_third_failure_is_terminal(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Retry a transient search failure within the bounded budget.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new RepeatedTransientAgentAdapter;
+        $backend = new AlwaysTransientAgentTurnBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile);
+
+        $this->assertSame('failed', $outcome->status);
+        $this->assertSame('TALOS_WEB_SEARCH_TRANSIENT_FAILURE', $outcome->failureCode);
+        $this->assertSame([
+            'provider-transient-0',
+            'provider-transient-1',
+            'provider-transient-2',
+        ], $backend->executedCallIds);
+        $this->assertSame(1, $adapter->startCalls);
+        $this->assertSame(2, $adapter->continueCalls);
+        $turn = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail();
+        $checkpoint = $this->app
+            ->make(TalosProceduralGuardCheckpointStore::class)
+            ->load($turn);
+        $this->assertSame(2, $checkpoint->repairAttempt('provider-transient-0'));
+        $this->assertSame(2, $checkpoint->repairAttempt('provider-transient-1'));
+        $this->assertSame([0, 1, 2], $turn->calls()->orderBy('sequence')->pluck('attempt')->all());
     }
 
     public function test_resume_blocks_a_semantic_repeat_with_a_new_provider_call_id_from_durable_state(): void
@@ -467,7 +824,7 @@ final class TalosAgentTurnServiceTest extends TestCase
         $this->assertSame([], $backend->executedTools);
         $turn = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail();
         $storedBeforeResume = $this->app
-            ->make(\App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore::class)
+            ->make(TalosProceduralGuardCheckpointStore::class)
             ->load($turn);
         $this->assertSame(1, $storedBeforeResume->repairAttempt('provider-invalid-search'));
         $turn->forceFill([
@@ -488,7 +845,7 @@ final class TalosAgentTurnServiceTest extends TestCase
         $this->assertSame('completed', $resumed->status);
         $this->assertSame(['web_search'], $backend->executedTools);
         $checkpoint = $this->app
-            ->make(\App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore::class)
+            ->make(TalosProceduralGuardCheckpointStore::class)
             ->load($turn->refresh());
         $this->assertSame(1, $checkpoint->repairAttempt('provider-invalid-search'));
         $this->assertSame(1, $checkpoint->repairAttempt('provider-repaired-search'));
@@ -663,7 +1020,7 @@ final class TalosAgentTurnServiceTest extends TestCase
         $call = new ToolCall('provider-orphaned', 'web_search', ['query' => 'AVM'], null, []);
         $checkpoint = TalosProceduralGuardCheckpoint::fresh();
         $checkpoint->correlateCalls([$call]);
-        \App\Models\TalosToolCall::query()->create([
+        TalosToolCall::query()->create([
             'tool_turn_id' => $turn->id,
             'run_id' => $run->id,
             'user_id' => $user->id,
@@ -676,7 +1033,7 @@ final class TalosAgentTurnServiceTest extends TestCase
             'arguments' => $call->arguments,
             'canonical_call' => json_encode($call->toWireArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
             'execution_context' => '{}',
-            'arguments_sha256' => 'sha256:'.hash('sha256', \Kadmos\Tool\ProceduralLoopGuard::canonicalJson($call->arguments)),
+            'arguments_sha256' => 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($call->arguments)),
             'dependencies' => [],
             'fingerprint' => 'sha256:'.hash('sha256', 'orphaned'),
             'state_version' => 0,
@@ -697,22 +1054,67 @@ final class TalosAgentTurnServiceTest extends TestCase
         );
     }
 
+    public function test_replay_compilation_state_keeps_non_browser_calls_on_the_batch_base_state(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        $turn = $this->runtimeTurn($user, $session, $run, $profile);
+        $calls = [
+            new ToolCall('provider-nav', 'browser_navigate', ['url' => 'https://example.test/target'], null, []),
+            new ToolCall('provider-search', 'web_search', ['query' => 'AVM'], null, []),
+        ];
+        foreach ($calls as $index => $call) {
+            TalosToolCall::query()->create([
+                'tool_turn_id' => $turn->id,
+                'run_id' => $run->id,
+                'user_id' => $user->id,
+                'sequence' => $index + 1,
+                'logical_call_id' => $call->providerCallId,
+                'provider_call_id' => $call->providerCallId,
+                'node_id' => 'node-'.$index,
+                'tool_name' => $call->name,
+                'node_type' => $call->name === 'browser_navigate' ? 'TOOL_BROWSER_NAVIGATE' : 'TOOL_WEB_SEARCH',
+                'arguments' => $call->arguments,
+                'canonical_call' => json_encode($call->toWireArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'execution_context' => '{}',
+                'arguments_sha256' => 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($call->arguments)),
+                'dependencies' => [],
+                'fingerprint' => 'sha256:'.hash('sha256', 'replay-'.$index),
+                'state_version' => 0,
+                'risk' => 'low',
+                'capability' => $call->name === 'browser_navigate' ? 'browser.read' : 'web.search',
+                'status' => 'succeeded',
+                'attempt' => 0,
+                'approval_state' => 'not_required',
+            ]);
+        }
+        $method = new \ReflectionMethod(TalosAgentTurnService::class, 'compilationStateVersion');
+
+        self::assertSame(0, $method->invoke(
+            $this->service(new AgentTurnTestAdapter(finalImmediately: true)),
+            $turn,
+            $calls,
+            null,
+        ));
+    }
+
     private function service(ProviderTurnAdapter $adapter): TalosAgentTurnService
     {
         $gateway = new TalosProviderGateway(new AgentTurnTestResolver($adapter));
 
         return new TalosAgentTurnService(
             $gateway,
-            $this->app->make(\Kadmos\Tool\ProceduralToolCompiler::class),
-            $this->app->make(\App\Services\Talos\Agent\TalosToolDispatcher::class),
-            $this->app->make(\App\Services\Talos\Agent\TalosGroundingGate::class),
-            $this->app->make(\App\Services\Talos\Agent\TalosToolRepairPolicy::class),
-            $this->app->make(\App\Services\Talos\Agent\TalosProviderToolArgumentValidator::class),
-            $this->app->make(\App\Services\Runs\TalosRunEventRecorder::class),
+            $this->app->make(ProceduralToolCompiler::class),
+            $this->app->make(TalosToolDispatcher::class),
+            $this->app->make(TalosGroundingGate::class),
+            $this->app->make(TalosToolRepairPolicy::class),
+            $this->app->make(TalosProviderToolArgumentValidator::class),
+            $this->app->make(TalosRunEventRecorder::class),
             $this->app->make(TalosExecutionClaimService::class),
-            $this->app->make(\App\Services\Talos\Agent\TalosAgentBudgetService::class),
-            $this->app->make(\App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore::class),
-            $this->app->make(\App\Services\Talos\Browser\TalosBrowserArtifactReader::class),
+            $this->app->make(TalosAgentBudgetService::class),
+            $this->app->make(TalosProceduralGuardCheckpointStore::class),
+            $this->app->make(TalosBrowserArtifactReader::class),
+            $this->app->make(TalosBrowserFollowUpResolver::class),
+            $this->app->make(TalosBrowserTaskRuntime::class),
         );
     }
 
@@ -795,10 +1197,14 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
     /** @var list<array{role: string, content: string}> */
     public array $receivedMessages = [];
 
+    public string $receivedSystemPrompt = '';
+
     public function __construct(
         private readonly bool $finalImmediately,
         private readonly bool $throwOnStart = false,
         private readonly ?\Closure $onStart = null,
+        private readonly string $toolName = 'web_search',
+        private readonly array $toolArguments = ['query' => 'AVM'],
     ) {}
 
     public function capabilities(): ProviderCapabilities
@@ -810,6 +1216,7 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
     {
         $this->startCalls++;
         $this->receivedMessages = $request->messages;
+        $this->receivedSystemPrompt = $request->systemPrompt;
         ($this->onStart)?->__invoke();
         if ($this->throwOnStart) {
             throw new \RuntimeException('Provider response outcome is unknown.');
@@ -818,7 +1225,7 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
             return ProviderTurnResponse::final('Completed with durable context.', 'response-final', 'stop', new TokenUsage(10, 5, 15));
         }
 
-        $call = new ToolCall('provider-search-1', 'web_search', ['query' => 'AVM'], null, []);
+        $call = new ToolCall('provider-search-1', $this->toolName, $this->toolArguments, null, []);
 
         return ProviderTurnResponse::toolCalls(
             null,
@@ -851,15 +1258,42 @@ final class AgentTurnTestBackend implements TalosToolExecutionBackend
     public function execute(ProceduralNode $node, TalosToolTurn $turn, ?TalosBrowserSession $browserSession = null): ToolResult
     {
         $this->executedTools[] = $node->call->name;
-        $hash = 'sha256:'.hash('sha256', 'search evidence');
+        $browserTool = str_starts_with($node->call->name, 'browser_');
+        if ($node->call->name === 'browser_navigate' && $browserSession instanceof TalosBrowserSession) {
+            $browserSession->forceFill([
+                'current_url' => (string) ($node->call->arguments['url'] ?? $browserSession->current_url),
+                'current_title' => 'Navigated page',
+                'worker_state_version' => $node->context->stateVersion + 1,
+                'last_seen_at' => now(),
+            ])->save();
+        }
+        $observation = [
+            'url' => $browserSession?->current_url ?? 'https://example.test/',
+            'title' => $browserSession?->current_title ?? '',
+        ];
+        $hash = $browserTool
+            ? 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($observation))
+            : 'sha256:'.hash('sha256', 'search evidence');
         $artifactId = 'missing-evidence-'.$node->call->providerCallId;
         if ($this->persistEvidence) {
+            $artifactUri = $browserTool
+                ? 'talos-tool-evidence://'.hash('sha256', implode('|', [
+                    (string) $turn->id,
+                    $node->call->providerCallId,
+                    'browser_navigation',
+                    '0',
+                ]))
+                : 'talos-test-evidence://'.$node->call->providerCallId;
             $artifact = TalosRunArtifact::query()->create([
                 'run_id' => $turn->run_id,
-                'artifact_type' => 'web_search_result',
-                'uri' => 'talos-test-evidence://'.$node->call->providerCallId,
+                'artifact_type' => $browserTool ? 'browser_navigation' : 'web_search_result',
+                'uri' => $artifactUri,
                 'mime_type' => 'application/json',
                 'metadata' => [
+                    ...($browserTool ? [
+                        'browser_session_id' => $browserSession?->id,
+                        'observation' => $observation,
+                    ] : []),
                     'tool_turn_id' => $turn->id,
                     'provider_call_id' => $node->call->providerCallId,
                     'sha256' => $hash,
@@ -876,10 +1310,57 @@ final class AgentTurnTestBackend implements TalosToolExecutionBackend
             ['results' => [['title' => 'AVM']], 'evidence_ids' => [$artifactId]],
             [[
                 'artifact_id' => $artifactId,
-                'kind' => 'search_result',
+                'kind' => $browserTool ? 'navigation' : 'search_result',
                 'sha256' => $hash,
-                'trusted_boundary' => 'untrusted_web_content',
+                'trusted_boundary' => $browserTool ? 'untrusted_browser_content' : 'untrusted_web_content',
             ]],
+        );
+    }
+}
+
+final class ThrowingBrowserAgentTurnBackend implements TalosToolExecutionBackend
+{
+    /** @var list<string> */
+    public array $executedTools = [];
+
+    public function execute(ProceduralNode $node, TalosToolTurn $turn, ?TalosBrowserSession $browserSession = null): ToolResult
+    {
+        $this->executedTools[] = $node->call->name;
+
+        throw new \RuntimeException('Simulated Browser transport disconnect after dispatch.');
+    }
+}
+
+final class FailingBrowserAgentTurnBackend implements TalosToolExecutionBackend
+{
+    /** @var list<string> */
+    public array $executedTools = [];
+
+    public function execute(ProceduralNode $node, TalosToolTurn $turn, ?TalosBrowserSession $browserSession = null): ToolResult
+    {
+        $this->executedTools[] = $node->call->name;
+
+        return ToolResult::error(
+            $node->call->providerCallId,
+            'TALOS_BROWSER_NAVIGATION_FAILED',
+            'The Browser worker rejected the navigation deterministically.',
+        );
+    }
+}
+
+final class AlwaysTransientAgentTurnBackend implements TalosToolExecutionBackend
+{
+    /** @var list<string> */
+    public array $executedCallIds = [];
+
+    public function execute(ProceduralNode $node, TalosToolTurn $turn, ?TalosBrowserSession $browserSession = null): ToolResult
+    {
+        $this->executedCallIds[] = $node->call->providerCallId;
+
+        return ToolResult::error(
+            $node->call->providerCallId,
+            'TALOS_WEB_SEARCH_TRANSIENT_FAILURE',
+            'The search transport failed transiently.',
         );
     }
 }
@@ -944,13 +1425,133 @@ final class InvalidThenRepairingAgentAdapter implements ProviderTurnAdapter
     }
 }
 
+final class RepeatedInvalidAgentAdapter implements ProviderTurnAdapter
+{
+    public int $startCalls = 0;
+
+    public int $continueCalls = 0;
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'agent_repair_test_v1', true, true, true, true, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        $this->startCalls++;
+
+        return $this->invalidResponse('provider-invalid-initial', 'response-invalid-initial', 1);
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        $this->continueCalls++;
+        $result = $toolResults[0] ?? null;
+        if (! $result instanceof ToolResult
+            || ! $result->isError
+            || ($result->structuredContent['code'] ?? null) !== 'TALOS_TOOL_ARGUMENTS_INVALID') {
+            throw new \RuntimeException('The provider did not receive the canonical argument-repair result.');
+        }
+        if ($this->continueCalls > 1) {
+            throw new \RuntimeException('A second malformed call was incorrectly admitted for repair.');
+        }
+
+        return $this->invalidResponse('provider-invalid-again', 'response-invalid-again', 2);
+    }
+
+    private function invalidResponse(string $callId, string $responseId, int $round): ProviderTurnResponse
+    {
+        $call = new ToolCall($callId, 'web_search', ['query' => '', 'unexpected' => true], null, []);
+
+        return ProviderTurnResponse::toolCalls(
+            null,
+            [$call],
+            new ProviderTurnState(
+                'openai',
+                'agent_repair_test_v1',
+                $responseId,
+                'test_state',
+                ['round' => $round],
+                [$callId],
+            ),
+            $responseId,
+            'tool_calls',
+            new TokenUsage(4, 2, 6),
+        );
+    }
+}
+
+final class RepeatedTransientAgentAdapter implements ProviderTurnAdapter
+{
+    public int $startCalls = 0;
+
+    public int $continueCalls = 0;
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'agent_transient_test_v1', true, true, true, true, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        $this->startCalls++;
+
+        return $this->toolResponse(0);
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        $this->continueCalls++;
+        $result = $toolResults[0] ?? null;
+        if (! $result instanceof ToolResult
+            || ! $result->isError
+            || ($result->structuredContent['code'] ?? null) !== 'TALOS_WEB_SEARCH_TRANSIENT_FAILURE') {
+            throw new \RuntimeException('The provider did not receive the canonical transient tool result.');
+        }
+        if ($this->continueCalls > 2) {
+            throw new \RuntimeException('The transient repair budget admitted an extra provider continuation.');
+        }
+
+        return $this->toolResponse($this->continueCalls);
+    }
+
+    private function toolResponse(int $round): ProviderTurnResponse
+    {
+        $callId = 'provider-transient-'.$round;
+        $responseId = 'response-transient-'.$round;
+        $call = new ToolCall($callId, 'web_search', ['query' => 'AVM transient retry'], null, []);
+
+        return ProviderTurnResponse::toolCalls(
+            null,
+            [$call],
+            new ProviderTurnState(
+                'openai',
+                'agent_transient_test_v1',
+                $responseId,
+                'test_state',
+                ['round' => $round],
+                [$callId],
+            ),
+            $responseId,
+            'tool_calls',
+            new TokenUsage(4, 2, 6),
+        );
+    }
+}
+
 final class FailingContinueAgentAdapter implements ProviderTurnAdapter
 {
     private AgentTurnTestAdapter $delegate;
 
-    public function __construct()
-    {
-        $this->delegate = new AgentTurnTestAdapter(finalImmediately: false);
+    public function __construct(
+        string $toolName = 'web_search',
+        array $toolArguments = ['query' => 'AVM'],
+    ) {
+        $this->delegate = new AgentTurnTestAdapter(
+            finalImmediately: false,
+            toolName: $toolName,
+            toolArguments: $toolArguments,
+        );
     }
 
     public function capabilities(): ProviderCapabilities

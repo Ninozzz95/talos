@@ -223,7 +223,9 @@ final class ToolContractGuard
 
     private static function isSensitiveKey(string $key): bool
     {
-        $snake = preg_replace('/(?<!^)[A-Z]/', '_$0', $key);
+        $snake = preg_match('/^[A-Z0-9_.-]+$/D', $key) === 1
+            ? $key
+            : preg_replace('/(?<!^)[A-Z]/', '_$0', $key);
         $normalized = strtolower(str_replace(['-', '.'], '_', is_string($snake) ? $snake : $key));
         if (in_array($normalized, [
             'secret',
@@ -254,13 +256,14 @@ final class ToolContractGuard
             return true;
         }
 
-        return preg_match('/_(?:secret|token|password|api_key|access_token|refresh_token|private_key|credential|cookie|connection_string|storage_path|local_path|absolute_path|filesystem_path|file_path|temporary_path|private_path)$/D', $normalized) === 1;
+        return preg_match('/_(?:secret|token|password|api_key|access_token|refresh_token|private_key|credential|cookie|connection_string|storage_path|local_path|absolute_path|filesystem_path|file_path|temporary_path|private_path)(?:_(?:b64|base64|pem|der))?$/D', $normalized) === 1;
     }
 
     private static function redactString(string $value): string
     {
         $value = preg_replace('/\b(Bearer\s+)[^\s,;]+/i', '$1[REDACTED]', $value) ?? $value;
         $value = preg_replace('/\bsk-[A-Za-z0-9_-]{12,}\b/', '[REDACTED]', $value) ?? $value;
+        $value = preg_replace('/(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])/', '[REDACTED]', $value) ?? $value;
         $value = preg_replace('/(?<=:\/\/)[^\/@\s]+:[^\/@\s]+@/', '[REDACTED]@', $value) ?? $value;
         $value = preg_replace('~(?<![A-Za-z0-9])(?:[A-Za-z]:[\\\\/]|\\\\\\\\)[^\s"\'<>]+~', '[REDACTED]', $value) ?? $value;
         $value = preg_replace('~(?<![A-Za-z0-9:])/(?:home|Users|var|tmp|opt|srv|etc|root|mnt|private|app)(?:/[^\s"\'<>]*)?~i', '[REDACTED]', $value) ?? $value;

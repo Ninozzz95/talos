@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Services\Security\CanonicalHttpUrl;
 use App\Services\Security\PublicHttpRequestPinning;
 use App\Services\Security\PublicHttpUrlPolicy;
 use GuzzleHttp\Psr7\Request as PsrRequest;
@@ -18,6 +19,70 @@ use Tests\TestCase;
 
 final class PublicHttpSecurityTest extends TestCase
 {
+    public function test_whatwg_canonicalization_is_shared_by_policy_and_connection_pinning(): void
+    {
+        $url = 'HTTPS://B'."\u{00DC}".'CHER.DE.:8443/a/../v1/chat/completions';
+        $resolvedHost = null;
+        $policy = PublicHttpUrlPolicy::forProviderHosts(
+            ['b'."\u{00FC}".'cher.de.'],
+            static function (string $host) use (&$resolvedHost): array {
+                $resolvedHost = $host;
+
+                return ['93.184.216.34'];
+            },
+        );
+
+        $canonical = CanonicalHttpUrl::fromString($url);
+        $pin = (new PublicHttpRequestPinning(
+            $policy,
+            curlResolveAvailable: true,
+            requirePrimaryIpEvidence: false,
+        ))->pin($url);
+
+        $this->assertSame('https://xn--bcher-kva.de:8443/v1/chat/completions', $canonical->asciiUrl);
+        $this->assertSame('xn--bcher-kva.de', $canonical->asciiHost);
+        $this->assertSame('b'."\u{00FC}".'cher.de', $canonical->unicodeHost);
+        $this->assertSame('xn--bcher-kva.de', $resolvedHost);
+        $this->assertTrue($pin['allowed']);
+        $this->assertSame(['xn--bcher-kva.de:8443:93.184.216.34'], $pin['curl_resolve']);
+    }
+
+    public function test_whatwg_parser_rejects_credentials_malformed_ports_and_blocks_trailing_dot_localhost(): void
+    {
+        $policy = new PublicHttpUrlPolicy(
+            resolver: static fn (string $host): array => ['93.184.216.34'],
+        );
+
+        foreach ([
+            'https://user:pass@example.com/private',
+            'https://example.com:70000/private',
+        ] as $invalidUrl) {
+            $decision = $policy->inspect($invalidUrl, requireResolution: true);
+
+            $this->assertFalse($decision['allowed'], $invalidUrl);
+            $this->assertSame('invalid or unsupported URL', $decision['reason'], $invalidUrl);
+        }
+
+        $localhost = $policy->inspect('http://LOCALHOST.:80/private', requireResolution: true);
+
+        $this->assertFalse($localhost['allowed']);
+        $this->assertSame('localhost', $localhost['host']);
+        $this->assertSame('private network host blocked', $localhost['reason']);
+    }
+
+    public function test_mixed_public_and_private_dns_answers_are_denied_as_one_fail_closed_decision(): void
+    {
+        $policy = new PublicHttpUrlPolicy(
+            resolver: static fn (string $host): array => ['93.184.216.34', '169.254.169.254'],
+        );
+
+        $decision = $policy->inspect('https://mixed.example/path', requireResolution: true);
+
+        $this->assertFalse($decision['allowed']);
+        $this->assertSame('private network host blocked', $decision['reason']);
+        $this->assertSame(['93.184.216.34', '169.254.169.254'], $decision['resolved_ips']);
+    }
+
     public function test_default_connection_pinning_rejects_missing_primary_ip_evidence(): void
     {
         $pinning = $this->pinning();

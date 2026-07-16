@@ -5,19 +5,19 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\TalosBrowserArtifact;
+use App\Models\TalosBrowserEvidenceBundle;
 use App\Models\TalosBrowserSession;
 use App\Models\TalosMessage;
 use App\Models\TalosModelProfile;
 use App\Models\TalosRunEvent;
 use App\Models\TalosSession;
 use App\Models\TalosToolTurn;
-use App\Models\User;
-use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore;
+use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProviderOutcomeCodec;
-use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
+use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
@@ -156,7 +156,7 @@ final class TalosChatProceduralBrowserTest extends TestCase
         ]);
     }
 
-    public function test_browser_click_is_presented_for_exact_approval_and_resumes_the_same_turn_with_evidence(): void
+    public function test_breg_006_browser_click_is_presented_for_exact_approval_and_resumes_the_same_turn_with_evidence(): void
     {
         $user = $this->authenticateTalosUser();
         $session = TalosSession::query()->create([
@@ -336,7 +336,7 @@ final class TalosChatProceduralBrowserTest extends TestCase
         ]);
     }
 
-    public function test_screenshot_evidence_is_attached_to_the_assistant_message_immediately_and_after_reload(): void
+    public function test_breg_007_screenshot_evidence_is_attached_to_the_assistant_message_immediately_and_after_reload(): void
     {
         $user = $this->authenticateTalosUser();
         $session = TalosSession::query()->create([
@@ -379,6 +379,7 @@ final class TalosChatProceduralBrowserTest extends TestCase
         ]);
 
         $client = new FakeBrowserSessionClient;
+        $client->screenshotResponse = ['url' => 'about:blank', 'title' => ''];
         $this->app->instance(BrowserSessionClient::class, $client);
         $adapter = new ProceduralBrowserHallucinatedScreenshotAdapter;
         $this->app->instance(TalosProviderAdapterResolver::class, new ProceduralBrowserRouteResolver($adapter));
@@ -414,6 +415,12 @@ final class TalosChatProceduralBrowserTest extends TestCase
             'browser_session_id' => $browser->id,
             'type' => 'screenshot',
         ]);
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $this->assertSame('about:blank', $artifact->metadata['url'] ?? null);
+        $this->assertSame(
+            'about:blank',
+            TalosBrowserEvidenceBundle::query()->where('screenshot_artifact_id', $artifactId)->firstOrFail()->url,
+        );
         $succeededEvent = TalosRunEvent::query()
             ->where('run_id', $response->json('run.id'))
             ->where('event_type', 'browser.command.succeeded')
@@ -464,6 +471,74 @@ final class TalosChatProceduralBrowserTest extends TestCase
         $this->assertSame($artifactId, data_get($recoveredAssistant, 'metadata.browser_activities.0.artifact_ids.0'));
         $this->assertNotSame($spoofedArtifactId, data_get($recoveredAssistant, 'metadata.browser_activities.0.artifact_ids.0'));
         $this->assertSame($spoofedArtifactId, data_get($persistedAssistant->refresh()->metadata, 'browser_activities.0.artifact_ids.0'));
+    }
+
+    public function test_breg_008_provider_screenshot_claim_without_committed_artifact_is_not_promoted(): void
+    {
+        $user = $this->authenticateTalosUser();
+        $session = TalosSession::query()->create([
+            'user_id' => $user->id,
+            'title' => 'Unsupported screenshot claim',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-test',
+            'display_name' => 'Unsupported screenshot claim test',
+            'encrypted_secret' => Crypt::encryptString('provider-secret'),
+            'base_url' => 'https://api.openai.com/v1',
+            'status' => 'healthy',
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-unsupported-screenshot-claim',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => [
+                'navigation' => true,
+                'screenshots' => true,
+                'accessibilitySnapshot' => true,
+            ],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $userMessage = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Descrivi lo screenshot che hai catturato.',
+            'metadata' => ['source' => 'talos_chat_page'],
+        ]);
+
+        $this->app->instance(BrowserSessionClient::class, new FakeBrowserSessionClient);
+        $this->app->instance(
+            TalosProviderAdapterResolver::class,
+            new ProceduralBrowserRouteResolver(new ProceduralBrowserHallucinatedScreenshotAdapter),
+        );
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $session->id,
+            'user_message_id' => $userMessage->id,
+            'message' => $userMessage->content,
+            'model_profile_id' => $profile->id,
+            'browser_mode' => [
+                'enabled' => true,
+                'browser_session_id' => $browser->id,
+            ],
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('code', 'TALOS_GROUNDING_EVIDENCE_REQUIRED');
+        $this->assertDatabaseMissing('talos_messages', [
+            'session_id' => $session->id,
+            'role' => 'assistant',
+            'content' => "Ecco l'ultimo screenshot della pagina:\n\n![Screenshot ManagerCar](https://talo.sh/artifact/019f6041-b3d6-7f8e-87f9-02110be8a48a)",
+        ]);
     }
 }
 

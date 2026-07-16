@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/schema/browser/v1/browser-capability-manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol_version", "adapter_name", "adapter_version", "capabilities", "limits", "degraded_reason"],
+  "properties": {
+    "schema_version": { "const": "talos.browser.capabilities.v1" },
+    "protocol_version": { "const": "talos.browser.worker.v2" },
+    "adapter_name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "adapter_version": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "capabilities": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "$ref": "#/$defs/capability" } },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_tabs", "max_viewport_width", "max_viewport_height", "max_artifact_bytes"],
+      "properties": {
+        "max_tabs": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "max_viewport_width": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "max_viewport_height": { "type": "integer", "minimum": 1, "maximum": 32768 },
+        "max_artifact_bytes": { "type": "integer", "minimum": 1, "maximum": 10737418240 }
+      }
+    },
+    "degraded_reason": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 }
+  },
+  "$defs": {
+    "capability": { "enum": ["navigate", "snapshot", "screenshot", "read", "click", "type", "select", "check", "scroll", "hover", "key", "drag", "upload", "download", "tabs", "history", "dialogs", "interactive_frame", "semantic_locator"] }
+  }
+}

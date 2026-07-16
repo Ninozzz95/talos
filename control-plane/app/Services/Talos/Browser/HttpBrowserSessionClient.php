@@ -14,7 +14,12 @@ use Throwable;
 
 final class HttpBrowserSessionClient implements BrowserSessionClient
 {
-    public function __construct(private readonly string $baseUrl, private readonly string $token, private readonly int $timeoutSeconds = 15) {}
+    public function __construct(
+        private readonly string $baseUrl,
+        private readonly string $token,
+        private readonly int $timeoutSeconds = 15,
+        private readonly ?TalosBrowserActionCapabilityIssuer $actionCapabilityIssuer = null,
+    ) {}
 
     public function toolDefinitions(string $ownerRef): array
     {
@@ -37,15 +42,60 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         return $definitions;
     }
 
-    public function callTool(string $ownerRef, string $workerSessionId, string $toolUseId, string $name, array $arguments, int $timeoutMs = 15000): BrowserToolResult
+    public function handshake(string $ownerRef, int $timeoutMilliseconds = 5000): TalosBrowserWorkerHandshake
     {
+        $response = $this->send('get', TalosBrowserWorkerProtocol::HANDSHAKE_PATH, $ownerRef, [], $timeoutMilliseconds);
+        if ($response->status() === 204 || strlen($response->body()) > 64 * 1024) {
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_HANDSHAKE_INVALID', 'Browser worker returned an invalid handshake.');
+        }
+        if (! in_array($response->status(), [200, 503], true)) {
+            $this->throwForFailure($response);
+        }
+
+        $handshake = TalosBrowserWorkerHandshake::fromJson($response->body());
+        $transportReady = $response->status() === 200;
+        if (($handshake->status === 'ready') !== $transportReady) {
+            throw new BrowserWorkerException(
+                'TALOS_BROWSER_WORKER_HANDSHAKE_INVALID',
+                'Browser worker returned an invalid handshake.',
+            );
+        }
+
+        return $handshake;
+    }
+
+    public function callTool(
+        string $ownerRef,
+        string $workerSessionId,
+        string $toolUseId,
+        string $name,
+        array $arguments,
+        int $timeoutMs = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): BrowserToolResult {
+        $payload = [
+            'tool_use_id' => $toolUseId,
+            'name' => $name,
+            'arguments' => $arguments === [] ? new stdClass : $arguments,
+        ];
+        $actionCapability = $this->actionCapabilityFor(
+            $ownerRef,
+            $workerSessionId,
+            $name,
+            is_int($arguments['state_version'] ?? null) ? $arguments['state_version'] : -1,
+            $payload,
+            $authorization,
+        );
         try {
             return BrowserToolResult::fromJson(
-                $this->requestRawData('post', "/sessions/{$workerSessionId}/tools/call", $ownerRef, [
-                    'tool_use_id' => $toolUseId,
-                    'name' => $name,
-                    'arguments' => $arguments === [] ? new stdClass : $arguments,
-                ], $timeoutMs),
+                $this->requestRawData(
+                    'post',
+                    "/sessions/{$workerSessionId}/tools/call",
+                    $ownerRef,
+                    $payload,
+                    $timeoutMs,
+                    $actionCapability,
+                ),
                 $toolUseId,
             );
         } catch (InvalidArgumentException) {
@@ -55,11 +105,64 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
 
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array
     {
-        $session = $this->request('post', TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH, $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => $ttlSeconds, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false]], $timeoutMilliseconds);
-        if (($session['protocols']['hmi'] ?? null) !== TalosBrowserWorkerProtocol::HMI_RUNTIME) {
+        return $this->bootstrapSession(
+            $ownerRef,
+            $width,
+            $height,
+            TalosBrowserWorkerProtocol::SESSION_BOOTSTRAP_PATH,
+            $timeoutMilliseconds,
+            $ttlSeconds,
+        );
+    }
+
+    public function createIdempotent(
+        string $ownerRef,
+        int $width,
+        int $height,
+        string $idempotencyKey,
+        int $timeoutMilliseconds = 15000,
+        int $ttlSeconds = 3600,
+    ): array {
+        if (! Str::isUuid($idempotencyKey)
+            || preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/Di', $idempotencyKey) !== 1) {
+            throw new InvalidArgumentException('Browser session idempotency key must be a UUID.');
+        }
+
+        return $this->bootstrapSession(
+            $ownerRef,
+            $width,
+            $height,
+            TalosBrowserWorkerProtocol::IDEMPOTENT_SESSION_BOOTSTRAP_PATH,
+            $timeoutMilliseconds,
+            $ttlSeconds,
+            strtolower($idempotencyKey),
+        );
+    }
+
+    private function bootstrapSession(
+        string $ownerRef,
+        int $width,
+        int $height,
+        string $path,
+        int $timeoutMilliseconds,
+        int $ttlSeconds,
+        ?string $idempotencyKey = null,
+    ): array {
+        $handshake = $this->handshake($ownerRef, $timeoutMilliseconds);
+        $handshake->assertUsable();
+        $session = $this->request('post', $path, $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => $ttlSeconds, 'capabilities' => ['navigation' => $handshake->supports('navigate'), 'screenshots' => $handshake->supports('screenshot'), 'accessibilitySnapshot' => $handshake->supports('snapshot'), 'actions' => false, 'hmiActions' => $handshake->supports('interactive_frame') && $handshake->supports('click'), 'downloads' => false, 'uploads' => false]], $timeoutMilliseconds, $idempotencyKey);
+        if (($session['protocols']['worker'] ?? null) !== TalosBrowserWorkerProtocol::WORKER
+            || ($session['protocols']['hmi'] ?? null) !== TalosBrowserWorkerProtocol::HMI_RUNTIME) {
             throw new BrowserWorkerException(
                 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
                 'Browser worker HMI protocol is incompatible with this TALOS control plane.',
+            );
+        }
+        if (! is_string($session['workerInstanceId'] ?? null)
+            || ! hash_equals($handshake->workerInstanceId, strtolower($session['workerInstanceId']))) {
+            throw new BrowserWorkerException(
+                'TALOS_BROWSER_WORKER_IDENTITY_MISMATCH',
+                'Browser worker identity changed during session bootstrap.',
             );
         }
 
@@ -102,9 +205,22 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         );
     }
 
-    public function executePointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
-    {
+    public function executePointer(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array {
         $this->validatePointerPayload($payload, true);
+        $actionCapability = $this->actionCapabilityFor(
+            $ownerRef,
+            $workerSessionId,
+            'hmi_pointer_execute',
+            (int) $payload['state_version'],
+            $payload,
+            $authorization,
+        );
 
         return $this->requestHmi(
             'post',
@@ -119,6 +235,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             (string) $payload['command_id'],
             (string) $payload['effect_classification'],
             (bool) $payload['sensitive_effect_authorized'],
+            $actionCapability,
         );
     }
 
@@ -127,10 +244,35 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         $this->request('delete', "/sessions/{$workerSessionId}", $ownerRef, [], $timeoutMilliseconds);
     }
 
+    public function cancel(
+        string $ownerRef,
+        string $workerSessionId,
+        string $reason,
+        int $timeoutMilliseconds = 15000,
+    ): void {
+        $reason = trim($reason);
+        if ($reason === '' || mb_strlen($reason) > 512 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', $reason) === 1) {
+            throw new InvalidArgumentException('Browser cancellation reason is invalid.');
+        }
+        $this->request(
+            'post',
+            "/sessions/{$workerSessionId}".TalosBrowserWorkerProtocol::SESSION_CANCEL_SUFFIX,
+            $ownerRef,
+            ['reason' => $reason],
+            $timeoutMilliseconds,
+        );
+    }
+
     /** @param array<string, mixed> $payload @return array<string, mixed> */
-    private function request(string $method, string $path, string $ownerRef, array $payload = [], int $timeoutMilliseconds = 15000): array
-    {
-        $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds);
+    private function request(
+        string $method,
+        string $path,
+        string $ownerRef,
+        array $payload = [],
+        int $timeoutMilliseconds = 15000,
+        ?string $idempotencyKey = null,
+    ): array {
+        $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds, idempotencyKey: $idempotencyKey);
         if ($response->status() === 204) {
             return [];
         }
@@ -144,9 +286,15 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
     }
 
     /** @param array<string, mixed> $payload */
-    private function requestRawData(string $method, string $path, string $ownerRef, array $payload, int $timeoutMilliseconds): string
-    {
-        $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds);
+    private function requestRawData(
+        string $method,
+        string $path,
+        string $ownerRef,
+        array $payload,
+        int $timeoutMilliseconds,
+        ?string $actionCapability = null,
+    ): string {
+        $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds, $actionCapability);
         if ($response->status() === 204) {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid tool result.');
         }
@@ -178,9 +326,9 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         ?string $expectedCommandId = null,
         ?string $expectedEffectClassification = null,
         ?bool $expectedSensitiveAuthorization = null,
-    ): array
-    {
-        $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds);
+        ?string $actionCapability = null,
+    ): array {
+        $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds, $actionCapability);
         if ($response->status() === 204 || strlen($response->body()) > 16 * 1024 * 1024) {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI response.');
         }
@@ -271,8 +419,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         ?string $expectedCommandId,
         ?string $expectedEffectClassification,
         ?bool $expectedSensitiveAuthorization,
-    ): void
-    {
+    ): void {
         foreach (['session_id', 'schema_version'] as $field) {
             if (! is_string($data[$field] ?? null) || trim($data[$field]) === '') {
                 throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI response.');
@@ -402,18 +549,82 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
     }
 
     /** @param array<string, mixed> $payload */
-    private function send(string $method, string $path, string $ownerRef, array $payload, int $timeoutMilliseconds): Response
-    {
+    private function send(
+        string $method,
+        string $path,
+        string $ownerRef,
+        array $payload,
+        int $timeoutMilliseconds,
+        ?string $actionCapability = null,
+        ?string $idempotencyKey = null,
+    ): Response {
         if (trim($this->baseUrl) === '' || trim($this->token) === '') {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is not configured.');
         }
         try {
             $timeoutSeconds = min(max(0.001, $this->timeoutSeconds), max(0.001, $timeoutMilliseconds / 1000));
+            $headers = [
+                'X-Talos-Worker-Token' => $this->token,
+                'X-Talos-Owner-Ref' => $ownerRef,
+            ];
+            if (is_string($actionCapability)) {
+                $headers['Authorization'] = 'Bearer '.$actionCapability;
+            }
+            if (is_string($idempotencyKey)) {
+                $headers['Idempotency-Key'] = '"'.$idempotencyKey.'"';
+            }
 
-            return Http::timeout($timeoutSeconds)->connectTimeout($timeoutSeconds)->acceptJson()->withHeaders(['X-Talos-Worker-Token' => $this->token, 'X-Talos-Owner-Ref' => $ownerRef])->send($method, rtrim($this->baseUrl, '/').$path, ['json' => $payload]);
+            return Http::timeout($timeoutSeconds)
+                ->connectTimeout($timeoutSeconds)
+                ->acceptJson()
+                ->withHeaders($headers)
+                ->send($method, rtrim($this->baseUrl, '/').$path, ['json' => $payload]);
         } catch (Throwable) {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is unavailable.');
         }
+    }
+
+    /** @param array<string, mixed> $request */
+    private function actionCapabilityFor(
+        string $ownerRef,
+        string $workerSessionId,
+        string $operation,
+        int $expectedStateVersion,
+        array $request,
+        ?BrowserActionAuthorization $authorization,
+    ): ?string {
+        $consequential = in_array($operation, ['browser_click', 'hmi_pointer_execute'], true);
+        if (! $consequential) {
+            if ($authorization instanceof BrowserActionAuthorization) {
+                throw new BrowserWorkerException(
+                    'TALOS_BROWSER_ACTION_CAPABILITY_INVALID',
+                    'Browser action authorization was supplied for a read-only operation.',
+                );
+            }
+
+            return null;
+        }
+        if (! $authorization instanceof BrowserActionAuthorization) {
+            throw new BrowserWorkerException(
+                'TALOS_BROWSER_ACTION_CAPABILITY_REQUIRED',
+                'A signed browser action capability is required.',
+            );
+        }
+        if (! $this->actionCapabilityIssuer instanceof TalosBrowserActionCapabilityIssuer) {
+            throw new BrowserWorkerException(
+                'TALOS_BROWSER_ACTION_CAPABILITY_CONFIGURATION_INVALID',
+                'Browser action capability issuance is not configured.',
+            );
+        }
+
+        return $this->actionCapabilityIssuer->issue(
+            $ownerRef,
+            $workerSessionId,
+            $operation,
+            $expectedStateVersion,
+            $request,
+            $authorization,
+        );
     }
 
     private function throwForFailure(Response $response): void

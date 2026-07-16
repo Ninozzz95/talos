@@ -85,6 +85,25 @@ async function expectNoDocumentOverflow(page: Page) {
     expect(Math.max(0, ...geometry.bubbles), JSON.stringify(geometry)).toBeLessThanOrEqual(1)
 }
 
+async function openAdvancedNavigation(page: Page, isMobile: boolean) {
+    if (isMobile) {
+        const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
+        if (!await navigation.isVisible().catch(() => false)) {
+            await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
+            await expect(navigation).toBeVisible()
+        }
+        const advanced = navigation.getByRole('button', { name: 'Advanced', exact: true })
+        if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
+
+        return navigation
+    }
+
+    const advanced = page.getByRole('button', { name: 'Advanced', exact: true })
+    if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
+
+    return page.locator('body')
+}
+
 test.beforeEach(async ({ page }) => {
     await installTalosApiMocks(page)
     await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -104,7 +123,51 @@ test('Browse is an in-place mode with one chat and no automatic evidence sidebar
     await expect(page.getByTestId('talos-browse-mode')).toContainText(/Ready|Active/)
 })
 
-test('Browse keeps every real module available on desktop and mobile', async ({ page }) => {
+test('persisted Browser clarification choices survive reload and only fill the composer', async ({ page }) => {
+    await resetMocks(page, {
+        initialSessions: [{
+            id: 'browser-clarification-chat',
+            title: 'Browser destination choice',
+            messages: [{
+                role: 'user',
+                content: 'Compare https://one.example/path and https://two.example/item.',
+            }, {
+                role: 'assistant',
+                content: 'I found multiple destinations. Choose which one TALOS should open.',
+                metadata: {
+                    source: 'talos_browser_clarification',
+                    browser_follow_up: {
+                        schema_version: 'talos_browser_follow_up_v1',
+                        operation: 'clarify',
+                        choices: [
+                            { index: 1, url: 'https://one.example/path', host: 'one.example', label: 'one.example/path' },
+                            { index: 2, url: 'https://two.example/item', host: 'two.example', label: 'two.example/item' },
+                        ],
+                        reason: 'multiple_urls',
+                    },
+                },
+            }],
+        }],
+    })
+    const choices = page.getByTestId('talos-browser-clarification-choices')
+    await expect(choices).toBeVisible()
+    await expect(choices.getByRole('button')).toHaveCount(2)
+    await expectNoDocumentOverflow(page)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByTestId('talos-browser-clarification-choices')).toBeVisible()
+
+    let chatPosts = 0
+    page.on('request', (request) => {
+        if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/talos/chat') chatPosts += 1
+    })
+    await page.getByRole('button', { name: 'Use destination two.example/item' }).click()
+
+    await expect(page.getByLabel('Message TALOS')).toHaveValue('Open and inspect https://two.example/item')
+    expect(chatPosts).toBe(0)
+})
+
+test('Browse keeps every real module available on desktop and mobile', async ({ page, isMobile }) => {
     await page.getByRole('button', { name: 'Browse', exact: true }).click()
     const modules = ['Runtime', 'Compare', 'Model Lab', 'Deep Research', 'Artifacts', 'Library', 'Calendar', 'Settings']
 
@@ -120,14 +183,12 @@ test('Browse keeps every real module available on desktop and mobile', async ({ 
         await window.getByRole('button', { name: new RegExp(`Close ${module}|Close ${windowId}`, 'i') }).click()
     }
 
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
-    const advancedLabels = await page.locator('[id^="talos-advanced-items-"]:visible button').allTextContents()
+    let advancedNavigation = await openAdvancedNavigation(page, isMobile)
+    const advancedLabels = await advancedNavigation.locator('[id^="talos-advanced-items-"] button').allTextContents()
     expect(advancedLabels.map((label) => label.trim())).toEqual(['Tasks', 'Notes', 'Knowledge', 'Brain', 'Tools', 'Doctor'])
     for (const module of ['Tasks', 'Notes', 'Knowledge', 'Brain', 'Tools', 'Doctor']) {
-        const moduleButton = page.getByRole('button', { name: module, exact: true }).first()
-        if (!await moduleButton.isVisible().catch(() => false)) {
-            await page.getByRole('button', { name: 'Advanced', exact: true }).click()
-        }
+        advancedNavigation = await openAdvancedNavigation(page, isMobile)
+        const moduleButton = advancedNavigation.getByRole('button', { name: module, exact: true })
         await moduleButton.click()
         const windowId = module === 'Knowledge' ? 'search' : module.toLowerCase()
         const window = page.locator(`[data-window-id="${windowId}"]`)
@@ -342,7 +403,8 @@ test('Browse state is isolated per TALOS chat session', async ({ page, isMobile 
     await expectNoDocumentOverflow(page)
 })
 
-test('Browse chat can capture screenshot evidence and restores it after reload', async ({ page }) => {
+test('BREG-007 Browse chat can capture screenshot evidence and restores it after reload', async ({ page }) => {
+    await resetMocks(page, { proceduralServerPersistedAssistant: true })
     let browserSessionCreates = 0
     page.on('request', (request) => {
         if (new URL(request.url()).pathname === '/api/talos/browser/sessions' && request.method() === 'POST') {
@@ -354,10 +416,10 @@ test('Browse chat can capture screenshot evidence and restores it after reload',
     await page.getByRole('button', { name: 'Send', exact: true }).click()
 
     const assistantBubble = page.locator('.talos-chat-message[data-message-role="assistant"]').last()
-    const activity = page.getByTestId('talos-browser-activity')
+    const screenshotEvidence = assistantBubble.getByTestId('talos-browser-screenshot-evidence')
     const screenshot = assistantBubble.getByRole('img', { name: browserScreenshotName })
     await expect(assistantBubble).toContainText('E2E response from AVM')
-    await expect(activity).toContainText('Screenshot')
+    await expect(screenshotEvidence).toBeVisible()
     await expect(screenshot).toBeVisible()
     await expect.poll(() => screenshot.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
 
@@ -436,7 +498,7 @@ test('procedural browser approval survives reload and resumes into a persisted a
     await expect(page.getByTestId('tool-approval-card')).toHaveCount(0)
 })
 
-test('a screenshot capability question does not fabricate screenshot evidence', async ({ page }) => {
+test('BREG-008 a screenshot capability question does not fabricate screenshot evidence', async ({ page }) => {
     await page.getByRole('button', { name: 'Browse', exact: true }).click()
     await page.getByLabel('Message TALOS').fill('quindi hai permessi screenshot?')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
@@ -526,7 +588,7 @@ test('Browse remains in place while the chat request carries the typed browser m
     expect(await page).toHaveURL(/\/$/)
 })
 
-test('a normal chat can enable Browse only for a contextual retry turn', async ({ page }) => {
+test('BREG-001 a normal chat can enable Browse only for a contextual retry turn', async ({ page }) => {
     const chatBodies: Record<string, unknown>[] = []
     page.on('request', (request) => {
         if (new URL(request.url()).pathname === '/api/talos/chat' && request.method() === 'POST') {

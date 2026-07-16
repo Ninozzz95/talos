@@ -10,6 +10,7 @@ use Kadmos\NodeStatus;
 use Kadmos\Tool\ProceduralNode;
 use Kadmos\Workers\NodeWorkerInterface;
 use RuntimeException;
+use Throwable;
 
 final class TalosProceduralNodeWorker implements NodeWorkerInterface
 {
@@ -56,12 +57,20 @@ final class TalosProceduralNodeWorker implements NodeWorkerInterface
             );
         }
 
-        $result = $this->evidenceBudgets->apply(
-            $this->turn,
-            $this->turnLeaseToken,
-            $node,
-            $this->backend->execute($node, $this->turn, $this->browserSession),
-        );
+        try {
+            $result = $this->evidenceBudgets->apply(
+                $this->turn,
+                $this->turnLeaseToken,
+                $node,
+                $this->backend->execute($node, $this->turn, $this->browserSession),
+            );
+        } catch (TalosToolRecoveryRequiredException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw new TalosToolRecoveryRequiredException(
+                message: 'The fenced tool execution did not return a verifiable outcome.',
+            );
+        }
 
         return [
             'status' => $result->isError ? NodeStatus::FAILED : NodeStatus::SUCCESS,

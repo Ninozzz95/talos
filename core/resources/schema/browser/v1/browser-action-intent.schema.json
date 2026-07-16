@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/schema/browser/v1/browser-action-intent.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "intent_id", "task_id", "source_message_id", "kind", "arguments", "target_tab_id", "requested_capabilities", "created_at"],
+  "properties": {
+    "schema_version": { "const": "talos.browser.intent.v1" },
+    "intent_id": { "$ref": "#/$defs/id" },
+    "task_id": { "$ref": "#/$defs/id" },
+    "source_message_id": { "$ref": "#/$defs/id" },
+    "kind": { "$ref": "#/$defs/actionKind" },
+    "arguments": { "type": "object" },
+    "target_tab_id": { "type": ["string", "null"], "minLength": 1, "maxLength": 256 },
+    "requested_capabilities": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "$ref": "#/$defs/capability" } },
+    "created_at": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[0-9A-HJKMNP-TV-Z]{26})$" },
+    "timestamp": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$" },
+    "actionKind": { "enum": ["navigate", "snapshot", "screenshot", "read", "click", "type", "select", "check", "scroll", "hover", "key", "drag", "upload", "download", "tab", "history", "dialog"] },
+    "capability": { "enum": ["navigate", "snapshot", "screenshot", "read", "click", "type", "select", "check", "scroll", "hover", "key", "drag", "upload", "download", "tabs", "history", "dialogs", "interactive_frame", "semantic_locator"] }
+  }
+}

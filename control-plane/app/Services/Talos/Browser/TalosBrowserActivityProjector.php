@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Talos\Browser;
 
 use App\Models\TalosBrowserArtifact;
+use App\Models\TalosBrowserEvidenceBundle;
 use App\Models\TalosBrowserSession;
 use App\Models\TalosMessage;
 use App\Models\TalosRun;
@@ -40,9 +41,10 @@ final class TalosBrowserActivityProjector
             ->whereIn('id', $sessionIds)
             ->get()
             ->keyBy('id');
+        $evidenceByRun = $this->reconciledEvidenceForRuns([(string) $run->id], $ownerUserId, (string) $run->session_id);
         $artifacts = $this->artifactsForEvents($events, $ownerUserId, $sessions->keys()->all());
 
-        return $this->project($run, $events, $sessions, $artifacts);
+        return $this->project($run, $events, $sessions, $artifacts, $evidenceByRun);
     }
 
     /**
@@ -78,6 +80,11 @@ final class TalosBrowserActivityProjector
             ->whereIn('id', $this->browserSessionIds($events))
             ->get()
             ->keyBy('id');
+        $evidenceByRun = $this->reconciledEvidenceForRuns(
+            $runIds->all(),
+            (int) $session->user_id,
+            (string) $session->id,
+        );
         $artifacts = $this->artifactsForEvents($events, (int) $session->user_id, $sessions->keys()->all());
 
         foreach ($messages as $message) {
@@ -88,7 +95,7 @@ final class TalosBrowserActivityProjector
                 ? $runs->get($message->run_id)
                 : null;
             if ($run instanceof TalosRun) {
-                $projection = $this->project($run, $run->getRelation('events'), $sessions, $artifacts);
+                $projection = $this->project($run, $run->getRelation('events'), $sessions, $artifacts, $evidenceByRun);
                 if ($projection['activities'] !== []) {
                     $metadata['browser_activities'] = $projection['activities'];
                 }
@@ -158,15 +165,67 @@ final class TalosBrowserActivityProjector
     }
 
     /**
+     * @param list<string> $runIds
+     * @return Collection<string, Collection<int, TalosBrowserEvidenceBundle>>
+     */
+    private function reconciledEvidenceForRuns(array $runIds, int $ownerUserId, string $sessionId): Collection
+    {
+        if ($runIds === [] || $ownerUserId <= 0 || $sessionId === '') {
+            return collect();
+        }
+
+        return TalosBrowserEvidenceBundle::query()
+            ->from('talos_browser_evidence_bundles as projection_evidence')
+            ->join('talos_browser_tasks as projection_tasks', function ($join): void {
+                $join->on('projection_tasks.id', '=', 'projection_evidence.task_id')
+                    ->on('projection_tasks.user_id', '=', 'projection_evidence.user_id')
+                    ->on('projection_tasks.talos_session_id', '=', 'projection_evidence.talos_session_id');
+            })
+            ->join('talos_browser_actions as projection_actions', function ($join): void {
+                $join->on('projection_actions.id', '=', 'projection_evidence.action_id')
+                    ->on('projection_actions.task_id', '=', 'projection_evidence.task_id')
+                    ->on('projection_actions.user_id', '=', 'projection_evidence.user_id')
+                    ->on('projection_actions.talos_session_id', '=', 'projection_evidence.talos_session_id');
+            })
+            ->join('talos_messages as projection_origins', function ($join): void {
+                $join->on('projection_origins.id', '=', 'projection_tasks.origin_message_id')
+                    ->on('projection_origins.session_id', '=', 'projection_tasks.talos_session_id');
+            })
+            ->where('projection_evidence.user_id', $ownerUserId)
+            ->where('projection_evidence.talos_session_id', $sessionId)
+            ->whereNotNull('projection_evidence.reconciled_at')
+            ->whereIn('projection_actions.status', ['evidence_committed', 'verified'])
+            ->whereIn('projection_origins.run_id', $runIds)
+            ->get([
+                'projection_evidence.*',
+                'projection_origins.run_id as projection_run_id',
+                'projection_tasks.browser_session_id as projection_browser_session_id',
+                'projection_actions.kind as projection_action_kind',
+            ])
+            ->groupBy(static fn (TalosBrowserEvidenceBundle $bundle): string => (string) $bundle->getAttribute('projection_run_id'));
+    }
+
+    /**
      * @param Collection<int, mixed> $events
      * @param EloquentCollection<string, TalosBrowserSession> $sessions
      * @param EloquentCollection<string, TalosBrowserArtifact> $artifacts
+     * @param Collection<string, Collection<int, TalosBrowserEvidenceBundle>> $evidenceByRun
      * @return array{activities: list<array<string, mixed>>, context: array<string, mixed>|null}
      */
-    private function project(TalosRun $run, Collection $events, EloquentCollection $sessions, EloquentCollection $artifacts): array
+    private function project(
+        TalosRun $run,
+        Collection $events,
+        EloquentCollection $sessions,
+        EloquentCollection $artifacts,
+        Collection $evidenceByRun,
+    ): array
     {
         $activities = [];
         $contextArtifacts = [];
+        $runEvidence = $evidenceByRun->get((string) $run->id, collect());
+        if (! $runEvidence instanceof Collection) {
+            $runEvidence = collect();
+        }
 
         foreach ($events as $event) {
             $payload = is_array($event->payload) ? $event->payload : [];
@@ -180,11 +239,22 @@ final class TalosBrowserActivityProjector
                 continue;
             }
 
+            $rawArtifactIds = $this->rawArtifactIds($payload);
+            $bundle = $event->event_type === 'browser.command.succeeded'
+                ? $this->matchingEvidenceBundle($runEvidence, $operation, $browserSessionId, $rawArtifactIds)
+                : null;
+            if ($event->event_type === 'browser.command.succeeded' && ! $bundle instanceof TalosBrowserEvidenceBundle) {
+                continue;
+            }
+            $bundleSourceIds = $bundle instanceof TalosBrowserEvidenceBundle
+                ? $this->bundleSourceIds($bundle)
+                : [];
             $validArtifacts = [];
-            foreach ($this->rawArtifactIds($payload) as $artifactId) {
+            foreach ($rawArtifactIds as $artifactId) {
                 $artifact = $artifacts->get($artifactId);
                 if ($artifact instanceof TalosBrowserArtifact
-                    && (string) $artifact->browser_session_id === $browserSessionId) {
+                    && (string) $artifact->browser_session_id === $browserSessionId
+                    && ($bundle === null || in_array($artifactId, $bundleSourceIds, true))) {
                     $validArtifacts[] = $artifact;
                 }
             }
@@ -212,6 +282,54 @@ final class TalosBrowserActivityProjector
             'activities' => $activities,
             'context' => $this->contextFromArtifacts($contextArtifacts, $sessions),
         ];
+    }
+
+    /**
+     * @param Collection<int, TalosBrowserEvidenceBundle> $bundles
+     * @param list<string> $eventArtifactIds
+     */
+    private function matchingEvidenceBundle(
+        Collection $bundles,
+        string $operation,
+        string $browserSessionId,
+        array $eventArtifactIds,
+    ): ?TalosBrowserEvidenceBundle {
+        foreach ($bundles as $bundle) {
+            if (! $bundle instanceof TalosBrowserEvidenceBundle
+                || (string) $bundle->getAttribute('projection_browser_session_id') !== $browserSessionId
+                || (string) $bundle->getAttribute('projection_action_kind') !== $operation) {
+                continue;
+            }
+            $sourceIds = $this->bundleSourceIds($bundle);
+            if ($sourceIds === []
+                || ($eventArtifactIds !== [] && array_intersect($eventArtifactIds, $sourceIds) === [])) {
+                continue;
+            }
+
+            return $bundle;
+        }
+
+        return null;
+    }
+
+    /** @return list<string> */
+    private function bundleSourceIds(TalosBrowserEvidenceBundle $bundle): array
+    {
+        $ids = [];
+        foreach ([$bundle->snapshot_artifact_id, $bundle->screenshot_artifact_id] as $artifactId) {
+            if (is_string($artifactId) && trim($artifactId) !== '') {
+                $ids[] = trim($artifactId);
+            }
+        }
+        $claims = is_array($bundle->claims) ? $bundle->claims : [];
+        foreach ($claims as $claim) {
+            $artifactId = is_array($claim) ? ($claim['source_artifact_id'] ?? null) : null;
+            if (is_string($artifactId) && trim($artifactId) !== '') {
+                $ids[] = trim($artifactId);
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     /** @param array<string, mixed> $payload @return list<string> */

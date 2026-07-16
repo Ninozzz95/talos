@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import concurrently from 'concurrently'
+import { generateBrowserActionKeypair } from './browser-action-keypair.mjs'
 import {
     acquireDevStackLease,
     assertBrowserWorkerCanStart,
@@ -27,6 +28,7 @@ function quoted(value) {
 
 export function createDevStackConfig({
     token = randomBytes(32).toString('hex'),
+    actionKeypair = generateBrowserActionKeypair(),
     inheritedEnv = process.env,
     platform = process.platform,
     workspaceRoot = defaultWorkspaceRoot,
@@ -41,18 +43,38 @@ export function createDevStackConfig({
     const hasLocalCaBundle = hasLocalPhpRuntime && fileExists(caBundle)
     const browserWorker = path.join(workspaceRoot, 'browser-worker')
     const validator = path.join(workspaceRoot, 'validator')
+    const sanitizedInheritedEnv = { ...inheritedEnv }
+    for (const name of [
+        'TALOS_BROWSER_WORKER_TOKEN',
+        'TALOS_BROWSER_ACTION_KEY_ID',
+        'TALOS_BROWSER_ACTION_PRIVATE_KEY_B64',
+        'TALOS_BROWSER_ACTION_PUBLIC_KEY_B64',
+    ]) {
+        delete sanitizedInheritedEnv[name]
+    }
     const sharedEnv = {
-        ...inheritedEnv,
+        ...sanitizedInheritedEnv,
         AVM_VALIDATOR_URL: 'http://127.0.0.1:3000',
         TALOS_VALIDATOR_HEALTH_URL: 'http://127.0.0.1:3000/health',
         TALOS_BROWSER_WORKER_URL: 'http://127.0.0.1:3100',
-        TALOS_BROWSER_WORKER_TOKEN: token,
         PHP_BIN: hasLocalPhpRuntime ? localPhpRuntime : 'php',
         ...(hasLocalCaBundle ? {
             TALOS_PHP_ROOT: phpRoot,
             CURL_CA_BUNDLE: caBundle,
             SSL_CERT_FILE: caBundle,
         } : {}),
+    }
+    const controlPlaneEnv = {
+        ...sharedEnv,
+        TALOS_BROWSER_WORKER_TOKEN: token,
+        TALOS_BROWSER_ACTION_KEY_ID: actionKeypair.keyId,
+        TALOS_BROWSER_ACTION_PRIVATE_KEY_B64: actionKeypair.privateKeyBase64,
+    }
+    const browserWorkerEnv = {
+        ...sharedEnv,
+        TALOS_BROWSER_WORKER_TOKEN: token,
+        TALOS_BROWSER_ACTION_KEY_ID: actionKeypair.keyId,
+        TALOS_BROWSER_ACTION_PUBLIC_KEY_B64: actionKeypair.publicKeyBase64,
     }
 
     return {
@@ -71,23 +93,23 @@ export function createDevStackConfig({
             {
                 name: 'server',
                 command: `${php} artisan serve --host=127.0.0.1 --port=8000`,
-                env: sharedEnv,
+                env: controlPlaneEnv,
             },
             {
                 name: 'queue',
                 command: `${php} artisan queue:listen --tries=1 --timeout=0`,
-                env: sharedEnv,
+                env: controlPlaneEnv,
             },
             {
                 name: 'vite',
                 command: `${npm} run dev -- --host 127.0.0.1 --port 5173`,
-                env: inheritedEnv,
+                env: sanitizedInheritedEnv,
             },
             {
                 name: 'browser',
                 command: `${npm} --prefix ${quoted(browserWorker)} run dev`,
                 env: {
-                    ...sharedEnv,
+                    ...browserWorkerEnv,
                     HOST: '127.0.0.1',
                     PORT: '3100',
                 },

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue'
-import { Check, ChevronDown, CircleAlert, Loader2, ScanSearch } from '@lucide/vue'
+import { Check, ChevronDown, CircleAlert, Loader2, ScanSearch, X } from '@lucide/vue'
+import { Button } from '../../ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../ui/collapsible'
 import TalosToolApprovalCard from './TalosToolApprovalCard.vue'
 import type {
@@ -9,6 +10,8 @@ import type {
     TalosBrowserPointerFrame,
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
+    TalosBrowserTask,
+    TalosMobileWindowPresentation,
     TalosPendingToolApproval,
 } from '../../../lib/talosTypes'
 
@@ -29,6 +32,13 @@ const props = withDefaults(defineProps<{
     excludedScreenshotArtifactIds?: string[]
     pendingToolApprovals?: TalosPendingToolApproval[]
     decidingToolApprovalIds?: string[]
+    browserTask?: TalosBrowserTask | null
+    browserTaskBusy?: boolean
+    browserTaskError?: string | null
+    browserTaskCommandPending?: boolean
+    embedded?: boolean
+    mobile?: boolean
+    mobileWindowPresentation?: TalosMobileWindowPresentation
 }>(), {
     activeBrowserSession: null,
     interactionPending: false,
@@ -39,12 +49,20 @@ const props = withDefaults(defineProps<{
     excludedScreenshotArtifactIds: () => [],
     pendingToolApprovals: () => [],
     decidingToolApprovalIds: () => [],
+    browserTask: null,
+    browserTaskBusy: false,
+    browserTaskError: null,
+    browserTaskCommandPending: false,
+    embedded: false,
+    mobile: false,
+    mobileWindowPresentation: 'drawer',
 })
 
 const emit = defineEmits<{
     interact: [frame: TalosBrowserPointerFrame]
     confirm: [decision: 'approve' | 'reject']
     decideToolApproval: [approval: TalosPendingToolApproval, decision: 'approve' | 'reject']
+    cancelTask: [taskId: string]
 }>()
 
 const rawEvidenceOpen = ref(false)
@@ -78,11 +96,76 @@ const sanitizedActivities = computed(() => props.activities.slice(-4).map((activ
     label: `${operationLabels[activity.operation] ?? 'Browser operation'} ${statusLabels[activity.status] ?? 'updated'}`,
 })))
 const showSanitizedStatus = computed(() => !props.devBrowserEvidence && sanitizedActivities.value.length > 0)
-const showActivity = computed(() => props.pendingToolApprovals.length > 0 || hasScreenshotEvidence.value || hasRawEvidence.value || showSanitizedStatus.value)
+const terminalTaskStatuses = new Set(['completed', 'failed', 'cancelled'])
+const taskLabels: Record<TalosBrowserTask['status'], string> = {
+    created: 'Preparing browser task',
+    planning: 'Planning browser task',
+    ready: 'Browser task ready',
+    running: 'Browsing in progress',
+    waiting_user: 'Browser task is waiting for your input',
+    recovering: 'Recovering browser task',
+    completed: 'Browser task completed',
+    failed: 'Browser task stopped because it could not continue',
+    cancelled: 'Browser task cancelled',
+}
+const taskLabel = computed(() => props.browserTask ? taskLabels[props.browserTask.status] : null)
+const taskIsActive = computed(() => Boolean(props.browserTask && !terminalTaskStatuses.has(props.browserTask.status)))
+const taskIsProgressing = computed(() => Boolean(props.browserTask && ['created', 'planning', 'ready', 'running', 'recovering'].includes(props.browserTask.status)))
+const showActivity = computed(() => Boolean(props.browserTask)
+    || Boolean(props.browserTaskError)
+    || props.pendingToolApprovals.length > 0
+    || hasScreenshotEvidence.value
+    || hasRawEvidence.value
+    || showSanitizedStatus.value)
 </script>
 
 <template>
-    <div v-if="showActivity" data-testid="talos-browser-activity" class="mb-4 min-w-0 overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs text-[var(--talos-text)]">
+    <div
+        v-if="showActivity"
+        data-testid="talos-browser-activity"
+        :data-presentation="embedded ? 'embedded' : 'standalone'"
+        class="min-w-0 overflow-hidden text-xs text-[var(--talos-text)]"
+        :class="embedded
+            ? 'py-1'
+            : 'mb-4 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2'"
+    >
+        <div v-if="browserTask && taskLabel" class="flex min-w-0 items-center gap-2 py-1">
+            <div
+                data-testid="talos-browser-task-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                class="flex min-w-0 flex-1 items-center gap-2"
+            >
+                <Loader2 v-if="taskIsProgressing" class="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
+                <CircleAlert v-else-if="browserTask.status === 'failed'" class="h-3.5 w-3.5 shrink-0 text-[var(--talos-warning)]" aria-hidden="true" />
+                <X v-else-if="browserTask.status === 'cancelled'" class="h-3.5 w-3.5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                <Check v-else class="h-3.5 w-3.5 shrink-0 text-[var(--talos-success)]" aria-hidden="true" />
+                <span class="min-w-0 flex-1 break-words font-medium">{{ taskLabel }}</span>
+            </div>
+            <Button
+                v-if="taskIsActive"
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="talos-browser-task-cancel"
+                class="h-7 shrink-0 border-[var(--talos-border-strong)] bg-transparent px-2.5 text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]"
+                :disabled="browserTaskCommandPending"
+                @click="emit('cancelTask', browserTask.id)"
+            >
+                <Loader2 v-if="browserTaskBusy" class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                <X v-else class="h-3.5 w-3.5" aria-hidden="true" />
+                {{ browserTaskBusy ? 'Cancelling' : 'Cancel' }}
+            </Button>
+        </div>
+        <p
+            v-if="browserTaskError"
+            data-testid="talos-browser-task-error"
+            role="alert"
+            class="mt-1 break-words rounded border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-2 py-1.5 text-[var(--talos-text)]"
+        >
+            {{ browserTaskError }}
+        </p>
         <div v-if="pendingToolApprovals.length" class="mb-2 space-y-2">
             <TalosToolApprovalCard
                 v-for="approval in pendingToolApprovals"
@@ -109,6 +192,8 @@ const showActivity = computed(() => props.pendingToolApprovals.length > 0 || has
             :interaction-error="interactionError"
             :pending-interaction-approval="pendingInteractionApproval"
             :excluded-artifact-ids="excludedScreenshotArtifactIds"
+            :mobile="mobile"
+            :mobile-window-presentation="mobileWindowPresentation"
             @interact="emit('interact', $event)"
             @confirm="emit('confirm', $event)"
         />

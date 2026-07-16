@@ -14,9 +14,10 @@ use App\Services\Talos\Browser\BrowserWorkerConfiguration;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
-use App\Services\Talos\Browser\TalosBrowserPolicy;
-use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserActionCapabilityIssuer;
 use App\Services\Talos\Browser\TalosBrowserArtifactReconciler;
+use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -28,7 +29,9 @@ final class TalosBrowserApiTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
+
     private TalosSession $chatSession;
+
     private FakeBrowserSessionClient $client;
 
     protected function setUp(): void
@@ -44,7 +47,7 @@ final class TalosBrowserApiTest extends TestCase
         $this->withHeader('X-Talos-Session-Id', $this->chatSession->id);
         $this->useIsolatedLocalStorage();
         config(['services.talos.browser.dev_evidence' => true]);
-        $this->client = new FakeBrowserSessionClient();
+        $this->client = new FakeBrowserSessionClient;
         $this->client->snapshotResponse = [
             'sessionId' => 'worker-1',
             'snapshotId' => 'snap_123e4567-e89b-12d3-a456-426614174000',
@@ -358,9 +361,12 @@ final class TalosBrowserApiTest extends TestCase
     {
         $session = $this->createSession();
         $artifact = TalosBrowserArtifact::query()->create(['browser_session_id' => $session->id, 'user_id' => $this->user->id, 'type' => 'snapshot', 'mime' => 'application/json', 'storage_disk' => 'local', 'storage_path' => 'browser/foreign.json', 'metadata' => []]);
-        $foreign = User::factory()->create(); $this->actingAs($foreign);
+        $foreign = User::factory()->create();
+        $this->actingAs($foreign);
 
-        foreach (["/api/talos/browser/sessions/{$session->id}", "/api/talos/browser/sessions/{$session->id}/events", "/api/talos/browser/artifacts/{$artifact->id}", "/api/talos/browser/artifacts/{$artifact->id}/preview"] as $route) $this->getJson($route)->assertNotFound();
+        foreach (["/api/talos/browser/sessions/{$session->id}", "/api/talos/browser/sessions/{$session->id}/events", "/api/talos/browser/artifacts/{$artifact->id}", "/api/talos/browser/artifacts/{$artifact->id}/preview"] as $route) {
+            $this->getJson($route)->assertNotFound();
+        }
         $this->deleteJson("/api/talos/browser/sessions/{$session->id}")->assertNotFound();
         $this->postJson("/api/talos/browser/sessions/{$session->id}/navigate", ['url' => 'https://example.com'])->assertNotFound();
         $this->postJson("/api/talos/browser/sessions/{$session->id}/screenshot")->assertNotFound();
@@ -443,14 +449,17 @@ final class TalosBrowserApiTest extends TestCase
     {
         $session = $this->createSession();
         $response = $this->postJson("/api/talos/browser/sessions/{$session->id}/screenshot")->assertCreated()->assertJsonPath('data.mime', 'image/png')->assertJsonMissingPath('data.storage_path')->assertJsonMissingPath('data.base64');
-        $artifactId = $response->json('data.id'); $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
+        $artifactId = $response->json('data.id');
+        $artifact = TalosBrowserArtifact::query()->findOrFail($artifactId);
         $this->assertTrue(Storage::disk('local')->exists($artifact->storage_path));
         $previewResponse = $this->get("/api/talos/browser/artifacts/{$artifactId}/preview")
             ->assertOk()
             ->assertHeader('content-type', 'image/png');
         $cacheControl = (string) $previewResponse->headers->get('Cache-Control');
         $this->assertStringContainsString('private', $cacheControl);
-        $this->assertStringContainsString('no-store', $cacheControl);
+        $this->assertStringContainsString('no-cache', $cacheControl);
+        $this->assertStringContainsString('must-revalidate', $cacheControl);
+        $this->assertStringNotContainsString('no-store', $cacheControl);
         $event = TalosBrowserEvent::query()->where('browser_session_id', $session->id)->where('type', 'screenshot.captured')->firstOrFail();
         $this->assertSame('screenshot', $event->payload['operation'] ?? null);
         $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', (string) ($event->payload['command_id'] ?? ''));
@@ -895,7 +904,7 @@ final class TalosBrowserApiTest extends TestCase
         $largeContents = str_repeat('x', 5_000_000);
         Storage::disk('local')->put($artifact->storage_path, $largeContents);
 
-        $receipt = DB::transaction(function () use ($artifact, $largeContents): array {
+        $receipt = DB::transaction(function () use ($largeContents): array {
             $session = TalosSession::query()->whereKey($this->chatSession->id)->lockForUpdate()->firstOrFail();
             $metadata = is_array($session->metadata) ? $session->metadata : [];
             $metadata[TalosBrowserArtifactStore::CLEANUP_PENDING_METADATA_KEY] = true;
@@ -1494,6 +1503,30 @@ final class TalosBrowserApiTest extends TestCase
         $this->assertDatabaseHas('talos_browser_events', ['browser_session_id' => $session->id, 'type' => 'policy.denied', 'url_after' => 'http://127.0.0.1/private']);
     }
 
+    public function test_whatwg_normalized_private_final_redirect_is_denied_before_page_state_is_committed(): void
+    {
+        $session = $this->createSession();
+        $this->client->navigateResponse = [
+            'url' => 'HTTP://LOCALHOST.:80/private/../latest/meta-data',
+            'title' => 'Metadata',
+            'status' => 'active',
+        ];
+
+        $this->postJson("/api/talos/browser/sessions/{$session->id}/navigate", ['url' => 'https://example.com'])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'TALOS_BROWSER_POLICY_DENIED');
+
+        $session->refresh();
+        $this->assertNull($session->current_url);
+        $this->assertNull($session->current_title);
+        $this->assertSame('ready', $session->status);
+        $this->assertDatabaseHas('talos_browser_events', [
+            'browser_session_id' => $session->id,
+            'type' => 'policy.denied',
+            'url_after' => 'HTTP://LOCALHOST.:80/private/../latest/meta-data',
+        ]);
+    }
+
     public function test_closed_session_rejects_read_only_operations_with_stable_browser_state_errors(): void
     {
         $session = $this->createSession();
@@ -1620,10 +1653,26 @@ final class TalosBrowserApiTest extends TestCase
         config()->set('services.talos.browser.client_driver', 'http');
         config()->set('services.talos.browser.worker_url', 'http://127.0.0.1:3110');
         config()->set('services.talos.browser.worker_token', 'integration-worker-token');
+        $this->configureEphemeralBrowserActionIssuer();
         $this->app->forgetInstance(BrowserWorkerConfiguration::class);
         $this->app->forgetInstance(BrowserSessionClient::class);
 
         $this->assertInstanceOf(HttpBrowserSessionClient::class, $this->app->make(BrowserSessionClient::class));
+    }
+
+    private function configureEphemeralBrowserActionIssuer(): void
+    {
+        $key = openssl_pkey_new([
+            'private_key_type' => OPENSSL_KEYTYPE_EC,
+            'curve_name' => 'prime256v1',
+        ]);
+        $this->assertNotFalse($key);
+        $privateKey = '';
+        $this->assertTrue(openssl_pkey_export($key, $privateKey));
+
+        config()->set('services.talos.browser.action_private_key_b64', base64_encode($privateKey));
+        config()->set('services.talos.browser.action_key_id', 'testing-browser-action-key');
+        $this->app->forgetInstance(TalosBrowserActionCapabilityIssuer::class);
     }
 
     public function test_http_browser_client_accepts_a_successful_no_content_close_response(): void
@@ -1835,6 +1884,7 @@ final class TalosBrowserApiTest extends TestCase
     private function createSession(): TalosBrowserSession
     {
         $id = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertCreated()->json('data.id');
+
         return TalosBrowserSession::query()->findOrFail($id);
     }
 

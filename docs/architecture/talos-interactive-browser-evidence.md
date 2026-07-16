@@ -30,7 +30,9 @@ trust boundaries.
    `confirm_sensitive`. A sensitive, ambiguous, privileged, or consequential
    target returns an upstream AlertDialog challenge bound to the same facts.
 7. Confirmation consumes a single-use approval and dispatches the exact
-   action under a fenced execution lease.
+   action under a fenced execution lease. Laravel signs a short-lived ES256
+   action capability bound to that complete request; the worker service token
+   alone cannot authorize the click.
 8. The worker returns the post-action screenshot and accessibility snapshot
    atomically. Laravel persists both the event and immutable artifact
    provenance before TALOS renders the new frame.
@@ -59,6 +61,16 @@ mutations. TALOS automatically retries only when the worker proves that a
 request was rejected before dispatch. A timeout or transport failure after
 possible dispatch is ambiguous and enters recovery instead of risking a
 duplicate click.
+
+Within one live worker session, the action ledger binds the action ID,
+idempotency key, request hash, precondition state version, completion status,
+and outcome hash. An exact duplicate can return the retained result; a changed
+request conflicts; an unknown post-dispatch outcome is recovery-required.
+
+A process restart intentionally discards isolated browser contexts. The new
+worker has a new instance identity and rejects the old session before consuming
+a retry capability. It does not infer that the prior action never happened.
+Laravel owns durable action records and later task/checkpoint reconciliation.
 
 Stale frames, reused approvals, expired approvals, wrong owners, wrong hashes,
 wrong state versions, duplicate commands, and unavailable workers fail
@@ -89,6 +101,9 @@ default and resets closed after reload.
 - Direct browser DNS and service-worker bypasses are denied.
 - Chromium launches with non-proxied WebRTC UDP disabled.
 - The worker requires a strong shared token in production.
+- Consequential actions also require a one-use ES256 capability issued by
+  Laravel; private and public key halves are process-separated.
+- Compact capabilities and private key material are never persisted or logged.
 - Plain HTTP worker transport requires an explicit development-only opt-in.
 - The MCP endpoint rejects browser Origins and enforces the configured host
   allowlist. The Browser Worker must never be internet-facing.
@@ -101,12 +116,13 @@ HTTP endpoint implemented by the pinned official TypeScript SDK. The pinned
 official PHP SDK exercises a live conformance round trip in CI; mocks do not
 replace this gate.
 
-The worker advertises the exact HMI runtime compatibility identifier
-`talos_browser_hmi_runtime_v2.1.0` from authenticated readiness and public
-liveness envelopes. Laravel, the native launcher, Doctor, Docker and CI fail
-closed when that identifier is absent or different. This prevents an old but
-still-running worker from accepting sessions and failing only when a user
-clicks the current screenshot frame.
+The worker advertises `talos.browser.worker.v2` and the exact HMI runtime
+identifier `talos_browser_hmi_runtime_v2.1.0` from authenticated readiness and
+public liveness envelopes. Its authenticated handshake also declares the ES256
+action-capability schema, type, issuer, audience, key ID, and maximum TTL.
+Laravel, the native launcher, Doctor, Docker and CI fail closed when any part is
+absent or incompatible. This prevents an old but still-running worker from
+accepting sessions and failing only when a user clicks the current frame.
 
 ## Verification
 
@@ -127,11 +143,13 @@ cd ..
 bash scripts/tests/talos-live-browser-worker-ci.sh
 ```
 
-The live script starts one production-mode worker and requires the official MCP
-round trip, Laravel integration, and authenticated Playwright UI click to pass
-against that same worker. The UI gate decodes the owner-scoped artifact and
-compares sampled RGBA pixels with the frame TALOS rendered; deterministic UI
-mocks are kept in a separate non-live path and cannot satisfy this gate.
+The live script starts a production-mode worker and requires the official MCP
+round trip, Laravel integration, and authenticated Playwright UI click. It then
+commits one real HMI action, terminates the process, starts a different worker
+instance, and proves that the exact old-session retry is rejected before
+redispatch. The UI gate decodes the owner-scoped artifact and compares sampled
+RGBA pixels with the frame TALOS rendered; deterministic UI mocks are kept in a
+separate non-live path and cannot satisfy this gate.
 
 The E2E matrix covers desktop and mobile interaction, sensitive confirmation,
 stale and unavailable states, artifact reload, development disclosure,

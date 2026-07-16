@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\TalosBrowserArtifact;
+use App\Models\TalosBrowserAction;
+use App\Models\TalosBrowserEvidenceBundle;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosBrowserTask;
 use App\Models\TalosSession;
 use App\Models\TalosRun;
 use App\Models\User;
@@ -261,6 +264,21 @@ final class TalosMessageApiTest extends TestCase
         $this->assertLessThanOrEqual(8, $denseQueries, 'The message listing evidence projection exceeded its bounded query budget.');
     }
 
+    public function test_message_listing_does_not_project_success_from_an_unreconciled_browser_bundle(): void
+    {
+        $session = $this->sessionWithBrowserEvidence('Staged evidence', 1, false);
+
+        $messages = $this->getJson('/api/talos/sessions/'.$session->id.'/messages')
+            ->assertOk()
+            ->json('data');
+
+        self::assertIsArray($messages);
+        $assistant = collect($messages)->firstWhere('role', 'assistant');
+        self::assertIsArray($assistant);
+        self::assertArrayNotHasKey('browser_activities', $assistant['metadata'] ?? []);
+        self::assertArrayNotHasKey('used_browser_context', $assistant['metadata'] ?? []);
+    }
+
     public function test_messages_are_scoped_to_sessions_owned_by_the_authenticated_user(): void
     {
         $owner = User::factory()->create();
@@ -323,7 +341,7 @@ final class TalosMessageApiTest extends TestCase
         ]);
     }
 
-    private function sessionWithBrowserEvidence(string $title, int $runCount): TalosSession
+    private function sessionWithBrowserEvidence(string $title, int $runCount, bool $reconciled = true): TalosSession
     {
         $session = TalosSession::query()->create([
             'user_id' => $this->user->id,
@@ -367,6 +385,75 @@ final class TalosMessageApiTest extends TestCase
                     'state_version' => $index + 1,
                 ],
             ]);
+            $origin = $session->messages()->create([
+                'role' => 'user',
+                'run_id' => $run->id,
+                'content' => 'Capture screenshot '.$index,
+            ]);
+            $task = TalosBrowserTask::query()->create([
+                'schema_version' => 'talos.browser.task.v1',
+                'user_id' => $this->user->id,
+                'talos_session_id' => $session->id,
+                'origin_message_id' => $origin->id,
+                'browser_session_id' => $browserSession->id,
+                'goal' => 'Capture screenshot '.$index,
+                'status' => $reconciled ? 'completed' : 'running',
+                'autonomy_profile' => 'read_only',
+                'budget' => [],
+                'state_version' => $index + 1,
+                'requested_at' => now(),
+                'started_at' => now(),
+                'completed_at' => $reconciled ? now() : null,
+            ]);
+            $action = TalosBrowserAction::query()->create([
+                'schema_version' => 'talos.browser.action.v1',
+                'task_id' => $task->id,
+                'user_id' => $this->user->id,
+                'talos_session_id' => $session->id,
+                'intent_id' => 'message-projector-'.$index,
+                'sequence' => 1,
+                'kind' => 'screenshot',
+                'arguments' => [],
+                'expected_state_version' => $index,
+                'risk' => 'read',
+                'idempotency_key' => 'sha256:'.hash('sha256', $run->id),
+                'preconditions' => [],
+                'status' => $reconciled ? 'evidence_committed' : 'committed',
+                'result_sha256' => 'sha256:'.hash('sha256', 'result-'.$run->id),
+                'requested_at' => now(),
+                'approved_at' => now(),
+                'started_at' => now(),
+                'committed_at' => now(),
+                'reconciled_at' => $reconciled ? now() : null,
+            ]);
+            TalosBrowserEvidenceBundle::query()->create([
+                'schema_version' => 'talos.browser.evidence.v1',
+                'task_id' => $task->id,
+                'action_id' => $action->id,
+                'user_id' => $this->user->id,
+                'talos_session_id' => $session->id,
+                'worker_state_version' => $index + 1,
+                'url' => 'https://example.com/'.$index,
+                'title' => 'Evidence '.$index,
+                'captured_at' => now(),
+                'frame' => ['viewport' => ['width' => 1280, 'height' => 800]],
+                'screenshot_artifact_id' => $artifact->id,
+                'screenshot_mime' => 'image/png',
+                'screenshot_sha256' => 'sha256:'.$artifact->sha256,
+                'screenshot_byte_size' => 1,
+                'screenshot_width' => 1280,
+                'screenshot_height' => 800,
+                'screenshot_redaction_status' => 'not_required',
+                'integrity_sha256' => 'sha256:'.hash('sha256', 'bundle-'.$run->id),
+                'claims' => [[
+                    'claim_id' => 'claim-'.$index,
+                    'kind' => 'screenshot',
+                    'value' => 'sha256:'.$artifact->sha256,
+                    'source_artifact_id' => (string) $artifact->id,
+                ]],
+                'committed_at' => now(),
+                'reconciled_at' => $reconciled ? now() : null,
+            ]);
             $run->events()->create([
                 'sequence' => 1,
                 'event_type' => 'browser.command.succeeded',
@@ -399,13 +486,12 @@ final class TalosMessageApiTest extends TestCase
         try {
             $response = $this->getJson('/api/talos/sessions/'.$session->id.'/messages')
                 ->assertOk()
-                ->assertJsonCount($expectedMessages, 'data');
-            for ($index = 0; $index < $expectedMessages; $index++) {
-                $response
-                    ->assertJsonPath("data.{$index}.metadata.browser_activities.0.operation", 'screenshot')
-                    ->assertJsonPath("data.{$index}.metadata.used_browser_context.screenshot_artifact_id", function (mixed $id): bool {
-                        return is_string($id) && $id !== '';
-                    });
+                ->assertJsonCount($expectedMessages * 2, 'data');
+            $assistants = collect($response->json('data'))->where('role', 'assistant')->values();
+            self::assertCount($expectedMessages, $assistants);
+            foreach ($assistants as $assistant) {
+                self::assertSame('screenshot', data_get($assistant, 'metadata.browser_activities.0.operation'));
+                self::assertIsString(data_get($assistant, 'metadata.used_browser_context.screenshot_artifact_id'));
             }
 
             return count(array_filter(

@@ -15,11 +15,14 @@ use App\Models\TalosRun;
 use App\Models\TalosRunArtifact;
 use App\Models\TalosRunEvent;
 use App\Models\TalosSession;
+use App\Services\Talos\Browser\TalosBrowserLegacyV1Adapter;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 final class TalosSessionExportService
 {
+    public function __construct(private readonly TalosBrowserLegacyV1Adapter $legacyBrowser) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -46,6 +49,7 @@ final class TalosSessionExportService
                 ->map(fn (TalosRun $run): array => $this->runPayload($run, $modelProfiles))
                 ->values()
                 ->all(),
+            'browser_legacy_projection' => $this->legacyBrowser->projectForSession($session),
             'context_manifest' => $contextManifest,
             'benchmark_readiness' => $benchmarkReadiness,
             'markdown_transcript' => $this->markdown($session, $messages),
@@ -130,8 +134,8 @@ final class TalosSessionExportService
     }
 
     /**
-     * @param Collection<int, TalosMessage> $messages
-     * @param Collection<int, TalosRun> $runs
+     * @param  Collection<int, TalosMessage>  $messages
+     * @param  Collection<int, TalosRun>  $runs
      * @return array<string, array<string, mixed>>
      */
     private function modelProfiles(Collection $messages, Collection $runs): array
@@ -174,12 +178,13 @@ final class TalosSessionExportService
     }
 
     /**
-     * @param array<string, array<string, mixed>> $modelProfiles
+     * @param  array<string, array<string, mixed>>  $modelProfiles
      * @return array<string, mixed>
      */
     private function messagePayload(TalosMessage $message, array $modelProfiles): array
     {
         $metadata = is_array($message->metadata) ? $message->metadata : [];
+        $exportMetadata = $this->legacyBrowser->annotateMessageMetadata($metadata);
 
         return [
             'id' => $message->id,
@@ -190,14 +195,14 @@ final class TalosSessionExportService
             'run_id' => $message->run_id,
             'used_context' => $this->listFromMetadata($metadata, 'used_context'),
             'used_memories' => $this->listFromMetadata($metadata, 'used_memories'),
-            'metadata' => $this->redactArray($metadata),
+            'metadata' => $this->redactArray($exportMetadata),
             'created_at' => $message->created_at?->toJSON(),
             'updated_at' => $message->updated_at?->toJSON(),
         ];
     }
 
     /**
-     * @param array<string, array<string, mixed>> $modelProfiles
+     * @param  array<string, array<string, mixed>>  $modelProfiles
      * @return array<string, mixed>
      */
     private function runPayload(TalosRun $run, array $modelProfiles): array
@@ -248,8 +253,8 @@ final class TalosSessionExportService
     }
 
     /**
-     * @param Collection<int, TalosMessage> $messages
-     * @param Collection<int, TalosRun> $runs
+     * @param  Collection<int, TalosMessage>  $messages
+     * @param  Collection<int, TalosRun>  $runs
      * @return array<string, mixed>
      */
     private function contextManifest(Collection $messages, Collection $runs): array
@@ -395,7 +400,7 @@ final class TalosSessionExportService
     }
 
     /**
-     * @param Collection<int, TalosRun> $runs
+     * @param  Collection<int, TalosRun>  $runs
      * @return array{ready: bool, missing: list<string>, scenario?: array<string, mixed>}
      */
     private function benchmarkReadiness(TalosSession $session, Collection $runs): array
@@ -464,32 +469,32 @@ final class TalosSessionExportService
     }
 
     /**
-     * @param Collection<int, TalosMessage> $messages
+     * @param  Collection<int, TalosMessage>  $messages
      */
     private function markdown(TalosSession $session, Collection $messages): string
     {
         $lines = [
             '# TALOS Session Export',
             '',
-            '- Session ID: ' . $session->id,
-            '- Title: ' . $session->title,
-            '- Exported at: ' . now()->toJSON(),
+            '- Session ID: '.$session->id,
+            '- Title: '.$session->title,
+            '- Exported at: '.now()->toJSON(),
             '',
             '## Messages',
         ];
 
         foreach ($messages as $message) {
             $lines[] = '';
-            $lines[] = '### ' . strtoupper((string) $message->role) . ' - ' . ($message->created_at?->toJSON() ?? 'unknown time');
+            $lines[] = '### '.strtoupper((string) $message->role).' - '.($message->created_at?->toJSON() ?? 'unknown time');
             $lines[] = '';
             $lines[] = (string) $message->content;
         }
 
-        return implode("\n", $lines) . "\n";
+        return implode("\n", $lines)."\n";
     }
 
     /**
-     * @param array<string, mixed> $metadata
+     * @param  array<string, mixed>  $metadata
      * @return list<array<string, mixed>>
      */
     private function listFromMetadata(array $metadata, string $key): array
@@ -507,7 +512,7 @@ final class TalosSessionExportService
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     private function redactArray(array $payload): array

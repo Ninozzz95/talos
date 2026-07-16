@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\Talos\Browser\TalosBrowserLegacyWritesDisabled;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -21,6 +22,18 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (TalosBrowserLegacyWritesDisabled $exception, Request $request): ?JsonResponse {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            return new JsonResponse([
+                'code' => 'TALOS_BROWSER_LEGACY_WRITES_DISABLED',
+                'message' => 'Legacy Browser writes are disabled while TALOS uses the canonical Browser v1 contract.',
+                'details' => ['operation' => $exception->operation],
+            ], 409);
+        });
+
         $exceptions->render(function (HttpExceptionInterface $exception, Request $request): ?JsonResponse {
             if ($exception->getStatusCode() !== 419 || ! $request->is('api/*')) {
                 return null;

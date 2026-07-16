@@ -37,6 +37,48 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Microsoft Playwright MCP 0.0.78
+
+- Upstream: https://github.com/microsoft/playwright-mcp/tree/v0.0.78
+- Package: https://www.npmjs.com/package/@playwright/mcp/v/0.0.78
+- Integrity: `sha512-XLTUeA6mEN9sQ+hJ4dfG8EIkDbxS0K3Trc2RBkUJuf02TgE2FQRNTMtq/aJfhyRMINsRl/Ybc4sxcWLtFn4/TQ==`
+- Tarball SHA-1: `305c96c4ac0179bd37622fe4ed4162493513b33e`
+- Direct transitive runtime pin: `playwright@1.62.0-alpha-1783623505000`
+- License: Apache-2.0
+- License text: https://github.com/microsoft/playwright-mcp/blob/v0.0.78/LICENSE
+- Copyright: Copyright (c) Microsoft Corporation
+- TALOS use: direct in-process browser automation server connected through the
+  official MCP SDK in-memory transport to the TALOS-owned Playwright
+  `BrowserContext`. An AVM gateway exposes only the pinned safe-tool allowlist
+  and retains URL policy, capabilities, ownership, one-tab enforcement,
+  idempotency, lifecycle, and recovery control. The upstream unsafe code tool
+  is never advertised or dispatched.
+
+## PHP Domain Parser 6.4.0
+
+- Upstream: https://github.com/jeremykendall/php-domain-parser/tree/6.4.0
+- Package: https://packagist.org/packages/jeremykendall/php-domain-parser#6.4.0
+- Source reference: `98401b32371fc1a75d93d4653d311b38e71f0d82`
+- License: MIT
+- Copyright: Copyright (C) 2013 Jeremy Kendall
+- License text: `control-plane/vendor/jeremykendall/php-domain-parser/LICENSE`
+- TALOS use: direct, pinned Public Suffix List evaluation behind the
+  `TalosPublicSuffixList` adapter. URL parsing remains owned by PHP 8.5's
+  built-in WHATWG URL implementation.
+
+## Public Suffix List 9b5c8144
+
+- Upstream: https://publicsuffix.org/list/public_suffix_list.dat
+- Repository commit: `9b5c814414374aa19a93dc6dd7e47c01909524cc`
+- SHA-256: `d2ae7d02585e00b8cb5427dc660d3d45e2a49f618d61c83344fc80502236194c`
+- License: Mozilla Public License 2.0
+- Bundled license: `control-plane/resources/talos/public_suffix_list.LICENSE`
+- Provenance: `control-plane/resources/talos/public_suffix_list.provenance.json`
+- TALOS use: reproducible offline public-suffix and registrable-domain
+  evaluation for canonical Browser URL intents. Runtime network updates are
+  disabled; upgrades require an explicit commit/hash change and regression
+  gate.
+
 ## Model Context Protocol PHP SDK 0.6.0
 
 - Upstream: https://github.com/modelcontextprotocol/php-sdk
@@ -86,9 +128,10 @@ SOFTWARE.
 - Pinned commit: `8458763e0dd0b6baa310e04f1829fc73da4e8c8a`
 - License: Apache-2.0
 - License text: https://github.com/opis/json-schema/blob/2.6.0/LICENSE
-- TALOS use: direct server-side validation of provider tool arguments against
-  server-owned JSON Schema contracts before AVM compilation or physical tool
-  dispatch. Remote schemas and provider-supplied schemas are not loaded.
+- TALOS use: direct server-side validation of provider tool arguments and
+  package-local Browser v1 contracts before AVM compilation, persistence or
+  physical tool dispatch. Remote schemas and provider-supplied schemas are not
+  loaded.
 
 ## SearXNG 2026.7.12-c19d86faa
 

@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\TalosBrowserArtifact;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosMessage;
 use App\Models\TalosRun;
 use App\Models\TalosRunArtifact;
 use App\Models\TalosSession;
@@ -14,17 +15,20 @@ use App\Models\User;
 use App\Services\Security\PublicHttpRequestPinning;
 use App\Services\Security\PublicHttpUrlPolicy;
 use App\Services\Talos\Agent\TalosLaravelToolExecutionBackend;
+use App\Services\Talos\Browser\BrowserActionAuthorization;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserToolResult;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use App\Services\Talos\Web\TalosWebFetchService;
 use App\Services\Talos\Web\WebSearchProviderFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Kadmos\Tool\ProceduralLoopGuard;
 use Kadmos\Tool\ProceduralNode;
+use Kadmos\Tool\ProceduralPlan;
 use Kadmos\Tool\ToolCall;
 use Kadmos\Tool\ToolExecutionContext;
 use Tests\TestCase;
@@ -128,6 +132,26 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             'sha256:'.TalosBrowserArtifact::query()->findOrFail($browser->last_snapshot_artifact_id)->sha256,
             $read->structuredContent['used_browser_context']['evidence_hash'],
         );
+
+        $links = TalosRunArtifact::query()
+            ->where('run_id', $run->id)
+            ->where('uri', 'talos-browser-artifact://'.$browser->last_snapshot_artifact_id)
+            ->get();
+        $this->assertCount(2, $links);
+        $this->assertSame(
+            ['call_browser_read', 'call_browser_snapshot'],
+            $links->map(static fn (TalosRunArtifact $link): mixed => $link->metadata['provider_call_id'] ?? null)
+                ->sort()
+                ->values()
+                ->all(),
+        );
+        $this->assertSame(
+            [(string) $turn->id],
+            $links->map(static fn (TalosRunArtifact $link): mixed => $link->metadata['tool_turn_id'] ?? null)
+                ->unique()
+                ->values()
+                ->all(),
+        );
     }
 
     public function test_browser_click_binds_the_model_ref_to_server_snapshot_state_and_persists_post_action_evidence(): void
@@ -171,6 +195,12 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             'snapshot_id' => 'snap_cookie-banner',
             'state_version' => 0,
         ], $request['arguments']);
+        $this->assertInstanceOf(BrowserActionAuthorization::class, $request['authorization']);
+        $this->assertSame('call_browser_click', $request['authorization']->actionId());
+        $this->assertSame([
+            'kind' => 'policy',
+            'policy' => 'talos_browser_semantic_click',
+        ], $request['authorization']->toCapabilityAttestation());
         $this->assertSame(1, $browser->refresh()->worker_state_version);
         $this->assertCount(2, $click->evidence);
         $this->assertSame(['screenshot', 'snapshot'], array_column($click->evidence, 'kind'));
@@ -481,18 +511,12 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             'metadata' => [],
             'started_at' => now(),
         ]);
-        $turn = TalosToolTurn::query()->create([
-            'user_id' => $user->id,
+        TalosMessage::query()->create([
             'session_id' => $chat->id,
+            'role' => 'user',
+            'content' => 'Tool backend',
             'run_id' => $run->id,
-            'status' => 'awaiting_tool_results',
-            'provider' => 'test',
-            'model' => 'test',
-            'adapter_version' => 'test_v1',
-            'pending_tool_call_ids' => [],
-            'budget_policy' => ['max_calls' => 8],
-            'budget_usage' => [],
-            'started_at' => now(),
+            'metadata' => [],
         ]);
         $browser = TalosBrowserSession::query()->create([
             'user_id' => $user->id,
@@ -506,6 +530,20 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             'policy' => [],
             'worker_state_version' => 0,
             'expires_at' => now()->addHour(),
+        ]);
+        $turn = TalosToolTurn::query()->create([
+            'user_id' => $user->id,
+            'session_id' => $chat->id,
+            'browser_session_id' => $browser->id,
+            'run_id' => $run->id,
+            'status' => 'awaiting_tool_results',
+            'provider' => 'test',
+            'model' => 'test',
+            'adapter_version' => 'test_v1',
+            'pending_tool_call_ids' => [],
+            'budget_policy' => ['max_calls' => 8],
+            'budget_usage' => [],
+            'started_at' => now(),
         ]);
 
         return [$user, $chat, $run, $turn, $browser];
@@ -535,6 +573,7 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             type: match ($tool) {
                 'browser_snapshot' => 'TOOL_BROWSER_SNAPSHOT',
                 'browser_read' => 'TOOL_BROWSER_READ',
+                'browser_take_screenshot' => 'TOOL_BROWSER_SCREENSHOT',
                 'browser_click' => 'TOOL_BROWSER_CLICK',
                 'web_search' => 'TOOL_WEB_SEARCH',
                 'web_fetch' => 'TOOL_WEB_FETCH',
@@ -548,43 +587,70 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             producesEvidence: true,
         );
 
-        if ($tool === 'browser_click' && $browser instanceof TalosBrowserSession) {
-            $browser->refresh();
-            $artifact = TalosBrowserArtifact::query()
-                ->whereKey($browser->last_snapshot_artifact_id)
-                ->where('browser_session_id', $browser->id)
-                ->where('user_id', $turn->user_id)
-                ->where('type', 'snapshot')
-                ->firstOrFail();
-            $snapshotId = is_array($artifact->metadata) && is_string($artifact->metadata['snapshot_id'] ?? null)
-                ? $artifact->metadata['snapshot_id']
-                : null;
-            $this->assertIsString($snapshotId);
-            $turn->calls()->updateOrCreate(
-                ['provider_call_id' => $call->providerCallId],
-                [
-                    'run_id' => $run->id,
-                    'user_id' => $turn->user_id,
-                    'sequence' => 1,
-                    'logical_call_id' => $call->providerCallId,
-                    'node_id' => $nodeId,
-                    'tool_name' => $tool,
-                    'node_type' => 'TOOL_BROWSER_CLICK',
-                    'arguments' => $arguments,
-                    'arguments_sha256' => 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($arguments)),
-                    'dependencies' => [],
-                    'fingerprint' => $node->fingerprint,
+        if (str_starts_with($tool, 'browser_') && $browser instanceof TalosBrowserSession) {
+            $callFields = [
+                'run_id' => $run->id,
+                'user_id' => $turn->user_id,
+                'sequence' => ((int) $turn->calls()->max('sequence')) + 1,
+                'logical_call_id' => $call->providerCallId,
+                'node_id' => $nodeId,
+                'tool_name' => $tool,
+                'node_type' => $node->type,
+                'arguments' => $arguments,
+                'arguments_sha256' => 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($arguments)),
+                'dependencies' => [],
+                'fingerprint' => $node->fingerprint,
+                'state_version' => (int) $browser->worker_state_version,
+                'risk' => $tool === 'browser_click' ? 'high' : 'low',
+                'capability' => $tool === 'browser_click' ? 'browser.write' : 'browser.read',
+                'status' => 'running',
+                'attempt' => 0,
+                'approval_state' => $tool === 'browser_click' ? 'claimed' : 'not_required',
+            ];
+            if (in_array($tool, ['browser_click', 'browser_read'], true)) {
+                $browser->refresh();
+                $artifact = TalosBrowserArtifact::query()
+                    ->whereKey($browser->last_snapshot_artifact_id)
+                    ->where('browser_session_id', $browser->id)
+                    ->where('user_id', $turn->user_id)
+                    ->where('type', 'snapshot')
+                    ->firstOrFail();
+                $snapshotId = is_array($artifact->metadata) && is_string($artifact->metadata['snapshot_id'] ?? null)
+                    ? $artifact->metadata['snapshot_id']
+                    : null;
+                $this->assertIsString($snapshotId);
+                $callFields = [
+                    ...$callFields,
                     'state_version' => (int) $browser->worker_state_version,
                     'evidence_hash' => 'sha256:'.$artifact->sha256,
                     'evidence_snapshot_artifact_id' => $artifact->id,
                     'evidence_snapshot_id' => $snapshotId,
-                    'risk' => 'high',
-                    'capability' => 'browser.write',
-                    'status' => 'running',
-                    'attempt' => 0,
-                    'approval_state' => 'claimed',
+                ];
+            }
+            $persistedCall = $turn->calls()->updateOrCreate(
+                ['provider_call_id' => $call->providerCallId],
+                [
+                    ...$callFields,
+                    'effect_key' => $context->idempotencyKey,
+                    'effect_status' => 'in_flight',
                 ],
             );
+            if ((int) $browser->user_id === (int) $turn->user_id
+                && (string) $browser->talos_session_id === (string) $chat->id) {
+                $runtime = $this->app->make(TalosBrowserTaskRuntime::class);
+                $task = $runtime->begin((int) $turn->user_id, $run, $browser);
+                $runtime->prepareActions(
+                    (int) $turn->user_id,
+                    $task,
+                    new ProceduralPlan(
+                        $node->requiresApproval ? ProceduralPlan::AWAITING_APPROVAL : ProceduralPlan::DAG_COMPILED,
+                        [$node],
+                        [$node->id],
+                        [],
+                    ),
+                    [$node->id => $persistedCall],
+                );
+            }
         }
 
         return $node;

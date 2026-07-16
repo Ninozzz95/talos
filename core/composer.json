@@ -4,7 +4,8 @@
     "type": "library",
     "license": "proprietary",
     "require": {
-        "php": "^8.5"
+        "php": "^8.5",
+        "opis/json-schema": "2.6.0"
     },
     "require-dev": {
         "mcp/sdk": "0.6.0",

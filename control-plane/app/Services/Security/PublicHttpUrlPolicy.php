@@ -108,21 +108,15 @@ final class PublicHttpUrlPolicy
      */
     public function inspect(string $url, bool $requireResolution = false, bool $resolveHostname = true): array
     {
-        $parts = parse_url($url);
-        $scheme = is_array($parts) ? strtolower((string) ($parts['scheme'] ?? '')) : '';
-        $host = is_array($parts) ? $this->normalizeHost((string) ($parts['host'] ?? '')) : '';
-
-        if (! is_array($parts)
-            || isset($parts['user'])
-            || isset($parts['pass'])
-            || ($this->rejectQueryAndFragment && (isset($parts['query']) || isset($parts['fragment'])))
-            || $host === ''
-            || ! in_array($scheme, ['http', 'https'], true)) {
-            return $this->decision(false, 'invalid or unsupported URL', $host, []);
+        try {
+            $canonical = CanonicalHttpUrl::fromString($url);
+        } catch (\InvalidArgumentException) {
+            return $this->decision(false, 'invalid or unsupported URL', '', []);
         }
+        $host = $canonical->asciiHost;
 
-        $port = $parts['port'] ?? null;
-        if (($port !== null && (! is_int($port) || $port < 1 || $port > 65535)) || ! $this->isValidHost($host)) {
+        if (($this->rejectQueryAndFragment && ($canonical->query !== null || $canonical->fragment !== null))
+            || $host === '') {
             return $this->decision(false, 'invalid or unsupported URL', $host, []);
         }
 
@@ -167,16 +161,20 @@ final class PublicHttpUrlPolicy
 
     private function normalizeHost(string $host): string
     {
-        return strtolower(rtrim(trim($host, "[] \t\n\r\0\x0B"), '.'));
-    }
-
-    private function isValidHost(string $host): bool
-    {
-        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-            return true;
+        $host = strtolower(rtrim(trim($host, "[] \t\n\r\0\x0B"), '.'));
+        if ($host === '') {
+            return '';
         }
 
-        return filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) !== false;
+        try {
+            $authority = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false
+                ? "[{$host}]"
+                : $host;
+
+            return CanonicalHttpUrl::fromString("http://{$authority}/")->asciiHost;
+        } catch (\InvalidArgumentException) {
+            return '';
+        }
     }
 
     /**

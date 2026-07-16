@@ -31,9 +31,13 @@ final class TalosBrowserArtifactStore
 
     public const MAX_CLEANUP_ARTIFACTS = 100;
 
+    public function __construct(private readonly TalosBrowserLegacyWriteGate $legacyWrites) {}
+
     /** @param array<string, mixed> $metadata @param array<string, mixed> $provenance */
     public function store(TalosBrowserSession $session, string $type, string $mime, string $contents, array $metadata = [], array $provenance = []): TalosBrowserArtifact
     {
+        $this->legacyWrites->assertEnabled('browser.artifact.store');
+
         $id = (string) str()->uuid();
         $path = self::artifactPath((int) $session->user_id, (string) $session->id, $id);
         $disk = $this->localDisk();
@@ -124,6 +128,8 @@ final class TalosBrowserArtifactStore
         ?string $approvalId = null,
         ?string $executionLeaseToken = null,
     ): array {
+        $this->legacyWrites->assertEnabled('browser.artifact.store_hmi_capture');
+
         if (($approvalId === null) !== ($executionLeaseToken === null)) {
             throw new \RuntimeException('Browser HMI execution lease binding is incomplete.');
         }

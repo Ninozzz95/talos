@@ -9,6 +9,8 @@ use App\Models\TalosRunArtifact;
 use App\Models\TalosToolCall;
 use App\Models\TalosToolResult as PersistedToolResult;
 use App\Models\TalosToolTurn;
+use App\Services\Talos\Browser\TalosBrowserEvidenceException;
+use App\Services\Talos\Browser\TalosBrowserEvidenceVerifier;
 use InvalidArgumentException;
 use Kadmos\Tool\ProviderTurnResponse;
 use Kadmos\Tool\ToolResult;
@@ -24,17 +26,28 @@ final class TalosGroundingGate
         'web_fetch',
     ];
 
+    public function __construct(
+        private readonly TalosOperationalClaimInspector $claimInspector,
+        private readonly TalosBrowserEvidenceVerifier $browserEvidence,
+    ) {}
+
     public function release(TalosToolTurn $turn, ProviderTurnResponse $response): string
     {
         if ($response->kind !== ProviderTurnResponse::FINAL || ! is_string($response->text) || trim($response->text) === '') {
             throw new TalosGroundingException('TALOS_GROUNDING_FINAL_REQUIRED', 'Grounding gate accepts only a final provider response.');
         }
 
+        $referencedEvidenceIds = $this->claimInspector->talosEvidenceIds($response->text);
         $turn->load(['calls.results']);
         if ($turn->calls->isEmpty()) {
+            if ($referencedEvidenceIds !== []) {
+                throw new TalosGroundingException('TALOS_GROUNDING_EVIDENCE_REQUIRED', 'Operational evidence claims require a correlated tool result.');
+            }
+
             return $response->text;
         }
 
+        $verifiedEvidenceIds = [];
         foreach ($turn->calls as $call) {
             $this->assertCallOwnership($turn, $call);
             if ($call->results->count() !== 1) {
@@ -57,7 +70,18 @@ final class TalosGroundingGate
             }
 
             if (! $result->isError && in_array($call->tool_name, self::EVIDENCE_TOOLS, true)) {
-                $this->assertEvidence($turn, $persisted, $result);
+                foreach ($this->assertEvidence($turn, $persisted, $result) as $evidenceId) {
+                    $verifiedEvidenceIds[$evidenceId] = true;
+                }
+                if (str_starts_with((string) $call->tool_name, 'browser_')) {
+                    $this->assertReconciledBrowserEvidence($turn, $call, $result);
+                }
+            }
+        }
+
+        foreach ($referencedEvidenceIds as $referencedEvidenceId) {
+            if (! isset($verifiedEvidenceIds[$referencedEvidenceId])) {
+                throw new TalosGroundingException('TALOS_GROUNDING_EVIDENCE_INVALID', 'Provider evidence references do not match the current tool results.');
             }
         }
 
@@ -84,7 +108,8 @@ final class TalosGroundingGate
         }
     }
 
-    private function assertEvidence(TalosToolTurn $turn, PersistedToolResult $persisted, ToolResult $result): void
+    /** @return list<string> */
+    private function assertEvidence(TalosToolTurn $turn, PersistedToolResult $persisted, ToolResult $result): array
     {
         if ($result->evidence === []) {
             throw new TalosGroundingException('TALOS_GROUNDING_EVIDENCE_REQUIRED', 'Successful web and browser tools require persisted evidence.');
@@ -112,6 +137,8 @@ final class TalosGroundingGate
         if (! array_is_list($persistedIds) || $canonicalIds !== $persistedIds) {
             throw new TalosGroundingException('TALOS_GROUNDING_EVIDENCE_INVALID', 'Persisted evidence IDs do not match the canonical tool result.');
         }
+
+        return $canonicalIds;
     }
 
     private function assertPersistedArtifact(TalosToolTurn $turn, string $artifactId, string $sha256): void
@@ -144,5 +171,24 @@ final class TalosGroundingGate
         }
 
         throw new TalosGroundingException('TALOS_GROUNDING_EVIDENCE_NOT_PERSISTED', 'Tool evidence is not persisted and owned by the current run.');
+    }
+
+    private function assertReconciledBrowserEvidence(TalosToolTurn $turn, TalosToolCall $call, ToolResult $result): void
+    {
+        try {
+            $this->browserEvidence->verifyForToolCall($turn, $call, $result);
+        } catch (TalosBrowserEvidenceException $exception) {
+            $missing = in_array($exception->faultCode, [
+                'TALOS_BROWSER_EVIDENCE_NOT_RECONCILED',
+                'TALOS_BROWSER_EVIDENCE_SOURCE_MISSING',
+            ], true);
+
+            throw new TalosGroundingException(
+                $missing ? 'TALOS_GROUNDING_EVIDENCE_NOT_PERSISTED' : 'TALOS_GROUNDING_EVIDENCE_INVALID',
+                $missing
+                    ? 'Browser evidence has not completed durable reconciliation.'
+                    : 'Browser evidence failed ownership, contract or byte-integrity verification.',
+            );
+        }
     }
 }

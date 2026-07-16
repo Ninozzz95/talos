@@ -1,0 +1,23 @@
+{
+  "schema_version": "talos.browser.evidence.v1",
+  "evidence_id": "66666666-6666-4666-8666-666666666666",
+  "task_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "action_id": "44444444-4444-4444-8444-444444444444",
+  "worker_state_version": 4,
+  "url": "https://example.test/vehicles?id=42#details",
+  "title": "Example vehicles",
+  "captured_at": "2026-07-15T12:00:02Z",
+  "frame": {
+    "frame_id": "frame-main-4",
+    "viewport_width": 1280,
+    "viewport_height": 800,
+    "device_pixel_ratio": 1,
+    "scroll_x": 0,
+    "scroll_y": 0
+  },
+  "snapshot_artifact_id": null,
+  "screenshot_artifact_id": "77777777-7777-4777-8777-777777777777",
+  "before_evidence_id": null,
+  "integrity_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "claims": []
+}

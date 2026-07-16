@@ -164,6 +164,13 @@ async function prepareChat(page: Page) {
     await page.unroute('**/api/**')
     await installTalosApiMocks(page, {
         initialSessions: [{ id: sessionId, title: 'Browser HMI E2E' }],
+        initialSettings: {
+            preferences: {
+                chat_layout: {
+                    mobile_window_presentation: 'fullscreen',
+                },
+            },
+        },
     })
     await installBrowserBackend(page)
     await realApi(page, 'PATCH', '/api/talos/settings', {
@@ -310,7 +317,7 @@ test.beforeEach(async ({ page }) => {
     await prepareChat(page)
 })
 
-test('authenticated desktop sends a fractional lightbox click through Laravel HMI and renders the exact verified frame', async ({ page, isMobile }) => {
+test('BREG-006 authenticated desktop sends a fractional lightbox click through Laravel HMI and renders the exact verified frame', async ({ page, isMobile }) => {
     test.skip(!realBrowserIntegration, 'Requires the real browser-worker integration gate')
     test.skip(isMobile, 'Desktop coverage')
 
@@ -518,7 +525,7 @@ test('recovery failure is visible in the lightbox without replaying the pointer'
     expect(attempts).toBe(1)
 })
 
-test('mobile lightbox is fullscreen, has no horizontal overflow, keeps focus, and restores it after Escape', async ({ page, isMobile }) => {
+test('BREG-019 mobile lightbox is explicitly fullscreen, has no horizontal overflow, keeps focus, and restores it after Escape', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'Mobile coverage')
 
     const { artifactId, dialog } = await openScreenshotDialog(page)

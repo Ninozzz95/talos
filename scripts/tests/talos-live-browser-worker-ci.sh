@@ -7,6 +7,8 @@ WORKER_HOST="127.0.0.1"
 WORKER_PORT="${TALOS_LIVE_BROWSER_WORKER_PORT:-3110}"
 WORKER_URL="http://${WORKER_HOST}:${WORKER_PORT}"
 WORKER_LOG="$(mktemp)"
+ACTION_KEY_ENV="$(mktemp)"
+RESTART_STATE="$(mktemp)"
 WORKER_PID=""
 WORKER_PROCESS_GROUP=0
 
@@ -100,7 +102,7 @@ cleanup() {
     cat "$WORKER_LOG" >&2 || true
   fi
   terminate_worker
-  rm -f "$WORKER_LOG"
+  rm -f "$WORKER_LOG" "$ACTION_KEY_ENV" "$RESTART_STATE"
   exit "$status"
 }
 trap cleanup EXIT
@@ -136,10 +138,24 @@ export TALOS_BROWSER_WORKER_URL="$WORKER_URL"
 export TALOS_BROWSER_WORKER_TOKEN="$TALOS_LIVE_BROWSER_WORKER_TOKEN"
 export TALOS_BROWSER_WORKER_ALLOW_INSECURE_INTERNAL_TRANSPORT=true
 export TALOS_E2E_REAL_BROWSER=1
+export TALOS_E2E_PHP_BIN="$PHP_BIN"
 export TALOS_E2E_LIVE_BROWSER_TARGET="${TALOS_E2E_LIVE_BROWSER_TARGET:-https://example.com/}"
+export TALOS_LIVE_BROWSER_MCP_TARGET="${TALOS_LIVE_BROWSER_MCP_TARGET:-https://example.com/}"
 export TALOS_E2E_LIVE_BROWSER_X="${TALOS_E2E_LIVE_BROWSER_X:-0.6173}"
 export TALOS_E2E_LIVE_BROWSER_Y="${TALOS_E2E_LIVE_BROWSER_Y:-0.3679}"
 export APP_KEY="${APP_KEY:-$(generate_app_key)}"
+
+printf '\n' > "$ACTION_KEY_ENV"
+node "$ROOT_DIR/control-plane/scripts/browser-action-keypair.mjs" --env-file "$ACTION_KEY_ENV" >/dev/null
+TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64="$(grep '^TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=' "$ACTION_KEY_ENV" | cut -d= -f2-)"
+TALOS_LIVE_BROWSER_ACTION_PUBLIC_KEY_B64="$(grep '^TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=' "$ACTION_KEY_ENV" | cut -d= -f2-)"
+TALOS_LIVE_BROWSER_ACTION_KEY_ID="$(grep '^TALOS_BROWSER_ACTION_KEY_ID=' "$ACTION_KEY_ENV" | cut -d= -f2-)"
+if [ -z "$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" ] \
+  || [ -z "$TALOS_LIVE_BROWSER_ACTION_PUBLIC_KEY_B64" ] \
+  || [[ ! "$TALOS_LIVE_BROWSER_ACTION_KEY_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]]; then
+  echo "Browser action keypair provisioning failed." >&2
+  exit 1
+fi
 
 start_worker() {
   cd "$ROOT_DIR/browser-worker"
@@ -148,46 +164,79 @@ start_worker() {
     PORT="$WORKER_PORT" \
     NODE_ENV=production \
     TALOS_BROWSER_WORKER_TOKEN="$TALOS_LIVE_BROWSER_WORKER_TOKEN" \
+    TALOS_BROWSER_ACTION_PUBLIC_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PUBLIC_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
     ./node_modules/.bin/tsx src/cli.ts
 }
 
-if command -v setsid >/dev/null 2>&1; then
-  (
-    cd "$ROOT_DIR/browser-worker"
-    exec setsid env \
-      HOST="$WORKER_HOST" \
-      PORT="$WORKER_PORT" \
-      NODE_ENV=production \
-      TALOS_BROWSER_WORKER_TOKEN="$TALOS_LIVE_BROWSER_WORKER_TOKEN" \
-      ./node_modules/.bin/tsx src/cli.ts
-  ) >"$WORKER_LOG" 2>&1 &
-  WORKER_PROCESS_GROUP=1
-else
-  start_worker >"$WORKER_LOG" 2>&1 &
-fi
-WORKER_PID=$!
+launch_worker() {
+  WORKER_PROCESS_GROUP=0
+  if command -v setsid >/dev/null 2>&1; then
+    (
+      cd "$ROOT_DIR/browser-worker"
+      exec setsid env \
+        HOST="$WORKER_HOST" \
+        PORT="$WORKER_PORT" \
+        NODE_ENV=production \
+        TALOS_BROWSER_WORKER_TOKEN="$TALOS_LIVE_BROWSER_WORKER_TOKEN" \
+        TALOS_BROWSER_ACTION_PUBLIC_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PUBLIC_KEY_B64" \
+        TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+        ./node_modules/.bin/tsx src/cli.ts
+    ) >>"$WORKER_LOG" 2>&1 &
+    WORKER_PROCESS_GROUP=1
+  else
+    start_worker >>"$WORKER_LOG" 2>&1 &
+  fi
+  WORKER_PID=$!
+}
 
-ready=0
-for _ in $(seq 1 60); do
-  if ! kill -0 "$WORKER_PID" >/dev/null 2>&1; then
-    echo "Browser worker exited before readiness." >&2
-    exit 1
+wait_for_worker_ready() {
+  local ready=0
+  local response=""
+  for _ in $(seq 1 60); do
+    if ! kill -0 "$WORKER_PID" >/dev/null 2>&1; then
+      echo "Browser worker exited before readiness." >&2
+      return 1
+    fi
+    if response="$($CURL_BIN --fail --silent --show-error \
+        --max-time 3 \
+        -H "X-Talos-Worker-Token: $TALOS_LIVE_BROWSER_WORKER_TOKEN" \
+        "$WORKER_URL/ready" 2>/dev/null)" \
+      && grep -Fq '"status":"ready"' <<<"$response" \
+      && grep -Fq '"worker":"talos.browser.worker.v2"' <<<"$response" \
+      && grep -Fq '"hmi":"talos_browser_hmi_runtime_v2.1.0"' <<<"$response"; then
+      ready=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$ready" -ne 1 ]; then
+    echo "Browser worker readiness timed out at $WORKER_URL/ready." >&2
+    return 1
   fi
-  if response="$($CURL_BIN --fail --silent --show-error \
-      --max-time 3 \
-      -H "X-Talos-Worker-Token: $TALOS_LIVE_BROWSER_WORKER_TOKEN" \
-      "$WORKER_URL/ready" 2>/dev/null)" \
-    && grep -Fq '"status":"ready"' <<<"$response" \
-    && grep -Fq '"hmi":"talos_browser_hmi_runtime_v2.1.0"' <<<"$response"; then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-if [ "$ready" -ne 1 ]; then
-  echo "Browser worker readiness timed out at $WORKER_URL/ready." >&2
-  exit 1
-fi
+}
+
+run_restart_phase() {
+  local phase="$1"
+  (
+    cd "$ROOT_DIR/control-plane"
+    env \
+      TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+      TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+      TALOS_LIVE_BROWSER_RESTART_PHASE="$phase" \
+      TALOS_LIVE_BROWSER_RESTART_STATE="$RESTART_STATE" \
+      "$PHP_BIN" vendor/bin/phpunit \
+      --configuration phpunit.xml \
+      --do-not-cache-result \
+      --fail-on-skipped \
+      --fail-on-empty-test-suite \
+      --filter=test_controlled_restart_fences_the_old_session_before_action_redispatch \
+      tests/Feature/LiveBrowserWorkerRestartReconciliationTest.php
+  )
+}
+
+launch_worker
+wait_for_worker_ready
 
 echo "Live browser worker ready at $WORKER_URL"
 
@@ -195,12 +244,15 @@ echo "Live browser worker ready at $WORKER_URL"
   cd "$ROOT_DIR/browser-worker"
   npm test -- \
     --run tests/browserMcpTransport.test.ts \
-    -t "round-trips discovery and browser tools through the official SDK client"
+    -t "round-trips the allowlisted real Playwright MCP tools through official Streamable HTTP"
 )
 
 (
   cd "$ROOT_DIR/control-plane"
-  "$PHP_BIN" vendor/bin/phpunit \
+  env \
+    TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+    "$PHP_BIN" vendor/bin/phpunit \
     --configuration phpunit.xml \
     --do-not-cache-result \
     --fail-on-skipped \
@@ -208,15 +260,28 @@ echo "Live browser worker ready at $WORKER_URL"
     tests/Feature/LiveBrowserWorkerHmiIntegrationTest.php
 )
 
+run_restart_phase before
+terminate_worker
+WORKER_PID=""
+launch_worker
+wait_for_worker_ready
+run_restart_phase after
+
 (
   cd "$ROOT_DIR/control-plane"
   npm run build
-  ./node_modules/.bin/playwright test \
+  env \
+    TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+    ./node_modules/.bin/playwright test \
     tests/e2e/talosBrowserHmi.e2e.spec.ts \
+    tests/e2e/talosBrowserRecovery.e2e.spec.ts \
     --project=chromium \
-    --grep "renders the exact verified frame"
+    --grep "renders the exact verified frame|BREG-004"
 )
 
 echo "Official MCP Streamable HTTP round-trip passed against the live browser worker"
-echo "LiveBrowserWorkerHmiIntegrationTest passed against real Chromium"
+echo "LiveBrowserWorkerHmiIntegrationTest passed HMI replay and cancellation against real Chromium"
+echo "Controlled worker restart fenced the prior action session before redispatch"
 echo "TALOS browser HMI Playwright gate rendered the exact worker artifact"
+echo "BREG-004 recovered one verified screenshot through reload against the live worker"

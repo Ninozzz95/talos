@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultWorkspaceRoot = path.resolve(scriptDirectory, '..', '..')
 const workerServiceName = 'talos-browser-worker'
+export const requiredBrowserWorkerProtocol = 'talos.browser.worker.v2'
 export const requiredBrowserHmiProtocol = 'talos_browser_hmi_runtime_v2.1.0'
 
 export function evaluateBrowserWorkerOwnership({ expectedUrl, lease, probes }) {
@@ -202,7 +203,8 @@ export async function probeBrowserWorkerEndpoint(url, {
         if (!response.ok) return 'conflict'
         const payload = await response.json()
         if (payload?.data?.service !== workerServiceName) return 'conflict'
-        return payload?.data?.protocols?.hmi === requiredBrowserHmiProtocol
+        return payload?.data?.protocols?.worker === requiredBrowserWorkerProtocol
+            && payload?.data?.protocols?.hmi === requiredBrowserHmiProtocol
             ? 'talos'
             : 'incompatible'
     } catch {

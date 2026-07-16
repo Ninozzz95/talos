@@ -6,6 +6,7 @@ namespace Kadmos;
 
 use Kadmos\Tool\ToolApprovalGrant;
 use Kadmos\Tool\ToolApprovalAuthority;
+use Kadmos\Workers\NodeWorkerControlException;
 use Kadmos\Workers\WorkerRegistry;
 use Kadmos\Workers\NodeWorkerInterface;
 use InvalidArgumentException;
@@ -280,6 +281,13 @@ final class ASTOrchestrator
             } elseif ($delta['status'] === NodeStatus::SUCCESS) {
                 $this->restoreBlockedDescendants($nodeId);
             }
+        } catch (NodeWorkerControlException $exception) {
+            $this->setStatus($nodeId, NodeStatus::FAILED);
+            $this->nodes[$nodeId]['output_summary'] = 'Worker execution failed.';
+            $this->nodes[$nodeId]['raw_output'] = null;
+            $this->blockPendingDescendants($nodeId);
+
+            throw $exception;
         } catch (\Throwable) {
             $this->setStatus($nodeId, NodeStatus::FAILED);
             $this->nodes[$nodeId]['output_summary'] = 'Worker execution failed.';

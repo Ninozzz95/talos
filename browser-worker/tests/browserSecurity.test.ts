@@ -6,6 +6,11 @@ import { BrowserEgressProxy } from "../src/BrowserEgressProxy.js";
 import { BrowserSessionManager, type BrowserLaunchOptions } from "../src/BrowserSessionManager.js";
 import { assertAllowedBrowserUrl, isPrivateOrReservedIp, normalizeHostname } from "../src/BrowserUrlPolicy.js";
 import { buildServer } from "../src/server.js";
+import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
+import { createTestActionCapabilityKeypair } from "./support/browserActionCapability.js";
+
+const actionKeys = createTestActionCapabilityKeypair("security-action-test-key");
+const actionVerifier = BrowserActionCapabilityVerifier.forTest(actionKeys.publicKeyPem, actionKeys.keyId);
 
 function fakeBrowser() {
   const page = { on: () => undefined } as unknown as Page;
@@ -53,14 +58,22 @@ describe("browser worker internal token", () => {
       internalToken: "a".repeat(64),
       runtimeEnvironment: "production",
     })).toThrow(/production worker token/i);
+    expect(() => buildServer({
+      internalToken: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      runtimeEnvironment: "production",
+    })).toThrowError(expect.objectContaining({
+      code: "TALOS_BROWSER_ACTION_CAPABILITY_CONFIGURATION_INVALID",
+    }));
 
     const production = buildServer({
       internalToken: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
       runtimeEnvironment: "production",
+      actionCapabilityVerifier: actionVerifier,
     });
     const development = buildServer({
       internalToken: "short-explicit-token",
       runtimeEnvironment: "development",
+      actionCapabilityVerifier: actionVerifier,
     });
     await Promise.all([production.close(), development.close()]);
   });

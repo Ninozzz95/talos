@@ -10,13 +10,16 @@ use App\Models\TalosMessage;
 use App\Models\TalosModelProfile;
 use App\Models\TalosRun;
 use App\Models\TalosSession;
+use App\Models\TalosToolCall;
 use App\Models\TalosToolCall as PersistedToolCall;
 use App\Models\TalosToolTurn;
 use App\Services\Runs\TalosRunEventRecorder;
 use App\Services\Talos\Browser\TalosBrowserArtifactReader;
+use App\Services\Talos\Browser\TalosBrowserFollowUpResolver;
+use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Kadmos\Provider\ProviderFailure;
+use Kadmos\Browser\Contract\BrowserTaskStatus;
 use Kadmos\Tool\ProceduralBudget;
 use Kadmos\Tool\ProceduralCompileContext;
 use Kadmos\Tool\ProceduralLoopGuard;
@@ -50,6 +53,8 @@ PROMPT;
         private readonly TalosAgentBudgetService $budgets,
         private readonly TalosProceduralGuardCheckpointStore $guardCheckpoints,
         private readonly TalosBrowserArtifactReader $artifactReader,
+        private readonly TalosBrowserFollowUpResolver $browserFollowUps,
+        private readonly TalosBrowserTaskRuntime $browserTasks,
     ) {}
 
     public function execute(
@@ -137,7 +142,7 @@ PROMPT;
                 new ProviderTurnRequest(
                     provider: (string) $profile->provider,
                     model: (string) $profile->model,
-                    systemPrompt: self::SYSTEM_PROMPT,
+                    systemPrompt: $this->systemPrompt($session, $run, $browserSession),
                     messages: $this->durableMessages($session, $run),
                     tools: array_values(TalosProceduralToolRegistry::definitions()),
                 ),
@@ -307,6 +312,8 @@ PROMPT;
         $usage = $this->usage($turn->refresh());
         $evidenceBinding = $this->compilationEvidenceBinding($turn, $calls, $browserSession, $ownerUserId);
         $evidenceHash = $evidenceBinding['hash'];
+        $replayProviderCallIds = $this->persistedReplayProviderCallIds($turn, $calls, $checkpoint);
+        $compilationStateVersion = $this->compilationStateVersion($turn, $calls, $browserSession);
         $plan = $this->compiler->compile(
             $calls,
             TalosProceduralToolRegistry::specs(),
@@ -316,7 +323,7 @@ PROMPT;
                 runId: (string) $run->id,
                 turnId: (string) $turn->id,
                 browserSessionId: $browserSession?->id,
-                stateVersion: (int) ($browserSession?->worker_state_version ?? 0),
+                stateVersion: $compilationStateVersion,
                 deadlineAt: $this->deadlineAt($turn),
                 observedAt: now()->toIso8601String(),
                 cancellationRequested: $turn->cancel_requested_at !== null,
@@ -324,7 +331,7 @@ PROMPT;
                 evidenceHash: $evidenceHash,
                 retryProviderCallIds: $checkpoint->retryProviderCallIds($calls),
                 logicalCallIdsByProviderCallId: $checkpoint->logicalCallIdsFor($calls),
-                replayProviderCallIds: $this->persistedReplayProviderCallIds($turn, $calls, $checkpoint),
+                replayProviderCallIds: $replayProviderCallIds,
             ),
             $this->proceduralBudget($turn),
             $checkpoint->guard(),
@@ -334,6 +341,9 @@ PROMPT;
         }
 
         $this->requireLease($ownerUserId, $turn, $leaseToken, 'tool_dispatch');
+        $browserTask = $browserSession instanceof TalosBrowserSession
+            ? $this->browserTasks->begin($ownerUserId, $run, $browserSession)
+            : null;
         $report = $this->dispatcher->dispatch(
             $ownerUserId,
             $turn,
@@ -346,6 +356,7 @@ PROMPT;
             evidenceHash: $evidenceHash,
             evidenceSnapshotArtifactId: $evidenceBinding['artifact_id'],
             evidenceSnapshotId: $evidenceBinding['snapshot_id'],
+            browserTask: $browserTask,
         );
         $turn->refresh();
         if ($report->status === 'awaiting_approval') {
@@ -445,8 +456,7 @@ PROMPT;
         TalosToolTurn $turn,
         string $leaseToken,
         array $calls,
-    ): array
-    {
+    ): array {
         $faults = [];
         foreach ($calls as $call) {
             $fault = $this->argumentValidator->validate($call);
@@ -525,8 +535,7 @@ PROMPT;
         TalosToolTurn $turn,
         array $calls,
         TalosProceduralGuardCheckpoint $checkpoint,
-    ): array
-    {
+    ): array {
         $providerCallIds = array_map(static fn (ToolCall $call): string => $call->providerCallId, $calls);
         if ($providerCallIds === []) {
             return [];
@@ -539,7 +548,7 @@ PROMPT;
         $replays = [];
         foreach ($calls as $call) {
             $stored = $persisted->get($call->providerCallId);
-            if (! $stored instanceof \App\Models\TalosToolCall) {
+            if (! $stored instanceof TalosToolCall) {
                 continue;
             }
             $canonical = ProceduralLoopGuard::canonicalJson($call->toWireArray());
@@ -560,6 +569,61 @@ PROMPT;
         }
 
         return $replays;
+    }
+
+    /** @param list<ToolCall> $calls */
+    private function compilationStateVersion(
+        TalosToolTurn $turn,
+        array $calls,
+        ?TalosBrowserSession $browserSession,
+    ): int {
+        $providerCallIds = array_map(static fn (ToolCall $call): string => $call->providerCallId, $calls);
+        if ($providerCallIds === []) {
+            return (int) ($browserSession?->worker_state_version ?? 0);
+        }
+        $persisted = $turn->calls()
+            ->whereIn('provider_call_id', $providerCallIds)
+            ->get()
+            ->keyBy('provider_call_id');
+        if ($persisted->isEmpty()) {
+            return (int) ($browserSession?->worker_state_version ?? 0);
+        }
+        if ($persisted->count() !== count($calls)) {
+            throw new TalosProviderRecoveryRequiredException(
+                faultCode: 'TALOS_TOOL_REPLAY_CONTEXT_PARTIAL',
+                message: 'A provider tool-call replay batch is only partially persisted.',
+            );
+        }
+
+        $initialStateVersion = null;
+        $browserStateVersion = null;
+        $registry = TalosProceduralToolRegistry::specs();
+        foreach ($calls as $call) {
+            $stored = $persisted->get($call->providerCallId);
+            $spec = $registry[$call->name] ?? null;
+            if (! $stored instanceof TalosToolCall || $spec === null) {
+                throw new TalosProviderRecoveryRequiredException(
+                    faultCode: 'TALOS_TOOL_REPLAY_CONTEXT_INVALID',
+                    message: 'A persisted provider tool call has no canonical replay context.',
+                );
+            }
+            $storedStateVersion = (int) $stored->state_version;
+            $initialStateVersion ??= $storedStateVersion;
+            $browserStateVersion ??= $initialStateVersion;
+            $browserTool = str_starts_with($call->name, 'browser_');
+            $expectedStateVersion = $browserTool ? $browserStateVersion : $initialStateVersion;
+            if ($storedStateVersion !== $expectedStateVersion) {
+                throw new TalosProviderRecoveryRequiredException(
+                    faultCode: 'TALOS_TOOL_REPLAY_CONTEXT_INVALID',
+                    message: 'Persisted provider tool calls disagree on Browser state progression.',
+                );
+            }
+            if ($browserTool && $spec->mutatesState) {
+                $browserStateVersion++;
+            }
+        }
+
+        return $initialStateVersion ?? (int) ($browserSession?->worker_state_version ?? 0);
     }
 
     private function persistGuardCheckpoint(
@@ -584,8 +648,7 @@ PROMPT;
         TalosToolTurn $turn,
         ProviderTurnResponse $response,
         string $leaseToken,
-    ): TalosAgentTurnOutcome
-    {
+    ): TalosAgentTurnOutcome {
         try {
             $text = $this->grounding->release($turn->refresh(), $response);
         } catch (TalosGroundingException $exception) {
@@ -630,6 +693,7 @@ PROMPT;
                 ['run_id' => (string) $lockedRun->id, 'user_id' => $ownerUserId],
                 ['event_type' => 'assistant.grounded', 'payload' => ['message_id' => $message->id]],
             );
+            $this->browserTasks->settle($ownerUserId, $lockedRun, BrowserTaskStatus::Completed);
 
             return $message;
         }, 3);
@@ -646,8 +710,7 @@ PROMPT;
         TalosToolTurn $turn,
         string $code,
         string $leaseToken,
-    ): TalosAgentTurnOutcome
-    {
+    ): TalosAgentTurnOutcome {
         $committed = DB::transaction(function () use ($ownerUserId, $run, $turn, $code, $leaseToken): bool {
             $lockedTurn = $this->findLiveTurnForUpdate($ownerUserId, (string) $turn->id, $leaseToken);
             if (! $lockedTurn instanceof TalosToolTurn) {
@@ -669,6 +732,7 @@ PROMPT;
                 'revision' => ((int) $lockedTurn->revision) + 1,
             ])->save();
             $lockedRun->forceFill(['status' => 'failed', 'completed_at' => now()])->save();
+            $this->browserTasks->settle($ownerUserId, $lockedRun, BrowserTaskStatus::Failed);
             $this->events->record(
                 ['run_id' => (string) $lockedRun->id, 'user_id' => $ownerUserId],
                 ['event_type' => 'agent.turn.failed', 'payload' => ['code' => $code]],
@@ -688,8 +752,7 @@ PROMPT;
         TalosToolTurn $turn,
         string $code,
         ?string $leaseToken,
-    ): TalosAgentTurnOutcome
-    {
+    ): TalosAgentTurnOutcome {
         $claimed = is_string($leaseToken) && DB::transaction(function () use ($run, $turn, $leaseToken): bool {
             $lockedTurn = TalosToolTurn::query()
                 ->ownedBy((int) $turn->user_id)
@@ -713,6 +776,7 @@ PROMPT;
 
             $lockedTurn->forceFill(['status' => 'recovery_required', 'completed_at' => null])->save();
             $lockedRun->forceFill(['status' => 'recovery_required', 'completed_at' => null])->save();
+            $this->browserTasks->settle((int) $turn->user_id, $lockedRun, BrowserTaskStatus::Recovering);
 
             return true;
         }, 3);
@@ -797,6 +861,32 @@ PROMPT;
         return $messages !== [] ? $messages : [['role' => 'user', 'content' => (string) $run->prompt]];
     }
 
+    private function systemPrompt(
+        TalosSession $session,
+        TalosRun $run,
+        ?TalosBrowserSession $browserSession,
+    ): string {
+        if (! $browserSession instanceof TalosBrowserSession) {
+            return self::SYSTEM_PROMPT;
+        }
+
+        $current = $session->messages()
+            ->where('run_id', $run->id)
+            ->where('role', 'user')
+            ->first(['id']);
+        $decision = $this->browserFollowUps->resolve(
+            (string) $run->prompt,
+            $session,
+            $browserSession,
+            $current?->id,
+        );
+        $directive = $decision->toProviderDirective();
+
+        return $directive === ''
+            ? self::SYSTEM_PROMPT
+            : self::SYSTEM_PROMPT."\n\n".$directive;
+    }
+
     /** @return array<string, int> */
     private function defaultBudgetPolicy(): array
     {
@@ -859,8 +949,7 @@ PROMPT;
         ?TokenUsage $providerUsage,
         TalosModelProfile $profile,
         string $leaseToken,
-    ): void
-    {
+    ): void {
         if ($providerUsage === null) {
             return;
         }
@@ -1209,8 +1298,7 @@ PROMPT;
         string $leaseToken,
         string $eventType,
         array $payload,
-    ): void
-    {
+    ): void {
         DB::transaction(function () use ($ownerUserId, $turn, $leaseToken, $eventType, $payload): void {
             $lockedTurn = $this->findLiveTurnForUpdate($ownerUserId, (string) $turn->id, $leaseToken);
             if (! $lockedTurn instanceof TalosToolTurn) {

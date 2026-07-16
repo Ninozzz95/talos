@@ -1,0 +1,266 @@
+{
+  "schema_version": "talos_browser_regression_corpus_v1",
+  "scenarios": [
+    {
+      "id": "BREG-001",
+      "title": "Enable Browse after an ordinary conversation has started",
+      "prompt": "riprova",
+      "expected_contract": "The same chat session resumes the nearest recoverable URL turn with Browse enabled.",
+      "current_state": "covered",
+      "tests": [
+        "tests/e2e/talosBrowse.e2e.spec.ts::BREG-001",
+        "tests/Feature/TalosChatBrowserModeTest.php::test_breg_003_retry_follow_up_replays_the_previous_single_url_after_browse_is_enabled"
+      ],
+      "promotion_phase": "B3"
+    },
+    {
+      "id": "BREG-002",
+      "title": "Preserve a complete URL followed by natural-language instructions",
+      "prompt": "https://example.test/vehicles?id=42&source=list#details analizza questa pagina e dimmi cosa vedi",
+      "expected_contract": "The exact URL, including query and fragment, is navigated while trailing prose remains user intent.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosChatBrowserModeTest.php::test_breg_002_full_query_url_with_fragment_and_trailing_instructions_is_not_truncated"
+      ],
+      "promotion_phase": "B3"
+    },
+    {
+      "id": "BREG-003",
+      "title": "Retry after a controlled Browser worker failure",
+      "prompt": "riprova",
+      "expected_contract": "Retry reconciles the failed action from durable task state without reviving unrelated history.",
+      "current_state": "partial",
+      "tests": [
+        "tests/Unit/TalosBrowserFollowUpResolverTest.php::test_it_resolves_consecutive_retry_turns_to_the_nearest_previous_single_url",
+        "tests/e2e/talosBrowserRecovery.e2e.spec.ts::BREG-003"
+      ],
+      "promotion_phase": "B4"
+    },
+    {
+      "id": "BREG-004",
+      "title": "Reload while screenshot evidence is being committed",
+      "prompt": "cattura screenshot",
+      "expected_contract": "Reload restores a pending action and eventually renders only committed screenshot evidence.",
+      "current_state": "covered",
+      "tests": [
+        "tests/e2e/talosBrowserRecovery.e2e.spec.ts::BREG-004"
+      ],
+      "promotion_phase": "B4"
+    },
+    {
+      "id": "BREG-005",
+      "title": "Reconcile duplicate requests without a duplicate physical action",
+      "prompt": "ripeti lo snapshot",
+      "expected_contract": "A duplicate idempotency key reuses or reconciles the prior result and never emits TALOS_BROWSER_REPEATED_COMMAND to the user.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosChatBrowserModeTest.php::test_breg_005_legacy_repeated_idempotency_key_replays_completed_observation_without_reexecution",
+        "tests/Feature/TalosChatBrowserModeTest.php::test_breg_005_rejects_same_idempotency_key_when_canonical_intent_changes",
+        "tests/Feature/TalosBrowserHmiApiTest.php::test_a_completed_ordinary_command_is_durably_replayed_without_worker_dispatch",
+        "tests/e2e/talosBrowserRecovery.e2e.spec.ts::BREG-005"
+      ],
+      "promotion_phase": "B4"
+    },
+    {
+      "id": "BREG-006",
+      "title": "Dismiss a cookie modal through the current verified frame",
+      "prompt": "accetta il banner cookie",
+      "expected_contract": "The exact current frame is used, approval is explicit when required, and post-action evidence is committed.",
+      "current_state": "partial",
+      "tests": [
+        "tests/Feature/TalosChatProceduralBrowserTest.php::test_breg_006_browser_click_is_presented_for_exact_approval_and_resumes_the_same_turn_with_evidence",
+        "tests/e2e/talosBrowserHmi.e2e.spec.ts::BREG-006"
+      ],
+      "promotion_phase": "B5"
+    },
+    {
+      "id": "BREG-007",
+      "title": "Keep an inline screenshot visible after reload",
+      "prompt": "cattura screenshot",
+      "expected_contract": "The chat bubble references an authenticated committed artifact immediately and after reload.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosChatProceduralBrowserTest.php::test_breg_007_screenshot_evidence_is_attached_to_the_assistant_message_immediately_and_after_reload",
+        "tests/e2e/talosBrowse.e2e.spec.ts::BREG-007"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-008",
+      "title": "Reject a provider screenshot claim without committed evidence",
+      "prompt": "quindi hai catturato lo screenshot?",
+      "expected_contract": "TALOS never renders or preserves an operational screenshot claim without a correlated committed artifact.",
+      "current_state": "partial",
+      "tests": [
+        "tests/e2e/talosBrowse.e2e.spec.ts::BREG-008",
+        "tests/Feature/TalosChatProceduralBrowserTest.php::test_breg_008_provider_screenshot_claim_without_committed_artifact_is_not_promoted"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-009",
+      "title": "Fail closed on a worker protocol or capability mismatch",
+      "prompt": "attiva browse",
+      "expected_contract": "Browse remains unavailable with a stable actionable setup fault when worker protocol or capabilities are incompatible.",
+      "current_state": "partial",
+      "tests": [
+        "tests/Unit/TalosBrowserSessionClientContractTest.php::test_http_client_rejects_a_malformed_tool_definitions_success",
+        "tests/e2e/talosBrowserRecovery.e2e.spec.ts::BREG-009"
+      ],
+      "promotion_phase": "B2"
+    },
+    {
+      "id": "BREG-010",
+      "title": "Bound malformed tool argument repair to one attempt",
+      "prompt": "leggi la pagina corrente",
+      "expected_contract": "One deterministic argument repair is allowed; a second malformed result becomes a controlled terminal fault without execution.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Unit/TalosToolRepairPolicyTest.php::breg_010_malformed_tool_arguments_receive_only_one_repair_opportunity"
+      ],
+      "promotion_phase": "B3"
+    },
+    {
+      "id": "BREG-011",
+      "title": "Keep Browser task state attached to the exact owning conversation turn",
+      "prompt": "Inspect the current page and preserve verified evidence.",
+      "expected_contract": "The task card appears once after its exact user turn while pending, migrates to the correlated assistant response, and retains that placement after hard reload.",
+      "current_state": "covered",
+      "tests": [
+        "tests/e2e/talosBrowserCard.e2e.spec.ts::BREG-011"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-012",
+      "title": "Refresh stale interactive evidence in both mobile viewer presentations",
+      "prompt": "Interact with the current verified browser frame.",
+      "expected_contract": "Drawer and fullscreen viewers reject stale coordinates, render the refreshed frame, commit fresh post-action evidence, survive reload, and restore focus to the exact launcher.",
+      "current_state": "covered",
+      "tests": [
+        "tests/e2e/talosBrowserCard.e2e.spec.ts::BREG-012"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-013",
+      "title": "Reject substituted, partial or stale Browser provenance",
+      "prompt": "usa l'evidenza browser corrente",
+      "expected_contract": "Only the exact persisted Browser call, parent turn, artifact namespace, digest and page state can produce a committed evidence bundle; replay converges on one deterministic usage link.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_a_provider_call_missing_from_the_owned_turn",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_uses_one_deterministic_link_identity_on_replay",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_a_partially_bound_existing_link",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_commit_rejects_a_generic_run_artifact_as_browser_evidence",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_commit_rejects_a_call_whose_parent_turn_is_outside_the_browser_task_scope",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_commit_rejects_session_page_identity_newer_than_the_source_artifact",
+        "tests/Feature/TalosChatBrowserModeTest.php::test_chat_does_not_bind_a_different_owned_message_to_the_new_run"
+      ],
+      "promotion_phase": "B5"
+    },
+    {
+      "id": "BREG-014",
+      "title": "Require exact Browser output state, evidence identity and user-message bytes",
+      "prompt": "inspect vehicles.",
+      "expected_contract": "A Browser result is committed only when its canonical digest, exact post-action state, page identity, artifact contract and byte-exact originating user message all agree with persisted state.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_commit_rejects_evidence_from_a_later_worker_state",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_commit_recalculates_the_supplied_tool_result_digest",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_commit_rejects_conflicting_page_identity_sources",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_noncanonical_artifacts_before_writing_a_run_link",
+        "tests/Feature/TalosUserMessageRunBinderTest.php::test_binding_is_byte_exact_and_atomic",
+        "tests/Feature/TalosChatBrowserModeTest.php::test_chat_does_not_bind_a_case_variant_of_the_owned_message"
+      ],
+      "promotion_phase": "B5"
+    },
+    {
+      "id": "BREG-015",
+      "title": "Replay a completed Browser call after provider continuation recovery",
+      "prompt": "Navigate once, then recover the provider continuation.",
+      "expected_contract": "Provider recovery recompiles from the immutable persisted pre-action context, reuses the correlated result, accepts the verified post-action worker state and never dispatches the Browser effect twice.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosAgentTurnServiceTest.php::test_browser_result_replays_after_provider_continuation_recovery_without_a_second_dispatch"
+      ],
+      "promotion_phase": "B5"
+    },
+    {
+      "id": "BREG-016",
+      "title": "Reject unverified artifact bytes and wrong action-output state before correlation",
+      "prompt": "correlate the current browser evidence",
+      "expected_contract": "No durable run-artifact link exists until the stored bytes match their digest and detected type and the artifact state exactly matches the persisted action output state.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_tampered_artifact_bytes_before_writing_a_run_link",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_spoofed_png_bytes_before_writing_a_run_link",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_an_artifact_from_the_wrong_action_output_state_before_writing_a_run_link"
+      ],
+      "promotion_phase": "B5"
+    },
+    {
+      "id": "BREG-017",
+      "title": "Reject same-state evidence from another Browser command",
+      "prompt": "correlate the exact browser call result",
+      "expected_contract": "A Browser artifact is correlated only when its source command and pre-action state match the exact persisted tool call and action, even when another command produced evidence at the same output state.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_an_artifact_from_another_same_state_command_before_writing_a_run_link",
+        "tests/Feature/TalosBrowserEvidenceCommitTest.php::test_correlator_rejects_read_artifact_not_bound_as_call_snapshot_even_at_same_state",
+        "tests/Feature/TalosBrowserCanonicalToolDispatchTest.php::test_canonical_read_input_can_bind_the_physical_command_to_a_persisted_tool_call_id",
+        "tests/Feature/TalosLaravelToolExecutionBackendTest.php::test_browser_read_uses_the_owner_scoped_current_snapshot_hash"
+      ],
+      "promotion_phase": "B5"
+    },
+    {
+      "id": "BREG-018",
+      "title": "Keep unowned current-session Browser activity visible without false turn ownership",
+      "prompt": "Capture a browser screenshot from the toolbar.",
+      "expected_contract": "A direct current-session screenshot or approval without a durable task renders once as an explicitly labelled Browser session article, remains actionable across reload where applicable, and never duplicates exact per-turn cards or persisted assistant screenshot evidence.",
+      "current_state": "covered",
+      "tests": [
+        "resources/js/lib/talosBrowserCardPlacement.test.ts::unplaced Browser session ownership",
+        "tests/e2e/talosBrowse.e2e.spec.ts::Browse lifecycle starts a real session and captures screenshot evidence inline",
+        "tests/e2e/talosBrowse.e2e.spec.ts::procedural browser approval survives reload and resumes into a persisted answer"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-019",
+      "title": "Select mobile Browser viewer presentation explicitly in acceptance coverage",
+      "prompt": "Open the current Browser capture in the configured mobile fullscreen viewer.",
+      "expected_contract": "The mobile Browser HMI viewer uses the persisted Drawer or fullscreen choice deterministically; fullscreen acceptance spans the viewport, traps focus, avoids horizontal overflow and restores the exact launcher without depending on residual settings or test order.",
+      "current_state": "covered",
+      "tests": [
+        "tests/e2e/talosBrowserHmi.e2e.spec.ts::BREG-019"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-020",
+      "title": "Cancel the exact Browser task card selected by the human",
+      "prompt": "Stop this Browser task while another task is still active.",
+      "expected_contract": "Every Cancel control carries its immutable task identity through the Vue component chain, resolves it against the current owner-scoped task collection, disables competing task commands in flight and calls only the selected task's version-fenced endpoint.",
+      "current_state": "covered",
+      "tests": [
+        "resources/js/composables/useTalosBrowse.test.ts::BREG-020",
+        "resources/js/components/talos/chat/TalosBrowserActivity.test.ts::renders accessible compact task state and emits cancellation",
+        "resources/js/components/talos/chat/TalosBrowserCard.test.ts::BREG-020",
+        "resources/js/components/talos/chat/TalosBrowserChatWiring.test.ts::connects current browser state and HMI events through the primary chat surface"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-021",
+      "title": "Reload durable Browser task cards while Browse is disabled",
+      "prompt": "Reload this chat after Browser mode has been turned off.",
+      "expected_contract": "The owner-scoped task journal is fetched as safe historical state for the selected chat even when Browse is disabled; TALOS does not create or restore a worker, and repeated polling remains limited to an active Browse request.",
+      "current_state": "covered",
+      "tests": [
+        "resources/js/composables/useTalosWorkspaceBrowse.test.ts::BREG-021"
+      ],
+      "promotion_phase": "B6"
+    }
+  ]
+}

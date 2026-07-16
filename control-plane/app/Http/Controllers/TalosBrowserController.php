@@ -12,17 +12,19 @@ use App\Models\User;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\LegacyBrowserSnapshot;
+use App\Services\Talos\Browser\TalosBoundedBase64Decoder;
 use App\Services\Talos\Browser\TalosBrowserArtifactIntegrityException;
 use App\Services\Talos\Browser\TalosBrowserArtifactReader;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserEvidenceEnvironment;
+use App\Services\Talos\Browser\TalosBrowserLegacyWriteGate;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
-use App\Services\Talos\Browser\TalosBoundedBase64Decoder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 final class TalosBrowserController extends Controller
 {
@@ -32,6 +34,7 @@ final class TalosBrowserController extends Controller
         private readonly TalosBrowserArtifactStore $artifacts,
         private readonly TalosBrowserArtifactReader $artifactReader,
         private readonly TalosBrowserEvidenceEnvironment $evidenceEnvironment,
+        private readonly TalosBrowserLegacyWriteGate $legacyWrites,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -61,6 +64,8 @@ final class TalosBrowserController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.session.create');
+
         $payload = $this->validated($request, [
             'talos_session_id' => ['required', 'string', 'max:64'],
             'viewport.width' => ['nullable', 'integer', 'min:320', 'max:3840'],
@@ -109,7 +114,8 @@ final class TalosBrowserController extends Controller
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
             return $error;
         }
-        if (($error = $this->reconcileForReuse($browserSession)) instanceof JsonResponse) {
+        if ($this->legacyWrites->enabled()
+            && ($error = $this->reconcileForReuse($browserSession)) instanceof JsonResponse) {
             return $error;
         }
 
@@ -118,6 +124,8 @@ final class TalosBrowserController extends Controller
 
     public function destroy(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.session.close');
+
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
             return $error;
         }
@@ -181,6 +189,8 @@ final class TalosBrowserController extends Controller
 
     public function navigate(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.navigate');
+
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
             return $error;
         }
@@ -231,6 +241,8 @@ final class TalosBrowserController extends Controller
 
     public function screenshot(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.screenshot');
+
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
             return $error;
         }
@@ -300,6 +312,8 @@ final class TalosBrowserController extends Controller
 
     public function snapshot(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
+        $this->legacyWrites->assertEnabled('browser.snapshot');
+
         if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
             return $error;
         }
@@ -346,7 +360,7 @@ final class TalosBrowserController extends Controller
             return $error;
         }
 
-return response()->json(['data' => $browserSession->events()->oldest()->get()->map->toApiArray()->values()]);
+        return response()->json(['data' => $browserSession->events()->oldest()->get()->map->toApiArray()->values()]);
     }
 
     public function artifact(Request $request, TalosBrowserArtifact $browserArtifact): JsonResponse
@@ -355,7 +369,7 @@ return response()->json(['data' => $browserSession->events()->oldest()->get()->m
             return $error;
         }
 
-return response()->json(['data' => $browserArtifact->toApiArray()]);
+        return response()->json(['data' => $browserArtifact->toApiArray()]);
     }
 
     public function preview(Request $request, TalosBrowserArtifact $browserArtifact)
@@ -370,7 +384,7 @@ return response()->json(['data' => $browserArtifact->toApiArray()]);
             return response()->json(['data' => ['preview_available' => false, 'artifact' => $browserArtifact->toApiArray()]]);
         }
         try {
-            $contents = $this->artifactReader->read($browserArtifact);
+            $contents = $this->artifactReader->readScreenshot($browserArtifact);
         } catch (TalosBrowserArtifactIntegrityException $exception) {
             if ($exception->reason === 'missing') {
                 return $this->notFound();
@@ -379,7 +393,19 @@ return response()->json(['data' => $browserArtifact->toApiArray()]);
             return $this->artifactRecoveryRequired($browserArtifact, $exception);
         }
 
-        return response($contents, 200, ['Content-Type' => $browserArtifact->mime, 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
+        $response = response($contents, 200, [
+            'Content-Type' => 'image/png',
+            'Cache-Control' => 'private, no-cache, must-revalidate',
+            'Content-Disposition' => HeaderUtils::makeDisposition(
+                HeaderUtils::DISPOSITION_INLINE,
+                'talos-browser-'.$browserArtifact->id.'.png',
+            ),
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+        $response->setEtag('sha256-'.$browserArtifact->sha256);
+        $response->isNotModified($request);
+
+        return $response;
     }
 
     private function userId(Request $request): int

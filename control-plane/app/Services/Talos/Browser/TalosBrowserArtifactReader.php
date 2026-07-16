@@ -13,6 +13,8 @@ use Throwable;
 
 final class TalosBrowserArtifactReader
 {
+    public function __construct(private readonly TalosBrowserLegacyWriteGate $legacyWrites) {}
+
     public function read(TalosBrowserArtifact $artifact): string
     {
         $maximumBytes = match ($artifact->type) {
@@ -65,9 +67,36 @@ final class TalosBrowserArtifactReader
         return $contents;
     }
 
+    public function readScreenshot(TalosBrowserArtifact $artifact): string
+    {
+        $contents = $this->read($artifact);
+        $metadata = is_array($artifact->metadata) ? $artifact->metadata : [];
+        $dimensions = @getimagesizefromstring($contents);
+        $detectedMime = (new \finfo(FILEINFO_MIME_TYPE))->buffer($contents);
+        $recordedWidth = $metadata['width'] ?? null;
+        $recordedHeight = $metadata['height'] ?? null;
+
+        if ($artifact->type !== 'screenshot'
+            || $artifact->mime !== 'image/png'
+            || $detectedMime !== 'image/png'
+            || ! is_array($dimensions)
+            || ($dimensions[2] ?? null) !== IMAGETYPE_PNG
+            || ! str_starts_with($contents, "\x89PNG\r\n\x1a\n")
+            || ($recordedWidth !== null && (! is_int($recordedWidth) || $recordedWidth !== (int) ($dimensions[0] ?? 0)))
+            || ($recordedHeight !== null && (! is_int($recordedHeight) || $recordedHeight !== (int) ($dimensions[1] ?? 0)))) {
+            $this->fail($artifact, 'mime_mismatch');
+        }
+
+        return $contents;
+    }
+
     private function fail(TalosBrowserArtifact $artifact, string $reason): never
     {
         try {
+            if (! $this->legacyWrites->enabled()) {
+                throw new TalosBrowserArtifactIntegrityException((string) $artifact->id, $reason);
+            }
+
             DB::transaction(function () use ($artifact, $reason): void {
                 $session = TalosBrowserSession::query()
                     ->whereKey($artifact->browser_session_id)
@@ -100,6 +129,8 @@ final class TalosBrowserArtifactReader
                     ],
                 );
             }, 3);
+        } catch (TalosBrowserArtifactIntegrityException $exception) {
+            throw $exception;
         } catch (Throwable) {
             // The integrity failure remains fail-closed even if observability persistence is unavailable.
         }

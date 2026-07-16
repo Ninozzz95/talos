@@ -20,6 +20,7 @@ final class TalosBrowseUiTest extends TestCase
         $routes = file_get_contents(base_path('resources/js/lib/talosWorkspaceCommandRoutes.ts'));
         $composable = file_get_contents($composablePath);
         $workspaceBrowse = file_get_contents($workspaceBrowsePath);
+        $chatSurface = file_get_contents(base_path('resources/js/components/talos/workspace/TalosChatSurface.vue'));
 
         $this->assertIsString($workspace);
         $this->assertIsString($leftRail);
@@ -28,6 +29,7 @@ final class TalosBrowseUiTest extends TestCase
         $this->assertIsString($routes);
         $this->assertIsString($composable);
         $this->assertIsString($workspaceBrowse);
+        $this->assertIsString($chatSurface);
         $this->assertFileExists($composablePath);
         $this->assertFileExists($workspaceBrowsePath);
         $this->assertFileDoesNotExist($obsoletePanelPath);
@@ -54,7 +56,20 @@ final class TalosBrowseUiTest extends TestCase
         $this->assertStringContainsString('activeTalosSessionId', $workspaceBrowse);
         $this->assertStringContainsString('chatActivities.value = []', $workspaceBrowse);
         $this->assertStringContainsString('latestBrowserSnapshot', $workspaceBrowse);
-        $this->assertStringContainsString(':snapshot="browserSnapshot"', file_get_contents(base_path('resources/js/components/talos/workspace/TalosChatSurface.vue')));
+        $this->assertStringContainsString('buildTalosBrowserCardPlacements', $chatSurface);
+        $this->assertStringContainsString('<TalosBrowserCard', $chatSurface);
+        $this->assertStringContainsString(':snapshot="browserSnapshotForPlacement(placement)"', $chatSurface);
+        $this->assertStringContainsString(':active-browser-session="browserSessionForPlacement(placement)"', $chatSurface);
+        $this->assertStringContainsString(':pending-tool-approvals="pendingApprovalsForPlacement(placement)"', $chatSurface);
+        $this->assertSame(1, substr_count($chatSurface, ':snapshot="browserSnapshot"'));
+        $this->assertSame(1, substr_count($chatSurface, '<TalosBrowserActivity'));
+        $this->assertStringContainsString('data-browser-session-activity', $chatSurface);
+        $this->assertStringContainsString('data-message-role="browser"', $chatSurface);
+        $this->assertStringContainsString(':activities="unplacedCurrentBrowserActivities"', $chatSurface);
+        $this->assertStringContainsString(':pending-tool-approvals="unplacedCurrentBrowserApprovals"', $chatSurface);
+        $this->assertStringContainsString('unplacedBrowserActivities(', $chatSurface);
+        $this->assertStringContainsString('unplacedBrowserApprovals(', $chatSurface);
+        $this->assertStringContainsString('!messages.length && !hasUnplacedBrowserSessionActivity', $chatSurface);
         $this->assertStringContainsString('talos-browser-snapshot-viewer', file_get_contents(base_path('resources/js/components/talos/chat/TalosBrowserActivity.vue')));
     }
 

@@ -1,5 +1,6 @@
 import { BrowserError } from "./BrowserErrors.js";
 import type { BrowserHmiResultResponse } from "./BrowserHmiContracts.js";
+import { canonicalSha256 } from "./BrowserCanonicalJson.js";
 
 export const MAX_HMI_COMMAND_RECORDS = 128;
 export const MAX_HMI_COMMAND_RETAINED_BYTES = 32 * 1024 * 1024;
@@ -20,7 +21,16 @@ interface CommandRecord {
   status: CommandStatus;
   result?: BrowserHmiResultResponse;
   resultBytes?: number;
+  outcomeSha256?: string;
   error?: StoredError;
+}
+
+export interface BrowserHmiCommandRecordView {
+  command_id: string;
+  request_sha256: string;
+  status: CommandStatus;
+  outcome_sha256?: string;
+  error_code?: string;
 }
 
 export type BrowserHmiCommandClaim =
@@ -97,6 +107,7 @@ export class BrowserHmiCommandLedger {
     record.status = "committed";
     record.result = result;
     record.resultBytes = resultBytes;
+    record.outcomeSha256 = canonicalSha256(result);
     this.retainedResultBytes += resultBytes;
   }
 
@@ -117,6 +128,18 @@ export class BrowserHmiCommandLedger {
     record.status = "rejected";
     record.error = storeError(controlled);
     return restoreError(record.error);
+  }
+
+  record(commandId: string): BrowserHmiCommandRecordView | undefined {
+    const record = this.records.get(commandId);
+    if (!record) return undefined;
+    return {
+      command_id: record.commandId,
+      request_sha256: record.requestSha256,
+      status: record.status,
+      ...(record.outcomeSha256 === undefined ? {} : { outcome_sha256: record.outcomeSha256 }),
+      ...(record.error === undefined ? {} : { error_code: record.error.code }),
+    };
   }
 
   clear(): void {

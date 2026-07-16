@@ -39,6 +39,9 @@ function testMainCliRunsContractTests(): void
         'OpenAIClientEndpointTest.php',
         'Security/ToolContextPolicyTest.php',
         'ToolContractTest.php',
+        'Browser/BrowserContractTest.php',
+        'Browser/BrowserContractFixtureTest.php',
+        'Browser/BrowserOrchestrationTest.php',
         'ProceduralToolCompilerTest.php',
         'ProviderTurnAdapterTest.php',
         'OpenAiResponsesTurnAdapterTest.php',
@@ -74,6 +77,21 @@ function testProceduralCompilerUsesTheCliRunnerSuccessMarker(): void
     );
 }
 
+function testBrowserContractTestsUseTheCliRunnerSuccessMarker(): void
+{
+    foreach ([
+        'Browser/BrowserContractTest.php' => 'All Browser contract tests passed',
+        'Browser/BrowserContractFixtureTest.php' => 'All Browser contract fixture tests passed',
+        'Browser/BrowserOrchestrationTest.php' => 'All Browser orchestration tests passed',
+    ] as $path => $marker) {
+        $test = (string) file_get_contents(__DIR__.'/'.$path);
+        assertTrue(
+            str_contains($test, $marker),
+            "{$path} must end with the success marker consumed by kadmos test.",
+        );
+    }
+}
+
 function testComposerTestDelegatesToTheFullCliSuite(): void
 {
     $composer = json_decode((string) file_get_contents(__DIR__.'/../composer.json'), true, 32, JSON_THROW_ON_ERROR);
@@ -102,6 +120,7 @@ $tests = [
     'testMainCliRunsContractTests',
     'testToolContractTestUsesTheCliRunnerSuccessMarker',
     'testProceduralCompilerUsesTheCliRunnerSuccessMarker',
+    'testBrowserContractTestsUseTheCliRunnerSuccessMarker',
     'testComposerTestDelegatesToTheFullCliSuite',
     'testLiveBenchmarkReadsCredentialsFromEnvironmentOnly',
 ];
