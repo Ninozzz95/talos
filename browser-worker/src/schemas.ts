@@ -13,7 +13,7 @@ export const capabilitiesSchema = z.object({
   actions: z.literal(false),
   hmiActions: z.boolean().optional(),
   downloads: z.literal(false),
-  uploads: z.literal(false),
+  uploads: z.boolean(),
 });
 
 export const createSessionSchema = z.object({

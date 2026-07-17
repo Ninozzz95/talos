@@ -41,6 +41,7 @@ const BrowserCapabilitySchema = z.enum([
   "interactive_frame",
   "semantic_locator",
   "tabs",
+  "upload",
 ]);
 const BrowserCapabilities = BrowserCapabilitySchema.options;
 const DegradedReasonSchema = z.string().min(1).max(128).regex(/^[a-z][a-z0-9_]*$/);
@@ -88,6 +89,7 @@ export const BrowserWorkerHandshakeSchema = z.strictObject({
       z.ZodLiteral<"interactive_frame">,
       z.ZodLiteral<"semantic_locator">,
       z.ZodLiteral<"tabs">,
+      z.ZodLiteral<"upload">,
     ]),
     limits: z.strictObject({
       max_tabs: z.literal(1),

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>TALOS File Upload Fixture</title>
+</head>
+<body>
+  <main>
+    <h1>File upload fixture</h1>
+    <label for="fixture-file">Upload document</label>
+    <input id="fixture-file" type="file">
+    <output id="upload-result" aria-live="polite">No file selected</output>
+    <label for="diverted-file">Diverted upload</label>
+    <input id="diverted-file" type="file">
+    <output id="diverted-result" aria-live="polite">No diverted file selected</output>
+  </main>
+  <script>
+    const fixtureFile = document.querySelector('#fixture-file')
+    const divertedFile = document.querySelector('#diverted-file')
+
+    fixtureFile.addEventListener('mousedown', (event) => {
+      if (location.hash !== '#redirect-chooser') return
+      window.diversionAttempts = (window.diversionAttempts || 0) + 1
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      divertedFile.click()
+    })
+
+    fixtureFile.addEventListener('click', (event) => {
+      if (location.hash !== '#redirect-chooser') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    })
+
+    fixtureFile.addEventListener('change', async (event) => {
+      const file = event.target.files[0]
+      document.querySelector('#upload-result').textContent = file
+        ? `${file.name}|${await file.text()}`
+        : 'No file selected'
+    })
+
+    divertedFile.addEventListener('change', async (event) => {
+      const file = event.target.files[0]
+      document.querySelector('#diverted-result').textContent = file
+        ? `${file.name}|${await file.text()}`
+        : 'No diverted file selected'
+    })
+  </script>
+</body>
+</html>

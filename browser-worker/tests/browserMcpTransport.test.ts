@@ -28,6 +28,7 @@ const liveWorkerUrl = process.env.TALOS_LIVE_BROWSER_WORKER_URL?.replace(/\/$/, 
 const liveWorkerToken = process.env.TALOS_LIVE_BROWSER_WORKER_TOKEN ?? token;
 const liveMcpTarget = process.env.TALOS_LIVE_BROWSER_MCP_TARGET ?? "https://example.com/";
 const navigationTarget = liveWorkerUrl === "" ? fixtureUrl : liveMcpTarget;
+const expectedEvidenceUrl = liveWorkerUrl === "" ? "about:blank" : liveMcpTarget;
 const expectedPageText = liveWorkerUrl === "" ? "TALOS Browse Fixture" : "Example Domain";
 const expectedPageTitle = liveWorkerUrl === "" ? "TALOS Browse Fixture" : "Example Domain";
 const actionKeys = createTestActionCapabilityKeypair("mcp-action-test-key");
@@ -134,7 +135,7 @@ describe("official MCP Streamable HTTP browser transport", () => {
       });
       expect(restSnapshot.statusCode).toBe(200);
       expect(restSnapshot.body.data).toMatchObject({
-        url: navigationTarget,
+        url: expectedEvidenceUrl,
         title: expectedPageTitle,
         stateVersion: 1,
       });

@@ -247,6 +247,24 @@ test('BREG-005 duplicate action reuses committed evidence without a second physi
     await expect(page.getByText('TALOS_BROWSER_REPEATED_COMMAND', { exact: false })).toHaveCount(0)
 })
 
-test('BREG-009 incompatible worker protocol keeps Browse disabled with an actionable setup fault', () => {
-    test.fixme(true, 'B2 must add the versioned worker handshake and UI readiness contract.')
+test('BREG-009 incompatible worker protocol keeps Browse disabled with an actionable setup fault', async ({ page }) => {
+    await installTalosApiMocks(page, {
+        browser: {
+            createFault: {
+                status: 502,
+                code: 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
+                message: 'Browser worker protocol is incompatible with this TALOS control plane.',
+            },
+        },
+    })
+    await openAuthenticatedWorkspace(page)
+
+    await page.getByRole('button', { name: 'Browse', exact: true }).click()
+
+    const setupFault = page.getByTestId('talos-browse-setup-fault')
+    await expect(setupFault).toBeVisible()
+    await expect(setupFault).toContainText(/incompatible/i)
+    await expect(setupFault).toContainText(/update the browser worker/i)
+    await expect(page.getByTestId('talos-browse-mode')).toHaveCount(0)
+    await expect(page.getByText('TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH', { exact: false })).toHaveCount(0)
 })

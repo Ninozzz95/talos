@@ -5,13 +5,16 @@ import {
     Camera,
     ChevronDown,
     Database,
+    FileText,
     Globe2,
     Loader2,
     MoreHorizontal,
+    Paperclip,
     RefreshCw,
     ScanSearch,
     Send,
     ShieldAlert,
+    ShieldCheck,
     SlidersHorizontal,
     Square,
     WandSparkles,
@@ -41,11 +44,19 @@ const props = withDefaults(defineProps<{
     enhancerDisabledReason?: string
     visibility: Record<string, boolean>
     browserMode: TalosBrowserMode
+    browseSetupFault?: string | null
     browserCurrentPage?: TalosBrowserCurrentPage | null
     devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
+    attachments?: Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>
+    vaultFiles?: Array<{ id: string; original_name: string; status: string }>
+    vaultPickerLoading?: boolean
 }>(), {
     devBrowserEvidence: false,
+    browseSetupFault: null,
+    attachments: () => [],
+    vaultFiles: () => [],
+    vaultPickerLoading: false,
 })
 
 const emit = defineEmits<{
@@ -63,7 +74,27 @@ const emit = defineEmits<{
     captureSnapshot: []
     slashCommand: [id: TalosCommand['id']]
     browseOpen: [url: string | null]
+    attachFiles: [files: File[]]
+    attachVaultFile: [fileId: string]
+    removeAttachment: [id: string]
+    openVaultPicker: []
 }>()
+
+const attachmentInput = ref<HTMLInputElement | null>(null)
+const attachmentMenuOpen = ref(false)
+
+function openAttachmentMenu() {
+    attachmentMenuOpen.value = !attachmentMenuOpen.value
+    if (attachmentMenuOpen.value) emit('openVaultPicker')
+}
+
+function handleAttachmentInput(event: Event) {
+    const input = event.target instanceof HTMLInputElement ? event.target : null
+    const files = input?.files ? [...input.files] : []
+    if (files.length > 0) emit('attachFiles', files)
+    if (input) input.value = ''
+    attachmentMenuOpen.value = false
+}
 
 const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve prompt')
 const sendTitle = computed(() => props.sendDisabledReason || 'Send message')
@@ -234,6 +265,47 @@ onBeforeUnmount(() => {
             </Button>
         </div>
 
+        <div
+            v-if="!browserMode.enabled && browseSetupFault"
+            data-testid="talos-browse-setup-fault"
+            role="alert"
+            class="mx-1 mt-1 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-2 py-1.5 text-xs text-[var(--talos-text)]"
+        >
+            {{ browseSetupFault }}
+        </div>
+        <div v-if="attachments.length > 0" data-testid="talos-attachment-tray" class="mx-1 mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+            <span
+                v-for="attachment in attachments"
+                :key="attachment.id"
+                data-testid="talos-attachment-chip"
+                :data-attachment-id="attachment.id"
+                :data-attachment-status="attachment.status"
+                :data-authorized="attachment.status === 'available' && attachment.grant_id ? 'true' : 'false'"
+                class="inline-flex min-w-0 max-w-56 items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
+                :class="attachment.status === 'failed'
+                    ? 'border-[var(--talos-danger-border,var(--talos-warning-border))] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]'
+                    : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-text)]'"
+                :title="attachment.status === 'failed' ? (attachment.failure_reason ?? 'Ingestion failed.') : attachment.name"
+            >
+                <Loader2 v-if="attachment.status === 'uploading'" class="h-3.5 w-3.5 shrink-0 animate-spin" />
+                <FileText v-else class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
+                <span class="truncate">{{ attachment.name }}</span>
+                <ShieldCheck
+                    v-if="attachment.status === 'available' && attachment.grant_id"
+                    class="h-3.5 w-3.5 shrink-0 text-[var(--talos-success)]"
+                    aria-label="Authorized file grant"
+                />
+                <span v-if="attachment.status === 'failed'" class="shrink-0 font-medium">failed</span>
+                <button
+                    type="button"
+                    class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    :aria-label="`Remove attachment ${attachment.name}`"
+                    @click="emit('removeAttachment', attachment.id)"
+                >
+                    <X class="h-3 w-3" />
+                </button>
+            </span>
+        </div>
         <div data-testid="talos-composer-capability-row" class="mt-1 flex min-w-0 items-end justify-between gap-2 px-1 pb-1">
             <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                 <button
@@ -258,6 +330,59 @@ onBeforeUnmount(() => {
                     <Database class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
                     <span data-testid="talos-composer-context-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ contextLabel }}</span>
                 </button>
+                <div v-if="visibility.attach_files !== false" class="relative flex shrink-0 items-center">
+                    <input
+                        ref="attachmentInput"
+                        data-testid="talos-attachment-input"
+                        type="file"
+                        class="sr-only"
+                        aria-label="Attachment file input"
+                        @change="handleAttachmentInput"
+                    >
+                    <button
+                        type="button"
+                        data-testid="talos-attachment-button"
+                        class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        aria-label="Attach a file"
+                        title="Attach a file"
+                        aria-haspopup="menu"
+                        :aria-expanded="attachmentMenuOpen"
+                        @click="openAttachmentMenu"
+                    >
+                        <Paperclip class="h-3.5 w-3.5" />
+                    </button>
+                    <div
+                        v-if="attachmentMenuOpen"
+                        role="menu"
+                        aria-label="Attachment sources"
+                        data-testid="talos-attachment-menu"
+                        class="absolute bottom-full left-0 z-50 mb-2 w-64 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-xl"
+                    >
+                        <button
+                            type="button"
+                            role="menuitem"
+                            class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]"
+                            @click="attachmentInput?.click()"
+                        >
+                            <Paperclip class="h-4 w-4" />Upload a file
+                        </button>
+                        <div class="border-t border-[var(--talos-border)] px-2 py-1.5 text-[10px] font-semibold uppercase text-[var(--talos-muted)]" role="presentation">From Vault</div>
+                        <div v-if="vaultPickerLoading" class="px-2 py-1.5 text-xs text-[var(--talos-muted)]" role="presentation">Loading Vault files…</div>
+                        <div v-else-if="vaultFiles.length === 0" class="px-2 py-1.5 text-xs text-[var(--talos-muted)]" role="presentation">No available Vault files yet.</div>
+                        <button
+                            v-for="vaultFile in vaultFiles.slice(0, 6)"
+                            :key="vaultFile.id"
+                            type="button"
+                            role="menuitem"
+                            data-testid="talos-attachment-vault-file"
+                            class="flex min-h-11 w-full min-w-0 items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]"
+                            @click="emit('attachVaultFile', vaultFile.id); attachmentMenuOpen = false"
+                        >
+                            <FileText class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
+                            <span class="truncate">{{ vaultFile.original_name }}</span>
+                        </button>
+                    </div>
+                </div>
                 <button
                     v-if="visibility.agent_mode_switcher !== false"
                     type="button"

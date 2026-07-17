@@ -46,6 +46,15 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
     public ?BrowserToolResult $callToolResponse = null;
 
     /** @var array<string, mixed>|null */
+    public ?array $stageFileResponse = null;
+
+    public ?int $failStageFileCall = null;
+
+    public bool $failDiscardStagedFile = false;
+
+    private int $stageFileCalls = 0;
+
+    /** @var array<string, mixed>|null */
     private ?array $latestToolSnapshot = null;
 
     public int $delayMilliseconds = 0;
@@ -121,6 +130,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'browser_take_screenshot' => 'screenshot',
             'browser_wait_for' => 'wait',
             'browser_click' => 'click',
+            'browser_file_upload' => 'upload',
             default => 'tool',
         };
         $request = compact('ownerRef', 'workerSessionId', 'toolUseId', 'name', 'arguments', 'timeoutMs', 'authorization');
@@ -130,6 +140,47 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         }
 
         return $this->respond($method, $request, $this->callToolResponse ?? $this->defaultToolResult($toolUseId, $name, $arguments));
+    }
+
+    public function stageFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        array $file,
+        int $timeoutMilliseconds = 15000,
+    ): array {
+        $this->stageFileCalls++;
+        if ($this->failStageFileCall === $this->stageFileCalls) {
+            $this->requests[] = ['method' => 'stageFile'] + compact('ownerRef', 'workerSessionId', 'stageId', 'file', 'timeoutMilliseconds');
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser staged file request failed.');
+        }
+        $response = $this->stageFileResponse ?? [
+            'stage_id' => $stageId,
+            'file_id' => $file['file_id'] ?? null,
+            'name' => $file['name'] ?? null,
+            'mime_type' => $file['mime_type'] ?? null,
+            'size_bytes' => $file['size_bytes'] ?? null,
+            'sha256' => $file['sha256'] ?? null,
+            'expires_at' => now()->addMinutes(2)->toJSON(),
+        ];
+
+        return $this->respond('stageFile', compact('ownerRef', 'workerSessionId', 'stageId', 'file', 'timeoutMilliseconds'), $response);
+    }
+
+    public function discardStagedFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        int $timeoutMilliseconds = 15000,
+    ): void {
+        if (preg_match('/^stg_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D', $stageId) !== 1) {
+            throw new \InvalidArgumentException('Browser staged file identity is invalid.');
+        }
+        if ($this->failDiscardStagedFile) {
+            $this->requests[] = ['method' => 'discardStagedFile'] + compact('ownerRef', 'workerSessionId', 'stageId', 'timeoutMilliseconds');
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser staged file cleanup failed.');
+        }
+        $this->respond('discardStagedFile', compact('ownerRef', 'workerSessionId', 'stageId', 'timeoutMilliseconds'), null);
     }
 
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array
@@ -193,7 +244,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         if (is_string($idempotencyKey)) {
             $request['idempotencyKey'] = $idempotencyKey;
         }
-        $response = $this->respond('create', $request + ['capabilities' => ['actions' => false, 'hmiActions' => true]], $this->createResponse ?? ['sessionId' => 'worker-'.$this->nextSession++, 'status' => 'ready', 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false], 'stateVersion' => 0, 'expiresAt' => now()->addSeconds($ttlSeconds)->toJSON()]);
+        $response = $this->respond('create', $request + ['capabilities' => ['actions' => false, 'hmiActions' => true]], $this->createResponse ?? ['sessionId' => 'worker-'.$this->nextSession++, 'status' => 'ready', 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'deviceScaleFactor' => 1, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false], 'stateVersion' => 0, 'expiresAt' => now()->addSeconds($ttlSeconds)->toJSON()]);
         if (is_string($response['sessionId'] ?? null) && $response['sessionId'] !== '') {
             $this->sessionState[$response['sessionId']] = $response;
         }

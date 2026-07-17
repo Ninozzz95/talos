@@ -33,6 +33,8 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'handshake'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'preflightPointer'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'executePointer'));
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'stageFile'));
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'discardStagedFile'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'cancel'));
         $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'preflightPointer'))->getDeclaringClass()->getName());
         $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'executePointer'))->getDeclaringClass()->getName());
@@ -399,6 +401,116 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             && $request['tool_use_id'] === 'signed-click'
             && $request['name'] === 'browser_click'
             && $request['arguments']['state_version'] === 1
+            && preg_match('/^Bearer [^.]+\.[^.]+\.[^.]+$/D', $request->header('Authorization')[0] ?? '') === 1);
+    }
+
+    public function test_http_client_enables_upload_only_when_negotiated_and_stages_exact_bytes(): void
+    {
+        $handshake = $this->validHandshake();
+        $handshake['data']['capability_manifest']['capabilities'][] = 'upload';
+        $requests = [];
+        Http::fake(function ($request) use (&$requests, $handshake) {
+            $requests[] = ['method' => $request->method(), 'url' => $request->url(), 'body' => $request->data()];
+            if ($request->method() === 'GET') {
+                return Http::response($handshake);
+            }
+            if ($request->method() === 'DELETE') {
+                return Http::response([], 204);
+            }
+            if (str_contains($request->url(), '/files/stage/')) {
+                return Http::response(['data' => [
+                    'stage_id' => 'stg_11111111-1111-4111-8111-111111111111',
+                    'file_id' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                    'name' => 'proof.txt',
+                    'mime_type' => 'text/plain',
+                    'size_bytes' => 5,
+                    'sha256' => 'sha256:'.hash('sha256', 'proof'),
+                    'expires_at' => '2026-07-17T12:02:00.000Z',
+                ]]);
+            }
+
+            return Http::response($this->validSessionBootstrap([
+                'capabilities' => [
+                    'navigation' => true,
+                    'screenshots' => true,
+                    'accessibilitySnapshot' => true,
+                    'actions' => false,
+                    'hmiActions' => true,
+                    'downloads' => false,
+                    'uploads' => true,
+                ],
+            ]));
+        });
+        $client = new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token');
+
+        $client->create('talos-user:1', 1280, 800);
+        $stageId = 'stg_11111111-1111-4111-8111-111111111111';
+        $staged = $client->stageFile('talos-user:1', 'worker-1', $stageId, [
+            'file_id' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            'name' => 'proof.txt',
+            'mime_type' => 'text/plain',
+            'size_bytes' => 5,
+            'sha256' => 'sha256:'.hash('sha256', 'proof'),
+            'base64' => base64_encode('proof'),
+        ]);
+        $client->discardStagedFile('talos-user:1', 'worker-1', $staged['stage_id']);
+
+        $this->assertTrue($requests[1]['body']['capabilities']['uploads']);
+        $this->assertSame('stg_11111111-1111-4111-8111-111111111111', $staged['stage_id']);
+        $this->assertSame(base64_encode('proof'), $requests[2]['body']['base64']);
+        $this->assertSame('PUT', $requests[2]['method']);
+        $this->assertSame('http://browser-worker.test/sessions/worker-1/files/stage/'.$stageId, $requests[2]['url']);
+        $this->assertSame('DELETE', $requests[3]['method']);
+        $this->assertSame('http://browser-worker.test/sessions/worker-1/files/stage/'.$staged['stage_id'], $requests[3]['url']);
+        $this->assertSame([], $requests[3]['body']);
+    }
+
+    public function test_http_client_upload_requires_a_user_approval_action_capability(): void
+    {
+        Http::fake(['*' => Http::response($this->validResult('upload-call'))]);
+        $client = new HttpBrowserSessionClient(
+            'http://browser-worker.test',
+            'worker-token',
+            15,
+            $this->actionCapabilityIssuer(),
+        );
+        $arguments = [
+            'target' => 'r4',
+            'staged_file_ids' => ['stg_11111111-1111-4111-8111-111111111111'],
+            'snapshot_id' => 'snap_1',
+            'state_version' => 1,
+        ];
+
+        try {
+            $client->callTool(
+                'talos-user:1',
+                'worker-1',
+                'upload-call',
+                'browser_file_upload',
+                $arguments,
+                authorization: BrowserActionAuthorization::policy('upload-call'),
+            );
+            $this->fail('A policy-only upload authorization was accepted.');
+        } catch (BrowserWorkerException $exception) {
+            $this->assertSame('TALOS_BROWSER_ACTION_CAPABILITY_INVALID', $exception->errorCode);
+        }
+
+        $result = $client->callTool(
+            'talos-user:1',
+            'worker-1',
+            'upload-call',
+            'browser_file_upload',
+            $arguments,
+            authorization: BrowserActionAuthorization::userApproval(
+                'upload-call',
+                'approval-upload',
+                'sha256:'.str_repeat('a', 64),
+                'execution-lease-upload',
+            ),
+        );
+
+        $this->assertSame('upload-call', $result->toolUseId);
+        Http::assertSent(fn ($request): bool => $request['name'] === 'browser_file_upload'
             && preg_match('/^Bearer [^.]+\.[^.]+\.[^.]+$/D', $request->header('Authorization')[0] ?? '') === 1);
     }
 

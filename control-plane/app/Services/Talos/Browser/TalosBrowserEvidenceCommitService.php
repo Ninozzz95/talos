@@ -28,6 +28,7 @@ final readonly class TalosBrowserEvidenceCommitService
         'browser_read' => 'read',
         'browser_take_screenshot' => 'screenshot',
         'browser_click' => 'click',
+        'browser_file_upload' => 'upload',
     ];
 
     public function __construct(private TalosBrowserArtifactReader $artifactReader) {}
@@ -57,7 +58,7 @@ final readonly class TalosBrowserEvidenceCommitService
                 'frame_id' => 'frame-'.substr(hash('sha256', $action->id."\0".$session->worker_state_version."\0".ProceduralLoopGuard::canonicalJson($claims)), 0, 48),
                 'viewport_width' => (int) $session->viewport_width,
                 'viewport_height' => (int) $session->viewport_height,
-                'device_pixel_ratio' => 1,
+                'device_pixel_ratio' => (int) ($session->device_scale_factor ?? 1),
                 'scroll_x' => 0,
                 'scroll_y' => 0,
             ];
@@ -231,7 +232,7 @@ final readonly class TalosBrowserEvidenceCommitService
 
     private function expectedCommittedStateVersion(\App\Models\TalosBrowserAction $action): int
     {
-        $delta = in_array((string) $action->kind, ['navigate', 'click'], true) ? 1 : 0;
+        $delta = in_array((string) $action->kind, ['navigate', 'click', 'upload'], true) ? 1 : 0;
 
         return (int) $action->expected_state_version + $delta;
     }
@@ -366,6 +367,7 @@ final readonly class TalosBrowserEvidenceCommitService
             'browser_read' => $type === 'snapshot' && $kind === 'snapshot_read',
             'browser_take_screenshot' => $type === 'screenshot' && $kind === 'screenshot',
             'browser_click' => $kind === $type,
+            'browser_file_upload' => $kind === $type,
             'browser_navigate' => $kind === $type,
             default => false,
         };

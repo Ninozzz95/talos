@@ -436,6 +436,9 @@ final class TalosToolDispatcherTest extends TestCase
     public function test_safe_sibling_completes_while_high_risk_node_waits_then_resume_consumes_exact_approval_once(): void
     {
         [$user, $session, $run, $turn, $browser] = $this->context();
+        $browser->forceFill([
+            'capabilities' => [...$browser->capabilities, 'hmiActions' => true],
+        ])->save();
         $browserTask = $this->beginBrowserTask($user, $session, $run, $browser);
         $backend = $this->durableRecordingBackend();
         $this->app->instance(TalosToolExecutionBackend::class, $backend);

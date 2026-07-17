@@ -188,6 +188,23 @@ final class TalosGroundingGateTest extends TestCase
         }
     }
 
+    public function test_successful_browser_file_upload_without_evidence_fails_closed(): void
+    {
+        [$user, $turn] = $this->turnContext();
+        $call = $this->toolCall($turn, $user, 'browser_file_upload');
+        $this->toolResult($call, $turn, $user, false, []);
+
+        try {
+            app(TalosGroundingGate::class)->release(
+                $turn,
+                ProviderTurnResponse::final('The file was uploaded.', 'response-upload-final', 'stop', new TokenUsage(1, 1, 2)),
+            );
+            $this->fail('A Browser file upload without correlated evidence must fail closed.');
+        } catch (TalosGroundingException $exception) {
+            $this->assertSame('TALOS_GROUNDING_EVIDENCE_REQUIRED', $exception->faultCode);
+        }
+    }
+
     public function test_cross_owner_result_is_rejected_before_release(): void
     {
         [$owner, $turn] = $this->turnContext();

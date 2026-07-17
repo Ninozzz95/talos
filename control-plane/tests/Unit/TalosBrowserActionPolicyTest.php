@@ -53,6 +53,75 @@ final class TalosBrowserActionPolicyTest extends TestCase
         $this->assertSame(BrowserActionDisposition::Confirm, $changedTarget->disposition);
     }
 
+    public function test_file_upload_is_sensitive_requires_exact_approval_and_worker_capability(): void
+    {
+        $policy = new TalosBrowserActionPolicy;
+        $task = $this->task('assist');
+        $node = $this->node(
+            'browser_file_upload',
+            ['target' => 'r4', 'file_ids' => ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']],
+            capability: 'browser.upload',
+            risk: 'critical',
+        );
+        $capable = $this->browserSession(capabilities: ['uploads' => true]);
+
+        $pending = $policy->evaluate($task, $node, $capable);
+        $approved = $policy->evaluate($task, $node, $capable, $this->approvedCall($task, $node));
+        $unsupported = $policy->evaluate(
+            $task,
+            $node,
+            $this->browserSession(capabilities: ['uploads' => false]),
+            $this->approvedCall($task, $node),
+        );
+
+        $this->assertSame(BrowserActionRisk::Sensitive, $pending->risk);
+        $this->assertSame(BrowserActionDisposition::Confirm, $pending->disposition);
+        $this->assertTrue($approved->allowsModelDispatch(), $approved->reasonCode);
+        $this->assertSame('browser_policy_exact_approval', $approved->reasonCode);
+        $this->assertSame(BrowserActionDisposition::Deny, $unsupported->disposition);
+        $this->assertSame('browser_policy_capability_denied', $unsupported->reasonCode);
+    }
+
+    public function test_configured_upload_grant_cannot_exceed_the_negotiated_worker_capability(): void
+    {
+        $task = $this->task('assist');
+        $node = $this->node(
+            'browser_file_upload',
+            ['target' => 'r4', 'file_ids' => ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']],
+            capability: 'browser.upload',
+            risk: 'critical',
+        );
+        $session = $this->browserSession(
+            ['browser_action_policy' => ['capability_grants' => ['upload']]],
+            ['uploads' => false],
+        );
+
+        $decision = (new TalosBrowserActionPolicy)->evaluate(
+            $task,
+            $node,
+            $session,
+            $this->approvedCall($task, $node),
+        );
+
+        $this->assertSame(BrowserActionDisposition::Deny, $decision->disposition);
+        $this->assertSame('browser_policy_capability_denied', $decision->reasonCode);
+
+        $clickNode = $this->node('browser_click', ['target' => 'r1']);
+        $clickSession = $this->browserSession(
+            ['browser_action_policy' => ['capability_grants' => ['click']]],
+            ['hmiActions' => false],
+        );
+        $clickDecision = (new TalosBrowserActionPolicy)->evaluate(
+            $task,
+            $clickNode,
+            $clickSession,
+            $this->approvedCall($task, $clickNode),
+        );
+
+        $this->assertSame(BrowserActionDisposition::Deny, $clickDecision->disposition);
+        $this->assertSame('browser_policy_capability_denied', $clickDecision->reasonCode);
+    }
+
     public function test_worker_capability_allows_reads_but_domain_policy_can_only_tighten(): void
     {
         $policy = new TalosBrowserActionPolicy;
@@ -121,7 +190,7 @@ final class TalosBrowserActionPolicyTest extends TestCase
     }
 
     /** @param array<string, mixed> $policy */
-    private function browserSession(array $policy = []): TalosBrowserSession
+    private function browserSession(array $policy = [], array $capabilities = []): TalosBrowserSession
     {
         $session = new TalosBrowserSession;
         $session->forceFill([
@@ -131,12 +200,13 @@ final class TalosBrowserActionPolicyTest extends TestCase
             'status' => 'ready',
             'mode' => 'read_only',
             'current_url' => 'https://allowed.example/current',
-            'capabilities' => [
+            'capabilities' => array_replace([
                 'navigation' => true,
                 'screenshots' => true,
                 'accessibilitySnapshot' => true,
                 'hmiActions' => true,
-            ],
+                'uploads' => false,
+            ], $capabilities),
             'policy' => $policy,
             'worker_state_version' => 3,
             'expires_at' => now()->addHour(),

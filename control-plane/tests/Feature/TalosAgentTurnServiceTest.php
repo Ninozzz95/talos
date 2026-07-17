@@ -82,6 +82,41 @@ final class TalosAgentTurnServiceTest extends TestCase
         $this->assertSame(1, TalosToolTurn::query()->where('run_id', $run->id)->count());
     }
 
+    public function test_request_local_current_user_context_replaces_only_the_provider_copy_of_that_turn(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create(['session_id' => $session->id, 'role' => 'user', 'content' => 'Earlier question.', 'metadata' => []]);
+        TalosMessage::query()->create(['session_id' => $session->id, 'role' => 'assistant', 'content' => 'Earlier answer.', 'metadata' => []]);
+        $current = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Upload the selected file.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentTurnTestAdapter(finalImmediately: true);
+
+        $outcome = $this->service($adapter)->execute(
+            $user->id,
+            $run,
+            $profile,
+            null,
+            "TALOS_FILE_RESOURCE_MANIFEST_V1:\n{\"resources\":[{\"file_id\":\"authorized-id\"}]}\n\nUSER_TASK:\nUpload the selected file.",
+        );
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertSame([
+            ['role' => 'user', 'content' => 'Earlier question.'],
+            ['role' => 'assistant', 'content' => 'Earlier answer.'],
+            [
+                'role' => 'user',
+                'content' => "TALOS_FILE_RESOURCE_MANIFEST_V1:\n{\"resources\":[{\"file_id\":\"authorized-id\"}]}\n\nUSER_TASK:\nUpload the selected file.",
+            ],
+        ], $adapter->receivedMessages);
+        $this->assertSame('Upload the selected file.', $current->refresh()->content);
+        $this->assertSame('Earlier question.', $session->messages()->where('role', 'user')->whereNull('run_id')->value('content'));
+    }
+
     public function test_agent_turn_appends_a_server_owned_directive_without_replacing_history(): void
     {
         [$user, $session, $run, $profile] = $this->context();

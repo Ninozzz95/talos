@@ -4,7 +4,7 @@ import { connect } from "node:net";
 import { PassThrough } from "node:stream";
 import { BrowserEgressProxy } from "../src/BrowserEgressProxy.js";
 import { BrowserSessionManager, type BrowserLaunchOptions } from "../src/BrowserSessionManager.js";
-import { assertAllowedBrowserUrl, isPrivateOrReservedIp, normalizeHostname } from "../src/BrowserUrlPolicy.js";
+import { assertAllowedBrowserUrl, browserEvidenceUrl, isPrivateOrReservedIp, normalizeHostname } from "../src/BrowserUrlPolicy.js";
 import { buildServer } from "../src/server.js";
 import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
 import { createTestActionCapabilityKeypair } from "./support/browserActionCapability.js";
@@ -281,6 +281,16 @@ describe("browser egress policy", () => {
   it("rejects an empty route-policy hostname after stripping root dots", async () => {
     expect(normalizeHostname("...")).toBe("");
     await expect(assertAllowedBrowserUrl("http://.../private")).rejects.toMatchObject({ code: "TALOS_BROWSER_INVALID_NAVIGATION_URL" });
+  });
+
+  it("canonicalizes public evidence URLs and redacts every local or opaque scheme", () => {
+    expect(browserEvidenceUrl("https://user:secret@example.com/catalog/item?token=secret#details"))
+      .toBe("https://example.com/catalog/item");
+    expect(browserEvidenceUrl("about:blank")).toBe("about:blank");
+    expect(browserEvidenceUrl("file:///C:/Users/example/private.txt")).toBe("about:blank");
+    expect(browserEvidenceUrl("file:///home/example/private.txt")).toBe("about:blank");
+    expect(browserEvidenceUrl("data:text/plain,secret")).toBe("about:blank");
+    expect(browserEvidenceUrl("not a URL")).toBe("about:blank");
   });
 
   it("normalizes public hostname case and root dot before proxy DNS and connection", async () => {

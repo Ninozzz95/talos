@@ -39,6 +39,8 @@ type SendPersistentChatOptions = {
     modelProfileId?: string | null
     modelRoutingProfileId?: string | null
     contextSetId?: string | null
+    attachmentFileIds?: string[] | null
+    attachmentGrantIds?: string[] | null
     browserMode?: {
         enabled: boolean
         browserSessionId: string | null
@@ -70,7 +72,32 @@ function normalizeUsedContext(value: unknown) {
     return Array.isArray(value) ? value : []
 }
 
-const browserOperations = new Set(['session_start', 'navigate', 'snapshot', 'screenshot', 'read', 'click'])
+type TalosUsedAttachment = {
+    file_id: string
+    file_name: string
+    sha256: string
+}
+
+function normalizeUsedAttachments(value: unknown): TalosUsedAttachment[] {
+    if (!Array.isArray(value)) {
+        return []
+    }
+
+    return value.flatMap((candidate) => {
+        const data = record(candidate)
+        const fileId = stringValue(data?.file_id)
+        const fileName = stringValue(data?.file_name)
+        const sha256 = stringValue(data?.sha256)?.toLowerCase()
+
+        if (!fileId || !fileName || !sha256 || !/^[a-f0-9]{64}$/.test(sha256)) {
+            return []
+        }
+
+        return [{ file_id: fileId, file_name: fileName, sha256 }]
+    })
+}
+
+const browserOperations = new Set(['session_start', 'navigate', 'snapshot', 'screenshot', 'read', 'click', 'upload'])
 const browserActivityStatuses = new Set(['queued', 'running', 'succeeded', 'failed', 'denied'])
 
 function normalizeBrowserActivities(value: unknown): TalosBrowserActivity[] {
@@ -222,6 +249,7 @@ export function useTalosChat() {
     }
 
     async function persistAssistantMessage(sessionId: string, response: TalosChatProxyResponse, persistMessage: PersistMessage) {
+        const usedAttachments = normalizeUsedAttachments(response.used_attachments)
         const persisted = persistedAssistantMessage(response.assistant_message, sessionId)
         if (persisted) {
             const browserActivities = normalizeBrowserActivities(response.browser_activities)
@@ -235,6 +263,7 @@ export function useTalosChat() {
                     ...(response.used_browser_context !== undefined
                         ? { used_browser_context: response.used_browser_context }
                         : {}),
+                    ...(usedAttachments.length > 0 ? { used_attachments: usedAttachments } : {}),
                 },
             }
         }
@@ -260,6 +289,7 @@ export function useTalosChat() {
                 validation_errors: errors,
                 run: response.run ?? null,
                 used_context: normalizeUsedContext(response.used_context),
+                used_attachments: usedAttachments,
                 model_routing: response.model_routing ?? null,
             },
         })
@@ -272,6 +302,7 @@ export function useTalosChat() {
                 ...(response.used_browser_context !== undefined
                     ? { used_browser_context: response.used_browser_context }
                     : {}),
+                used_attachments: usedAttachments,
             },
         }
     }
@@ -319,6 +350,12 @@ export function useTalosChat() {
 
             if (options.contextSetId) {
                 payload.context_set_id = options.contextSetId
+            }
+            if (options.attachmentFileIds && options.attachmentFileIds.length > 0) {
+                payload.attachment_file_ids = options.attachmentFileIds
+            }
+            if (options.attachmentGrantIds && options.attachmentGrantIds.length > 0) {
+                payload.attachment_grant_ids = options.attachmentGrantIds
             }
             if (options.browserMode?.enabled && options.browserMode.browserSessionId) {
                 payload.browser_mode = {

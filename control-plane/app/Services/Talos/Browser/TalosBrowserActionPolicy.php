@@ -49,6 +49,11 @@ final class TalosBrowserActionPolicy
             'risk' => BrowserActionRisk::Reversible,
             'capability' => BrowserCapability::Click,
         ],
+        'browser_file_upload' => [
+            'kind' => BrowserActionKind::Upload,
+            'risk' => BrowserActionRisk::Sensitive,
+            'capability' => BrowserCapability::Upload,
+        ],
     ];
 
     public function __construct(private readonly BrowserActionPolicy $policy = new BrowserActionPolicy) {}
@@ -156,9 +161,19 @@ final class TalosBrowserActionPolicy
             }
         }
 
-        if (($profile === BrowserAutonomyProfile::Assist && $required === BrowserCapability::Click
-                && in_array('interact', $session->apiCapabilities(), true))
-            || $exactApproval) {
+        $operationAvailable = match ($required) {
+            BrowserCapability::Click => in_array('interact', $session->apiCapabilities(), true),
+            BrowserCapability::Upload => in_array('upload', $session->apiCapabilities(), true),
+            default => true,
+        };
+        if (! $operationAvailable) {
+            unset($grants[$required->value]);
+
+            return array_values($grants);
+        }
+        if ($operationAvailable && ($required === BrowserCapability::Upload
+            || ($profile === BrowserAutonomyProfile::Assist && $required === BrowserCapability::Click)
+            || $exactApproval)) {
             $grants[$required->value] = $required;
         }
 

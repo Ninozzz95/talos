@@ -130,6 +130,7 @@ const props = defineProps<{
     authUserName?: string
     logoutUrl?: string
     csrfToken?: string
+    activeTalosSessionId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -552,6 +553,7 @@ watch(
                         <TalosSettingsBrowserPanel
                             v-model="preferences.browser_hmi_mode"
                             :policy="settings?.browser_hmi_policy ?? null"
+                            :active-talos-session-id="activeTalosSessionId ?? null"
                         />
                     </template>
 

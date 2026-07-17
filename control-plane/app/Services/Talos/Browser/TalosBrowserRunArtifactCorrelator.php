@@ -22,6 +22,7 @@ final readonly class TalosBrowserRunArtifactCorrelator
         'browser_read',
         'browser_take_screenshot',
         'browser_click',
+        'browser_file_upload',
     ];
 
     public function __construct(private TalosBrowserArtifactReader $artifactReader) {}
@@ -232,7 +233,7 @@ final readonly class TalosBrowserRunArtifactCorrelator
         $allowedTypes = match ((string) $call->tool_name) {
             'browser_snapshot', 'browser_read' => ['snapshot'],
             'browser_take_screenshot' => ['screenshot'],
-            'browser_navigate', 'browser_click' => ['snapshot', 'screenshot'],
+            'browser_navigate', 'browser_click', 'browser_file_upload' => ['snapshot', 'screenshot'],
             default => [],
         };
         $mimeMatches = ($type === 'snapshot' && $mime === 'application/json')
@@ -243,9 +244,10 @@ final readonly class TalosBrowserRunArtifactCorrelator
             'browser_read' => 'read',
             'browser_take_screenshot' => 'screenshot',
             'browser_click' => 'click',
+            'browser_file_upload' => 'upload',
             default => null,
         };
-        $stateDelta = in_array($expectedKind, ['navigate', 'click'], true) ? 1 : 0;
+        $stateDelta = in_array($expectedKind, ['navigate', 'click', 'upload'], true) ? 1 : 0;
         $expectedSourceStateVersion = (int) $action->expected_state_version;
         $expectedStateVersion = (int) $action->expected_state_version + $stateDelta;
         $sourceCommandMatches = is_string($artifact->source_command_id)

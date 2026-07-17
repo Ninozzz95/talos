@@ -82,6 +82,64 @@ describe('useTalosWorkspaceChatActions', () => {
         expect(actions.sending.value).toBe(false)
     })
 
+    it('passes correlated attachment authority grants through the workspace send path', async () => {
+        const reset = vi.fn()
+        const deps = {
+            ...dependencies(),
+            attachmentTray: {
+                attachments: ref([{
+                    id: 'attachment-1',
+                    file_id: 'file-1',
+                    grant_id: 'grant-1',
+                    name: 'notes.md',
+                    status: 'available',
+                    failure_reason: null,
+                }]),
+                readyFileIds: ref(['file-1']),
+                readyGrantIds: ref(['grant-1']),
+                hasPendingUpload: ref(false),
+                reset,
+            },
+        }
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        await expect(actions.sendChatText('Read this file.')).resolves.toBe(true)
+
+        expect(deps.sendPersistentChat).toHaveBeenCalledWith(expect.objectContaining({
+            attachmentFileIds: ['file-1'],
+            attachmentGrantIds: ['grant-1'],
+        }))
+        expect(reset).toHaveBeenCalledOnce()
+    })
+
+    it('blocks send while a failed attachment remains selected', async () => {
+        const deps = {
+            ...dependencies(),
+            attachmentTray: {
+                attachments: ref([{
+                    id: 'attachment-failed',
+                    file_id: null,
+                    grant_id: null,
+                    name: 'rejected.bin',
+                    status: 'failed',
+                    failure_reason: 'TALOS rejected this file for ingestion.',
+                }]),
+                readyFileIds: ref<string[]>([]),
+                readyGrantIds: ref<string[]>([]),
+                hasPendingUpload: ref(false),
+                reset: vi.fn(),
+            },
+        }
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        await expect(actions.sendChatText('Read the selected file.')).resolves.toBe(false)
+
+        expect(deps.uiError.value).toMatch(/failed attachment/i)
+        expect(deps.ensureSessionForPrompt).not.toHaveBeenCalled()
+        expect(deps.persistUserMessage).not.toHaveBeenCalled()
+        expect(deps.sendPersistentChat).not.toHaveBeenCalled()
+    })
+
     it('resends a user message with explicit provenance metadata', async () => {
         const deps = dependencies()
         const actions = useTalosWorkspaceChatActions(deps)

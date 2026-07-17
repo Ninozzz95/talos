@@ -21,11 +21,11 @@ final class TalosBrowserSession extends Model
 
     protected $attributes = ['worker_state_version' => 0];
 
-    protected $fillable = ['user_id', 'talos_session_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'capabilities', 'policy', 'worker_state_version', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
+    protected $fillable = ['user_id', 'talos_session_id', 'worker_session_id', 'status', 'mode', 'current_url', 'current_title', 'viewport_width', 'viewport_height', 'device_scale_factor', 'capabilities', 'policy', 'worker_state_version', 'last_snapshot_artifact_id', 'last_screenshot_artifact_id', 'expires_at', 'last_seen_at'];
 
     protected function casts(): array
     {
-        return ['capabilities' => 'array', 'policy' => 'array', 'worker_state_version' => 'integer', 'expires_at' => 'datetime', 'last_seen_at' => 'datetime'];
+        return ['capabilities' => 'array', 'policy' => 'array', 'device_scale_factor' => 'integer', 'worker_state_version' => 'integer', 'expires_at' => 'datetime', 'last_seen_at' => 'datetime'];
     }
 
     /** @return HasMany<TalosBrowserEvent, $this> */
@@ -65,7 +65,7 @@ final class TalosBrowserSession extends Model
         }
 
         $names = [];
-        foreach (['navigation' => 'navigate', 'screenshots' => 'screenshot', 'accessibilitySnapshot' => 'snapshot', 'hmiActions' => 'interact'] as $workerName => $apiName) {
+        foreach (['navigation' => 'navigate', 'screenshots' => 'screenshot', 'accessibilitySnapshot' => 'snapshot', 'hmiActions' => 'interact', 'uploads' => 'upload'] as $workerName => $apiName) {
             if (($capabilities[$workerName] ?? false) === true) {
                 $names[] = $apiName;
             }

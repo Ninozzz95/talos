@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 
 const safeStateVersionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const normalizedCoordinateSchema = z.number().finite().min(0).max(1);
@@ -6,6 +7,10 @@ const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const commandIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const interactionIdSchema = z.string().uuid();
 const boundedUtf8Schema = (maxBytes: number) => z.string().max(maxBytes).refine((value) => Buffer.byteLength(value, "utf8") <= maxBytes, `String exceeds the ${maxBytes}-byte UTF-8 limit.`);
+const canonicalEvidenceUrlSchema = boundedUtf8Schema(2_048).refine(
+  (value) => browserEvidenceUrl(value) === value,
+  "Browser evidence URL must be canonical HTTP(S) without credentials, query, or fragment, or about:blank.",
+);
 const httpHrefSchema = boundedUtf8Schema(2_048).refine((value) => {
   try {
     const url = new URL(value);
@@ -105,7 +110,7 @@ export const BrowserHmiResultResponseSchema = z.object({
   source_state_version: safeStateVersionSchema,
   state_version: safeStateVersionSchema,
   frame_sha256: sha256Schema,
-  url: boundedUtf8Schema(2_048),
+  url: canonicalEvidenceUrlSchema,
   title: boundedUtf8Schema(512),
   effect_classification: z.enum(["ordinary", "sensitive"]),
   sensitive_effect_authorized: z.boolean(),

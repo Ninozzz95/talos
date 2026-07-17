@@ -7,6 +7,8 @@ import type { BrowserContext, Route } from "playwright";
 import { BrowserError } from "./BrowserErrors.js";
 
 const FIXTURE_ROOT = resolve(process.cwd(), "tests", "fixtures");
+const SAFE_EMPTY_BROWSER_URL = "about:blank";
+const MAX_EVIDENCE_URL_BYTES = 2_048;
 
 export async function assertAllowedBrowserUrl(value: string): Promise<void> {
   let url: URL;
@@ -43,6 +45,31 @@ export async function installBrowserRequestPolicy(context: BrowserContext): Prom
       await route.abort("blockedbyclient");
     }
   });
+}
+
+export function browserEvidenceUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return SAFE_EMPTY_BROWSER_URL;
+  }
+
+  if (url.protocol === "about:" && url.href === SAFE_EMPTY_BROWSER_URL) {
+    return SAFE_EMPTY_BROWSER_URL;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return SAFE_EMPTY_BROWSER_URL;
+  }
+
+  url.username = "";
+  url.password = "";
+  url.search = "";
+  url.hash = "";
+  const sanitized = url.toString();
+  return Buffer.byteLength(sanitized, "utf8") <= MAX_EVIDENCE_URL_BYTES
+    ? sanitized
+    : `${url.origin}/`;
 }
 
 function isAllowedFixturePath(url: URL): boolean {

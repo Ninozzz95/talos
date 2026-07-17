@@ -105,7 +105,8 @@ final class TalosBrowserActionCapabilityIssuer
 
         $attestation = $authorization->toCapabilityAttestation();
         if (($operation === 'browser_click' && ($attestation['kind'] ?? null) !== 'policy')
-            || ($operation === 'hmi_pointer_execute' && ($attestation['kind'] ?? null) !== 'user_approval')) {
+            || (in_array($operation, ['browser_file_upload', 'hmi_pointer_execute'], true)
+                && ($attestation['kind'] ?? null) !== 'user_approval')) {
             throw self::invalid();
         }
         try {

@@ -20,6 +20,7 @@ import {
 } from "./BrowserHmiContracts.js";
 import { captureSnapshot } from "./BrowserSnapshot.js";
 import { BrowserSessionManager, type BrowserSession } from "./BrowserSessionManager.js";
+import { browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 
 type TargetFacts = Omit<BrowserHmiTargetDescriptor, "fingerprint">;
 type InspectedTarget = { target: BrowserHmiTargetDescriptor; attestation: BrowserHmiTargetAttestation };
@@ -217,7 +218,7 @@ export class BrowserHmiService {
           source_state_version: sourceStateVersion,
           state_version: current.stateVersion,
           frame_sha256: sourceFrameSha256,
-          url: safeEvidenceUrl(current.page.url()),
+          url: browserEvidenceUrl(current.page.url()),
           title: boundedUtf8(await current.page.title(), 512),
           effect_classification: input.effect_classification,
           sensitive_effect_authorized: input.sensitive_effect_authorized,
@@ -361,24 +362,6 @@ function safeOrigin(value: string): string {
   } catch {
     return "null";
   }
-}
-
-function safeEvidenceUrl(value: string): string {
-  let result = value;
-  try {
-    const url = new URL(value);
-    if (url.protocol === "http:" || url.protocol === "https:") {
-      url.username = "";
-      url.password = "";
-      url.search = "";
-      url.hash = "";
-      result = url.toString();
-    }
-  } catch {
-    // Non-HTTP fixture URLs remain useful in worker-local evidence.
-  }
-  if (Buffer.byteLength(result, "utf8") > 2_048) throw new Error("evidence_url_bounds");
-  return result;
 }
 
 function sanitizeHref(raw: string | null, base: string): string | null {

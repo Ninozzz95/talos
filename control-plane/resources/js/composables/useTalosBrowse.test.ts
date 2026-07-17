@@ -305,6 +305,107 @@ describe('useTalosBrowse chat isolation', () => {
         ))).toHaveLength(1)
     })
 
+    it('keeps Browse unavailable with an actionable setup fault when the worker protocol is incompatible', async () => {
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [] } as never
+            if (url === '/api/talos/browser/sessions' && options?.method === 'POST') {
+                throw new TalosApiError('Browser worker protocol is incompatible with this TALOS control plane.', {
+                    status: 502,
+                    details: { code: 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH', message: 'Browser worker protocol is incompatible with this TALOS control plane.', details: [] },
+                })
+            }
+            throw new Error(`Unhandled test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+
+        await expect(browse.enableBrowse()).rejects.toBeInstanceOf(TalosApiError)
+
+        expect(browse.browserMode.value).toMatchObject({ enabled: false, session_id: null, status: 'disconnected' })
+        expect(browse.browseSetupFault.value).toMatch(/incompatible/i)
+        expect(browse.browseSetupFault.value).toMatch(/update/i)
+    })
+
+    it('classifies every handshake incompatibility code as a non-retryable setup fault', async () => {
+        const codes = [
+            'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
+            'TALOS_BROWSER_WORKER_ADAPTER_MISMATCH',
+            'TALOS_BROWSER_WORKER_CAPABILITY_MISMATCH',
+            'TALOS_BROWSER_WORKER_AUTHENTICATION_MISMATCH',
+            'TALOS_BROWSER_WORKER_HANDSHAKE_INVALID',
+        ]
+        for (const code of codes) {
+            talosFetchMock.mockReset()
+            talosFetchMock.mockImplementation(async (url, options) => {
+                if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [] } as never
+                if (url === '/api/talos/browser/sessions' && options?.method === 'POST') {
+                    throw new TalosApiError('Browser worker is incompatible.', {
+                        status: 502,
+                        details: { code, message: 'Browser worker is incompatible.', details: [] },
+                    })
+                }
+                throw new Error(`Unhandled test request: ${url}`)
+            })
+            const browse = useTalosBrowse()
+            browse.bindTalosSession('chat-a')
+
+            await expect(browse.enableBrowse()).rejects.toBeInstanceOf(TalosApiError)
+
+            expect(browse.browserMode.value.enabled, code).toBe(false)
+            expect(browse.browseSetupFault.value, code).not.toBeNull()
+        }
+    })
+
+    it('keeps the retryable failed state without a setup fault when the worker is temporarily unavailable', async () => {
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [] } as never
+            if (url === '/api/talos/browser/sessions' && options?.method === 'POST') {
+                throw new TalosApiError('Browser worker is temporarily unavailable.', {
+                    status: 503,
+                    details: { code: 'TALOS_BROWSER_WORKER_UNAVAILABLE', message: 'Browser worker is temporarily unavailable.', details: [] },
+                })
+            }
+            throw new Error(`Unhandled test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+
+        await expect(browse.enableBrowse()).rejects.toBeInstanceOf(TalosApiError)
+
+        expect(browse.browserMode.value).toMatchObject({ enabled: true, status: 'failed' })
+        expect(browse.browseSetupFault.value).toBeNull()
+    })
+
+    it('clears a prior setup fault when Browse is enabled again after the worker is fixed', async () => {
+        let attempt = 0
+        const created = browserSession('chat-a')
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [] } as never
+            if (url === '/api/talos/browser/sessions' && options?.method === 'POST') {
+                attempt += 1
+                if (attempt === 1) {
+                    throw new TalosApiError('Browser worker protocol is incompatible with this TALOS control plane.', {
+                        status: 502,
+                        details: { code: 'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH', message: 'incompatible', details: [] },
+                    })
+                }
+                return { data: created } as never
+            }
+            if (url === `/api/talos/browser/sessions/${created.id}/events`) return { data: [] } as never
+            throw new Error(`Unhandled test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+
+        await expect(browse.enableBrowse()).rejects.toBeInstanceOf(TalosApiError)
+        expect(browse.browseSetupFault.value).not.toBeNull()
+
+        await browse.enableBrowse()
+
+        expect(browse.browserMode.value).toMatchObject({ enabled: true, status: 'ready' })
+        expect(browse.browseSetupFault.value).toBeNull()
+    })
+
     it('does not re-enable Browse when a pending session creation resolves after the user disables it', async () => {
         const created = browserSession('chat-a')
         let resolveCreate: ((value: { data: TalosBrowserSession }) => void) | null = null

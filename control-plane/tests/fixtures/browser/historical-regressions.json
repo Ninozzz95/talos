@@ -102,9 +102,10 @@
       "title": "Fail closed on a worker protocol or capability mismatch",
       "prompt": "attiva browse",
       "expected_contract": "Browse remains unavailable with a stable actionable setup fault when worker protocol or capabilities are incompatible.",
-      "current_state": "partial",
+      "current_state": "covered",
       "tests": [
         "tests/Unit/TalosBrowserSessionClientContractTest.php::test_http_client_rejects_a_malformed_tool_definitions_success",
+        "resources/js/composables/useTalosBrowse.test.ts::keeps Browse unavailable with an actionable setup fault when the worker protocol is incompatible",
         "tests/e2e/talosBrowserRecovery.e2e.spec.ts::BREG-009"
       ],
       "promotion_phase": "B2"

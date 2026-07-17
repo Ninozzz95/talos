@@ -105,7 +105,7 @@ describe("TALOS REST browser tool adapter", () => {
     await deleteSession(first.json().data.sessionId as string);
   });
 
-  it("returns the stable six-tool discovery list with closed canonical schemas", async () => {
+  it("returns the stable canonical discovery list with additive staged upload and closed schemas", async () => {
     const response = await app.inject({ method: "GET", url: "/tools", headers: ownerHeaders });
     const body = response.json();
 
@@ -118,6 +118,7 @@ describe("TALOS REST browser tool adapter", () => {
       "browser_take_screenshot",
       "browser_wait_for",
       "browser_click",
+      "browser_file_upload",
     ]);
     for (const tool of body.data.tools) {
       expect(tool.inputSchema).toMatchObject({ type: "object", additionalProperties: false });
@@ -177,13 +178,13 @@ describe("TALOS REST browser tool adapter", () => {
       const navigationResult = navigated.json();
       expect(navigated.statusCode).toBe(200);
       expect(navigationResult).toMatchObject({ schema_version: "talos_tool_result_v1", tool_use_id: "call-nav", isError: false });
-      expect(navigationResult.structuredContent).toMatchObject({ url: fixtureUrl, title: "TALOS Browse Fixture", state_version: 1 });
+      expect(navigationResult.structuredContent).toMatchObject({ url: "about:blank", title: "TALOS Browse Fixture", state_version: 1 });
       expect(navigationResult.evidence[0].sha256).toMatch(/^sha256:[a-f0-9]{64}$/);
 
       const snapshotResponse = await callTool(sessionId, "call-snapshot", "browser_snapshot", {});
       const snapshotResult = snapshotResponse.json();
       expect(snapshotResponse.statusCode).toBe(200);
-      expect(snapshotResult.structuredContent).toMatchObject({ state_version: 1, url: fixtureUrl, title: "TALOS Browse Fixture" });
+      expect(snapshotResult.structuredContent).toMatchObject({ state_version: 1, url: "about:blank", title: "TALOS Browse Fixture" });
       expect(snapshotResult.structuredContent.snapshot_id).toMatch(/^snap_/);
       expect(snapshotResult.structuredContent.nodes.length).toBeGreaterThan(0);
       expect(snapshotResult.evidence[0]).toMatchObject({ kind: "snapshot", trusted_boundary: "untrusted_web_content" });
@@ -282,7 +283,7 @@ describe("TALOS REST browser tool adapter", () => {
         tool_use_id: "click-cookie",
         isError: false,
         structuredContent: {
-          url: hmiFixtureUrl,
+          url: "about:blank",
           title: "TALOS HMI Fixture",
           state_version: 2,
           target: { ref: target.ref, role: "button", name: "Reject optional cookies" },
@@ -774,7 +775,7 @@ describe("TALOS REST browser tool adapter", () => {
 
       expect(waited.json()).toMatchObject({ isError: false, structuredContent: { state_version: 1 } });
       expect(navigated.statusCode).toBe(200);
-      expect(navigated.json()).toMatchObject({ data: { stateVersion: 2, url: fixtureUrl } });
+      expect(navigated.json()).toMatchObject({ data: { stateVersion: 2, url: "about:blank" } });
     } finally {
       await deleteSession(sessionId);
     }
@@ -816,7 +817,7 @@ describe("TALOS REST browser tool adapter", () => {
 
       const legacy = await app.inject({ method: "POST", url: `/sessions/${sessionId}/navigate`, headers: ownerHeaders, payload: { url: fixtureUrl } });
       expect(legacy.statusCode).toBe(200);
-      expect(legacy.json()).toEqual(expect.objectContaining({ data: expect.objectContaining({ title: "TALOS Browse Fixture", url: fixtureUrl }) }));
+      expect(legacy.json()).toEqual(expect.objectContaining({ data: expect.objectContaining({ title: "TALOS Browse Fixture", url: "about:blank" }) }));
     } finally {
       await deleteSession(sessionId);
     }

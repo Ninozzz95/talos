@@ -2,12 +2,17 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { createHash, randomUUID } from "node:crypto";
 import { BrowserSessionManager } from "./BrowserSessionManager.js";
 import { BrowserError, errorPayload } from "./BrowserErrors.js";
-import { assertAllowedBrowserUrl } from "./BrowserUrlPolicy.js";
+import { assertAllowedBrowserUrl, browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 import { captureSnapshot } from "./BrowserSnapshot.js";
 import { captureCanonicalBrowserFrame } from "./BrowserFrameCapture.js";
 import { createSessionSchema, navigateSchema } from "./schemas.js";
 import { BrowserToolDefinitions, BrowserToolCallSchema, BrowserToolResultSchema } from "./BrowserToolContracts.js";
 import { BrowserToolDispatcher } from "./BrowserToolDispatcher.js";
+import {
+  BrowserFileStageRequestSchema,
+  BrowserFileStagingStore,
+  MAX_FILE_STAGE_REQUEST_BYTES,
+} from "./BrowserFileStagingStore.js";
 import {
   BrowserHmiExecuteRequestSchema,
   BrowserHmiPreflightRequestSchema,
@@ -48,6 +53,7 @@ export interface BrowserWorkerServerOptions {
   workerInstanceId?: string;
   automationAdapter?: BrowserAutomationAdapter;
   actionCapabilityVerifier?: BrowserActionCapabilityVerifier;
+  fileStaging?: BrowserFileStagingStore;
 }
 
 export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyInstance {
@@ -55,8 +61,10 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
   const internalToken = options.internalToken ?? process.env.TALOS_BROWSER_WORKER_TOKEN;
   assertWorkerTokenConfiguration(internalToken, runtimeEnvironment);
   const app = Fastify({ logger: false });
+  const fileStaging = options.fileStaging ?? new BrowserFileStagingStore();
   const sessions = options.sessions ?? new BrowserSessionManager();
-  const browserTools = new BrowserToolDispatcher(sessions);
+  sessions.onSessionDisposed(({ ownerRef, sessionId }) => fileStaging.discardSession(ownerRef, sessionId));
+  const browserTools = new BrowserToolDispatcher(sessions, fileStaging);
   const browserAutomation = options.automationAdapter ?? new PlaywrightMcpAdapter(sessions, {
     allowTestFixtureFileAccess: runtimeEnvironment === "test",
   });
@@ -92,7 +100,7 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
 
   app.setNotFoundHandler((_request, reply) => reply.code(404).send({ message: "Browser worker route not found.", code: "TALOS_BROWSER_ROUTE_NOT_FOUND", details: {} }));
 
-  app.addHook("preHandler", async (request) => {
+  app.addHook("onRequest", async (request) => {
     if (request.url === "/health") return;
     const token = request.headers["x-talos-worker-token"];
     if (typeof token !== "string" || token.length === 0) throw new BrowserError("Worker token is required.", "TALOS_BROWSER_WORKER_TOKEN_REQUIRED", 401);
@@ -188,7 +196,7 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     const data = await sessions.runExclusive(request.params.id, async () => {
       const session = await sessions.navigate(request.params.id, parsed.data);
       const page = await sessions.get(request.params.id);
-      return { ...session, url: page.page.url(), title: await page.page.title(), capturedAt: new Date().toISOString() };
+      return { ...session, url: browserEvidenceUrl(page.page.url()), title: await page.page.title(), capturedAt: new Date().toISOString() };
     });
     return { data };
   });
@@ -197,15 +205,43 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     const parsed = BrowserToolCallSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "Invalid browser tool call payload.", code: "TALOS_BROWSER_INVALID_TOOL_CALL", details: parsed.error.flatten() });
     const session = await ownedSession(sessions, request);
-    if (parsed.data.name === "browser_click") {
+    if (parsed.data.name === "browser_click" || parsed.data.name === "browser_file_upload") {
       await actionCapabilityVerifier.verifyAndConsume(
         authorizationFromRequest(request),
-        restClickActionExpectation(ownerFromRequest(request), request.params.id, session.stateVersion, parsed.data),
+        restActionExpectation(ownerFromRequest(request), request.params.id, session.stateVersion, parsed.data),
       );
     }
     const result = BrowserToolResultSchema.parse(await browserTools.call(request.params.id, parsed.data));
     return reply.code(200).send(result);
   });
+
+  app.put<{ Params: { id: string; stageId: string } }>(
+    "/sessions/:id/files/stage/:stageId",
+    { bodyLimit: MAX_FILE_STAGE_REQUEST_BYTES },
+    async (request, reply) => {
+      const parsed = BrowserFileStageRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          message: "Invalid staged Browser file payload.",
+          code: "TALOS_BROWSER_STAGED_FILE_INVALID",
+          details: parsed.error.flatten(),
+        });
+      }
+      await ownedSession(sessions, request);
+      const staged = fileStaging.stage(ownerFromRequest(request), request.params.id, request.params.stageId, parsed.data);
+      const { replayed, ...data } = staged;
+      return reply.code(replayed ? 200 : 201).send({ data });
+    },
+  );
+
+  app.delete<{ Params: { id: string; stageId: string } }>(
+    "/sessions/:id/files/stage/:stageId",
+    async (request, reply) => {
+      await ownedSession(sessions, request);
+      fileStaging.discard(ownerFromRequest(request), request.params.id, request.params.stageId);
+      return reply.code(204).send();
+    },
+  );
 
   app.post<{ Params: { id: string } }>("/sessions/:id/mcp", async (request, reply) => {
     assertMcpTransportRequest(request.headers, mcpAllowedHosts);
@@ -323,12 +359,13 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
       if (!session.capabilities.accessibilitySnapshot) throw new BrowserError("Accessibility snapshots are not enabled for this session.", "TALOS_BROWSER_CAPABILITY_DENIED", 403);
       const snapshot = await captureSnapshot(session.page);
       sessions.recordSnapshot(session.sessionId, snapshot);
-      return { data: { sessionId: session.sessionId, stateVersion: session.stateVersion, url: session.page.url(), title: await session.page.title(), ...snapshot, capturedAt: new Date().toISOString() } };
+      return { data: { sessionId: session.sessionId, stateVersion: session.stateVersion, url: browserEvidenceUrl(session.page.url()), title: await session.page.title(), ...snapshot, capturedAt: new Date().toISOString() } };
     });
   });
 
   app.delete<{ Params: { id: string } }>("/sessions/:id", async (request, reply) => {
-    await ownedSession(sessions, request);
+    const session = await ownedSession(sessions, request);
+    fileStaging.discardSession(session.ownerRef, request.params.id);
     await browserAutomation.closeSession(request.params.id);
     await sessions.delete(request.params.id);
     return reply.code(204).send();
@@ -343,13 +380,15 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
         details: parsed.error.flatten(),
       });
     }
-    await ownedSession(sessions, request);
+    const session = await ownedSession(sessions, request);
+    fileStaging.discardSession(session.ownerRef, request.params.id);
     await browserAutomation.cancelSession(request.params.id, parsed.data.reason).catch(() => undefined);
     await sessions.cancel(request.params.id, parsed.data.reason);
     return reply.code(204).send();
   });
 
   app.addHook("onClose", async () => {
+    fileStaging.clear();
     await browserAutomation.close();
     await sessions.close();
   });
@@ -368,7 +407,7 @@ function authorizationFromRequest(request: { headers: Record<string, string | st
   return typeof authorization === "string" ? authorization : undefined;
 }
 
-function restClickActionExpectation(
+function restActionExpectation(
   ownerRef: string,
   sessionId: string,
   currentStateVersion: number,
@@ -379,7 +418,7 @@ function restClickActionExpectation(
     ownerRef,
     workerSessionId: sessionId,
     actionId: request.tool_use_id,
-    operation: "browser_click",
+    operation: request.name,
     preconditionStateVersion: Number.isInteger(requestedStateVersion) && typeof requestedStateVersion === "number"
       ? requestedStateVersion
       : currentStateVersion,
@@ -430,6 +469,7 @@ function sessionsSummary(session: Awaited<ReturnType<BrowserSessionManager["get"
     createdAt: session.createdAt,
     expiresAt: session.expiresAt,
     viewport: session.viewport,
+    deviceScaleFactor: session.deviceScaleFactor,
     capabilities: session.capabilities,
     stateVersion: session.stateVersion,
     ...(session.recovery ? { recovery: session.recovery } : {}),

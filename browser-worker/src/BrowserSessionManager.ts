@@ -16,6 +16,7 @@ export interface SessionSummary {
   createdAt: string;
   expiresAt: string;
   viewport: { width: number; height: number };
+  deviceScaleFactor: number;
   capabilities: Capabilities;
   recovery?: BrowserSessionRecovery;
 }
@@ -38,6 +39,7 @@ export interface BrowserSession extends SessionSummary {
   singlePageGuard?: (page: Page) => void;
   downloadGuard?: (download: Download) => void;
   fileChooserGuard?: (fileChooser: FileChooser) => void;
+  fileChooserDispatchExpected?: boolean;
   hmiCommands: BrowserHmiCommandLedger;
   actionLedger: BrowserActionLedger;
   hmiDispatchFenceStateVersion?: number;
@@ -65,6 +67,13 @@ export interface BrowserSessionManagerOptions {
   browserLauncher?: (options: BrowserLaunchOptions) => Promise<Browser>;
 }
 
+export interface BrowserSessionDisposedEvent {
+  ownerRef: string;
+  sessionId: string;
+}
+
+export type BrowserSessionDisposedListener = (event: BrowserSessionDisposedEvent) => void;
+
 export interface BrowserLaunchOptions {
   headless: true;
   proxy: { server: string };
@@ -91,6 +100,7 @@ export class BrowserSessionManager {
   private cleanupHandle?: unknown;
   private readonly proxyFactory: () => BrowserEgressProxyLike;
   private readonly browserLauncher: (options: BrowserLaunchOptions) => Promise<Browser>;
+  private readonly sessionDisposedListeners = new Set<BrowserSessionDisposedListener>();
   private egressProxy?: BrowserEgressProxyLike;
 
   constructor(options: BrowserSessionManagerOptions = {}) {
@@ -101,6 +111,11 @@ export class BrowserSessionManager {
     this.browserLauncher = options.browserLauncher ?? ((launchOptions) => chromium.launch(launchOptions));
     const scheduleCleanup = options.scheduleCleanup ?? ((callback, intervalMs) => setInterval(() => void callback(), intervalMs));
     this.cleanupHandle = scheduleCleanup(() => this.pruneExpired(), options.cleanupIntervalMs ?? 1_000);
+  }
+
+  onSessionDisposed(listener: BrowserSessionDisposedListener): () => void {
+    this.sessionDisposedListeners.add(listener);
+    return () => this.sessionDisposedListeners.delete(listener);
   }
 
   async create(input: CreateSessionInput, idempotencyKey?: string): Promise<SessionSummary> {
@@ -151,7 +166,9 @@ export class BrowserSessionManager {
       this.assertAccepting();
       const browser = await this.getBrowser();
       this.assertAccepting();
-      const context = await browser.newContext({ viewport: input.viewport, acceptDownloads: false, serviceWorkers: "block" });
+      // Evidence provenance requires an explicit, recorded scale: screenshots
+      // are rendered at viewport x deviceScaleFactor physical pixels.
+      const context = await browser.newContext({ viewport: input.viewport, deviceScaleFactor: 1, acceptDownloads: false, serviceWorkers: "block" });
       try {
         this.assertAccepting();
         await installBrowserRequestPolicy(context);
@@ -167,6 +184,7 @@ export class BrowserSessionManager {
           createdAt: createdAt.toISOString(),
           expiresAt: new Date(createdAt.getTime() + input.ttlSeconds * 1000).toISOString(),
           viewport: input.viewport,
+          deviceScaleFactor: 1,
           capabilities: input.capabilities,
           stateVersion: 0,
           page,
@@ -386,6 +404,14 @@ export class BrowserSessionManager {
       if (this.operationStates.get(sessionId) === state) this.operationStates.delete(sessionId);
       return;
     }
+    const listenerFailures: unknown[] = [];
+    for (const listener of this.sessionDisposedListeners) {
+      try {
+        listener({ ownerRef: session.ownerRef, sessionId: session.sessionId });
+      } catch (error) {
+        listenerFailures.push(error);
+      }
+    }
     session.hmiCommands.clear();
     session.actionLedger.clear();
     await this.disposeSnapshot(session.latestSnapshot?.value);
@@ -402,6 +428,7 @@ export class BrowserSessionManager {
         if (claim.sessionId === sessionId) this.createClaims.delete(claimKey);
       }
     }
+    if (listenerFailures.length > 0) throw listenerFailures[0];
   }
 
   close(): Promise<void> {
@@ -538,6 +565,7 @@ export class BrowserSessionManager {
       singlePageGuard: _singlePageGuard,
       downloadGuard: _downloadGuard,
       fileChooserGuard: _fileChooserGuard,
+      fileChooserDispatchExpected: _fileChooserDispatchExpected,
       hmiCommands: _hmiCommands,
       actionLedger: _actionLedger,
       hmiDispatchFenceStateVersion: _hmiDispatchFenceStateVersion,
@@ -563,6 +591,7 @@ export class BrowserSessionManager {
         void download.cancel().catch(() => undefined);
       };
       const fileChooserListener = (fileChooser: FileChooser) => {
+        if (session.fileChooserDispatchExpected === true) return;
         this.markSessionRecovery(session, "file_chooser_opened", session.hmiDispatchFenceStateVersion);
         void fileChooser.setFiles([]).catch(() => undefined);
       };

@@ -7,6 +7,7 @@ type ComposerAvailabilityOptions = {
     modelSelectionUsable: Readonly<Ref<boolean>>
     browserMode: Readonly<Ref<TalosBrowserMode>>
     activeBrowserSession: Readonly<Ref<unknown | null>>
+    hasFailedAttachments: Readonly<Ref<boolean>>
 }
 
 export function useTalosComposerAvailability(options: ComposerAvailabilityOptions) {
@@ -17,11 +18,13 @@ export function useTalosComposerAvailability(options: ComposerAvailabilityOption
     const canSend = computed(() => options.prompt.value.trim().length > 0
         && !options.sending.value
         && options.modelSelectionUsable.value
+        && !options.hasFailedAttachments.value
         && browserReadyForSend.value)
     const sendDisabledReason = computed(() => {
         if (options.sending.value) return 'TALOS is already processing a message.'
         if (!options.prompt.value.trim()) return 'Type a workflow in the composer before sending.'
         if (!options.modelSelectionUsable.value) return 'Choose a usable model or routing profile before sending.'
+        if (options.hasFailedAttachments.value) return 'Remove the failed attachment and attach the file again before sending.'
         if (!browserReadyForSend.value) return 'Wait for Browse to become ready before sending.'
         return ''
     })

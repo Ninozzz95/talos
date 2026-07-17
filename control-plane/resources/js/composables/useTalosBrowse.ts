@@ -34,6 +34,19 @@ function browserInteractionId() {
     return interactionId
 }
 
+// A worker handshake incompatibility is a setup/configuration fault (RFC 9110
+// 426 semantics): Browse must stay unavailable with an actionable message rather
+// than a retryable transient failure.
+const SETUP_INCOMPATIBILITY_CODES = new Set([
+    'TALOS_BROWSER_WORKER_PROTOCOL_MISMATCH',
+    'TALOS_BROWSER_WORKER_ADAPTER_MISMATCH',
+    'TALOS_BROWSER_WORKER_CAPABILITY_MISMATCH',
+    'TALOS_BROWSER_WORKER_AUTHENTICATION_MISMATCH',
+    'TALOS_BROWSER_WORKER_HANDSHAKE_INVALID',
+])
+
+const BROWSE_SETUP_FAULT_MESSAGE = 'Browse is unavailable because the browser worker is incompatible with this TALOS version. Update the browser worker to a compatible protocol, then enable Browse again.'
+
 export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     const boundTalosSessionId = ref<string | null>(null)
     const sessions = ref<TalosBrowserSession[]>([])
@@ -48,6 +61,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         status: 'disconnected',
         capabilities: [],
     })
+    const browseSetupFault = ref<string | null>(null)
     const loadingCollection = ref(false)
     const loadingSession = ref(false)
     const mutating = ref(false)
@@ -119,6 +133,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         loadingCollection.value = false
         loadingSession.value = false
         mutating.value = false
+        browseSetupFault.value = null
         setBrowserMode(false, null)
     }
 
@@ -371,8 +386,15 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
             return response.data
         } catch (error) {
             if (scopeIsCurrent(talosSessionId, revision) && activationGuard()) {
-                setMutationError(error, 'TALOS could not start a browser session.')
-                browserMode.value = { ...browserMode.value, enabled: true, status: 'failed' }
+                const code = interactionErrorCode(error)
+                if (code !== null && SETUP_INCOMPATIBILITY_CODES.has(code)) {
+                    browseSetupFault.value = BROWSE_SETUP_FAULT_MESSAGE
+                    mutationError.value = null
+                    setBrowserMode(false, null)
+                } else {
+                    setMutationError(error, 'TALOS could not start a browser session.')
+                    browserMode.value = { ...browserMode.value, enabled: true, status: 'failed' }
+                }
             }
             throw error
         } finally {
@@ -382,6 +404,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
 
     async function performEnableBrowse(talosSessionId: string, revision: number, intentRevision: number) {
         if (!browseIntentIsCurrent(talosSessionId, revision, intentRevision)) return null
+        browseSetupFault.value = null
         browserMode.value = { ...browserMode.value, enabled: true, status: 'starting' }
         if (sessions.value.length === 0) await loadSessions()
         if (!browseIntentIsCurrent(talosSessionId, revision, intentRevision)) return null
@@ -423,6 +446,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     function disableBrowse() {
         browseIntentRevision += 1
         mutating.value = false
+        browseSetupFault.value = null
         setBrowserMode(false)
     }
 
@@ -749,6 +773,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         activeSession,
         events,
         browserMode,
+        browseSetupFault,
         browserActivities,
         latestScreenshot,
         latestSnapshot,

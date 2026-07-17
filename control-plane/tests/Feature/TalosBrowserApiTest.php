@@ -76,6 +76,7 @@ final class TalosBrowserApiTest extends TestCase
             'status' => 'ready',
             'mode' => 'read_only',
             'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
             'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false],
             'stateVersion' => 3,
             'expiresAt' => now()->addHour()->toJSON(),
@@ -98,6 +99,93 @@ final class TalosBrowserApiTest extends TestCase
         $this->assertSame('talos-user:'.$this->user->id, $this->client->requests[0]['ownerRef']);
     }
 
+    public function test_session_creation_accepts_the_negotiated_upload_capability_without_escalating_actions(): void
+    {
+        $this->client->createResponse = [
+            'sessionId' => 'worker-upload-capable-session',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
+            'capabilities' => [
+                'navigation' => true,
+                'screenshots' => true,
+                'accessibilitySnapshot' => true,
+                'actions' => false,
+                'hmiActions' => true,
+                'downloads' => false,
+                'uploads' => true,
+            ],
+            'stateVersion' => 0,
+            'expiresAt' => now()->addHour()->toJSON(),
+        ];
+
+        $response = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload());
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.mode', 'read_only')
+            ->assertJsonPath('data.capabilities', ['navigate', 'screenshot', 'snapshot', 'interact', 'upload']);
+        $this->assertDatabaseHas('talos_browser_sessions', [
+            'id' => $response->json('data.id'),
+            'mode' => 'read_only',
+        ]);
+        $stored = TalosBrowserSession::query()->findOrFail($response->json('data.id'));
+        $this->assertTrue((bool) data_get($stored->capabilities, 'uploads'));
+        $this->assertFalse((bool) data_get($stored->capabilities, 'actions'));
+        $this->assertFalse((bool) data_get($stored->capabilities, 'downloads'));
+    }
+
+    public function test_session_creation_fails_closed_when_the_worker_summary_omits_device_scale_factor(): void
+    {
+        $this->client->createResponse = [
+            'sessionId' => 'worker-without-device-scale',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport' => ['width' => 1280, 'height' => 800],
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false],
+            'stateVersion' => 0,
+            'expiresAt' => now()->addHour()->toJSON(),
+        ];
+
+        $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())
+            ->assertStatus(502)
+            ->assertJsonPath('code', 'TALOS_BROWSER_WORKER_FAILURE');
+
+        $this->assertDatabaseCount('talos_browser_sessions', 0);
+    }
+
+    public function test_session_creation_fails_closed_when_the_worker_reports_a_non_unit_device_scale_factor(): void
+    {
+        $this->client->createResponse = [
+            'sessionId' => 'worker-scaled-device',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 2,
+            'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false],
+            'stateVersion' => 0,
+            'expiresAt' => now()->addHour()->toJSON(),
+        ];
+
+        $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())
+            ->assertStatus(502)
+            ->assertJsonPath('code', 'TALOS_BROWSER_WORKER_FAILURE');
+
+        $this->assertDatabaseCount('talos_browser_sessions', 0);
+    }
+
+    public function test_created_session_persists_the_worker_device_scale_factor(): void
+    {
+        $response = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload());
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('talos_browser_sessions', [
+            'id' => $response->json('data.id'),
+            'device_scale_factor' => 1,
+        ]);
+    }
+
     public function test_session_creation_fails_closed_when_the_worker_cannot_provide_interactive_hmi(): void
     {
         $this->client->createResponse = [
@@ -105,6 +193,7 @@ final class TalosBrowserApiTest extends TestCase
             'status' => 'ready',
             'mode' => 'read_only',
             'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
             'capabilities' => [
                 'navigation' => true,
                 'screenshots' => true,
@@ -165,6 +254,7 @@ final class TalosBrowserApiTest extends TestCase
             'status' => 'ready',
             'mode' => 'read_only',
             'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
             'capabilities' => [
                 'navigation' => true,
                 'screenshots' => true,
@@ -230,6 +320,7 @@ final class TalosBrowserApiTest extends TestCase
             'status' => 'ready',
             'mode' => 'read_only',
             'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
             'capabilities' => [
                 'navigation' => true,
                 'screenshots' => true,
@@ -261,6 +352,7 @@ final class TalosBrowserApiTest extends TestCase
             'status' => 'ready',
             'mode' => 'read_only',
             'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
             'capabilities' => [
                 'navigation' => true,
                 'screenshots' => true,
