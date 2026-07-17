@@ -60,6 +60,7 @@ const props = defineProps<{
     authUserName: string
     logoutUrl: string
     csrfToken: string
+    activeTalosSessionId: string | null
     theme: TalosThemeId
     motionPreferences: TalosMotionV6Preferences
     reducedMotion: boolean
@@ -188,6 +189,7 @@ function moduleContextFor(id: TalosWindowId): TalosWindowModuleContext {
         authUserName: props.authUserName,
         logoutUrl: props.logoutUrl,
         csrfToken: props.csrfToken,
+        activeTalosSessionId: props.activeTalosSessionId,
         theme: props.theme,
         openWindow: (windowId) => emit('openWindow', windowId),
         openModule: (moduleId, sectionId) => {

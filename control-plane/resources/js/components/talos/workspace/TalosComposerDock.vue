@@ -14,6 +14,10 @@ const props = withDefaults(defineProps<{
     prompt: string
     browserContext?: { host: string; title: string } | null
     browserMode: TalosBrowserMode
+    browseSetupFault?: string | null
+    attachments?: Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>
+    vaultFiles?: Array<{ id: string; original_name: string; status: string }>
+    vaultPickerLoading?: boolean
     browserCurrentPage?: TalosBrowserCurrentPage | null
     devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
@@ -75,6 +79,10 @@ const emit = defineEmits<{
     captureScreenshot: []
     captureSnapshot: []
     closePopovers: []
+    attachFiles: [files: File[]]
+    attachVaultFile: [fileId: string]
+    removeAttachment: [id: string]
+    openVaultPicker: []
 }>()
 
 const composerPrompt = computed({
@@ -288,6 +296,10 @@ onBeforeUnmount(() => {
                 :context-label="contextLabel"
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
+                :browse-setup-fault="browseSetupFault"
+                :attachments="attachments"
+                :vault-files="vaultFiles"
+                :vault-picker-loading="vaultPickerLoading"
                 :browser-current-page="browserCurrentPage"
                 :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
@@ -308,6 +320,10 @@ onBeforeUnmount(() => {
                 @restart-browse="emit('restartBrowse')"
                 @capture-screenshot="emit('captureScreenshot')"
                 @capture-snapshot="emit('captureSnapshot')"
+                @attach-files="emit('attachFiles', $event)"
+                @attach-vault-file="emit('attachVaultFile', $event)"
+                @remove-attachment="emit('removeAttachment', $event)"
+                @open-vault-picker="emit('openVaultPicker')"
             />
         </div>
     </div>

@@ -172,7 +172,11 @@ final readonly class TalosBrowserTaskRuntime
                     );
                 }
                 $kind = $this->actionKind($node->call->name);
-                $risk = $node->call->name === 'browser_click' ? 'reversible' : 'read';
+                $risk = match ($node->call->name) {
+                    'browser_click' => 'reversible',
+                    'browser_file_upload' => 'sensitive',
+                    default => 'read',
+                };
                 $action = $lockedTask->actions()
                     ->where('idempotency_key', $node->context->idempotencyKey)
                     ->first();
@@ -728,6 +732,7 @@ final readonly class TalosBrowserTaskRuntime
                     'current_title' => $this->checkpointActiveValue($checkpoint, 'title'),
                     'viewport_width' => $width,
                     'viewport_height' => $height,
+                    'device_scale_factor' => is_int($worker['deviceScaleFactor'] ?? null) ? $worker['deviceScaleFactor'] : 1,
                     'capabilities' => $worker['capabilities'],
                     'policy' => $sourceBrowser instanceof TalosBrowserSession ? $sourceBrowser->policy : [],
                     'worker_state_version' => $worker['stateVersion'],
@@ -906,6 +911,7 @@ final readonly class TalosBrowserTaskRuntime
             'browser_read' => 'read',
             'browser_take_screenshot' => 'screenshot',
             'browser_click' => 'click',
+            'browser_file_upload' => 'upload',
             default => throw new TalosBrowserTaskException(
                 'TALOS_BROWSER_ACTION_UNSUPPORTED',
                 'Compiled Browser tool is not supported by the task action journal.',

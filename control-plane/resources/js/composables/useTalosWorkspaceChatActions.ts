@@ -31,6 +31,8 @@ export type TalosWorkspaceChatActionDependencies = {
         modelProfileId: string | null
         modelRoutingProfileId: string | null
         contextSetId: string | null
+        attachmentFileIds: string[]
+        attachmentGrantIds: string[]
         browserMode: { enabled: boolean; browserSessionId: string | null }
         chatEndpoint: string
         userMessageMetadata: Record<string, unknown>
@@ -50,6 +52,13 @@ export type TalosWorkspaceChatActionDependencies = {
     selectedBenchmarkScenarioRef: Readonly<Ref<string | null>>
     selectedBenchmarkScenarioIsRunnable: Readonly<Ref<boolean>>
     benchmarkDisabledReason: Readonly<Ref<string>>
+    attachmentTray?: {
+        attachments: Readonly<Ref<Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>>>
+        readyFileIds: Readonly<Ref<string[]>>
+        readyGrantIds: Readonly<Ref<string[]>>
+        hasPendingUpload: Readonly<Ref<boolean>>
+        reset: () => void
+    }
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -75,6 +84,28 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
             deps.uiError.value = 'Wait for Browse to become ready before sending.'
             return false
         }
+        if (deps.attachmentTray?.hasPendingUpload.value) {
+            deps.uiError.value = 'Wait for the attachment to finish ingesting before sending.'
+            return false
+        }
+        if (deps.attachmentTray?.attachments.value.some((attachment) => attachment.status === 'failed')) {
+            deps.uiError.value = 'A failed attachment is still selected. Remove it and attach the file again before sending.'
+            return false
+        }
+        const attachmentFileIds = deps.attachmentTray?.readyFileIds.value ?? []
+        const attachmentGrantIds = deps.attachmentTray?.readyGrantIds.value ?? []
+        if (attachmentFileIds.length !== attachmentGrantIds.length) {
+            deps.uiError.value = 'Attachment authority is incomplete. Remove the file and attach it again.'
+            return false
+        }
+        if (attachmentFileIds.length > 0) {
+            userMessageMetadata = {
+                ...userMessageMetadata,
+                attachments: deps.attachmentTray?.attachments.value
+                    .filter((attachment) => attachment.status === 'available' && attachment.file_id !== null)
+                    .map((attachment) => ({ file_id: attachment.file_id, name: attachment.name })),
+            }
+        }
         sending.value = true
         deps.uiError.value = null
         if (clearComposer) prompt.value = ''
@@ -88,6 +119,8 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
                 modelProfileId: deps.selectedModelProfileId.value || null,
                 modelRoutingProfileId: deps.selectedModelRoutingProfileId.value || null,
                 contextSetId: deps.selectedContextSetId.value || null,
+                attachmentFileIds,
+                attachmentGrantIds,
                 browserMode: {
                     enabled: deps.browseModeEnabled.value,
                     browserSessionId: deps.browseModeEnabled.value ? deps.activeBrowserSession.value?.id ?? null : null,
@@ -101,6 +134,7 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
             if (chatResult.assistantMessage) {
                 deps.acceptPersistedMessage(chatResult.assistantMessage)
             }
+            if (attachmentFileIds.length > 0) deps.attachmentTray?.reset()
             deps.recordBrowserActivities(
                 chatResult.response?.browser_activities
                 ?? chatResult.assistantMessage?.metadata?.browser_activities,

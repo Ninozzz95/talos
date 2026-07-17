@@ -22,6 +22,22 @@ interface BrowserSessionClient
         ?BrowserActionAuthorization $authorization = null,
     ): BrowserToolResult;
 
+    /** @param array<string, mixed> $file @return array<string, mixed> */
+    public function stageFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        array $file,
+        int $timeoutMilliseconds = 15000,
+    ): array;
+
+    public function discardStagedFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        int $timeoutMilliseconds = 15000,
+    ): void;
+
     /** @return array<string, mixed> */
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array;
 

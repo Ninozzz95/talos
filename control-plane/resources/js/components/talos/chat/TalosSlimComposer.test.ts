@@ -106,6 +106,22 @@ describe('TalosSlimComposer', () => {
         expect(container.querySelector('[data-testid="talos-composer-status"]')?.textContent).toContain('DeepSeek profile')
     })
 
+    it('shows when an attachment has an active per-file authority grant', () => {
+        const container = mountComposer('full', false, {
+            attachments: [{
+                id: 'attachment-1',
+                file_id: 'file-1',
+                grant_id: 'grant-1',
+                name: 'notes.md',
+                status: 'available',
+                failure_reason: null,
+            }],
+        })
+
+        expect(container.querySelector('[data-attachment-id="attachment-1"]')?.getAttribute('data-authorized')).toBe('true')
+        expect(container.querySelector('[aria-label="Authorized file grant"]')).not.toBeNull()
+    })
+
     it('keeps capability labels desktop-only while preserving accessible icon commands on mobile', () => {
         const container = mountComposer('full')
 

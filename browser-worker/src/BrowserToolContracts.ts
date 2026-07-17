@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 
 const MAX_TOOL_USE_ID_LENGTH = 256;
 const MAX_TOOL_TEXT_LENGTH = 65_536;
@@ -9,6 +10,10 @@ const MAX_BROWSER_TITLE_LENGTH = 512;
 const SAFE_INTEGER = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const JsonObjectSchema = z.record(z.string(), z.unknown());
 const BoundedBrowserUrlSchema = z.string().max(MAX_BROWSER_URL_LENGTH).refine((value) => Buffer.byteLength(value, "utf8") <= MAX_BROWSER_URL_LENGTH, "Browser URL exceeds the UTF-8 byte limit.");
+const CanonicalBrowserEvidenceUrlSchema = BoundedBrowserUrlSchema.refine(
+  (value) => browserEvidenceUrl(value) === value,
+  "Browser evidence URL must be canonical HTTP(S) without credentials, query, or fragment, or about:blank.",
+);
 const NavigableBrowserUrlSchema = z.string().max(MAX_BROWSER_URL_LENGTH).url().refine((value) => Buffer.byteLength(value, "utf8") <= MAX_BROWSER_URL_LENGTH, "Browser URL exceeds the UTF-8 byte limit.");
 const BoundedBrowserTitleSchema = z.string().max(MAX_BROWSER_TITLE_LENGTH).refine((value) => Buffer.byteLength(value, "utf8") <= MAX_BROWSER_TITLE_LENGTH, "Browser title exceeds the UTF-8 byte limit.");
 
@@ -195,6 +200,72 @@ const rawToolDefinitions = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
+  {
+    name: "browser_file_upload",
+    title: "Upload staged files",
+    description: "Upload explicitly approved, opaque staged files to one file input from the current accessibility snapshot.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: { type: "string", pattern: "^r[0-9]+$" },
+        element: { type: "string", maxLength: 512 },
+        staged_file_ids: {
+          type: "array",
+          minItems: 1,
+          maxItems: 4,
+          uniqueItems: true,
+          items: { type: "string", pattern: "^stg_[0-9a-f-]{36}$" },
+        },
+        snapshot_id: { type: "string", pattern: "^snap_[A-Za-z0-9-]+$" },
+        state_version: { type: "integer", minimum: 0 },
+      },
+      required: ["target", "staged_file_ids", "snapshot_id", "state_version"],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        ...commonOutputProperties,
+        target: {
+          type: "object",
+          properties: {
+            ref: { type: "string", pattern: "^r[0-9]+$" },
+            role: { type: "string" },
+            name: { type: "string" },
+          },
+          required: ["ref", "role", "name"],
+          additionalProperties: false,
+        },
+        files: { type: "array", minItems: 1, maxItems: 4 },
+        screenshot: {
+          type: "object",
+          properties: {
+            mime_type: { type: "string", const: "image/png" },
+            width: { type: "integer", minimum: 1 },
+            height: { type: "integer", minimum: 1 },
+            sha256: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+          },
+          required: ["mime_type", "width", "height", "sha256"],
+          additionalProperties: false,
+        },
+        snapshot: {
+          type: "object",
+          properties: {
+            snapshot_id: { type: "string" },
+            format: { type: "string", const: "accessibility_refs_v1" },
+            text_digest: { type: "string" },
+            sha256: { type: "string", pattern: "^sha256:[a-f0-9]{64}$" },
+            nodes: { type: "array", maxItems: 200 },
+          },
+          required: ["snapshot_id", "format", "text_digest", "sha256", "nodes"],
+          additionalProperties: false,
+        },
+      },
+      required: ["url", "title", "state_version", "target", "files", "screenshot", "snapshot"],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
 ] as const;
 
 const JsonSchema = JsonObjectSchema.superRefine((value, context) => {
@@ -265,6 +336,17 @@ export const WaitToolArgumentsSchema = z.object({
 export const ClickToolArgumentsSchema = z.object({
   target: z.string().regex(/^r\d+$/),
   element: z.string().max(512).optional(),
+  snapshot_id: z.string().regex(/^snap_[A-Za-z0-9-]+$/),
+  state_version: SAFE_INTEGER,
+}).strict();
+
+export const BrowserFileUploadToolArgumentsSchema = z.object({
+  target: z.string().regex(/^r\d+$/),
+  element: z.string().max(512).optional(),
+  staged_file_ids: z.array(z.string().regex(/^stg_[0-9a-f-]{36}$/u)).min(1).max(4).refine(
+    (values) => new Set(values).size === values.length,
+    "Staged file IDs must be unique.",
+  ),
   snapshot_id: z.string().regex(/^snap_[A-Za-z0-9-]+$/),
   state_version: SAFE_INTEGER,
 }).strict();
@@ -341,7 +423,7 @@ export const BrowserToolResultSchema = z.object({
 });
 
 const commonStructuredSchema = z.object({
-  url: BoundedBrowserUrlSchema,
+  url: CanonicalBrowserEvidenceUrlSchema,
   title: BoundedBrowserTitleSchema,
   state_version: SAFE_INTEGER,
   evidence_ids: z.array(z.string()).optional(),
@@ -372,6 +454,33 @@ const StructuredOutputSchemas = {
       role: z.string().min(1),
       name: z.string(),
     }).strict(),
+    screenshot: z.object({
+      mime_type: z.literal("image/png"),
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+      sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    }).strict(),
+    snapshot: z.object({
+      snapshot_id: z.string().min(1),
+      format: z.literal("accessibility_refs_v1"),
+      text_digest: z.string().max(4_000),
+      sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+      nodes: z.array(JsonObjectSchema).max(200),
+    }).strict(),
+  }),
+  browser_file_upload: commonStructuredSchema.extend({
+    target: z.object({
+      ref: z.string().regex(/^r\d+$/),
+      role: z.string().min(1),
+      name: z.string(),
+    }).strict(),
+    files: z.array(z.object({
+      file_id: z.uuid(),
+      name: z.string().min(1).max(255),
+      mime_type: z.string().min(1).max(128),
+      size_bytes: z.number().int().positive().max(10 * 1024 * 1024),
+      sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    }).strict()).min(1).max(4),
     screenshot: z.object({
       mime_type: z.literal("image/png"),
       width: z.number().int().positive(),

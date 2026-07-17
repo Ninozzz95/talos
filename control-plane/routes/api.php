@@ -23,6 +23,7 @@ use App\Http\Controllers\TalosCookbookController;
 use App\Http\Controllers\TalosDocumentController;
 use App\Http\Controllers\TalosEmailController;
 use App\Http\Controllers\TalosFileController;
+use App\Http\Controllers\TalosFileAuthorityController;
 use App\Http\Controllers\TalosGoogleCalendarController;
 use App\Http\Controllers\TalosGoogleDriveController;
 use App\Http\Controllers\TalosGoogleOAuthController;
@@ -142,6 +143,9 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::get('/sessions/{session}/pending-tool-approvals', [TalosChatController::class, 'pendingToolApprovals']);
         Route::get('/files', [TalosFileController::class, 'index']);
         Route::get('/files/{file}', [TalosFileController::class, 'show']);
+        Route::get('/file-authority/grants', [TalosFileAuthorityController::class, 'index']);
+        Route::post('/file-authority/grants', [TalosFileAuthorityController::class, 'store']);
+        Route::delete('/file-authority/grants/{grant}', [TalosFileAuthorityController::class, 'destroy']);
         Route::get('/context-sets', [TalosContextSetController::class, 'index']);
         Route::post('/context-sets', [TalosContextSetController::class, 'store']);
         Route::get('/context-sets/{contextSet}', [TalosContextSetController::class, 'show']);

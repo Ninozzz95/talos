@@ -13,6 +13,7 @@ use App\Models\TalosToolTurn;
 use App\Services\Runs\RunEventNormalizer;
 use App\Services\Talos\Browser\TalosBrowserCommand;
 use App\Services\Talos\Browser\TalosBrowserCommandService;
+use App\Services\Talos\Browser\TalosBrowserFileUploadService;
 use App\Services\Talos\Browser\TalosBrowserRunArtifactCorrelator;
 use App\Services\Talos\Browser\TalosBrowserSemanticClickService;
 use App\Services\Talos\Web\TalosWebFetchException;
@@ -33,6 +34,7 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
         'browser_read' => ['type' => 'TOOL_BROWSER_READ', 'capability' => 'browser.read', 'risk' => 'low', 'requiresApproval' => false, 'producesEvidence' => true, 'operation' => 'read'],
         'browser_take_screenshot' => ['type' => 'TOOL_BROWSER_SCREENSHOT', 'capability' => 'browser.read', 'risk' => 'low', 'requiresApproval' => false, 'producesEvidence' => true, 'operation' => 'screenshot'],
         'browser_click' => ['type' => 'TOOL_BROWSER_CLICK', 'capability' => 'browser.write', 'risk' => 'high', 'requiresApproval' => true, 'producesEvidence' => true, 'operation' => 'click'],
+        'browser_file_upload' => ['type' => 'TOOL_BROWSER_FILE_UPLOAD', 'capability' => 'browser.upload', 'risk' => 'critical', 'requiresApproval' => true, 'producesEvidence' => true, 'operation' => 'upload'],
         'web_search' => ['type' => 'TOOL_WEB_SEARCH', 'capability' => 'web.search', 'risk' => 'low', 'requiresApproval' => false, 'producesEvidence' => true],
         'web_fetch' => ['type' => 'TOOL_WEB_FETCH', 'capability' => 'web.fetch', 'risk' => 'low', 'requiresApproval' => false, 'producesEvidence' => true],
     ];
@@ -40,6 +42,7 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
     public function __construct(
         private readonly TalosBrowserCommandService $browserCommands,
         private readonly TalosBrowserSemanticClickService $browserClicks,
+        private readonly TalosBrowserFileUploadService $browserUploads,
         private readonly WebSearchProviderFactory $searchProviders,
         private readonly TalosWebFetchService $webFetch,
         private readonly TalosAgentBudgetService $budgets,
@@ -68,6 +71,7 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
             return match ($node->call->name) {
                 'browser_navigate', 'browser_snapshot', 'browser_read', 'browser_take_screenshot' => $this->executeBrowser($node, $turn, $browserSession, $contract['operation']),
                 'browser_click' => $this->executeBrowserClick($node, $turn, $browserSession),
+                'browser_file_upload' => $this->executeBrowserFileUpload($node, $turn, $browserSession),
                 'web_search' => $this->executeSearch($node, $turn),
                 'web_fetch' => $this->executeFetch($node, $turn),
             };
@@ -143,6 +147,67 @@ final class TalosLaravelToolExecutionBackend implements TalosToolExecutionBacken
                 'evidence_bytes' => (int) ($payload['evidence_bytes'] ?? 0),
             ],
             $this->browserEvidence($payload, $turn, $browserSession, 'click', $node->call->providerCallId),
+        );
+    }
+
+    private function executeBrowserFileUpload(ProceduralNode $node, TalosToolTurn $turn, ?TalosBrowserSession $browserSession): ToolResult
+    {
+        if (! $browserSession instanceof TalosBrowserSession) {
+            return ToolResult::error($node->call->providerCallId, 'TALOS_BROWSER_SESSION_REQUIRED', 'The authorized browser session is required for this tool.');
+        }
+
+        $run = TalosRun::query()
+            ->whereKey($turn->run_id)
+            ->where('user_id', $turn->user_id)
+            ->where('session_id', $turn->session_id)
+            ->first();
+        if (! $run instanceof TalosRun) {
+            return ToolResult::error($node->call->providerCallId, 'TALOS_TOOL_OWNERSHIP_MISMATCH', 'Tool execution run is not owned by its turn.');
+        }
+
+        $policy = is_array($turn->budget_policy) ? $turn->budget_policy : [];
+        $evidenceLimit = $policy['max_evidence_bytes'] ?? null;
+        $remainingEvidenceBytes = is_int($evidenceLimit)
+            ? max(0, $evidenceLimit - $this->budgets->consumedForTurn(
+                (int) $turn->user_id,
+                (string) $turn->id,
+                'evidence_bytes',
+            ))
+            : PHP_INT_MAX;
+        $persistedCall = $turn->calls()
+            ->where('user_id', $turn->user_id)
+            ->where('run_id', $turn->run_id)
+            ->where('node_id', $node->id)
+            ->where('provider_call_id', $node->call->providerCallId)
+            ->first();
+        if (! $persistedCall instanceof \App\Models\TalosToolCall
+            || ! is_string($persistedCall->evidence_snapshot_artifact_id)
+            || ! is_string($persistedCall->evidence_snapshot_id)
+            || ! is_string($persistedCall->evidence_hash)) {
+            return ToolResult::error($node->call->providerCallId, 'TALOS_BROWSER_STALE_EVIDENCE', 'The approved browser upload is missing its exact snapshot binding.');
+        }
+        $payload = $this->browserUploads->execute(
+            $browserSession,
+            $run,
+            $this->normalizer ?? new RunEventNormalizer,
+            $persistedCall,
+            $node->id,
+            $remainingEvidenceBytes,
+        );
+        if (isset($payload['error']) && is_array($payload['error'])) {
+            return $this->errorFromPayload($node->call->providerCallId, $payload['error'], 'TALOS_BROWSER_UPLOAD_FAILED');
+        }
+
+        return $this->success(
+            $node->call->providerCallId,
+            [
+                'tool' => $node->call->name,
+                'activity' => $payload['activity'] ?? null,
+                'observation' => $payload['observation'] ?? null,
+                'used_browser_context' => $payload['used_browser_context'] ?? null,
+                'evidence_bytes' => (int) ($payload['evidence_bytes'] ?? 0),
+            ],
+            $this->browserEvidence($payload, $turn, $browserSession, 'upload', $node->call->providerCallId),
         );
     }
 

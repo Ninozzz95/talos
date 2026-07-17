@@ -6,6 +6,7 @@ import type { TalosChatProxyResponse } from './useTalosChat'
 type ApiEnvelope<T> = { data: T }
 
 const sha256Pattern = /^sha256:[a-f0-9]{64}$/
+const unsafeFileNamePattern = /[\\/\u0000-\u001f\u007f]/
 
 function record(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -45,9 +46,27 @@ export function normalizePendingToolApprovals(value: unknown): TalosPendingToolA
         const staleReason = optionalString(data?.stale_reason)
         const url = optionalString(data?.url)
         const title = optionalString(data?.title)
+        const isClick = data?.tool_name === 'browser_click'
+            && data?.risk === 'high'
+            && data?.capability === 'browser.write'
+        const isUpload = data?.tool_name === 'browser_file_upload'
+            && data?.risk === 'critical'
+            && data?.capability === 'browser.upload'
+        const rawFiles = Array.isArray(data?.files) ? data.files : []
+        const files = rawFiles.flatMap((candidateFile) => {
+            const file = record(candidateFile)
+            const fileId = requiredString(file?.file_id)
+            const name = requiredString(file?.name)
+            const mimeType = requiredString(file?.mime_type)
+            const sha256 = requiredString(file?.sha256)
+            const sizeBytes = file?.size_bytes
+            if (!fileId || !name || name === '.' || name === '..' || unsafeFileNamePattern.test(name)
+                || !mimeType || !sha256 || !sha256Pattern.test(sha256)
+                || !Number.isInteger(sizeBytes) || (sizeBytes as number) < 1) return []
+            return [{ file_id: fileId, name, mime_type: mimeType, size_bytes: sizeBytes as number, sha256 }]
+        })
 
-        if (!id || !turnId || !runId || data?.tool_name !== 'browser_click'
-            || data?.risk !== 'high' || data?.capability !== 'browser.write'
+        if (!id || !turnId || !runId || (!isClick && !isUpload)
             || (status !== 'pending' && status !== 'stale')
             || typeof actionable !== 'boolean'
             || (status === 'pending' && (!actionable || staleReason !== null))
@@ -59,17 +78,17 @@ export function normalizePendingToolApprovals(value: unknown): TalosPendingToolA
             || !expectedEffect || !targetRef || !targetRole || !targetName
             || typeof target?.visible !== 'boolean'
             || (data?.url !== null && url === null)
-            || (data?.title !== null && title === null)) {
+            || (data?.title !== null && title === null)
+            || (isUpload && status === 'pending' && rawFiles.length === 0)
+            || (isUpload && rawFiles.length !== files.length)
+            || (isClick && rawFiles.length > 0)) {
             return []
         }
 
-        return [{
+        const base = {
             id,
             turn_id: turnId,
             run_id: runId,
-            tool_name: 'browser_click',
-            risk: 'high',
-            capability: 'browser.write',
             status,
             actionable,
             stale_reason: staleReason,
@@ -88,7 +107,11 @@ export function normalizePendingToolApprovals(value: unknown): TalosPendingToolA
             },
             url,
             title,
-        }]
+        }
+
+        return isUpload
+            ? [{ ...base, tool_name: 'browser_file_upload' as const, risk: 'critical' as const, capability: 'browser.upload' as const, files }]
+            : [{ ...base, tool_name: 'browser_click' as const, risk: 'high' as const, capability: 'browser.write' as const }]
     })
 }
 

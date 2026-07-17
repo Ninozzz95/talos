@@ -18,6 +18,7 @@ final class TalosProceduralToolRegistryTest extends TestCase
         'browser_read',
         'browser_take_screenshot',
         'browser_click',
+        'browser_file_upload',
         'web_search',
         'web_fetch',
     ];
@@ -59,6 +60,7 @@ final class TalosProceduralToolRegistryTest extends TestCase
                 'browser_read' => 'TOOL_BROWSER_READ',
                 'browser_take_screenshot' => 'TOOL_BROWSER_SCREENSHOT',
                 'browser_click' => 'TOOL_BROWSER_CLICK',
+                'browser_file_upload' => 'TOOL_BROWSER_FILE_UPLOAD',
                 'web_search' => 'TOOL_WEB_SEARCH',
                 'web_fetch' => 'TOOL_WEB_FETCH',
             ],
@@ -130,6 +132,28 @@ final class TalosProceduralToolRegistryTest extends TestCase
         $this->assertTrue($specs['browser_click']->mutatesState);
         $this->assertFalse($specs['browser_click']->parallelSafe);
         $this->assertTrue($specs['browser_click']->producesEvidence);
+
+        $upload = $definitions['browser_file_upload'];
+        $this->assertSame(['target', 'file_ids'], $upload->inputSchema['required']);
+        $this->assertSame(['target', 'element', 'file_ids'], array_keys($upload->inputSchema['properties']));
+        $this->assertSame('^r[0-9]+$', $upload->inputSchema['properties']['target']['pattern']);
+        $this->assertSame('uuid', $upload->inputSchema['properties']['file_ids']['items']['format']);
+        $this->assertSame(1, $upload->inputSchema['properties']['file_ids']['minItems']);
+        $this->assertSame(4, $upload->inputSchema['properties']['file_ids']['maxItems']);
+        $this->assertTrue($upload->inputSchema['properties']['file_ids']['uniqueItems']);
+        foreach (['state_version', 'snapshot_id', 'staged_file_ids', 'path', 'base64'] as $serverOwned) {
+            $this->assertArrayNotHasKey($serverOwned, $upload->inputSchema['properties']);
+        }
+        $this->assertFalse($upload->annotations['readOnlyHint']);
+        $this->assertFalse($upload->annotations['destructiveHint']);
+        $this->assertFalse($upload->annotations['idempotentHint']);
+        $this->assertFalse($upload->annotations['openWorldHint']);
+        $this->assertSame('browser.upload', $specs['browser_file_upload']->capability);
+        $this->assertSame('critical', $specs['browser_file_upload']->risk);
+        $this->assertTrue($specs['browser_file_upload']->requiresApproval);
+        $this->assertTrue($specs['browser_file_upload']->mutatesState);
+        $this->assertFalse($specs['browser_file_upload']->parallelSafe);
+        $this->assertTrue($specs['browser_file_upload']->producesEvidence);
     }
 
     public function test_web_tools_match_bounded_laravel_contracts_and_untrusted_evidence(): void

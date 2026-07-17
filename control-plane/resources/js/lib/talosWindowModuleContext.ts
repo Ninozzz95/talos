@@ -19,6 +19,7 @@ export type TalosWindowModuleContext = {
     authUserName: string
     logoutUrl: string
     csrfToken: string
+    activeTalosSessionId: string | null
     theme: TalosThemeId
     openWindow: (id: TalosWindowId) => void
     openModule: (id: string, section?: string) => void

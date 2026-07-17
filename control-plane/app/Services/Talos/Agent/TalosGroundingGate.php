@@ -22,6 +22,7 @@ final class TalosGroundingGate
         'browser_snapshot',
         'browser_read',
         'browser_take_screenshot',
+        'browser_file_upload',
         'web_search',
         'web_fetch',
     ];

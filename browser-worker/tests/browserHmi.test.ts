@@ -446,7 +446,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
         source_state_version: 1,
         state_version: 2,
         frame_sha256: inspected.json().data.frame_sha256,
-        url: fixtureUrl,
+        url: "about:blank",
         title: "TALOS HMI Fixture",
         screenshot: {
           mime_type: "image/png",

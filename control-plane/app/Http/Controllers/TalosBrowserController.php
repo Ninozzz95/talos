@@ -103,7 +103,7 @@ final class TalosBrowserController extends Controller
                 'details' => [],
             ], 503);
         }
-        $session = TalosBrowserSession::query()->create(['user_id' => $userId, 'talos_session_id' => $chatSession->id, 'worker_session_id' => (string) $worker['sessionId'], 'status' => (string) ($worker['status'] ?? 'ready'), 'mode' => 'read_only', 'viewport_width' => $width, 'viewport_height' => $height, 'capabilities' => $worker['capabilities'] ?? [], 'policy' => [], 'worker_state_version' => is_int($worker['stateVersion'] ?? null) && $worker['stateVersion'] >= 0 ? $worker['stateVersion'] : 0, 'expires_at' => $worker['expiresAt'] ?? null, 'last_seen_at' => now()]);
+        $session = TalosBrowserSession::query()->create(['user_id' => $userId, 'talos_session_id' => $chatSession->id, 'worker_session_id' => (string) $worker['sessionId'], 'status' => (string) ($worker['status'] ?? 'ready'), 'mode' => 'read_only', 'viewport_width' => $width, 'viewport_height' => $height, 'device_scale_factor' => (int) $worker['deviceScaleFactor'], 'capabilities' => $worker['capabilities'] ?? [], 'policy' => [], 'worker_state_version' => is_int($worker['stateVersion'] ?? null) && $worker['stateVersion'] >= 0 ? $worker['stateVersion'] : 0, 'expires_at' => $worker['expiresAt'] ?? null, 'last_seen_at' => now()]);
         $this->event($session, 'session.created', 'system', payload: ['mode' => 'read_only']);
 
         return response()->json(['data' => $session->toApiArray()], 201);
@@ -598,6 +598,7 @@ final class TalosBrowserController extends Controller
             || ! is_array($viewport) || array_is_list($viewport)
             || ! is_int($viewport['width'] ?? null) || $viewport['width'] < 320 || $viewport['width'] > 3840
             || ! is_int($viewport['height'] ?? null) || $viewport['height'] < 240 || $viewport['height'] > 2160
+            || ($worker['deviceScaleFactor'] ?? null) !== 1
             || ! is_array($capabilities) || array_is_list($capabilities)
             || ! is_int($worker['stateVersion'] ?? null) || $worker['stateVersion'] < 0
             || ! is_string($expiresAt) || $expiresAt === '') {
@@ -618,8 +619,7 @@ final class TalosBrowserController extends Controller
         }
 
         return $capabilities['actions'] === false
-            && $capabilities['downloads'] === false
-            && $capabilities['uploads'] === false;
+            && $capabilities['downloads'] === false;
     }
 
     /** @param array<string, mixed> $capabilities */
@@ -631,7 +631,7 @@ final class TalosBrowserController extends Controller
             && ($capabilities['hmiActions'] ?? false) === true
             && ($capabilities['actions'] ?? null) === false
             && ($capabilities['downloads'] ?? null) === false
-            && ($capabilities['uploads'] ?? null) === false;
+            && is_bool($capabilities['uploads'] ?? null);
     }
 
     /** @param array<string, mixed> $worker */

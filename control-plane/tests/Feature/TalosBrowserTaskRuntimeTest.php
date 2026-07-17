@@ -24,6 +24,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Kadmos\Browser\Contract\BrowserTaskStatus;
+use Kadmos\Tool\ProceduralLoopGuard;
+use Kadmos\Tool\ProceduralNode;
+use Kadmos\Tool\ProceduralPlan;
+use Kadmos\Tool\ToolCall;
+use Kadmos\Tool\ToolExecutionContext;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
 use Tests\TestCase;
@@ -59,6 +64,98 @@ final class TalosBrowserTaskRuntimeTest extends TestCase
         $this->assertSame(1, TalosBrowserTask::query()->whereKey($first->id)->count());
         $this->assertSame(16, $first->budget['max_domains']);
         $this->assertSame(196608, $first->budget['max_tokens']);
+    }
+
+    public function test_file_upload_action_is_journaled_as_sensitive_upload(): void
+    {
+        [$user, $run, $browser] = $this->context();
+        $browser->forceFill([
+            'capabilities' => [
+                'navigation' => true,
+                'screenshots' => true,
+                'accessibilitySnapshot' => true,
+                'hmiActions' => true,
+                'uploads' => true,
+            ],
+        ])->save();
+        $turn = TalosToolTurn::query()->create([
+            'user_id' => $user->id,
+            'session_id' => $run->session_id,
+            'browser_session_id' => $browser->id,
+            'run_id' => $run->id,
+            'status' => 'awaiting_approval',
+            'provider' => 'deepseek',
+            'model' => 'deepseek-chat',
+            'adapter_version' => 'test',
+            'pending_tool_call_ids' => [],
+            'budget_policy' => [],
+            'budget_usage' => [],
+            'revision' => 0,
+            'started_at' => now(),
+        ]);
+        $arguments = [
+            'target' => 'r4',
+            'file_ids' => [(string) str()->uuid()],
+        ];
+        $providerCall = new ToolCall('provider-upload-runtime', 'browser_file_upload', $arguments, null, []);
+        $context = new ToolExecutionContext(
+            userId: (string) $user->id,
+            chatSessionId: (string) $run->session_id,
+            runId: (string) $run->id,
+            turnId: (string) $turn->id,
+            browserSessionId: (string) $browser->id,
+            nodeId: 'node-upload-runtime',
+            capability: 'browser.upload',
+            risk: 'critical',
+            stateVersion: (int) $browser->worker_state_version,
+            deadlineAt: now()->addMinute()->toJSON(),
+            idempotencyKey: 'sha256:'.hash('sha256', 'upload-runtime-effect'),
+        );
+        $node = new ProceduralNode(
+            id: 'node-upload-runtime',
+            type: 'TOOL_BROWSER_FILE_UPLOAD',
+            call: $providerCall,
+            context: $context,
+            dependencies: [],
+            fingerprint: 'sha256:'.hash('sha256', 'upload-runtime-node'),
+            requiresApproval: true,
+            producesEvidence: true,
+        );
+        $call = TalosToolCall::query()->create([
+            'tool_turn_id' => $turn->id,
+            'run_id' => $run->id,
+            'user_id' => $user->id,
+            'sequence' => 1,
+            'logical_call_id' => 'logical-upload-runtime',
+            'provider_call_id' => $providerCall->providerCallId,
+            'node_id' => $node->id,
+            'node_type' => $node->type,
+            'tool_name' => $providerCall->name,
+            'arguments' => $arguments,
+            'arguments_sha256' => 'sha256:'.hash('sha256', ProceduralLoopGuard::canonicalJson($arguments)),
+            'dependencies' => [],
+            'fingerprint' => $node->fingerprint,
+            'state_version' => $context->stateVersion,
+            'risk' => $context->risk,
+            'capability' => $context->capability,
+            'status' => 'awaiting_approval',
+            'attempt' => 0,
+            'effect_key' => $context->idempotencyKey,
+            'effect_status' => 'pending',
+            'approval_state' => 'awaiting_approval',
+        ]);
+        $runtime = $this->app->make(TalosBrowserTaskRuntime::class);
+        $task = $runtime->begin((int) $user->id, $run, $browser);
+
+        $actions = $runtime->prepareActions(
+            (int) $user->id,
+            $task,
+            new ProceduralPlan(ProceduralPlan::AWAITING_APPROVAL, [$node], [$node->id], []),
+            [$node->id => $call],
+        );
+
+        $this->assertSame('upload', $actions[$node->id]->kind);
+        $this->assertSame('sensitive', $actions[$node->id]->risk);
     }
 
     public function test_cancel_atomically_fences_task_run_turn_calls_and_rejects_late_completion(): void

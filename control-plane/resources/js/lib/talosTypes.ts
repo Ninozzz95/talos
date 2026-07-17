@@ -83,13 +83,25 @@ export type TalosBrowserActivity = {
     artifact_ids: string[]
     occurred_at: string
 }
-export type TalosPendingToolApproval = {
+export type TalosToolApprovalTarget = {
+    ref: string
+    role: string
+    name: string
+    visible: boolean
+}
+
+export type TalosToolApprovalFile = {
+    file_id: string
+    name: string
+    mime_type: string
+    size_bytes: number
+    sha256: string
+}
+
+type TalosPendingToolApprovalBase = {
     id: string
     turn_id: string
     run_id: string
-    tool_name: 'browser_click'
-    risk: 'high'
-    capability: 'browser.write'
     status: 'pending' | 'stale'
     actionable: boolean
     stale_reason: string | null
@@ -100,15 +112,25 @@ export type TalosPendingToolApproval = {
     state_version: number
     evidence_hash: string
     expected_effect: string
-    target: {
-        ref: string
-        role: string
-        name: string
-        visible: boolean
-    }
+    target: TalosToolApprovalTarget
     url: string | null
     title: string | null
 }
+
+export type TalosPendingBrowserClickApproval = TalosPendingToolApprovalBase & {
+    tool_name: 'browser_click'
+    risk: 'high'
+    capability: 'browser.write'
+}
+
+export type TalosPendingBrowserFileUploadApproval = TalosPendingToolApprovalBase & {
+    tool_name: 'browser_file_upload'
+    risk: 'critical'
+    capability: 'browser.upload'
+    files: TalosToolApprovalFile[]
+}
+
+export type TalosPendingToolApproval = TalosPendingBrowserClickApproval | TalosPendingBrowserFileUploadApproval
 export type TalosRunMode = 'avm_on' | 'avm_off_direct' | 'tool_agent'
     | 'avm_off'
     | 'verified_execution'
@@ -123,6 +145,34 @@ export type TalosFileStatus =
     | 'available'
     | 'quarantined'
     | 'failed'
+
+export type TalosFileAuthorityScope = 'file' | 'folder' | 'session' | 'global'
+export type TalosFileAuthorityPermission = 'model.read' | 'browser.upload'
+export type TalosFileAuthorityStatus = 'active' | 'revoked' | 'expired'
+
+export type TalosFileAuthorityGrantFile = {
+    id: string
+    original_name: string
+    mime_type: string | null
+    size_bytes: number
+    checksum: string
+    status: TalosFileStatus | string
+}
+
+export type TalosFileAuthorityGrant = {
+    id: string
+    scope: TalosFileAuthorityScope
+    label: string
+    permissions: TalosFileAuthorityPermission[]
+    status: TalosFileAuthorityStatus
+    talos_session_id: string | null
+    files: TalosFileAuthorityGrantFile[]
+    expires_at: string | null
+    revoked_at: string | null
+    last_used_at: string | null
+    created_at: string | null
+    updated_at: string | null
+}
 
 export type TalosSession = {
     id: string

@@ -17,6 +17,7 @@ defineProps<{ context: TalosWindowModuleContext }>()
         :auth-user-name="context.authUserName"
         :logout-url="context.logoutUrl"
         :csrf-token="context.csrfToken"
+        :active-talos-session-id="context.activeTalosSessionId"
         @select-model="context.selectModel"
         @select-context="context.selectContext"
         @change-theme="context.changeTheme"

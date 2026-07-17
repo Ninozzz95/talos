@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -21,6 +22,7 @@ import type { CreateSessionInput } from "../src/schemas.js";
 import { buildServer } from "../src/server.js";
 import { startBrowserWorker } from "../src/startBrowserWorker.js";
 import type { BrowserAutomationAdapter } from "../src/adapters/BrowserAutomationAdapter.js";
+import { BrowserFileStagingStore } from "../src/BrowserFileStagingStore.js";
 
 const fixtureUrl = `file://${resolve("tests/fixtures/read-only-page.html").replaceAll("\\", "/")}`;
 const execFileAsync = promisify(execFile);
@@ -119,7 +121,7 @@ describe("TALOS browser worker", () => {
         protocol_version: TALOS_BROWSER_WORKER_PROTOCOL,
         adapter_name: TALOS_BROWSER_ADAPTER_NAME,
         adapter_version: TALOS_BROWSER_ADAPTER_VERSION,
-        capabilities: ["navigate", "snapshot", "screenshot", "read", "click", "interactive_frame", "semantic_locator", "tabs"],
+        capabilities: ["navigate", "snapshot", "screenshot", "read", "click", "interactive_frame", "semantic_locator", "tabs", "upload"],
         limits: {
           max_tabs: 1,
           max_viewport_width: 3840,
@@ -344,7 +346,10 @@ describe("TALOS browser worker", () => {
     const response = await app.inject({
       method: "POST",
       url: "/sessions",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-talos-worker-token": "test-worker-token",
+      },
       payload: "{",
     });
 
@@ -604,6 +609,7 @@ describe("Playwright MCP worker lifecycle", () => {
       get: async () => ({ ownerRef: "user:lifecycle" }),
       delete: async () => { events.push("session:delete"); },
       close: async () => { events.push("sessions:close"); },
+      onSessionDisposed: () => () => undefined,
     } as unknown as BrowserSessionManager;
     const adapter: BrowserAutomationAdapter = {
       handshake: async () => { throw new Error("Not used by lifecycle test."); },
@@ -645,6 +651,7 @@ describe("Playwright MCP worker lifecycle", () => {
       get: async () => ({ ownerRef: "user:lifecycle" }),
       cancel: async (_sessionId: string, reason: string) => { events.push(`session:cancel:${reason}`); },
       close: async () => undefined,
+      onSessionDisposed: () => () => undefined,
     } as unknown as BrowserSessionManager;
     const adapter: BrowserAutomationAdapter = {
       handshake: async () => { throw new Error("Not used by cancellation test."); },
@@ -705,6 +712,16 @@ describe("BrowserSessionManager resource lifecycle", () => {
     } as unknown as Browser;
     return { browser, contextOptions: () => contextOptions, downloadHandler: () => downloadHandler, contextClosed: () => contextClosed };
   }
+
+  it("pins device scale factor 1 in the browser context and reports it in the session summary", async () => {
+    const fake = fakeBrowser();
+    const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => 1_000 });
+    const created = await manager.create(createPayload as CreateSessionInput);
+
+    expect(fake.contextOptions()).toMatchObject({ deviceScaleFactor: 1 });
+    expect((created as { deviceScaleFactor?: number }).deviceScaleFactor).toBe(1);
+    await manager.close();
+  });
 
   it("disables downloads and cancels download events", async () => {
     const fake = fakeBrowser();
@@ -812,6 +829,60 @@ describe("BrowserSessionManager resource lifecycle", () => {
     await expect(manager.get(session.sessionId)).rejects.toMatchObject({ code: "TALOS_BROWSER_SESSION_NOT_FOUND" });
     expect(fake.contextClosed()).toBe(true);
     await manager.close();
+  });
+
+  it("purges staged file bytes when a Browser session expires", async () => {
+    const fake = fakeBrowser();
+    let now = 1_000;
+    const fileStaging = new BrowserFileStagingStore({ now: () => now, ttlMs: 5_000 });
+    const manager = new BrowserSessionManager({ browserFactory: async () => fake.browser, now: () => now });
+    const app = buildServer({
+      internalToken: "test-worker-token",
+      sessions: manager,
+      fileStaging,
+    });
+    const headers = {
+      "x-talos-worker-token": "test-worker-token",
+      "x-talos-owner-ref": "user:1",
+    };
+
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/sessions",
+        headers,
+        payload: { ...createPayload, ttlSeconds: 1 },
+      });
+      expect(created.statusCode).toBe(201);
+      const sessionId = created.json().data.sessionId as string;
+      const bytes = Buffer.from("session-scoped staged bytes", "utf8");
+      const stageId = "stg_11111111-1111-4111-8111-111111111111";
+      const staged = await app.inject({
+        method: "PUT",
+        url: `/sessions/${sessionId}/files/stage/${stageId}`,
+        headers,
+        payload: {
+          file_id: "11111111-1111-4111-8111-111111111111",
+          name: "session-note.txt",
+          mime_type: "text/plain",
+          size_bytes: bytes.byteLength,
+          sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+          base64: bytes.toString("base64"),
+        },
+      });
+      expect(staged.statusCode).toBe(201);
+      expect(staged.json().data.stage_id).toBe(stageId);
+
+      now = 2_000;
+      const expired = await app.inject({ method: "GET", url: `/sessions/${sessionId}`, headers });
+
+      expect(expired.statusCode).toBe(404);
+      expect(() => fileStaging.takeMany("user:1", sessionId, [stageId])).toThrowError(expect.objectContaining({
+        code: "TALOS_BROWSER_STAGED_FILE_NOT_FOUND",
+      }));
+    } finally {
+      await app.close();
+    }
   });
 
   it("runs periodic expiry cleanup through an injected timer", async () => {
@@ -961,6 +1032,7 @@ describe("BrowserSessionManager resource lifecycle", () => {
         throw new Error(`Unexpected ${actionCapability} ${privateKeyMaterial}`);
       },
       close: async () => undefined,
+      onSessionDisposed: () => () => undefined,
     } as unknown as BrowserSessionManager;
     const writes: string[] = [];
     const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
@@ -1032,6 +1104,7 @@ describe("TALOS browser worker boundary", () => {
     expect(Object.keys(data).sort()).toEqual([
       "capabilities",
       "createdAt",
+      "deviceScaleFactor",
       "expiresAt",
       "mode",
       "sessionId",

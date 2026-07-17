@@ -40,6 +40,29 @@ function pendingApproval(overrides: Record<string, unknown> = {}) {
     }
 }
 
+function uploadApproval(overrides: Record<string, unknown> = {}) {
+    return pendingApproval({
+        tool_name: 'browser_file_upload',
+        risk: 'critical',
+        capability: 'browser.upload',
+        expected_effect: 'Upload the listed Vault files through the selected browser file control and capture verified post-action evidence.',
+        target: {
+            ref: 'r-upload',
+            role: 'button',
+            name: 'Upload resume',
+            visible: true,
+        },
+        files: [{
+            file_id: 'file-1',
+            name: 'resume.pdf',
+            mime_type: 'application/pdf',
+            size_bytes: 2048,
+            sha256: `sha256:${'c'.repeat(64)}`,
+        }],
+        ...overrides,
+    })
+}
+
 describe('useTalosToolApprovals', () => {
     beforeEach(() => {
         talosFetchMock.mockReset()
@@ -55,6 +78,29 @@ describe('useTalosToolApprovals', () => {
         expect(talosFetchMock).toHaveBeenCalledWith('/api/talos/sessions/session-1/pending-tool-approvals')
         expect(approvals.pendingApprovals.value).toEqual([pendingApproval()])
         expect(approvals.approvalError.value).toBeNull()
+    })
+
+    it('normalizes sensitive browser upload approvals but rejects path-shaped file metadata', async () => {
+        talosFetchMock.mockResolvedValue({
+            data: [
+                uploadApproval(),
+                uploadApproval({
+                    id: 'call-path',
+                    files: [{
+                        file_id: 'file-2',
+                        name: '../secret.txt',
+                        mime_type: 'text/plain',
+                        size_bytes: 10,
+                        sha256: `sha256:${'d'.repeat(64)}`,
+                    }],
+                }),
+            ],
+        } as never)
+        const approvals = useTalosToolApprovals(ref('session-1'))
+
+        await approvals.hydratePendingApprovals()
+
+        expect(approvals.pendingApprovals.value).toEqual([uploadApproval()])
     })
 
     it('posts the exact plan hash and replaces pending state from the resume response', async () => {

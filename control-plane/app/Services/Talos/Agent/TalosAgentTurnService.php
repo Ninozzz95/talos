@@ -62,6 +62,7 @@ PROMPT;
         TalosRun $run,
         TalosModelProfile $profile,
         ?TalosBrowserSession $browserSession = null,
+        ?string $currentUserMessage = null,
     ): TalosAgentTurnOutcome {
         [$run, $session, $profile] = $this->ownedContext($ownerUserId, $run, $profile);
         $this->assertBrowserOwnership($ownerUserId, $session, $browserSession);
@@ -143,7 +144,7 @@ PROMPT;
                     provider: (string) $profile->provider,
                     model: (string) $profile->model,
                     systemPrompt: $this->systemPrompt($session, $run, $browserSession),
-                    messages: $this->durableMessages($session, $run),
+                    messages: $this->durableMessages($session, $run, $currentUserMessage),
                     tools: array_values(TalosProceduralToolRegistry::definitions()),
                 ),
                 $leaseToken,
@@ -845,8 +846,15 @@ PROMPT;
     }
 
     /** @return list<array{role: string, content: string}> */
-    private function durableMessages(TalosSession $session, TalosRun $run): array
+    private function durableMessages(
+        TalosSession $session,
+        TalosRun $run,
+        ?string $currentUserMessage = null,
+    ): array
     {
+        $currentUserMessage = is_string($currentUserMessage) && trim($currentUserMessage) !== ''
+            ? $currentUserMessage
+            : null;
         $messages = $session->messages()
             ->whereIn('role', ['user', 'assistant'])
             ->whereNotNull('content')
@@ -854,7 +862,14 @@ PROMPT;
             ->orderBy('id')
             ->get()
             ->filter(static fn (TalosMessage $message): bool => trim((string) $message->content) !== '')
-            ->map(static fn (TalosMessage $message): array => ['role' => (string) $message->role, 'content' => (string) $message->content])
+            ->map(static fn (TalosMessage $message): array => [
+                'role' => (string) $message->role,
+                'content' => $currentUserMessage !== null
+                    && $message->role === 'user'
+                    && (string) $message->run_id === (string) $run->id
+                        ? $currentUserMessage
+                        : (string) $message->content,
+            ])
             ->values()
             ->all();
 

@@ -52,6 +52,26 @@ final class BrowserBackedWebSearchProviderTest extends TestCase
         $this->assertSame([], $client->calls);
     }
 
+    public function test_read_only_search_client_rejects_file_staging(): void
+    {
+        $client = new RecordingBrowserSessionClient;
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Browser search must not stage upload files.');
+
+        $client->stageFile('user:7', 'worker-1', 'stg_11111111-1111-4111-8111-111111111111', []);
+    }
+
+    public function test_read_only_search_client_rejects_staged_file_discard(): void
+    {
+        $client = new RecordingBrowserSessionClient;
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('Browser search must not discard staged upload files.');
+
+        $client->discardStagedFile('user:7', 'worker-1', 'stg_11111111-1111-4111-8111-111111111111');
+    }
+
     public function test_search_uses_an_owner_scoped_read_only_browser_and_normalizes_safe_link_nodes(): void
     {
         $client = new RecordingBrowserSessionClient;
@@ -372,6 +392,25 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
         ?BrowserActionAuthorization $authorization = null,
     ): BrowserToolResult {
         throw new \LogicException('Browser search must use the session lifecycle API.');
+    }
+
+    public function stageFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        array $file,
+        int $timeoutMilliseconds = 15000,
+    ): array {
+        throw new \LogicException('Browser search must not stage upload files.');
+    }
+
+    public function discardStagedFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        int $timeoutMilliseconds = 15000,
+    ): void {
+        throw new \LogicException('Browser search must not discard staged upload files.');
     }
 
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array

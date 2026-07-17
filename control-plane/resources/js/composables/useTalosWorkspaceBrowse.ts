@@ -309,6 +309,7 @@ export function useTalosWorkspaceBrowse(
         isBrowseSurface,
         activeBrowserSession: browse.activeSession,
         browserMode: browse.browserMode,
+        browseSetupFault: browse.browseSetupFault,
         browserCurrentPage,
         browserContext,
         visibleBrowserActivities: visibleActivities,

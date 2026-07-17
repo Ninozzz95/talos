@@ -15,12 +15,14 @@ describe('useTalosComposerAvailability', () => {
             capabilities: [],
         })
         const activeBrowserSession = ref<unknown | null>(null)
+        const hasFailedAttachments = ref(false)
         const availability = useTalosComposerAvailability({
             prompt,
             sending,
             modelSelectionUsable,
             browserMode,
             activeBrowserSession,
+            hasFailedAttachments,
         })
 
         expect(availability.canSend.value).toBe(false)
@@ -28,6 +30,33 @@ describe('useTalosComposerAvailability', () => {
 
         activeBrowserSession.value = { id: 'browser-ready' }
         browserMode.value = { ...browserMode.value, session_id: 'browser-ready', status: 'ready' }
+
+        expect(availability.canSend.value).toBe(true)
+        expect(availability.sendDisabledReason.value).toBe('')
+    })
+
+    it('disables send while a failed attachment remains selected', () => {
+        const hasFailedAttachments = ref(true)
+        const availability = useTalosComposerAvailability({
+            prompt: ref('Inspect the attached report'),
+            sending: ref(false),
+            modelSelectionUsable: ref(true),
+            browserMode: ref<TalosBrowserMode>({
+                enabled: false,
+                session_id: null,
+                status: 'idle',
+                capabilities: [],
+            }),
+            activeBrowserSession: ref(null),
+            hasFailedAttachments,
+        })
+
+        expect(availability.canSend.value).toBe(false)
+        expect(availability.sendDisabledReason.value).toBe(
+            'Remove the failed attachment and attach the file again before sending.',
+        )
+
+        hasFailedAttachments.value = false
 
         expect(availability.canSend.value).toBe(true)
         expect(availability.sendDisabledReason.value).toBe('')

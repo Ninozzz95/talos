@@ -89,6 +89,120 @@ final class TalosBrowserEvidenceCommitTest extends TestCase
         self::assertSame(1, TalosBrowserEvidenceBundle::query()->where('action_id', $context['action']->id)->count());
     }
 
+    public function test_evidence_frame_device_pixel_ratio_derives_from_the_persisted_session_device_scale(): void
+    {
+        $context = $this->context();
+        $context['browser']->forceFill(['device_scale_factor' => 2])->save();
+        $artifact = $this->app->make(TalosBrowserArtifactStore::class)->store(
+            $context['browser'],
+            'snapshot',
+            'application/json',
+            json_encode([
+                'format' => 'accessibility_refs_v1',
+                'url' => 'https://example.test/vehicles',
+                'title' => 'Vehicles',
+                'textDigest' => hash('sha256', 'Vehicles'),
+                'nodes' => [],
+            ], JSON_THROW_ON_ERROR),
+            ['format' => 'accessibility_refs_v1', 'text_digest' => hash('sha256', 'Vehicles'), 'node_count' => 0],
+            [
+                'source_command_id' => $context['call']->provider_call_id,
+                'source_state_version' => 1,
+                'trust_boundary' => 'untrusted_browser_content',
+                'state_version' => 1,
+            ],
+        );
+        $this->linkArtifactToRun($context, (string) $artifact->id, (string) $artifact->sha256);
+        $result = $this->toolResult($context['call'], (string) $artifact->id, (string) $artifact->sha256, 'snapshot');
+
+        $bundle = $this->app->make(TalosBrowserEvidenceCommitService::class)->commit($this->request($context, $result));
+
+        self::assertSame(2, $bundle->frame['device_pixel_ratio']);
+    }
+
+    public function test_upload_commit_accepts_its_correlated_post_action_snapshot_and_screenshot(): void
+    {
+        $context = $this->context();
+        $context['call']->forceFill([
+            'tool_name' => 'browser_file_upload',
+            'node_type' => 'TOOL_BROWSER_FILE_UPLOAD',
+            'risk' => 'critical',
+            'capability' => 'browser.upload',
+            'state_version' => 1,
+        ])->save();
+        $context['action']->forceFill([
+            'kind' => 'upload',
+            'risk' => 'sensitive',
+            'expected_state_version' => 1,
+        ])->save();
+        $context['browser']->forceFill([
+            'worker_state_version' => 2,
+            'viewport_width' => 1,
+            'viewport_height' => 1,
+        ])->save();
+        $screenshot = $this->app->make(TalosBrowserArtifactStore::class)->store(
+            $context['browser'],
+            'screenshot',
+            'image/png',
+            $this->png(),
+            ['url' => 'https://example.test/vehicles', 'title' => 'Vehicles', 'width' => 1, 'height' => 1],
+            [
+                'source_command_id' => $context['call']->provider_call_id,
+                'source_state_version' => 1,
+                'state_version' => 2,
+                'trust_boundary' => 'untrusted_browser_content',
+            ],
+        );
+        $snapshotBytes = json_encode([
+            'format' => 'accessibility_refs_v1',
+            'url' => 'https://example.test/vehicles',
+            'title' => 'Vehicles',
+            'textDigest' => hash('sha256', 'Uploaded proof.txt'),
+            'nodes' => [],
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $snapshot = $this->app->make(TalosBrowserArtifactStore::class)->store(
+            $context['browser'],
+            'snapshot',
+            'application/json',
+            $snapshotBytes,
+            ['url' => 'https://example.test/vehicles', 'title' => 'Vehicles'],
+            [
+                'source_command_id' => $context['call']->provider_call_id,
+                'source_state_version' => 1,
+                'state_version' => 2,
+                'trust_boundary' => 'untrusted_browser_content',
+            ],
+        );
+        $this->linkArtifactToRun($context, (string) $screenshot->id, (string) $screenshot->sha256, 'screenshot', 'image/png');
+        $this->linkArtifactToRun($context, (string) $snapshot->id, (string) $snapshot->sha256);
+        $result = new ToolResult(
+            toolUseId: (string) $context['call']->provider_call_id,
+            isError: false,
+            content: [['type' => 'text', 'text' => '{"uploaded":true}']],
+            structuredContent: ['uploaded' => true, 'evidence_ids' => [(string) $screenshot->id, (string) $snapshot->id]],
+            evidence: [
+                [
+                    'artifact_id' => (string) $screenshot->id,
+                    'kind' => 'screenshot',
+                    'sha256' => 'sha256:'.$screenshot->sha256,
+                    'trusted_boundary' => 'untrusted_browser_content',
+                ],
+                [
+                    'artifact_id' => (string) $snapshot->id,
+                    'kind' => 'snapshot',
+                    'sha256' => 'sha256:'.$snapshot->sha256,
+                    'trusted_boundary' => 'untrusted_browser_content',
+                ],
+            ],
+        );
+
+        $bundle = $this->app->make(TalosBrowserEvidenceCommitService::class)->commit($this->request($context, $result));
+
+        self::assertCount(2, $bundle->claims);
+        self::assertSame((string) $screenshot->id, $bundle->screenshot_artifact_id);
+        self::assertSame((string) $snapshot->id, $bundle->snapshot_artifact_id);
+    }
+
     public function test_verifier_rejects_screenshot_bytes_spoofing_the_declared_png_mime(): void
     {
         $this->assertInvalidScreenshotEvidence('not a png', 1280, 800);

@@ -1,11 +1,13 @@
 import { BrowserError } from "./BrowserErrors.js";
-import { assertAllowedBrowserUrl } from "./BrowserUrlPolicy.js";
+import { assertAllowedBrowserUrl, browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 import { captureSnapshot } from "./BrowserSnapshot.js";
 import { captureCanonicalBrowserFrame } from "./BrowserFrameCapture.js";
 import { BrowserSessionManager, type BrowserSession } from "./BrowserSessionManager.js";
+import { BrowserFileStagingStore, type StagedBrowserFile } from "./BrowserFileStagingStore.js";
 import {
   BrowserToolCallSchema,
   BrowserToolResultSchema,
+  BrowserFileUploadToolArgumentsSchema,
   ClickToolArgumentsSchema,
   NavigateToolArgumentsSchema,
   ReadToolArgumentsSchema,
@@ -22,6 +24,7 @@ import { z } from "zod";
 
 type BrowserToolCall = z.infer<typeof BrowserToolCallSchema>;
 type CanonicalToolResult = z.infer<typeof BrowserToolResultSchema>;
+type BrowserFileUploadArguments = z.infer<typeof BrowserFileUploadToolArgumentsSchema>;
 
 export interface BrowserToolRequestContext {
   idempotencyKey?: string;
@@ -32,7 +35,10 @@ const SEMANTIC_CLICK_ROLES = new Set([
 ]);
 
 export class BrowserToolDispatcher {
-  constructor(private readonly sessions: BrowserSessionManager) {}
+  constructor(
+    private readonly sessions: BrowserSessionManager,
+    private readonly fileStaging: BrowserFileStagingStore = new BrowserFileStagingStore(),
+  ) {}
 
   async call(sessionId: string, rawCall: unknown, context: BrowserToolRequestContext = {}): Promise<CanonicalToolResult> {
     const parsedCall = BrowserToolCallSchema.safeParse(rawCall);
@@ -58,7 +64,7 @@ export class BrowserToolDispatcher {
           ? requestedStateVersion
           : session.stateVersion,
         request: { name: call.name, arguments: call.arguments },
-        consequential: call.name === "browser_click",
+        consequential: isConsequentialTool(call.name),
       });
       if (claim.kind === "result") return BrowserToolResultSchema.parse(claim.result);
       if (claim.kind === "error") return this.errorResult(call.tool_use_id, claim.error.code, claim.error.message, claim.error.details);
@@ -69,6 +75,12 @@ export class BrowserToolDispatcher {
           session = current;
           if (call.name === "browser_click") {
             return this.click(current, call, () => {
+              current.actionLedger.markDispatched(idempotencyKey);
+              dispatched = true;
+            });
+          }
+          if (call.name === "browser_file_upload") {
+            return this.upload(current, call, () => {
               current.actionLedger.markDispatched(idempotencyKey);
               dispatched = true;
             });
@@ -93,7 +105,7 @@ export class BrowserToolDispatcher {
           : new BrowserError("The browser tool failed.", "TALOS_BROWSER_TOOL_EXECUTION_FAILED", 500);
         if (!dispatched) {
           session.actionLedger.rejectIfPending(idempotencyKey, controlled);
-        } else if (call.name === "browser_click") {
+        } else if (isConsequentialTool(call.name)) {
           session.actionLedger.markAmbiguous(idempotencyKey, controlled);
         } else {
           const result = this.errorResult(call.tool_use_id, controlled.code, controlled.message, controlled.details);
@@ -103,8 +115,13 @@ export class BrowserToolDispatcher {
         return this.errorResult(call.tool_use_id, controlled.code, controlled.message, controlled.details);
       }
     } catch (error) {
-      const controlled = error instanceof BrowserError && call.name === "browser_click" && error.code === "TALOS_BROWSER_ACTION_CONFLICT"
-        ? new BrowserError(error.message, "TALOS_BROWSER_CLICK_COMMAND_CONFLICT", error.statusCode, error.details)
+      const controlled = error instanceof BrowserError && isConsequentialTool(call.name) && error.code === "TALOS_BROWSER_ACTION_CONFLICT"
+        ? new BrowserError(
+          error.message,
+          call.name === "browser_file_upload" ? "TALOS_BROWSER_UPLOAD_COMMAND_CONFLICT" : "TALOS_BROWSER_CLICK_COMMAND_CONFLICT",
+          error.statusCode,
+          error.details,
+        )
         : error;
       return this.errorResult(
         call.tool_use_id,
@@ -127,7 +144,7 @@ export class BrowserToolDispatcher {
     });
     const current = await this.sessions.get(session.sessionId);
     const structured = {
-      url: current.page.url(),
+      url: browserEvidenceUrl(current.page.url()),
       title: await current.page.title(),
       state_version: current.stateVersion,
     };
@@ -145,7 +162,7 @@ export class BrowserToolDispatcher {
     const current = await this.sessions.get(session.sessionId);
     await this.sessions.recordSnapshot(session.sessionId, captured);
     const structured = {
-      url: current.page.url(),
+      url: browserEvidenceUrl(current.page.url()),
       title: await current.page.title(),
       state_version: current.stateVersion,
       snapshot_id: captured.snapshotId,
@@ -170,7 +187,7 @@ export class BrowserToolDispatcher {
       .filter((node) => (parsed.data.ref === undefined || node.ref === parsed.data.ref) && (query === undefined || node.name.toLocaleLowerCase().includes(query)))
       .slice(0, 20);
     const structured = {
-      url: session.page.url(),
+      url: browserEvidenceUrl(session.page.url()),
       title: await session.page.title(),
       state_version: session.stateVersion,
       snapshot_id: stored.value.snapshotId,
@@ -192,7 +209,7 @@ export class BrowserToolDispatcher {
     }
     const digest = sha256(image);
     const structured = {
-      url: session.page.url(),
+      url: browserEvidenceUrl(session.page.url()),
       title: await session.page.title(),
       state_version: session.stateVersion,
       mime_type: "image/png" as const,
@@ -219,7 +236,7 @@ export class BrowserToolDispatcher {
       throw new BrowserError("The browser wait condition timed out.", "TALOS_BROWSER_WAIT_TIMEOUT", 408, { reason: error instanceof Error ? error.message : "unknown" });
     }
     const current = this.sessions.advanceState(session.sessionId);
-    const structured = { url: current.page.url(), title: await current.page.title(), state_version: current.stateVersion };
+    const structured = { url: browserEvidenceUrl(current.page.url()), title: await current.page.title(), state_version: current.stateVersion };
     return this.success(call.tool_use_id, call.name, structured, "Browser wait completed.", "wait", structured);
   }
 
@@ -432,7 +449,7 @@ export class BrowserToolDispatcher {
         call.tool_use_id,
         call.name,
         {
-          url: current.page.url(),
+          url: browserEvidenceUrl(current.page.url()),
           title: await current.page.title(),
           state_version: current.stateVersion,
           target: { ref: node.ref, role: node.role, name: node.name },
@@ -462,6 +479,182 @@ export class BrowserToolDispatcher {
       session.context.off("page", pageListener);
       session.page.off("download", downloadListener);
       session.page.off("filechooser", fileChooserListener);
+    }
+  }
+
+  private async upload(session: BrowserSession, call: BrowserToolCall, onDispatch: () => void): Promise<CanonicalToolResult> {
+    const parsed = BrowserFileUploadToolArgumentsSchema.safeParse(call.arguments);
+    if (!parsed.success) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_INVALID_TOOL_ARGUMENTS", "Invalid browser_file_upload arguments.");
+    if (session.capabilities.uploads !== true) {
+      throw new BrowserError("Browser file uploads are not enabled for this session.", "TALOS_BROWSER_CAPABILITY_DENIED", 403);
+    }
+    if (!session.capabilities.screenshots || !session.capabilities.accessibilitySnapshot) {
+      throw new BrowserError("Browser upload evidence is not enabled for this session.", "TALOS_BROWSER_CAPABILITY_DENIED", 403);
+    }
+
+    const stagedFiles = this.fileStaging.takeMany(session.ownerRef, session.sessionId, parsed.data.staged_file_ids);
+    try {
+      return await this.uploadApprovedStagedFiles(session, call, parsed.data, stagedFiles, onDispatch);
+    } finally {
+      this.fileStaging.release(stagedFiles);
+    }
+  }
+
+  private async uploadApprovedStagedFiles(
+    session: BrowserSession,
+    call: BrowserToolCall,
+    input: BrowserFileUploadArguments,
+    stagedFiles: readonly StagedBrowserFile[],
+    onDispatch: () => void,
+  ): Promise<CanonicalToolResult> {
+    this.sessions.assertState(session.sessionId, input.state_version);
+    const stored = this.sessions.snapshot(session.sessionId);
+    if (!stored || stored.stateVersion !== session.stateVersion || stored.value.snapshotId !== input.snapshot_id) {
+      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_STALE_SNAPSHOT", "The requested browser snapshot is stale.", { state_version: session.stateVersion });
+    }
+    const node = stored.value.nodes.find((candidate) => candidate.ref === input.target);
+    if (!node) {
+      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_STALE_REF", "The requested browser ref is missing from the stored snapshot.", { state_version: session.stateVersion });
+    }
+    if (input.element !== undefined && input.element !== node.name) {
+      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_TARGET_MISMATCH", "The descriptive element does not match the stored upload target.", { state_version: session.stateVersion });
+    }
+    if (stored.value.documentToken !== undefined && stored.value.documentToken !== await documentToken(session.page)) {
+      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_DOCUMENT_CHANGED", "The document changed after the snapshot was captured.", { state_version: session.stateVersion });
+    }
+    const binding = stored.value.refBindings?.get(node.ref);
+    if (!binding) {
+      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_REF_MISSING", "The stored upload target is no longer present.", { state_version: session.stateVersion });
+    }
+    const targetState = await binding.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return {
+        connected: element.isConnected,
+        visible: element.isConnected
+          && style.display !== "none"
+          && style.visibility !== "hidden"
+          && element.getAttribute("aria-hidden") !== "true"
+          && rect.width > 0
+          && rect.height > 0,
+        disabled: element.matches(":disabled") || element.getAttribute("aria-disabled") === "true",
+        fileChooser: element.tagName.toLowerCase() === "input" && input.type.toLocaleLowerCase() === "file",
+        multiple: input.multiple,
+      };
+    }).catch(() => null);
+    if (!targetState?.connected) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_REF_MISSING", "The stored upload target is no longer present.", { state_version: session.stateVersion });
+    if (!targetState.visible || !node.visible) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_TARGET_HIDDEN", "The stored upload target is hidden.", { state_version: session.stateVersion });
+    if (targetState.disabled) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_TARGET_DISABLED", "The stored upload target is disabled.", { state_version: session.stateVersion });
+    if (!targetState.fileChooser) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_UPLOAD_TARGET_INVALID", "The stored ref is not a file chooser control.", { state_version: session.stateVersion });
+    if (!targetState.multiple && input.staged_file_ids.length > 1) {
+      return this.errorResult(call.tool_use_id, "TALOS_BROWSER_UPLOAD_MULTIPLE_DENIED", "The selected file input accepts only one file.", { state_version: session.stateVersion });
+    }
+
+    const baselinePages = new Set(session.context.pages());
+    let openedPage = false;
+    let downloadObserved = false;
+    const pageListener = (page: unknown) => { if (!baselinePages.has(page as never)) openedPage = true; };
+    const downloadListener = () => { downloadObserved = true; };
+    session.context.on("page", pageListener);
+    session.page.on("download", downloadListener);
+    const dispatchStateVersion = session.stateVersion + 1;
+    let dispatchThresholdReached = false;
+    let stateAdvanced = false;
+    try {
+      this.sessions.armHmiDispatchFence(session.sessionId, dispatchStateVersion);
+      dispatchThresholdReached = true;
+      onDispatch();
+      await binding.setInputFiles(stagedFiles.map((file) => ({
+        name: file.name,
+        mimeType: file.mimeType,
+        buffer: file.bytes,
+      })));
+      const assignedFiles = await binding.evaluate((element) => (
+        Array.from((element as HTMLInputElement).files ?? []).map((file) => ({
+          name: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        }))
+      )).catch(() => null);
+      const assignmentMatches = assignedFiles !== null
+        && assignedFiles.length === stagedFiles.length
+        && assignedFiles.every((assigned, index) => {
+          const expected = stagedFiles[index];
+          return expected !== undefined
+            && assigned.name === expected.name
+            && assigned.mimeType === expected.mimeType
+            && assigned.sizeBytes === expected.sizeBytes;
+        });
+      if (!assignmentMatches) throw new Error("file_input_assignment_mismatch");
+      await session.page.waitForTimeout(50);
+      const current = session.recovery ? session : this.sessions.advanceState(session.sessionId);
+      stateAdvanced = !session.recovery;
+      if (current.recovery || openedPage || downloadObserved) {
+        throw new Error(openedPage ? "new_context_opened" : downloadObserved ? "download_started" : "session_recovery_required");
+      }
+
+      const screenshot = await captureCanonicalBrowserFrame(current.page);
+      const snapshot = await captureSnapshot(current.page);
+      const verificationScreenshot = await captureCanonicalBrowserFrame(current.page);
+      const verificationSnapshot = await captureSnapshot(current.page);
+      if (sha256(screenshot) !== sha256(verificationScreenshot)
+        || snapshot.documentToken !== await documentToken(current.page)
+        || snapshot.domDigest !== verificationSnapshot.domDigest) {
+        throw new Error("evidence_frame_changed");
+      }
+      await this.sessions.recordSnapshot(current.sessionId, snapshot);
+      const snapshotValue = {
+        snapshot_id: snapshot.snapshotId,
+        format: snapshot.format,
+        text_digest: snapshot.textDigest,
+        nodes: snapshot.nodes,
+      };
+      const result = this.successWithEvidence(
+        call.tool_use_id,
+        call.name,
+        {
+          url: browserEvidenceUrl(current.page.url()),
+          title: await current.page.title(),
+          state_version: current.stateVersion,
+          target: { ref: node.ref, role: node.role, name: node.name },
+          files: stagedFiles.map((file) => ({
+            file_id: file.fileId,
+            name: file.name,
+            mime_type: file.mimeType,
+            size_bytes: file.sizeBytes,
+            sha256: file.sha256,
+          })),
+          screenshot: {
+            mime_type: "image/png",
+            width: current.viewport.width,
+            height: current.viewport.height,
+            sha256: sha256(screenshot),
+          },
+          snapshot: { ...snapshotValue, sha256: sha256(JSON.stringify(snapshotValue)) },
+        },
+        "Approved files were uploaded to the selected Browser control.",
+        [
+          { kind: "screenshot", source: screenshot, image: { type: "image", data: screenshot.toString("base64"), mimeType: "image/png" } },
+          { kind: "snapshot", source: JSON.stringify(snapshotValue) },
+        ],
+      );
+      if (result.isError) throw new Error("post_upload_output_validation");
+      return result;
+    } catch (error) {
+      if (!dispatchThresholdReached) throw error;
+      if (!stateAdvanced && !session.recovery) this.sessions.advanceState(session.sessionId);
+      const reasonCode = error instanceof Error ? error.message : "post_dispatch_failure";
+      const recovery = this.sessions.markRecoveryRequired(session.sessionId, reasonCode, dispatchStateVersion);
+      throw new BrowserError("The browser upload may have taken effect but evidence could not be committed.", "TALOS_BROWSER_UPLOAD_RECOVERY_REQUIRED", 409, {
+        state_version: recovery.stateVersion,
+        reason_code: recovery.recovery?.reasonCode ?? reasonCode,
+        idempotency_status: "ambiguous",
+      });
+    } finally {
+      this.sessions.clearHmiDispatchFence(session.sessionId);
+      session.context.off("page", pageListener);
+      session.page.off("download", downloadListener);
     }
   }
 
@@ -523,4 +716,8 @@ export class BrowserToolDispatcher {
 
 async function documentToken(page: BrowserSession["page"]): Promise<string> {
   return page.evaluate(() => `${document.location.href}|${performance.timeOrigin}`);
+}
+
+function isConsequentialTool(name: string): boolean {
+  return name === "browser_click" || name === "browser_file_upload";
 }

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { MousePointerClick, ShieldCheck } from '@lucide/vue'
 import Select from '../../ui/Select.vue'
+import TalosFileAuthorityPanel from './TalosFileAuthorityPanel.vue'
 import {
     TALOS_BROWSER_HMI_MODES,
     talosBrowserHmiModeLabel,
@@ -13,6 +14,7 @@ import {
 const props = defineProps<{
     modelValue: TalosBrowserHmiMode
     policy: TalosBrowserHmiPolicyState | null
+    activeTalosSessionId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -74,6 +76,7 @@ function updateMode(event: Event) {
                 No stricter workspace minimum is configured. Sensitive and ambiguous effects still fail closed.
             </p>
         </section>
+
+        <TalosFileAuthorityPanel :active-talos-session-id="activeTalosSessionId ?? null" />
     </div>
 </template>
-

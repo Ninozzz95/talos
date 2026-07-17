@@ -7,6 +7,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Collection;
 
 final class TalosFile extends Model
@@ -45,6 +46,17 @@ final class TalosFile extends Model
     public function contextSources(): HasMany
     {
         return $this->hasMany(TalosContextSource::class, 'file_id');
+    }
+
+    /** @return BelongsToMany<TalosFileAuthorityGrant, $this> */
+    public function authorityGrants(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            TalosFileAuthorityGrant::class,
+            'talos_file_authority_grant_files',
+            'file_id',
+            'grant_id',
+        )->withPivot('checksum_snapshot')->withTimestamps();
     }
 
     /**

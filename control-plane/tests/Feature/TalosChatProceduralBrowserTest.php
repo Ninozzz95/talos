@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Models\TalosBrowserArtifact;
 use App\Models\TalosBrowserEvidenceBundle;
 use App\Models\TalosBrowserSession;
+use App\Models\TalosFile;
 use App\Models\TalosMessage;
 use App\Models\TalosModelProfile;
 use App\Models\TalosRunEvent;
@@ -16,11 +17,15 @@ use App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore;
 use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProviderOutcomeCodec;
 use App\Services\Talos\Browser\BrowserSessionClient;
+use App\Services\Talos\Browser\BrowserToolResult;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\FileAuthority\TalosFileAuthorityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Kadmos\Provider\ProviderCapabilities;
 use Kadmos\Provider\ProviderTurnAdapter;
@@ -36,6 +41,29 @@ use Tests\TestCase;
 final class TalosChatProceduralBrowserTest extends TestCase
 {
     use RefreshDatabase;
+
+    private string $storageRoot;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->storageRoot = storage_path('framework/testing/disks/b7-chat-upload-'.Str::uuid());
+        config(['filesystems.disks.local' => [
+            'driver' => 'local',
+            'root' => $this->storageRoot,
+            'throw' => true,
+        ]]);
+        Storage::forgetDisk('local');
+    }
+
+    protected function tearDown(): void
+    {
+        Storage::forgetDisk('local');
+        if (isset($this->storageRoot)) {
+            File::deleteDirectory($this->storageRoot);
+        }
+        parent::tearDown();
+    }
 
     public function test_browser_mode_uses_native_procedural_tool_calls_instead_of_legacy_jmp_plans(): void
     {
@@ -334,6 +362,209 @@ final class TalosChatProceduralBrowserTest extends TestCase
             'role' => 'assistant',
             'content' => 'The cookie banner was dismissed through verified browser evidence.',
         ]);
+    }
+
+    public function test_browser_file_upload_provider_receives_authorized_file_manifest_then_requires_exact_approval_and_reconciled_evidence(): void
+    {
+        $user = $this->authenticateTalosUser();
+        $session = TalosSession::query()->create([
+            'user_id' => $user->id,
+            'title' => 'Procedural browser upload',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-test',
+            'display_name' => 'Procedural browser upload test',
+            'encrypted_secret' => Crypt::encryptString('provider-secret'),
+            'base_url' => 'https://api.openai.com/v1',
+            'status' => 'healthy',
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-procedural-upload',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'current_url' => 'https://example.com/upload',
+            'current_title' => 'Upload form',
+            'viewport_width' => 1,
+            'viewport_height' => 1,
+            'capabilities' => [
+                'navigation' => true,
+                'screenshots' => true,
+                'accessibilitySnapshot' => true,
+                'hmiActions' => true,
+                'uploads' => true,
+            ],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $userMessage = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Carica proof.txt nel selettore corrente.',
+            'metadata' => ['source' => 'talos_chat_page'],
+        ]);
+        Storage::disk('local')->put('vault/private/proof.txt', 'proof');
+        $file = TalosFile::query()->create([
+            'user_id' => $user->id,
+            'original_name' => 'proof.txt',
+            'mime_type' => 'text/plain',
+            'size_bytes' => 5,
+            'checksum' => hash('sha256', 'proof'),
+            'status' => 'available',
+            'storage_disk' => 'local',
+            'storage_path' => 'vault/private/proof.txt',
+            'parser' => 'text',
+        ]);
+        $grant = $this->app->make(TalosFileAuthorityService::class)->create((int) $user->id, [
+            'scope' => 'file',
+            'permissions' => ['model.read', 'browser.upload'],
+            'file_ids' => [(string) $file->id],
+        ]);
+        $client = new FakeBrowserSessionClient;
+        $client->snapshotResponse = [
+            'snapshot_id' => 'snap_upload-approval',
+            'format' => 'accessibility_refs_v1',
+            'text_digest' => 'Choose file',
+            'nodes' => [['ref' => 'r4', 'role' => 'button', 'name' => 'Choose file', 'visible' => true]],
+            'url' => 'https://example.com/upload',
+            'title' => 'Upload form',
+        ];
+        $client->inspectResponse = [
+            'sessionId' => $browser->worker_session_id,
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport' => ['width' => 1, 'height' => 1],
+            'capabilities' => $browser->capabilities,
+            'stateVersion' => 0,
+            'expiresAt' => now()->addHour()->toJSON(),
+        ];
+        $this->app->instance(BrowserSessionClient::class, $client);
+        $adapter = new ProceduralBrowserUploadRouteAdapter((string) $file->id);
+        $this->app->instance(TalosProviderAdapterResolver::class, new ProceduralBrowserRouteResolver($adapter));
+
+        $pending = $this->postJson('/api/talos/chat', [
+            'session_id' => $session->id,
+            'user_message_id' => $userMessage->id,
+            'message' => $userMessage->content,
+            'model_profile_id' => $profile->id,
+            'browser_mode' => [
+                'enabled' => true,
+                'browser_session_id' => $browser->id,
+            ],
+            'attachment_file_ids' => [(string) $file->id],
+            'attachment_grant_ids' => [(string) $grant->id],
+        ])->assertStatus(202)
+            ->assertJsonPath('agent_turn.status', 'awaiting_approval')
+            ->assertJsonPath('pending_approvals.0.tool_name', 'browser_file_upload')
+            ->assertJsonPath('pending_approvals.0.capability', 'browser.upload')
+            ->assertJsonPath('pending_approvals.0.risk', 'critical');
+        $this->assertSame('pending', $pending->json('pending_approvals.0.status'), json_encode($pending->json(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $this->assertTrue($pending->json('pending_approvals.0.actionable'), json_encode($pending->json(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $this->assertSame((string) $file->id, $pending->json('pending_approvals.0.files.0.file_id'), json_encode($pending->json(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $this->assertSame('proof.txt', $pending->json('pending_approvals.0.files.0.name'));
+        $this->assertSame((string) $file->id, $pending->json('used_attachments.0.file_id'));
+        $this->assertSame('proof.txt', $pending->json('used_attachments.0.file_name'));
+        $this->assertSame((string) $file->checksum, $pending->json('used_attachments.0.sha256'));
+        $providerPrompt = (string) ($adapter->receivedMessages[array_key_last($adapter->receivedMessages)]['content'] ?? '');
+        $this->assertStringContainsString('TALOS_FILE_RESOURCE_MANIFEST_V1', $providerPrompt);
+        $this->assertStringContainsString((string) $file->id, $providerPrompt);
+        $this->assertStringContainsString('proof.txt', $providerPrompt);
+        $this->assertStringNotContainsString('vault/private/proof.txt', $providerPrompt);
+        $this->assertStringNotContainsString((string) $grant->id, $providerPrompt);
+        $this->assertStringNotContainsString(base64_encode('proof'), $providerPrompt);
+        $this->assertSame('Carica proof.txt nel selettore corrente.', $userMessage->refresh()->content);
+        $turnId = $pending->json('agent_turn.id');
+        $approvalId = $pending->json('pending_approvals.0.id');
+        $planHash = $pending->json('pending_approvals.0.plan_hash');
+        $this->assertIsString($turnId);
+        $this->assertIsString($approvalId);
+        $this->assertIsString($planHash);
+        $client->callToolResponse = $this->uploadWorkerResult((string) $file->id, (string) $file->checksum);
+
+        $approved = $this->postJson("/api/talos/agent-turns/{$turnId}/approvals/{$approvalId}", [
+            'decision' => 'approve',
+            'plan_hash' => $planHash,
+        ])->assertOk()
+            ->assertJsonPath('agent_turn.status', 'completed')
+            ->assertJsonPath('text', 'The approved Vault file was uploaded through verified browser evidence.')
+            ->assertJsonPath('used_attachments.0.file_id', (string) $file->id)
+            ->assertJsonPath('assistant_message.metadata.used_attachments.0.file_id', (string) $file->id)
+            ->assertJsonPath('pending_approvals', []);
+
+        $uploadRequest = collect($client->requests)->firstWhere('method', 'upload');
+        $stageRequest = collect($client->requests)->firstWhere('method', 'stageFile');
+        $this->assertIsArray($uploadRequest);
+        $this->assertIsArray($stageRequest);
+        $this->assertSame('user_approval', $uploadRequest['authorization']->toCapabilityAttestation()['kind']);
+        $this->assertArrayNotHasKey('file_ids', $uploadRequest['arguments']);
+        $this->assertSame(base64_encode('proof'), $stageRequest['file']['base64']);
+        $this->assertSame(['screenshot', 'snapshot'], array_column($adapter->uploadEvidence, 'kind'));
+        $uploadBundle = TalosBrowserEvidenceBundle::query()
+            ->where('worker_state_version', 1)
+            ->whereNotNull('reconciled_at')
+            ->firstOrFail();
+        $this->assertSame('upload', $uploadBundle->action()->value('kind'));
+        $this->assertDatabaseHas('talos_messages', [
+            'session_id' => $session->id,
+            'run_id' => $approved->json('run.id'),
+            'role' => 'assistant',
+            'content' => 'The approved Vault file was uploaded through verified browser evidence.',
+        ]);
+        $wire = json_encode($approved->json(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        $this->assertStringNotContainsString('vault/private/proof.txt', $wire);
+        $this->assertStringNotContainsString(base64_encode('proof'), $wire);
+    }
+
+    private function uploadWorkerResult(string $fileId, string $checksum): BrowserToolResult
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', true);
+        $this->assertIsString($png);
+        $snapshot = [
+            'snapshot_id' => 'snap_upload-completed',
+            'format' => 'accessibility_refs_v1',
+            'text_digest' => 'Selected proof.txt',
+            'nodes' => [['ref' => 'r4', 'role' => 'button', 'name' => 'proof.txt', 'visible' => true]],
+        ];
+        $snapshotBytes = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $screenshotHash = 'sha256:'.hash('sha256', $png);
+        $snapshotHash = 'sha256:'.hash('sha256', $snapshotBytes);
+        $evidence = [
+            ['artifact_id' => 'shot-upload-route', 'kind' => 'screenshot', 'sha256' => $screenshotHash, 'trusted_boundary' => 'untrusted_browser_content'],
+            ['artifact_id' => 'snap-upload-route', 'kind' => 'snapshot', 'sha256' => $snapshotHash, 'trusted_boundary' => 'untrusted_browser_content'],
+        ];
+
+        return BrowserToolResult::fromArray([
+            'schema_version' => BrowserToolResult::SCHEMA_VERSION,
+            'tool_use_id' => 'provider-browser-upload',
+            'isError' => false,
+            'content' => [
+                ['type' => 'text', 'text' => 'Uploaded proof.txt'],
+                ['type' => 'image', 'data' => base64_encode($png), 'mimeType' => 'image/png'],
+            ],
+            'structuredContent' => [
+                'url' => 'https://example.com/upload',
+                'title' => 'Upload form',
+                'state_version' => 1,
+                'evidence_ids' => array_column($evidence, 'artifact_id'),
+                'target' => ['ref' => 'r4', 'role' => 'button', 'name' => 'Choose file'],
+                'files' => [[
+                    'file_id' => $fileId,
+                    'name' => 'proof.txt',
+                    'mime_type' => 'text/plain',
+                    'size_bytes' => 5,
+                    'sha256' => 'sha256:'.$checksum,
+                ]],
+                'screenshot' => ['mime_type' => 'image/png', 'width' => 1, 'height' => 1, 'sha256' => $screenshotHash],
+                'snapshot' => [...$snapshot, 'sha256' => $snapshotHash],
+            ],
+            'evidence' => $evidence,
+        ], 'provider-browser-upload');
     }
 
     public function test_breg_007_screenshot_evidence_is_attached_to_the_assistant_message_immediately_and_after_reload(): void
@@ -685,6 +916,91 @@ final class ProceduralBrowserClickRouteAdapter implements ProviderTurnAdapter
         return ProviderTurnResponse::final(
             'The cookie banner was dismissed through verified browser evidence.',
             'response-browser-click-final',
+            'stop',
+            new TokenUsage(14, 8, 22),
+        );
+    }
+}
+
+final class ProceduralBrowserUploadRouteAdapter implements ProviderTurnAdapter
+{
+    public int $startCalls = 0;
+
+    public int $continueCalls = 0;
+
+    /** @var list<array<string, mixed>> */
+    public array $uploadEvidence = [];
+
+    /** @var list<array{role: string, content: string}> */
+    public array $receivedMessages = [];
+
+    public function __construct(private readonly string $fileId) {}
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'procedural_browser_upload_route_v1', true, true, true, true, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        $this->startCalls++;
+        $this->receivedMessages = $request->messages;
+
+        return ProviderTurnResponse::toolCalls(
+            null,
+            [new ToolCall('provider-browser-snapshot', 'browser_snapshot', [], null, [])],
+            new ProviderTurnState(
+                'openai',
+                'procedural_browser_upload_route_v1',
+                'response-browser-upload-snapshot',
+                'upload_snapshot_state',
+                ['round' => 1],
+                ['provider-browser-snapshot'],
+            ),
+            'response-browser-upload-snapshot',
+            'tool_calls',
+            new TokenUsage(10, 4, 14),
+        );
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        $this->continueCalls++;
+        $result = $toolResults[0] ?? null;
+        if (! $result instanceof ToolResult || $result->isError) {
+            throw new \RuntimeException('The procedural browser upload result was not correlated.');
+        }
+
+        if ($result->toolUseId === 'provider-browser-snapshot') {
+            return ProviderTurnResponse::toolCalls(
+                null,
+                [new ToolCall('provider-browser-upload', 'browser_file_upload', [
+                    'target' => 'r4',
+                    'element' => 'Model-authored text must not control the target name.',
+                    'file_ids' => [$this->fileId],
+                ], null, [])],
+                new ProviderTurnState(
+                    'openai',
+                    'procedural_browser_upload_route_v1',
+                    'response-browser-upload',
+                    'upload_state',
+                    ['round' => 2],
+                    ['provider-browser-upload'],
+                ),
+                'response-browser-upload',
+                'tool_calls',
+                new TokenUsage(12, 6, 18),
+            );
+        }
+
+        if ($result->toolUseId !== 'provider-browser-upload') {
+            throw new \RuntimeException('The procedural file upload result was not correlated.');
+        }
+        $this->uploadEvidence = $result->evidence;
+
+        return ProviderTurnResponse::final(
+            'The approved Vault file was uploaded through verified browser evidence.',
+            'response-browser-upload-final',
             'stop',
             new TokenUsage(14, 8, 22),
         );

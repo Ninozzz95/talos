@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { AlertCircle, Loader2 } from '@lucide/vue'
+import { AlertCircle, FileText, Loader2 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
@@ -111,6 +111,18 @@ const emit = defineEmits<{
 const chatThreadEl = ref<HTMLElement | null>(null)
 const welcomePrompt = computed(() => resolveTalosWelcomePrompt(props.welcomePromptId, props.welcomePromptId ?? 'talos'))
 const unseenUpdates = computed(() => props.viewport.unseenCount.value)
+
+function messageAttachments(message: TalosMessage): Array<{ file_id: string; name: string }> {
+    const attachments = message.metadata?.attachments
+    if (!Array.isArray(attachments)) return []
+
+    return attachments.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
+        const attachment = candidate as Record<string, unknown>
+        if (typeof attachment.file_id !== 'string' || typeof attachment.name !== 'string') return []
+        return [{ file_id: attachment.file_id, name: attachment.name }]
+    })
+}
 
 function messageBrowserActivities(message: TalosMessage): TalosBrowserActivityItem[] {
     const activities = message.metadata?.browser_activities
@@ -582,6 +594,18 @@ defineExpose({ scrollToBottom })
                         >
                             {{ message.content }}
                         </p>
+                        <div v-if="messageAttachments(message).length > 0" class="mt-2 flex flex-wrap gap-1.5">
+                            <span
+                                v-for="attachment in messageAttachments(message)"
+                                :key="attachment.file_id"
+                                data-testid="talos-message-attachment"
+                                class="inline-flex min-w-0 max-w-56 items-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 py-0.5 text-xs text-[var(--talos-text)]"
+                                :title="attachment.name"
+                            >
+                                <FileText class="h-3 w-3 shrink-0 text-[var(--talos-accent)]" />
+                                <span class="truncate">{{ attachment.name }}</span>
+                            </span>
+                        </div>
                         <TalosMessageActions
                             v-if="message.role !== 'system'"
                             class="mt-3"

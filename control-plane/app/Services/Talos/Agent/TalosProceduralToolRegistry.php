@@ -16,6 +16,7 @@ final class TalosProceduralToolRegistry
         'browser_read',
         'browser_take_screenshot',
         'browser_click',
+        'browser_file_upload',
         'web_search',
         'web_fetch',
     ];
@@ -47,6 +48,7 @@ final class TalosProceduralToolRegistry
             'browser_read' => new ProceduralToolSpec('browser_read', 'TOOL_BROWSER_READ', 'browser.read', 'low', false, true, false, true),
             'browser_take_screenshot' => new ProceduralToolSpec('browser_take_screenshot', 'TOOL_BROWSER_SCREENSHOT', 'browser.read', 'low', false, true, false, true),
             'browser_click' => new ProceduralToolSpec('browser_click', 'TOOL_BROWSER_CLICK', 'browser.write', 'high', true, false, true, true),
+            'browser_file_upload' => new ProceduralToolSpec('browser_file_upload', 'TOOL_BROWSER_FILE_UPLOAD', 'browser.upload', 'critical', true, false, true, true),
             'web_search' => new ProceduralToolSpec('web_search', 'TOOL_WEB_SEARCH', 'web.search', 'low', false, true, false, true),
             'web_fetch' => new ProceduralToolSpec('web_fetch', 'TOOL_WEB_FETCH', 'web.fetch', 'low', false, true, false, true),
         ];
@@ -205,6 +207,34 @@ final class TalosProceduralToolRegistry
                     'openWorldHint' => false,
                 ],
             ],
+            'browser_file_upload' => [
+                'name' => 'browser_file_upload',
+                'title' => 'Upload files',
+                'description' => 'Upload one to four explicitly authorized Vault files to an exact file input from the current verified Browser snapshot.',
+                'inputSchema' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'target' => ['type' => 'string', 'pattern' => '^r[0-9]+$'],
+                        'element' => ['type' => 'string', 'maxLength' => 256],
+                        'file_ids' => [
+                            'type' => 'array',
+                            'minItems' => 1,
+                            'maxItems' => 4,
+                            'uniqueItems' => true,
+                            'items' => ['type' => 'string', 'format' => 'uuid'],
+                        ],
+                    ],
+                    'required' => ['target', 'file_ids'],
+                    'additionalProperties' => false,
+                ],
+                'outputSchema' => self::browserUploadOutputSchema(),
+                'annotations' => [
+                    'readOnlyHint' => false,
+                    'destructiveHint' => false,
+                    'idempotentHint' => false,
+                    'openWorldHint' => false,
+                ],
+            ],
             'web_search' => [
                 'name' => 'web_search',
                 'title' => 'Web search',
@@ -333,6 +363,32 @@ final class TalosProceduralToolRegistry
             'required' => ['url', 'title', 'state_version', 'target', 'screenshot', 'snapshot'],
             'additionalProperties' => false,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function browserUploadOutputSchema(): array
+    {
+        $schema = self::browserClickOutputSchema();
+        $schema['properties']['files'] = [
+            'type' => 'array',
+            'minItems' => 1,
+            'maxItems' => 4,
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'file_id' => ['type' => 'string', 'format' => 'uuid'],
+                    'name' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 255],
+                    'mime_type' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 128],
+                    'size_bytes' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 10485760],
+                    'sha256' => ['type' => 'string', 'pattern' => '^sha256:[a-f0-9]{64}$'],
+                ],
+                'required' => ['file_id', 'name', 'mime_type', 'size_bytes', 'sha256'],
+                'additionalProperties' => false,
+            ],
+        ];
+        $schema['required'][] = 'files';
+
+        return $schema;
     }
 
     /** @return array<string, bool> */

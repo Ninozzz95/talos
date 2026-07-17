@@ -103,6 +103,84 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         }
     }
 
+    public function stageFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        array $file,
+        int $timeoutMilliseconds = 15000,
+    ): array {
+        $expectedKeys = ['file_id', 'name', 'mime_type', 'size_bytes', 'sha256', 'base64'];
+        $actualKeys = array_keys($file);
+        sort($expectedKeys);
+        sort($actualKeys);
+        $bytes = is_string($file['base64'] ?? null) ? base64_decode($file['base64'], true) : false;
+        $semanticName = is_string($file['name'] ?? null) ? trim($file['name']) : '';
+        if (preg_match('/^stg_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D', $stageId) !== 1
+            || $actualKeys !== $expectedKeys
+            || ! is_string($file['file_id'] ?? null)
+            || ! Str::isUuid($file['file_id'])
+            || ! is_string($file['name'] ?? null)
+            || $semanticName === ''
+            || strlen($file['name']) > 255
+            || in_array($semanticName, ['.', '..'], true)
+            || preg_match('/[\\\\\/\x00-\x1F\x7F]/', $file['name']) === 1
+            || ! in_array($file['mime_type'] ?? null, ['text/plain', 'text/markdown', 'application/json', 'text/csv'], true)
+            || ! is_int($file['size_bytes'] ?? null)
+            || $file['size_bytes'] < 1
+            || $file['size_bytes'] > 10 * 1024 * 1024
+            || ! is_string($bytes)
+            || strlen($bytes) !== $file['size_bytes']
+            || ! is_string($file['sha256'] ?? null)
+            || ! hash_equals($file['sha256'], 'sha256:'.hash('sha256', $bytes))) {
+            throw new BrowserWorkerException('TALOS_BROWSER_STAGED_FILE_INVALID', 'Browser staged file input is invalid.');
+        }
+
+        $response = $this->request(
+            'put',
+            "/sessions/{$workerSessionId}/files/stage/{$stageId}",
+            $ownerRef,
+            $file,
+            $timeoutMilliseconds,
+        );
+        $responseKeys = array_keys($response);
+        $expectedResponseKeys = ['stage_id', 'file_id', 'name', 'mime_type', 'size_bytes', 'sha256', 'expires_at'];
+        sort($responseKeys);
+        sort($expectedResponseKeys);
+        if ($responseKeys !== $expectedResponseKeys
+            || ! is_string($response['stage_id'] ?? null)
+            || ! hash_equals($stageId, $response['stage_id'])
+            || ($response['file_id'] ?? null) !== $file['file_id']
+            || ($response['name'] ?? null) !== $file['name']
+            || ($response['mime_type'] ?? null) !== $file['mime_type']
+            || ($response['size_bytes'] ?? null) !== $file['size_bytes']
+            || ($response['sha256'] ?? null) !== $file['sha256']
+            || ! is_string($response['expires_at'] ?? null)
+            || strtotime($response['expires_at']) === false) {
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid staged file response.');
+        }
+
+        return $response;
+    }
+
+    public function discardStagedFile(
+        string $ownerRef,
+        string $workerSessionId,
+        string $stageId,
+        int $timeoutMilliseconds = 15000,
+    ): void {
+        if (preg_match('/^stg_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D', $stageId) !== 1) {
+            throw new InvalidArgumentException('Browser staged file identity is invalid.');
+        }
+        $this->request(
+            'delete',
+            "/sessions/{$workerSessionId}/files/stage/{$stageId}",
+            $ownerRef,
+            [],
+            $timeoutMilliseconds,
+        );
+    }
+
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array
     {
         return $this->bootstrapSession(
@@ -150,7 +228,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
     ): array {
         $handshake = $this->handshake($ownerRef, $timeoutMilliseconds);
         $handshake->assertUsable();
-        $session = $this->request('post', $path, $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => $ttlSeconds, 'capabilities' => ['navigation' => $handshake->supports('navigate'), 'screenshots' => $handshake->supports('screenshot'), 'accessibilitySnapshot' => $handshake->supports('snapshot'), 'actions' => false, 'hmiActions' => $handshake->supports('interactive_frame') && $handshake->supports('click'), 'downloads' => false, 'uploads' => false]], $timeoutMilliseconds, $idempotencyKey);
+        $session = $this->request('post', $path, $ownerRef, ['ownerRef' => $ownerRef, 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'ttlSeconds' => $ttlSeconds, 'capabilities' => ['navigation' => $handshake->supports('navigate'), 'screenshots' => $handshake->supports('screenshot'), 'accessibilitySnapshot' => $handshake->supports('snapshot'), 'actions' => false, 'hmiActions' => $handshake->supports('interactive_frame') && $handshake->supports('click'), 'downloads' => false, 'uploads' => $handshake->supports('upload')]], $timeoutMilliseconds, $idempotencyKey);
         if (($session['protocols']['worker'] ?? null) !== TalosBrowserWorkerProtocol::WORKER
             || ($session['protocols']['hmi'] ?? null) !== TalosBrowserWorkerProtocol::HMI_RUNTIME) {
             throw new BrowserWorkerException(
@@ -574,11 +652,13 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
                 $headers['Idempotency-Key'] = '"'.$idempotencyKey.'"';
             }
 
+            $options = $payload === [] ? [] : ['json' => $payload];
+
             return Http::timeout($timeoutSeconds)
                 ->connectTimeout($timeoutSeconds)
                 ->acceptJson()
                 ->withHeaders($headers)
-                ->send($method, rtrim($this->baseUrl, '/').$path, ['json' => $payload]);
+                ->send($method, rtrim($this->baseUrl, '/').$path, $options);
         } catch (Throwable) {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_UNAVAILABLE', 'Browser worker is unavailable.');
         }
@@ -593,7 +673,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         array $request,
         ?BrowserActionAuthorization $authorization,
     ): ?string {
-        $consequential = in_array($operation, ['browser_click', 'hmi_pointer_execute'], true);
+        $consequential = in_array($operation, ['browser_click', 'browser_file_upload', 'hmi_pointer_execute'], true);
         if (! $consequential) {
             if ($authorization instanceof BrowserActionAuthorization) {
                 throw new BrowserWorkerException(

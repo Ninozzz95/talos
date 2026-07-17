@@ -1,6 +1,11 @@
 import type { Page, Route } from '@playwright/test'
 import { deflateSync } from 'node:zlib'
 
+const TALOS_E2E_UUID_PREFIX = '018f47a2-7f42-7d10-9b37-'
+
+export const TALOS_E2E_FILE_ID = `${TALOS_E2E_UUID_PREFIX}000000000101`
+export const TALOS_E2E_FIRST_FILE_AUTHORITY_GRANT_ID = `${TALOS_E2E_UUID_PREFIX}000000000201`
+
 type Json = Record<string, unknown> | unknown[]
 type PersistenceMode = 'persistent' | 'temporary'
 type InitialSessionMessage = {
@@ -62,6 +67,10 @@ export type TalosSettingsRequestLedger = {
 
 function cloneJsonSnapshot<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T
+}
+
+function fileAuthorityGrantId(sequence: number) {
+    return `${TALOS_E2E_UUID_PREFIX}${(0x200 + sequence).toString(16).padStart(12, '0')}`
 }
 
 function createTalosSettingsRequestLedger(): TalosSettingsRequestLedger & {
@@ -364,7 +373,7 @@ function sessionExportPayload(sessionId: string, format = 'json') {
                                 id: 'context-source-e2e',
                                 source_type: 'file_chunk',
                                 file: {
-                                    id: 'file-e2e',
+                                    id: TALOS_E2E_FILE_ID,
                                     original_name: 'workflow.md',
                                     status: 'available',
                                 },
@@ -436,7 +445,7 @@ function sessionExportPayload(sessionId: string, format = 'json') {
                 used_context: [
                     {
                         context_set_id: 'context-set-e2e',
-                        file_id: 'file-e2e',
+                        file_id: TALOS_E2E_FILE_ID,
                         chunk_id: 'chunk-e2e',
                         file_name: 'workflow.md',
                         preview: 'Workflow file says approve the deployment checklist.',
@@ -654,7 +663,7 @@ function runBenchmarkGroupPayload(includeResults = false) {
 
 function filePayload() {
     return {
-        id: 'file-e2e',
+        id: TALOS_E2E_FILE_ID,
         original_name: 'workflow.md',
         mime_type: 'text/markdown',
         size_bytes: 42,
@@ -667,13 +676,51 @@ function filePayload() {
     }
 }
 
+function fileAuthorityGrantPayload(
+    id: string,
+    input: Record<string, unknown>,
+    availableFiles: Record<string, unknown>[],
+) {
+    const scope = typeof input.scope === 'string' ? input.scope : 'file'
+    const fileIds = Array.isArray(input.file_ids)
+        ? input.file_ids.filter((value): value is string => typeof value === 'string')
+        : []
+    const files = scope === 'global'
+        ? []
+        : availableFiles.filter((file) => fileIds.includes(String(file.id ?? '')))
+    const defaultLabel = scope === 'global'
+        ? 'All Vault files'
+        : scope === 'session'
+            ? 'Chat session files'
+            : scope === 'folder'
+                ? 'Selected folder'
+                : String(files[0]?.original_name ?? 'File authority')
+
+    return {
+        id,
+        scope,
+        label: typeof input.label === 'string' && input.label.trim() ? input.label.trim() : defaultLabel,
+        permissions: Array.isArray(input.permissions)
+            ? input.permissions.filter((value): value is string => typeof value === 'string')
+            : [],
+        status: 'active',
+        talos_session_id: scope === 'session' && typeof input.session_id === 'string' ? input.session_id : null,
+        files,
+        expires_at: typeof input.expires_at === 'string' ? input.expires_at : null,
+        revoked_at: null,
+        last_used_at: null,
+        created_at: now,
+        updated_at: now,
+    }
+}
+
 function fileDetailsPayload() {
     return {
         ...filePayload(),
         chunks: [
             {
                 id: 'chunk-e2e',
-                file_id: 'file-e2e',
+                file_id: TALOS_E2E_FILE_ID,
                 sequence: 1,
                 token_count: 12,
                 preview: 'Workflow file says approve the deployment checklist.',
@@ -705,7 +752,7 @@ function contextSetPayload() {
             {
                 id: 'context-source-e2e',
                 context_set_id: 'context-set-e2e',
-                file_id: 'file-e2e',
+                file_id: TALOS_E2E_FILE_ID,
                 chunk_id: null,
                 metadata: { source: 'e2e' },
                 created_at: now,
@@ -1445,6 +1492,7 @@ export type InstallTalosApiMocksOptions = {
         capabilities?: string[]
         createStatuses?: string[]
         deny?: 'navigate' | 'screenshot' | 'snapshot'
+        createFault?: { status: number; code: string; message: string }
     }
     initialSettings?: TalosInitialSettings
     settingsPatchFailure?: TalosSettingsPatchFailure
@@ -1466,6 +1514,8 @@ export type InstallTalosApiMocksOptions = {
 export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}): Promise<TalosSettingsRequestLedger> {
     let messageSequence = 0
     let fileUploaded = false
+    let fileAuthorityGrantSequence = 0
+    let fileAuthorityGrants: Record<string, unknown>[] = []
     let contextSetCreated = false
     let comparisonCreated = false
     let modelComparisonPromoted = false
@@ -1598,6 +1648,10 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             const talosSessionId = typeof body.talos_session_id === 'string' ? body.talos_session_id : null
             if (!talosSessionId) return json(route, { message: 'Browse session create body requires talos_session_id.' }, 422)
             if (request.headers()['x-talos-session-id'] !== talosSessionId) return json(route, { message: 'Browse chat scope mismatch.' }, 404)
+            const createFault = options.browser?.createFault
+            if (createFault) {
+                return json(route, { code: createFault.code, message: createFault.message, details: [] }, createFault.status)
+            }
             const status = options.browser?.createStatuses?.[browserCreateCount] ?? 'active'
             browserCreateCount += 1
             const attempt = browserCreateAttemptsByTalosSession.get(talosSessionId) ?? 0
@@ -2193,7 +2247,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 used_context: contextSetId ? [
                     {
                         context_set_id: contextSetId,
-                        file_id: 'file-e2e',
+                        file_id: TALOS_E2E_FILE_ID,
                         chunk_id: 'chunk-e2e',
                         file_name: 'workflow.md',
                         preview: 'Workflow file says approve the deployment checklist.',
@@ -2279,8 +2333,38 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             return json(route, { data: fileUploaded ? [filePayload(), ...importedDriveFiles] : importedDriveFiles })
         }
 
-        if (path === '/api/talos/files/file-e2e' && method === 'GET') {
+        if (path === `/api/talos/files/${TALOS_E2E_FILE_ID}` && method === 'GET') {
             return json(route, { data: fileDetailsPayload() })
+        }
+
+        if (path === '/api/talos/file-authority/grants' && method === 'GET') {
+            const sessionId = url.searchParams.get('session_id')
+            const visibleGrants = sessionId === null
+                ? fileAuthorityGrants
+                : fileAuthorityGrants.filter((grant) => grant.talos_session_id === null || grant.talos_session_id === sessionId)
+            return json(route, { data: visibleGrants })
+        }
+
+        if (path === '/api/talos/file-authority/grants' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            fileAuthorityGrantSequence += 1
+            const grant = fileAuthorityGrantPayload(
+                fileAuthorityGrantId(fileAuthorityGrantSequence),
+                body,
+                fileUploaded ? [filePayload(), ...importedDriveFiles] : importedDriveFiles,
+            )
+            fileAuthorityGrants = [grant, ...fileAuthorityGrants]
+            return json(route, { data: grant }, 201)
+        }
+
+        const fileAuthorityGrantMatch = path.match(/^\/api\/talos\/file-authority\/grants\/([^/]+)$/)
+        if (fileAuthorityGrantMatch && method === 'DELETE') {
+            const grantId = decodeURIComponent(fileAuthorityGrantMatch[1])
+            const existing = fileAuthorityGrants.find((grant) => grant.id === grantId)
+            if (!existing) return json(route, { message: 'File authority grant was not found.' }, 404)
+            const revoked = { ...existing, status: 'revoked', revoked_at: now, updated_at: now }
+            fileAuthorityGrants = fileAuthorityGrants.map((grant) => grant.id === grantId ? revoked : grant)
+            return json(route, { data: revoked })
         }
 
         if (path === '/api/talos/context-sets' && method === 'POST') {

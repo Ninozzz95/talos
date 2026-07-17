@@ -64,6 +64,84 @@ describe('useTalosChat server-persisted procedural responses', () => {
         expect(persistMessage).toHaveBeenCalledWith('session-1', expect.objectContaining({ role: 'user' }))
     })
 
+    it('sends correlated attachment file and authority grant identities to Laravel', async () => {
+        const user = message('user', 'Read the attached file.', 'user-1')
+        const assistant = message('assistant', 'Attachment read.', 'assistant-1')
+        const persistMessage = vi.fn(async () => user)
+        talosFetchMock.mockResolvedValue({
+            text: assistant.content,
+            assistant_message: assistant,
+            agent_turn: { id: 'turn-1', status: 'completed', failure_code: null },
+        } as never)
+
+        await useTalosChat().sendPersistentChat({
+            sessionId: 'session-1',
+            prompt: user.content,
+            modelProfileId: 'profile-1',
+            attachmentFileIds: ['file-1'],
+            attachmentGrantIds: ['grant-1'],
+            persistMessage,
+        })
+
+        const [, options] = talosFetchMock.mock.calls[0]
+        expect(JSON.parse(String(options?.body))).toMatchObject({
+            attachment_file_ids: ['file-1'],
+            attachment_grant_ids: ['grant-1'],
+        })
+    })
+
+    it('persists attachment provenance on a fallback assistant message', async () => {
+        const user = message('user', 'Summarize the attached report.', 'user-attachment')
+        const assistant = message('assistant', 'The report is summarized.', 'assistant-attachment')
+        const usedAttachments = [{
+            file_id: '019f7000-0000-7000-8000-000000000001',
+            file_name: 'report.txt',
+            sha256: 'a'.repeat(64),
+        }]
+        const persistMessage = vi.fn(async (_sessionId, payload) => payload.role === 'user'
+            ? user
+            : {
+                ...assistant,
+                metadata: payload.metadata ?? {},
+            })
+        talosFetchMock.mockResolvedValue({
+            text: assistant.content,
+            mutations: [],
+            errors: [],
+            used_attachments: [
+                ...usedAttachments,
+                { file_id: 'invalid-file', file_name: 'invalid.txt', sha256: 'not-a-sha256' },
+            ],
+            run: {
+                id: 'run-attachment',
+                mode: 'verified_execution',
+                status: 'succeeded',
+                prompt_hash: 'hash',
+                created_at: '2026-07-17T15:00:00Z',
+                updated_at: '2026-07-17T15:00:01Z',
+            },
+        } as never)
+
+        const result = await useTalosChat().sendPersistentChat({
+            sessionId: 'session-1',
+            prompt: user.content,
+            modelProfileId: 'profile-1',
+            attachmentFileIds: [usedAttachments[0].file_id],
+            attachmentGrantIds: ['grant-attachment'],
+            persistMessage,
+        })
+
+        expect(persistMessage).toHaveBeenLastCalledWith('session-1', expect.objectContaining({
+            role: 'assistant',
+            metadata: expect.objectContaining({
+                used_attachments: usedAttachments,
+            }),
+        }))
+        expect(result.assistantMessage?.metadata).toMatchObject({
+            used_attachments: usedAttachments,
+        })
+    })
+
     it('attaches canonical browser evidence to a server-persisted assistant message', async () => {
         const user = message('user', 'Cattura screenshot.', 'user-1')
         const assistant = message('assistant', 'Screenshot captured.', 'assistant-1')
@@ -111,6 +189,44 @@ describe('useTalosChat server-persisted procedural responses', () => {
             used_browser_context: { browser_session_id: 'browser-1' },
         })
         expect(persistMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps a successful upload activity on the server-persisted assistant message', async () => {
+        const user = message('user', 'Upload the attached proof.', 'user-upload')
+        const assistant = message('assistant', 'Proof uploaded with verified evidence.', 'assistant-upload')
+        const activity = {
+            id: 'command-upload',
+            operation: 'upload',
+            status: 'succeeded',
+            label: 'Upload files',
+            run_id: 'run-1',
+            browser_session_id: 'browser-1',
+            artifact_ids: ['screenshot-upload', 'snapshot-upload'],
+            occurred_at: '2026-07-17T14:00:01Z',
+        }
+        const persistMessage = vi.fn(async (_sessionId, payload) => {
+            if (payload.role === 'user') return user
+            throw new Error('The client attempted to persist a duplicate assistant message.')
+        })
+        talosFetchMock.mockResolvedValue({
+            text: assistant.content,
+            assistant_message: assistant,
+            browser_activities: [activity],
+            used_browser_context: { browser_session_id: 'browser-1' },
+            agent_turn: { id: 'turn-upload', status: 'completed', failure_code: null },
+        } as never)
+
+        const result = await useTalosChat().sendPersistentChat({
+            sessionId: 'session-1',
+            prompt: user.content,
+            modelProfileId: 'profile-1',
+            browserMode: { enabled: true, browserSessionId: 'browser-1' },
+            persistMessage,
+        })
+
+        expect(result.assistantMessage?.metadata).toMatchObject({
+            browser_activities: [activity],
+        })
     })
 
     it('keeps canonical evidence visible locally when a legacy assistant is persisted without server-owned metadata', async () => {

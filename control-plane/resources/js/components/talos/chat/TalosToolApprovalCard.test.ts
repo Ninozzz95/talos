@@ -30,6 +30,24 @@ function approval(overrides: Partial<TalosPendingToolApproval> = {}): TalosPendi
     }
 }
 
+function uploadApproval(): TalosPendingToolApproval {
+    return {
+        ...approval(),
+        tool_name: 'browser_file_upload',
+        risk: 'critical',
+        capability: 'browser.upload',
+        expected_effect: 'Upload the listed Vault files through the selected browser file control and capture verified post-action evidence.',
+        target: { ref: 'r-upload', role: 'button', name: 'Upload resume', visible: true },
+        files: [{
+            file_id: 'file-1',
+            name: 'resume.pdf',
+            mime_type: 'application/pdf',
+            size_bytes: 2048,
+            sha256: `sha256:${'c'.repeat(64)}`,
+        }],
+    } as unknown as TalosPendingToolApproval
+}
+
 let app: ReturnType<typeof createApp> | null = null
 
 async function mountCard(item: TalosPendingToolApproval, busy = false) {
@@ -86,5 +104,23 @@ describe('TalosToolApprovalCard', () => {
         expect(mountPoint.querySelector('[data-testid="tool-approval-open-confirm"]')).toBeNull()
         expect(mountPoint.querySelector('[data-testid="tool-approval-reject"]')).toBeNull()
         expect(decisions).toEqual([])
+    })
+
+    it('shows the exact upload destination and safe file metadata before critical approval', async () => {
+        const { mountPoint, decisions } = await mountCard(uploadApproval())
+
+        expect(mountPoint.textContent).toContain('File upload requires approval')
+        expect(mountPoint.textContent).toContain('resume.pdf')
+        expect(mountPoint.textContent).toContain('2 KB')
+        expect(mountPoint.textContent).toContain('Upload resume')
+        expect(mountPoint.textContent).toContain('example.com')
+        expect(mountPoint.textContent).not.toContain('file-1')
+
+        mountPoint.querySelector<HTMLButtonElement>('[data-testid="tool-approval-open-confirm"]')?.click()
+        await nextTick()
+        expect(document.body.textContent).toContain('upload resume.pdf')
+        document.body.querySelector<HTMLButtonElement>('[data-testid="tool-approval-confirm"]')?.click()
+        await nextTick()
+        expect(decisions).toEqual(['approve'])
     })
 })
