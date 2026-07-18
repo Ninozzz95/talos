@@ -19,6 +19,8 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
 {
     public const ADAPTER_VERSION = 'anthropic_messages_v1';
 
+    private const SUPPORTED_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
     public function __construct(
         private readonly string $endpoint,
         private readonly string $apiKey,
@@ -56,6 +58,8 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             imageToolResults: false,
             source: 'adapter_contract',
             limitations: ['Model-level capabilities still require a successful probe.'],
+            nativeInputImages: true,
+            nativeInputDocuments: true,
         );
     }
 
@@ -64,10 +68,13 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
         if (strtolower($request->provider) !== 'anthropic') {
             throw new InvalidArgumentException('Anthropic request requires the anthropic provider.');
         }
+        $messages = $request->resources === []
+            ? $request->messages
+            : $this->messagesWithResources($request);
         $payload = [
             'model' => $request->model,
             'system' => $request->systemPrompt,
-            'messages' => $request->messages,
+            'messages' => $messages,
             'max_tokens' => $request->maxTokens ?? 4096,
         ];
         if ($request->temperature !== null) {
@@ -77,7 +84,59 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             $payload['tools'] = array_map($this->providerTool(...), $request->tools);
         }
 
-        return $this->perform($payload);
+        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function messagesWithResources(ProviderTurnRequest $request): array
+    {
+        $messages = $request->messages;
+        $last = array_key_last($messages);
+        $content = [];
+        foreach ($request->resources as $resource) {
+            if ($resource->isImage()) {
+                if (! in_array($resource->mediaType, self::SUPPORTED_IMAGE_MEDIA_TYPES, true)) {
+                    throw new InvalidArgumentException('Anthropic Messages does not support this image media type.');
+                }
+                $content[] = [
+                    'type' => 'image',
+                    'source' => [
+                        'type' => 'base64',
+                        'media_type' => $resource->mediaType,
+                        'data' => $resource->base64Data(),
+                    ],
+                ];
+                continue;
+            }
+            if ($resource->mediaType !== 'application/pdf') {
+                throw new InvalidArgumentException('Anthropic native documents must be PDF.');
+            }
+            $content[] = [
+                'type' => 'document',
+                'source' => [
+                    'type' => 'base64',
+                    'media_type' => 'application/pdf',
+                    'data' => $resource->base64Data(),
+                ],
+            ];
+        }
+        $content[] = ['type' => 'text', 'text' => $messages[$last]['content']];
+        $messages[$last]['content'] = $content;
+
+        return $messages;
+    }
+
+    private function withoutResourceContinuation(ProviderTurnResponse $response, bool $hasResources): ProviderTurnResponse
+    {
+        if (! $hasResources || $response->kind !== ProviderTurnResponse::TOOL_CALLS) {
+            return $response;
+        }
+
+        return ProviderTurnResponse::failure(new ProviderFailure(
+            code: 'PROVIDER_RESOURCE_TOOL_CALL_UNSUPPORTED',
+            message: 'A provider resource turn returned an undeclared tool call.',
+            retryable: false,
+        ), $response->responseId, $response->stopReason, $response->usage);
     }
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse

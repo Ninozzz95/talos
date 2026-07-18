@@ -407,6 +407,8 @@ switch ($command) {
             'BrowserContractFixture' => "$baseDir/tests/Browser/BrowserContractFixtureTest.php",
             'BrowserOrchestration' => "$baseDir/tests/Browser/BrowserOrchestrationTest.php",
             'ProceduralToolCompiler' => "$baseDir/tests/ProceduralToolCompilerTest.php",
+            'ProviderInputResource' => "$baseDir/tests/ProviderInputResourceTest.php",
+            'ProviderCapabilities' => "$baseDir/tests/ProviderCapabilitiesTest.php",
             'ProviderTurnAdapter' => "$baseDir/tests/ProviderTurnAdapterTest.php",
             'OpenAiResponsesTurnAdapter' => "$baseDir/tests/OpenAiResponsesTurnAdapterTest.php",
             'AnthropicMessagesTurnAdapter' => "$baseDir/tests/AnthropicMessagesTurnAdapterTest.php",

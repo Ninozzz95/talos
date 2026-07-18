@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { createTalosPlaywrightWebServer } from '../tests/e2e/helpers/talosPlaywrightServer.ts'
 
 test('Playwright serializes stateful E2E projects that share one Laravel database', () => {
@@ -39,5 +40,27 @@ test('Playwright web server uses the selected PHP runtime and disables OPcache f
             if (value === undefined) delete process.env[name]
             else process.env[name] = value
         }
+    }
+})
+
+test('Playwright web server keeps Laravel redirects on the configured E2E origin and bypasses stale config', () => {
+    const previousAppUrl = process.env.APP_URL
+    const configCacheUrl = new URL('../storage/framework/testing/talos-playwright-config.php', import.meta.url)
+    const configCachePath = fileURLToPath(configCacheUrl)
+    mkdirSync(new URL('../storage/framework/testing/', import.meta.url), { recursive: true })
+    writeFileSync(configCacheUrl, '<?php return [];\n')
+    process.env.APP_URL = 'http://localhost'
+
+    try {
+        const baseURL = 'http://127.0.0.1:8014'
+        const config = createTalosPlaywrightWebServer(baseURL, false)
+
+        assert.equal(config.env.APP_URL, baseURL)
+        assert.equal(config.env.APP_CONFIG_CACHE, configCachePath)
+        assert.equal(existsSync(configCacheUrl), false)
+    } finally {
+        rmSync(configCacheUrl, { force: true })
+        if (previousAppUrl === undefined) delete process.env.APP_URL
+        else process.env.APP_URL = previousAppUrl
     }
 })

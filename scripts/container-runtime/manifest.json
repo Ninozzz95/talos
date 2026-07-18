@@ -1,0 +1,40 @@
+{
+  "schema_version": "talos.container-runtime.manifest.v1",
+  "windows_x64": {
+    "docker_desktop": {
+      "version": "4.82.0",
+      "build": "233772",
+      "url": "https://desktop.docker.com/win/main/amd64/233772/Docker%20Desktop%20Installer.exe",
+      "sha256": "a5b5837542f2f57fadbb09db90a60c84f8efc0a65f8d6dcd2e5b9fca3a2b87e6",
+      "bytes": 638124464,
+      "archive": "docker-desktop-4.82.0-amd64.exe",
+      "release_url": "https://docs.docker.com/desktop/release-notes/#4820",
+      "license": "Docker Subscription Service Agreement",
+      "license_url": "https://www.docker.com/legal/docker-subscription-service-agreement/",
+      "authenticode_subject": "Docker Inc"
+    },
+    "podman": {
+      "version": "6.0.1",
+      "commit": "4cabbe6",
+      "url": "https://github.com/podman-container-tools/podman/releases/download/v6.0.1/podman-remote-release-windows_amd64.zip",
+      "sha256": "127d02930ac25c80088817502e833916cd3ee1ed1e771dbd42a4ce81b2e0d415",
+      "bytes": 30837400,
+      "binary_sha256": "1ca3b88816a4f217d00a557c76dd279094185fda4122029b74eb5714dcef34f7",
+      "binary_bytes": 45108736,
+      "archive": "podman-remote-release-windows-amd64-6.0.1.zip",
+      "archive_root": "podman-6.0.1",
+      "release_url": "https://github.com/podman-container-tools/podman/releases/tag/v6.0.1",
+      "license": "Apache-2.0"
+    },
+    "compose": {
+      "version": "5.1.4",
+      "commit": "4732a2e",
+      "url": "https://github.com/docker/compose/releases/download/v5.1.4/docker-compose-windows-x86_64.exe",
+      "sha256": "e1a8faff28c7433635201a2222171b727f33ecdb0ed367e54d162d00432f39aa",
+      "bytes": 33647104,
+      "archive": "docker-compose-windows-x86_64-5.1.4.exe",
+      "release_url": "https://github.com/docker/compose/releases/tag/v5.1.4",
+      "license": "Apache-2.0"
+    }
+  }
+}

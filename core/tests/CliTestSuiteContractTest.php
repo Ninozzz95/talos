@@ -43,6 +43,8 @@ function testMainCliRunsContractTests(): void
         'Browser/BrowserContractFixtureTest.php',
         'Browser/BrowserOrchestrationTest.php',
         'ProceduralToolCompilerTest.php',
+        'ProviderInputResourceTest.php',
+        'ProviderCapabilitiesTest.php',
         'ProviderTurnAdapterTest.php',
         'OpenAiResponsesTurnAdapterTest.php',
         'AnthropicMessagesTurnAdapterTest.php',

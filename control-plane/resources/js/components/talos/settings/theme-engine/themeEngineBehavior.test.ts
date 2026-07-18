@@ -253,7 +253,7 @@ describe('Theme Engine behavior', () => {
         await clickByText(container, 'Save motion')
         await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
         expect(settingsHarness.updateSettings.mock.calls[0]?.[0]?.preferences?.theme_motion_v6).toMatchObject({
-            mode: 'adaptive',
+            mode: 'off',
             interface_enabled: true,
             interface: { profile: 'preset' },
         })
@@ -271,13 +271,15 @@ describe('Theme Engine behavior', () => {
         await vi.waitFor(() => expect(container.textContent).toContain('motion write rejected'))
         expect(container.textContent).toContain('Retry last change')
         expect(container.querySelector('[aria-label="Motion mode Complex"]')?.getAttribute('aria-pressed')).toBe('false')
-        expect(container.querySelector('[aria-label="Motion mode Adaptive"]')?.getAttribute('aria-pressed')).toBe('true')
+        expect(container.querySelector('[aria-label="Motion mode Off"]')?.getAttribute('aria-pressed')).toBe('true')
     })
 
     it('runs a stable real-scene product preview without persisting draft interactions', async () => {
         const container = mountTheme()
         await nextTick()
         await clickByText(container, 'Motion')
+        await clickByText(container, 'Adaptive')
+        await nextTick()
         const preview = container.querySelector<HTMLElement>('[data-testid="talos-motion-v6-preview"]')
         expect(preview).toBeTruthy()
         expect(preview?.querySelector('[data-talos-motion-stage]')).toBeTruthy()

@@ -21,6 +21,8 @@ final readonly class ProviderCapabilities
         public string $source,
         public bool $modelVerified = false,
         public array $limitations = [],
+        public bool $nativeInputImages = false,
+        public bool $nativeInputDocuments = false,
     ) {
         ToolContractGuard::nonEmptyString($provider, 'Provider capability provider', 64);
         ToolContractGuard::nonEmptyString($adapterVersion, 'Provider capability adapter version', 128);
@@ -43,6 +45,8 @@ final readonly class ProviderCapabilities
             'stateful_continuation' => $this->statefulContinuation,
             'reasoning_continuation_state' => $this->reasoningContinuationState,
             'image_tool_results' => $this->imageToolResults,
+            'native_input_images' => $this->nativeInputImages,
+            'native_input_documents' => $this->nativeInputDocuments,
             'source' => $this->source,
             'model_verified' => $this->modelVerified,
             'limitations' => $this->limitations,

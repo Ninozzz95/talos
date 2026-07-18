@@ -4,15 +4,22 @@ declare(strict_types=1);
 
 namespace App\Services\Admin;
 
+use App\Services\FileIngestion\TalosFilePipelineHealth;
 use App\Services\Talos\Browser\TalosBrowserWorkerProtocol;
+use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 final class TalosReadinessService
 {
+    public function __construct(
+        private readonly TalosFilePipelineHealth $filePipelineHealth,
+        private readonly Migrator $migrator,
+    ) {}
+
     /**
-     * @return array{ready: bool, status: string, checks: array<string, array{status: string, detail: string}>, timestamp: string}
+     * @return array{ready: bool, status: string, checks: array<string, array{status: string, detail: string, blocking?: bool}>, timestamp: string}
      */
     public function report(): array
     {
@@ -22,12 +29,14 @@ final class TalosReadinessService
             'migrations' => $this->migrationsCheck(),
             'storage' => $this->storageCheck(),
             'queue' => $this->queueCheck(),
+            ...$this->filePipelineHealth->checks(),
             'validator' => $this->validatorCheck(),
             'browser_worker' => $this->browserWorkerCheck(),
         ];
 
         $ready = ! collect($checks)->contains(
-            fn (array $check): bool => $check['status'] !== 'healthy',
+            fn (array $check): bool => ($check['blocking'] ?? true)
+                && ($check['status'] ?? null) !== 'healthy',
         );
 
         return [
@@ -72,11 +81,29 @@ final class TalosReadinessService
     private function migrationsCheck(): array
     {
         try {
-            if (! Schema::hasTable('migrations')) {
+            if (! $this->migrator->repositoryExists()) {
                 return $this->check('failed', 'migrations table is missing.');
             }
 
-            return $this->check('healthy', 'migrations table is available.');
+            $paths = array_values(array_unique([
+                database_path('migrations'),
+                ...$this->migrator->paths(),
+            ]));
+            $migrationFiles = $this->migrator->getMigrationFiles($paths);
+            $ran = $this->migrator->getRepository()->getRan();
+            $pending = array_diff(array_keys($migrationFiles), $ran);
+
+            if ($pending !== []) {
+                $count = count($pending);
+                $label = $count === 1 ? 'migration' : 'migrations';
+
+                return $this->check(
+                    'failed',
+                    "{$count} pending {$label}. Run php artisan migrate --force before serving traffic.",
+                );
+            }
+
+            return $this->check('healthy', 'all migration files are applied.');
         } catch (\Throwable $exception) {
             return $this->check('failed', $exception->getMessage());
         }

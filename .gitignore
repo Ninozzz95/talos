@@ -14,6 +14,10 @@ control-plane/.env
 *.log
 core/tests/benchmarks/logs/*.json
 .phpunit.cache/
+__pycache__/
+*.py[codz]
+.pytest_cache/
+.venv/
 .DS_Store
 Thumbs.db
 docs/superpowers/

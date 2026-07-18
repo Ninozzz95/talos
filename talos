@@ -13,11 +13,11 @@ usage() {
 talos - AVM/TALOS deployment helper
 
 Usage:
-  talos up              Start the complete Docker stack from a clean checkout
+  talos up              Start the complete stack from a clean checkout
   talos dev             Bootstrap native tools/dependencies and start all dev services
-  talos down            Stop the Docker Compose stack
+  talos down            Stop the container stack
   talos logs            Follow stack logs
-  talos doctor          Check Docker and native development readiness
+  talos doctor          Check container-runtime and native development readiness
   talos doctor --repair Repair the repo-local native toolchain and dependencies
   talos open            Open the TALOS URL in the default browser
   talos fresh           Development-only reset of Compose volumes, then start
@@ -28,6 +28,8 @@ Global options:
 
 Environment:
   TALOS_NO_BOOT=1       Disable bootstrap output for this invocation
+  TALOS_CONTAINER_RUNTIME=auto|docker|podman
+                        Select the container runtime (default: auto)
 HELP
 }
 
@@ -97,7 +99,7 @@ boot_sequence() {
     printf '\r  [OK] %s\n' "$phase"
   done
 
-  printf 'Runtime profile: Docker-first TALOS workspace\n'
+  printf 'Runtime profile: adaptive TALOS container workspace\n'
   printf 'Operator mode: HMI-first, fail-closed, evidence-ready\n\n'
   printf '\033[?25h'
 }
@@ -127,6 +129,19 @@ effective_env_value() {
   env_value "$key" || true
 }
 
+RUNTIME_ADAPTER="$ROOT_DIR/scripts/container-runtime/runtime.sh"
+if [ -f "$RUNTIME_ADAPTER" ]; then
+  # shellcheck source=scripts/container-runtime/runtime.sh
+  source "$RUNTIME_ADAPTER"
+fi
+
+require_runtime_adapter() {
+  if ! declare -F talos_runtime_ensure >/dev/null 2>&1; then
+    echo "TALOS container runtime adapter is missing: $RUNTIME_ADAPTER" >&2
+    return 1
+  fi
+}
+
 compose_profile_is_enabled() {
   local profile="$1"
   local profiles
@@ -139,24 +154,51 @@ compose_profile_is_enabled() {
   esac
 }
 
+ocr_is_enabled() {
+  is_truthy "$(effective_env_value TALOS_OCR_ENABLED)"
+}
+
+ocr_startup_timeout_seconds() {
+  local timeout
+  timeout="$(effective_env_value TALOS_OCR_STARTUP_TIMEOUT_SECONDS)"
+  timeout="${timeout:-900}"
+
+  if [[ ! "$timeout" =~ ^[0-9]+$ ]] || [ "$timeout" -lt 60 ] || [ "$timeout" -gt 3600 ]; then
+    echo "TALOS_OCR_STARTUP_TIMEOUT_SECONDS must be an integer between 60 and 3600." >&2
+    return 1
+  fi
+
+  printf '%s\n' "$timeout"
+}
+
 compose() {
   local compose_args=()
   if [ "$(effective_env_value TALOS_WEB_SEARCH_PROVIDER)" = "searxng" ] \
     && ! compose_profile_is_enabled search; then
     compose_args+=(--profile search)
   fi
-  docker compose "${compose_args[@]}" "$@"
+  if ocr_is_enabled && ! compose_profile_is_enabled ocr; then
+    compose_args+=(--profile ocr)
+  fi
+  talos_runtime_compose "${compose_args[@]}" "$@"
 }
 
 compose_all_profiles() {
-  docker compose --profile "*" "$@"
+  talos_runtime_compose_all_profiles "$@"
 }
 
 reconcile_stale_search_service() {
   if [ "$(effective_env_value TALOS_WEB_SEARCH_PROVIDER)" != "searxng" ] \
     && ! compose_profile_is_enabled search; then
     echo "Reconciling stale auto-managed SearXNG service"
-    docker compose --profile search rm -sf searxng
+    talos_runtime_compose --profile search rm -sf searxng
+  fi
+}
+
+reconcile_stale_ocr_services() {
+  if ! ocr_is_enabled && ! compose_profile_is_enabled ocr; then
+    echo "Reconciling stale auto-managed OCR services"
+    talos_runtime_compose --profile ocr rm -sf ocr-worker ocr-runtime ocr-model-fetch
   fi
 }
 
@@ -241,28 +283,35 @@ provision_browser_action_keypair() {
     return
   fi
 
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Node.js or Docker is required to provision browser action capabilities." >&2
+  if ! declare -F talos_runtime_cli >/dev/null 2>&1 \
+    || ! talos_runtime_require_existing; then
+    echo "Node.js or a healthy TALOS container runtime is required to provision browser action capabilities." >&2
     return 1
   fi
 
   local relative_path="${env_file#"$ROOT_DIR"/}"
   local mount_root="$ROOT_DIR"
-  local docker_user=()
-  local docker_environment=()
+  local runtime_user=()
+  local use_msys_path_guard=0
   if command -v cygpath >/dev/null 2>&1; then
     mount_root="$(cygpath -w "$ROOT_DIR")"
-    docker_environment+=(MSYS_NO_PATHCONV=1)
+    use_msys_path_guard=1
   elif command -v id >/dev/null 2>&1; then
-    docker_user=(--user "$(id -u):$(id -g)")
+    runtime_user=(--user "$(id -u):$(id -g)")
   fi
 
-  TALOS_BROWSER_ACTION_ENV_FILE="$env_file" env "${docker_environment[@]}" docker run --rm \
-    "${docker_user[@]}" \
-    --volume "$mount_root:/workspace" \
-    --workdir /workspace/control-plane \
-    node:24.18.0-bookworm-slim \
-    node scripts/browser-action-keypair.mjs --env-file "/workspace/$relative_path"
+  (
+    export TALOS_BROWSER_ACTION_ENV_FILE="$env_file"
+    if [ "$use_msys_path_guard" -eq 1 ]; then
+      export MSYS_NO_PATHCONV=1
+    fi
+    talos_runtime_cli run --rm \
+      "${runtime_user[@]}" \
+      --volume "$mount_root:/workspace" \
+      --workdir /workspace/control-plane \
+      node:24.18.0-bookworm-slim \
+      node scripts/browser-action-keypair.mjs --env-file "/workspace/$relative_path"
+  )
 }
 
 ensure_env() {
@@ -287,6 +336,24 @@ ensure_env() {
     echo "Generated the internal SearXNG credential in .env"
   fi
 
+  if ocr_is_enabled; then
+    ocr_startup_timeout_seconds >/dev/null
+
+    local ocr_worker_token
+    ocr_worker_token="$(env_value TALOS_OCR_WORKER_TOKEN || true)"
+    if [[ ! "$ocr_worker_token" =~ ^[a-f0-9]{64}$ ]]; then
+      set_env_value .env TALOS_OCR_WORKER_TOKEN "$(random_hex_32)"
+      echo "Generated the internal OCR worker credential in .env"
+    fi
+
+    local ocr_vllm_api_key
+    ocr_vllm_api_key="$(env_value TALOS_OCR_VLLM_API_KEY || true)"
+    if [[ ! "$ocr_vllm_api_key" =~ ^[a-f0-9]{64}$ ]]; then
+      set_env_value .env TALOS_OCR_VLLM_API_KEY "$(random_hex_32)"
+      echo "Generated the internal vLLM credential in .env"
+    fi
+  fi
+
   local app_key
   app_key="$(env_value APP_KEY || true)"
   if [[ ! "$app_key" =~ ^base64:[A-Za-z0-9+/]{43}=$ ]]; then
@@ -296,19 +363,10 @@ ensure_env() {
   chmod 600 .env
 }
 
-require_docker() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker is required for 'talos up'. Install Docker or run 'talos dev'." >&2
-    return 1
-  fi
-  if ! compose version >/dev/null 2>&1; then
-    echo "The Docker Compose plugin is required for 'talos up'." >&2
-    return 1
-  fi
-  if ! docker info >/dev/null 2>&1; then
-    echo "The Docker daemon is not reachable. Start Docker and retry." >&2
-    return 1
-  fi
+require_container_runtime() {
+  require_runtime_adapter
+  talos_runtime_ensure
+  printf 'Container runtime: %s\n' "$(talos_runtime_version)"
 }
 
 native_bootstrap() {
@@ -448,8 +506,15 @@ wait_for_ready() {
   url="$(talos_url)"
   local ready_url="${url%/}/readyz"
 
+  local ready_attempts=30
+  if ocr_is_enabled; then
+    local ocr_startup_timeout
+    ocr_startup_timeout="$(ocr_startup_timeout_seconds)"
+    ready_attempts=$(( (ocr_startup_timeout + 1) / 2 ))
+  fi
+
   local attempt
-  for attempt in $(seq 1 30); do
+  for attempt in $(seq 1 "$ready_attempts"); do
     if command -v curl >/dev/null 2>&1 && curl -fsS "$ready_url" >/dev/null 2>&1; then
       echo "Readiness OK: $ready_url"
       return 0
@@ -465,7 +530,11 @@ wait_for_ready() {
 
   echo "Readiness failed: $ready_url" >&2
   compose ps || true
-  compose logs --tail=120 talos validator browser-worker || true
+  local ocr_services=()
+  if ocr_is_enabled; then
+    ocr_services+=(ocr-worker ocr-runtime ocr-model-fetch)
+  fi
+  compose logs --tail=120 talos validator browser-worker clamav tika "${ocr_services[@]}" || true
   echo "Run: ./talos doctor" >&2
   return 1
 }
@@ -531,26 +600,22 @@ browser_worker_ownership_doctor() {
 
 doctor() {
   local repair="${1:-}"
-  local docker_available=0
-  local compose_available=0
-  local docker_ready=0
+  local container_ready=0
   local native_ready=0
   local browser_ownership_ready=0
   echo "TALOS Doctor"
   echo "------------"
 
-  if command -v docker >/dev/null 2>&1; then
-    echo "docker              OK   $(docker --version)"
-    docker_available=1
+  if declare -F talos_runtime_doctor >/dev/null 2>&1 \
+    && talos_runtime_doctor; then
+    container_ready=1
   else
-    echo "docker              WARN Docker CLI is not available"
+    if ! declare -F talos_runtime_doctor >/dev/null 2>&1; then
+      echo "container runtime   WARN adapter is missing"
+    fi
   fi
-
-  if [ "$docker_available" -eq 1 ] && compose version >/dev/null 2>&1; then
-    echo "docker compose      OK   $(compose version)"
-    compose_available=1
-  else
-    echo "docker compose      WARN Docker Compose plugin is not available"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker              WARN Docker CLI is not available"
   fi
 
   if [ -f .env ]; then
@@ -565,18 +630,15 @@ doctor() {
     echo "compose file        FAIL docker-compose.yml missing"
   fi
 
-  if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ]; then
-    if ! docker info >/dev/null 2>&1; then
-      echo "docker daemon       WARN unavailable"
-    elif compose config >/dev/null 2>&1; then
-      echo "docker daemon       OK   reachable"
+  if [ "$container_ready" -eq 1 ]; then
+    if compose config >/dev/null 2>&1; then
       echo "compose config      OK   valid"
-      docker_ready=1
     else
       echo "compose config      FAIL invalid"
+      container_ready=0
     fi
   else
-    echo "compose config      SKIP Docker Compose unavailable"
+    echo "compose config      SKIP container runtime unavailable"
   fi
 
   if [ "$repair" = "--repair" ]; then
@@ -613,7 +675,7 @@ doctor() {
     browser_ownership_ready=1
   fi
 
-  if [ "$docker_available" -eq 1 ] && [ "$compose_available" -eq 1 ] && compose ps >/dev/null 2>&1; then
+  if [ "$container_ready" -eq 1 ] && compose ps >/dev/null 2>&1; then
     compose ps
   fi
 
@@ -621,9 +683,9 @@ doctor() {
   url="$(talos_url)"
   if command -v curl >/dev/null 2>&1; then
     if curl -fsS "${url%/}/readyz" >/dev/null 2>&1; then
-      echo "docker readyz       OK   ${url%/}/readyz"
+      echo "container readyz    OK   ${url%/}/readyz"
     else
-      echo "docker readyz       WARN ${url%/}/readyz is not healthy or not running"
+      echo "container readyz    WARN ${url%/}/readyz is not healthy or not running"
     fi
     if curl -fsS "http://127.0.0.1:8000/readyz" >/dev/null 2>&1; then
       echo "native readyz       OK   http://127.0.0.1:8000/readyz"
@@ -632,7 +694,7 @@ doctor() {
     fi
   fi
 
-  if { [ "$docker_ready" -eq 1 ] || [ "$native_ready" -eq 1 ]; } \
+  if { [ "$container_ready" -eq 1 ] || [ "$native_ready" -eq 1 ]; } \
     && [ "$browser_ownership_ready" -eq 1 ]; then
     return 0
   fi
@@ -657,11 +719,18 @@ maybe_boot "$cmd"
 
 case "$cmd" in
   up)
-    require_docker
+    require_container_runtime
     print_step "Preparing environment"
     ensure_env
+    print_step "Validating stack configuration"
+    compose config >/dev/null
     reconcile_stale_search_service
-    print_step "Building and starting TALOS, queue, validator, and browser worker"
+    reconcile_stale_ocr_services
+    if ocr_is_enabled; then
+      print_step "Building and starting TALOS, queue, validator, browser worker, ClamAV, Tika, OCR worker, and DeepSeek OCR-2 runtime"
+    else
+      print_step "Building and starting TALOS, queue, validator, browser worker, ClamAV, and Tika"
+    fi
     compose up -d --build
     print_step "Checking readiness"
     wait_for_ready
@@ -677,10 +746,14 @@ case "$cmd" in
     (cd "$ROOT_DIR/control-plane" && "$ROOT_DIR/.tools/bin/composer.cmd" run dev)
     ;;
   down)
+    require_runtime_adapter
+    talos_runtime_require_existing
     print_step "Stopping TALOS stack"
     compose_all_profiles down
     ;;
   logs)
+    require_runtime_adapter
+    talos_runtime_require_existing
     compose logs -f
     ;;
   doctor)
@@ -691,17 +764,21 @@ case "$cmd" in
     open_url "$(active_talos_url)"
     ;;
   fresh)
-    require_docker
-    echo "This removes local TALOS Docker volumes. Use only for development."
+    require_container_runtime
+    echo "This removes local TALOS container volumes. Use only for development."
     read -r -p "Type RESET to continue: " confirm
     if [ "$confirm" != "RESET" ]; then
       echo "Aborted."
       exit 1
     fi
-    print_step "Resetting Docker volumes"
+    print_step "Resetting container volumes"
     compose_all_profiles down -v
     print_step "Preparing environment"
     ensure_env
+    print_step "Validating stack configuration"
+    compose config >/dev/null
+    reconcile_stale_search_service
+    reconcile_stale_ocr_services
     print_step "Building and starting fresh TALOS stack"
     compose up -d --build
     print_step "Checking readiness"

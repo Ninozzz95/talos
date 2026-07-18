@@ -243,13 +243,41 @@ Every user-visible feature must be backed by real behavior or clearly labeled as
 ### Fresh-clone deployment contract
 
 - `.tools/` is ignored, disposable runtime state. Public startup must never assume it was copied from another checkout.
-- `./talos up` is Docker-first and must not require host PHP, Composer, Node, or npm. Laravel app-key generation and migrations happen in the container.
+- `./talos up` is container-runtime adaptive and must not require host PHP,
+  Composer, Node, or npm. A healthy Docker installation remains preferred;
+  otherwise supported Windows workstations bootstrap pinned Docker Desktop and
+  Windows Server bootstraps pinned Podman Machine with Hyper-V plus the pinned
+  Compose provider. Laravel app-key generation and migrations happen in the
+  container.
+- `TALOS_CONTAINER_RUNTIME=auto|docker|podman` is the stable selection contract.
+  An explicit provider never falls back to another provider. Automatic installation is Windows-only;
+  macOS and Linux require a healthy compatible runtime supplied by the operator.
+- `TALOS_PODMAN_MACHINE=talos-machine` is the stable TALOS-owned machine and
+  connection contract. Every Podman probe, raw engine command, and Compose
+  invocation must bind it explicitly; never depend on Podman's global default.
+- Runtime acquisition must use `scripts/container-runtime/manifest.json`, fixed
+  HTTPS origins, exact byte counts and SHA-256, safe archive extraction,
+  explicit Docker Desktop license acceptance, and a visible UAC/restart fence.
+  Before elevation, resolve system tools from the Windows system directory,
+  verify the extracted Podman binary pin, and keep all approved inputs
+  read-fenced until the elevated child exits. The source checkout is the stated
+  trust root and must never be described as publisher-authenticated.
+  Over-the-shoulder UAC must preserve the original caller SID and grant only
+  Hyper-V Administrators membership required by Podman, never local
+  Administrators membership.
+  A persisted state file never substitutes for real engine and Compose probes.
+- `./talos down` and `./talos logs` may use only an existing healthy runtime;
+  they must never install, elevate, restart Windows, or delete volumes.
 - `./talos dev` owns pinned Windows toolchain bootstrap, locked dependency installation, SQLite initialization, and the single native dev stack.
 - Native runtime artifacts come only from the fixed HTTPS URLs and SHA-256 digests in `scripts/toolchain/manifest.json`; checksum or archive validation failures are fail-closed.
 - PHP configuration and launchers must remain relocatable. Never write a user checkout path into tracked files or generated `php.ini`.
 - Do not run `npm ci`, Composer repair, or migrations concurrently with an active native setup. The `.tools/.native-setup.lock` contract guards `talos dev` and `talos doctor --repair`.
-- Docker persistence must not mount over `control-plane/database/`, because that hides tracked migrations. SQLite runtime data belongs under the persisted storage volume.
-- The complete Docker stack includes TALOS, queue, validator, browser worker, and the PHP core. The public TALOS image uses nginx plus PHP-FPM, not `artisan serve`.
+- Container persistence must not mount over `control-plane/database/`, because
+  that hides tracked migrations. SQLite runtime data belongs under the
+  persisted storage volume.
+- The complete Compose stack includes TALOS, queue, validator, browser worker,
+  and the PHP core. The public TALOS image uses nginx plus PHP-FPM, not
+  `artisan serve`.
 
 Run verification before claiming completion:
 

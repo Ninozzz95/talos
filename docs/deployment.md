@@ -11,8 +11,8 @@ The repository supports two deployment paths:
 
 - native development, useful while editing Laravel, Vue, the validator, and the
   PHP core;
-- Docker-first deployment, useful for local demos and private production-like
-  installs.
+- adaptive container deployment, useful for local demos and private
+  production-like installs.
 
 ## Canonical Topology
 
@@ -22,6 +22,8 @@ Browser
        -> SQLite/PostgreSQL database
        -> Laravel queue worker
        -> Node validator on private/internal URL
+       -> ClamAV malware scanner on private/internal URL
+       -> Apache Tika extractor on private/internal URL
        -> PHP Kadmos core through Laravel/core integration points
 
 Operator terminal
@@ -66,6 +68,18 @@ No manual runtime or package-manager setup is required on Windows. The command:
    giving only the private half to Laravel/queue and only the public half to the
    Browser Worker;
 9. runs migrations and starts validator, Laravel, queue, Vite, and browser worker.
+
+Native development keeps the web stack usable when Docker is absent, but real
+PDF/Office ingestion is fail-closed until the file sidecars are available. To
+exercise the production-equivalent ingestion path while running TALOS natively:
+
+```bash
+docker compose up -d clamav tika
+```
+
+The sidecars bind only to `127.0.0.1` on host ports `13310` and `19998` by
+default. `control-plane/.env` must use those local endpoints. Text, PDF and
+Office uploads never receive an implicit development scanner bypass.
 
 The command stays attached to the terminal. Stop the complete stack with
 `Ctrl+C`. A second `talos dev` or repair process fails closed while the first is
@@ -132,10 +146,10 @@ cd control-plane
 ./talos doctor --repair
 ```
 
-Doctor reports Docker and native profiles independently. It treats a missing
+Doctor reports the selected container runtime and native profiles independently. It treats a missing
 Chromium executable as a failed native profile even when `node_modules` is
 present. `--repair` may rebuild only ignored local runtime/dependency state; it
-never modifies system PHP, Node, Composer, Docker, or user files outside the
+never modifies system PHP, Node, Composer, container runtimes, or user files outside the
 checkout, and it exits immediately if any repair step fails.
 
 If PHP reports missing `curl`, `openssl`, `pdo_sqlite`, or other extensions
@@ -241,7 +255,7 @@ cd core
 
 ## TALOS Production Deployment
 
-Production should be Docker-first. The operator experience is:
+Production-like startup is container-first. The operator experience is:
 
 ```bash
 git clone https://github.com/Ninozzz95/agent-virtual-machine.git
@@ -250,12 +264,113 @@ cd agent-virtual-machine
 ```
 
 On Windows Command Prompt use `talos.cmd up`. No PHP, Composer, Node, npm, or
-pre-existing `.tools` directory is required for this Docker path. The launcher
+pre-existing `.tools` directory is required for this path. The launcher
 creates `.env`, generates the internal browser-worker credential and a valid
 32-byte Laravel `APP_KEY`, builds all images, and returns nonzero with bounded
 service logs when `/readyz` fails. On Unix the generated `.env` is restricted to
 mode `0600`; Compose injects it with `env_file` rather than mounting it into the
 application filesystem.
+
+`APP_URL` is the canonical browser origin for every generated redirect, asset,
+OAuth callback and absolute application URL. It must include the externally
+reachable scheme, host and non-default port, for example
+`http://localhost:8088` for the default loopback deployment or
+`https://talos.example.internal` behind a trusted HTTPS proxy. TALOS does not
+derive this authority from an untrusted or port-stripped `Host` header. When
+`APP_BIND` or `APP_PORT` changes, update `APP_URL` to the matching public origin
+before startup.
+
+### Adaptive container runtime bootstrap
+
+`./talos up` uses one provider-neutral command surface. With
+`TALOS_CONTAINER_RUNTIME=auto`, TALOS first reuses a healthy Docker runtime,
+then a healthy Podman runtime. If neither is healthy, automatic installation is
+available on supported x64 Windows hosts:
+
+- Windows 10/11 workstations install Docker Desktop `4.82.0` (build `233772`)
+  in per-user WSL 2 mode.
+- Windows Server uses Podman `6.0.1` with Podman Machine on Hyper-V and the
+  Docker Compose `5.1.4` provider. Docker Desktop is never installed on Windows
+  Server because that platform is not supported upstream.
+
+The bootstrap reads `scripts/container-runtime/manifest.json`, accepts only the
+tracked HTTPS origins and redirects, checks the exact byte count and SHA-256,
+validates archive paths, and stages replacements atomically. The extracted
+Podman executable has its own byte-count and SHA-256 pin; a changed copy is
+restored from the verified archive before it can execute. Docker Desktop is
+also required to have a valid `Docker Inc` Authenticode signature. Downloads,
+binaries, the Podman machine adapter and lifecycle state live under the ignored
+`.tools/container-runtime` directory. Runtime state is evidence for Doctor, not
+authority: every command probes the real engine and Compose provider again.
+
+Docker Desktop installation is performed only after the operator reviews and
+accepts the Docker Subscription Service Agreement. Interactive startup asks the
+operator to type `ACCEPT`. Unattended provisioning must make that decision
+explicitly:
+
+```bash
+TALOS_DOCKER_DESKTOP_LICENSE_ACCEPTED=1 ./talos up
+```
+
+Machine-wide WSL 2 or Hyper-V preparation uses a visible UAC boundary. Run this
+operation only from a trusted checkout. The bootstrap resolves PowerShell, WSL,
+and system tools from the protected Windows system directory, and the approved
+bootstrap, module, manifest, and Podman executable remain read-fenced and
+SHA-256 checked while the elevated process runs. When a standard user supplies
+separate administrator credentials at UAC, TALOS preserves the original
+requesting user SID and grants that account only membership in Hyper-V Administrators;
+it does not add the account to Administrators. If
+Windows reports a restart required, the launcher exits without claiming
+readiness or starting the stack. Restart Windows once, return to the checkout,
+and rerun the same `./talos up` command. UAC cancellation, download failure,
+checksum mismatch, machine startup timeout, or Compose failure remains a
+controlled nonzero result.
+
+Before initializing a Hyper-V Podman Machine, TALOS validates the host's
+configured default virtual-machine and virtual-disk directories. Missing
+directories are created through the same UAC boundary only when both settings
+are absolute paths on existing local drives. TALOS does not rewrite the
+Hyper-V defaults. UNC paths, relative paths, unavailable drives, or a file
+where a directory is required fail closed; `./talos doctor` reports
+`hyper-v storage WARN preparation_required` until the condition is resolved.
+
+Provider selection can be pinned without changing the public commands:
+
+```env
+TALOS_CONTAINER_RUNTIME=auto
+# TALOS_CONTAINER_RUNTIME=docker
+# TALOS_CONTAINER_RUNTIME=podman
+TALOS_PODMAN_MACHINE=talos-machine
+```
+
+`TALOS_PODMAN_MACHINE` is both the Podman Machine name and the explicit Podman
+connection used by every TALOS engine, health, and Compose command. Changing it
+selects a separate operator-managed machine; TALOS never falls back to Podman's
+unrelated global default connection.
+
+On a healthy Podman installation, `./talos doctor` also inspects that exact
+named machine through Podman's documented formatted fields. It reports the VM
+provider (for example `hyperv`), machine name and state, container-engine
+health, Podman version, and Compose version. These checks are read-only and do
+not change Podman's default connection, start another machine, request UAC, or
+repair the host. A missing, mismatched, or stopped configured machine keeps
+the container-runtime section non-ready and points the operator back to
+`./talos up`. The overall Doctor command may still succeed when the independent
+native-development profile is healthy; it never promotes the failed container
+profile or validates its Compose configuration.
+
+An explicit provider never falls back to the other provider. `./talos down` and
+`./talos logs` require an already healthy runtime and never trigger installation.
+Use `./talos doctor` to inspect the selected provider, engine or machine health,
+Compose health, restart state, and native development profile.
+
+TALOS does not uninstall a host runtime or delete user data during rollback.
+Stop the stack with `./talos down`, change `TALOS_CONTAINER_RUNTIME`, and rerun
+`./talos up`. Podman binaries and bootstrap cache can be removed by deleting
+only `.tools/container-runtime` after the stack is stopped; Compose volumes are
+retained unless the operator explicitly runs the development-only `talos fresh`
+flow. Automatic runtime installation is currently Windows-only; macOS and Linux
+must provide a healthy compatible Docker or Podman runtime.
 
 Then open:
 
@@ -284,6 +399,10 @@ The production compose stack contains:
 - `validator`: Node/Fastify validator on an internal network URL.
 - `browser-worker`: Playwright/Chromium worker on an internal, token-protected
   URL.
+- `clamav`: digest-pinned ClamAV 1.5.3 daemon; Laravel sends bytes through
+  `INSTREAM`, never a host path.
+- `tika`: digest-pinned Apache Tika 3.3.1 minimal server for bounded PDF/OOXML
+  extraction. It is not treated as a security boundary.
 - `searxng`: optional internal metasearch service, enabled only through the
   Compose `search` profile. Its API is not published on a host port.
 
@@ -292,8 +411,13 @@ development server. The container monitors both processes and exits when either
 one terminates, allowing the restart policy to recover the complete web tier.
 
 `/readyz` is stricter than process liveness: it verifies Laravel, database,
-migrations, storage, queue configuration, validator health, and the authenticated
-browser-worker `/ready` endpoint. That endpoint launches Chromium and reports
+migrations, storage, queue configuration, validator health, the pinned ClamAV
+and Tika protocols, and the authenticated browser-worker `/ready` endpoint.
+The migration check compares every tracked migration file with Laravel's
+migration repository; any pending file returns HTTP 503 with the remedy
+`php artisan migrate --force` instead of allowing missing-column failures to
+surface later in user requests.
+That endpoint launches Chromium and reports
 failure when the browser runtime is missing or cannot start. TALOS requires both
 `talos.browser.worker.v2` and the exact
 `talos_browser_hmi_runtime_v2.1.0` compatibility identifier, plus the ES256
@@ -376,6 +500,24 @@ TALOS_SEARXNG_SECRET=
 TALOS_BROWSER_SEARCH_ENABLED=false
 TALOS_BROWSER_SEARCH_ORIGIN=
 
+TALOS_FILE_SIDECAR_BIND=127.0.0.1
+TALOS_CLAMAV_HOST_PORT=13310
+TALOS_TIKA_HOST_PORT=19998
+TALOS_CLAMAV_EXPECTED_VERSION=1.5.3
+TALOS_TIKA_EXPECTED_VERSION=3.3.1
+TALOS_TIKA_MAX_RESPONSE_BYTES=10485760
+TALOS_TIKA_MAX_EXTRACTED_BYTES=5242880
+
+# Optional GPU OCR profile. Disabled in the default stack.
+TALOS_OCR_ENABLED=false
+TALOS_OCR_WORKER_TOKEN=
+TALOS_OCR_VLLM_API_KEY=
+TALOS_OCR_LIVE_HOST_PORT=13200
+TALOS_OCR_TIMEOUT_SECONDS=180
+TALOS_OCR_REQUEST_TIMEOUT_SECONDS=170
+TALOS_OCR_STARTUP_TIMEOUT_SECONDS=900
+TALOS_OCR_MAX_RESPONSE_BYTES=10485760
+
 TALOS_ADMIN_NAME=TALOS Admin
 TALOS_ADMIN_EMAIL=
 TALOS_ADMIN_PASSWORD=
@@ -391,6 +533,114 @@ TALOS_MODEL_PROVIDER_ALLOWED_HOSTS=api.openai.com,api.deepseek.com,api.anthropic
 Provider profiles, theme settings, Context Vault, tool registry, benchmarks,
 memory, skills, and workflow settings belong in TALOS Settings or persisted
 control-plane tables, not as scattered deployment variables.
+
+### Secure file-ingestion sidecars
+
+`./talos up` starts ClamAV and Tika as required services. Their images use both
+an immutable tag and registry digest. Compose exposes their optional host gates
+only on loopback; TALOS containers use the private service names `clamav` and
+`tika`. Do not change `TALOS_FILE_SIDECAR_BIND` to a LAN/public address: neither
+clamd TCP nor Tika Server provides the product authentication boundary.
+
+The ClamAV service repeats the official image's `clamdcheck.sh` health probe and
+six-minute startup grace explicitly in Compose. This preserves the required
+`service_healthy` dependency on OCI engines that do not expose the image's
+healthcheck metadata consistently; TALOS never substitutes process-started for
+an actual ClamD PING/PONG readiness result.
+
+Run the real integration gate after both health checks pass:
+
+```bash
+cd control-plane
+TALOS_FILE_SIDECAR_LIVE=1 \
+TALOS_CLAMAV_HOST=127.0.0.1 TALOS_CLAMAV_PORT=13310 \
+TALOS_TIKA_URL=http://127.0.0.1:19998 \
+../.tools/bin/php.cmd artisan test tests/Integration/TalosFileSidecarLiveTest.php
+```
+
+The gate scans both clean and EICAR bytes and extracts independent sentinels
+from a generated PDF and DOCX. A scanner timeout, version mismatch, malformed
+response, extraction failure or changed post-scan checksum leaves the file
+unavailable and visible as a controlled lifecycle fault.
+
+### Optional DeepSeek OCR-2 profile
+
+OCR for PNG, JPEG, WebP and image-only PDF input is an optional NVIDIA GPU
+profile. The normal TALOS stack remains CPU-only and starts with
+`TALOS_OCR_ENABLED=false`. Enabling OCR requires a CUDA-capable NVIDIA GPU,
+current host drivers, Docker GPU support through the NVIDIA Container Toolkit,
+and enough VRAM for the pinned DeepSeek OCR-2 model. Confirm that Docker can see
+the intended GPU before enabling the profile; TALOS deliberately does not fall
+back to a provider API or mark an image available when the local runtime is
+unhealthy.
+
+Set the following value in the root `.env`, then start TALOS normally:
+
+```env
+TALOS_OCR_ENABLED=true
+```
+
+```bash
+./talos up
+```
+
+The launcher enables Compose profile `ocr` and generates independent 64-byte
+hex credentials for the OCR worker and vLLM when they are absent. A one-shot model fetcher
+downloads the exact DeepSeek OCR-2 revision into the persistent
+cache and then exits. Only that fetcher joins `ocr-egress`. The digest-pinned
+vLLM 0.25.1 runtime starts after the fetch succeeds with `HF_HUB_OFFLINE=1` and
+`TRANSFORMERS_OFFLINE=1`; the request-bearing runtime never retains egress.
+The fetcher is the only writer of the persistent Hugging Face cache. vLLM mounts
+that read-only model snapshot and writes compilation/cache state only to its
+bounded ephemeral `/tmp`, preventing request-time mutation of model artifacts.
+The separate non-root TALOS OCR worker has bounded Uvicorn admission, memory,
+swap and PID limits. Production publishes no OCR host port: only the Laravel
+web/queue tier shares `ocr-app` with the worker, the worker can address vLLM
+through the separate internal `ocr-private` network, and Laravel cannot address
+vLLM directly. `/readyz` becomes blocking while OCR is enabled and reports
+worker, model, runtime and measured renderer drift instead of silently degrading.
+
+The first OCR startup may need to download and load the pinned model before
+readiness can pass. `TALOS_OCR_STARTUP_TIMEOUT_SECONDS` controls only the
+launcher readiness window while OCR is enabled; it defaults to 900 seconds and
+accepts integer values from 60 through 3600. The normal stack keeps its existing
+60-second readiness window when OCR is disabled. An expired window fails closed
+and prints OCR worker/runtime logs instead of reporting a healthy deployment.
+`TALOS_OCR_REQUEST_TIMEOUT_SECONDS` is a separate per-request worker deadline;
+it defaults to 170 seconds so the worker returns a canonical retryable timeout
+before Laravel's default 180-second OCR transport window expires. Native PDF and
+image rendering remains capacity-bound even after a caller timeout, preventing
+repeated failed requests from accumulating uncancellable renderer threads. The
+Laravel-to-worker transport deliberately ignores inherited HTTP proxy settings
+so uploaded bytes cannot leave the configured private sidecar route.
+
+The loopback port exists only in the explicit live-test overlay. After the base
+stack is healthy, run this from the repository root:
+
+```bash
+docker compose -f docker-compose.yml -f docker/ocr-live.yml --profile ocr up -d
+export TALOS_OCR_WORKER_TOKEN="$(grep '^TALOS_OCR_WORKER_TOKEN=' .env | tail -n 1 | cut -d= -f2-)"
+export TALOS_OCR_URL=http://127.0.0.1:13200
+
+cd ocr-worker
+TALOS_OCR_LIVE=1 uv run pytest -q tests/integration/test_live_deepseek_ocr.py
+
+cd ../control-plane
+TALOS_OCR_LIVE=1 ../.tools/bin/php.cmd artisan test tests/Integration/TalosOcrSidecarLiveTest.php
+```
+
+Both gates send a generated PNG and an image-only PDF through the real worker
+and pinned vLLM runtime. They require sentinel text, exact source/page/text
+hashes and exact model/runtime/renderer provenance. Mocks do not replace these
+promotion gates. The repository's normal automated suites leave them explicitly
+skipped when `TALOS_OCR_LIVE` is absent.
+
+To roll back without deleting user data, set `TALOS_OCR_ENABLED=false` and run
+`./talos up` again. The launcher removes stale auto-managed OCR services and
+`/readyz` returns the OCR check to non-blocking `disabled`. Existing OCR
+provenance remains attached to historical files; regular text/Tika ingestion
+continues, while new image-only input fails closed rather than being relabeled
+or sent to another model.
 
 ### Web search providers
 
@@ -467,6 +717,8 @@ content as untrusted.
 - Keep validator private/internal.
 - Keep provider keys server-side in TALOS model profiles.
 - Keep SearXNG internal; do not publish its raw API port.
+- Keep ClamAV and Tika internal. Their loopback test bindings are not public
+  service endpoints and must not be reverse-proxied.
 - Never expose raw model, database, validator, queue, or storage ports publicly.
 - Keep root `.env` readable only by the deployment account. TALOS never mounts
   this file into the PHP-FPM application path.
@@ -570,9 +822,46 @@ is explicitly set for a private, trusted internal bridge such as the bundled
 Compose network or loopback native fallback. This opt-in does not enable public
 transport.
 
-The Docker-first `./talos up` path performs the secret generation, service
+The adaptive `./talos up` path performs runtime selection, secret generation, service
 wiring, dependency ordering and readiness check automatically and remains the
 recommended production installation.
+
+Production image builds exclude generated Laravel PHP manifests from
+`control-plane/bootstrap/cache`. At container startup TALOS removes only the
+package and service-provider manifests and regenerates them from the production
+Composer dependency set before migrations. This prevents a developer machine's
+cached dev-only providers from contaminating a production image while preserving
+unrelated optimized cache files.
+
+The production build also excludes local storage, test output, test suites,
+generated frontend bundles, and repository documentation from OCI build
+contexts. Browser and optional OCR workers use their own source directories as
+contexts. The web and queue services share `${TALOS_APP_IMAGE:-talos-app:local}`;
+only the web service builds it, while the queue reuses that exact local image.
+Dependency lockfiles are copied before changing application source so normal
+rebuilds retain Composer and npm layers. `./talos up` still evaluates source
+changes and never deletes local artifacts to obtain this speedup.
+
+The TALOS frontend stage has a narrower cache boundary than the PHP runtime.
+Only package manifests, `.npmrc`, Vite and TypeScript configuration, maintained
+package patches, the Vite build driver, `resources/`, and `public/` can
+invalidate the frontend bundle. A backend-only change under `app/`, `routes/`,
+or `database/` is still copied into the runtime image but reuses both `npm ci`
+and `npm run build`. Changes to any declared frontend input rebuild the bundle
+normally. The first build initializes this cache; subsequent source reconciles
+benefit without disabling source-change detection.
+
+To measure a deployment on the target host, time the first run and one unchanged
+second run separately. The second run is the warm-cache gate:
+
+```bash
+time ./talos --plain up
+time ./talos --plain up
+```
+
+Use `./talos doctor` after either run to verify that the selected engine,
+Compose provider and application readiness remain healthy; elapsed time alone
+is never a readiness signal.
 
 `./talos doctor` returns a non-zero status when browser-worker ownership or the
 required HMI protocol is incompatible, even when Docker or the native toolchain
@@ -685,7 +974,7 @@ Command responsibilities:
   to pass.
 - `dev`: provision the pinned native toolchain and locked dependencies, then
   start Laravel, queue, Vite, validator, and browser worker in one terminal.
-- `doctor`: inspect Docker and native profiles independently.
+- `doctor`: inspect the selected container runtime and native profiles independently.
 - `doctor --repair`: repair only ignored native tool/dependency/application
   state; system runtimes are never changed.
 - `open`: open the canonical TALOS URL.

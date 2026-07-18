@@ -6,6 +6,7 @@ require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\OpenAiChatTurnAdapter;
 use Kadmos\Provider\ProviderRequestException;
+use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
@@ -272,6 +273,110 @@ function testChatCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState(): vo
     assertProviderTurn($capabilities->parallelToolCalls === false, 'Parallel tool support must remain false until a model probe passes.');
 }
 
+function openAiResourceRequest(
+    string $provider = 'openai',
+    string $documentMime = 'application/pdf',
+    string $imageMime = 'image/png',
+): ProviderTurnRequest
+{
+    return new ProviderTurnRequest(
+        provider: $provider,
+        model: strtolower($provider) === 'openai' ? 'gpt-5.6' : 'deepseek-chat',
+        systemPrompt: 'Answer from the supplied resources.',
+        messages: [['role' => 'user', 'content' => 'Analyze these resources.']],
+        tools: [],
+        resources: [
+            ProviderInputResource::fromBytes('image-1', ProviderInputResource::KIND_IMAGE, 'diagram.png', $imageMime, 'image-bytes'),
+            ProviderInputResource::fromBytes('document-1', ProviderInputResource::KIND_DOCUMENT, 'report.pdf', $documentMime, 'pdf-bytes'),
+        ],
+    );
+}
+
+function testOpenAiChatAdapterRejectsGifWithoutStaticFrameProof(): void
+{
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+
+    try {
+        openAiFixtureAdapter($responses, $requests, 'openai')->start(openAiResourceRequest(imageMime: 'image/gif'));
+    } catch (InvalidArgumentException) {
+        assertProviderTurn($requests === [], 'Unverified OpenAI Chat GIF input must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('OpenAI Chat GIF input without static-frame proof must fail closed.');
+}
+
+function testOpenAiChatAdapterNormalizesConfiguredProviderIdentity(): void
+{
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests, 'OpenAI');
+
+    $response = $adapter->start(openAiResourceRequest('OPENAI'));
+
+    assertProviderTurn($response->kind === 'final', 'Mixed-case OpenAI identity must preserve native resource delivery.');
+    assertProviderTurn($adapter->capabilities()->provider === 'openai', 'Provider capabilities must expose a canonical identity.');
+    assertProviderTurn($adapter->capabilities()->nativeInputImages, 'Mixed-case OpenAI configuration must advertise native image support.');
+    assertProviderTurn($adapter->capabilities()->nativeInputDocuments, 'Mixed-case OpenAI configuration must advertise native document support.');
+}
+
+function testOpenAiChatAdapterRejectsUnsupportedDocumentMimeBeforeTransport(): void
+{
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+
+    try {
+        openAiFixtureAdapter($responses, $requests, 'openai')->start(openAiResourceRequest(documentMime: 'application/octet-stream'));
+    } catch (InvalidArgumentException) {
+        assertProviderTurn($requests === [], 'Unsupported OpenAI Chat document MIME must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('Unsupported OpenAI Chat document MIME must fail closed.');
+}
+
+function testOpenAiChatAdapterSerializesNativeOpenAiResourcesAndRejectsCompatibleAliases(): void
+{
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests, 'openai');
+    $adapter->start(openAiResourceRequest());
+
+    $content = $requests[0]['payload']['messages'][1]['content'] ?? [];
+    assertProviderTurn(($content[0]['type'] ?? null) === 'image_url', 'OpenAI Chat images must use image_url blocks.');
+    assertProviderTurn(($content[0]['image_url']['url'] ?? null) === 'data:image/png;base64,'.base64_encode('image-bytes'), 'OpenAI Chat images must carry inline data URLs.');
+    assertProviderTurn(($content[1]['type'] ?? null) === 'file', 'OpenAI Chat documents must use file blocks.');
+    assertProviderTurn(($content[1]['file']['filename'] ?? null) === 'report.pdf', 'OpenAI Chat file blocks must preserve the safe filename.');
+    assertProviderTurn(($content[1]['file']['file_data'] ?? null) === 'data:application/pdf;base64,'.base64_encode('pdf-bytes'), 'OpenAI Chat files must carry inline data URLs.');
+    assertProviderTurn(($content[2]['type'] ?? null) === 'text' && ($content[2]['text'] ?? null) === 'Analyze these resources.', 'OpenAI Chat prompt text must remain in the final user turn.');
+    assertProviderTurn($adapter->capabilities()->nativeInputImages, 'OpenAI Chat must advertise native image support.');
+    assertProviderTurn($adapter->capabilities()->nativeInputDocuments, 'OpenAI Chat must advertise native document support.');
+
+    $responses = [providerFixture('mixed-preamble-tool-call')['provider_response']];
+    $requests = [];
+    $unexpectedCall = openAiFixtureAdapter($responses, $requests, 'openai')->start(openAiResourceRequest());
+    assertProviderTurn($unexpectedCall->kind === 'failure', 'OpenAI Chat resource turns must reject undeclared provider tool calls.');
+    assertProviderTurn($unexpectedCall->state === null, 'OpenAI Chat resource turns must not retain inline bytes in continuation state.');
+
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    $deepSeek = openAiFixtureAdapter($responses, $requests, 'deepseek');
+    try {
+        $deepSeek->start(openAiResourceRequest('deepseek'));
+    } catch (InvalidArgumentException) {
+        assertProviderTurn($requests === [], 'OpenAI-compatible aliases must reject resources before transport.');
+        assertProviderTurn(! $deepSeek->capabilities()->nativeInputImages, 'DeepSeek must not inherit OpenAI image support.');
+        assertProviderTurn(! $deepSeek->capabilities()->nativeInputDocuments, 'DeepSeek must not inherit OpenAI document support.');
+
+        return;
+    }
+
+    throw new RuntimeException('OpenAI-compatible aliases must fail closed for native resources.');
+}
+
 $tests = [
     'testOpenAiAdapterNormalizesFinalTextAndPreservesConversationHistory',
     'testOpenAiAdapterSerializesEmptySchemaPropertiesAsAnObject',
@@ -283,6 +388,10 @@ $tests = [
     'testOpenAiAdapterReturnsRedactedProviderFailures',
     'testOpenAiAdapterAllowsCredentialFreeOllamaOnlyOnLoopback',
     'testChatCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState',
+    'testOpenAiChatAdapterSerializesNativeOpenAiResourcesAndRejectsCompatibleAliases',
+    'testOpenAiChatAdapterRejectsUnsupportedDocumentMimeBeforeTransport',
+    'testOpenAiChatAdapterNormalizesConfiguredProviderIdentity',
+    'testOpenAiChatAdapterRejectsGifWithoutStaticFrameProof',
 ];
 
 foreach ($tests as $test) {

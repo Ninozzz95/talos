@@ -193,6 +193,10 @@ final class TalosThemeMotionV6Migration
             }
         }
 
+        if ($hasLegacy) {
+            $value['mode'] = 'adaptive';
+        }
+
         if (($record['theme_background_disabled'] ?? null) === true) {
             $value['mode'] = 'off';
             $value['background_enabled'] = false;

@@ -50,13 +50,27 @@ final class TalosThemeMotionV6MigrationTest extends TestCase
         );
     }
 
-    public function test_empty_php_preferences_array_uses_adaptive_defaults(): void
+    public function test_empty_php_preferences_array_uses_safe_background_off_defaults(): void
     {
         $result = TalosThemeMotionV6Migration::resolve([]);
 
         self::assertTrue($result['success']);
         self::assertSame('default', $result['source']);
         self::assertSame(TalosThemeMotionV6::defaults(), $result['value']);
+        self::assertSame('off', $result['value']['mode']);
+        self::assertTrue($result['value']['interface_enabled']);
+    }
+
+    public function test_explicit_saved_static_motion_is_preserved_after_default_change(): void
+    {
+        $saved = TalosThemeMotionV6::defaults();
+        $saved['mode'] = 'static';
+
+        $result = TalosThemeMotionV6Migration::resolve(['theme_motion_v6' => $saved]);
+
+        self::assertTrue($result['success']);
+        self::assertSame('v6', $result['source']);
+        self::assertSame($saved, $result['value']);
     }
 
     public function test_output_is_independent_and_plain_stdclass_input_is_supported(): void

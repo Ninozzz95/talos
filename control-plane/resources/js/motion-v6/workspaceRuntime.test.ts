@@ -15,6 +15,35 @@ const environment = {
 } as const
 
 describe('TALOS workspace Motion V6 coordinator', () => {
+    it('starts a preference-free workspace with background off and interface motion on', () => {
+        const result = resolveTalosWorkspaceMotionV6({
+            settingsPreferences: {},
+            themeId: 'forge',
+            colorMode: 'dark',
+            environment,
+        })
+
+        expect(result).toMatchObject({ success: true, source: 'default' })
+        expect(result.preferences).toMatchObject({
+            mode: 'off',
+            background_enabled: true,
+            interface_enabled: true,
+        })
+        expect(result.decision).toMatchObject({
+            effectiveMode: 'off',
+            backgroundEnabled: false,
+            uiMotionEnabled: true,
+        })
+
+        const reduced = resolveTalosWorkspaceMotionV6({
+            settingsPreferences: {},
+            themeId: 'forge',
+            colorMode: 'dark',
+            environment: { ...environment, prefersReducedMotion: true },
+        })
+        expect(reduced.decision).toMatchObject({ effectiveMode: 'off', uiMotionEnabled: false })
+    })
+
     it('resolves canonical V6 settings into policy, scene identity and active palette', () => {
         const preferences = createDefaultTalosMotionV6Preferences()
         preferences.mode = 'complex'
@@ -56,8 +85,10 @@ describe('TALOS workspace Motion V6 coordinator', () => {
     })
 
     it('makes OS reduced motion dominant and produces a static effective renderer', () => {
+        const preferences = createDefaultTalosMotionV6Preferences()
+        preferences.mode = 'complex'
         const result = resolveTalosWorkspaceMotionV6({
-            settingsPreferences: { theme_motion_v6: createDefaultTalosMotionV6Preferences() },
+            settingsPreferences: { theme_motion_v6: preferences },
             themeId: 'aurora',
             colorMode: 'dark',
             environment: { ...environment, prefersReducedMotion: true },

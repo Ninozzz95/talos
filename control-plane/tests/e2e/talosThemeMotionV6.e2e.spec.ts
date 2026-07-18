@@ -197,6 +197,24 @@ async function readPreviewCanvas(page: Page) {
 
 test.describe.configure({ mode: 'serial' })
 
+test('fresh workspace shows background off and interface motion on without persisting a patch', async ({ page, isMobile }) => {
+    const ledger = await bootstrap(page)
+    await openThemeMotion(page, isMobile)
+
+    await expect(page.getByRole('button', { name: 'Motion mode Off' })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('switch', { name: 'Procedural background' })).not.toBeChecked()
+    await expect(page.getByTestId('talos-background-motion-state')).toHaveText('Off')
+    await expect(page.getByRole('switch', { name: 'Interface motion' })).toBeChecked()
+    await expect(page.getByTestId('talos-interface-motion-state')).toHaveText('Active')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'off')
+    await expect(page.getByTestId('talos-motion-background').locator('[data-talos-motion-stage]')).toHaveCount(0)
+    expect(ledger.patches).toHaveLength(0)
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await expect(page.getByTestId('talos-interface-motion-state')).toHaveText('Suppressed')
+    expect(ledger.patches).toHaveLength(0)
+})
+
 for (const viewport of [
     { name: '320x800', width: 320, height: 800 },
     { name: '375x812', width: 375, height: 812 },

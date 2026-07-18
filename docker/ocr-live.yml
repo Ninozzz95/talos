@@ -1,0 +1,4 @@
+services:
+  ocr-worker:
+    ports:
+      - "127.0.0.1:${TALOS_OCR_LIVE_HOST_PORT:-13200}:3200"

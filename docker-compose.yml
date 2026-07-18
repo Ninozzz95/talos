@@ -1,5 +1,7 @@
 services:
   talos:
+    image: ${TALOS_APP_IMAGE:-talos-app:local}
+    pull_policy: build
     build:
       context: .
       dockerfile: Dockerfile.talos
@@ -9,6 +11,9 @@ services:
       - .env
     volumes:
       - talos-storage:/app/control-plane/storage
+    networks:
+      - default
+      - ocr-app
     environment:
       - APP_URL=${APP_URL:-http://localhost:8088}
       - DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
@@ -24,10 +29,31 @@ services:
       - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
       - TALOS_BROWSER_SEARCH_ENABLED=${TALOS_BROWSER_SEARCH_ENABLED:-false}
       - TALOS_BROWSER_SEARCH_ORIGIN=${TALOS_BROWSER_SEARCH_ORIGIN:-}
+      - TALOS_CLAMAV_HOST=clamav
+      - TALOS_CLAMAV_PORT=3310
+      - TALOS_CLAMAV_EXPECTED_VERSION=${TALOS_CLAMAV_EXPECTED_VERSION:-1.5.3}
+      - TALOS_TIKA_URL=http://tika:9998
+      - TALOS_TIKA_EXPECTED_VERSION=${TALOS_TIKA_EXPECTED_VERSION:-3.3.1}
+      - TALOS_TIKA_MAX_RESPONSE_BYTES=${TALOS_TIKA_MAX_RESPONSE_BYTES:-10485760}
+      - TALOS_TIKA_MAX_EXTRACTED_BYTES=${TALOS_TIKA_MAX_EXTRACTED_BYTES:-5242880}
+      - TALOS_OCR_ENABLED=${TALOS_OCR_ENABLED:-false}
+      - TALOS_OCR_URL=http://ocr-worker:3200
+      - TALOS_OCR_WORKER_TOKEN=${TALOS_OCR_WORKER_TOKEN:-}
+      - TALOS_OCR_PROTOCOL=talos.ocr.worker.v1
+      - TALOS_OCR_EXPECTED_MODEL=deepseek-ai/DeepSeek-OCR-2
+      - TALOS_OCR_EXPECTED_MODEL_REVISION=aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - TALOS_OCR_EXPECTED_SERVED_MODEL=deepseek-ai/DeepSeek-OCR-2@aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - TALOS_OCR_EXPECTED_RUNTIME_VERSION=0.25.1
+      - TALOS_OCR_EXPECTED_PDF_RENDERER_VERSION=5.12.1
+      - TALOS_OCR_EXPECTED_IMAGE_RENDERER_VERSION=12.3.0
     depends_on:
       validator:
         condition: service_healthy
       browser-worker:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+      tika:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1:8088/readyz') === false ? 1 : 0);\""]
@@ -38,14 +64,16 @@ services:
     restart: unless-stopped
 
   talos-queue:
-    build:
-      context: .
-      dockerfile: Dockerfile.talos
+    image: ${TALOS_APP_IMAGE:-talos-app:local}
+    pull_policy: never
     command: ["php", "artisan", "queue:work", "--tries=3", "--timeout=90"]
     env_file:
       - .env
     volumes:
       - talos-storage:/app/control-plane/storage
+    networks:
+      - default
+      - ocr-app
     environment:
       - APP_URL=${APP_URL:-http://localhost:8088}
       - DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite
@@ -61,12 +89,33 @@ services:
       - TALOS_SEARXNG_URL=${TALOS_SEARXNG_URL:-http://searxng:8080}
       - TALOS_BROWSER_SEARCH_ENABLED=${TALOS_BROWSER_SEARCH_ENABLED:-false}
       - TALOS_BROWSER_SEARCH_ORIGIN=${TALOS_BROWSER_SEARCH_ORIGIN:-}
+      - TALOS_CLAMAV_HOST=clamav
+      - TALOS_CLAMAV_PORT=3310
+      - TALOS_CLAMAV_EXPECTED_VERSION=${TALOS_CLAMAV_EXPECTED_VERSION:-1.5.3}
+      - TALOS_TIKA_URL=http://tika:9998
+      - TALOS_TIKA_EXPECTED_VERSION=${TALOS_TIKA_EXPECTED_VERSION:-3.3.1}
+      - TALOS_TIKA_MAX_RESPONSE_BYTES=${TALOS_TIKA_MAX_RESPONSE_BYTES:-10485760}
+      - TALOS_TIKA_MAX_EXTRACTED_BYTES=${TALOS_TIKA_MAX_EXTRACTED_BYTES:-5242880}
+      - TALOS_OCR_ENABLED=${TALOS_OCR_ENABLED:-false}
+      - TALOS_OCR_URL=http://ocr-worker:3200
+      - TALOS_OCR_WORKER_TOKEN=${TALOS_OCR_WORKER_TOKEN:-}
+      - TALOS_OCR_PROTOCOL=talos.ocr.worker.v1
+      - TALOS_OCR_EXPECTED_MODEL=deepseek-ai/DeepSeek-OCR-2
+      - TALOS_OCR_EXPECTED_MODEL_REVISION=aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - TALOS_OCR_EXPECTED_SERVED_MODEL=deepseek-ai/DeepSeek-OCR-2@aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - TALOS_OCR_EXPECTED_RUNTIME_VERSION=0.25.1
+      - TALOS_OCR_EXPECTED_PDF_RENDERER_VERSION=5.12.1
+      - TALOS_OCR_EXPECTED_IMAGE_RENDERER_VERSION=12.3.0
     depends_on:
       talos:
         condition: service_healthy
       validator:
         condition: service_healthy
       browser-worker:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+      tika:
         condition: service_healthy
     restart: unless-stopped
 
@@ -92,8 +141,8 @@ services:
 
   browser-worker:
     build:
-      context: .
-      dockerfile: Dockerfile.browser-worker
+      context: browser-worker
+      dockerfile: Dockerfile
     expose:
       - "3100"
     shm_size: "1gb"
@@ -110,6 +159,202 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+    restart: unless-stopped
+
+  clamav:
+    image: clamav/clamav:1.5.3@sha256:7f5389ccaa2368c383fa80e167ccfe44348d71e685f926fce4755eed1757673a
+    expose:
+      - "3310"
+    ports:
+      - "${TALOS_FILE_SIDECAR_BIND:-127.0.0.1}:${TALOS_CLAMAV_HOST_PORT:-13310}:3310"
+    volumes:
+      - clamav-db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 6m
+    restart: unless-stopped
+
+  tika:
+    image: apache/tika:3.3.1.0@sha256:90b7fa1dc018434075fce9e1d9b88b1e3d0ea6979d0cf86e116c79a8073ae973
+    expose:
+      - "9998"
+    ports:
+      - "${TALOS_FILE_SIDECAR_BIND:-127.0.0.1}:${TALOS_TIKA_HOST_PORT:-19998}:9998"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/9998; printf 'GET /version HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3; IFS= read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  ocr-model-fetch:
+    profiles: ["ocr"]
+    image: vllm/vllm-openai:v0.25.1@sha256:e4f88a835143cd22aee2397a26ec6bb80b3a4a6fe0c882bcbc63822904766089
+    user: "2000:0"
+    entrypoint: ["python3", "-c"]
+    command:
+      - |
+        from huggingface_hub import snapshot_download
+        snapshot_download(repo_id="deepseek-ai/DeepSeek-OCR-2", revision="aaa02f3811945a91062062994c5c4a3f4c0af2b0")
+    environment:
+      - HOME=/home/vllm
+      - HF_HOME=/home/vllm/.cache/huggingface
+      - HF_HUB_DISABLE_TELEMETRY=1
+      - DO_NOT_TRACK=1
+    volumes:
+      - ocr-hf-cache:/home/vllm/.cache/huggingface
+    networks:
+      - ocr-egress
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    mem_limit: "2g"
+    memswap_limit: "2g"
+    pids_limit: 128
+    restart: "no"
+
+  ocr-runtime:
+    profiles: ["ocr"]
+    image: vllm/vllm-openai:v0.25.1@sha256:e4f88a835143cd22aee2397a26ec6bb80b3a4a6fe0c882bcbc63822904766089
+    user: "2000:0"
+    command:
+      - --model
+      - deepseek-ai/DeepSeek-OCR-2
+      - --revision
+      - aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - --tokenizer-revision
+      - aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - --served-model-name
+      - deepseek-ai/DeepSeek-OCR-2@aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - --model-impl
+      - vllm
+      - --generation-config
+      - vllm
+      - --logits-processors
+      - vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor
+      - --no-enable-prefix-caching
+      - --mm-processor-cache-gb
+      - "0"
+      - --limit-mm-per-prompt
+      - '{"image":1}'
+      - --max-model-len
+      - "8192"
+      - --max-num-seqs
+      - "2"
+    expose:
+      - "8000"
+    environment:
+      - HOME=/home/vllm
+      - HF_HOME=/home/vllm/.cache/huggingface
+      - HF_HUB_DISABLE_TELEMETRY=1
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - VLLM_CACHE_ROOT=/tmp/vllm-cache
+      - XDG_CACHE_HOME=/tmp/cache
+      - DO_NOT_TRACK=1
+      - VLLM_API_KEY=${TALOS_OCR_VLLM_API_KEY:-}
+      - VLLM_MEDIA_URL_ALLOW_REDIRECTS=0
+      - VLLM_MAX_IMAGE_PIXELS=16000000
+    volumes:
+      - ocr-hf-cache:/home/vllm/.cache/huggingface:ro
+    networks:
+      - ocr-private
+    depends_on:
+      ocr-model-fetch:
+        condition: service_completed_successfully
+    shm_size: "4gb"
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; raise SystemExit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status == 200 else 1)"]
+      interval: 15s
+      timeout: 8s
+      retries: 40
+      start_period: 60s
+    restart: unless-stopped
+
+  ocr-worker:
+    profiles: ["ocr"]
+    build:
+      context: ocr-worker
+      dockerfile: Dockerfile
+    expose:
+      - "3200"
+    environment:
+      - TALOS_OCR_WORKER_TOKEN=${TALOS_OCR_WORKER_TOKEN:-}
+      - TALOS_OCR_PROTOCOL=talos.ocr.worker.v1
+      - TALOS_OCR_VLLM_URL=http://ocr-runtime:8000
+      - TALOS_OCR_VLLM_API_KEY=${TALOS_OCR_VLLM_API_KEY:-}
+      - TALOS_OCR_MODEL=deepseek-ai/DeepSeek-OCR-2
+      - TALOS_OCR_MODEL_REVISION=aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - TALOS_OCR_SERVED_MODEL=deepseek-ai/DeepSeek-OCR-2@aaa02f3811945a91062062994c5c4a3f4c0af2b0
+      - TALOS_OCR_VLLM_VERSION=0.25.1
+      - TALOS_OCR_MAX_REQUEST_BYTES=15728640
+      - TALOS_OCR_MAX_SOURCE_BYTES=10485760
+      - TALOS_OCR_MAX_RESPONSE_BYTES=10485760
+      - TALOS_OCR_MAX_TEXT_BYTES=5242880
+      - TALOS_OCR_MAX_PDF_PAGES=20
+      - TALOS_OCR_PDF_SCALE=2.0
+      - TALOS_OCR_MAX_IMAGE_PIXELS=16000000
+      - TALOS_OCR_MAX_TOTAL_PIXELS=80000000
+      - TALOS_OCR_MAX_COMPLETION_TOKENS=8192
+      - TALOS_OCR_MAX_CONCURRENCY=2
+      - TALOS_OCR_REQUEST_TIMEOUT_SECONDS=${TALOS_OCR_REQUEST_TIMEOUT_SECONDS:-170}
+      - TALOS_OCR_CONNECT_TIMEOUT_SECONDS=3
+      - TALOS_OCR_WRITE_TIMEOUT_SECONDS=30
+      - TALOS_OCR_READ_TIMEOUT_SECONDS=180
+      - TALOS_OCR_POOL_TIMEOUT_SECONDS=5
+    networks:
+      - ocr-app
+      - ocr-private
+    depends_on:
+      ocr-runtime:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    mem_limit: "2g"
+    memswap_limit: "2g"
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,os,urllib.request; r=urllib.request.Request('http://127.0.0.1:3200/ready',headers={'X-Talos-Ocr-Token':os.environ['TALOS_OCR_WORKER_TOKEN']}); d=json.load(urllib.request.urlopen(r,timeout=5))['data']; raise SystemExit(0 if d['status']=='ready' and d['protocol']=='talos.ocr.worker.v1' and d['runtime_version']=='0.25.1' else 1)"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
   searxng:
@@ -143,3 +388,13 @@ services:
 
 volumes:
   talos-storage:
+  clamav-db:
+  ocr-hf-cache:
+
+networks:
+  default:
+  ocr-app:
+    internal: true
+  ocr-private:
+    internal: true
+  ocr-egress:

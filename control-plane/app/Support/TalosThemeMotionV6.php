@@ -93,7 +93,7 @@ final class TalosThemeMotionV6
     {
         return [
             'schema_version' => 1,
-            'mode' => 'adaptive',
+            'mode' => 'off',
             'background_enabled' => true,
             'interface_enabled' => true,
             'scene_override' => null,

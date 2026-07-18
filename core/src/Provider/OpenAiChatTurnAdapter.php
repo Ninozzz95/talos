@@ -20,14 +20,17 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
 {
     public const ADAPTER_VERSION = 'openai_chat_v1';
 
+    private readonly string $provider;
+
     public function __construct(
-        private readonly string $provider,
+        string $provider,
         private readonly string $endpoint,
         private readonly string $apiKey,
         private readonly ProviderTransport $transport,
         private readonly int $timeoutMs = 30000,
     ) {
         ToolContractGuard::nonEmptyString($provider, 'OpenAI-compatible provider', 64);
+        $this->provider = strtolower($provider);
         if ($timeoutMs < 1) {
             throw new InvalidArgumentException('OpenAI-compatible timeout must be positive.');
         }
@@ -70,6 +73,8 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             imageToolResults: false,
             source: 'adapter_contract',
             limitations: ['Model-level capabilities still require a successful probe.'],
+            nativeInputImages: $this->provider === 'openai',
+            nativeInputDocuments: $this->provider === 'openai',
         );
     }
 
@@ -79,7 +84,13 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             throw new InvalidArgumentException('Provider turn request does not match the configured adapter.');
         }
 
-        $messages = [['role' => 'system', 'content' => $request->systemPrompt], ...$request->messages];
+        if ($request->resources !== [] && $this->provider !== 'openai') {
+            throw new InvalidArgumentException('This OpenAI-compatible provider does not support canonical native input resources.');
+        }
+        $durableMessages = $request->resources === []
+            ? $request->messages
+            : $this->messagesWithResources($request);
+        $messages = [['role' => 'system', 'content' => $request->systemPrompt], ...$durableMessages];
         $payload = [
             'model' => $request->model,
             'messages' => $messages,
@@ -95,7 +106,49 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             $payload['tool_choice'] = 'auto';
         }
 
-        return $this->perform($payload);
+        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function messagesWithResources(ProviderTurnRequest $request): array
+    {
+        $messages = $request->messages;
+        $last = array_key_last($messages);
+        $content = [];
+        foreach ($request->resources as $resource) {
+            OpenAiInputResourcePolicy::assertSupported($resource, 'OpenAI Chat Completions');
+            if ($resource->isImage()) {
+                $content[] = [
+                    'type' => 'image_url',
+                    'image_url' => ['url' => $resource->dataUri()],
+                ];
+                continue;
+            }
+            $content[] = [
+                'type' => 'file',
+                'file' => [
+                    'filename' => $resource->filename,
+                    'file_data' => $resource->dataUri(),
+                ],
+            ];
+        }
+        $content[] = ['type' => 'text', 'text' => $messages[$last]['content']];
+        $messages[$last]['content'] = $content;
+
+        return $messages;
+    }
+
+    private function withoutResourceContinuation(ProviderTurnResponse $response, bool $hasResources): ProviderTurnResponse
+    {
+        if (! $hasResources || $response->kind !== ProviderTurnResponse::TOOL_CALLS) {
+            return $response;
+        }
+
+        return ProviderTurnResponse::failure(new ProviderFailure(
+            code: 'PROVIDER_RESOURCE_TOOL_CALL_UNSUPPORTED',
+            message: 'A provider resource turn returned an undeclared tool call.',
+            retryable: false,
+        ), $response->responseId, $response->stopReason, $response->usage);
     }
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse

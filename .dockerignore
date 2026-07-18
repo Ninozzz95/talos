@@ -10,25 +10,30 @@
 .env
 control-plane/.env
 
-control-plane/storage/logs/
-control-plane/storage/app/private/
-control-plane/storage/app/public/
-control-plane/storage/framework/cache/
-control-plane/storage/framework/sessions/
-control-plane/storage/framework/views/
+control-plane/storage/
 control-plane/database/*.sqlite
+control-plane/bootstrap/cache/*.php
+control-plane/public/build/
+control-plane/tests/
+core/tests/
+validator/tests/
 
-docs/superpowers/
+docs/
 docs/architecture/progress/
+scripts/tests/
 
 validator/dist/
 validator/*.log
 
 *.log
+.venv/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+*.py[cod]
 .phpunit.cache/
 test-results/
 playwright-report/
 
 .DS_Store
 Thumbs.db
-

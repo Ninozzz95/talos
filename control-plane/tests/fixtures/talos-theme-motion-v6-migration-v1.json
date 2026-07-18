@@ -7,7 +7,7 @@
         "success": true,
         "value": {
           "schema_version": 1,
-          "mode": "adaptive",
+          "mode": "off",
           "background_enabled": true,
           "interface_enabled": true,
           "scene_override": null,
@@ -170,7 +170,7 @@
     {
       "name": "unknown preferences are ignored",
       "input": { "theme_color": "blue", "theme_customization": { "accent": "#123456" } },
-      "expected": { "success": true, "value": { "schema_version": 1, "mode": "adaptive", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "default", "shouldPersist": false }
+      "expected": { "success": true, "value": { "schema_version": 1, "mode": "off", "background_enabled": true, "interface_enabled": true, "scene_override": null, "speed": 100, "intensity": 65, "glow_intensity": 0, "density": 100, "depth": 50, "trails": 35, "contrast": 60, "parallax": 20, "quality": "adaptive", "fps_cap": 30, "dpr_cap": 1.25, "pause_when_hidden": true, "respect_data_saver": true, "interface": { "profile": "preset", "duration_scale": 50, "intensity": 65, "easing": "precise", "stagger": 40, "categories": { "windows": true, "surfaces": true, "navigation": true, "composer": true, "messages": true, "feedback": true } } }, "source": "default", "shouldPersist": false }
     }
   ]
 }

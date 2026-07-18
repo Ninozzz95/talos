@@ -55,6 +55,8 @@ final class OpenAiResponsesTurnAdapter implements ProviderTurnAdapter
             imageToolResults: true,
             source: 'adapter_contract',
             limitations: ['Model-level capabilities still require a successful probe.'],
+            nativeInputImages: true,
+            nativeInputDocuments: true,
         );
     }
 
@@ -63,10 +65,13 @@ final class OpenAiResponsesTurnAdapter implements ProviderTurnAdapter
         if (strtolower($request->provider) !== 'openai') {
             throw new InvalidArgumentException('OpenAI Responses request requires the openai provider.');
         }
+        $input = $request->resources === []
+            ? $request->messages
+            : $this->messagesWithResources($request);
         $payload = [
             'model' => $request->model,
             'instructions' => $request->systemPrompt,
-            'input' => $request->messages,
+            'input' => $input,
         ];
         if ($request->maxTokens !== null) {
             $payload['max_output_tokens'] = $request->maxTokens;
@@ -79,7 +84,44 @@ final class OpenAiResponsesTurnAdapter implements ProviderTurnAdapter
             $payload['tool_choice'] = 'auto';
         }
 
-        return $this->perform($payload);
+        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function messagesWithResources(ProviderTurnRequest $request): array
+    {
+        $messages = $request->messages;
+        $last = array_key_last($messages);
+        $content = [];
+        foreach ($request->resources as $resource) {
+            OpenAiInputResourcePolicy::assertSupported($resource, 'OpenAI Responses');
+            if ($resource->isImage()) {
+                $content[] = ['type' => 'input_image', 'image_url' => $resource->dataUri()];
+                continue;
+            }
+            $content[] = [
+                'type' => 'input_file',
+                'filename' => $resource->filename,
+                'file_data' => $resource->dataUri(),
+            ];
+        }
+        $content[] = ['type' => 'input_text', 'text' => $messages[$last]['content']];
+        $messages[$last]['content'] = $content;
+
+        return $messages;
+    }
+
+    private function withoutResourceContinuation(ProviderTurnResponse $response, bool $hasResources): ProviderTurnResponse
+    {
+        if (! $hasResources || $response->kind !== ProviderTurnResponse::TOOL_CALLS) {
+            return $response;
+        }
+
+        return ProviderTurnResponse::failure(new ProviderFailure(
+            code: 'PROVIDER_RESOURCE_TOOL_CALL_UNSUPPORTED',
+            message: 'A provider resource turn returned an undeclared tool call.',
+            retryable: false,
+        ), $response->responseId, $response->stopReason, $response->usage);
     }
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse

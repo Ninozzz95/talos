@@ -17,6 +17,7 @@ import {
     type TalosMotionRuntimeEnvironment,
 } from '../motion-v6/runtimePolicy'
 import type { TalosWorkspaceSettings, UpdateTalosSettingsPayload } from './useTalosSettings'
+import { useTalosMotionEnvironment } from './useTalosMotionEnvironment'
 
 type TopLevelKey = Exclude<keyof TalosMotionV6Preferences, 'schema_version' | 'interface'>
 type InterfaceKey = Exclude<keyof TalosInterfaceMotionPreferences, 'categories'>
@@ -46,25 +47,6 @@ function failClosedPreferences(): TalosMotionV6Preferences {
     return fallback
 }
 
-function defaultEnvironment(): TalosMotionRuntimeEnvironment {
-    const connection = typeof navigator === 'undefined'
-        ? undefined
-        : (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
-    return {
-        workspaceBackgroundAllowed: true,
-        workspaceInterfaceMotionAllowed: true,
-        prefersReducedMotion: typeof window !== 'undefined'
-            && typeof window.matchMedia === 'function'
-            && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-        documentHidden: typeof document !== 'undefined' && document.hidden,
-        saveData: connection?.saveData === true,
-        rendererFault: false,
-        failedEffectiveMode: null,
-        frameP95Ms: null,
-        frameSampleSufficient: false,
-    }
-}
-
 function messageFor(error: unknown): string {
     return error instanceof Error && error.message.trim() !== ''
         ? error.message
@@ -72,6 +54,9 @@ function messageFor(error: unknown): string {
 }
 
 export function useTalosThemeMotionV6Editor(options: TalosThemeMotionV6EditorOptions) {
+    const motionEnvironment = options.environment === undefined
+        ? useTalosMotionEnvironment()
+        : null
     const initial = createDefaultTalosMotionV6Preferences()
     const draft = ref<TalosMotionV6Preferences>(clonePreferences(initial))
     const lastKnownGood = ref<TalosMotionV6Preferences>(clonePreferences(initial))
@@ -86,7 +71,17 @@ export function useTalosThemeMotionV6Editor(options: TalosThemeMotionV6EditorOpt
     const canRetry = computed(() => failedDraft.value !== null && !saving.value)
     const runtimeDecision = computed<TalosMotionRuntimeDecision>(() => resolveTalosMotionRuntimePolicy(
         draft.value,
-        options.environment?.() ?? defaultEnvironment(),
+        options.environment?.() ?? {
+            workspaceBackgroundAllowed: true,
+            workspaceInterfaceMotionAllowed: true,
+            prefersReducedMotion: motionEnvironment?.prefersReducedMotion.value ?? false,
+            documentHidden: motionEnvironment?.documentHidden.value ?? false,
+            saveData: motionEnvironment?.lowPower.value ?? false,
+            rendererFault: false,
+            failedEffectiveMode: null,
+            frameP95Ms: null,
+            frameSampleSufficient: false,
+        },
     ))
 
     function syncFromSettings(snapshot: TalosWorkspaceSettings | null = options.settings.value) {

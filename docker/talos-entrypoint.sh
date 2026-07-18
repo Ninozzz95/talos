@@ -22,6 +22,8 @@ if [ -z "${APP_KEY:-}" ] && ! grep -Eq '^APP_KEY=base64:.+' .env; then
     php artisan key:generate --force
 fi
 
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+php artisan package:discover --ansi
 php artisan migrate --force
 php artisan config:clear
 

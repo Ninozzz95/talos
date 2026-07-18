@@ -1,0 +1,28 @@
+[project]
+name = "talos-ocr-worker"
+version = "0.1.0"
+description = "Bounded DeepSeek OCR-2 adapter for TALOS"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi==0.139.2",
+    "httpx==0.28.1",
+    "pillow==12.3.0",
+    "pypdfium2==5.12.1",
+    "uvicorn==0.51.0",
+]
+
+[dependency-groups]
+dev = [
+    "pypdf==6.12.2",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+asyncio_mode = "auto"
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false

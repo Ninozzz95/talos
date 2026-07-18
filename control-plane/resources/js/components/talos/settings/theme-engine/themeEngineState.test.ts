@@ -156,7 +156,9 @@ describe('Theme Engine persistence contract', () => {
             ...validExport.theme.chat_layout,
             mobile_window_presentation: 'drawer',
         })
-        expect(parseStrictTalosThemeImport(validExport)?.motion_v6).toEqual(createDefaultTalosMotionV6Preferences())
+        const legacyMotionV6 = createDefaultTalosMotionV6Preferences()
+        legacyMotionV6.mode = 'adaptive'
+        expect(parseStrictTalosThemeImport(validExport)?.motion_v6).toEqual(legacyMotionV6)
         const motionV6 = createDefaultTalosMotionV6Preferences()
         motionV6.mode = 'complex'
         motionV6.scene_override = 'signal'

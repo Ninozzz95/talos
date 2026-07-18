@@ -17,7 +17,7 @@ final class TalosThemeMotionV6Test extends TestCase
         'message' => 'Motion V6 payload could not be serialized safely.',
     ];
 
-    public function test_defaults_match_typescript_exactly_and_are_independent_copies(): void
+    public function test_defaults_start_with_background_off_and_interface_motion_on_and_are_independent_copies(): void
     {
         $expected = self::canonicalDefaults();
         $first = TalosThemeMotionV6::defaults();
@@ -25,6 +25,9 @@ final class TalosThemeMotionV6Test extends TestCase
 
         self::assertSame($expected, $first);
         self::assertSame($expected, $second);
+        self::assertSame('off', $first['mode']);
+        self::assertTrue($first['background_enabled']);
+        self::assertTrue($first['interface_enabled']);
 
         $first['interface']['categories']['windows'] = false;
         self::assertTrue($second['interface']['categories']['windows']);
@@ -587,7 +590,7 @@ final class TalosThemeMotionV6Test extends TestCase
     {
         return [
             'schema_version' => 1,
-            'mode' => 'adaptive',
+            'mode' => 'off',
             'background_enabled' => true,
             'interface_enabled' => true,
             'scene_override' => null,
