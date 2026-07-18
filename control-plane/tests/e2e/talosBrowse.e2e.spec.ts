@@ -588,6 +588,38 @@ test('Browse remains in place while the chat request carries the typed browser m
     expect(await page).toHaveURL(/\/$/)
 })
 
+test('human Browser conversation handles a typo, bare URL, follow-up and reload without a validator fault', async ({ page }) => {
+    const chatBodies: Record<string, unknown>[] = []
+    page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/talos/chat' && request.method() === 'POST') {
+            chatBodies.push(request.postDataJSON() as Record<string, unknown>)
+        }
+    })
+
+    await page.getByRole('button', { name: 'Browse', exact: true }).click()
+    await page.getByLabel('Message TALOS').fill('ciao, puoi navaigare su https://fixture.example.test/evidence e dimmi cosa vedi?')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.locator('.talos-chat-message[data-message-role="assistant"]').last()).toContainText('E2E response from AVM')
+
+    await page.getByLabel('Message TALOS').fill('fixture.example.test/evidence')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect.poll(() => chatBodies.length).toBe(2)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByTestId('talos-browse-mode')).toHaveAttribute('data-enabled', 'true')
+    await page.getByLabel('Message TALOS').fill('riprova e cattura uno screenshot')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+
+    await expect.poll(() => chatBodies.length).toBe(3)
+    for (const body of chatBodies) {
+        expect(body.browser_mode).toEqual({ enabled: true, browser_session_id: 'browser-session-e2e' })
+    }
+    await expect(page.getByText('TALOS_BROWSER_COMMAND_MALFORMED', { exact: false })).toHaveCount(0)
+    await expect(page.getByText('validator rejected', { exact: false })).toHaveCount(0)
+    await expect(page.locator('[data-window-id="settings"]')).toHaveCount(0)
+})
+
 test('BREG-001 a normal chat can enable Browse only for a contextual retry turn', async ({ page }) => {
     const chatBodies: Record<string, unknown>[] = []
     page.on('request', (request) => {

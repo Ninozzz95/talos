@@ -18,6 +18,7 @@ use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProviderOutcomeCodec;
 use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserToolResult;
+use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\FileAuthority\TalosFileAuthorityService;
@@ -165,6 +166,13 @@ final class TalosChatProceduralBrowserTest extends TestCase
         $this->assertSame(1, $adapter->continueCalls);
         $this->assertContains('browser_snapshot', $adapter->advertisedBrowserTools);
         $this->assertNotContains('BROWSER_COMMAND', $adapter->advertisedBrowserTools);
+        foreach ($client->requests as $workerRequest) {
+            $this->assertSame(
+                'talos-user:'.$user->id,
+                $workerRequest['ownerRef'] ?? null,
+                'Every request in one procedural Browser turn must retain the worker session owner identity.',
+            );
+        }
         $this->assertSame('completed', TalosToolTurn::query()->where('run_id', $response->json('run.id'))->value('status'));
         $runSnapshotId = $response->json('browser_activities.0.artifact_ids.0');
         $this->assertIsString($runSnapshotId);
@@ -182,6 +190,88 @@ final class TalosChatProceduralBrowserTest extends TestCase
             'role' => 'assistant',
             'content' => 'The current page was inspected through verified browser evidence.',
         ]);
+    }
+
+    public function test_procedural_browser_runtime_failure_is_typed_and_never_reported_as_validator_rejection(): void
+    {
+        $user = $this->authenticateTalosUser();
+        $session = TalosSession::query()->create([
+            'user_id' => $user->id,
+            'title' => 'Procedural browser runtime failure',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-test',
+            'display_name' => 'Procedural browser runtime failure test',
+            'encrypted_secret' => Crypt::encryptString('provider-secret'),
+            'base_url' => 'https://api.openai.com/v1',
+            'status' => 'healthy',
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-procedural-runtime-failure',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => [
+                'navigation' => true,
+                'screenshots' => true,
+                'accessibilitySnapshot' => true,
+            ],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $userMessage = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'naaviga su https://caradero-web.vercel.app/vehicles e dimmi cosa vedi',
+            'metadata' => ['source' => 'talos_chat_page'],
+        ]);
+
+        $client = new FakeBrowserSessionClient;
+        $inspectionCount = 0;
+        $client->afterRequest = static function (string $method) use (&$inspectionCount): void {
+            if ($method !== 'inspect') {
+                return;
+            }
+            $inspectionCount++;
+            if ($inspectionCount === 2) {
+                throw new BrowserWorkerException(
+                    'TALOS_BROWSER_SESSION_NOT_FOUND',
+                    'The worker session disappeared before budget verification.',
+                );
+            }
+        };
+        $this->app->instance(BrowserSessionClient::class, $client);
+        $this->app->instance(
+            TalosProviderAdapterResolver::class,
+            new ProceduralBrowserRouteResolver(new ProceduralBrowserRouteAdapter),
+        );
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $session->id,
+            'user_message_id' => $userMessage->id,
+            'message' => $userMessage->content,
+            'model_profile_id' => $profile->id,
+            'browser_mode' => [
+                'enabled' => true,
+                'browser_session_id' => $browser->id,
+            ],
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('code', 'TALOS_BROWSER_BUDGET_STATE_UNAVAILABLE')
+            ->assertJsonPath('chat_error.layer', 'browser_runtime')
+            ->assertJsonPath('chat_error.code', 'TALOS_BROWSER_BUDGET_STATE_UNAVAILABLE')
+            ->assertJsonPath('chat_error.retryable', true);
+        $this->assertStringNotContainsString('validator rejected', strtolower((string) $response->json('message')));
+        $this->assertSame('failed', $response->json('run.status'));
     }
 
     public function test_breg_006_browser_click_is_presented_for_exact_approval_and_resumes_the_same_turn_with_evidence(): void
@@ -764,7 +854,9 @@ final class TalosChatProceduralBrowserTest extends TestCase
         ]);
 
         $response->assertUnprocessable()
-            ->assertJsonPath('code', 'TALOS_GROUNDING_EVIDENCE_REQUIRED');
+            ->assertJsonPath('code', 'TALOS_GROUNDING_EVIDENCE_REQUIRED')
+            ->assertJsonPath('chat_error.layer', 'agent_evidence')
+            ->assertJsonPath('chat_error.code', 'TALOS_GROUNDING_EVIDENCE_REQUIRED');
         $this->assertDatabaseMissing('talos_messages', [
             'session_id' => $session->id,
             'role' => 'assistant',

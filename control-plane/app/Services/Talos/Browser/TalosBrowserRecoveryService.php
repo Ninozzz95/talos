@@ -414,7 +414,7 @@ final readonly class TalosBrowserRecoveryService
             return [false, null];
         }
         try {
-            $summary = $this->worker->inspect('user:'.$ownerUserId, $browser->worker_session_id);
+            $summary = $this->worker->inspect(TalosBrowserOwnerReference::forUser($ownerUserId), $browser->worker_session_id);
         } catch (BrowserWorkerException) {
             return [false, null];
         }

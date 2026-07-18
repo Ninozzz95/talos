@@ -326,7 +326,7 @@ final class TalosBrowserSemanticClickService
     {
         try {
             $result = $this->client->callTool(
-                $this->ownerRef($session),
+                TalosBrowserOwnerReference::forUser((int) $session->user_id),
                 (string) $session->worker_session_id,
                 $commandId,
                 'browser_click',
@@ -759,8 +759,4 @@ final class TalosBrowserSemanticClickService
         ];
     }
 
-    private function ownerRef(TalosBrowserSession $session): string
-    {
-        return 'talos-user:'.$session->user_id;
-    }
 }

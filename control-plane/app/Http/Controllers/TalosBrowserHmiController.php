@@ -20,6 +20,7 @@ use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserHmiApprovalService;
 use App\Services\Talos\Browser\TalosBrowserHmiPolicy;
 use App\Services\Talos\Browser\TalosBrowserLegacyWriteGate;
+use App\Services\Talos\Browser\TalosBrowserOwnerReference;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -102,7 +103,7 @@ final class TalosBrowserHmiController extends Controller
         $pointer = $this->workerPointer($input, $commandId);
         try {
             $rawPreflight = $this->client->preflightPointer(
-                $this->ownerRef((int) $browserSession->user_id),
+                TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
                 (string) $browserSession->worker_session_id,
                 $pointer,
             );
@@ -256,7 +257,7 @@ final class TalosBrowserHmiController extends Controller
         $pointer = $this->workerPointer($approvalInput, $commandId);
         try {
             $rawPreflight = $this->client->preflightPointer(
-                $this->ownerRef((int) $browserSession->user_id),
+                TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
                 (string) $browserSession->worker_session_id,
                 $pointer,
             );
@@ -494,7 +495,7 @@ final class TalosBrowserHmiController extends Controller
                 );
             }
             $result = $this->client->executePointer(
-                $this->ownerRef((int) $session->user_id),
+                TalosBrowserOwnerReference::forUser((int) $session->user_id),
                 (string) $session->worker_session_id,
                 $payload,
                 authorization: BrowserActionAuthorization::userApproval(
@@ -1512,11 +1513,6 @@ final class TalosBrowserHmiController extends Controller
         $user = $request->user();
 
         return $user instanceof User ? (int) $user->id : 0;
-    }
-
-    private function ownerRef(int $userId): string
-    {
-        return "talos-user:{$userId}";
     }
 
     /** @param array<string, mixed> $payload @param array<string, mixed>|null $policy */

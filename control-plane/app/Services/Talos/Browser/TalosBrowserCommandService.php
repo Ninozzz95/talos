@@ -38,7 +38,7 @@ final class TalosBrowserCommandService
         }
 
         try {
-            $worker = $this->client->inspect($this->ownerRef($session), $session->worker_session_id, $this->remainingTimeout($deadline));
+            $worker = $this->client->inspect(TalosBrowserOwnerReference::forUser((int) $session->user_id), $session->worker_session_id, $this->remainingTimeout($deadline));
         } catch (BrowserWorkerException $exception) {
             $session->update(['status' => 'failed', 'last_seen_at' => now()]);
             throw new TalosBrowserCommandException('TALOS_BROWSER_WORKER_LOST', 'Browser worker session is unavailable.', status: 503);
@@ -337,7 +337,7 @@ final class TalosBrowserCommandService
     {
         $currentState = (int) $session->worker_state_version;
         $result = $this->client->callTool(
-            $this->ownerRef($session),
+            TalosBrowserOwnerReference::forUser((int) $session->user_id),
             $session->worker_session_id,
             $command->commandId,
             $name,
@@ -550,8 +550,4 @@ final class TalosBrowserCommandService
         return ['error' => ['code' => $exception->errorCode, 'message' => $exception->getMessage(), 'details' => $exception->details, 'status' => $exception->status, 'origin' => $exception->origin], 'activity' => ['id' => $commandId, 'operation' => $operation, 'status' => 'failed', 'label' => ucfirst($operation), 'run_id' => $run->id, 'browser_session_id' => $session->id, 'artifact_ids' => [], 'occurred_at' => now()->toJSON()]];
     }
 
-    private function ownerRef(TalosBrowserSession $session): string
-    {
-        return 'talos-user:'.$session->user_id;
-    }
 }

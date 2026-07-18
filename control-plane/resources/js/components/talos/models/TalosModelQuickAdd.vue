@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, ChevronDown, Loader2, PlugZap, Plus, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
@@ -23,7 +23,7 @@ const emit = defineEmits<{
 }>()
 
 const {
-    createModelProfile,
+    createAndProbeModelProfile,
     probeDraftModelProfile,
 } = useTalosModelProfiles()
 
@@ -167,18 +167,19 @@ async function testAndAdd() {
 
     try {
         const provider = selectedProvider.value
-        const profile = await createModelProfile({
-            ...payload(provider),
-            status: 'untested',
-        })
+        const profile = await createAndProbeModelProfile(payload(provider))
 
         emit('created', profile)
-        actionMessage.value = provider.requiresSecret
-            ? 'Secret stored server-side. Run Test later to verify live provider readiness.'
-            : 'Local endpoint stored without bearer token. Run Test later to verify readiness.'
         form.secret = ''
         draftProbe.value = null
         lastProbeFingerprint.value = ''
+        await nextTick()
+        actionMessage.value = profile.status === 'healthy' && profile.probe_result?.ok === true
+            ? 'Profile saved and verified. It is ready in chat.'
+            : 'Profile saved, but its persisted probe is not healthy yet.'
+        if (profile.status !== 'healthy' || profile.probe_result?.ok !== true) {
+            actionError.value = 'Review the persisted probe result before using this profile in chat.'
+        }
     } catch (error) {
         actionError.value = error instanceof Error ? error.message : 'TALOS could not add this provider profile.'
     } finally {

@@ -82,6 +82,20 @@ describe('useTalosWorkspaceChatActions', () => {
         expect(actions.sending.value).toBe(false)
     })
 
+    it('keeps the workspace stable when the selected model is not callable', async () => {
+        const deps = dependencies()
+        deps.modelSelectionIsUsable.value = false
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        await expect(actions.sendChatText('Keep the current workspace visible.')).resolves.toBe(false)
+
+        expect(deps.uiError.value).toBe('Choose a usable model or routing profile before sending.')
+        expect(deps.openSettings).not.toHaveBeenCalled()
+        expect(deps.openModelPopover).not.toHaveBeenCalled()
+        expect(deps.ensureSessionForPrompt).not.toHaveBeenCalled()
+        expect(deps.sendPersistentChat).not.toHaveBeenCalled()
+    })
+
     it('passes correlated attachment authority grants through the workspace send path', async () => {
         const reset = vi.fn()
         const deps = {

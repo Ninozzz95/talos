@@ -500,6 +500,7 @@ final class TalosChatController extends Controller
                 $run,
                 $session,
                 $browserSession,
+                $normalizer,
                 $usedMemories,
                 $usedContext,
                 $usedAttachments,
@@ -1053,6 +1054,7 @@ final class TalosChatController extends Controller
         Request $request,
         string $toolTurn,
         string $toolCall,
+        RunEventNormalizer $normalizer,
         TalosApprovalService $approvals,
         TalosAgentTurnService $agentTurns,
         TalosBrowserSemanticClickService $browserClicks,
@@ -1180,6 +1182,7 @@ final class TalosChatController extends Controller
             $run,
             $session,
             $browserSession,
+            $normalizer,
             [],
             [],
             is_array($metadata['used_attachments'] ?? null) ? $metadata['used_attachments'] : [],
@@ -1201,6 +1204,7 @@ final class TalosChatController extends Controller
         TalosRun $run,
         ?TalosSession $session,
         TalosBrowserSession $browserSession,
+        RunEventNormalizer $normalizer,
         array $usedMemories,
         array $usedContext,
         array $usedAttachments,
@@ -1278,7 +1282,26 @@ final class TalosChatController extends Controller
             default => 'TALOS_AGENT_TURN_FAILED',
         };
 
-        return response()->json($payload, $status);
+        if ($outcome->status === 'in_progress') {
+            return response()->json($payload, $status);
+        }
+
+        return $this->failedChatResponse(
+            $payload,
+            $run,
+            $session,
+            $normalizer,
+            [
+                'reason' => 'procedural_browser_turn_failed',
+                'code' => $payload['code'],
+                'status' => $status,
+                'agent_turn_status' => $outcome->status,
+                'provider' => $run->provider,
+                'model' => $run->model,
+            ],
+            $status,
+            finalizeRun: false,
+        );
     }
 
     /** @return array<string, mixed> */
@@ -1507,6 +1530,7 @@ final class TalosChatController extends Controller
         RunEventNormalizer $normalizer,
         array $eventPayload,
         int $responseStatus = 502,
+        bool $finalizeRun = true,
     ): JsonResponse {
         if (isset($payload['error']) && is_string($payload['error']) && ! isset($payload['message'])) {
             $payload['message'] = $payload['error'];
@@ -1526,10 +1550,12 @@ final class TalosChatController extends Controller
                 ],
             ]);
 
-            $run->update([
-                'status' => 'failed',
-                'completed_at' => now(),
-            ]);
+            if ($finalizeRun) {
+                $run->update([
+                    'status' => 'failed',
+                    'completed_at' => now(),
+                ]);
+            }
 
             $payload['run'] = $run->refresh()->toApiArray();
         }
@@ -1637,6 +1663,55 @@ final class TalosChatController extends Controller
                 message: 'The validator returned a response TALOS could not parse.',
                 nextAction: 'Open Doctor and check the validator build/version before retrying.',
                 retryable: true,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'procedural_browser_turn_failed' && $rawCode !== null && str_starts_with($rawCode, 'TALOS_BROWSER_')) {
+            $stateUnavailable = in_array($rawCode, [
+                'TALOS_BROWSER_BUDGET_STATE_UNAVAILABLE',
+                'TALOS_BROWSER_SESSION_NOT_FOUND',
+                'TALOS_BROWSER_WORKER_UNAVAILABLE',
+            ], true);
+
+            return $this->typedChatError(
+                layer: 'browser_runtime',
+                code: $rawCode,
+                message: $stateUnavailable
+                    ? 'TALOS could not verify the active Browser session before dispatch.'
+                    : 'The Browser runtime could not complete this turn.',
+                nextAction: $stateUnavailable
+                    ? 'Retry the Browse turn. If it fails again, open Doctor and verify the browser worker session.'
+                    : 'Open Doctor, inspect the Browser run trace, then retry after the reported runtime fault is resolved.',
+                retryable: $stateUnavailable,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'procedural_browser_turn_failed' && $rawCode !== null && str_starts_with($rawCode, 'TALOS_GROUNDING_')) {
+            return $this->typedChatError(
+                layer: 'agent_evidence',
+                code: $rawCode,
+                message: 'TALOS could not verify enough committed evidence for this answer.',
+                nextAction: 'Capture fresh Browser evidence and retry the request without relying on an unverified provider claim.',
+                retryable: false,
+                status: $status,
+                provider: $provider,
+                model: $model,
+            );
+        }
+
+        if ($reason === 'procedural_browser_turn_failed' && $rawCode !== null && str_starts_with($rawCode, 'TALOS_TOOL_')) {
+            return $this->typedChatError(
+                layer: 'agent_tool',
+                code: $rawCode,
+                message: 'The procedural tool turn could not be completed safely.',
+                nextAction: 'Review the tool request and its permissions, then retry with valid bounded arguments.',
+                retryable: false,
                 status: $status,
                 provider: $provider,
                 model: $model,

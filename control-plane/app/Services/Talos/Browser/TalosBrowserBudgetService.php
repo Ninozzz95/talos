@@ -132,7 +132,7 @@ final readonly class TalosBrowserBudgetService
         }
         try {
             $inspection = $this->worker->inspect(
-                'user:'.(int) $task->user_id,
+                TalosBrowserOwnerReference::forUser((int) $task->user_id),
                 $browser->worker_session_id,
             );
         } catch (BrowserWorkerException $exception) {

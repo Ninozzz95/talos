@@ -54,6 +54,9 @@ final class TalosBrowserRecoveryServiceTest extends TestCase
         $this->assertSame(BrowserRecoveryStrategy::Reconcile, $decision->strategy);
         $this->assertSame($decision->toApiArray(), $replay->toApiArray());
         $this->assertSame('recovering', $task->refresh()->status);
+        $inspection = collect($worker->requests)->firstWhere('method', 'inspect');
+        $this->assertIsArray($inspection);
+        $this->assertSame('talos-user:'.$user->id, $inspection['ownerRef']);
         $this->assertCount(0, array_filter(
             $worker->requests,
             static fn (array $request): bool => in_array($request['method'], ['navigate', 'click', 'tool'], true),
@@ -185,6 +188,7 @@ final class TalosBrowserRecoveryServiceTest extends TestCase
             static fn (array $request): bool => $request['method'] === 'create',
         ))[0];
         $this->assertSame($expectedForkId, $createRequest['idempotencyKey']);
+        $this->assertSame('talos-user:'.$user->id, $createRequest['ownerRef']);
     }
 
     public function test_corrupt_journal_fails_closed_before_worker_inspection(): void

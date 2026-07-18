@@ -121,7 +121,7 @@ final class TalosBrowserFileUploadService
                 $stageId = 'stg_'.Str::uuid();
                 $stagedIds[] = $stageId;
                 $staged = $this->client->stageFile(
-                    $this->ownerRef($session),
+                    TalosBrowserOwnerReference::forUser((int) $session->user_id),
                     (string) $session->worker_session_id,
                     $stageId,
                     $stagingPayload,
@@ -271,7 +271,7 @@ final class TalosBrowserFileUploadService
             foreach ($stagedIds as $stageId) {
                 try {
                     $this->client->discardStagedFile(
-                        $this->ownerRef($session),
+                        TalosBrowserOwnerReference::forUser((int) $session->user_id),
                         (string) $session->worker_session_id,
                         $stageId,
                     );
@@ -460,7 +460,7 @@ final class TalosBrowserFileUploadService
     {
         try {
             $result = $this->client->callTool(
-                $this->ownerRef($session),
+                TalosBrowserOwnerReference::forUser((int) $session->user_id),
                 (string) $session->worker_session_id,
                 (string) $call->provider_call_id,
                 'browser_file_upload',
@@ -875,8 +875,4 @@ final class TalosBrowserFileUploadService
         ];
     }
 
-    private function ownerRef(TalosBrowserSession $session): string
-    {
-        return 'talos-user:'.$session->user_id;
-    }
 }
