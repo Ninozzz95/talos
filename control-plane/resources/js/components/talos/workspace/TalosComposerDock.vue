@@ -18,6 +18,7 @@ const props = withDefaults(defineProps<{
     attachments?: Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
     vaultPickerLoading?: boolean
+    lastUserPrompt?: string | null
     browserCurrentPage?: TalosBrowserCurrentPage | null
     devBrowserEvidence?: boolean
     composerMode: TalosComposerMode
@@ -161,7 +162,7 @@ onBeforeUnmount(() => {
                     data-talos-composer-overlay
                     role="dialog"
                     aria-label="Model selection"
-                    class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+                    class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md talos-elev-2 p-3"
                 >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model profile</div>
                 <label class="sr-only" for="talos-workspace-model-profile">Server-side model profile</label>
@@ -217,7 +218,7 @@ onBeforeUnmount(() => {
                     data-talos-composer-overlay
                     role="dialog"
                     aria-label="Grounding context selection"
-                    class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 shadow-xl"
+                    class="talos-composer-popover talos-context-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md talos-elev-2 p-3"
                 >
                 <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Grounding context</div>
                 <label class="sr-only" for="talos-workspace-context-set">Grounding context set</label>
@@ -272,7 +273,7 @@ onBeforeUnmount(() => {
                     data-talos-composer-overlay
                     role="status"
                     aria-live="polite"
-                    class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-sm text-[var(--talos-text)] shadow-xl"
+                    class="talos-composer-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 rounded-md talos-elev-2 p-3 text-sm text-[var(--talos-text)]"
                 >
                     <div v-if="enhancingPrompt" class="flex items-center gap-2 text-[var(--talos-muted)]">
                         <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
@@ -297,6 +298,7 @@ onBeforeUnmount(() => {
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
                 :browse-setup-fault="browseSetupFault"
+                :last-user-prompt="lastUserPrompt"
                 :attachments="attachments"
                 :vault-files="vaultFiles"
                 :vault-picker-loading="vaultPickerLoading"

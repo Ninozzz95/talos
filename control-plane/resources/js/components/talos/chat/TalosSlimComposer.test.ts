@@ -253,4 +253,44 @@ describe('TalosSlimComposer', () => {
         retry?.click()
         expect(restartBrowse).toHaveBeenCalledOnce()
     })
+
+    it('arrowup on an empty composer recalls the last user prompt editable', () => {
+        const updates: string[] = []
+        const container = mountComposer('full', false, {
+            prompt: '',
+            lastUserPrompt: 'Check the external API workflow',
+            'onUpdate:prompt': (value: string) => updates.push(value),
+        })
+        const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+
+        const event = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+        composer?.dispatchEvent(event)
+
+        expect(updates).toEqual(['Check the external API workflow'])
+        expect(event.defaultPrevented).toBe(true)
+    })
+
+    it('arrowup with drafted text or without history keeps native behavior', () => {
+        const draftedUpdates: string[] = []
+        const drafted = mountComposer('full', false, {
+            prompt: 'draft in progress',
+            lastUserPrompt: 'Check the external API workflow',
+            'onUpdate:prompt': (value: string) => draftedUpdates.push(value),
+        })
+        const draftedArea = drafted.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+        const draftedEvent = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true })
+        draftedArea?.dispatchEvent(draftedEvent)
+        expect(draftedUpdates).toEqual([])
+        expect(draftedEvent.defaultPrevented).toBe(false)
+
+        const emptyUpdates: string[] = []
+        const withoutHistory = mountComposer('full', false, {
+            prompt: '',
+            lastUserPrompt: null,
+            'onUpdate:prompt': (value: string) => emptyUpdates.push(value),
+        })
+        const emptyArea = withoutHistory.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+        emptyArea?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
+        expect(emptyUpdates).toEqual([])
+    })
 })

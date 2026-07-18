@@ -95,4 +95,19 @@ describe('TalosStatusMessage', () => {
         expect(container.querySelector('[role="status"]')?.textContent).toContain('Context set updated.')
         expect(container.querySelector('[role="alert"]')).toBeNull()
     })
+
+    it('system rows render as centered caption rows, not warning washes', () => {
+        const container = mountMessage({
+            id: 'notice-2',
+            session_id: 'session-1',
+            role: 'system',
+            content: 'Benchmark run created.',
+            created_at: '2026-07-10T10:05:00Z',
+            metadata: {},
+        })
+
+        const row = container.querySelector<HTMLElement>('[role="status"]')
+        expect(row?.classList.contains('talos-status-row')).toBe(true)
+        expect(row?.className).not.toContain('warning')
+    })
 })

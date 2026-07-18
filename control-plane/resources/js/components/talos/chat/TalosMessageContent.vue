@@ -1,14 +1,31 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { renderTalosMarkdown } from '../../../lib/talosMessageMarkdown'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     content: string
     sensitive?: boolean
-}>()
+    censorEnabled?: boolean
+}>(), {
+    sensitive: false,
+    censorEnabled: true,
+})
 
 const copyStatus = ref('')
+const contentRoot = ref<HTMLElement | null>(null)
 const rendered = computed(() => renderTalosMarkdown(props.content))
+
+function applyCensor() {
+    if (!props.censorEnabled || !contentRoot.value) return
+    void import('../../../lib/talosSensitiveCensor').then(({ censorSensitiveText }) => {
+        if (props.censorEnabled && contentRoot.value) censorSensitiveText(contentRoot.value)
+    }).catch(() => undefined)
+}
+
+onMounted(applyCensor)
+watch(rendered, () => {
+    void nextTick(applyCensor)
+})
 
 function fallbackCopyText(value: string) {
     const textarea = document.createElement('textarea')
@@ -48,6 +65,7 @@ async function handleContentClick(event: MouseEvent) {
 
 <template>
     <div
+        ref="contentRoot"
         data-testid="talos-message-content"
         class="talos-message-content min-w-0 max-w-full"
         :class="sensitive ? 'talos-sensitive-output' : ''"
