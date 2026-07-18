@@ -80,6 +80,7 @@ This file defines how agentic coding work must be done in this repository. It is
 - Add or strengthen characterization tests before refactoring behavior that already works. A new feature is not complete if it regresses an existing flow, even when its focused tests pass.
 - Run focused tests during each TDD cycle, then the complete affected subsystem suite and cross-cutting smoke/E2E gates before closing a slice.
 - For UI work, verify the full human-visible path at representative desktop and mobile viewports, including reload, persistence, reduced-motion, keyboard, and failure states where relevant.
+- A user-facing agent capability is not complete after component or API tests alone. Its acceptance gate must exercise realistic, multi-turn human language from the final composer through the real backend/tool/evidence boundary, including representative typos, natural URLs, contextual follow-ups or retries, and reload persistence.
 - Record every discovered regression as a permanent automated test. Do not repeatedly rely on manual rediscovery of the same failure class.
 - If a regression is found, stop feature progression, reproduce it with a failing test, fix the root cause, and rerun both the regression test and the previously passing feature gates.
 

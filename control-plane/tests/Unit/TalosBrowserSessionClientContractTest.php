@@ -19,6 +19,7 @@ use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserWorkerHandshake;
 use App\Services\Talos\Browser\TalosBrowserWorkerProtocol;
 use Illuminate\Foundation\Vite;
+use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -563,6 +564,7 @@ final class TalosBrowserSessionClientContractTest extends TestCase
                     'https://browser-worker.internal',
                     bin2hex(random_bytes(32)),
                 ),
+                $this->app->make(UrlGenerator::class),
             );
             $this->fail('Production boot accepted a missing browser action capability issuer.');
         } catch (BrowserWorkerException $exception) {

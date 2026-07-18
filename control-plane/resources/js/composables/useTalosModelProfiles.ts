@@ -90,6 +90,12 @@ export function useTalosModelProfiles() {
         }
     }
 
+    async function createAndProbeModelProfile(payload: CreateTalosModelProfilePayload) {
+        const created = await createModelProfile(payload)
+
+        return probeModelProfile(created.id)
+    }
+
     async function probeDraftModelProfile(payload: CreateTalosModelProfilePayload) {
         modelProfileError.value = null
 
@@ -170,6 +176,7 @@ export function useTalosModelProfiles() {
         modelProfileError,
         loadModelProfiles,
         createModelProfile,
+        createAndProbeModelProfile,
         updateModelProfile,
         deleteModelProfile,
         probeModelProfile,

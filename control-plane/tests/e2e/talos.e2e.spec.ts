@@ -1552,8 +1552,14 @@ test('model center offers provider-first quick add with optional draft test', as
             && body.base_url === 'https://openrouter.ai/api/v1'
             && body.timeout_seconds === 45
     })
+    const persistedProbeRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/model-profiles/profile-openrouter-quick-add/probe')
+        && request.method() === 'POST'
+    ))
     await quickAdd.getByRole('button', { name: 'Add profile' }).click()
     await createRequest
+    await persistedProbeRequest
+    await expect(quickAdd.getByText('Profile saved and verified. It is ready in chat.')).toBeVisible()
 
     const openRouterProfile = page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })
     await expect(openRouterProfile).toBeVisible()
@@ -1574,6 +1580,12 @@ test('model center offers provider-first quick add with optional draft test', as
     await page.getByRole('button', { name: 'Close Model Lab' }).click()
     await page.getByRole('button', { name: 'Choose model profile' }).click()
     await expect(page.getByLabel('Server-side model profile').locator('option', { hasText: 'OpenRouter quick profile' })).toHaveCount(1)
+    await page.getByLabel('Server-side model profile').selectOption('profile-openrouter-quick-add')
+    await page.getByLabel('Message TALOS').fill('Verify the newly added profile without opening setup again.')
+    await page.getByRole('button', { name: 'Send', exact: true }).click()
+    await expect(page.locator('.talos-chat-message[data-message-role="assistant"]').last()).toContainText('E2E response from AVM')
+    await expect(page.locator('[data-window-id="settings"]')).toHaveCount(0)
+    await expect(page.locator('[data-window-id="model_lab"]')).toHaveCount(0)
 })
 
 test('model center can save a provider profile after a failed optional draft probe', async ({ page }) => {
@@ -1616,11 +1628,16 @@ test('model center can save a provider profile after a failed optional draft pro
 
         return body.provider === 'openrouter'
             && body.secret === 'sk-openrouter-e2e-secret'
-            && body.status === 'untested'
+            && body.status === undefined
     })
+    const persistedProbeRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/model-profiles/profile-openrouter-quick-add/probe')
+        && request.method() === 'POST'
+    ))
 
     await quickAdd.getByRole('button', { name: 'Add profile' }).click()
     await createRequest
+    await persistedProbeRequest
     await expect(page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })).toBeVisible()
 })
 

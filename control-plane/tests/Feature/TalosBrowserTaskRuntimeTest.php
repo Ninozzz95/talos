@@ -192,7 +192,9 @@ final class TalosBrowserTaskRuntimeTest extends TestCase
         $this->assertSame('cancelled', $call->refresh()->status);
         $this->assertNull($call->execution_token);
         $this->assertSame('closed', $browser->refresh()->status);
-        $this->assertCount(1, array_filter($client->requests, static fn (array $request): bool => $request['method'] === 'cancel'));
+        $cancelRequests = array_values(array_filter($client->requests, static fn (array $request): bool => $request['method'] === 'cancel'));
+        $this->assertCount(1, $cancelRequests);
+        $this->assertSame('talos-user:'.$user->id, $cancelRequests[0]['ownerRef']);
         $this->assertFalse($this->app->make(TalosExecutionClaimService::class)->completeCall(
             $user->id,
             $call->id,
@@ -308,6 +310,9 @@ final class TalosBrowserTaskRuntimeTest extends TestCase
             $client->requests,
             static fn (array $request): bool => $request['method'] === 'create',
         ));
+        $createRequest = collect($client->requests)->firstWhere('method', 'create');
+        $this->assertIsArray($createRequest);
+        $this->assertSame('talos-user:'.$user->id, $createRequest['ownerRef']);
         $this->assertCount(0, array_filter(
             $client->requests,
             static fn (array $request): bool => $request['method'] === 'close',

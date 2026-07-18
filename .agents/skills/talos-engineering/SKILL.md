@@ -75,6 +75,7 @@ If live web research is unavailable, stop before planning or implementation and 
 - Use `control-plane/tests/e2e/helpers/talosVisibleMotion.ts` for composited motion evidence and `npm run test:e2e:visible-ui` as the focused regression gate.
 - Screenshots attached only for inspection do not constitute assertions. A visual artifact must be compared or inspected by an explicit automated invariant to close a bug.
 - Apply this layered method to all future UI debugging: semantic state, computed presentation, painted pixels, hit-testing/accessibility, and real backend integration when the feature crosses an API boundary.
+- User-facing agent capabilities require a realistic multi-turn final-UI acceptance test in addition to component and API tests. Drive natural language through the composer to the backend/tool/evidence result, and cover representative typos, natural or bare URLs, contextual follow-up/retry, and reload persistence before promotion.
 
 ## No fake feature rule
 

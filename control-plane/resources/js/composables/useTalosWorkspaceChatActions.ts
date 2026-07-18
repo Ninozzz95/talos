@@ -76,8 +76,6 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
         if (!normalizedMessage || sending.value) return false
         if (!deps.modelSelectionIsUsable.value) {
             deps.uiError.value = 'Choose a usable model or routing profile before sending.'
-            deps.openSettings()
-            deps.openModelPopover()
             return false
         }
         if (!deps.browserReadyForSend.value) {

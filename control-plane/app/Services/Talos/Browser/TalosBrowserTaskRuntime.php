@@ -631,7 +631,7 @@ final readonly class TalosBrowserTaskRuntime
         }
         if ($propagate && is_string($workerSessionId) && $workerSessionId !== '') {
             try {
-                $this->worker->cancel('user:'.$ownerUserId, $workerSessionId, $reason);
+                $this->worker->cancel(TalosBrowserOwnerReference::forUser($ownerUserId), $workerSessionId, $reason);
             } catch (Throwable $exception) {
                 if (is_string($runId)) {
                     $this->events->record(
@@ -692,7 +692,7 @@ final readonly class TalosBrowserTaskRuntime
         $width = $sourceBrowser instanceof TalosBrowserSession ? (int) $sourceBrowser->viewport_width : 1280;
         $height = $sourceBrowser instanceof TalosBrowserSession ? (int) $sourceBrowser->viewport_height : 800;
         $worker = $this->worker->createIdempotent(
-            'user:'.$ownerUserId,
+            TalosBrowserOwnerReference::forUser($ownerUserId),
             $width,
             $height,
             $forkId,
@@ -873,7 +873,7 @@ final readonly class TalosBrowserTaskRuntime
             return;
         }
         try {
-            $this->worker->close('user:'.$ownerUserId, $worker['sessionId']);
+            $this->worker->close(TalosBrowserOwnerReference::forUser($ownerUserId), $worker['sessionId']);
         } catch (Throwable) {
         }
     }

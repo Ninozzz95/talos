@@ -18,6 +18,7 @@ use App\Services\Talos\Browser\TalosBrowserArtifactReader;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserEvidenceEnvironment;
 use App\Services\Talos\Browser\TalosBrowserLegacyWriteGate;
+use App\Services\Talos\Browser\TalosBrowserOwnerReference;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -85,7 +86,7 @@ final class TalosBrowserController extends Controller
         $height = (int) data_get($payload, 'viewport.height', 800);
         $userId = $this->userId($request);
         try {
-            $worker = $this->client->create($this->ownerRef($userId), $width, $height);
+            $worker = $this->client->create(TalosBrowserOwnerReference::forUser($userId), $width, $height);
         } catch (BrowserWorkerException $exception) {
             return $this->workerError($exception);
         }
@@ -167,7 +168,7 @@ final class TalosBrowserController extends Controller
         }
 
         try {
-            $this->client->close($this->ownerRef((int) $leased->user_id), $leased->worker_session_id);
+            $this->client->close(TalosBrowserOwnerReference::forUser((int) $leased->user_id), $leased->worker_session_id);
         } catch (BrowserWorkerException) { /* The durable session must still close when the transient worker cannot be reached. */
         }
         $closed = TalosBrowserSession::query()
@@ -211,7 +212,7 @@ final class TalosBrowserController extends Controller
         }
         $sourceStateVersion = (int) $browserSession->worker_state_version;
         try {
-            $worker = $this->client->navigate($this->ownerRef((int) $browserSession->user_id), $browserSession->worker_session_id, $url);
+            $worker = $this->client->navigate(TalosBrowserOwnerReference::forUser((int) $browserSession->user_id), $browserSession->worker_session_id, $url);
         } catch (BrowserWorkerException $exception) {
             return $this->workerError($exception);
         }
@@ -250,7 +251,7 @@ final class TalosBrowserController extends Controller
             return $error;
         }
         try {
-            $worker = $this->client->screenshot($this->ownerRef((int) $browserSession->user_id), $browserSession->worker_session_id);
+            $worker = $this->client->screenshot(TalosBrowserOwnerReference::forUser((int) $browserSession->user_id), $browserSession->worker_session_id);
         } catch (BrowserWorkerException $exception) {
             return $this->workerError($exception);
         }
@@ -322,7 +323,7 @@ final class TalosBrowserController extends Controller
         }
         $sourceStateVersion = (int) $browserSession->worker_state_version;
         try {
-            $worker = $this->client->snapshot($this->ownerRef((int) $browserSession->user_id), $browserSession->worker_session_id);
+            $worker = $this->client->snapshot(TalosBrowserOwnerReference::forUser((int) $browserSession->user_id), $browserSession->worker_session_id);
         } catch (BrowserWorkerException $exception) {
             return $this->workerError($exception);
         }
@@ -415,11 +416,6 @@ final class TalosBrowserController extends Controller
         return $user instanceof User ? (int) $user->id : 0;
     }
 
-    private function ownerRef(int $userId): string
-    {
-        return "talos-user:{$userId}";
-    }
-
     private function ownedChatSession(Request $request, string $sessionId): TalosSession|JsonResponse
     {
         $session = TalosSession::query()
@@ -487,7 +483,7 @@ final class TalosBrowserController extends Controller
 
         try {
             $worker = $this->client->inspect(
-                $this->ownerRef((int) $session->user_id),
+                TalosBrowserOwnerReference::forUser((int) $session->user_id),
                 $session->worker_session_id,
             );
         } catch (BrowserWorkerException $exception) {
@@ -642,7 +638,7 @@ final class TalosBrowserController extends Controller
             return;
         }
         try {
-            $this->client->close($this->ownerRef($userId), $workerSessionId);
+            $this->client->close(TalosBrowserOwnerReference::forUser($userId), $workerSessionId);
         } catch (BrowserWorkerException) {
             // A rejected worker contract must never become durable state.
         }

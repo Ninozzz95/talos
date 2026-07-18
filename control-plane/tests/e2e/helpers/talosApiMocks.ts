@@ -1280,7 +1280,7 @@ function modelProfilePayload(overrides: Record<string, unknown> = {}) {
         base_url: overrides.base_url ?? null,
         timeout_seconds: overrides.timeout_seconds ?? 60,
         status: overrides.status ?? 'healthy',
-        capabilities: overrides.capabilities ?? {
+        capabilities: Object.prototype.hasOwnProperty.call(overrides, 'capabilities') ? overrides.capabilities : {
             json: true,
             tools: true,
             vision: false,
@@ -1288,7 +1288,7 @@ function modelProfilePayload(overrides: Record<string, unknown> = {}) {
             local: false,
             remote: true,
         },
-        probe_result: overrides.probe_result ?? {
+        probe_result: Object.prototype.hasOwnProperty.call(overrides, 'probe_result') ? overrides.probe_result : {
             ok: true,
             http_status: 200,
             latency_ms: 118,
@@ -1796,14 +1796,10 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 model: body.model || preset.model,
                 base_url: body.base_url ?? preset.base_url,
                 timeout_seconds: body.timeout_seconds ?? 60,
-                status: String(body.status ?? 'untested'),
+                status: 'untested',
                 has_secret: provider !== 'ollama',
-                probe_result: {
-                    ok: true,
-                    http_status: 200,
-                    latency_ms: 96,
-                    provider,
-                },
+                capabilities: null,
+                probe_result: null,
             })
             modelProfiles = [profile, ...modelProfiles]
 

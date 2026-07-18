@@ -160,6 +160,25 @@ final class TalosBrowserBudgetServiceTest extends TestCase
         ])->allowed);
     }
 
+    public function test_worker_tab_fallback_uses_the_canonical_owner_reference(): void
+    {
+        [$task] = $this->context([
+            'max_actions' => 8,
+            'max_elapsed_ms' => 60_000,
+            'max_bytes' => 1_000_000,
+            'max_tabs' => 4,
+            'max_domains' => 4,
+            'max_tokens' => 2_000,
+        ]);
+        $client = new FakeBrowserSessionClient;
+
+        (new TalosBrowserBudgetService($client))->usage($task->refresh());
+
+        $inspection = collect($client->requests)->firstWhere('method', 'inspect');
+        $this->assertIsArray($inspection);
+        $this->assertSame('talos-user:'.$task->user_id, $inspection['ownerRef']);
+    }
+
     /** @param array<string, int> $budget @return array{TalosBrowserTask, TalosToolTurn} */
     private function context(array $budget): array
     {
