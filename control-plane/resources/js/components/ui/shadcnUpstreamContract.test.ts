@@ -248,4 +248,19 @@ describe('shadcn-vue upstream primitive contract', () => {
         expect(open.value).toBe(false)
         expect(document.body.querySelector('[role="alertdialog"][data-state="closed"]')).not.toBeNull()
     })
+
+    it('ships the reka-backed dropdown-menu wrapper set introduced by v7 R0', async () => {
+        const parts = await import('./dropdown-menu/index.js')
+        for (const name of [
+            'DropdownMenu',
+            'DropdownMenuTrigger',
+            'DropdownMenuContent',
+            'DropdownMenuItem',
+            'DropdownMenuLabel',
+            'DropdownMenuSeparator',
+            'DropdownMenuGroup',
+        ]) {
+            expect(parts[name], `${name} must be exported from ui/dropdown-menu`).toBeTruthy()
+        }
+    })
 })

@@ -26,7 +26,7 @@ const open = ref(false)
         <span
             v-if="open"
             role="tooltip"
-            class="absolute right-0 top-full z-50 mt-2 w-72 rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-xs leading-5 text-[var(--talos-muted)] shadow-xl"
+            class="talos-elev-2 absolute right-0 top-full z-50 mt-2 w-72 rounded-md p-3 text-xs leading-5 text-[var(--talos-muted)]"
         >
             <slot />
         </span>

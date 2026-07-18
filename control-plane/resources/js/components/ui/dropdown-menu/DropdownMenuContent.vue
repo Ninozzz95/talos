@@ -1,6 +1,6 @@
 <script setup>
 import { reactiveOmit } from "@vueuse/core";
-import { TooltipContent, TooltipPortal, useForwardPropsEmits } from "reka-ui";
+import { DropdownMenuContent, DropdownMenuPortal, useForwardPropsEmits } from "reka-ui";
 import { cn } from "@/lib/utils";
 
 defineOptions({
@@ -9,30 +9,40 @@ defineOptions({
 
 const props = defineProps({
   forceMount: { type: Boolean, required: false },
-  ariaLabel: { type: String, required: false },
-  asChild: { type: Boolean, required: false },
-  as: { type: null, required: false },
-  to: { type: null, required: false, default: "#talos-portal-root" },
+  loop: { type: Boolean, required: false },
   side: { type: null, required: false },
   sideOffset: { type: Number, required: false, default: 4 },
-  align: { type: null, required: false },
+  sideFlip: { type: Boolean, required: false },
+  align: { type: null, required: false, default: "start" },
   alignOffset: { type: Number, required: false },
+  alignFlip: { type: Boolean, required: false },
   avoidCollisions: { type: Boolean, required: false },
   collisionBoundary: { type: null, required: false },
-  collisionPadding: { type: [Number, Object], required: false },
+  collisionPadding: { type: [Number, Object], required: false, default: 8 },
   arrowPadding: { type: Number, required: false },
   sticky: { type: String, required: false },
   hideWhenDetached: { type: Boolean, required: false },
   positionStrategy: { type: String, required: false },
   updatePositionStrategy: { type: String, required: false },
+  prioritizePosition: { type: Boolean, required: false },
+  reference: { type: null, required: false },
+  asChild: { type: Boolean, required: false },
+  as: { type: null, required: false },
+  to: { type: null, required: false, default: "#talos-portal-root" },
   class: {
     type: [Boolean, null, String, Object, Array],
     required: false,
     skipCheck: true,
   },
 });
-
-const emits = defineEmits(["escapeKeyDown", "pointerDownOutside"]);
+const emits = defineEmits([
+  "escapeKeyDown",
+  "pointerDownOutside",
+  "focusOutside",
+  "interactOutside",
+  "openAutoFocus",
+  "closeAutoFocus",
+]);
 
 const delegatedProps = reactiveOmit(props, "class", "to");
 
@@ -40,17 +50,17 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <TooltipPortal :to="to">
-    <TooltipContent
+  <DropdownMenuPortal :to="to">
+    <DropdownMenuContent
       v-bind="{ ...forwarded, ...$attrs }"
       :class="
         cn(
-          'talos-elev-2 z-50 overflow-hidden rounded-md px-3 py-1.5 text-sm text-[var(--talos-text)] animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+          'talos-elev-2 z-[90] max-h-[calc(100dvh-1rem)] min-w-44 overflow-y-auto rounded-md p-1 text-[var(--talos-text)] outline-none',
           props.class,
         )
       "
     >
       <slot />
-    </TooltipContent>
-  </TooltipPortal>
+    </DropdownMenuContent>
+  </DropdownMenuPortal>
 </template>

@@ -23,7 +23,7 @@ const describedBy = computed(() => [
 
 <template>
     <div class="talos-field grid min-w-0 gap-1.5" :data-field-id="id">
-        <label :for="id" class="text-xs font-medium text-[var(--talos-text)]">
+        <label :for="id" class="talos-type-label text-[var(--talos-text)]">
             {{ label }}
             <span v-if="required" class="text-[var(--talos-danger)]" aria-hidden="true">*</span>
         </label>
