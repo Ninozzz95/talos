@@ -282,6 +282,10 @@ function migrateLegacy(record: LegacyRecord): TalosThemeMotionV6MigrationResult 
         }
     }
 
+    if (hasLegacy) {
+        value.mode = 'adaptive'
+    }
+
     if (record.theme_background_disabled === true) {
         value.mode = 'off'
         value.background_enabled = false

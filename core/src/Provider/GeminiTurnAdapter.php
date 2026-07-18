@@ -19,6 +19,8 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
 {
     public const ADAPTER_VERSION = 'gemini_generate_content_v1beta';
 
+    private const SUPPORTED_IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'];
+
     public function __construct(
         private readonly string $endpoint,
         private readonly string $apiKey,
@@ -54,6 +56,8 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
             imageToolResults: false,
             source: 'adapter_contract',
             limitations: ['Model-level capabilities still require a successful probe.'],
+            nativeInputImages: true,
+            nativeInputDocuments: true,
         );
     }
 
@@ -62,15 +66,19 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
         if (strtolower($request->provider) !== 'gemini') {
             throw new InvalidArgumentException('Gemini request requires the gemini provider.');
         }
+        $contents = array_map(
+            static fn (array $message): array => [
+                'role' => $message['role'] === 'assistant' ? 'model' : 'user',
+                'parts' => [['text' => $message['content']]],
+            ],
+            $request->messages,
+        );
+        if ($request->resources !== []) {
+            $contents = $this->contentsWithResources($request, $contents);
+        }
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $request->systemPrompt]]],
-            'contents' => array_map(
-                static fn (array $message): array => [
-                    'role' => $message['role'] === 'assistant' ? 'model' : 'user',
-                    'parts' => [['text' => $message['content']]],
-                ],
-                $request->messages,
-            ),
+            'contents' => $contents,
         ];
         $generationConfig = [];
         if ($request->maxTokens !== null) {
@@ -89,7 +97,48 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
             $payload['toolConfig'] = ['functionCallingConfig' => ['mode' => 'AUTO']];
         }
 
-        return $this->perform($payload);
+        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $contents
+     * @return list<array<string, mixed>>
+     */
+    private function contentsWithResources(ProviderTurnRequest $request, array $contents): array
+    {
+        $last = array_key_last($contents);
+        $parts = [];
+        foreach ($request->resources as $resource) {
+            if ($resource->isImage() && ! in_array($resource->mediaType, self::SUPPORTED_IMAGE_MEDIA_TYPES, true)) {
+                throw new InvalidArgumentException('Gemini generateContent does not support this image media type.');
+            }
+            if ($resource->isDocument() && $resource->mediaType !== 'application/pdf') {
+                throw new InvalidArgumentException('Gemini native documents must be PDF.');
+            }
+            $parts[] = [
+                'inline_data' => [
+                    'mime_type' => $resource->mediaType,
+                    'data' => $resource->base64Data(),
+                ],
+            ];
+        }
+        $parts[] = ['text' => $request->messages[array_key_last($request->messages)]['content']];
+        $contents[$last]['parts'] = $parts;
+
+        return $contents;
+    }
+
+    private function withoutResourceContinuation(ProviderTurnResponse $response, bool $hasResources): ProviderTurnResponse
+    {
+        if (! $hasResources || $response->kind !== ProviderTurnResponse::TOOL_CALLS) {
+            return $response;
+        }
+
+        return ProviderTurnResponse::failure(new ProviderFailure(
+            code: 'PROVIDER_RESOURCE_TOOL_CALL_UNSUPPORTED',
+            message: 'A provider resource turn returned an undeclared tool call.',
+            retryable: false,
+        ), $response->responseId, $response->stopReason, $response->usage);
     }
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse

@@ -1,4 +1,6 @@
-import { nextTick, ref } from 'vue'
+// @vitest-environment jsdom
+
+import { effectScope, nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { createDefaultTalosMotionV6Preferences } from '../motion-v6/defaults'
 import type { TalosWorkspaceSettings, UpdateTalosSettingsPayload } from './useTalosSettings'
@@ -193,7 +195,7 @@ describe('useTalosThemeMotionV6Editor', () => {
         h.editor.updateInterface('duration_scale', 140)
         h.editor.resetBackground()
 
-        expect(h.editor.draft.value).toMatchObject({ mode: 'adaptive', speed: 100, glow_intensity: 0 })
+        expect(h.editor.draft.value).toMatchObject({ mode: 'off', speed: 100, glow_intensity: 0 })
         expect(h.editor.draft.value.interface).toMatchObject({ profile: 'expressive', duration_scale: 140 })
 
         h.editor.updateTopLevel('speed', 175)
@@ -253,5 +255,40 @@ describe('useTalosThemeMotionV6Editor', () => {
             effectiveMode: 'complex',
             reason: 'requested',
         })
+    })
+
+    it('reacts immediately when the OS reduced-motion preference changes', async () => {
+        const originalMatchMedia = window.matchMedia
+        let reducedMotionListener: ((event: MediaQueryListEvent) => void) | null = null
+        window.matchMedia = vi.fn(() => ({
+            matches: false,
+            addEventListener: (type: string, listener: (event: MediaQueryListEvent) => void) => {
+                if (type === 'change') reducedMotionListener = listener
+            },
+            removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList)
+        const settingsRef = ref<TalosWorkspaceSettings | null>(settings())
+        const scope = effectScope()
+
+        try {
+            const editor = scope.run(() => useTalosThemeMotionV6Editor({
+                settings: settingsRef,
+                updateSettings: vi.fn(async () => settingsRef.value!),
+            }))!
+
+            expect(editor.runtimeDecision.value.uiMotionEnabled).toBe(true)
+            expect(reducedMotionListener).toBeTypeOf('function')
+
+            reducedMotionListener?.({ matches: true } as MediaQueryListEvent)
+            await nextTick()
+            expect(editor.runtimeDecision.value.uiMotionEnabled).toBe(false)
+
+            reducedMotionListener?.({ matches: false } as MediaQueryListEvent)
+            await nextTick()
+            expect(editor.runtimeDecision.value.uiMotionEnabled).toBe(true)
+        } finally {
+            scope.stop()
+            window.matchMedia = originalMatchMedia
+        }
     })
 })

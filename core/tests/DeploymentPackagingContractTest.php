@@ -233,7 +233,7 @@ function testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations(): voi
 
     foreach ([
         'browser-worker:',
-        'Dockerfile.browser-worker',
+        'context: browser-worker',
         'TALOS_BROWSER_WORKER_URL=http://browser-worker:3100',
         'DB_DATABASE=/app/control-plane/storage/app/talos/database.sqlite',
         'env_file:',
@@ -256,7 +256,7 @@ function testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations(): voi
         'cd core',
         'composer install --no-dev',
     ]);
-    assertDeploymentFileContains($root.'/Dockerfile.browser-worker', [
+    assertDeploymentFileContains($root.'/browser-worker/Dockerfile', [
         'browser-worker',
         'playwright install',
         'ENV NODE_ENV=production',
@@ -264,6 +264,213 @@ function testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations(): voi
         'USER node',
         'PLAYWRIGHT_BROWSERS_PATH',
     ]);
+}
+
+function testTalosImageDefersLaravelDiscoveryUntilRuntimeConfigurationExists(): void
+{
+    $root = dirname(__DIR__, 2);
+    $dockerfile = (string) file_get_contents($root.'/Dockerfile.talos');
+    $entrypoint = (string) file_get_contents($root.'/docker/talos-entrypoint.sh');
+
+    preg_match_all('/composer install[^\r\n]*/', $dockerfile, $composerInstallMatches);
+    $composerInstalls = $composerInstallMatches[0] ?? [];
+    assertTrue(count($composerInstalls) === 2, 'Dockerfile.talos should contain the two reviewed Composer installs.');
+    foreach ($composerInstalls as $composerInstall) {
+        assertTrue(
+            str_contains($composerInstall, '--no-scripts'),
+            'Every Dockerfile.talos Composer install must defer configuration-dependent scripts until runtime.'
+        );
+    }
+
+    $discoveryOffset = strpos($entrypoint, 'php artisan package:discover --ansi');
+    $migrationOffset = strpos($entrypoint, 'php artisan migrate --force');
+    assertTrue(
+        $discoveryOffset !== false && $migrationOffset !== false && $discoveryOffset < $migrationOffset,
+        'The TALOS entrypoint must discover Laravel packages with runtime configuration before migrations.'
+    );
+
+    $normalizedDockerfile = strtolower($dockerfile);
+    foreach ([
+        'arg talos_browser_',
+        'env talos_browser_',
+        'copy .env',
+        'copy control-plane/.env',
+    ] as $forbidden) {
+        assertTrue(
+            ! str_contains($normalizedDockerfile, $forbidden),
+            "Dockerfile.talos must not embed runtime browser configuration through {$forbidden}."
+        );
+    }
+}
+
+function testTalosImageRejectsHostGeneratedLaravelManifests(): void
+{
+    $root = dirname(__DIR__, 2);
+    $dockerignore = (string) file_get_contents($root.'/.dockerignore');
+    $entrypoint = (string) file_get_contents($root.'/docker/talos-entrypoint.sh');
+    $cleanup = 'rm -f bootstrap/cache/packages.php bootstrap/cache/services.php';
+
+    assertTrue(
+        in_array('control-plane/bootstrap/cache/*.php', preg_split('/\R/', $dockerignore) ?: [], true),
+        '.dockerignore must exclude host-generated Laravel PHP manifests from the production build context.'
+    );
+
+    $cleanupOffset = strpos($entrypoint, $cleanup);
+    $discoveryOffset = strpos($entrypoint, 'php artisan package:discover --ansi');
+    assertTrue(
+        $cleanupOffset !== false && $discoveryOffset !== false && $cleanupOffset < $discoveryOffset,
+        'The TALOS entrypoint must remove only stale Laravel package/provider manifests before runtime discovery.'
+    );
+
+    foreach ([
+        'rm -rf bootstrap/cache',
+        'rm -f bootstrap/cache/*',
+    ] as $forbidden) {
+        assertTrue(
+            ! str_contains($entrypoint, $forbidden),
+            "The TALOS entrypoint must not broadly delete bootstrap cache through {$forbidden}."
+        );
+    }
+}
+
+function testProductionBuildContextAndTalosImageReuseAreBounded(): void
+{
+    $root = dirname(__DIR__, 2);
+    $dockerignore = (string) file_get_contents($root.'/.dockerignore');
+    $ignoreLines = array_map('trim', preg_split('/\R/', $dockerignore) ?: []);
+    $compose = (string) file_get_contents($root.'/docker-compose.yml');
+
+    foreach ([
+        'control-plane/storage/',
+        'control-plane/public/build/',
+        'control-plane/tests/',
+        'core/tests/',
+        'validator/tests/',
+        'docs/',
+        'scripts/tests/',
+    ] as $ignoredPath) {
+        assertTrue(
+            in_array($ignoredPath, $ignoreLines, true),
+            ".dockerignore must exclude non-runtime build input {$ignoredPath}."
+        );
+    }
+
+    foreach ([
+        'browser-worker/.dockerignore' => ['node_modules/', 'tests/', 'storage/', '*.log'],
+        'ocr-worker/.dockerignore' => ['.venv/', 'tests/', '__pycache__/', '.pytest_cache/', '*.py[cod]'],
+    ] as $path => $requiredLines) {
+        assertTrue(is_file($root.'/'.$path), "{$path} must define its owned build context.");
+        $lines = array_map('trim', preg_split('/\R/', (string) file_get_contents($root.'/'.$path)) ?: []);
+        foreach ($requiredLines as $requiredLine) {
+            assertTrue(in_array($requiredLine, $lines, true), "{$path} must contain {$requiredLine}.");
+        }
+    }
+
+    $services = [];
+    foreach (['talos', 'talos-queue', 'browser-worker', 'ocr-worker'] as $serviceName) {
+        assertTrue(
+            (bool) preg_match('/\n  '.preg_quote($serviceName, '/').':\n(?<service>.*?)(?=\n  [a-z][a-z0-9-]*:\n|\nvolumes:)/s', $compose, $matches),
+            "docker-compose.yml should contain a parseable {$serviceName} service."
+        );
+        $services[$serviceName] = $matches['service'];
+    }
+
+    $sharedImage = 'image: ${TALOS_APP_IMAGE:-talos-app:local}';
+    assertTrue(str_contains($services['talos'], $sharedImage), 'The TALOS web service must own the shared app image name.');
+    assertTrue(str_contains($services['talos'], 'pull_policy: build'), 'The TALOS web service must own the source build.');
+    assertTrue(str_contains($services['talos'], 'dockerfile: Dockerfile.talos'), 'The TALOS web service must build Dockerfile.talos.');
+    assertTrue(str_contains($services['talos-queue'], $sharedImage), 'The TALOS queue must consume the shared app image.');
+    assertTrue(str_contains($services['talos-queue'], 'pull_policy: never'), 'The TALOS queue must not pull the locally built app image.');
+    assertTrue(! str_contains($services['talos-queue'], 'build:'), 'The TALOS queue must not duplicate the app image build.');
+    assertTrue(substr_count($compose, 'dockerfile: Dockerfile.talos') === 1, 'Dockerfile.talos must have exactly one Compose build owner.');
+
+    foreach ([
+        'browser-worker' => ['context: browser-worker', 'dockerfile: Dockerfile'],
+        'ocr-worker' => ['context: ocr-worker', 'dockerfile: Dockerfile'],
+    ] as $serviceName => $buildContract) {
+        foreach ($buildContract as $needle) {
+            assertTrue(str_contains($services[$serviceName], $needle), "{$serviceName} must contain {$needle}.");
+        }
+    }
+
+    $talosDockerfile = (string) file_get_contents($root.'/Dockerfile.talos');
+    $assetStageEnd = strpos($talosDockerfile, 'FROM php:8.5-fpm-bookworm AS talos_runtime');
+    assertTrue($assetStageEnd !== false, 'Dockerfile.talos must retain a distinct frontend asset stage.');
+    $assetStage = substr($talosDockerfile, 0, $assetStageEnd);
+    $assetInputs = [
+        'COPY control-plane/package*.json control-plane/.npmrc ./',
+        'RUN npm ci --ignore-scripts',
+        'COPY control-plane/vite.config.js control-plane/tsconfig.json ./',
+        'COPY control-plane/patches ./patches',
+        'COPY control-plane/scripts/vite-build.mjs ./scripts/vite-build.mjs',
+        'COPY control-plane/resources ./resources',
+        'COPY control-plane/public ./public',
+        'RUN npm run build',
+    ];
+    $previousAssetInput = -1;
+    foreach ($assetInputs as $assetInput) {
+        $assetInputPosition = strpos($assetStage, $assetInput);
+        assertTrue($assetInputPosition !== false, "The TALOS asset stage must contain {$assetInput}.");
+        assertTrue($assetInputPosition > $previousAssetInput, "The TALOS asset stage must order {$assetInput} after its stable prerequisites.");
+        $previousAssetInput = $assetInputPosition;
+    }
+    assertTrue(
+        ! str_contains($assetStage, 'COPY control-plane ./'),
+        'Backend-only control-plane source must not invalidate the TALOS frontend asset stage.'
+    );
+
+    $coreSource = strpos($talosDockerfile, 'COPY core ./core');
+    $controlPlaneManifest = strpos($talosDockerfile, 'COPY control-plane/composer.json control-plane/composer.lock ./control-plane/');
+    $controlPlaneInstall = strpos($talosDockerfile, 'cd control-plane && composer install');
+    $controlPlaneSource = strpos($talosDockerfile, 'COPY control-plane ./control-plane');
+    assertTrue(
+        $coreSource !== false
+        && $controlPlaneManifest !== false
+        && $controlPlaneInstall !== false
+        && $controlPlaneSource !== false
+        && $coreSource < $controlPlaneManifest
+        && $controlPlaneManifest < $controlPlaneInstall
+        && $controlPlaneInstall < $controlPlaneSource,
+        'Dockerfile.talos must install stable production dependencies before copying changing control-plane source.'
+    );
+
+    $validatorDockerfile = (string) file_get_contents($root.'/Dockerfile.validator');
+    $validatorManifest = strpos($validatorDockerfile, 'COPY core/composer.json core/composer.lock ./core/');
+    $validatorInstall = strpos($validatorDockerfile, 'cd core && composer install');
+    $validatorSource = strpos($validatorDockerfile, 'COPY core ./core');
+    assertTrue(
+        $validatorManifest !== false
+        && $validatorInstall !== false
+        && $validatorSource !== false
+        && $validatorManifest < $validatorInstall
+        && $validatorInstall < $validatorSource,
+        'Dockerfile.validator must cache core dependencies before copying changing core source.'
+    );
+}
+
+function testClamAvDependencyHasAnExplicitPortableHealthcheck(): void
+{
+    $root = dirname(__DIR__, 2);
+    $compose = (string) file_get_contents($root.'/docker-compose.yml');
+
+    assertTrue(
+        (bool) preg_match('/\n  clamav:\n(?<service>.*?)(?=\n  [a-z][a-z0-9-]*:\n|\nvolumes:)/s', $compose, $matches),
+        'docker-compose.yml should contain a parseable clamav service.'
+    );
+
+    foreach ([
+        'healthcheck:',
+        'test: ["CMD", "/usr/local/bin/clamdcheck.sh"]',
+        'interval: 30s',
+        'timeout: 30s',
+        'retries: 3',
+        'start_period: 6m',
+    ] as $needle) {
+        assertTrue(
+            str_contains($matches['service'], $needle),
+            "The ClamAV service must declare the upstream portable healthcheck field {$needle}."
+        );
+    }
 }
 
 function testProductionBrowserWorkerCannotBeSilentlyOmitted(): void
@@ -393,6 +600,67 @@ function testOptionalSearxngIntegrationIsPinnedInternalAndJsonOnly(): void
     ]);
 }
 
+function testOptionalOcrDeploymentIsPinnedIsolatedAndDocumented(): void
+{
+    $root = dirname(__DIR__, 2);
+    $talosDockerfile = strtolower((string) file_get_contents($root.'/Dockerfile.talos'));
+
+    assertDeploymentFileContains($root.'/.env.example', [
+        'TALOS_OCR_ENABLED=false',
+        'TALOS_OCR_WORKER_TOKEN=',
+        'TALOS_OCR_VLLM_API_KEY=',
+        'TALOS_OCR_LIVE_HOST_PORT=13200',
+        'TALOS_OCR_REQUEST_TIMEOUT_SECONDS=170',
+    ]);
+    assertDeploymentFileContains($root.'/.gitignore', [
+        '__pycache__/',
+        '*.py[codz]',
+        '.pytest_cache/',
+        '.venv/',
+    ]);
+    assertDeploymentFileContains($root.'/ocr-worker/Dockerfile', [
+        'ghcr.io/astral-sh/uv:0.11.29@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc',
+        'python:3.12.13-slim-bookworm@sha256:d50fb7611f86d04a3b0471b46d7557818d88983fc3136726336b2a4c657aa30b',
+        'uv sync --frozen --no-dev --no-install-project',
+        '"--limit-concurrency", "4"',
+        'USER 10001:10001',
+    ]);
+    foreach (['python', 'pip install', 'deepseek', 'vllm'] as $forbidden) {
+        assertTrue(
+            ! str_contains($talosDockerfile, $forbidden),
+            "Dockerfile.talos must not contain the OCR dependency {$forbidden}."
+        );
+    }
+    assertDeploymentFileContains($root.'/docs/deployment.md', [
+        'Optional DeepSeek OCR-2 profile',
+        'TALOS_OCR_ENABLED=true',
+        'NVIDIA Container Toolkit',
+        'docker/ocr-live.yml',
+        'TALOS_OCR_LIVE=1',
+        'TALOS_OCR_ENABLED=false',
+        'no OCR host port',
+        'one-shot model fetcher',
+        'HF_HUB_OFFLINE=1',
+        'read-only model snapshot',
+    ]);
+    assertDeploymentFileContains($root.'/docs/architecture/security-model.md', [
+        'DeepSeek OCR-2',
+        'fixed OCR prompt',
+        'untrusted extraction evidence',
+        '`--trust-remote-code` is forbidden',
+        'model, runtime and renderer pin drift',
+    ]);
+    assertDeploymentFileContains($root.'/THIRD_PARTY_NOTICES.md', [
+        'DeepSeek OCR-2',
+        '2f3699ebbb96fa8af32212e8c170f2cc28730fad',
+        'aaa02f3811945a91062062994c5c4a3f4c0af2b0',
+        'vLLM 0.25.1',
+        'sha256:e4f88a835143cd22aee2397a26ec6bb80b3a4a6fe0c882bcbc63822904766089',
+        'pypdfium2 5.12.1',
+        'Pillow `12.3.0`',
+    ]);
+}
+
 function testRuntimeStateIsIgnored(): void
 {
     $root = dirname(__DIR__, 2);
@@ -400,6 +668,105 @@ function testRuntimeStateIsIgnored(): void
     assertDeploymentFileContains($root.'/.gitignore', [
         '.talos/',
     ]);
+}
+
+function testAdaptiveContainerRuntimeBootstrapIsPinnedAndWired(): void
+{
+    $root = dirname(__DIR__, 2);
+    $manifestPath = $root.'/scripts/container-runtime/manifest.json';
+    $manifest = json_decode((string) file_get_contents($manifestPath), true, flags: JSON_THROW_ON_ERROR);
+
+    foreach ([
+        'scripts/container-runtime/runtime.sh',
+        'scripts/container-runtime/bootstrap.sh',
+        'scripts/container-runtime/bootstrap-windows.ps1',
+        'scripts/container-runtime/Talos.ContainerRuntime.psm1',
+        'scripts/container-runtime/manifest.json',
+        'scripts/tests/talos-container-runtime-adapter.sh',
+        'scripts/tests/talos-container-runtime-windows.ps1',
+    ] as $file) {
+        assertTrue(is_file($root.'/'.$file), "{$file} should be packaged.");
+    }
+
+    assertTrue(
+        ($manifest['schema_version'] ?? null) === 'talos.container-runtime.manifest.v1',
+        'Container runtime manifest schema should be pinned.'
+    );
+    assertTrue(
+        ($manifest['windows_x64']['docker_desktop']['version'] ?? null) === '4.82.0'
+        && ($manifest['windows_x64']['docker_desktop']['build'] ?? null) === '233772'
+        && ($manifest['windows_x64']['docker_desktop']['sha256'] ?? null) === 'a5b5837542f2f57fadbb09db90a60c84f8efc0a65f8d6dcd2e5b9fca3a2b87e6',
+        'Docker Desktop artifact should remain at the reviewed pin.'
+    );
+    assertTrue(
+        ($manifest['windows_x64']['podman']['version'] ?? null) === '6.0.1'
+        && ($manifest['windows_x64']['podman']['commit'] ?? null) === '4cabbe6'
+        && ($manifest['windows_x64']['podman']['sha256'] ?? null) === '127d02930ac25c80088817502e833916cd3ee1ed1e771dbd42a4ce81b2e0d415'
+        && ($manifest['windows_x64']['podman']['binary_sha256'] ?? null) === '1ca3b88816a4f217d00a557c76dd279094185fda4122029b74eb5714dcef34f7'
+        && ($manifest['windows_x64']['podman']['binary_bytes'] ?? null) === 45108736,
+        'Podman artifact should remain at the reviewed pin.'
+    );
+    assertTrue(
+        ($manifest['windows_x64']['compose']['version'] ?? null) === '5.1.4'
+        && ($manifest['windows_x64']['compose']['commit'] ?? null) === '4732a2e'
+        && ($manifest['windows_x64']['compose']['sha256'] ?? null) === 'e1a8faff28c7433635201a2222171b727f33ecdb0ed367e54d162d00432f39aa',
+        'Docker Compose artifact should remain at the reviewed pin.'
+    );
+
+    assertDeploymentFileContains($root.'/talos', [
+        'scripts/container-runtime/runtime.sh',
+        'talos_runtime_ensure',
+        'talos_runtime_require_existing',
+        'talos_runtime_cli run --rm',
+        'talos_runtime_compose',
+        'talos_runtime_doctor',
+    ]);
+    assertDeploymentFileContains($root.'/.env.example', [
+        'TALOS_CONTAINER_RUNTIME=auto',
+        'TALOS_PODMAN_MACHINE=talos-machine',
+    ]);
+    assertDeploymentFileContains($root.'/README.md', [
+        'adaptive container runtime',
+        'No manual Docker or Podman installation is required',
+        'Windows Server uses Podman Machine with Hyper-V',
+        'trusted checkout',
+    ]);
+    assertDeploymentFileContains($root.'/docs/deployment.md', [
+        'Adaptive container runtime bootstrap',
+        'Docker Desktop `4.82.0` (build `233772`)',
+        'Podman `6.0.1`',
+        'Docker Compose `5.1.4`',
+        'TALOS_CONTAINER_RUNTIME=auto',
+        'TALOS_PODMAN_MACHINE=talos-machine',
+        'TALOS_DOCKER_DESKTOP_LICENSE_ACCEPTED=1',
+        '.tools/container-runtime',
+        'restart required',
+        'read-fenced',
+        'Hyper-V Administrators',
+    ]);
+    assertDeploymentFileContains($root.'/THIRD_PARTY_NOTICES.md', [
+        'Docker Desktop 4.82.0',
+        'Podman 6.0.1',
+        'Docker Compose 5.1.4',
+        '4cabbe6',
+        '4732a2e',
+    ]);
+    assertDeploymentFileContains($root.'/.agents/skills/talos-engineering/SKILL.md', [
+        '`./talos up` is container-runtime adaptive',
+        'TALOS_CONTAINER_RUNTIME=auto|docker|podman',
+        'TALOS_PODMAN_MACHINE=talos-machine',
+        'Automatic installation is Windows-only',
+    ]);
+
+    exec('bash '.escapeshellarg($root.'/scripts/tests/talos-container-runtime-adapter.sh').' 2>&1', $adapterOutput, $adapterCode);
+    assertTrue($adapterCode === 0, "Adaptive runtime adapter contract failed:\n".implode(PHP_EOL, $adapterOutput));
+
+    if (PHP_OS_FAMILY === 'Windows') {
+        $command = 'powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File '
+            .escapeshellarg(str_replace('/', DIRECTORY_SEPARATOR, $root.'/scripts/tests/talos-container-runtime-windows.ps1'));
+        exec($command.' 2>&1', $windowsOutput, $windowsCode);
+        assertTrue($windowsCode === 0, "Windows runtime bootstrap contract failed:\n".implode(PHP_EOL, $windowsOutput));
+    }
 }
 
 function testRootLauncherHelpWorksFromRenamedPathWithSpaces(): void
@@ -595,9 +962,15 @@ $tests = [
     'testTrackedLaunchersAreRelocatable',
     'testNativeToolchainBootstrapIsPinnedAndVerifiable',
     'testDockerFreshCloneIncludesEveryRuntimeWithoutMaskingMigrations',
+    'testTalosImageDefersLaravelDiscoveryUntilRuntimeConfigurationExists',
+    'testTalosImageRejectsHostGeneratedLaravelManifests',
+    'testProductionBuildContextAndTalosImageReuseAreBounded',
+    'testClamAvDependencyHasAnExplicitPortableHealthcheck',
     'testProductionBrowserWorkerCannotBeSilentlyOmitted',
     'testOptionalSearxngIntegrationIsPinnedInternalAndJsonOnly',
+    'testOptionalOcrDeploymentIsPinnedIsolatedAndDocumented',
     'testRuntimeStateIsIgnored',
+    'testAdaptiveContainerRuntimeBootstrapIsPinnedAndWired',
     'testRootLauncherHelpWorksFromRenamedPathWithSpaces',
     'testDockerFirstCleanCloneDoesNotRequireHostPhp',
     'testRealDockerIntegrationContractIsWiredIntoCi',

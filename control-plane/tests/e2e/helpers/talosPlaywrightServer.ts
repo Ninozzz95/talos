@@ -1,11 +1,13 @@
-import { closeSync, mkdirSync, openSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 export function createTalosPlaywrightWebServer(baseURL: string, reuseExistingServer: boolean) {
     const databasePath = resolve('storage/framework/testing/talos-playwright.sqlite')
+    const configCachePath = resolve('storage/framework/testing/talos-playwright-config.php')
     const hotFilePath = resolve('storage/framework/testing/talos-playwright.hot')
     mkdirSync(dirname(databasePath), { recursive: true })
     closeSync(openSync(databasePath, 'a'))
+    rmSync(configCachePath, { force: true })
     const configuredPhp = process.env.TALOS_E2E_PHP_BIN?.trim()
     const phpBin = configuredPhp && configuredPhp !== ''
         ? configuredPhp
@@ -23,6 +25,8 @@ export function createTalosPlaywrightWebServer(baseURL: string, reuseExistingSer
         reuseExistingServer,
         timeout: 120_000,
         env: {
+            APP_URL: baseURL,
+            APP_CONFIG_CACHE: configCachePath,
             APP_ENV: 'testing',
             DB_CONNECTION: 'sqlite',
             DB_DATABASE: databasePath,

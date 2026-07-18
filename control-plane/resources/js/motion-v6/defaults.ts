@@ -24,7 +24,7 @@ const DEFAULT_INTERFACE = Object.freeze({
 
 export const TALOS_MOTION_V6_DEFAULTS = Object.freeze({
     schema_version: 1,
-    mode: 'adaptive',
+    mode: 'off',
     background_enabled: true,
     interface_enabled: true,
     scene_override: null,

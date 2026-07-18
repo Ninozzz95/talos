@@ -8,7 +8,7 @@ AVM is the Agnostic Agent Virtual Machine workspace:
 
 ## Quick Start
 
-Docker-first local/private start from a clean checkout:
+The adaptive container runtime starts from a clean checkout:
 
 ```bash
 git clone https://github.com/Ninozzz95/agent-virtual-machine.git
@@ -16,11 +16,22 @@ cd agent-virtual-machine
 ./talos up
 ```
 
-On Windows Command Prompt use `talos.cmd up`. The launcher creates `.env`,
-generates the internal browser-worker credential and Laravel application key,
-builds the complete stack, runs migrations, and fails with diagnostics if
-validator or launchable-Chromium readiness does not pass. A repo-local `.tools`
-directory is not required for Docker startup.
+Run the bootstrap only from a trusted checkout. TALOS verifies every downloaded
+runtime artifact and protects the approved inputs across UAC, but source mode
+intentionally treats the cloned repository itself as the trust root.
+
+On Windows Command Prompt use `talos.cmd up`. No manual Docker or Podman installation is required
+on supported Windows hosts. A healthy existing Docker
+installation remains preferred; otherwise supported Windows workstations use
+the pinned Docker Desktop bootstrap. Windows Server uses Podman Machine with Hyper-V;
+the first run may request UAC elevation and one Windows restart, then the same
+command resumes setup.
+
+The launcher creates `.env`, generates internal credentials, installs verified
+runtime artifacts under the ignored `.tools/` directory when needed, builds the
+complete stack, runs migrations, and fails with diagnostics if runtime,
+validator, or launchable-Chromium readiness does not pass. On macOS and Linux,
+install a compatible Docker or Podman runtime before running the command.
 
 Open:
 

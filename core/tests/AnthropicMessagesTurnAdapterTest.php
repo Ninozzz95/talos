@@ -6,6 +6,7 @@ require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\AnthropicMessagesTurnAdapter;
 use Kadmos\Provider\ProviderRequestException;
+use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
@@ -162,12 +163,64 @@ function testAnthropicCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState(
     assertAnthropicAdapter($capabilities->parallelToolCalls === false, 'Anthropic parallel calls require a successful model probe.');
 }
 
+function anthropicResourceRequest(string $documentMime = 'application/pdf'): ProviderTurnRequest
+{
+    return new ProviderTurnRequest(
+        provider: 'anthropic',
+        model: 'claude-opus-4-8',
+        systemPrompt: 'Answer from the supplied resources.',
+        messages: [['role' => 'user', 'content' => 'Analyze these resources.']],
+        tools: [],
+        resources: [
+            ProviderInputResource::fromBytes('image-1', ProviderInputResource::KIND_IMAGE, 'photo.jpg', 'image/jpeg', 'image-bytes'),
+            ProviderInputResource::fromBytes('document-1', ProviderInputResource::KIND_DOCUMENT, 'report.pdf', $documentMime, 'pdf-bytes'),
+        ],
+    );
+}
+
+function testAnthropicAdapterSerializesNativeImageAndPdfResourcesAndRejectsOtherDocuments(): void
+{
+    $responses = [anthropicFixture('final-text')['provider_response']];
+    $requests = [];
+    $adapter = anthropicAdapter($responses, $requests);
+    $adapter->start(anthropicResourceRequest());
+
+    $content = $requests[0]['payload']['messages'][0]['content'] ?? [];
+    assertAnthropicAdapter(($content[0]['type'] ?? null) === 'image', 'Anthropic images must use image blocks.');
+    assertAnthropicAdapter(($content[0]['source']['type'] ?? null) === 'base64', 'Anthropic images must use base64 sources.');
+    assertAnthropicAdapter(($content[0]['source']['data'] ?? null) === base64_encode('image-bytes'), 'Anthropic image sources must contain canonical bytes.');
+    assertAnthropicAdapter(($content[1]['type'] ?? null) === 'document', 'Anthropic PDFs must use document blocks.');
+    assertAnthropicAdapter(($content[1]['source']['media_type'] ?? null) === 'application/pdf', 'Anthropic document source must remain PDF.');
+    assertAnthropicAdapter(($content[2]['type'] ?? null) === 'text' && ($content[2]['text'] ?? null) === 'Analyze these resources.', 'Anthropic prompt text must follow native resources.');
+    assertAnthropicAdapter($adapter->capabilities()->nativeInputImages, 'Anthropic must advertise native image support.');
+    assertAnthropicAdapter($adapter->capabilities()->nativeInputDocuments, 'Anthropic must advertise native PDF support.');
+
+    $responses = [anthropicFixture('mixed-preamble-tool-call')['provider_response']];
+    $requests = [];
+    $unexpectedCall = anthropicAdapter($responses, $requests)->start(anthropicResourceRequest());
+    assertAnthropicAdapter($unexpectedCall->kind === 'failure', 'Anthropic resource turns must reject undeclared provider tool calls.');
+    assertAnthropicAdapter($unexpectedCall->state === null, 'Anthropic resource turns must not retain inline bytes in continuation state.');
+
+    $responses = [anthropicFixture('final-text')['provider_response']];
+    $requests = [];
+    try {
+        anthropicAdapter($responses, $requests)->start(anthropicResourceRequest('text/plain'));
+    } catch (InvalidArgumentException) {
+        assertAnthropicAdapter($requests === [], 'Unsupported Anthropic documents must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('Anthropic non-PDF documents must fail closed.');
+}
+
 $tests = [
     'testAnthropicAdapterNormalizesFinalMixedAndMultipleBlocks',
     'testAnthropicAdapterSerializesEmptySchemaPropertiesAsAnObject',
     'testAnthropicAdapterContinuesWithImmediateToolResultBlocks',
     'testAnthropicAdapterFailsClosedForMalformedRefusedIncompleteAndProviderErrors',
     'testAnthropicCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState',
+    'testAnthropicAdapterSerializesNativeImageAndPdfResourcesAndRejectsOtherDocuments',
 ];
 
 foreach ($tests as $test) {

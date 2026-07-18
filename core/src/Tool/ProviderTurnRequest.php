@@ -8,9 +8,13 @@ use InvalidArgumentException;
 
 final readonly class ProviderTurnRequest
 {
+    private const MAX_RESOURCES = 4;
+    private const MAX_RESOURCE_BYTES = 20971520;
+
     /**
      * @param list<array{role: string, content: string}> $messages
      * @param list<ToolDefinition> $tools
+     * @param list<ProviderInputResource> $resources
      */
     public function __construct(
         public string $provider,
@@ -20,6 +24,7 @@ final readonly class ProviderTurnRequest
         public array $tools,
         public ?int $maxTokens = null,
         public ?float $temperature = null,
+        public array $resources = [],
     ) {
         ToolContractGuard::nonEmptyString($provider, 'Provider turn provider', 64);
         ToolContractGuard::nonEmptyString($model, 'Provider turn model', 256);
@@ -44,6 +49,28 @@ final readonly class ProviderTurnRequest
                 throw new InvalidArgumentException('Provider turn tools must be ToolDefinition values.');
             }
         }
+        ToolContractGuard::boundedListArray($resources, 'Provider turn resources', self::MAX_RESOURCES);
+        $resourceIds = [];
+        $resourceBytes = 0;
+        foreach ($resources as $resource) {
+            if (! $resource instanceof ProviderInputResource) {
+                throw new InvalidArgumentException('Provider turn resources must be ProviderInputResource values.');
+            }
+            if (isset($resourceIds[$resource->resourceId])) {
+                throw new InvalidArgumentException('Provider turn resource IDs must be unique.');
+            }
+            $resourceIds[$resource->resourceId] = true;
+            $resourceBytes += $resource->sizeBytes;
+        }
+        if ($resourceBytes > self::MAX_RESOURCE_BYTES) {
+            throw new InvalidArgumentException('Provider turn resources exceed the aggregate byte budget.');
+        }
+        if ($resources !== [] && $tools !== []) {
+            throw new InvalidArgumentException('Provider turns cannot combine native input resources with procedural tools.');
+        }
+        if ($resources !== [] && ($messages[array_key_last($messages)]['role'] ?? null) !== 'user') {
+            throw new InvalidArgumentException('Provider turn resources require a final user message.');
+        }
         if ($maxTokens !== null && $maxTokens < 1) {
             throw new InvalidArgumentException('Provider turn maxTokens must be positive when set.');
         }
@@ -61,6 +88,7 @@ final readonly class ProviderTurnRequest
             'system_prompt' => $this->systemPrompt,
             'messages' => $this->messages,
             'tools' => array_map(static fn (ToolDefinition $tool): array => $tool->toArray(), $this->tools),
+            'resources' => array_map(static fn (ProviderInputResource $resource): array => $resource->toAuditArray(), $this->resources),
             'max_tokens' => $this->maxTokens,
             'temperature' => $this->temperature,
         ]);

@@ -2,6 +2,15 @@
 
 namespace App\Providers;
 
+use App\Services\FileIngestion\FileBenchmarkScenarioFactory;
+use App\Services\FileIngestion\Malware\ClamAvInstreamClient;
+use App\Services\FileIngestion\Malware\TalosMalwareScanner;
+use App\Services\FileIngestion\Ocr\DisabledTalosOcrClient;
+use App\Services\FileIngestion\Ocr\HttpDeepSeekOcrClient;
+use App\Services\FileIngestion\Ocr\TalosOcrClient;
+use App\Services\FileIngestion\TalosBenchmarkScenarioMaterializer;
+use App\Services\FileIngestion\TalosFilePipelineHealth;
+use App\Services\FileIngestion\TalosFileSidecarHealth;
 use App\Services\Talos\Agent\TalosLaravelToolExecutionBackend;
 use App\Services\Talos\Agent\TalosToolExecutionBackend;
 use App\Services\Talos\Browser\BrowserSessionClient;
@@ -14,6 +23,7 @@ use App\Services\Talos\Web\WebSearchProvider;
 use App\Services\Talos\Web\WebSearchProviderFactory;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Vite;
+use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\ServiceProvider;
 use RuntimeException;
 
@@ -25,6 +35,14 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(TalosToolExecutionBackend::class, TalosLaravelToolExecutionBackend::class);
+        $this->app->bind(TalosMalwareScanner::class, ClamAvInstreamClient::class);
+        $this->app->bind(TalosFilePipelineHealth::class, TalosFileSidecarHealth::class);
+        $this->app->bind(TalosBenchmarkScenarioMaterializer::class, FileBenchmarkScenarioFactory::class);
+        $this->app->bind(TalosOcrClient::class, static fn (): TalosOcrClient => (
+            config('talos-files.ocr.enabled') === true
+                ? new HttpDeepSeekOcrClient
+                : new DisabledTalosOcrClient
+        ));
 
         $this->app->singleton(BrowserWorkerConfiguration::class, static function (): BrowserWorkerConfiguration {
             return new BrowserWorkerConfiguration(
@@ -83,8 +101,20 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(Vite $vite, BrowserWorkerConfiguration $browserWorker): void
+    public function boot(
+        Vite $vite,
+        BrowserWorkerConfiguration $browserWorker,
+        UrlGenerator $urlGenerator,
+    ): void
     {
+        if (! $this->app->environment('local')) {
+            $canonicalOrigin = rtrim((string) config('app.url'), '/');
+            if ($canonicalOrigin === '') {
+                throw new RuntimeException('APP_URL must define the canonical TALOS browser origin.');
+            }
+            $urlGenerator->useOrigin($canonicalOrigin);
+        }
+
         $browserWorker->assertReadyFor($this->app->environment());
         if ($this->app->environment('production')) {
             $this->app->make(TalosBrowserActionCapabilityIssuer::class);

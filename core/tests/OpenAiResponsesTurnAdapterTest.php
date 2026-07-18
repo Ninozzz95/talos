@@ -6,6 +6,7 @@ require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\OpenAiResponsesTurnAdapter;
 use Kadmos\Provider\ProviderRequestException;
+use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
@@ -177,6 +178,96 @@ function testResponsesAdapterRejectsListShapedToolArguments(): void
     assertResponsesAdapter($response->toolCalls === [], 'List-shaped Responses arguments must never reach execution.');
 }
 
+function responsesResourceRequest(
+    string $imageMime = 'image/png',
+    string $documentMime = 'application/pdf',
+): ProviderTurnRequest
+{
+    return new ProviderTurnRequest(
+        provider: 'openai',
+        model: 'gpt-5.6',
+        systemPrompt: 'Answer from the supplied resources.',
+        messages: [
+            ['role' => 'user', 'content' => 'Earlier question.'],
+            ['role' => 'assistant', 'content' => 'Earlier answer.'],
+            ['role' => 'user', 'content' => 'Analyze these resources.'],
+        ],
+        tools: [],
+        resources: [
+            ProviderInputResource::fromBytes('image-1', ProviderInputResource::KIND_IMAGE, 'diagram.png', $imageMime, 'image-bytes'),
+            ProviderInputResource::fromBytes('document-1', ProviderInputResource::KIND_DOCUMENT, 'report.pdf', $documentMime, 'pdf-bytes'),
+        ],
+    );
+}
+
+function testOpenAiResponsesAdapterRejectsUnsupportedDocumentMimeBeforeTransport(): void
+{
+    $responses = [responsesFixture('final-text')['provider_response']];
+    $requests = [];
+
+    try {
+        responsesAdapter($responses, $requests)->start(responsesResourceRequest(documentMime: 'application/octet-stream'));
+    } catch (InvalidArgumentException) {
+        assertResponsesAdapter($requests === [], 'Unsupported Responses document MIME must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('Unsupported Responses document MIME must fail closed.');
+}
+
+function testOpenAiResponsesAdapterRejectsGifWithoutStaticFrameProof(): void
+{
+    $responses = [responsesFixture('final-text')['provider_response']];
+    $requests = [];
+
+    try {
+        responsesAdapter($responses, $requests)->start(responsesResourceRequest(imageMime: 'image/gif'));
+    } catch (InvalidArgumentException) {
+        assertResponsesAdapter($requests === [], 'Unverified Responses GIF input must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('OpenAI GIF input without static-frame proof must fail closed.');
+}
+
+function testResponsesAdapterSerializesNativeImageAndDocumentResources(): void
+{
+    $responses = [responsesFixture('final-text')['provider_response']];
+    $requests = [];
+    $adapter = responsesAdapter($responses, $requests);
+    $adapter->start(responsesResourceRequest());
+
+    $content = $requests[0]['payload']['input'][2]['content'] ?? [];
+    assertResponsesAdapter(($content[0]['type'] ?? null) === 'input_image', 'Responses images must use input_image.');
+    assertResponsesAdapter(($content[0]['image_url'] ?? null) === 'data:image/png;base64,'.base64_encode('image-bytes'), 'Responses images must carry an inline data URL.');
+    assertResponsesAdapter(($content[1]['type'] ?? null) === 'input_file', 'Responses documents must use input_file.');
+    assertResponsesAdapter(($content[1]['filename'] ?? null) === 'report.pdf', 'Responses file input must preserve the safe filename.');
+    assertResponsesAdapter(($content[1]['file_data'] ?? null) === 'data:application/pdf;base64,'.base64_encode('pdf-bytes'), 'Responses files must carry an inline data URL.');
+    assertResponsesAdapter(($content[2]['type'] ?? null) === 'input_text' && ($content[2]['text'] ?? null) === 'Analyze these resources.', 'Responses prompt text must remain attached to the final user turn.');
+    assertResponsesAdapter($adapter->capabilities()->nativeInputImages, 'Responses capability must advertise native image wire support.');
+    assertResponsesAdapter($adapter->capabilities()->nativeInputDocuments, 'Responses capability must advertise native document wire support.');
+
+    $responses = [responsesFixture('mixed-preamble-tool-call')['provider_response']];
+    $requests = [];
+    $unexpectedCall = responsesAdapter($responses, $requests)->start(responsesResourceRequest());
+    assertResponsesAdapter($unexpectedCall->kind === 'failure', 'Responses resource turns must reject undeclared provider tool calls.');
+    assertResponsesAdapter($unexpectedCall->state === null, 'Responses resource turns must not retain inline bytes in continuation state.');
+
+    $responses = [responsesFixture('final-text')['provider_response']];
+    $requests = [];
+    try {
+        responsesAdapter($responses, $requests)->start(responsesResourceRequest('image/bmp'));
+    } catch (InvalidArgumentException) {
+        assertResponsesAdapter($requests === [], 'Unsupported Responses image MIME must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('Unsupported Responses image MIME must fail closed.');
+}
+
 $tests = [
     'testResponsesAdapterNormalizesFinalMixedAndMultipleOutputs',
     'testResponsesAdapterSerializesEmptySchemaPropertiesAsAnObject',
@@ -184,6 +275,9 @@ $tests = [
     'testResponsesAdapterFailsClosedForMalformedRefusedIncompleteAndProviderErrors',
     'testResponsesAdapterRejectsListShapedToolArguments',
     'testResponsesCapabilitiesSeparateAdapterSupportFromModelVerification',
+    'testResponsesAdapterSerializesNativeImageAndDocumentResources',
+    'testOpenAiResponsesAdapterRejectsUnsupportedDocumentMimeBeforeTransport',
+    'testOpenAiResponsesAdapterRejectsGifWithoutStaticFrameProof',
 ];
 
 foreach ($tests as $test) {

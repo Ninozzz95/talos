@@ -4,22 +4,33 @@ declare(strict_types=1);
 
 namespace App\Services\FileIngestion;
 
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
+use Throwable;
 
-final class FileBenchmarkScenarioFactory
+final class FileBenchmarkScenarioFactory implements TalosBenchmarkScenarioMaterializer
 {
     /**
-     * @param array<string, mixed> $ingestedFile
+     * @param  array<string, mixed>  $ingestedFile
      * @return array<string, mixed>
      */
     public function create(array $ingestedFile): array
     {
-        $id = 'file_' . substr((string) $ingestedFile['sha256'], 0, 16);
-        $name = 'File ingestion: ' . (string) $ingestedFile['original_name'];
+        $fileId = $ingestedFile['id'] ?? null;
+        if (! is_string($fileId) || ! Str::isUuid($fileId)) {
+            throw new RuntimeException('TALOS_BENCHMARK_SCENARIO_INGESTION_ID_INVALID');
+        }
+
+        $sourceSha256 = (string) $ingestedFile['sha256'];
+        $id = 'file_'.substr($sourceSha256, 0, 16).'_'.str_replace('-', '', strtolower($fileId));
+        $name = 'File ingestion: '.(string) $ingestedFile['original_name'];
 
         $scenario = [
             'id' => $id,
+            'ref' => $fileId,
+            'source_sha256' => $sourceSha256,
             'name' => $name,
             'category' => 'file_ingestion',
             'difficulty' => 2,
@@ -72,8 +83,27 @@ final class FileBenchmarkScenarioFactory
             ]],
         ];
 
-        $storagePath = 'benchmark-scenarios/' . date('Y/m/d') . '/' . $id . '.json';
-        Storage::disk('local')->put($storagePath, (string) json_encode($scenario, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $storagePath = 'benchmark-scenarios/'.date('Y/m/d').'/'.$id.'.json';
+        $partialPath = $storagePath.'.partial';
+
+        try {
+            $storage = Storage::disk('local');
+            $encoded = json_encode($scenario, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            if (! $storage->put($partialPath, $encoded)) {
+                throw new RuntimeException('Scenario storage returned an unsuccessful write result.');
+            }
+
+            if (! $storage->move($partialPath, $storagePath)) {
+                throw new RuntimeException('Scenario storage returned an unsuccessful move result.');
+            }
+        } catch (Throwable $exception) {
+            if (isset($storage)) {
+                $this->cleanupAfterFailure($storage, $partialPath);
+                $this->cleanupAfterFailure($storage, $storagePath);
+            }
+
+            throw new RuntimeException('TALOS_BENCHMARK_SCENARIO_WRITE_FAILED', 0, $exception);
+        }
 
         return [
             ...$scenario,
@@ -82,8 +112,43 @@ final class FileBenchmarkScenarioFactory
         ];
     }
 
+    /** @param array<string, mixed> $scenario */
+    public function discard(array $scenario): void
+    {
+        $disk = $scenario['storage_disk'] ?? null;
+        $path = $scenario['storage_path'] ?? null;
+        if ($disk !== 'local'
+            || ! is_string($path)
+            || ! str_starts_with($path, 'benchmark-scenarios/')
+            || str_contains($path, '..')
+            || str_contains($path, '\\')
+        ) {
+            throw new RuntimeException('TALOS_BENCHMARK_SCENARIO_ARTIFACT_INVALID');
+        }
+
+        try {
+            $storage = Storage::disk('local');
+            if ($storage->exists($path) && ! $storage->delete($path)) {
+                throw new RuntimeException('Scenario storage returned an unsuccessful delete result.');
+            }
+        } catch (Throwable $exception) {
+            throw new RuntimeException('TALOS_BENCHMARK_SCENARIO_DISCARD_FAILED', 0, $exception);
+        }
+    }
+
+    private function cleanupAfterFailure(FilesystemAdapter $storage, string $path): void
+    {
+        try {
+            if ($storage->exists($path) && ! $storage->delete($path)) {
+                throw new RuntimeException('Scenario storage returned an unsuccessful compensation result.');
+            }
+        } catch (Throwable $cleanupException) {
+            report($cleanupException);
+        }
+    }
+
     /**
-     * @param array<string, mixed> $ingestedFile
+     * @param  array<string, mixed>  $ingestedFile
      * @return list<array<string, mixed>>
      */
     private function buildSteps(array $ingestedFile): array
@@ -134,7 +199,7 @@ final class FileBenchmarkScenarioFactory
     }
 
     /**
-     * @param array<string, mixed> $ingestedFile
+     * @param  array<string, mixed>  $ingestedFile
      */
     private function buildTask(array $ingestedFile): string
     {

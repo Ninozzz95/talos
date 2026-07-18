@@ -17,8 +17,9 @@ RUN apt-get update \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
-COPY core ./core
+COPY core/composer.json core/composer.lock ./core/
 RUN cd core && composer install --no-dev --optimize-autoloader --no-interaction
+COPY core ./core
 
 WORKDIR /app/validator
 COPY validator/package*.json ./
@@ -34,4 +35,3 @@ ENV KADMOS_CHAT_SCRIPT=/app/core/kadmos-chat.php
 EXPOSE 3000
 
 CMD ["node", "dist/server.js"]
-

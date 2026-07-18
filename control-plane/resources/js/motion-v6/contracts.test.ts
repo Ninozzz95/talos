@@ -58,7 +58,7 @@ const CATEGORY_KEYS = [
 
 const EXPECTED_DEFAULTS = {
     schema_version: 1,
-    mode: 'adaptive',
+    mode: 'off',
     background_enabled: true,
     interface_enabled: true,
     scene_override: null,
@@ -229,6 +229,11 @@ describe('TALOS Theme Motion Engine V6 contract', () => {
     it('keeps the complete frozen default payload exact', () => {
         expect(TALOS_MOTION_V6_DEFAULTS).toEqual(EXPECTED_DEFAULTS)
         expect(createDefaultTalosMotionV6Preferences()).toEqual(EXPECTED_DEFAULTS)
+        expect(TALOS_MOTION_V6_DEFAULTS).toMatchObject({
+            mode: 'off',
+            background_enabled: true,
+            interface_enabled: true,
+        })
         expect(Object.keys(TALOS_MOTION_V6_DEFAULTS)).toEqual(TOP_LEVEL_KEYS)
         expect(Object.keys(TALOS_MOTION_V6_DEFAULTS.interface)).toEqual(INTERFACE_KEYS)
         expect(Object.keys(TALOS_MOTION_V6_DEFAULTS.interface.categories)).toEqual(CATEGORY_KEYS)

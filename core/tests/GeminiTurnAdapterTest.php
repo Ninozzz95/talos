@@ -6,6 +6,7 @@ require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\GeminiTurnAdapter;
 use Kadmos\Provider\ProviderRequestException;
+use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
@@ -163,12 +164,62 @@ function testGeminiCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState(): 
     assertGeminiAdapter($capabilities->parallelToolCalls === false, 'Gemini parallel calls require a successful model probe.');
 }
 
+function geminiResourceRequest(string $imageMime = 'image/png'): ProviderTurnRequest
+{
+    return new ProviderTurnRequest(
+        provider: 'gemini',
+        model: 'gemini-3.5-flash',
+        systemPrompt: 'Answer from the supplied resources.',
+        messages: [['role' => 'user', 'content' => 'Analyze these resources.']],
+        tools: [],
+        resources: [
+            ProviderInputResource::fromBytes('image-1', ProviderInputResource::KIND_IMAGE, 'diagram.png', $imageMime, 'image-bytes'),
+            ProviderInputResource::fromBytes('document-1', ProviderInputResource::KIND_DOCUMENT, 'report.pdf', 'application/pdf', 'pdf-bytes'),
+        ],
+    );
+}
+
+function testGeminiAdapterSerializesNativeImageAndPdfResourcesAndRejectsUnsupportedMime(): void
+{
+    $responses = [geminiFixture('final-text')['provider_response']];
+    $requests = [];
+    $adapter = geminiAdapter($responses, $requests);
+    $adapter->start(geminiResourceRequest());
+
+    $parts = $requests[0]['payload']['contents'][0]['parts'] ?? [];
+    assertGeminiAdapter(($parts[0]['inline_data']['mime_type'] ?? null) === 'image/png', 'Gemini images must use inline_data with canonical MIME.');
+    assertGeminiAdapter(($parts[0]['inline_data']['data'] ?? null) === base64_encode('image-bytes'), 'Gemini image parts must contain canonical bytes.');
+    assertGeminiAdapter(($parts[1]['inline_data']['mime_type'] ?? null) === 'application/pdf', 'Gemini PDFs must use inline_data document parts.');
+    assertGeminiAdapter(($parts[2]['text'] ?? null) === 'Analyze these resources.', 'Gemini prompt text must follow native resources.');
+    assertGeminiAdapter($adapter->capabilities()->nativeInputImages, 'Gemini must advertise native image support.');
+    assertGeminiAdapter($adapter->capabilities()->nativeInputDocuments, 'Gemini must advertise native PDF support.');
+
+    $responses = [geminiFixture('mixed-preamble-tool-call')['provider_response']];
+    $requests = [];
+    $unexpectedCall = geminiAdapter($responses, $requests)->start(geminiResourceRequest());
+    assertGeminiAdapter($unexpectedCall->kind === 'failure', 'Gemini resource turns must reject undeclared provider tool calls.');
+    assertGeminiAdapter($unexpectedCall->state === null, 'Gemini resource turns must not retain inline bytes in continuation state.');
+
+    $responses = [geminiFixture('final-text')['provider_response']];
+    $requests = [];
+    try {
+        geminiAdapter($responses, $requests)->start(geminiResourceRequest('image/gif'));
+    } catch (InvalidArgumentException) {
+        assertGeminiAdapter($requests === [], 'Unsupported Gemini image MIME must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('Unsupported Gemini image MIME must fail closed.');
+}
+
 $tests = [
     'testGeminiAdapterNormalizesFinalMixedAndMultipleParts',
     'testGeminiAdapterSerializesEmptySchemaPropertiesAsAnObject',
     'testGeminiAdapterContinuesWithFunctionResponseAndThoughtSignature',
     'testGeminiAdapterFailsClosedForMalformedRefusedIncompleteAndProviderErrors',
     'testGeminiCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState',
+    'testGeminiAdapterSerializesNativeImageAndPdfResourcesAndRejectsUnsupportedMime',
 ];
 
 foreach ($tests as $test) {

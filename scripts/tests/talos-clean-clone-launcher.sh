@@ -9,7 +9,22 @@ mkdir -p "$FIXTURE_ROOT/fakebin"
 cp "$ROOT_DIR/talos" "$ROOT_DIR/.env.example" "$ROOT_DIR/docker-compose.yml" "$FIXTURE_ROOT/"
 mkdir -p "$FIXTURE_ROOT/control-plane/scripts"
 cp "$ROOT_DIR/control-plane/scripts/browser-action-keypair.mjs" "$FIXTURE_ROOT/control-plane/scripts/"
+mkdir -p "$FIXTURE_ROOT/scripts/container-runtime"
+cp \
+  "$ROOT_DIR/scripts/container-runtime/runtime.sh" \
+  "$ROOT_DIR/scripts/container-runtime/bootstrap.sh" \
+  "$ROOT_DIR/scripts/container-runtime/bootstrap-windows.ps1" \
+  "$ROOT_DIR/scripts/container-runtime/Talos.ContainerRuntime.psm1" \
+  "$ROOT_DIR/scripts/container-runtime/manifest.json" \
+  "$FIXTURE_ROOT/scripts/container-runtime/"
 REAL_NODE="$(command -v node)"
+
+if ! grep -q 'talos_runtime_ensure' "$FIXTURE_ROOT/talos" \
+  || ! grep -q 'talos_runtime_cli run --rm' "$FIXTURE_ROOT/talos" \
+  || ! grep -q 'scripts/container-runtime/runtime.sh' "$FIXTURE_ROOT/talos"; then
+  echo 'Root launcher is not wired through the adaptive container runtime.' >&2
+  exit 1
+fi
 
 cat > "$FIXTURE_ROOT/fakebin/docker" <<'SH'
 #!/usr/bin/env bash

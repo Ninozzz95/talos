@@ -7,6 +7,8 @@ namespace Tests\Feature;
 use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
+use Illuminate\Routing\UrlGenerator;
 use Tests\TestCase;
 
 final class TalosAuthTest extends TestCase
@@ -32,6 +34,19 @@ final class TalosAuthTest extends TestCase
 
         $this->get('/')
             ->assertRedirect('/setup');
+    }
+
+    public function test_first_run_redirect_uses_canonical_public_origin_when_fastcgi_omits_the_external_port(): void
+    {
+        $this->withoutVite();
+
+        $urlGenerator = $this->app->make(UrlGenerator::class);
+        $urlGenerator->setRequest(Request::create('http://127.0.0.1/'));
+
+        self::assertSame(
+            'http://localhost:8088/setup',
+            $urlGenerator->to('/setup'),
+        );
     }
 
     public function test_guest_with_existing_user_is_redirected_to_login_before_workspace(): void

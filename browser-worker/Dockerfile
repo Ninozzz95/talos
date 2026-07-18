@@ -3,12 +3,12 @@ FROM node:24-bookworm
 WORKDIR /app/browser-worker
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-COPY browser-worker/package*.json ./
+COPY package*.json ./
 RUN npm ci \
     && npx playwright install --with-deps chromium \
     && chown -R node:node /app/browser-worker /ms-playwright
 
-COPY --chown=node:node browser-worker ./
+COPY --chown=node:node . ./
 
 ENV HOST=0.0.0.0
 ENV PORT=3100
