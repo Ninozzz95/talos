@@ -136,6 +136,7 @@ docker compose --profile search config >/dev/null
 bash ./talos --plain up
 curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 2 \
   http://127.0.0.1:8088/readyz | grep -q '"ready":true'
+docker compose exec -T talos nginx -T 2>&1 | grep -Fq 'fastcgi_param HTTP_HOST $http_host;'
 docker compose --profile search exec -T searxng wget --spider --quiet --timeout=5 --tries=1 \
   http://127.0.0.1:8080/healthz
 docker compose --profile search exec -T searxng python3 -c \

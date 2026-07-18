@@ -490,6 +490,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
             const response = await talosFetch<ApiEnvelope<TalosBrowserArtifact>>(`/api/talos/browser/sessions/${idPath(session.id)}/screenshot`, { method: 'POST', body: JSON.stringify({}), headers: scopedHeaders(talosSessionId) })
             if (scopeIsCurrent(talosSessionId, revision)) latestScreenshot.value = artifactPreviewUrl(response.data.id, talosSessionId)
             await selectSession(session.id)
+            return response.data
         } catch (error) {
             if (scopeIsCurrent(talosSessionId, revision)) setMutationError(error, 'TALOS could not capture a screenshot.')
             throw error
@@ -632,7 +633,14 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
 
     async function refreshAfterStale(sessionId: string) {
         try {
-            await selectSession(sessionId)
+            if (activeSession.value?.id !== sessionId) throw new Error('The stale Browser session is no longer active.')
+            const screenshot = await captureScreenshot()
+            if (!screenshot
+                || activeSession.value?.id !== sessionId
+                || activeSession.value.last_screenshot_artifact_id !== screenshot.id
+                || activeSession.value.state_version !== screenshot.state_version) {
+                throw new Error('TALOS did not promote the captured frame to the active Browser session.')
+            }
             interactionError.value = 'The page changed before the action. Review the refreshed frame and try again.'
             return true
         } catch (error) {

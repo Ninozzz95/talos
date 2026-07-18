@@ -378,7 +378,8 @@ final class TalosBrowserArtifactStore
             || ! is_bool($workerResult['sensitive_effect_authorized'] ?? null)
             || (($workerResult['effect_classification'] ?? null) === 'sensitive' && $workerResult['sensitive_effect_authorized'] !== true)
             || ! $this->validHmiTarget($workerResult['target'] ?? null)
-            || ($workerResult['target']['required_effect_classification'] ?? null) !== $workerResult['effect_classification']) {
+            || (($workerResult['target']['required_effect_classification'] ?? null) === 'sensitive'
+                && $workerResult['effect_classification'] !== 'sensitive')) {
             throw new \RuntimeException('Browser HMI capture contract is invalid.');
         }
 

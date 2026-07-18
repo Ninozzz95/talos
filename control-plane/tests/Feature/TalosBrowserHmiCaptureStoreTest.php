@@ -64,6 +64,46 @@ final class TalosBrowserHmiCaptureStoreTest extends TestCase
         $this->assertStringNotContainsString('#', Storage::disk('local')->get($stored['snapshot']->storage_path));
     }
 
+    public function test_policy_elevation_from_ordinary_target_to_sensitive_execution_commits_exact_evidence(): void
+    {
+        $session = $this->browserSession('policy-elevation', 1);
+        $result = $this->workerResult((string) $session->worker_session_id, 1, 2, 'command-policy-elevation');
+        $result['effect_classification'] = 'sensitive';
+        $result['sensitive_effect_authorized'] = true;
+
+        $stored = $this->app->make(TalosBrowserArtifactStore::class)->storeHmiCapture(
+            $session,
+            'command-policy-elevation',
+            $result,
+        );
+
+        $this->assertSame('active', $stored['session']->status);
+        $this->assertSame('ordinary', $result['target']['required_effect_classification']);
+        $this->assertSame($result['frame_sha256'], $stored['screenshot']->metadata['source_frame_sha256']);
+        $this->assertDatabaseCount('talos_browser_artifacts', 2);
+    }
+
+    public function test_sensitive_target_requirement_cannot_be_downgraded_to_ordinary_execution(): void
+    {
+        $session = $this->browserSession('policy-downgrade', 1);
+        $result = $this->workerResult((string) $session->worker_session_id, 1, 2, 'command-policy-downgrade');
+        $result['target']['effect_attestation'] = 'unattestable';
+        $result['target']['required_effect_classification'] = 'sensitive';
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Browser HMI capture contract is invalid.');
+
+        try {
+            $this->app->make(TalosBrowserArtifactStore::class)->storeHmiCapture(
+                $session,
+                'command-policy-downgrade',
+                $result,
+            );
+        } finally {
+            $this->assertDatabaseCount('talos_browser_artifacts', 0);
+        }
+    }
+
     public function test_replaying_the_same_hmi_capture_returns_the_original_artifacts_without_duplicates(): void
     {
         $session = $this->browserSession('replay', 1);

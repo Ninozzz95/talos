@@ -22,12 +22,13 @@ type BrowserCardFixtureState = {
     events: Record<string, unknown>[]
     frames: Map<string, BrowserFrame>
     pointerRequests: Record<string, unknown>[]
+    screenshotRequests: number
     sessionRequests: string[]
     staleOnce: boolean
     completeTask: () => void
 }
 
-function frameFixture(index: number): BrowserFrame {
+function frameFixture(index: number, stateVersion = index): BrowserFrame {
     const id = `browser-card-frame-${index}`
     const width = 96
     const height = 60
@@ -48,8 +49,8 @@ function frameFixture(index: number): BrowserFrame {
         artifact: {
             id,
             browser_session_id: browserSessionId,
-            source_state_version: index - 1,
-            state_version: index,
+            source_state_version: Math.max(0, stateVersion - 1),
+            state_version: stateVersion,
             trust_boundary: 'untrusted_browser_content',
             type: 'screenshot',
             mime: 'image/png',
@@ -138,8 +139,8 @@ async function installBrowserCardFixture(
         },
     })
 
-    const frames = new Map([1, 2, 3].map((index) => {
-        const frame = frameFixture(index)
+    const frames = new Map([[1, 1], [2, 1], [3, 2]].map(([index, stateVersion]) => {
+        const frame = frameFixture(index, stateVersion)
         return [String(frame.artifact.id), frame] as const
     }))
     const state: BrowserCardFixtureState = {
@@ -182,6 +183,7 @@ async function installBrowserCardFixture(
         events: [browserEvent(1)],
         frames,
         pointerRequests: [],
+        screenshotRequests: 0,
         sessionRequests: [],
         staleOnce: options.staleOnce ?? false,
         completeTask() {
@@ -196,9 +198,11 @@ async function installBrowserCardFixture(
     }
 
     const advanceFrame = (index: number) => {
+        const frame = state.frames.get(`browser-card-frame-${index}`)
+        if (!frame) throw new Error(`Missing Browser frame fixture ${index}.`)
         state.session = {
             ...state.session,
-            state_version: index,
+            state_version: frame.artifact.state_version,
             last_screenshot_artifact_id: `browser-card-frame-${index}`,
             updated_at: `2026-07-16T12:0${index}:00Z`,
         }
@@ -258,19 +262,26 @@ async function installBrowserCardFixture(
             return route.fulfill({ status: 200, contentType: 'image/png', body: frame.bytes })
         }
 
+        if (path === `/api/talos/browser/sessions/${browserSessionId}/screenshot` && method === 'POST') {
+            state.screenshotRequests += 1
+            advanceFrame(2)
+            const frame = state.frames.get('browser-card-frame-2')
+            if (!frame) return json(route, { code: 'FIXTURE_EXHAUSTED', message: 'No fresh frame is available.' }, 500)
+            return json(route, { data: frame.artifact }, 201)
+        }
+
         if (path === `/api/talos/browser/sessions/${browserSessionId}/interactions/pointer` && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             state.pointerRequests.push(body)
             if (state.staleOnce && state.pointerRequests.length === 1) {
-                advanceFrame(2)
                 return json(route, {
                     code: 'TALOS_BROWSER_FRAME_STALE',
                     message: 'The page changed before the action could be applied.',
-                    details: { current_state_version: 2 },
+                    details: { current_state_version: 1 },
                 }, 409)
             }
 
-            const nextIndex = Number(state.session.state_version) + 1
+            const nextIndex = 3
             advanceFrame(nextIndex)
             const frame = state.frames.get(`browser-card-frame-${nextIndex}`)
             if (!frame) return json(route, { code: 'FIXTURE_EXHAUSTED', message: 'No fresh frame is available.' }, 500)
@@ -454,8 +465,37 @@ test('BREG-021 completed task card survives hard reload while Browse stays disab
     expect(state.sessionRequests).toEqual([])
 })
 
+test('BREG-022 desktop lightbox captures and renders the physical frame after stale rejection', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), 'Desktop stale-frame recovery coverage')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const state = await installBrowserCardFixture(page, {
+        presentation: 'drawer',
+        includeAssistant: true,
+        staleOnce: true,
+    })
+    await openAuthenticatedWorkspace(page)
+
+    const trigger = page.getByTestId('browser-evidence-open-browser-card-frame-1')
+    await trigger.click()
+    const surface = page.getByTestId('talos-browser-interactive-frame')
+    await expect(surface).toBeVisible()
+    await expect(surface).toHaveAttribute('data-window-presentation', 'desktop-dialog')
+
+    const firstPointer = page.waitForResponse((response) => (
+        response.request().method() === 'POST'
+        && new URL(response.url()).pathname.endsWith('/interactions/pointer')
+    ))
+    await page.getByTestId('browser-evidence-stage').click()
+    expect((await firstPointer).status()).toBe(409)
+
+    await expect(page.getByText('The page changed before the action. Review the refreshed frame and try again.')).toBeVisible()
+    await assertDecodedNonBlankFrame(page.getByTestId('browser-evidence-image-browser-card-frame-2'))
+    expect(state.screenshotRequests).toBe(1)
+    expect(state.pointerRequests).toHaveLength(1)
+})
+
 for (const presentation of ['drawer', 'fullscreen'] as const) {
-    test(`BREG-012 mobile ${presentation} refreshes stale evidence and renders the verified post-action frame`, async ({ page, isMobile }) => {
+    test(`BREG-012 BREG-022 mobile ${presentation} refreshes stale evidence and renders the verified post-action frame`, async ({ page, isMobile }) => {
         test.skip(!isMobile, 'Mobile responsive viewer coverage')
         await page.setViewportSize({ width: 390, height: 844 })
         const state = await installBrowserCardFixture(page, {
@@ -501,6 +541,7 @@ for (const presentation of ['drawer', 'fullscreen'] as const) {
         const refreshedFrame = page.getByTestId('browser-evidence-image-browser-card-frame-2')
         await assertDecodedNonBlankFrame(refreshedFrame)
         expect(state.pointerRequests).toHaveLength(1)
+        expect(state.screenshotRequests).toBe(1)
 
         const secondPointer = page.waitForResponse((response) => (
             response.request().method() === 'POST'

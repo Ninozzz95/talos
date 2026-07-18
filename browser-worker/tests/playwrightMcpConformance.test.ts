@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -16,6 +17,15 @@ import { PlaywrightMcpAdapter } from "../src/adapters/PlaywrightMcpAdapter.js";
 const require = createRequire(import.meta.url);
 
 describe("Microsoft Playwright MCP direct integration", () => {
+  it("loads the exact sharp target-frame adapter and Apache provenance", () => {
+    const packagePath = join(dirname(dirname(require.resolve("sharp"))), "package.json");
+    const metadata = require(packagePath) as { name: string; version: string; license: string };
+    const license = readFileSync(join(dirname(packagePath), "LICENSE"), "utf8");
+
+    expect(metadata).toMatchObject({ name: "sharp", version: "0.35.3", license: "Apache-2.0" });
+    expect(license).toContain("Apache License");
+  });
+
   it("loads the exact supported Microsoft package and provenance", () => {
     const packagePath = require.resolve("@playwright/mcp/package.json");
     const metadata = require(packagePath) as {
@@ -211,6 +221,16 @@ describe("Microsoft Playwright MCP direct integration", () => {
       expect(Buffer.from(image.data, "base64").subarray(0, 8)).toEqual(
         Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       );
+      const bytes = Buffer.from(image.data, "base64");
+      const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+      const current = await sessions.get(sessionId);
+      await expect(sessions.compareFrameTargetRegion(
+        sessionId,
+        digest,
+        current.stateVersion,
+        bytes,
+        { left: 0, top: 0, width: 32, height: 32 },
+      )).resolves.toMatchObject({ matches: true, reason: "matched" });
     }, 20_000);
 
     it("executes a semantic click through upstream and records each physical mutation once", async () => {

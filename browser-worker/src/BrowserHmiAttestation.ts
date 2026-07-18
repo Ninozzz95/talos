@@ -64,6 +64,14 @@ export interface BrowserHmiTargetAttestation {
   hasRelevantEventListeners: boolean;
   visible: boolean;
   disabled: boolean;
+  bounds: BrowserHmiTargetBounds;
+}
+
+export interface BrowserHmiTargetBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 interface FrameTreeNode {
@@ -96,10 +104,12 @@ export async function inspectBrowserTarget(
   const cdp = await page.context().newCDPSession(page);
   try {
     await cdp.send("DOM.enable");
+    const layout = await cdp.send("Page.getLayoutMetrics");
+    const documentPoint = documentCoordinates(point, layout.cssVisualViewport);
     const [hit, frameTree] = await Promise.all([
       cdp.send("DOM.getNodeForLocation", {
-        x: point.x,
-        y: point.y,
+        x: documentPoint.x,
+        y: documentPoint.y,
         includeUserAgentShadowDOM: true,
       }),
       cdp.send("Page.getFrameTree"),
@@ -135,6 +145,7 @@ export async function inspectBrowserTarget(
     if (actionable.exceptionDetails || !actionable.result.objectId) throw missingTarget();
 
     const described = await cdp.send("DOM.describeNode", { objectId: actionable.result.objectId, depth: 0 });
+    const boxModel = await cdp.send("DOM.getBoxModel", { objectId: actionable.result.objectId });
     const factsResult = await cdp.send("Runtime.callFunctionOn", {
       objectId: actionable.result.objectId,
       functionDeclaration: isolatedFactsFunction(),
@@ -168,6 +179,7 @@ export async function inspectBrowserTarget(
       hasRelevantEventListeners,
       visible: facts.visible,
       disabled: facts.disabled,
+      bounds: boundsFromQuad(boxModel.model.border),
     };
   } finally {
     await cdp.send("Runtime.releaseObjectGroup", { objectGroup: OBJECT_GROUP }).catch(() => undefined);
@@ -204,10 +216,12 @@ export async function dispatchGuardedBrowserClick(
   let guardObjectId: string | undefined;
   try {
     await cdp.send("DOM.enable");
+    const layout = await cdp.send("Page.getLayoutMetrics");
+    const documentPoint = documentCoordinates(point, layout.cssVisualViewport);
     const [hit, frameTree] = await Promise.all([
       cdp.send("DOM.getNodeForLocation", {
-        x: point.x,
-        y: point.y,
+        x: documentPoint.x,
+        y: documentPoint.y,
         includeUserAgentShadowDOM: true,
       }),
       cdp.send("Page.getFrameTree"),
@@ -507,6 +521,28 @@ function assertBounded(value: string, maxBytes: number): void {
 
 function missingTarget(): BrowserError {
   return new BrowserError("No browser target exists at this point.", "TALOS_BROWSER_HMI_TARGET_MISSING", 403);
+}
+
+function boundsFromQuad(quad: number[]): BrowserHmiTargetBounds {
+  if (quad.length !== 8 || quad.some((coordinate) => !Number.isFinite(coordinate))) throw missingTarget();
+  const xs = [quad[0], quad[2], quad[4], quad[6]] as number[];
+  const ys = [quad[1], quad[3], quad[5], quad[7]] as number[];
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+  const right = Math.max(...xs);
+  const bottom = Math.max(...ys);
+  if (right <= left || bottom <= top) throw missingTarget();
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function documentCoordinates(
+  point: { x: number; y: number },
+  viewport: { pageX: number; pageY: number },
+): { x: number; y: number } {
+  const x = point.x + viewport.pageX;
+  const y = point.y + viewport.pageY;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) throw missingTarget();
+  return { x: Math.round(x), y: Math.round(y) };
 }
 
 function staleDispatchTarget(): BrowserError {

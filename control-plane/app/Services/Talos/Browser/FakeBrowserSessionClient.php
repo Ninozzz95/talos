@@ -61,13 +61,14 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
 
     public int $screenshotStateVersion = 0;
 
-    private int $nextSession = 1;
-
     /** @var array<string, array<string, mixed>> */
     private array $sessionState = [];
 
     /** @var array<string, array{fingerprint: string, session_id: string, response: array<string, mixed>}> */
     private array $createClaims = [];
+
+    /** @var array<string, array<string, mixed>> */
+    private array $latestHmiTargets = [];
 
     /** @return list<array<string, mixed>> */
     public function toolDefinitions(string $ownerRef): array
@@ -244,7 +245,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         if (is_string($idempotencyKey)) {
             $request['idempotencyKey'] = $idempotencyKey;
         }
-        $response = $this->respond('create', $request + ['capabilities' => ['actions' => false, 'hmiActions' => true]], $this->createResponse ?? ['sessionId' => 'worker-'.$this->nextSession++, 'status' => 'ready', 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'deviceScaleFactor' => 1, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false], 'stateVersion' => 0, 'expiresAt' => now()->addSeconds($ttlSeconds)->toJSON()]);
+        $response = $this->respond('create', $request + ['capabilities' => ['actions' => false, 'hmiActions' => true]], $this->createResponse ?? ['sessionId' => 'brw_'.Str::uuid(), 'status' => 'ready', 'mode' => 'read_only', 'viewport' => ['width' => $width, 'height' => $height], 'deviceScaleFactor' => 1, 'capabilities' => ['navigation' => true, 'screenshots' => true, 'accessibilitySnapshot' => true, 'actions' => false, 'hmiActions' => true, 'downloads' => false, 'uploads' => false], 'stateVersion' => 0, 'expiresAt' => now()->addSeconds($ttlSeconds)->toJSON()]);
         if (is_string($response['sessionId'] ?? null) && $response['sessionId'] !== '') {
             $this->sessionState[$response['sessionId']] = $response;
         }
@@ -306,6 +307,9 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'target' => $this->defaultHmiTarget(null, $payload),
         ];
         $response['interaction_id'] = $payload['interaction_id'] ?? ($response['interaction_id'] ?? null);
+        if (is_array($response['target'] ?? null)) {
+            $this->latestHmiTargets[$this->hmiTargetKey($ownerRef, $workerSessionId)] = $response['target'];
+        }
 
         return $this->respond('preflightPointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
     }
@@ -334,16 +338,14 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'snapshot' => [...$snapshot, 'sha256' => 'sha256:'.hash('sha256', json_encode($snapshotCanonical, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))],
             'captured_at' => now()->toJSON(),
         ];
+        $preflightTarget = $this->latestHmiTargets[$this->hmiTargetKey($ownerRef, $workerSessionId)] ?? null;
+        if (is_array($preflightTarget)) {
+            $response['target'] = $preflightTarget;
+        }
         $response['command_id'] = $payload['command_id'] ?? ($response['command_id'] ?? null);
         $response['interaction_id'] = $payload['interaction_id'] ?? ($response['interaction_id'] ?? null);
         $response['effect_classification'] = $payload['effect_classification'] ?? ($response['effect_classification'] ?? null);
         $response['sensitive_effect_authorized'] = $payload['sensitive_effect_authorized'] ?? ($response['sensitive_effect_authorized'] ?? null);
-        if (is_array($response['target'] ?? null)) {
-            $response['target']['effect_attestation'] = $response['effect_classification'] === 'sensitive'
-                ? 'unattestable'
-                : 'browser_default';
-            $response['target']['required_effect_classification'] = $response['effect_classification'];
-        }
 
         $result = $this->respond('executePointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds', 'authorization'), $response);
         if (isset($this->sessionState[$workerSessionId]) && is_int($result['state_version'] ?? null)) {
@@ -352,6 +354,11 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         }
 
         return $result;
+    }
+
+    private function hmiTargetKey(string $ownerRef, string $workerSessionId): string
+    {
+        return $ownerRef."\0".$workerSessionId;
     }
 
     /** @return array<string, mixed> */

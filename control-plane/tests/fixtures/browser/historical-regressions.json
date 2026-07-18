@@ -262,6 +262,81 @@
         "resources/js/composables/useTalosWorkspaceBrowse.test.ts::BREG-021"
       ],
       "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-022",
+      "title": "Refresh stale Browser evidence inside the open HMI lightbox",
+      "prompt": "Click a link in an older OpenRouter capture after the physical page has changed.",
+      "expected_contract": "The stale pointer remains rejected and is never replayed; TALOS captures a new owner-scoped physical screenshot, promotes it to the current session frame, replaces the image in the already-open lightbox, and requires a new deliberate human click.",
+      "current_state": "covered",
+      "tests": [
+        "resources/js/composables/useTalosBrowse.test.ts::BREG-022",
+        "tests/e2e/talosBrowserCard.e2e.spec.ts::BREG-022"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-023",
+      "title": "Commit exact evidence after a policy-elevated human link click",
+      "prompt": "Click a normal public link in the current shadcn or OpenRouter screenshot.",
+      "expected_contract": "A direct human click on an attestable public GET or HEAD link executes exactly once without a default confirmation modal, persists the next screenshot and snapshot, refreshes the open lightbox and never enters false recovery; policy may raise authorization risk but can never lower the worker target requirement.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Feature/TalosBrowserHmiCaptureStoreTest.php::test_policy_elevation_from_ordinary_target_to_sensitive_execution_commits_exact_evidence",
+        "tests/Feature/TalosBrowserHmiPolicyTest.php::test_http_destinations_apply_risk_at_the_point_of_external_effect",
+        "tests/Unit/TalosBrowserSessionClientContractTest.php::test_fake_hmi_result_preserves_the_preflight_target_when_policy_only_raises_execution_risk",
+        "tests/Feature/TalosBrowserHmiApiTest.php::test_direct_human_public_link_click_executes_once_without_confirmation_and_persists_evidence"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-024",
+      "title": "Keep fake worker session identities unique across independent requests",
+      "prompt": "Enable Browser in sequential desktop and mobile sessions against one control plane.",
+      "expected_contract": "Every Browser worker session identity remains globally unique across independent Laravel requests and follows the real brw UUID namespace, so sequential viewports never fail Browser startup with a database collision.",
+      "current_state": "covered",
+      "tests": [
+        "tests/Unit/TalosBrowserSessionClientContractTest.php::test_fresh_fake_clients_allocate_unique_real_worker_namespaced_session_ids",
+        "tests/e2e/talosBrowserRecovery.e2e.spec.ts::BREG-004"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-025",
+      "title": "Preserve the public TALOS authority through container login",
+      "prompt": "Sign in at the container URL and continue into the real Browser workspace.",
+      "expected_contract": "Nginx preserves the incoming Host authority, including its public port, so Laravel's intended redirect remains on the canonical TALOS entrypoint and the real Browser HMI gate can authenticate without leaving the application.",
+      "current_state": "covered",
+      "tests": [
+        "scripts/tests/talos-docker-integration.sh::preserves external Host authority for authenticated redirects",
+        "tests/e2e/talosBrowserHmi.e2e.spec.ts::BREG-006"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-026",
+      "title": "Commit modern link navigation without global network silence",
+      "prompt": "Click a normal shadcn link while the page keeps background requests active.",
+      "expected_contract": "TALOS settles against the committed main-frame lifecycle and an atomic screenshot/snapshot transaction instead of waiting for global network idle; the ordinary link executes once without confirmation, changes URL, refreshes evidence and never enters false recovery, while a continuously mutating evidence frame remains fail-closed.",
+      "current_state": "covered",
+      "tests": [
+        "browser-worker/tests/browserHmi.test.ts::commits a same-context link navigation while an unrelated background request remains active",
+        "browser-worker/tests/browserHmi.test.ts::requires recovery when the post-click DOM never reaches quiescence",
+        "tests/e2e/talosBrowserHmi.e2e.spec.ts::BREG-006"
+      ],
+      "promotion_phase": "B6"
+    },
+    {
+      "id": "BREG-027",
+      "title": "Keep production-transformed page evaluation inside the browser VM",
+      "prompt": "Click a normal shadcn link and commit the rendered frame after navigation.",
+      "expected_contract": "Every Playwright page evaluation used by post-action settlement remains self-contained under the locked production tsx/esbuild transform; no Node-side helper leaks into the page, and TALOS commits the exact new screenshot and snapshot without replay or false recovery.",
+      "current_state": "covered",
+      "tests": [
+        "browser-worker/tests/browserPresentationBoundary.test.ts::BREG-027",
+        "tests/e2e/talosBrowserHmi.e2e.spec.ts::BREG-006"
+      ],
+      "promotion_phase": "B6"
     }
   ]
 }

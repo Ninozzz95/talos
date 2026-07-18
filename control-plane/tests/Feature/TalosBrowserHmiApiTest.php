@@ -165,6 +165,40 @@ final class TalosBrowserHmiApiTest extends TestCase
         $this->assertSame($interactionId, $evidenceEvent->payload['interaction_id'] ?? null);
     }
 
+    public function test_direct_human_public_link_click_executes_once_without_confirmation_and_persists_evidence(): void
+    {
+        $this->client->preflightPointerResponse = $this->preflight('Navigation menu', [
+            'tag' => 'a',
+            'role' => 'link',
+            'href' => 'https://example.com/docs/components/base/navigation-menu',
+        ]);
+
+        $response = $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/pointer",
+            $this->pointerPayload([
+                'schema_version' => 'talos_browser_hmi_pointer_v2',
+                'interaction_id' => 'abababab-abab-4bab-8bab-abababababab',
+            ]),
+        );
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.interaction.status', 'executed')
+            ->assertJsonPath('data.session.status', 'active')
+            ->assertJsonPath('data.session.state_version', 8);
+
+        $this->assertSame(['preflightPointer', 'executePointer'], array_column($this->client->requests, 'method'));
+        $this->assertSame('ordinary', $this->client->requests[1]['payload']['effect_classification'] ?? null);
+        $this->assertFalse($this->client->requests[1]['payload']['sensitive_effect_authorized'] ?? true);
+        $this->assertDatabaseCount('talos_browser_hmi_approvals', 1);
+        $this->assertDatabaseHas('talos_browser_hmi_approvals', ['status' => 'consumed']);
+        $this->assertDatabaseCount('talos_browser_artifacts', 3);
+        $this->assertDatabaseMissing('talos_browser_events', [
+            'browser_session_id' => $this->browser->id,
+            'type' => 'hmi.recovery_required',
+        ]);
+    }
+
     public function test_a_completed_ordinary_command_is_durably_replayed_without_worker_dispatch(): void
     {
         $payload = $this->pointerPayload([

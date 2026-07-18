@@ -730,6 +730,71 @@ describe('useTalosBrowse chat isolation', () => {
         expect(talosFetchMock.mock.calls.filter(([url]) => String(url).includes('/interactions/pointer'))).toHaveLength(1)
     })
 
+    it('BREG-022 captures and promotes a fresh physical frame after stale HMI rejection without replaying the pointer', async () => {
+        const active = {
+            ...browserSession('chat-a'),
+            status: 'active',
+            state_version: 7,
+            capabilities: ['interact', 'screenshot'],
+            last_screenshot_artifact_id: 'screen-7',
+        }
+        const updated = { ...active, last_screenshot_artifact_id: 'screen-8' }
+        let captured = false
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (String(url).endsWith('/interactions/pointer') && options?.method === 'POST') {
+                throw new TalosApiError('Stale frame', {
+                    status: 409,
+                    details: { code: 'TALOS_BROWSER_FRAME_STALE', details: {} },
+                })
+            }
+            if (String(url).endsWith('/screenshot') && options?.method === 'POST') {
+                captured = true
+                return {
+                    data: {
+                        id: 'screen-8',
+                        browser_session_id: active.id,
+                        type: 'screenshot',
+                        mime: 'image/png',
+                        sha256: 'b'.repeat(64),
+                        state_version: 7,
+                        metadata: { width: 1280, height: 800 },
+                    },
+                } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}`) {
+                return { data: captured ? updated : active } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/events`) {
+                return { data: captured ? [{
+                    id: 'event-screen-8',
+                    type: 'screenshot.captured',
+                    actor: 'worker',
+                    created_at: '2026-07-18T16:30:00Z',
+                    payload: {
+                        operation: 'screenshot',
+                        artifact_id: 'screen-8',
+                        artifact_ids: ['screen-8'],
+                        state_version: 7,
+                    },
+                }] : [] } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse()
+        browse.bindTalosSession('chat-a')
+        browse.activeSession.value = active
+        browse.sessions.value = [active]
+
+        await expect(browse.interactWithScreenshot(pointerFrame(active))).resolves.toEqual({ status: 'stale' })
+
+        expect(captured).toBe(true)
+        expect(browse.activeSession.value).toMatchObject({ last_screenshot_artifact_id: 'screen-8' })
+        expect(browse.latestScreenshot.value).toContain('/api/talos/browser/artifacts/screen-8/preview')
+        expect(browse.interactionError.value).toBe('The page changed before the action. Review the refreshed frame and try again.')
+        expect(talosFetchMock.mock.calls.filter(([url]) => String(url).includes('/interactions/pointer'))).toHaveLength(1)
+        expect(talosFetchMock.mock.calls.filter(([url, options]) => String(url).endsWith('/screenshot') && options?.method === 'POST')).toHaveLength(1)
+    })
+
     it('surfaces an actionable error when stale-frame refresh also fails', async () => {
         const active = {
             ...browserSession('chat-a'),
@@ -745,8 +810,8 @@ describe('useTalosBrowse chat isolation', () => {
                     details: { code: 'TALOS_BROWSER_FRAME_STALE', details: {} },
                 })
             }
-            if (url === `/api/talos/browser/sessions/${active.id}`) {
-                throw new TalosApiError('Browser refresh unavailable.', { status: 503 })
+            if (String(url).endsWith('/screenshot')) {
+                throw new TalosApiError('Current frame capture unavailable.', { status: 503 })
             }
             throw new Error(`Unexpected test request: ${url}`)
         })
@@ -757,7 +822,8 @@ describe('useTalosBrowse chat isolation', () => {
 
         await expect(browse.interactWithScreenshot(pointerFrame(active))).resolves.toEqual({ status: 'stale' })
         expect(browse.interactionError.value).toContain('Frame changed')
-        expect(browse.interactionError.value).toContain('Browser refresh unavailable')
+        expect(browse.interactionError.value).toContain('Current frame capture unavailable')
+        expect(browse.activeSession.value?.last_screenshot_artifact_id).toBe('screen-7')
     })
 
     it('exposes recovery_required as an explicit browser mode state', async () => {

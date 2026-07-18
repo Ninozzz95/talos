@@ -1704,13 +1704,18 @@ final class TalosBrowserApiTest extends TestCase
             ->assertJsonPath('code', 'TALOS_BROWSER_NOT_FOUND');
     }
 
-    public function test_fake_browser_client_sequences_worker_ids_deterministically(): void
+    public function test_fake_browser_client_allocates_unique_real_worker_namespaced_ids(): void
     {
         $first = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertCreated();
         $second = $this->postJson('/api/talos/browser/sessions', $this->sessionPayload())->assertCreated();
 
-        $this->assertSame('worker-1', TalosBrowserSession::query()->findOrFail($first->json('data.id'))->worker_session_id);
-        $this->assertSame('worker-2', TalosBrowserSession::query()->findOrFail($second->json('data.id'))->worker_session_id);
+        $firstWorkerSessionId = (string) TalosBrowserSession::query()->findOrFail($first->json('data.id'))->worker_session_id;
+        $secondWorkerSessionId = (string) TalosBrowserSession::query()->findOrFail($second->json('data.id'))->worker_session_id;
+
+        $workerSessionPattern = '/^brw_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D';
+        $this->assertMatchesRegularExpression($workerSessionPattern, $firstWorkerSessionId);
+        $this->assertMatchesRegularExpression($workerSessionPattern, $secondWorkerSessionId);
+        $this->assertNotSame($firstWorkerSessionId, $secondWorkerSessionId);
     }
 
     public function test_browser_session_listing_filters_legacy_capabilities_without_trusting_actions(): void
