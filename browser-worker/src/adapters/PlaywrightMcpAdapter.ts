@@ -113,6 +113,9 @@ export class PlaywrightMcpAdapter implements BrowserAutomationAdapter {
         if (MUTATING_TOOLS.has(request.name) && isSuccessfulImmediateResult(result)) {
           this.sessions.recordAutomationMutation(sessionId);
         }
+        if (request.name === "browser_take_screenshot" && isSuccessfulImmediateResult(result)) {
+          await this.recordViewportScreenshot(sessionId, result);
+        }
         return result;
       });
     } finally {
@@ -152,6 +155,14 @@ export class PlaywrightMcpAdapter implements BrowserAutomationAdapter {
     this.accepting = false;
     const sessionIds = [...this.connections.keys()];
     await Promise.all(sessionIds.map((sessionId) => this.closeSession(sessionId)));
+  }
+
+  private async recordViewportScreenshot(sessionId: string, result: BrowserAdapterToolResult): Promise<void> {
+    if (!("content" in result) || !Array.isArray(result.content)) return;
+    const image = result.content.find((item) => item.type === "image" && item.mimeType === "image/png");
+    if (!image || image.type !== "image") return;
+    const bytes = Buffer.from(image.data, "base64");
+    await this.sessions.recordFrame(sessionId, bytes).catch(() => undefined);
   }
 
   private async connection(sessionId: string, signal: AbortSignal): Promise<PlaywrightMcpSessionConnection> {

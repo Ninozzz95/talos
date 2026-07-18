@@ -349,7 +349,8 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     return sessions.runExclusive(request.params.id, async (session) => {
       if (!session.capabilities.screenshots) throw new BrowserError("Screenshots are not enabled for this session.", "TALOS_BROWSER_CAPABILITY_DENIED", 403);
       const image = await captureCanonicalBrowserFrame(session.page);
-      return { data: { sessionId: session.sessionId, stateVersion: session.stateVersion, mime: "image/png", width: session.viewport.width, height: session.viewport.height, sha256: createHash("sha256").update(image).digest("hex"), base64: image.toString("base64"), capturedAt: new Date().toISOString() } };
+      const digest = await sessions.recordFrame(session.sessionId, image, session.stateVersion);
+      return { data: { sessionId: session.sessionId, stateVersion: session.stateVersion, mime: "image/png", width: session.viewport.width, height: session.viewport.height, sha256: digest.slice("sha256:".length), base64: image.toString("base64"), capturedAt: new Date().toISOString() } };
     });
   });
 

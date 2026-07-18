@@ -203,11 +203,12 @@ export class BrowserToolDispatcher {
       throw new BrowserError("Screenshots are not enabled for this session.", "TALOS_BROWSER_CAPABILITY_DENIED", 403);
     }
     this.sessions.assertState(session.sessionId, parsed.data.state_version);
-    const image = await session.page.screenshot({ type: "png" });
+    const image = await captureCanonicalBrowserFrame(session.page);
     if (image.byteLength > TOOL_MAX_SCREENSHOT_BYTES) {
       return this.errorResult(call.tool_use_id, "TALOS_BROWSER_SCREENSHOT_BOUNDS", "The browser screenshot exceeds the bounded output limit.", { max_bytes: TOOL_MAX_SCREENSHOT_BYTES });
     }
     const digest = sha256(image);
+    await this.sessions.recordFrame(session.sessionId, image, session.stateVersion);
     const structured = {
       url: browserEvidenceUrl(session.page.url()),
       title: await session.page.title(),
@@ -433,6 +434,7 @@ export class BrowserToolDispatcher {
       }
       if (snapshot.domDigest !== verificationSnapshot.domDigest) throw new Error("evidence_dom_changed");
       await this.sessions.recordSnapshot(current.sessionId, snapshot);
+      await this.sessions.recordFrame(current.sessionId, screenshot, current.stateVersion);
       const snapshotValue = {
         snapshot_id: snapshot.snapshotId,
         format: snapshot.format,
@@ -604,6 +606,7 @@ export class BrowserToolDispatcher {
         throw new Error("evidence_frame_changed");
       }
       await this.sessions.recordSnapshot(current.sessionId, snapshot);
+      await this.sessions.recordFrame(current.sessionId, screenshot, current.stateVersion);
       const snapshotValue = {
         snapshot_id: snapshot.snapshotId,
         format: snapshot.format,

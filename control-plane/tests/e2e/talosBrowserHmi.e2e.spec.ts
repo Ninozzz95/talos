@@ -9,6 +9,7 @@ const loginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const loginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
 const devEvidence = process.env.TALOS_E2E_DEV_BROWSER_EVIDENCE === '1'
 const realBrowserIntegration = process.env.TALOS_E2E_REAL_BROWSER === '1'
+const expectedLiveBrowserUrl = process.env.TALOS_E2E_EXPECT_LIVE_BROWSER_URL
 const mockBrowserFrames = new Map<string, Buffer>()
 
 function mockBrowserFrame(artifactId: string) {
@@ -41,6 +42,13 @@ async function isAuthenticatedWorkspace(page: Page) {
     return await page.locator('#talos-workspace-root[data-authenticated="true"]').count() > 0
 }
 
+async function waitForAuthenticatedWorkspace(page: Page, timeout = 15_000) {
+    return expect(page.locator('#talos-workspace-root[data-authenticated="true"]'))
+        .toHaveCount(1, { timeout })
+        .then(() => true)
+        .catch(() => false)
+}
+
 async function openWorkspace(page: Page) {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
@@ -50,16 +58,13 @@ async function openWorkspace(page: Page) {
 async function submitLogin(page: Page, email: string, password: string) {
     await page.goto('/login', { waitUntil: 'domcontentloaded' })
     const form = page.locator('#talos-login-form')
-    if (!await form.isVisible().catch(() => false)) return false
+    if (!await form.isVisible().catch(() => false)) return waitForAuthenticatedWorkspace(page)
 
     await form.getByLabel('Email').fill(email)
     await form.getByLabel('Password').fill(password)
-    await Promise.all([
-        page.waitForURL(/\/$/, { waitUntil: 'domcontentloaded', timeout: 4_000 }).catch(() => undefined),
-        form.getByRole('button', { name: 'Sign in' }).click(),
-    ])
+    await form.getByRole('button', { name: 'Sign in' }).click()
 
-    return isAuthenticatedWorkspace(page)
+    return waitForAuthenticatedWorkspace(page)
 }
 
 async function ensureAuthenticated(page: Page) {
@@ -73,11 +78,8 @@ async function ensureAuthenticated(page: Page) {
         await setupForm.getByLabel('Email').fill(setupEmail)
         await setupForm.getByLabel('Password', { exact: true }).fill(setupPassword)
         await setupForm.getByLabel('Confirm password').fill(setupPassword)
-        await Promise.all([
-            page.waitForURL(/\/$/, { waitUntil: 'domcontentloaded', timeout: 4_000 }).catch(() => undefined),
-            setupForm.getByRole('button', { name: 'Create first admin' }).click(),
-        ])
-        if (await isAuthenticatedWorkspace(page)) return
+        await setupForm.getByRole('button', { name: 'Create first admin' }).click()
+        if (await waitForAuthenticatedWorkspace(page)) return
     }
 
     for (const [email, password] of [[loginEmail, loginPassword], [setupEmail, setupPassword]] as const) {
@@ -340,7 +342,9 @@ test('BREG-006 authenticated desktop sends a fractional lightbox click through L
     const request = await pointerRequest
     let response = await pointerResponse
     let responseBody = await response.text()
+    let confirmationRequired = false
     if (response.status() === 428) {
+        confirmationRequired = true
         expect(JSON.parse(responseBody)).toMatchObject({
             code: 'TALOS_BROWSER_HMI_CONFIRMATION_REQUIRED',
         })
@@ -356,7 +360,9 @@ test('BREG-006 authenticated desktop sends a fractional lightbox click through L
         await expect(alert).toBeHidden()
     }
     expect(response.status(), responseBody).toBe(201)
-    const payload = JSON.parse(responseBody) as { data: { screenshot: { id: string }, session: { state_version: number } } }
+    const payload = JSON.parse(responseBody) as {
+        data: { screenshot: { id: string }, session: { state_version: number, current_url: string } }
+    }
     const requestBody = request.postDataJSON() as Record<string, unknown>
     expect(new URL(request.url()).pathname).toMatch(/\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/pointer$/)
     expect(requestBody).toMatchObject({
@@ -373,6 +379,10 @@ test('BREG-006 authenticated desktop sends a fractional lightbox click through L
     expect(Math.abs(workerY - Math.round(workerY))).toBeGreaterThan(0.01)
     expect(payload.data.session.state_version).toBeGreaterThan(0)
     expect(payload.data.screenshot.id).not.toBe(initialArtifactId)
+    if (expectedLiveBrowserUrl) {
+        expect(confirmationRequired).toBe(false)
+        expect(payload.data.session.current_url).toBe(expectedLiveBrowserUrl)
+    }
 
     const updatedImage = page.getByTestId(`browser-evidence-image-${payload.data.screenshot.id}`)
     await expect(updatedImage).toBeVisible()

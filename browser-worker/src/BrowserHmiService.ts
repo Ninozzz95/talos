@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Page, Request } from "playwright";
+import type { Frame, Page } from "playwright";
 import { BrowserError } from "./BrowserErrors.js";
 import { captureCanonicalBrowserFrame } from "./BrowserFrameCapture.js";
 import {
@@ -8,6 +8,8 @@ import {
   inspectBrowserTarget,
   type BrowserHmiTargetAttestation,
 } from "./BrowserHmiAttestation.js";
+import type { BrowserFrameRegion } from "./BrowserFrameEvidenceStore.js";
+import { waitForBrowserPresentationBoundary } from "./BrowserPresentationBoundary.js";
 import {
   BrowserHmiPreflightResponseSchema,
   BrowserHmiResultResponseSchema,
@@ -23,9 +25,13 @@ import { BrowserSessionManager, type BrowserSession } from "./BrowserSessionMana
 import { browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 
 type TargetFacts = Omit<BrowserHmiTargetDescriptor, "fingerprint">;
-type InspectedTarget = { target: BrowserHmiTargetDescriptor; attestation: BrowserHmiTargetAttestation };
+type InspectedTarget = {
+  target: BrowserHmiTargetDescriptor;
+  attestation: BrowserHmiTargetAttestation;
+  region: BrowserFrameRegion;
+};
 
-const HMI_QUIESCENCE_TIMEOUT_MS = 1_000;
+const HMI_QUIESCENCE_TIMEOUT_MS = 5_000;
 const HMI_QUIESCENCE_STABLE_MS = 100;
 const HMI_QUIESCENCE_POLL_MS = 25;
 const HMI_POST_ACTION_GUARD_MS = 400;
@@ -37,21 +43,23 @@ export class BrowserHmiService {
     return this.sessions.runExclusive(sessionId, async (session) => {
       this.assertCapability(session);
       this.sessions.assertState(sessionId, input.state_version);
-      const frameSha256 = sha256(await captureCanonicalBrowserFrame(session.page));
-      if (frameSha256 !== input.expected_frame_sha256) {
-        throw new BrowserError("The visible browser frame changed before preflight.", "TALOS_BROWSER_FRAME_STALE", 409, {
-          state_version: session.stateVersion,
-        });
-      }
       const point = this.point(session, input.normalized_x, input.normalized_y);
-      const { target } = await this.inspectedTarget(session, input.state_version, frameSha256, point);
+      const frame = await captureCanonicalBrowserFrame(session.page);
+      const { target } = await this.inspectedTarget(
+        session,
+        input.state_version,
+        input.expected_frame_sha256,
+        point,
+        frame,
+        "preflight",
+      );
 
       return BrowserHmiPreflightResponseSchema.parse({
         schema_version: "talos_browser_hmi_preflight_v2",
         interaction_id: input.interaction_id,
         session_id: sessionId,
         state_version: session.stateVersion,
-        frame_sha256: frameSha256,
+        frame_sha256: input.expected_frame_sha256,
         origin: safeOrigin(session.page.url()),
         point,
         target,
@@ -73,14 +81,17 @@ export class BrowserHmiService {
       this.assertCapability(session);
       this.sessions.assertState(sessionId, input.state_version);
       const sourceStateVersion = session.stateVersion;
-      const sourceFrameSha256 = sha256(await captureCanonicalBrowserFrame(session.page));
-      if (sourceFrameSha256 !== input.expected_frame_sha256) {
-        throw new BrowserError("The visible browser frame changed before execution.", "TALOS_BROWSER_FRAME_STALE", 409, {
-          state_version: session.stateVersion,
-        });
-      }
+      const sourceFrameSha256 = input.expected_frame_sha256;
       const point = this.point(session, input.normalized_x, input.normalized_y);
-      const { target } = await this.inspectedTarget(session, sourceStateVersion, sourceFrameSha256, point);
+      const sourceFrame = await captureCanonicalBrowserFrame(session.page);
+      const { target } = await this.inspectedTarget(
+        session,
+        sourceStateVersion,
+        sourceFrameSha256,
+        point,
+        sourceFrame,
+        "execution",
+      );
 
       if (target.fingerprint !== input.expected_fingerprint) {
         throw new BrowserError("The browser target changed before execution.", "TALOS_BROWSER_TARGET_STALE", 409, {
@@ -145,13 +156,15 @@ export class BrowserHmiService {
       try {
         quiescence = createQuiescenceTracker(session.page);
         await installDomProbe(session.page, domProbeKey);
-        const immediateFrameSha256 = sha256(await captureCanonicalBrowserFrame(session.page));
-        if (immediateFrameSha256 !== sourceFrameSha256) {
-          throw new BrowserError("The visible browser frame changed before pointer dispatch.", "TALOS_BROWSER_FRAME_STALE", 409, {
-            state_version: session.stateVersion,
-          });
-        }
-        const immediateTarget = await this.inspectedTarget(session, sourceStateVersion, immediateFrameSha256, point);
+        const immediateFrame = await captureCanonicalBrowserFrame(session.page);
+        const immediateTarget = await this.inspectedTarget(
+          session,
+          sourceStateVersion,
+          sourceFrameSha256,
+          point,
+          immediateFrame,
+          "dispatch",
+        );
         if (immediateTarget.target.fingerprint !== target.fingerprint) {
           throw new BrowserError("The browser target changed before pointer dispatch.", "TALOS_BROWSER_TARGET_STALE", 409, {
             state_version: session.stateVersion,
@@ -190,6 +203,8 @@ export class BrowserHmiService {
         } finally {
           await suppressCapturePresentationMutations(current.page, domProbeKey, false);
         }
+        const mutationCountAfterScreenshot = await readEvidenceDomProbe(current.page, domProbeKey);
+        const documentAfterScreenshot = await currentMainDocumentIdentity(current.page);
         const snapshot = await captureSnapshot(current.page);
         const documentAfterCapture = await currentMainDocumentIdentity(current.page);
         const mutationCountAfterCapture = await readEvidenceDomProbe(current.page, domProbeKey);
@@ -198,10 +213,19 @@ export class BrowserHmiService {
           || documentBeforeCapture.frameId !== documentAfterCapture.frameId
           || documentBeforeCapture.loaderId !== documentAfterCapture.loaderId
           || documentBeforeCapture.url !== documentAfterCapture.url) {
+          console.error("TALOS_HMI_EVIDENCE_FRAME_DEBUG", {
+            mutationCountBeforeCapture,
+            mutationCountAfterScreenshot,
+            mutationCountAfterCapture,
+            documentBeforeCapture,
+            documentAfterScreenshot,
+            documentAfterCapture,
+          });
           throw new Error("evidence_frame_changed");
         }
         this.sessions.assertOperational(sessionId);
         this.sessions.recordSnapshot(sessionId, snapshot);
+        await this.sessions.recordFrame(sessionId, screenshot, current.stateVersion);
         const snapshotValue = {
           snapshot_id: snapshot.snapshotId,
           format: snapshot.format,
@@ -297,10 +321,32 @@ export class BrowserHmiService {
   private async inspectedTarget(
     session: BrowserSession,
     stateVersion: number,
-    frameSha256: string,
+    sourceFrameSha256: string,
     point: { normalized_x: number; normalized_y: number; x: number; y: number },
+    currentFrame: Buffer,
+    phase: "preflight" | "execution" | "dispatch",
   ): Promise<InspectedTarget> {
     const raw = await inspectBrowserTarget(session.page, point);
+    const region = targetFrameRegion(session, point, raw);
+    const currentFrameSha256 = sha256(currentFrame);
+    if (currentFrameSha256 === sourceFrameSha256) {
+      await this.sessions.recordFrame(session.sessionId, currentFrame, stateVersion);
+    }
+    const frameComparison = await this.sessions.compareFrameTargetRegion(
+      session.sessionId,
+      sourceFrameSha256,
+      stateVersion,
+      currentFrame,
+      region,
+    );
+    if (!frameComparison.matches || !frameComparison.regionSha256) {
+      throw new BrowserError(
+        `The visible browser target changed before ${phase}.`,
+        "TALOS_BROWSER_FRAME_STALE",
+        409,
+        { state_version: session.stateVersion, reason_code: frameComparison.reason },
+      );
+    }
     const currentPageUrl = session.page.url();
     if (Buffer.byteLength(currentPageUrl, "utf8") > 8_192) {
       throw new BrowserError("The browser URL exceeds the bounded HMI contract.", "TALOS_BROWSER_HMI_TARGET_BOUNDS", 413);
@@ -329,7 +375,9 @@ export class BrowserHmiService {
     const fingerprint = sha256(canonicalJson({
       session_id: session.sessionId,
       state_version: stateVersion,
-      frame_sha256: frameSha256,
+      source_frame_sha256: sourceFrameSha256,
+      target_region_sha256: frameComparison.regionSha256,
+      target_region: region,
       frame_id: raw.frameId,
       loader_id: raw.loaderId,
       backend_node_id: raw.backendNodeId,
@@ -344,8 +392,51 @@ export class BrowserHmiService {
     return {
       target: BrowserHmiTargetDescriptorSchema.parse({ ...facts, fingerprint }),
       attestation: raw,
+      region,
     };
   }
+}
+
+function targetFrameRegion(
+  session: BrowserSession,
+  point: { x: number; y: number },
+  target: BrowserHmiTargetAttestation,
+): BrowserFrameRegion {
+  const margin = 8;
+  const maximumExtent = 512;
+  const targetLeft = Math.max(0, target.bounds.left - margin);
+  const targetTop = Math.max(0, target.bounds.top - margin);
+  const targetRight = Math.min(session.viewport.width, target.bounds.left + target.bounds.width + margin);
+  const targetBottom = Math.min(session.viewport.height, target.bounds.top + target.bounds.height + margin);
+  if (point.x < targetLeft || point.x > targetRight || point.y < targetTop || point.y > targetBottom) {
+    throw new BrowserError("The browser target geometry changed before interaction.", "TALOS_BROWSER_TARGET_STALE", 409, {
+      state_version: session.stateVersion,
+    });
+  }
+
+  const left = boundedRegionStart(targetLeft, targetRight, point.x, maximumExtent, session.viewport.width);
+  const top = boundedRegionStart(targetTop, targetBottom, point.y, maximumExtent, session.viewport.height);
+  const right = Math.min(session.viewport.width, Math.max(point.x + 1, Math.min(targetRight, left + maximumExtent)));
+  const bottom = Math.min(session.viewport.height, Math.max(point.y + 1, Math.min(targetBottom, top + maximumExtent)));
+  const integralLeft = Math.max(0, Math.floor(left));
+  const integralTop = Math.max(0, Math.floor(top));
+  return {
+    left: integralLeft,
+    top: integralTop,
+    width: Math.max(1, Math.ceil(right) - integralLeft),
+    height: Math.max(1, Math.ceil(bottom) - integralTop),
+  };
+}
+
+function boundedRegionStart(
+  targetStart: number,
+  targetEnd: number,
+  point: number,
+  maximumExtent: number,
+  viewportExtent: number,
+): number {
+  if (targetEnd - targetStart <= maximumExtent) return targetStart;
+  return Math.max(0, Math.min(viewportExtent - maximumExtent, point - maximumExtent / 2));
 }
 
 function roundCoordinate(value: number): number {
@@ -424,7 +515,7 @@ async function closeUnexpectedPages(session: BrowserSession, baselinePages: Set<
 }
 
 function recoveryReason(error: unknown): string {
-  if (error instanceof Error && ["new_context_opened", "download_started", "file_chooser_opened", "dispatch_guard_rejected", "evidence_frame_changed", "evidence_url_bounds", "quiescence_timeout"].includes(error.message)) return error.message;
+  if (error instanceof Error && ["new_context_opened", "download_started", "file_chooser_opened", "dispatch_guard_rejected", "evidence_frame_changed", "evidence_url_bounds", "navigation_settlement_timeout", "quiescence_timeout"].includes(error.message)) return error.message;
   return "post_dispatch_failure";
 }
 
@@ -454,43 +545,37 @@ interface QuiescenceTracker {
 }
 
 function createQuiescenceTracker(page: Page): QuiescenceTracker {
-  const activeRequests = new Set<Request>();
-  let activityVersion = 0;
   let navigationVersion = 0;
-  const onRequest = (request: Request) => {
-    activeRequests.add(request);
-    activityVersion += 1;
-  };
-  const onRequestDone = (request: Request) => {
-    activeRequests.delete(request);
-    activityVersion += 1;
-  };
-  const onNavigation = () => {
+  const onNavigation = (frame: Frame) => {
+    if (frame !== page.mainFrame()) return;
     navigationVersion += 1;
-    activityVersion += 1;
   };
-  page.on("request", onRequest);
-  page.on("requestfinished", onRequestDone);
-  page.on("requestfailed", onRequestDone);
   page.on("framenavigated", onNavigation);
-  const baselineActiveRequests = activeRequests.size;
   const baselineNavigationVersion = navigationVersion;
+  const baselineUrl = page.url();
 
   return {
     async waitFor(currentPage, domProbeKey) {
       const deadline = Date.now() + HMI_QUIESCENCE_TIMEOUT_MS;
       let previousMutationCount: number | undefined;
-      let previousActivityVersion = activityVersion;
       let previousNavigationVersion = navigationVersion;
       let stableSince: number | undefined;
 
       while (Date.now() < deadline) {
-        let mutationCount = await readDomProbe(currentPage, domProbeKey);
-        const navigationChanged = navigationVersion > baselineNavigationVersion;
+        const navigationChanged = navigationVersion > baselineNavigationVersion
+          || currentPage.url() !== baselineUrl;
         if (navigationChanged) {
           const remaining = Math.max(1, deadline - Date.now());
-          await currentPage.waitForLoadState("domcontentloaded", { timeout: remaining }).catch(() => undefined);
+          try {
+            await currentPage.waitForLoadState("domcontentloaded", { timeout: remaining });
+            await installDomProbe(currentPage, domProbeKey);
+            await waitForBrowserPresentationBoundary(currentPage, Math.max(1, deadline - Date.now()));
+          } catch {
+            throw new Error("navigation_settlement_timeout");
+          }
+          return;
         }
+        let mutationCount = await readDomProbe(currentPage, domProbeKey);
         const probeReinstalled = mutationCount === null;
         if (probeReinstalled) {
           try {
@@ -504,26 +589,20 @@ function createQuiescenceTracker(page: Page): QuiescenceTracker {
         const changed = probeReinstalled
           || previousMutationCount === undefined
           || mutationCount !== previousMutationCount
-          || activityVersion !== previousActivityVersion
-          || navigationVersion !== previousNavigationVersion
-          || activeRequests.size > baselineActiveRequests;
+          || navigationVersion !== previousNavigationVersion;
         if (changed) {
           stableSince = undefined;
         } else if (stableSince === undefined) {
           stableSince = Date.now();
         }
         previousMutationCount = mutationCount ?? previousMutationCount;
-        previousActivityVersion = activityVersion;
         previousNavigationVersion = navigationVersion;
-        if (stableSince !== undefined && Date.now() - stableSince >= HMI_QUIESCENCE_STABLE_MS && activeRequests.size <= baselineActiveRequests) return;
+        if (stableSince !== undefined && Date.now() - stableSince >= HMI_QUIESCENCE_STABLE_MS) return;
         await currentPage.waitForTimeout(Math.min(HMI_QUIESCENCE_POLL_MS, Math.max(1, deadline - Date.now())));
       }
       throw new Error("quiescence_timeout");
     },
     dispose() {
-      page.off("request", onRequest);
-      page.off("requestfinished", onRequestDone);
-      page.off("requestfailed", onRequestDone);
       page.off("framenavigated", onNavigation);
     },
   };

@@ -701,6 +701,22 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $this->assertNotSame($first['sessionId'], $replacement['sessionId']);
     }
 
+    public function test_fresh_fake_clients_allocate_unique_real_worker_namespaced_session_ids(): void
+    {
+        $first = (new FakeBrowserSessionClient)->create('owner-1', 1280, 800);
+        $second = (new FakeBrowserSessionClient)->create('owner-1', 1280, 800);
+
+        $this->assertMatchesRegularExpression(
+            '/^brw_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D',
+            (string) $first['sessionId'],
+        );
+        $this->assertMatchesRegularExpression(
+            '/^brw_[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/D',
+            (string) $second['sessionId'],
+        );
+        $this->assertNotSame($first['sessionId'], $second['sessionId']);
+    }
+
     public function test_http_client_rejects_a_mismatched_worker_protocol_during_session_bootstrap(): void
     {
         Http::fakeSequence()
@@ -1073,6 +1089,35 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             'sha256:'.hash('sha256', json_encode($canonicalSnapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)),
             $snapshot['sha256'],
         );
+    }
+
+    public function test_fake_hmi_result_preserves_the_preflight_target_when_policy_only_raises_execution_risk(): void
+    {
+        $client = new FakeBrowserSessionClient;
+        $pointer = [
+            'schema_version' => 'talos_browser_hmi_pointer_v2',
+            'interaction_id' => self::HMI_INTERACTION_ID,
+            'state_version' => 0,
+            'expected_frame_sha256' => 'sha256:'.str_repeat('c', 64),
+            'normalized_x' => 0.5,
+            'normalized_y' => 0.5,
+            'button' => 'left',
+            'click_count' => 1,
+        ];
+        $preflight = $client->preflightPointer('owner-1', 'worker-1', $pointer);
+
+        $result = $client->executePointer('owner-1', 'worker-1', [
+            ...$pointer,
+            'command_id' => 'command-policy-elevation',
+            'expected_fingerprint' => $preflight['target']['fingerprint'],
+            'effect_classification' => 'sensitive',
+            'sensitive_effect_authorized' => true,
+        ]);
+
+        $this->assertSame($preflight['target'], $result['target']);
+        $this->assertSame('ordinary', $result['target']['required_effect_classification']);
+        $this->assertSame('sensitive', $result['effect_classification']);
+        $this->assertTrue($result['sensitive_effect_authorized']);
     }
 
     public function test_fake_client_preserves_created_viewport_and_hmi_state_for_reconciliation(): void

@@ -137,7 +137,7 @@ final class TalosBrowserHmiPolicy
         if (($target['href'] ?? null) !== null) {
             return $this->isPotentiallyEffectfulNavigation($target, $tokens, $formMethod)
                 ? 'external_commit'
-                : 'external_navigation';
+                : 'ordinary';
         }
         if ($this->isBoundedSearch($target, $tokens, $formMethod)) {
             return 'ordinary';

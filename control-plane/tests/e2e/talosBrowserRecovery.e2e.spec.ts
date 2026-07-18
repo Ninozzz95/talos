@@ -43,9 +43,9 @@ async function openAuthenticatedWorkspace(page: Page) {
 test('Browser historical regression corpus has stable complete identifiers and explicit ownership', () => {
     expect(corpus.schema_version).toBe('talos_browser_regression_corpus_v1')
     expect(corpus.scenarios.map(({ id }) => id)).toEqual(
-        Array.from({ length: 21 }, (_, index) => `BREG-${String(index + 1).padStart(3, '0')}`),
+        Array.from({ length: 27 }, (_, index) => `BREG-${String(index + 1).padStart(3, '0')}`),
     )
-    expect(new Set(corpus.scenarios.map(({ id }) => id)).size).toBe(21)
+    expect(new Set(corpus.scenarios.map(({ id }) => id)).size).toBe(27)
 
     for (const scenario of corpus.scenarios) {
         expect(scenario.title.trim(), scenario.id).not.toBe('')

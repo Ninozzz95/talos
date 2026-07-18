@@ -133,31 +133,53 @@ final class TalosBrowserHmiPolicyTest extends TestCase
     }
 
     #[DataProvider('httpDestinationProvider')]
-    public function test_http_destinations_are_never_classified_as_ordinary(array $overrides, string $expectedCategory): void
+    public function test_http_destinations_apply_risk_at_the_point_of_external_effect(
+        array $overrides,
+        string $expectedDecision,
+        string $expectedCategory,
+    ): void
     {
         $result = app(TalosBrowserHmiPolicy::class)->classify($this->target(
             name: 'Next page',
             overrides: $overrides,
         ));
 
-        $this->assertSame('confirm', $result['decision']);
+        $this->assertSame($expectedDecision, $result['decision']);
         $this->assertSame($expectedCategory, $result['category']);
     }
 
-    /** @return iterable<string, array{array<string, mixed>, string}> */
+    /** @return iterable<string, array{array<string, mixed>, string, string}> */
     public static function httpDestinationProvider(): iterable
     {
         yield 'external GET navigation with a path' => [[
             'tag' => 'a',
             'role' => 'link',
             'href' => 'https://example.com/docs/next-page',
-        ], 'external_navigation'];
+        ], 'allow', 'ordinary'];
         yield 'effectful POST destination' => [[
             'tag' => 'button',
             'href' => 'https://example.com/account/close',
             'form_method' => 'post',
             'is_submit' => true,
-        ], 'external_commit'];
+        ], 'confirm', 'external_commit'];
+    }
+
+    public function test_workspace_can_still_require_confirmation_for_safe_public_navigation(): void
+    {
+        $target = $this->target(name: 'Navigation menu', overrides: [
+            'tag' => 'a',
+            'role' => 'link',
+            'href' => 'https://ui.shadcn.com/docs/components/base/navigation-menu',
+        ]);
+
+        $result = app(TalosBrowserHmiPolicy::class)->classify(
+            $target,
+            TalosBrowserHmiPolicy::CONFIRM_SENSITIVE,
+            TalosBrowserHmiPolicy::CONFIRM_EVERY_INTERACTION,
+        );
+
+        $this->assertSame('confirm', $result['decision']);
+        $this->assertSame('ordinary', $result['category']);
     }
 
     /** @return array<string, mixed> */

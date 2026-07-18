@@ -220,7 +220,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const response = await preflight(sessionId);
       const data = response.json().data;
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
       expect(data).toMatchObject({
         schema_version: "talos_browser_hmi_preflight_v2",
         session_id: sessionId,
@@ -384,7 +384,105 @@ describe("TALOS Browser HMI pointer boundary", () => {
     }
   });
 
-  it("rejects execution when the visible frame changed after preflight without dispatching the click", async () => {
+  it("BREG-022 ignores unrelated dynamic pixels while preserving target-bound HMI attestation", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        const ticker = document.createElement("div");
+        ticker.id = "unrelated-ticker";
+        ticker.textContent = "tick-0";
+        ticker.style = "position:fixed;right:8px;bottom:8px;width:96px;height:32px;background:#123;color:#fff";
+        document.body.append(ticker);
+      });
+      const source = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/screenshot`,
+        headers: ownerHeaders,
+      });
+      expect(source.statusCode).toBe(200);
+      const expectedFrameSha256 = `sha256:${source.json().data.sha256}`;
+
+      await session.page.locator("#unrelated-ticker").evaluate((ticker) => {
+        ticker.textContent = "tick-1";
+        (ticker as HTMLElement).style.background = "#456";
+      });
+      expect(await currentFrameSha256(sessionId)).not.toBe(expectedFrameSha256);
+
+      const inspected = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/hmi/pointer/preflight`,
+        headers: ownerHeaders,
+        payload: {
+          ...pointerPayload(0.2, 0.28),
+          expected_frame_sha256: expectedFrameSha256,
+        },
+      });
+      expect(inspected.statusCode).toBe(200);
+      expect(inspected.json().data.frame_sha256).toBe(expectedFrameSha256);
+
+      await session.page.locator("#unrelated-ticker").evaluate((ticker) => {
+        ticker.textContent = "tick-2";
+        (ticker as HTMLElement).style.background = "#789";
+      });
+      const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
+
+      expect(response.statusCode).toBe(200);
+      expect(await session.page.locator("#cookie-banner").count()).toBe(0);
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("binds the target crop to viewport coordinates after the document scrolls", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        document.body.style.minHeight = "1800px";
+        const button = document.createElement("button");
+        button.id = "scrolled-target";
+        button.type = "button";
+        button.textContent = "Scrolled target";
+        button.style = "position:absolute;left:100px;top:900px;width:160px;height:48px";
+        document.body.append(button);
+        window.scrollTo(0, 700);
+      });
+      await session.page.waitForFunction(() => window.scrollY === 700);
+      const source = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/screenshot`,
+        headers: ownerHeaders,
+      });
+      const payload = pointerPayload(0.225, 224 / viewport.height);
+      const inspected = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/hmi/pointer/preflight`,
+        headers: ownerHeaders,
+        payload: {
+          ...payload,
+          expected_frame_sha256: `sha256:${source.json().data.sha256}`,
+        },
+      });
+
+      expect(inspected.statusCode).toBe(200);
+      expect(inspected.json().data.target.name).toBe("Scrolled target");
+      const response = await executePointer(
+        sessionId,
+        executionPayload(inspected.json(), payload),
+        ownerHeaders,
+      );
+      expect(response.statusCode).toBe(200);
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("rejects execution when the target pixels changed after preflight without dispatching the click", async () => {
     const sessionId = await createSession();
     try {
       await navigate(sessionId);
@@ -393,7 +491,8 @@ describe("TALOS Browser HMI pointer boundary", () => {
 
       const session = await sessions.get(sessionId);
       await session.page.evaluate(() => {
-        document.body.style.backgroundColor = "rgb(255, 0, 0)";
+        const target = document.querySelector<HTMLElement>("#dismiss-cookie");
+        if (target) target.style.backgroundColor = "rgb(255, 0, 0)";
       });
 
       const response = await executePointer(sessionId, executionPayload(inspected.json()), ownerHeaders);
@@ -618,7 +717,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
       const inspected = await preflight(sessionId, pointerPayload(0.05, 0.05));
       const response = await executePointer(sessionId, executionPayload(inspected.json(), pointerPayload(0.05, 0.05)), ownerHeaders);
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
       expect(response.json().data.state_version).toBe(2);
     } finally {
       await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
@@ -1241,6 +1340,58 @@ describe("TALOS Browser HMI pointer boundary", () => {
         details: { state_version: 2, reason_code: "quiescence_timeout" },
       });
       expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  }, 20_000);
+
+  it("commits a same-context link navigation while an unrelated background request remains active", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.route("https://talos.test/long-poll", async (route) => {
+        await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 1_500));
+        await route.fulfill({
+          status: 200,
+          headers: { "access-control-allow-origin": "*", "content-type": "text/plain" },
+          body: "settled",
+        }).catch(() => undefined);
+      });
+      await session.page.evaluate(() => {
+        const link = document.createElement("a");
+        link.id = "background-navigation";
+        link.href = "#background-navigation-complete";
+        link.textContent = "Open docs";
+        link.style = "position:fixed;left:0;top:0;width:100px;height:100px;z-index:9999;background:white";
+        link.addEventListener("click", () => {
+          void fetch("https://talos.test/long-poll").catch(() => undefined);
+        });
+        document.body.append(link);
+      });
+      const payload = pointerPayload(0.05, 0.05);
+      const inspected = await preflight(sessionId, payload);
+      expect(inspected.statusCode).toBe(200);
+      expect(inspected.json().data.target).toMatchObject({
+        tag: "a",
+        required_effect_classification: "sensitive",
+      });
+
+      const response = await executePointer(
+        sessionId,
+        executionPayload(inspected.json(), payload),
+        ownerHeaders,
+      );
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data).toMatchObject({
+        state_version: 2,
+        url: "about:blank",
+        screenshot: { mime_type: "image/png" },
+        snapshot: { format: "accessibility_refs_v1" },
+      });
+      expect(session.page.url()).toContain("#background-navigation-complete");
+      expect((await sessions.get(sessionId)).status).toBe("active");
     } finally {
       await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
     }

@@ -77,6 +77,41 @@ wrong state versions, duplicate commands, and unavailable workers fail
 closed. User intent also fences the UI: disabling Browse while startup is in
 flight cannot be reversed by a late response.
 
+Whole-viewport hashes are provenance, not a target-stability heuristic. Modern
+pages can update unrelated pixels continuously, so the worker retains a
+four-entry, state-scoped in-memory cache of frame bytes it actually returned to
+the user. Preflight and execution use Chromium's stable CDP border box for the
+hit-tested actionable target and compare the exact raw pixels in that bounded
+target region plus a guard margin. The persisted source artifact hash remains
+unchanged in every Laravel contract and target fingerprint. Live document,
+backend-node, destination, visibility, disabled-state, event-listener, policy,
+owner and action-capability checks still run immediately before dispatch.
+
+Post-action settlement follows the main browsing context rather than global
+network silence. A committed main-frame or same-document navigation waits for
+`domcontentloaded` and a browser paint boundary before capture. A non-navigation
+action requires a bounded DOM-stable window. Background analytics, prefetch,
+streaming and long-poll requests do not block evidence indefinitely. The final
+screenshot and accessibility snapshot still form one guarded transaction: if
+the document identity changes or meaningful DOM mutation occurs between them,
+the worker enters typed recovery and never replays the action.
+
+Worker code and evaluated page code execute in separate virtual machines. The
+paint boundary is therefore sent to Playwright as a self-contained browser
+expression with a bounded numeric argument; it cannot inherit helper symbols
+inserted by the locked `tsx`/esbuild production transform. A subprocess
+conformance test executes the real helper through `tsx` and pinned Chromium so
+Vitest-only transformation cannot hide production evaluation failures.
+
+Target crop decoding uses the directly integrated `sharp` `0.35.3` upstream
+package (Apache-2.0), pinned in `browser-worker/package-lock.json`. PNG type,
+viewport dimensions, channel count, decoded pixel count, compressed byte size,
+cache count and region geometry are bounded. A missing/evicted frame, malformed
+PNG, dimension mismatch, target-region change or target identity change remains
+fail-closed and never replays a pointer. Cache contents are disposable worker
+concurrency evidence, are cleared on recovery/disposal, and never become
+authorization or durable product state.
+
 ## Evidence And Replay
 
 Browser artifacts are owner-scoped and served through authenticated TALOS
@@ -154,4 +189,10 @@ separate non-live path and cannot satisfy this gate.
 The E2E matrix covers desktop and mobile interaction, sensitive confirmation,
 stale and unavailable states, artifact reload, development disclosure,
 production disclosure absence, keyboard/focus, reduced motion, and a live
-Chromium DOM mutation through the real Browser Worker.
+Chromium DOM mutation through the real Browser Worker. The real dynamic-page
+gate also proves that several different whole-viewport hashes do not block an
+unchanged target, while a visual mutation intersecting that target is rejected
+before physical dispatch. Dependency upgrades must review `sharp` release and
+license notes, rebuild the Linux worker image, rerun the full worker suite and
+repeat this live gate; rollback removes the adapter and restores the prior
+whole-frame rejection without weakening any owner, policy or capability check.
