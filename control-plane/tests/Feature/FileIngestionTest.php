@@ -157,12 +157,12 @@ final class FileIngestionTest extends TestCase
         $this->useIsolatedLocalStorage();
 
         $response = $this->postJson('/api/files/ingest', [
-            'file' => UploadedFile::fake()->createWithContent('diagram.png', 'not an allowed text fixture'),
+            'file' => UploadedFile::fake()->createWithContent('diagram.gif', 'not an allowed image fixture'),
         ]);
 
         $response
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'The file field must be a file of type: txt, md, json, csv.');
+            ->assertJsonPath('message', 'The file field must be a file of type: txt, md, json, csv, pdf, docx, xlsx, pptx, png, jpg, jpeg, webp.');
     }
 
     public function test_files_larger_than_ten_megabytes_are_rejected(): void
