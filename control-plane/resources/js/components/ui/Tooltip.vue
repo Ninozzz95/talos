@@ -28,7 +28,7 @@ const portalTarget = inject(tooltipPortalTargetKey, ref('#talos-portal-root'))
                 :align="align"
                 :side-offset="8"
                 :collision-padding="8"
-                class="pointer-events-auto z-[120] max-w-56 border-neutral-700 bg-neutral-950 px-2 py-1 text-xs leading-5 text-neutral-50"
+                class="talos-elev-2 pointer-events-auto z-[120] max-w-56 rounded-md px-2 py-1 text-xs leading-5 text-[var(--talos-text)]"
             >
                 {{ content }}
             </TooltipContent>
