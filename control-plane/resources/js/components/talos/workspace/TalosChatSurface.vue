@@ -6,6 +6,7 @@ import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
 import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
 import TalosBrowserCard from '../chat/TalosBrowserCard.vue'
 import TalosBrowserClarificationChoices from '../chat/TalosBrowserClarificationChoices.vue'
+import Skeleton from '../../ui/Skeleton.vue'
 import TalosMessageContent from '../chat/TalosMessageContent.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosRunActivity from '../chat/TalosRunActivity.vue'
@@ -48,7 +49,7 @@ type MessageSource = {
     preview?: string
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     uiError: string | null
     sessionError: string | null
     messageError: string | null
@@ -70,6 +71,7 @@ const props = defineProps<{
     showMissionPath: boolean
     fullWidthChat: boolean
     sensitiveBlur: boolean
+    censorEnabled?: boolean
     bubbleScale: TalosChatBubbleScale
     browserActivities: TalosBrowserActivityItem[]
     browserSnapshot: TalosBrowserSnapshotPreview | null
@@ -89,7 +91,9 @@ const props = defineProps<{
     mobile: boolean
     mobileWindowPresentation: TalosMobileWindowPresentation
     viewport: TalosChatViewportController
-}>()
+}>(), {
+    censorEnabled: true,
+})
 
 const emit = defineEmits<{
     openModel: []
@@ -463,9 +467,9 @@ defineExpose({ scrollToBottom })
                 <span>{{ contextSetError }}</span>
             </div>
 
-            <div v-if="loadingMessages" class="flex flex-1 items-center justify-center text-sm text-[var(--talos-muted)]">
-                <Loader2 class="mr-2 h-4 w-4 animate-spin text-[var(--talos-accent)]" />
-                Loading messages
+            <div v-if="loadingMessages" role="status" aria-label="Loading messages" class="flex flex-1 flex-col justify-center gap-3 py-6">
+                <span class="sr-only">Loading messages</span>
+                <Skeleton preset="list" :count="3" />
             </div>
 
             <div v-else-if="!messages.length && !hasUnplacedBrowserSessionActivity" class="flex flex-1 flex-col items-center justify-center text-center">
@@ -514,16 +518,16 @@ defineExpose({ scrollToBottom })
                         :data-message-id="message.id"
                     >
                     <div
-                        class="talos-message-bubble min-w-0 max-w-full rounded-md border"
+                        class="talos-message-bubble min-w-0 rounded-md"
                         :data-message-kind="message.role"
                         :data-bubble-scale="bubbleScale"
                         :class="message.role === 'user'
-                            ? 'border-[var(--talos-border-strong)] bg-[var(--talos-user)] text-[var(--talos-user-text)]'
+                            ? 'max-w-[min(720px,100%)] border border-transparent bg-[var(--talos-user)] text-[var(--talos-user-text)]'
                             : message.role === 'system'
-                                ? 'border-[var(--talos-warning-border)] bg-[var(--talos-system)] text-[var(--talos-system-text)]'
-                                : 'border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]'"
+                                ? 'w-full max-w-full border border-transparent bg-transparent text-[var(--talos-text)]'
+                                : 'max-w-[min(720px,100%)] border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]'"
                     >
-                        <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase opacity-75">
+                        <div v-if="message.role !== 'system'" class="talos-message-meta mb-2 flex flex-wrap items-center gap-2 opacity-80">
                             <span class="font-semibold">{{ messageLabel(message) }}</span>
                             <span>{{ messageMeta(message) }}</span>
                             <span>{{ formatTime(message.created_at) }}</span>
@@ -536,6 +540,7 @@ defineExpose({ scrollToBottom })
                             v-else-if="message.role === 'assistant'"
                             :content="message.content"
                             :sensitive="sensitiveBlur && messageContainsSensitiveText(message.content)"
+                            :censor-enabled="censorEnabled"
                         />
                         <TalosBrowserClarificationChoices
                             v-if="messageBrowserClarificationChoices(message).length"

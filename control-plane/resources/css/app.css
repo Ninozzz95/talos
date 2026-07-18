@@ -1830,3 +1830,53 @@ button {
 }
 
 /* end v7 R0 */
+
+/* v7 R2 */
+
+.talos-censored {
+    display: inline;
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--talos-accent) 14%, var(--talos-panel-soft));
+    color: transparent;
+    font: inherit;
+    text-shadow: 0 0 7px color-mix(in srgb, var(--talos-text) 72%, transparent);
+    cursor: pointer;
+}
+
+.talos-censored:hover {
+    background: color-mix(in srgb, var(--talos-accent) 22%, var(--talos-panel-soft));
+}
+
+.talos-censored:focus-visible {
+    outline: 2px solid var(--talos-ring);
+    outline-offset: 1px;
+}
+
+.talos-censored[data-revealed="true"] {
+    color: inherit;
+    text-shadow: none;
+    background: color-mix(in srgb, var(--talos-accent) 10%, transparent);
+}
+
+.talos-status-row .talos-type-caption {
+    color: var(--talos-muted);
+}
+
+.talos-message-meta {
+    font-family: var(--talos-font-chrome);
+    font-size: var(--talos-text-caption);
+    letter-spacing: 0.04em;
+}
+
+.talos-message-bubble[data-message-kind="user"] {
+    box-shadow: none;
+}
+
+.talos-chip-authorized {
+    box-shadow: inset 2px 0 0 var(--talos-accent);
+}
+
+/* end v7 R2 */

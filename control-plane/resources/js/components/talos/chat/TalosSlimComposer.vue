@@ -51,12 +51,14 @@ const props = withDefaults(defineProps<{
     attachments?: Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
     vaultPickerLoading?: boolean
+    lastUserPrompt?: string | null
 }>(), {
     devBrowserEvidence: false,
     browseSetupFault: null,
     attachments: () => [],
     vaultFiles: () => [],
     vaultPickerLoading: false,
+    lastUserPrompt: null,
 })
 
 const emit = defineEmits<{
@@ -188,6 +190,11 @@ function handleKeydown(event: KeyboardEvent) {
             return
         }
     }
+    if (event.key === 'ArrowUp' && !prompt.value && props.lastUserPrompt) {
+        event.preventDefault()
+        prompt.value = props.lastUserPrompt
+        return
+    }
     if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing) {
         event.preventDefault()
         if (prompt.value.trim() && !props.sending) emit('send')
@@ -282,9 +289,10 @@ onBeforeUnmount(() => {
                 :data-attachment-status="attachment.status"
                 :data-authorized="attachment.status === 'available' && attachment.grant_id ? 'true' : 'false'"
                 class="inline-flex min-w-0 max-w-56 items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
-                :class="attachment.status === 'failed'
+                :class="[attachment.status === 'failed'
                     ? 'border-[var(--talos-danger-border,var(--talos-warning-border))] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]'
-                    : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-text)]'"
+                    : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-text)]',
+                attachment.status === 'available' && attachment.grant_id ? 'talos-chip-authorized' : '']"
                 :title="attachment.status === 'failed' ? (attachment.failure_reason ?? 'Ingestion failed.') : attachment.name"
             >
                 <Loader2 v-if="attachment.status === 'uploading'" class="h-3.5 w-3.5 shrink-0 animate-spin" />

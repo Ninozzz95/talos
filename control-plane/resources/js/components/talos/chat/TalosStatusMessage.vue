@@ -62,9 +62,9 @@ const providerLabel = computed(() => {
         v-else
         role="status"
         aria-live="polite"
-        class="flex min-w-0 items-start gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-sm text-[var(--talos-text)]"
+        class="talos-status-row mx-auto flex min-w-0 max-w-full items-center justify-center gap-1.5 px-3 py-1 text-center"
     >
-        <Info class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-        <p class="min-w-0 break-words leading-6 [overflow-wrap:anywhere]">{{ message.content }}</p>
+        <Info class="h-3.5 w-3.5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+        <p class="talos-type-caption min-w-0 break-words [overflow-wrap:anywhere]">{{ message.content }}</p>
     </div>
 </template>
