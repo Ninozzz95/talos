@@ -40,6 +40,15 @@ function mountTitleBar(options: Record<string, unknown> = {}) {
 }
 
 describe('TalosWindowTitleBar', () => {
+    it('renders the v7 station code chip in chrome type next to the title', () => {
+        const { container } = mountTitleBar({ stationCode: 'RUN' })
+        const chip = container.querySelector<HTMLElement>('.talos-chip .talos-chip-code')
+        expect(chip?.textContent).toBe('RUN')
+
+        const bare = mountTitleBar({ stationCode: undefined })
+        expect(bare.container.querySelector('.talos-chip-code')).toBeNull()
+    })
+
     it('exposes the upstream drag handle without swallowing its pointer event', () => {
         const { container, events } = mountTitleBar()
         const titleSpace = container.querySelector<HTMLElement>('[aria-label="Drag Runtime window"]')!

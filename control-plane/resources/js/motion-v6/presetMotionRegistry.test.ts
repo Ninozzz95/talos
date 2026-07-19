@@ -23,6 +23,7 @@ const EXPECTED_THEME_IDS = [
     'violet',
     'claudius',
     'basicus',
+    'telemetry',
 ] as const
 
 type MutableProfile = Record<string, any>
@@ -41,10 +42,10 @@ function profilePayload(id: typeof EXPECTED_THEME_IDS[number] = 'forge'): TalosD
 }
 
 describe('TALOS desktop motion profile V6 registry', () => {
-    it('uses exact unique Simple and Complex renderer namespaces for all twelve IDs', () => {
-        expect(EXPECTED_THEME_IDS).toHaveLength(12)
-        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(12)
-        expect(TALOS_DESKTOP_MOTION_PROFILES_V6).toHaveLength(12)
+    it('uses exact unique Simple and Complex renderer namespaces for all thirteen IDs', () => {
+        expect(EXPECTED_THEME_IDS).toHaveLength(13)
+        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(13)
+        expect(TALOS_DESKTOP_MOTION_PROFILES_V6).toHaveLength(13)
 
         const identityIds = TALOS_DESKTOP_MOTION_PROFILES_V6.map((profile) => profile.identity_id)
         const simpleIds = TALOS_DESKTOP_MOTION_PROFILES_V6.map((profile) => profile.simple_scene_id)
@@ -53,8 +54,8 @@ describe('TALOS desktop motion profile V6 registry', () => {
         expect(identityIds).toEqual(EXPECTED_THEME_IDS)
         expect(simpleIds).toEqual(EXPECTED_THEME_IDS)
         expect(complexIds).toEqual(EXPECTED_THEME_IDS)
-        expect(new Set(simpleIds)).toHaveLength(12)
-        expect(new Set(complexIds)).toHaveLength(12)
+        expect(new Set(simpleIds)).toHaveLength(13)
+        expect(new Set(complexIds)).toHaveLength(13)
 
         for (const profile of TALOS_DESKTOP_MOTION_PROFILES_V6) {
             expect(profile.simple_scene_id).toBe(profile.identity_id)

@@ -23,6 +23,7 @@ export const TALOS_THEME_IDS = [
     'violet',
     'claudius',
     'basicus',
+    'telemetry',
 ] as const
 
 export type TalosThemeId = typeof TALOS_THEME_IDS[number]
@@ -127,7 +128,7 @@ export type TalosThemeExportV2 = {
     }
 }
 
-export const TALOS_DEFAULT_THEME: TalosThemeId = 'forge'
+export const TALOS_DEFAULT_THEME: TalosThemeId = 'telemetry'
 
 export const TALOS_BACKGROUND_EFFECTS: Array<{ value: TalosBackgroundEffect; label: string; description: string }> = [
     { value: 'dag-flow', label: 'DAG Flow', description: 'Execution graph pulses for normal AVM work.' },
@@ -448,6 +449,23 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         preview: { background: '#fafafa', accent: '#1976d2', secondary: '#9c27b0', line: '#e0e0e0' },
         poster: themePoster('basicus'),
         defaultEffect: 'kahn-grid',
+    },
+    {
+        id: 'telemetry',
+        label: 'Telemetry',
+        shortLabel: 'Telemetry',
+        description: 'v7 instrument deck: mono chrome, cyan rules and tabular readouts.',
+        mood: 'Graphite, instrument cyan, signal green',
+        motion: 'Rule sweep',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'sharp',
+        defaultMotion: 'subtle',
+        isLight: false,
+        fontUi: 'Instrument Sans',
+        fontMono: 'JetBrains Mono',
+        preview: { background: '#0b0f11', accent: '#6ad4d4', secondary: '#63f08e', line: '#1f3238' },
+        poster: themePoster('telemetry'),
+        defaultEffect: 'signal-mesh',
     },
 ]
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Command, Download, UserRound } from '@lucide/vue'
+import { Command, Download, Menu, UserRound } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import Tooltip from '../../ui/Tooltip.vue'
@@ -19,12 +19,14 @@ const props = defineProps<{
     bubbleScale: TalosChatBubbleScale
     bubbleScaleLabel: string
     chatLayoutLocked: boolean
+    navigationOpen?: boolean
 }>()
 
 const emit = defineEmits<{
     openCommands: []
     openExport: []
     openAccount: []
+    openNavigation: []
     decreaseMessageScale: []
     increaseMessageScale: []
     resetMessageScale: []
@@ -32,7 +34,20 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <header data-testid="talos-workspace-header" class="talos-workspace-header relative z-20 flex min-h-14 items-center justify-end gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-2 backdrop-blur sm:gap-2 sm:px-3 md:px-5">
+    <header data-testid="talos-workspace-header" class="talos-workspace-header relative z-20 flex min-h-14 items-center justify-between gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/88 px-2 backdrop-blur sm:gap-2 sm:px-3 md:px-5">
+        <div class="flex shrink-0 items-center">
+            <Button
+                size="icon"
+                variant="ghost"
+                class="lg:hidden"
+                aria-label="Open navigation menu"
+                :aria-pressed="Boolean(navigationOpen)"
+                title="Navigation menu"
+                @click="emit('openNavigation')"
+            >
+                <Menu class="h-4 w-4" />
+            </Button>
+        </div>
         <div class="flex shrink-0 items-center gap-1 sm:gap-2">
             <TalosMessageScaleControls
                 :bubble-scale="bubbleScale"

@@ -287,6 +287,10 @@ export function useTalosWindowMotion(options: UseTalosWindowMotionOptions) {
 
     function requestWindowClose(id: TalosWindowId) {
         clearWindowActionFault(id)
+        if (options.breakpoint.value !== 'desktop') {
+            commitWindowClose(id)
+            return
+        }
         const revision = beginTransition(id, 'closing', rawTransitionOriginFor(id))
         const target = targetFor(id)
         const base = resolvePlan('window-close')

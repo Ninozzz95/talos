@@ -11,7 +11,6 @@ import {
     Image,
     MessageSquare,
     MessageSquarePlus,
-    Menu,
     Palette,
     Settings,
 } from '@lucide/vue'
@@ -33,11 +32,11 @@ const emit = defineEmits<{
 }>()
 
 const mobileRailItems: Array<{ id: TalosWindowId; label: string; icon: unknown }> = [
-    { id: 'runtime', label: 'Runtime', icon: Activity },
+    { id: 'runtime', label: 'Cockpit', icon: Activity },
     { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-    { id: 'compare', label: 'Compare', icon: BarChart3 },
+    { id: 'compare', label: 'Benchmarks', icon: BarChart3 },
     { id: 'model_lab', label: 'Model Lab', icon: FlaskConical },
-    { id: 'research', label: 'Deep Research', icon: BookOpen },
+    { id: 'research', label: 'Research', icon: BookOpen },
     { id: 'library', label: 'Library', icon: FileArchive },
     { id: 'gallery', label: 'Artifacts', icon: Image },
     { id: 'browse', label: 'Browse', icon: Globe2 },
@@ -105,18 +104,7 @@ watch(
                 title="Chat"
                 @click="emit('focusChat')"
             >
-                <MessageSquare class="h-4 w-4 text-[var(--talos-accent)]" />
-            </Button>
-            <Button
-                size="icon"
-                variant="ghost"
-                class="min-h-11 min-w-11"
-                aria-label="Open navigation menu"
-                :aria-pressed="Boolean(navigationOpen)"
-                title="Navigation menu"
-                @click="emit('openNavigation')"
-            >
-                <Menu class="h-4 w-4 text-[var(--talos-accent)]" />
+                <MessageSquare class="h-4 w-4" />
             </Button>
             <div
                 v-for="item in visibleMobileRailItems"
@@ -133,7 +121,7 @@ watch(
                     :title="item.label"
                     @click="emit('openWindow', item.id)"
                 >
-                    <component :is="item.icon" class="h-4 w-4 text-[var(--talos-accent)]" />
+                    <component :is="item.icon" class="h-4 w-4" />
                 </Button>
             </div>
         </div>

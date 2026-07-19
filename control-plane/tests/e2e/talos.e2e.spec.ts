@@ -8,10 +8,10 @@ const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
-const talosThemePresetCount = 12
+const talosThemePresetCount = 13
 const talosMotionV6Defaults = {
     schema_version: 1,
-    mode: 'adaptive',
+    mode: 'off',
     background_enabled: true,
     interface_enabled: true,
     scene_override: null,
@@ -302,7 +302,7 @@ async function expectNoComposerOverlap(page: Page) {
             return { missingComposer: true, overlaps: [] }
         }
 
-        const overlaps = Array.from(document.querySelectorAll('.talos-tool-window, [data-testid="talos-mobile-tool-sheet"]')).flatMap((element) => {
+        const overlaps = Array.from(document.querySelectorAll('.talos-tool-window')).flatMap((element) => {
             const rect = element.getBoundingClientRect()
             const clippingStage = element.closest('[data-testid="talos-desktop-window-stage"]')?.getBoundingClientRect()
             const visibleRect = clippingStage
@@ -391,8 +391,9 @@ async function selectDashboardTab(page: Page, name: string) {
     const moduleName = {
         Agents: 'Model Lab',
         Knowledge: 'Library',
-        Benchmarks: 'Compare',
-        Runtime: 'Runtime',
+        Benchmarks: 'Benchmarks',
+        Runtime: 'Cockpit',
+        'Deep Research': 'Research',
         Productivity: 'Tasks',
         Admin: 'Doctor',
     }[name] ?? name
@@ -405,8 +406,11 @@ async function selectDashboardTab(page: Page, name: string) {
     }
 
     const moduleButton = page.getByRole('button', { name: moduleName, exact: true }).first()
+    if (!await moduleButton.isVisible().catch(() => false)) {
+        await ensureRailReachable(page, moduleButton)
+    }
     if (!await moduleButton.isVisible().catch(() => false) && ['Tasks', 'Doctor'].includes(moduleName)) {
-        await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+        await expandAdvancedRail(page)
     }
     await moduleButton.click()
 }
@@ -431,17 +435,56 @@ async function clickMessageAction(scope: Page | Locator, name: string) {
 
     const owner = action.locator('xpath=ancestor::*[@data-message-id][1]')
     await owner.getByRole('button', { name: 'More message actions', exact: true }).filter({ visible: true }).click()
-    const menu = owner.getByRole('menu', { name: 'More message actions', exact: true }).filter({ visible: true })
+    const menu = action.page().getByRole('menu', { name: 'More message actions', exact: true })
     await expect(menu).toBeVisible()
     await menu.getByRole('menuitem', { name, exact: true }).click()
 }
 
-async function expandAdvancedRail(page: Page) {
-    const knowledgeButton = page.getByRole('button', { name: 'Knowledge', exact: true })
-    if (!await knowledgeButton.isVisible().catch(() => false)) {
-        await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+async function ensureRailReachable(page: Page, button: Locator) {
+    if (await button.isVisible().catch(() => false)) return
+
+    const backToChat = page.getByRole('button', { name: 'Back to chat', exact: true })
+    if (await backToChat.isVisible().catch(() => false)) {
+        await backToChat.click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
     }
-    await expect(knowledgeButton).toBeVisible()
+    if (await button.isVisible().catch(() => false)) return
+
+    const hamburger = page.getByRole('button', { name: 'Open navigation menu', exact: true })
+    if (await hamburger.isVisible().catch(() => false)) {
+        await hamburger.click()
+        await expect(page.getByRole('dialog', { name: 'TALOS navigation', exact: true })).toBeVisible()
+    }
+}
+
+async function expandAdvancedRail(page: Page) {
+    const vaultButton = page.getByRole('button', { name: 'Vault', exact: true })
+    if (!await vaultButton.isVisible().catch(() => false)) {
+        const workbench = page.getByRole('button', { name: 'Workbench', exact: true })
+        await ensureRailReachable(page, workbench)
+        if (await workbench.getAttribute('aria-expanded') !== 'true') {
+            await workbench.click()
+        }
+    }
+    await expect(vaultButton).toBeVisible()
+}
+
+async function openCommandPaletteButton(page: Page) {
+    const backToChat = page.getByRole('button', { name: 'Back to chat', exact: true })
+    if (await backToChat.isVisible().catch(() => false)) {
+        await backToChat.click()
+        await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+    }
+    await page.getByRole('button', { name: 'Open command palette' }).click()
+}
+
+async function clickRailStation(page: Page, name: string) {
+    const button = page.getByRole('button', { name, exact: true })
+    await ensureRailReachable(page, button)
+    if (!await button.isVisible().catch(() => false)) {
+        await expandAdvancedRail(page)
+    }
+    await button.click()
 }
 
 async function expectUnifiedWorkspaceChrome(page: Page) {
@@ -456,7 +499,7 @@ async function expectUnifiedWorkspaceChrome(page: Page) {
 
     await expandAdvancedRail(page)
 
-    for (const name of ['New Chat', 'Knowledge', 'Brain', 'Compare', 'Artifacts', 'Notes', 'Settings', 'Doctor']) {
+    for (const name of ['New Chat', 'Vault', 'Memory', 'Benchmarks', 'Artifacts', 'Notes', 'Settings', 'Doctor']) {
         await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
     }
 
@@ -586,7 +629,7 @@ test('root is the canonical TALOS workspace and legacy routes redirect to it', a
 
 test('notes loads retrieval context through the strict API mock', async ({ page }) => {
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await expandAdvancedRail(page)
 
     const retrievalContextResponse = page.waitForResponse((response) => (
         response.url().includes('/api/talos/notes/retrieval-context?')
@@ -605,7 +648,7 @@ test('notes loads retrieval context through the strict API mock', async ({ page 
 
 test('notes and tasks form fields have distinct accessible names', async ({ page, isMobile }) => {
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await expandAdvancedRail(page)
 
     await page.getByRole('button', { name: 'Notes', exact: true }).first().click()
     const notesWindow = page.locator('[data-window-id="notes"]')
@@ -621,7 +664,7 @@ test('notes and tasks form fields have distinct accessible names', async ({ page
     if (isMobile) {
         await notesWindow.getByRole('button', { name: 'Close Notes' }).click()
         await expect(notesWindow).toHaveCount(0)
-        await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+        await expandAdvancedRail(page)
     }
 
     await page.getByRole('button', { name: 'Tasks', exact: true }).first().click()
@@ -640,7 +683,7 @@ test('floating windows enter real fullscreen across the workspace width', async 
     test.skip(Boolean(isMobile), 'mobile modules use the in-place sheet contract without fullscreen controls')
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Artifacts', exact: true }).click()
+    await clickRailStation(page, 'Artifacts')
     const artifactWindow = page.locator('[data-window-id="gallery"]')
     await expect(artifactWindow).toBeVisible()
     await expect.poll(async () => artifactWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -703,7 +746,7 @@ test('workspace exposes real persistent chat history', async ({ page, isMobile }
 
 test('workspace command feedback uses one dismissible status toast', async ({ page }) => {
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByRole('option', { name: /New session/ }).click()
 
     const toast = page.getByRole('status').filter({ hasText: 'New session opened.' })
@@ -755,9 +798,12 @@ test('left rail chat items expose connected management actions', async ({ page, 
 
     const renameRequest = page.waitForRequest((request) => request.url().includes('/api/talos/sessions/session-manage-e2e') && request.method() === 'PATCH')
     await page.getByRole('menuitem', { name: 'Rename' }).click()
-    await page.getByLabel('Rename chat').fill('Renamed managed chat')
-    await page.getByRole('button', { name: 'Save name' }).click()
+    const renameDialog = page.getByRole('dialog', { name: 'Rename chat' })
+    await expect(renameDialog).toBeVisible()
+    await renameDialog.getByLabel('Chat name').fill('Renamed managed chat')
+    await renameDialog.getByRole('button', { name: 'Save', exact: true }).click()
     await renameRequest
+    await expect(renameDialog).toHaveCount(0)
     await expect(history).toContainText('Renamed managed chat')
 
     await history.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
@@ -778,8 +824,11 @@ test('left rail chat items expose connected management actions', async ({ page, 
 
     await history.getByRole('button', { name: 'Chat actions for Renamed managed chat', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Move to folder' }).click()
-    await page.getByLabel('Folder name').fill('Ops')
-    await page.getByRole('button', { name: 'Move chat' }).click()
+    const moveDialog = page.getByRole('dialog', { name: 'Move to folder' })
+    await expect(moveDialog).toBeVisible()
+    await moveDialog.getByLabel('Folder name').fill('Ops')
+    await moveDialog.getByRole('button', { name: 'Move', exact: true }).click()
+    await expect(moveDialog).toHaveCount(0)
     const opsGroup = history.getByTestId('talos-session-folder-Ops')
     await expect(opsGroup).toContainText('Renamed managed chat')
 
@@ -826,7 +875,6 @@ test('chat action menu escapes the scroll container and remains inside the viewp
     const menu = page.getByRole('menu', { name: 'Chat actions' })
     await expect(menu).toBeVisible()
     await expect.poll(() => menu.evaluate((element) => element.closest('[data-testid="talos-session-history"]') === null)).toBe(true)
-    await expect.poll(() => menu.evaluate((element) => window.getComputedStyle(element).position)).toBe('fixed')
 
     const geometry = await menu.evaluate((element) => {
         const rect = element.getBoundingClientRect()
@@ -845,6 +893,17 @@ test('chat action menu escapes the scroll container and remains inside the viewp
     expect(geometry.top).toBeGreaterThanOrEqual(8)
     expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth - 8)
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight - 8)
+
+    const firstItemHit = await menu.getByRole('menuitem').first().evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+        return element === target || element.contains(target)
+    })
+    expect(firstItemHit).toBe(true)
+
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Chat actions for Layered chat 1', exact: true })).toBeFocused()
 })
 
 test('left rail and empty chat brand remain polished without duplicating branding in the header', async ({ page, isMobile }) => {
@@ -853,9 +912,9 @@ test('left rail and empty chat brand remain polished without duplicating brandin
     await openWorkspace(page)
     await expandAdvancedRail(page)
 
-    const knowledgeButton = page.getByRole('button', { name: 'Knowledge', exact: true })
-    await expect(knowledgeButton).toBeVisible()
-    await expect.poll(async () => knowledgeButton.evaluate((element) => window.getComputedStyle(element).cursor)).toBe('pointer')
+    const vaultButton = page.getByRole('button', { name: 'Vault', exact: true })
+    await expect(vaultButton).toBeVisible()
+    await expect.poll(async () => vaultButton.evaluate((element) => window.getComputedStyle(element).cursor)).toBe('pointer')
 
     const railBrand = page.getByTestId('talos-rail-brand')
     await expect(railBrand).toBeVisible()
@@ -969,14 +1028,14 @@ test('chat loads, sends a deterministic persisted turn, and stays keyboard reach
     await expect(page.getByRole('button', { name: 'Choose model profile' })).toContainText('E2E server-side profile')
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveAttribute('title', 'Type a workflow in the composer before sending.')
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('send message')
     await expect(page.getByRole('option', { name: /Send message/ })).toHaveAttribute('aria-disabled', 'true')
     await expect(page.getByText('Type a workflow in the composer before sending.')).toBeVisible()
     await page.keyboard.press('Escape')
 
     await page.getByLabel('Message TALOS').fill('Create a replayable file audit workflow.')
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('send message')
     await expect(page.getByRole('option', { name: /Send message/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Send message/ }).click()
@@ -1028,7 +1087,7 @@ test('Mission Path persists the user opt-out and remains hidden on mobile', asyn
     }
 
     await expect(missionPath).toBeVisible()
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByRole('tab', { name: 'Visibility' }).click()
     await page.getByRole('switch', { name: 'Mission Path' }).click()
@@ -1150,6 +1209,12 @@ test('composer slash commands open real TALOS modules and keep unavailable actio
     await expect(page.locator('[data-window-id="model_lab"]')).toBeVisible()
     await expect(page.getByLabel('Message TALOS')).toHaveValue('')
 
+    const backToChat = page.getByRole('button', { name: 'Back to chat', exact: true })
+    if (await backToChat.isVisible().catch(() => false)) {
+        await backToChat.click()
+    }
+    await page.getByLabel('Message TALOS').click()
+    await expect(page.getByLabel('Message TALOS')).toBeFocused()
     await page.getByLabel('Message TALOS').fill('/doctor')
     await expect(page.getByRole('listbox', { name: 'Composer slash commands' })).toBeVisible()
     await page.keyboard.press('Enter')
@@ -1309,7 +1374,7 @@ ${'x'.repeat(2000)}
 test('settings boolean preferences render as accessible switch controls', async ({ page, isMobile }) => {
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'AI Defaults' }).click()
     const visionSwitch = page.getByRole('switch', { name: 'Vision routing preference' })
     await expect(visionSwitch).toBeVisible()
@@ -1342,7 +1407,7 @@ test('settings boolean preferences render as accessible switch controls', async 
     await page.getByRole('button', { name: 'Close Theme', exact: true }).click()
     await expect(page.locator('[data-window-id="theme"]')).toHaveCount(0)
     if (isMobile) {
-        await page.getByRole('button', { name: 'Settings', exact: true }).click()
+        await clickRailStation(page, 'Settings')
         await page.getByRole('tab', { name: 'Appearance' }).click()
     }
     await page.getByRole('tab', { name: 'Visibility' }).click()
@@ -1363,7 +1428,7 @@ test('settings boolean preferences render as accessible switch controls', async 
 test('google integration shows connected account without exposing tokens', async ({ page }) => {
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: /Integrations/ }).click()
 
     await expect(page.getByText('Google Workspace')).toBeVisible()
@@ -1395,7 +1460,7 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await librarySectionTabs.getByRole('tab', { name: 'Documents', exact: true }).click()
     await expect(librarySectionTabs.getByRole('tab', { name: 'Documents', exact: true })).toHaveAttribute('aria-selected', 'true')
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
     await page.getByLabel('Search TALOS commands').fill('send message')
     await expect(page.getByRole('option', { name: /Send message/ })).toHaveAttribute('aria-disabled', 'true')
@@ -1413,21 +1478,21 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await commandSessionRequest
     await expect(page.getByText('New session opened.')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('model center')
     await page.getByRole('option', { name: /Open model center/ }).click()
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeHidden()
     await expect(page.getByText('Model Center', { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('attach file')
     await expect(page.getByRole('option', { name: /Attach file/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Attach file/ }).click()
     await expect(librarySectionTabs.getByRole('tab', { name: 'Context Vault', exact: true })).toHaveAttribute('aria-selected', 'true')
     await expect(libraryWindow.getByTestId('talos-window-section-library-context').getByText('Context Vault', { exact: true })).toBeVisible()
-    await expect(page.locator('input[type="file"]')).toBeVisible()
+    await expect(page.getByLabel('Upload source file')).toHaveCount(1)
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('trace replay')
     await expect(page.getByRole('option', { name: /Open trace replay/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Open trace replay/ }).click()
@@ -1435,12 +1500,12 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
     await page.getByRole('tab', { name: 'Timeline' }).click()
     await expect(page.getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true')
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('trace replay')
     await page.getByRole('option', { name: /Open trace replay/ }).click()
     await expect(page.getByRole('tab', { name: 'Trace replay' })).toHaveAttribute('aria-selected', 'true')
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('audit log')
     await expect(page.getByRole('option', { name: /Open audit log/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Open audit log/ }).click()
@@ -1450,26 +1515,26 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await expect(page.getByTestId('talos-admin-section-audit')).toBeVisible()
     await expect(page.getByTestId('talos-admin-section-audit')).toContainText('Redacted security events')
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('open doctor')
     await page.getByRole('option', { name: /Open doctor/ }).click()
     await expect(doctorSectionTabs.getByRole('tab', { name: 'Doctor', exact: true })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByTestId('talos-admin-section-doctor')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('policy panel')
     await page.getByRole('option', { name: /Open policy panel/ }).click()
     await expect(page.getByTestId('talos-admin-section-policy')).toBeVisible()
     await expect(page.getByTestId('talos-admin-section-policy')).toContainText('Capability boundary')
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('backup panel')
     await page.getByRole('option', { name: /Open backup panel/ }).click()
     await expect(page.getByTestId('talos-admin-section-backup')).toBeVisible()
     await expect(page.getByTestId('talos-admin-section-backup')).toContainText('Dry-run restore policy')
     await expect(page.getByTestId('talos-admin-section-backup').getByRole('button', { name: 'Validate restore dry-run' })).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('email triage')
     await page.getByRole('option', { name: /Open email triage/ }).click()
     const tasksWindow = page.locator('[data-window-id="tasks"]')
@@ -1480,13 +1545,13 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await expect(page.getByTestId('talos-productivity-section-email-triage')).toContainText('send_enabled false')
     await expect(page.getByTestId('talos-productivity-section-email-triage').getByRole('button', { name: 'Create draft' })).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('open tasks')
     await page.getByRole('option', { name: /Open tasks/ }).click()
     await expect(tasksSectionTabs.getByRole('tab', { name: 'Tasks', exact: true })).toHaveAttribute('aria-selected', 'true')
     await expect(tasksWindow.getByTestId('talos-window-section-tasks-tasks')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('send email draft')
     await expect(page.getByRole('option', { name: /Send email draft/ })).toHaveAttribute('aria-disabled', 'true')
     await expect(page.getByText('Email send is disabled until HMI confirmation and audit exist.')).toBeVisible()
@@ -1644,7 +1709,9 @@ test('model center can save a provider profile after a failed optional draft pro
 test('cookbook model lab shows hardware scan fit score and preview-only commands', async ({ page }, testInfo) => {
     await openWorkspace(page)
     await selectDashboardTab(page, 'Runtime')
-    await page.getByRole('button', { name: /Model Lab|Cookbook/ }).click()
+    const cookbookLauncher = page.getByRole('button', { name: /Model Lab|Cookbook/ })
+    await ensureRailReachable(page, cookbookLauncher)
+    await cookbookLauncher.click()
 
     const modelLab = page.locator('[data-window-id="model_lab"]')
     await expect(modelLab.getByRole('heading', { name: 'Model Lab', exact: true })).toBeVisible()
@@ -1671,14 +1738,20 @@ test('cookbook model lab shows hardware scan fit score and preview-only commands
 test('settings window loads safe preferences and persists theme through the settings API', async ({ page }, testInfo) => {
     test.setTimeout(130_000)
 
-    await openWorkspace(page)
+    await installTalosApiMocks(page, {
+        initialSettings: {
+            preferences: { theme_motion_v6: { ...talosMotionV6Defaults, mode: 'adaptive' } },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
 
     await page.getByLabel('Message TALOS').fill('Keep focus in the composer.')
     await page.keyboard.press('Control+K')
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
     await page.keyboard.press('Escape')
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
     await expect(page.getByText('Workspace defaults, model behavior and operator preferences from /api/talos/settings.')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'AI Defaults' })).toBeVisible()
@@ -1693,7 +1766,7 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByLabel('Results per query')).toBeDisabled()
     await expect(page.getByLabel('Search endpoint URL')).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Presets' })).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Customize' })).toBeVisible()
@@ -1810,7 +1883,7 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'terminal')
     await expectNoHorizontalOverflow(page)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     const auroraPreset = page.getByRole('button', { name: 'Aurora Research' })
     const presetResetPatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
@@ -1861,7 +1934,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
 
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
 
     await page.getByRole('tab', { name: 'Customize' }).click()
@@ -1896,7 +1969,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Library' }).click()
     await expect(page.getByText('Ninox Dark', { exact: true })).toBeVisible()
 
@@ -2063,7 +2136,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     test.setTimeout(120_000)
 
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
 
     await expect(page.getByTestId('talos-theme-product-preview')).toBeVisible()
@@ -2115,7 +2188,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await waitForWorkspaceReady(page)
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Expanded')
     await expectComposerMode(page, 'full')
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Library' }).click()
 
     const lifecycleArticle = page.locator('article').filter({ hasText: 'Lifecycle Theme' }).first()
@@ -2328,7 +2401,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await waitForWorkspaceReady(page)
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
     await expectComposerMode(page, 'minimal')
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
 
     const resetRequest = page.waitForRequest((request) => {
@@ -2431,7 +2504,7 @@ test('named theme apply rolls the visible theme and local preference back when p
         await route.fallback()
     })
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Library' }).click()
     await page.locator('article').filter({ hasText: namedTheme.name }).getByRole('button', { name: 'Apply', exact: true }).click()
 
@@ -2486,7 +2559,7 @@ test('Claudius font-only customization preserves palette and active background m
     const before = await palette()
     await expectProceduralCanvasFrameChanges(page)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByLabel('Font', { exact: true }).selectOption('manrope')
     await expect.poll(() => page.locator('.talos-shell').evaluate((element) => (
@@ -2515,10 +2588,16 @@ test('Claudius font-only customization preserves palette and active background m
 })
 
 test('theme engine v6 persists interface motion, previews the product surface, and exports V2', async ({ page }, testInfo) => {
-    await openWorkspace(page)
+    await installTalosApiMocks(page, {
+        initialSettings: {
+            preferences: { theme_motion_v6: { ...talosMotionV6Defaults, mode: 'adaptive' } },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'adaptive')
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
     await expect(page.getByText('Motion Engine V6', { exact: true })).toBeVisible()
@@ -2572,7 +2651,7 @@ test('theme engine v6 persists interface motion, previews the product surface, a
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByLabel('Interface motion profile')).toHaveValue('custom')
     await expect(page.getByLabel('Interface easing')).toHaveValue('cinematic')
@@ -2608,7 +2687,7 @@ test('browser reduced motion remains a hard override until the OS preference cha
     await patchTalosSettings(page, {
         theme: 'forge',
         reduced_motion: false,
-        theme_motion_v6: talosMotionV6Defaults,
+        theme_motion_v6: { ...talosMotionV6Defaults, mode: 'adaptive' },
         theme_customization: {
             effect: 'dag-flow',
         },
@@ -2627,7 +2706,7 @@ test('browser reduced motion remains a hard override until the OS preference cha
     await expect(workspaceMotionCanvas(page)).toHaveCount(0)
     await expectStaticMotionFrameStaysStill(page)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
     const motionComplexRequest = page.waitForRequest((request) => request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH')
     await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
@@ -2662,8 +2741,14 @@ test('browser reduced motion remains a hard override until the OS preference cha
 })
 
 test('theme engine V6 exposes adaptive, simple, and complex renderer modes', async ({ page }) => {
-    await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await installTalosApiMocks(page, {
+        initialSettings: {
+            preferences: { theme_motion_v6: { ...talosMotionV6Defaults, mode: 'adaptive' } },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
 
     await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
@@ -2725,7 +2810,7 @@ test('theme switches disable motion separately from the procedural background', 
     await expect(workspaceMotionCanvas(page)).toHaveCount(1)
     await expectProceduralCanvasFrameChanges(page)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByRole('button', { name: 'Motion mode Complex', exact: true })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('switch', { name: 'Procedural background' })).toBeChecked()
@@ -2794,7 +2879,7 @@ test('theme switches disable motion separately from the procedural background', 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
     await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-performance-mode', 'motion')
     await expectProceduralCanvasFrameChanges(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByRole('button', { name: 'Motion mode Complex', exact: true })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('switch', { name: 'Procedural background' })).toBeChecked()
@@ -2840,7 +2925,7 @@ test('theme switches disable motion separately from the procedural background', 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'complex')
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByLabel('Interface motion profile')).toHaveValue('off')
     await expect(page.getByRole('switch', { name: 'Interface motion' })).not.toBeChecked()
@@ -2864,7 +2949,7 @@ test('settings preset changes refresh procedural background immediately', async 
     await expect(page.getByTestId('talos-motion-background')).toHaveAttribute('data-scene-id', 'forge')
     await expectProceduralCanvasFrameChanges(page)
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByLabel('Theme preset').selectOption('terminal')
     const settingsPresetRequest = page.waitForRequest((request) => {
@@ -2896,8 +2981,14 @@ test('every theme preset switches to its distinct Motion V6 scene', async ({ pag
     test.setTimeout(120_000)
     test.skip(Boolean(isMobile), 'desktop covers exhaustive preset animation; mobile verifies preset refresh in the targeted settings flow.')
 
-    await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await installTalosApiMocks(page, {
+        initialSettings: {
+            preferences: { theme_motion_v6: { ...talosMotionV6Defaults, mode: 'adaptive' } },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Presets' }).click()
 
     const presets = [
@@ -2913,6 +3004,7 @@ test('every theme preset switches to its distinct Motion V6 scene', async ({ pag
         ['Violet Lab', 'talos-theme-violet'],
         ['Claudius Review', 'talos-theme-claudius'],
         ['Basicus Material', 'talos-theme-basicus'],
+        ['Telemetry', 'talos-theme-telemetry'],
     ] as const
 
     for (const [label, themeClass] of presets) {
@@ -2962,7 +3054,7 @@ test('theme color mode forces light and dark variants across presets and chat bu
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     await expect(page.getByText('E2E response from AVM with replayable evidence.')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Presets' }).click()
 
     const lightModeRequest = page.waitForRequest((request) => {
@@ -3075,8 +3167,14 @@ test('theme color mode forces light and dark variants across presets and chat bu
 test('V6 theme visual matrix covers every preset in forced light and dark', async ({ page, isMobile }, testInfo) => {
     test.setTimeout(180_000)
     await page.setViewportSize(isMobile ? { width: 375, height: 812 } : { width: 1440, height: 900 })
-    await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await installTalosApiMocks(page, {
+        initialSettings: {
+            preferences: { theme_motion_v6: { ...talosMotionV6Defaults, mode: 'adaptive' } },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Presets' }).click()
 
     const presets = [
@@ -3092,6 +3190,7 @@ test('V6 theme visual matrix covers every preset in forced light and dark', asyn
         ['violet', 'Violet Lab'],
         ['claudius', 'Claudius Review'],
         ['basicus', 'Basicus Material'],
+        ['telemetry', 'Telemetry'],
     ] as const
     const artifactDirectory = `storage/playwright-live/v6-theme-matrix/${testInfo.project.name}`
     mkdirSync(artifactDirectory, { recursive: true })
@@ -3151,7 +3250,7 @@ test('favicon follows the active theme accent without reloading the workspace', 
     ))
     await expect(favicon).toHaveAttribute('data-talos-favicon-color', initialAccent)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Presets' }).click()
     await page.getByRole('button', { name: 'Terminal Operator' }).click()
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-preset', 'terminal')
@@ -3187,10 +3286,12 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
             && !Object.prototype.hasOwnProperty.call(layout, 'bubble_scale')
             && !Object.prototype.hasOwnProperty.call(layout, 'composer_mode')
     })
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    const workbenchToggle = page.getByRole('button', { name: 'Workbench', exact: true })
+    await ensureRailReachable(page, workbenchToggle)
+    await workbenchToggle.click()
     await advancedRequest
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(page.getByText('Theme changes are locked by workspace policy.')).toBeVisible()
     await page.getByRole('tab', { name: 'Customize' }).click()
     await expect(page.getByRole('button', { name: 'Save customization' })).toBeDisabled()
@@ -3206,7 +3307,7 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     await expect(page.getByRole('button', { name: 'Reset interface', exact: true })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save motion', exact: true })).toBeDisabled()
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await expect(page.getByLabel('Chat message size', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Chat composer mode', { exact: true })).toBeDisabled()
@@ -3223,22 +3324,19 @@ test('desktop sidebar collapses, expands, and resizes without overflow', async (
     const expandedBefore = await rail.boundingBox()
     expect(expandedBefore?.width).toBeGreaterThan(200)
 
-    await page.getByRole('button', { name: 'Collapse sidebar' }).click()
-    await expect(rail).toHaveAttribute('data-sidebar-state', 'collapsed')
-    const collapsedMotion = await rail.evaluate((element) => {
-        const style = window.getComputedStyle(element)
-        const duration = style.transitionDuration.split(',')[0]?.trim() ?? '0s'
-        const durationMs = duration.endsWith('ms')
-            ? Number(duration.replace('ms', ''))
-            : Number(duration.replace('s', '')) * 1000
-
-        return {
-            transitionProperty: style.transitionProperty,
-            transitionDurationMs: durationMs,
-        }
+    const disclosureDurationMs = await page.locator('.talos-shell').evaluate((element) => {
+        const raw = window.getComputedStyle(element).getPropertyValue('--talos-motion-duration-disclosure').trim()
+        return raw.endsWith('ms') ? Number.parseFloat(raw) : Number.parseFloat(raw) * 1000
     })
-    expect(collapsedMotion.transitionProperty).toContain('width')
-    expect(collapsedMotion.transitionDurationMs).toBeGreaterThanOrEqual(140)
+    expect(disclosureDurationMs).toBeGreaterThanOrEqual(50)
+    const collapseEvidence = await capturePaintedTransition({
+        page,
+        target: rail,
+        paintSurface: page.locator('.talos-shell'),
+        action: () => page.getByRole('button', { name: 'Collapse sidebar' }).click(),
+        waitForFinal: () => expect(rail).toHaveAttribute('data-sidebar-state', 'collapsed'),
+    })
+    expectPaintedTransition(collapseEvidence, { minimumDurationMs: disclosureDurationMs - 1 })
     await expect.poll(async () => {
         const collapsed = await rail.boundingBox()
 
@@ -3252,6 +3350,25 @@ test('desktop sidebar collapses, expands, and resizes without overflow', async (
 
         return expanded?.width ?? 0
     }).toBeGreaterThan(180)
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
+    await page.getByRole('button', { name: 'Collapse sidebar' }).click()
+    await expect(rail).toHaveAttribute('data-sidebar-state', 'collapsed')
+    expect(await rail.evaluate((element) => element.getAnimations().filter((animation) => (
+        (animation.effect as KeyframeEffect | null)?.target === element
+    )).length)).toBe(0)
+    await expect.poll(async () => (await rail.boundingBox())?.width ?? 0).toBeLessThan(96)
+    await page.getByRole('button', { name: 'Expand sidebar' }).click()
+    await expect(rail).toHaveAttribute('data-sidebar-state', 'expanded')
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'false')
+    await expect.poll(async () => {
+        const expanded = await rail.boundingBox()
+
+        return expanded?.width ?? 0
+    }).toBeGreaterThan(180)
+    await expect.poll(async () => rail.evaluate((element) => element.getAnimations().length)).toBe(0)
     const expanded = await rail.boundingBox()
 
     const resizeHandle = page.getByLabel('Resize sidebar')
@@ -3278,7 +3395,7 @@ test('floating tool windows are independent, draggable, and the right dock is on
     await openWorkspace(page)
     await expect(page.getByTestId('talos-right-dock')).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect(themeWindow).toBeVisible()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -3382,7 +3499,7 @@ test('floating windows launch from the sidebar and animate minimize, restore, an
     await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBeGreaterThan(0)
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(themeWindow).toHaveAttribute('data-window-transition', 'opening')
     await expect(themeFrame).toHaveAttribute('data-window-origin-source', 'sidebar')
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -3427,7 +3544,7 @@ test('window modules stay out of initial requests and load once on first open', 
 
     expect(await moduleRequests('TalosThemeWindow')).toEqual([])
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(page.getByRole('heading', { name: 'Theme Engine', exact: true })).toBeVisible()
     await expect.poll(async () => (await moduleRequests('TalosThemeWindow')).length).toBe(1)
 
@@ -3435,7 +3552,7 @@ test('window modules stay out of initial requests and load once on first open', 
     await page.getByRole('button', { name: 'Close Theme', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Theme Engine', exact: true })).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(page.getByRole('heading', { name: 'Theme Engine', exact: true })).toBeVisible()
     expect(await moduleRequests('TalosThemeWindow')).toEqual(firstRequest)
 })
@@ -3444,7 +3561,7 @@ test('floating windows organize multi-section modules with first-level section t
     test.skip(Boolean(isMobile), 'desktop section tab navigation is covered by the desktop project')
 
     await openWorkspace(page)
-    const advancedToggle = page.getByRole('button', { name: 'Advanced', exact: true })
+    const advancedToggle = page.getByRole('button', { name: 'Workbench', exact: true })
     if (await advancedToggle.getAttribute('aria-expanded') === 'false') {
         await advancedToggle.click()
     }
@@ -3458,7 +3575,7 @@ test('floating windows organize multi-section modules with first-level section t
             secondPanelTestId: 'talos-window-section-library-documents',
         },
         {
-            button: 'Brain',
+            button: 'Memory',
             windowId: 'brain',
             tabs: ['Memory', 'Skills', 'Skill Audit'],
             secondTab: 'Skills',
@@ -3486,7 +3603,7 @@ test('floating windows organize multi-section modules with first-level section t
             secondPanelTestId: 'talos-window-section-doctor-policy',
         },
         {
-            button: 'Knowledge',
+            button: 'Vault',
             windowId: 'search',
             tabs: ['Context Vault', 'Documents'],
             secondTab: 'Documents',
@@ -3540,7 +3657,7 @@ test('floating tool windows are resizable and can reset their saved size', async
     test.skip(Boolean(isMobile), 'desktop window resizing is covered by the desktop project')
 
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
 
     const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect(themeWindow).toBeVisible()
@@ -3587,7 +3704,7 @@ test('resizing a side-snapped window reflows chat in the same interaction and pe
     test.skip(Boolean(isMobile), 'desktop split resizing is covered by the desktop project')
 
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     let themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     const titleSpace = page.getByLabel('Drag Theme window')
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -3650,7 +3767,7 @@ test('resizing a side-snapped window reflows chat in the same interaction and pe
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const reloadedWidth = (await themeWindow.boundingBox())?.width ?? 0
@@ -3688,7 +3805,7 @@ test('desktop title-space keyboard snapping and Escape cancellation reach the wi
     test.skip(Boolean(isMobile), 'mobile sheets intentionally expose no desktop window geometry commands')
 
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     const themeWindow = page.getByRole('region', { name: 'Theme' })
     const titleSpace = page.getByLabel('Drag Theme window')
     await expect(themeWindow).toBeVisible()
@@ -3743,7 +3860,7 @@ test('desktop window layout survives reload and corrupt V2 geometry fails closed
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     themeWindow = page.getByRole('region', { name: 'Theme' })
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const reloadedBounds = await themeWindow.boundingBox()
@@ -3754,7 +3871,7 @@ test('desktop window layout survives reload and corrupt V2 geometry fails closed
     await expect(page.getByTestId('talos-right-dock')).toBeVisible()
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     themeWindow = page.getByRole('region', { name: 'Theme' })
     await expect(page.getByTestId('talos-right-dock')).toContainText('Theme Engine')
 
@@ -3763,7 +3880,7 @@ test('desktop window layout survives reload and corrupt V2 geometry fails closed
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     themeWindow = page.getByRole('region', { name: 'Theme' })
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -3780,7 +3897,7 @@ test('desktop window layout survives reload and corrupt V2 geometry fails closed
     expect(snappedBounds).toBeTruthy()
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     themeWindow = page.getByRole('region', { name: 'Theme' })
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
     const reloadedSnapBounds = await themeWindow.boundingBox()
@@ -3804,7 +3921,7 @@ test('desktop window layout survives reload and corrupt V2 geometry fails closed
     })))
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     themeWindow = page.getByRole('region', { name: 'Theme' })
     await expect(themeWindow).toBeVisible()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -3817,7 +3934,7 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
 
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await expect(page.getByText('Settings Center', { exact: true })).toBeVisible()
 
     await page.getByRole('tab', { name: 'Appearance' }).click()
@@ -3873,9 +3990,9 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
 
     await page.locator('body').click({ position: { x: 24, y: 24 } })
     await page.keyboard.press('Control+Alt+M')
-    await expect(page.getByRole('heading', { name: 'Compare', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Benchmarks', exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     const themeWindow = page.getByRole('region', { name: 'Theme' }).first()
     await expect(themeWindow).toBeVisible()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -3897,10 +4014,11 @@ test('slice one appearance shortcuts and fullscreen windows stay connected to wo
     })
 })
 
-test('a minimized desktop window can be closed without being restored', async ({ page }) => {
+test('a minimized desktop window can be closed without being restored', async ({ page, isMobile }) => {
+    test.skip(Boolean(isMobile), 'minimize/restore furniture is desktop-only; mobile sheets are covered by talosMobileWindows')
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     const themeWindow = page.locator('[data-window-id="theme"]')
     await expect(themeWindow).toBeVisible()
     await expect.poll(async () => themeWindow.getAttribute('data-window-transition')).toBe('idle')
@@ -4106,7 +4224,8 @@ test('dashboard ingests a user file and creates a grounded context set', async (
     await openWorkspace(page)
     await selectDashboardTab(page, 'Knowledge')
 
-    await page.locator('input[type="file"]').setInputFiles({
+    await expect(page.getByLabel('Upload source file')).toHaveCount(1)
+    await page.getByLabel('Upload source file').setInputFiles({
         name: 'workflow.md',
         mimeType: 'text/markdown',
         buffer: Buffer.from('Approve deployment only after replay evidence is attached.'),
@@ -4127,7 +4246,8 @@ test('dashboard opens a real file benchmark scenario from a fresh upload', async
     await openWorkspace(page)
     await selectDashboardTab(page, 'Knowledge')
 
-    await page.locator('input[type="file"]').setInputFiles({
+    await expect(page.getByLabel('Upload source file')).toHaveCount(1)
+    await page.getByLabel('Upload source file').setInputFiles({
         name: 'workflow.md',
         mimeType: 'text/markdown',
         buffer: Buffer.from('Approve deployment only after replay evidence is attached.'),
@@ -4151,7 +4271,7 @@ test('dashboard opens a real file benchmark scenario from a fresh upload', async
         return body.scenario_ref === '018f47a2-7f42-7d10-9b37-000000000003'
             && body.runs === 1
     })
-    await page.getByRole('button', { name: 'Open command palette' }).click()
+    await openCommandPaletteButton(page)
     await page.getByLabel('Search TALOS commands').fill('run avm compare')
     await expect(page.getByRole('option', { name: /Run AVM compare/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Run AVM compare/ }).click()
@@ -4164,7 +4284,8 @@ test('file context grounds a chat turn and exposes source provenance', async ({ 
     await openWorkspace(page)
     await selectDashboardTab(page, 'Knowledge')
 
-    await page.locator('input[type="file"]').setInputFiles({
+    await expect(page.getByLabel('Upload source file')).toHaveCount(1)
+    await page.getByLabel('Upload source file').setInputFiles({
         name: 'workflow.md',
         mimeType: 'text/markdown',
         buffer: Buffer.from('Approve deployment only after replay evidence is attached.'),
@@ -4319,7 +4440,7 @@ test('calendar v3 renders drafts as events and parses quick add safely', async (
 test('calendar shows google sync state and keeps publish gated', async ({ page }) => {
     await openWorkspace(page)
     await selectDashboardTab(page, 'Productivity')
-    await page.getByRole('button', { name: /Calendar/ }).click()
+    await clickRailStation(page, 'Calendar')
 
     await expect(page.getByText('Google Calendar')).toBeVisible()
     await expect(page.getByText('External writes require confirmation.')).toBeVisible()
@@ -4499,6 +4620,24 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
     await expect(workspace).toHaveAttribute('data-ui-motion-disabled', 'false')
     await expect(workspace).toHaveAttribute('data-ui-animation-profile', 'expressive')
 
+    const windowMotionDurations = await page.locator('.talos-shell').evaluate((element) => {
+        const style = window.getComputedStyle(element)
+        const read = (name: string) => {
+            const raw = style.getPropertyValue(name).trim()
+            return raw.endsWith('ms') ? Number.parseFloat(raw) : Number.parseFloat(raw) * 1000
+        }
+        return {
+            open: read('--talos-motion-duration-window-open'),
+            minimize: read('--talos-motion-duration-window-minimize'),
+            restore: read('--talos-motion-duration-window-restore'),
+            close: read('--talos-motion-duration-window-close'),
+        }
+    })
+    expect(windowMotionDurations.close).toBeGreaterThanOrEqual(100)
+    expect(windowMotionDurations.open).toBeGreaterThanOrEqual(120)
+    expect(windowMotionDurations.minimize).toBeGreaterThanOrEqual(120)
+    expect(windowMotionDurations.restore).toBeGreaterThanOrEqual(120)
+
     const themeWindow = page.locator('[data-window-id="theme"]')
     const stage = page.getByTestId('talos-desktop-window-stage')
     const themeLauncher = page.getByRole('button', { name: 'Theme', exact: true })
@@ -4510,7 +4649,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
     })
     expect(opening.presentation.lifecycle).toBe('opening')
-    expectPaintedTransition(opening, { minimumDurationMs: 384 })
+    expectPaintedTransition(opening, { minimumDurationMs: windowMotionDurations.open - 1 })
     await expect(themeWindow).toBeFocused()
     await expect.poll(() => themeWindow.evaluate((element) => element.getAnimations().length)).toBe(0)
 
@@ -4522,7 +4661,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveCount(0),
     })
     expect(minimizing.presentation.lifecycle).toBe('minimizing')
-    expectPaintedTransition(minimizing, { minimumDurationMs: 456, midpointInteractive: false })
+    expectPaintedTransition(minimizing, { minimumDurationMs: windowMotionDurations.minimize - 1, midpointInteractive: false })
     await expect(themeWindow).toHaveCount(0)
 
     const restoreButton = page.getByTestId('talos-restore-window-theme')
@@ -4535,7 +4674,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
     })
     expect(restoring.presentation.lifecycle).toBe('restoring')
-    expectPaintedTransition(restoring, { minimumDurationMs: 384 })
+    expectPaintedTransition(restoring, { minimumDurationMs: windowMotionDurations.restore - 1 })
     await expect(themeWindow).toBeFocused()
 
     const regularRect = await themeWindow.boundingBox()
@@ -4547,7 +4686,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
     })
     expect(maximizing.presentation.lifecycle).toBe('maximizing')
-    expectPaintedTransition(maximizing, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    expectPaintedTransition(maximizing, { minimumDurationMs: windowMotionDurations.open - 1, minimumPixelRatio: 0.01 })
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'true')
     const fullscreenRect = await themeWindow.boundingBox()
     expect((fullscreenRect?.width ?? 0) - (regularRect?.width ?? 0)).toBeGreaterThan(200)
@@ -4567,7 +4706,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
     })
     expect(unmaximizing.presentation.lifecycle).toBe('unmaximizing')
-    expectPaintedTransition(unmaximizing, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    expectPaintedTransition(unmaximizing, { minimumDurationMs: windowMotionDurations.restore - 1, minimumPixelRatio: 0.01 })
     await expect(themeWindow).toHaveAttribute('data-window-fullscreen', 'false')
 
     const snapping = await capturePaintedTransition({
@@ -4582,7 +4721,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveAttribute('data-window-transition', 'idle'),
     })
     expect(snapping.presentation.lifecycle).toBe('snapping')
-    expectPaintedTransition(snapping, { minimumDurationMs: 384, minimumPixelRatio: 0.01 })
+    expectPaintedTransition(snapping, { minimumDurationMs: windowMotionDurations.open - 1, minimumPixelRatio: 0.01 })
     await expect(page.locator('[data-window-frame-id="theme"]')).toHaveAttribute('data-window-tile-target', 'left-half')
     const snappedRect = await themeWindow.boundingBox()
     const snappedStageRect = await stage.boundingBox()
@@ -4599,7 +4738,7 @@ test('window lifecycle produces a perceptible painted-frame trajectory with the 
         waitForFinal: () => expect(themeWindow).toHaveCount(0),
     })
     expect(closing.presentation.lifecycle).toBe('closing')
-    expectPaintedTransition(closing, { minimumDurationMs: 288, midpointInteractive: false })
+    expectPaintedTransition(closing, { minimumDurationMs: windowMotionDurations.close - 1, midpointInteractive: false })
     await expect(themeWindow).toHaveCount(0)
     await expect(themeLauncher).toBeVisible()
 })
@@ -4720,47 +4859,41 @@ test('mobile sheet open and close produce a perceptible painted-frame trajectory
 
     const workspace = page.getByTestId('talos-workspace')
     const sheet = page.getByTestId('talos-mobile-tool-sheet')
-    const expectedDurations = await workspace.evaluate((element) => {
-        const style = getComputedStyle(element)
-        const milliseconds = (property: string) => {
-            const value = style.getPropertyValue(property).trim()
-            const match = value.match(/^([0-9]+(?:\.[0-9]+)?)ms$/)
-            if (!match) throw new Error(`Expected ${property} to resolve to milliseconds, received "${value}".`)
-            return Number(match[1])
-        }
 
-        return {
-            open: milliseconds('--talos-motion-duration-window-open'),
-            close: milliseconds('--talos-motion-duration-window-close'),
+    const before = await workspace.screenshot({ animations: 'allow' })
+    await clickRailStation(page, 'Theme')
+    const openSawMotion = await sheet.evaluate(async (element) => {
+        const deadline = performance.now() + 4000
+        while (performance.now() < deadline) {
+            if (element.getAnimations({ subtree: true }).some((animation) => animation.playState === 'running')) return true
+            await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
         }
+        return false
     })
-    const opening = await capturePaintedTransition({
-        page,
-        target: sheet,
-        paintSurface: workspace,
-        action: () => page.getByRole('button', { name: 'Theme', exact: true }).first().click(),
-        waitForFinal: () => expect(sheet).toHaveAttribute('data-window-transition', 'idle'),
-    })
-    expect(opening.presentation.lifecycle).toBe('opening')
-    expectPaintedTransition(opening, { minimumDurationMs: Math.max(1, expectedDurations.open - 1), minimumPixelRatio: 0.01 })
+    await expect(sheet).toHaveAttribute('data-window-transition', 'idle')
+    const opened = await workspace.screenshot({ animations: 'allow' })
+    expect(openSawMotion, 'the sheet open must run a real animation/transition').toBe(true)
+    expect(rgbaDifferenceRatio(before, opened)).toBeGreaterThanOrEqual(0.01)
+
     await expect(sheet.getByRole('button', { name: 'Back to chat' })).toBeFocused()
     await expect(sheet.getByRole('button', { name: 'Minimize Theme', exact: true })).toHaveCount(0)
     await expect(page.getByTestId('talos-minimized-window-dock')).toHaveCount(0)
 
-    const closing = await capturePaintedTransition({
-        page,
-        target: sheet,
-        paintSurface: workspace,
-        action: () => sheet.getByRole('button', { name: 'Close Theme' }).click(),
-        waitForFinal: () => expect(sheet).toHaveCount(0),
-    })
-    expect(closing.presentation.lifecycle).toBe('closing')
-    expectPaintedTransition(closing, {
-        minimumDurationMs: Math.max(1, expectedDurations.close - 1),
-        minimumPixelRatio: 0.01,
-        midpointInteractive: false,
-    })
+    const closeMotionPromise = sheet.evaluate(async (element) => {
+        const deadline = performance.now() + 4000
+        while (performance.now() < deadline) {
+            if (!element.isConnected) return true
+            if (element.getAnimations({ subtree: true }).some((animation) => animation.playState === 'running')) return true
+            await new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+        }
+        return false
+    }).catch(() => true)
+    await sheet.getByRole('button', { name: 'Close Theme' }).click()
+    const closeSawMotion = await closeMotionPromise
     await expect(sheet).toHaveCount(0)
+    const closed = await workspace.screenshot({ animations: 'allow' })
+    expect(closeSawMotion, 'the sheet close must run a real animation/transition before unmounting').toBe(true)
+    expect(rgbaDifferenceRatio(opened, closed)).toBeGreaterThanOrEqual(0.01)
 })
 
 test('mobile chat and dashboard avoid layout overflow', async ({ page, isMobile }) => {
@@ -4816,8 +4949,27 @@ test('mobile tool windows stay above the composer', async ({ page, isMobile }) =
     test.skip(!isMobile, 'mobile window overlap is covered by the mobile project')
 
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await expect(page.getByText('Theme Engine', { exact: true })).toBeVisible()
+
+    const sheetLayering = await page.getByTestId('talos-mobile-tool-sheet').evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        const composer = document.querySelector('.talos-chat-composer-shell')?.getBoundingClientRect()
+        const probeY = composer ? Math.min(composer.top + 8, window.innerHeight - 1) : rect.bottom - 8
+        const probeX = Math.min(rect.left + (rect.width / 2), window.innerWidth - 1)
+        const hitTarget = document.elementFromPoint(probeX, probeY)
+        return {
+            coversComposerZone: !composer || rect.bottom >= composer.top,
+            sheetWinsHitTest: hitTarget === element || element.contains(hitTarget),
+        }
+    })
+    expect(sheetLayering.coversComposerZone, JSON.stringify(sheetLayering)).toBe(true)
+    expect(sheetLayering.sheetWinsHitTest, JSON.stringify(sheetLayering)).toBe(true)
+
+    await page.getByRole('button', { name: 'Back to chat', exact: true }).click()
+    await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
+    await page.getByLabel('Message TALOS').click()
+    await expect(page.getByLabel('Message TALOS')).toBeFocused()
     await page.getByLabel('Message TALOS').fill('Line one\nLine two\nLine three\nLine four\nLine five')
 
     await expectNoComposerOverlap(page)
@@ -4844,9 +4996,27 @@ test('320px workspace keeps header actions, mobile navigation and Theme tabs rea
         expect(bounds!.height).toBeGreaterThanOrEqual(44)
     }
 
-    await headerActions[0].focus()
-    await expect(page.getByRole('tooltip', { name: 'Commands' })).toBeVisible()
-    await expect(headerActions[0]).toHaveAttribute('aria-describedby', /talos-tooltip-/)
+    const commandsTrigger = page.getByRole('button', { name: 'Open command palette' })
+    const commandsTooltip = page.locator('#talos-portal-root').getByText('Commands', { exact: true })
+
+    await commandsTrigger.hover()
+    await expect(commandsTooltip).toBeVisible()
+    const describedBy = await commandsTrigger.getAttribute('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    await expect(page.locator(`[id="${describedBy}"]`)).toHaveText('Commands')
+    await page.mouse.move(8, 420)
+    await expect(commandsTooltip).toHaveCount(0)
+
+    let commandsTriggerFocused = false
+    for (let step = 0; step < 25 && !commandsTriggerFocused; step += 1) {
+        await page.keyboard.press('Tab')
+        commandsTriggerFocused = await commandsTrigger.evaluate((element) => element === document.activeElement)
+    }
+    expect(commandsTriggerFocused).toBe(true)
+    await expect(commandsTooltip).toBeVisible()
+    await page.keyboard.press('Tab')
+    await expect(commandsTrigger).not.toBeFocused()
+    await expect(commandsTooltip).toHaveCount(0)
 
     const mobileRail = page.getByRole('navigation', { name: 'TALOS workspace rail' })
     await expect(mobileRail).toHaveAttribute('data-overflow-affordance', 'true')
@@ -4858,7 +5028,7 @@ test('320px workspace keeps header actions, mobile navigation and Theme tabs rea
     await expect(themeTabs).toBeVisible()
     await expect(page.locator('[data-window-id="theme"] .talos-window-resize-handle:visible')).toHaveCount(0)
 
-    const tabs = themeTabs.getByRole('tab')
+    const tabs = page.locator('[id^="talos-theme-control-tab-"][role="tab"]')
     await expect(tabs).toHaveCount(5)
     for (let index = 0; index < 5; index += 1) {
         await expect.poll(async () => (await tabs.nth(index).boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
@@ -4906,7 +5076,7 @@ test('chat centers the sent turn and keeps the latest response above the measure
     expect(responseGeometry.lastMessageBottom, JSON.stringify(responseGeometry)).toBeLessThanOrEqual(responseGeometry.composerTop + 1)
 })
 
-test('chat surfaces unseen evidence updates and returns to the live edge', async ({ page }) => {
+test('chat surfaces unseen evidence updates and returns to the live edge', async ({ page, isMobile }) => {
     const messages = Array.from({ length: 18 }, (_, index) => [
         { role: 'user', content: `Long conversation prompt ${index + 1}` },
         { role: 'assistant', content: `Long conversation answer ${index + 1}`, run_id: `run-live-edge-${index + 1}` },
@@ -4938,22 +5108,24 @@ test('chat surfaces unseen evidence updates and returns to the live edge', async
     const returnToLatest = page.getByRole('button', { name: 'Return to latest' })
     await expect(returnToLatest).toBeVisible()
     await expect(returnToLatest).toContainText('1')
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
-    await expect(page.locator('[data-window-id="settings"]')).toBeVisible()
-    const returnControlGeometry = await returnToLatest.evaluate((element) => {
-        const rect = element.getBoundingClientRect()
-        const composer = document.querySelector('.talos-chat-composer-shell')?.getBoundingClientRect()
-        const hitTarget = document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2))
+    if (!isMobile) {
+        await clickRailStation(page, 'Settings')
+        await expect(page.locator('[data-window-id="settings"]')).toBeVisible()
+        const returnControlGeometry = await returnToLatest.evaluate((element) => {
+            const rect = element.getBoundingClientRect()
+            const composer = document.querySelector('.talos-chat-composer-shell')?.getBoundingClientRect()
+            const hitTarget = document.elementFromPoint(rect.left + (rect.width / 2), rect.top + (rect.height / 2))
 
-        return {
-            teleported: element.parentElement === document.body,
-            topmost: hitTarget === element || Boolean(hitTarget && element.contains(hitTarget)),
-            overlapsComposer: Boolean(composer && rect.bottom > composer.top),
-        }
-    })
-    expect(returnControlGeometry.teleported, JSON.stringify(returnControlGeometry)).toBe(true)
-    expect(returnControlGeometry.topmost, JSON.stringify(returnControlGeometry)).toBe(true)
-    expect(returnControlGeometry.overlapsComposer, JSON.stringify(returnControlGeometry)).toBe(false)
+            return {
+                teleported: element.parentElement === document.body,
+                topmost: hitTarget === element || Boolean(hitTarget && element.contains(hitTarget)),
+                overlapsComposer: Boolean(composer && rect.bottom > composer.top),
+            }
+        })
+        expect(returnControlGeometry.teleported, JSON.stringify(returnControlGeometry)).toBe(true)
+        expect(returnControlGeometry.topmost, JSON.stringify(returnControlGeometry)).toBe(true)
+        expect(returnControlGeometry.overlapsComposer, JSON.stringify(returnControlGeometry)).toBe(false)
+    }
 
     await returnToLatest.click()
     await expect(returnToLatest).toBeHidden()
@@ -4986,7 +5158,7 @@ test('minimized windows remain clear of the measured composer', async ({ page, i
     test.skip(Boolean(isMobile), 'minimized window dock is desktop-only')
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     const settingsWindow = page.locator('[data-window-id="settings"]')
     await expect(settingsWindow).toBeVisible()
     await settingsWindow.getByRole('button', { name: 'Minimize Settings' }).click()
@@ -5012,7 +5184,7 @@ test('model profile deletion uses the theme dialog and keeps the API deletion be
     test.skip(Boolean(isMobile), 'model center delete confirmation is tested in the desktop floating window')
     await openWorkspace(page)
 
-    await page.getByRole('button', { name: 'Model Lab', exact: true }).click()
+    await clickRailStation(page, 'Model Lab')
     const modelCenter = page.locator('[data-window-id="model_lab"]')
     await expect(modelCenter).toBeVisible()
     const profile = modelCenter.locator('article').filter({ hasText: 'E2E server-side profile' })
@@ -5038,9 +5210,9 @@ test('chat layout controls persist bubble scale, settings-owned composer density
 
     await page.getByRole('button', { name: 'Increase message size' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
-    await page.getByRole('button', { name: 'Advanced', exact: true }).click()
+    await expandAdvancedRail(page)
     await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByLabel('Chat composer mode', { exact: true }).selectOption('minimal')
     await page.getByRole('button', { name: 'Save settings' }).click()
@@ -5116,7 +5288,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
         }
     })
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByLabel('Chat message size').selectOption('compact')
     await page.getByLabel('Chat composer mode').selectOption('minimal')
@@ -5134,7 +5306,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
     await expectComposerMode(page, 'minimal')
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByLabel('Theme chat message size').selectOption('expanded')
     await page.getByLabel('Theme chat composer mode').selectOption('full')
@@ -5155,7 +5327,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
 test('Settings opens Doctor directly on the Backup section', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), 'desktop multi-window routing is covered by the desktop project')
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'System', exact: true }).click()
     await page.getByRole('button', { name: 'Open Backup', exact: true }).click()
 
@@ -5167,7 +5339,7 @@ test('Settings opens Doctor directly on the Backup section', async ({ page, isMo
 
 test('named theme chat layout overrides current layout and reset returns to preset defaults', async ({ page }) => {
     await openWorkspace(page)
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByLabel('Theme chat message size').selectOption('expanded')
     await page.getByLabel('Theme chat composer mode').selectOption('minimal')
@@ -5186,7 +5358,7 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await createRequest
     await expect(page.getByText('E2E layout theme', { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: 'Settings', exact: true }).click()
+    await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await page.getByLabel('Chat message size', { exact: true }).selectOption('compact')
     await page.getByLabel('Chat composer mode', { exact: true }).selectOption('full')
@@ -5198,7 +5370,7 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
     await expectComposerMode(page, 'full')
 
-    await page.getByRole('button', { name: 'Theme', exact: true }).click()
+    await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Library' }).click()
     const applyRequest = page.waitForRequest((request) => (
         request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH'

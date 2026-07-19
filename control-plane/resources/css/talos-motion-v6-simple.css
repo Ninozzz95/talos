@@ -338,3 +338,33 @@
         transition: none !important;
     }
 }
+
+/* v7 telemetry scene roles */
+
+[data-talos-motion-layer-role="telemetry-field"] {
+    border: 1px solid color-mix(in srgb, var(--talos-v6-border) 45%, transparent);
+    background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--talos-v6-border) 18%, transparent) 0 1px, transparent 1px 9%), repeating-linear-gradient(0deg, color-mix(in srgb, var(--talos-v6-secondary) 12%, transparent) 0 1px, transparent 1px 12%);
+    mask-image: linear-gradient(90deg, transparent, black 14%, black 82%, transparent);
+}
+
+[data-talos-motion-layer-role="telemetry-band"],
+[data-talos-motion-layer-role="telemetry-carrier-band"] {
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--talos-v6-accent) 26%, transparent) 30%, color-mix(in srgb, var(--talos-v6-secondary) 22%, transparent) 70%, transparent);
+    filter: blur(6px);
+}
+
+[data-talos-motion-layer-role="telemetry-grid"] {
+    background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--talos-v6-border) 20%, transparent) 0 1px, transparent 1px 14%);
+    mask-image: linear-gradient(180deg, transparent, black 20%, black 80%, transparent);
+}
+
+[data-talos-motion-layer-role="telemetry-rule-run"],
+[data-talos-motion-layer-role="telemetry-readout-line"] {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--talos-v6-accent) 55%, transparent), color-mix(in srgb, var(--talos-v6-secondary) 40%, transparent));
+    box-shadow: 0 0 8px color-mix(in srgb, var(--talos-v6-accent) 30%, transparent);
+}
+
+[data-talos-motion-layer-role="telemetry-tick-cluster"] {
+    background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--talos-v6-accent) 60%, transparent) 0 1px, transparent 1px 4px);
+}

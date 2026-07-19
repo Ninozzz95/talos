@@ -37,6 +37,11 @@ const AMBIENT_GLYPHS: Readonly<Record<TalosMotionSceneId, readonly SimpleGlyph[]
         { role: 'aurora-ribbon', x: 8, y: 23, width: 84, height: 44, motionX: -9, motionY: 5, rotation: 7, opacity: 0.3, phase: 13 },
         { role: 'aurora-constellation', x: 17, y: 10, width: 68, height: 64, motionX: 3, motionY: 4, opacity: 0.2, phase: 17 },
     ]),
+    telemetry: Object.freeze([
+        { role: 'telemetry-field', x: 4, y: 10, width: 92, height: 74, motionX: 4, motionY: -2, opacity: 0.24, phase: 11 },
+        { role: 'telemetry-band', x: 9, y: 30, width: 80, height: 26, motionX: -6, motionY: 3, rotation: -2, opacity: 0.26, phase: 13 },
+        { role: 'telemetry-grid', x: 20, y: 14, width: 64, height: 58, motionX: 3, motionY: 4, opacity: 0.18, phase: 17 },
+    ]),
     glacier: Object.freeze([
         { role: 'glacier-facet-field', x: 5, y: 8, width: 89, height: 78, motionX: -3, motionY: 2, opacity: 0.25, phase: 11 },
         { role: 'glacier-refraction', x: 12, y: 12, width: 71, height: 62, motionX: 5, motionY: -3, rotation: 4, opacity: 0.22, phase: 13 },

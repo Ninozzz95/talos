@@ -60,8 +60,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
                 ref="disclosureButton"
                 class="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md border text-[13px] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8 lg:min-w-8"
                 :class="hasActiveItem ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]' : 'border-transparent text-[var(--talos-muted)]'"
-                aria-label="Advanced"
-                title="Advanced"
+                aria-label="Workbench"
+                title="Workbench"
             >
                 <ChevronDown class="h-4 w-4 shrink-0 transition" :class="expanded ? '' : '-rotate-90'" />
             </button>
@@ -96,15 +96,15 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
                 ref="disclosureButton"
                 class="flex min-w-0 flex-1 cursor-pointer items-center rounded-md border border-transparent text-left text-[13px] text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 :class="collapsed ? 'justify-center px-0 py-2' : 'justify-between gap-2.5 px-2 py-1.5'"
-                aria-label="Advanced"
+                aria-label="Workbench"
                 :aria-controls="props.id"
                 :aria-expanded="expanded"
-                title="Advanced"
+                title="Workbench"
                 @click="emit('toggle')"
             >
                 <span class="flex min-w-0 items-center gap-2.5">
                     <ChevronDown class="h-4 w-4 shrink-0 transition" :class="expanded ? '' : '-rotate-90'" />
-                    <span v-if="!collapsed" class="truncate">Advanced</span>
+                    <span v-if="!collapsed" class="truncate">Workbench</span>
                 </span>
             </button>
         </div>

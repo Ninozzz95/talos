@@ -118,6 +118,7 @@ const PROFILE_RENDERING_DEFAULTS: Record<
     violet: { default_mode: 'adaptive', default_quality: 'high', fps_cap: 30, dpr_cap: 1.5 },
     claudius: { default_mode: 'simple', default_quality: 'low', fps_cap: 24, dpr_cap: 1 },
     basicus: { default_mode: 'adaptive', default_quality: 'balanced', fps_cap: 30, dpr_cap: 1.25 },
+    telemetry: { default_mode: 'adaptive', default_quality: 'balanced', fps_cap: 30, dpr_cap: 1.25 },
 }
 
 function strictProfileRecord(value: unknown, expectedKeys: readonly string[]): ProfileRecord | null {

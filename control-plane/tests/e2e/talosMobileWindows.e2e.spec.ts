@@ -93,14 +93,14 @@ async function openMobileWindow(page: Page, id: TalosWindowId) {
     if (await launcher.count() === 0) {
         const compactMobileRailVisible = await page.locator('.talos-mobile-rail:visible').count() > 0
         if (compactMobileRailVisible) {
-            await rail.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
+            await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
             const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
             await expect(navigation).toBeVisible()
-            const advanced = navigation.getByRole('button', { name: 'Advanced', exact: true })
+            const advanced = navigation.getByRole('button', { name: 'Workbench', exact: true })
             if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
             launcher = navigation.getByRole('button', { name: label, exact: true })
         } else {
-            const advanced = rail.getByRole('button', { name: 'Advanced', exact: true })
+            const advanced = rail.getByRole('button', { name: 'Workbench', exact: true })
             if (await advanced.getAttribute('aria-expanded') !== 'true') {
                 await advanced.click()
             }
@@ -264,7 +264,7 @@ for (const viewport of [
                 const rail = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
                 const compactMobileRailVisible = await page.locator('.talos-mobile-rail:visible').count() > 0
                 const returnTarget = ADVANCED_WINDOW_IDS.has(id) && compactMobileRailVisible
-                    ? rail.locator('button[aria-label="Open navigation menu"]')
+                    ? page.locator('button[aria-label="Open navigation menu"]')
                     : rail.locator(`button[aria-label="${mobileRailLabel(id)}"]`)
                 await sheet.getByRole('button', { name: `Close ${mobileRailLabel(id)}`, exact: true }).click()
                 await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
@@ -346,8 +346,7 @@ test.describe('TALOS mobile presentation preference', () => {
         await expectGuideFocusRoundTrip(page, drawer, 'rail.notes', 'Notes')
         await drawer.getByRole('button', { name: 'Back to chat', exact: true }).click()
         await expect(page.getByTestId('talos-mobile-tool-sheet')).toHaveCount(0)
-        const advancedLauncher = page.locator('[aria-label="TALOS workspace rail"]:visible').first()
-            .getByRole('button', { name: 'Open navigation menu', exact: true })
+        const advancedLauncher = page.getByRole('button', { name: 'Open navigation menu', exact: true })
         await expect(advancedLauncher).toBeFocused()
     })
 })
@@ -363,16 +362,14 @@ test.describe('TALOS mobile modal lifecycle regressions', () => {
         await page.goto('/', { waitUntil: 'domcontentloaded' })
         await waitForWorkspaceReady(page)
 
-        await page.locator('.talos-mobile-rail:visible')
-            .getByRole('button', { name: 'Open navigation menu', exact: true })
-            .click()
+        await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
         const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
         await expect(navigation).toBeVisible()
 
         const trigger = navigation.locator('[data-talos-session-menu-trigger="true"]').first()
         await expect(trigger).toBeVisible()
         await trigger.click()
-        const menu = page.getByRole('menu', { name: 'Chat actions', exact: true })
+        const menu = page.getByRole('menu', { name: 'Chat actions for Actionable chat', exact: true })
         await expect(menu).toBeVisible()
         await expect.poll(() => menu.evaluate((element) => (
             element.closest('[role="dialog"][aria-modal="true"]')?.getAttribute('aria-label')
@@ -389,9 +386,7 @@ test.describe('TALOS mobile modal lifecycle regressions', () => {
         await page.goto('/', { waitUntil: 'domcontentloaded' })
         await waitForWorkspaceReady(page)
 
-        await page.locator('.talos-mobile-rail:visible')
-            .getByRole('button', { name: 'Open navigation menu', exact: true })
-            .click()
+        await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
         const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
         const chat = page.locator('.talos-chat-scroll-root')
         await expect(navigation).toBeVisible()
@@ -482,17 +477,17 @@ test.describe('TALOS mobile quick navigation', () => {
 
         const rail = page.locator('.talos-mobile-rail:visible')
         await expect(rail.getByRole('button', { name: 'Chat', exact: true })).toBeVisible()
-        await expect(rail.getByRole('button', { name: 'Open navigation menu', exact: true })).toBeVisible()
-        await expect(rail.getByRole('button', { name: 'Advanced', exact: true })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Open navigation menu', exact: true })).toBeVisible()
+        await expect(rail.getByRole('button', { name: 'Workbench', exact: true })).toHaveCount(0)
 
         await rail.getByRole('button', { name: 'Chat', exact: true }).click()
         await expect(page.getByLabel('Message TALOS')).toBeFocused()
         await expect(page.getByRole('dialog', { name: 'TALOS navigation', exact: true })).toHaveCount(0)
 
-        await rail.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
+        await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
         const navigation = page.getByRole('dialog', { name: 'TALOS navigation', exact: true })
         await expect(navigation).toBeVisible()
-        await expect(navigation.getByRole('button', { name: 'Advanced', exact: true })).toBeVisible()
+        await expect(navigation.getByRole('button', { name: 'Workbench', exact: true })).toBeVisible()
         await expect(navigation.getByRole('button', { name: 'Close navigation menu', exact: true })).toBeFocused()
     })
 })

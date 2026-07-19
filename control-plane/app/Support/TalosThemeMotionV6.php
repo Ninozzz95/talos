@@ -24,6 +24,7 @@ final class TalosThemeMotionV6
     private const QUALITY_LEVELS = ['low', 'balanced', 'high', 'adaptive'];
 
     private const SCENE_IDS = [
+        'telemetry',
         'forge',
         'paper',
         'terminal',

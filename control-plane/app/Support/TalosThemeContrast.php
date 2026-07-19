@@ -10,6 +10,7 @@ final class TalosThemeContrast
 
     /** @var array<string, array{background: string, accent: string, secondary: string, line: string, light: bool}> */
     private const PRESETS = [
+        'telemetry' => ['background' => '#0b0f11', 'accent' => '#6ad4d4', 'secondary' => '#63f08e', 'line' => '#1f3238', 'light' => false],
         'forge' => ['background' => '#080b11', 'accent' => '#c98b32', 'secondary' => '#6ad4d4', 'line' => '#27313e', 'light' => false],
         'paper' => ['background' => '#f8fafc', 'accent' => '#a96617', 'secondary' => '#2f6f7d', 'line' => '#d7dee8', 'light' => true],
         'terminal' => ['background' => '#020403', 'accent' => '#63f08e', 'secondary' => '#d6ff72', 'line' => '#163821', 'light' => false],

@@ -73,7 +73,7 @@ function statusTone(status: string) {
             No research reports returned by the research API yet.
         </div>
 
-        <div v-else-if="reportsState === 'ready'" class="max-h-[260px] divide-y divide-[var(--talos-border)] overflow-y-auto">
+        <div v-else-if="reportsState === 'ready'" class="max-h-[260px] divide-y divide-[var(--talos-border)] overflow-y-auto" tabindex="0">
             <button
                 v-for="report in reports"
                 :key="report.id"

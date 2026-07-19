@@ -77,6 +77,7 @@ function closeSurface() {
     if (!open.value || closeRequested.value) return
     closeRequested.value = true
     open.value = false
+    scheduleCloseFallback()
 }
 
 function updateOpen(next: boolean) {
@@ -88,10 +89,17 @@ function updateOpen(next: boolean) {
     }
 
     closeRequested.value = true
+    scheduleCloseFallback()
+}
+
+const disposed = ref(false)
+
+function scheduleCloseFallback() {
+    window.setTimeout(completeClose, 450)
 }
 
 function completeClose() {
-    if (!closeRequested.value || closeEmitted.value) return
+    if (disposed.value || !closeRequested.value || closeEmitted.value) return
     closeEmitted.value = true
     emit('close', props.id)
 }
@@ -101,7 +109,7 @@ function completeOpenTransition(next: boolean) {
 }
 
 function completePresenceLeave() {
-    if (!isDrawer.value) completeClose()
+    completeClose()
 }
 
 function focusPrimaryControl(event: Event) {
@@ -146,7 +154,10 @@ function isVisibleFocusTarget(element: HTMLElement | null): element is HTMLEleme
     return !browserHasLayout || element.getClientRects().length > 0
 }
 
-onBeforeUnmount(restoreLauncherFocus)
+onBeforeUnmount(() => {
+    disposed.value = true
+    restoreLauncherFocus()
+})
 </script>
 
 <template>

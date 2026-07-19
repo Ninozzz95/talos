@@ -7,15 +7,40 @@ namespace App\Models;
 use App\Support\TalosThemeMotionV6;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use JsonException;
+use stdClass;
 
 final class TalosWorkspaceSetting extends Model
 {
     public const DEFAULT_ID = 'default';
 
+    public const SENSITIVE_CENSOR_DEFAULT = true;
+
     private const BROWSER_HMI_MODE_VALUES = [
         'read_only' => true,
         'confirm_sensitive' => true,
         'confirm_every_interaction' => true,
+    ];
+
+    private const SIDEBAR_RAIL_ITEM_VALUES = [
+        'runtime' => true,
+        'calendar' => true,
+        'compare' => true,
+        'model_lab' => true,
+        'research' => true,
+        'gallery' => true,
+        'library' => true,
+        'browse' => true,
+    ];
+
+    private const SIDEBAR_RAIL_GROUP_VALUES = [
+        'workbench' => true,
+    ];
+
+    private const SIDEBAR_RAIL_KEYS = [
+        'order' => true,
+        'collapsed_groups' => true,
+        'collapsed' => true,
     ];
 
     private const THEME_COLOR_KEYS = [
@@ -37,6 +62,7 @@ final class TalosWorkspaceSetting extends Model
     ];
 
     private const THEME_VALUES = [
+        'telemetry' => true,
         'forge' => true,
         'paper' => true,
         'terminal' => true,
@@ -283,6 +309,13 @@ final class TalosWorkspaceSetting extends Model
         return 'user-'.$userId;
     }
 
+    public static function sensitiveCensorEnabled(mixed $preferences): bool
+    {
+        $preferences = self::sanitizePreferences($preferences);
+
+        return $preferences['sensitive_censor'] ?? self::SENSITIVE_CENSOR_DEFAULT;
+    }
+
     /**
      * @return BelongsTo<User, $this>
      */
@@ -301,7 +334,10 @@ final class TalosWorkspaceSetting extends Model
             'user_id' => $this->user_id,
             'default_model_profile_id' => $this->default_model_profile_id,
             'default_context_set_id' => $this->default_context_set_id,
-            'preferences' => self::sanitizePreferences($this->preferences ?? []),
+            'preferences' => self::sanitizePreferences(
+                $this->preferences ?? [],
+                $this->getRawOriginal('preferences'),
+            ),
             'revision' => (int) ($this->revision ?? 0),
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
@@ -311,7 +347,7 @@ final class TalosWorkspaceSetting extends Model
     /**
      * @return array<mixed>
      */
-    public static function sanitizePreferences(mixed $preferences): array
+    public static function sanitizePreferences(mixed $preferences, mixed $rawPreferencesJson = null): array
     {
         if (! is_array($preferences)) {
             return [];
@@ -390,6 +426,7 @@ final class TalosWorkspaceSetting extends Model
                 'theme_simple_animation',
                 'theme_background_disabled',
                 'theme_policy_locked',
+                'sensitive_censor',
             ], true)) {
                 if (is_bool($value)) {
                     $safe[$key] = $value;
@@ -459,6 +496,15 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'sidebar_rail') {
+                $rail = self::sanitizeSidebarRail($value);
+                if ($rail !== null) {
+                    $safe[$key] = $rail;
+                }
+
+                continue;
+            }
+
             if (is_string($key) && self::isThemePreferenceKeyCandidate($key)) {
                 continue;
             }
@@ -466,7 +512,7 @@ final class TalosWorkspaceSetting extends Model
             $safe[$key] = is_array($value) ? self::sanitizePreferences($value) : $value;
         }
 
-        return $safe;
+        return self::applyRawSidebarRailShape($safe, $rawPreferencesJson);
     }
 
     /**
@@ -488,6 +534,123 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return [];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateSidebarRailPreferencesForWrite(mixed $preferences): array
+    {
+        if (! is_array($preferences) || ! array_key_exists('sidebar_rail', $preferences)) {
+            return [];
+        }
+
+        return self::validateSidebarRailValueForWrite($preferences['sidebar_rail'], false);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateRawSidebarRailForWrite(mixed $rail): array
+    {
+        return self::validateSidebarRailValueForWrite($rail, true);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private static function validateSidebarRailValueForWrite(mixed $rail, bool $rawJson): array
+    {
+        $path = 'preferences.sidebar_rail';
+        if ($rawJson) {
+            if (! $rail instanceof stdClass || $rail::class !== stdClass::class) {
+                return [$path => ['Sidebar rail preferences must be an object.']];
+            }
+
+            $rail = get_object_vars($rail);
+        } elseif (! is_array($rail) || array_is_list($rail)) {
+            return [$path => ['Sidebar rail preferences must be an object.']];
+        }
+
+        $errors = [];
+        foreach ($rail as $key => $_value) {
+            if (! is_string($key) || ! isset(self::SIDEBAR_RAIL_KEYS[$key])) {
+                $errorPath = is_string($key) ? "{$path}.{$key}" : $path;
+                $errors[$errorPath] = ['Unknown sidebar rail preference key.'];
+            }
+        }
+
+        foreach (self::SIDEBAR_RAIL_KEYS as $key => $_allowed) {
+            if (! array_key_exists($key, $rail)) {
+                $errors["{$path}.{$key}"] = ['Sidebar rail preference is required.'];
+            }
+        }
+
+        if (array_key_exists('order', $rail)) {
+            $orderPath = "{$path}.order";
+            $order = $rail['order'];
+            if (! is_array($order) || ! array_is_list($order)) {
+                $errors[$orderPath] = ['Sidebar rail order must be a list.'];
+            } else {
+                if (count($order) > count(self::SIDEBAR_RAIL_ITEM_VALUES)) {
+                    $errors[$orderPath] = ['Sidebar rail order contains too many items.'];
+                }
+
+                $seen = [];
+                foreach ($order as $index => $itemId) {
+                    $itemPath = "{$orderPath}.{$index}";
+                    if (! is_string($itemId) || ! isset(self::SIDEBAR_RAIL_ITEM_VALUES[$itemId])) {
+                        $errors[$itemPath] = ['Sidebar rail item is not recognized.'];
+
+                        continue;
+                    }
+
+                    if (isset($seen[$itemId])) {
+                        $errors[$itemPath] = ['Sidebar rail items must be unique.'];
+
+                        continue;
+                    }
+
+                    $seen[$itemId] = true;
+                }
+            }
+        }
+
+        if (array_key_exists('collapsed_groups', $rail)) {
+            $groupsPath = "{$path}.collapsed_groups";
+            $groups = $rail['collapsed_groups'];
+            if (! is_array($groups) || ! array_is_list($groups)) {
+                $errors[$groupsPath] = ['Collapsed sidebar groups must be a list.'];
+            } else {
+                if (count($groups) > count(self::SIDEBAR_RAIL_GROUP_VALUES)) {
+                    $errors[$groupsPath] = ['Too many collapsed sidebar groups were provided.'];
+                }
+
+                $seen = [];
+                foreach ($groups as $index => $groupId) {
+                    $groupPath = "{$groupsPath}.{$index}";
+                    if (! is_string($groupId) || ! isset(self::SIDEBAR_RAIL_GROUP_VALUES[$groupId])) {
+                        $errors[$groupPath] = ['Sidebar rail group is not recognized.'];
+
+                        continue;
+                    }
+
+                    if (isset($seen[$groupId])) {
+                        $errors[$groupPath] = ['Collapsed sidebar groups must be unique.'];
+
+                        continue;
+                    }
+
+                    $seen[$groupId] = true;
+                }
+            }
+        }
+
+        if (array_key_exists('collapsed', $rail) && ! is_bool($rail['collapsed'])) {
+            $errors["{$path}.collapsed"] = ['Sidebar rail collapsed state must be a boolean.'];
+        }
+
+        return $errors;
     }
 
     /**
@@ -1057,6 +1220,112 @@ final class TalosWorkspaceSetting extends Model
             || str_ends_with($normalized, 'token')
             || str_ends_with($normalized, '_token')
             || str_ends_with($normalized, '-token');
+    }
+
+    /**
+     * @return array{order?: array<int, string>, collapsed_groups?: array<int, string>, collapsed?: bool}|null
+     */
+    private static function sanitizeSidebarRail(mixed $value): ?array
+    {
+        return self::sanitizeSidebarRailValue($value, false);
+    }
+
+    /**
+     * @param  array<string, mixed>  $safe
+     * @return array<string, mixed>
+     */
+    private static function applyRawSidebarRailShape(array $safe, mixed $rawPreferencesJson): array
+    {
+        if (! is_string($rawPreferencesJson) || $rawPreferencesJson === '') {
+            return $safe;
+        }
+
+        try {
+            $rawPreferences = json_decode($rawPreferencesJson, false, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return $safe;
+        }
+
+        if (! $rawPreferences instanceof stdClass
+            || $rawPreferences::class !== stdClass::class
+            || ! property_exists($rawPreferences, 'sidebar_rail')
+        ) {
+            return $safe;
+        }
+
+        $rail = self::sanitizeSidebarRailValue($rawPreferences->sidebar_rail, true);
+        if ($rail === null) {
+            unset($safe['sidebar_rail']);
+        } else {
+            $safe['sidebar_rail'] = $rail;
+        }
+
+        return $safe;
+    }
+
+    /**
+     * @return array{order?: array<int, string>, collapsed_groups?: array<int, string>, collapsed?: bool}|null
+     */
+    private static function sanitizeSidebarRailValue(mixed $value, bool $rawJson): ?array
+    {
+        if ($rawJson) {
+            if (! $value instanceof stdClass || $value::class !== stdClass::class) {
+                return null;
+            }
+
+            $value = get_object_vars($value);
+        } elseif (! is_array($value) || array_is_list($value)) {
+            return null;
+        }
+
+        $safe = [];
+        $order = $value['order'] ?? null;
+        if (is_array($order) && array_is_list($order)) {
+            $safeOrder = [];
+            $seen = [];
+            foreach ($order as $itemId) {
+                if (! is_string($itemId)
+                    || ! isset(self::SIDEBAR_RAIL_ITEM_VALUES[$itemId])
+                    || isset($seen[$itemId])
+                ) {
+                    continue;
+                }
+
+                $safeOrder[] = $itemId;
+                $seen[$itemId] = true;
+                if (count($safeOrder) === count(self::SIDEBAR_RAIL_ITEM_VALUES)) {
+                    break;
+                }
+            }
+            $safe['order'] = $safeOrder;
+        }
+
+        $groups = $value['collapsed_groups'] ?? null;
+        if (is_array($groups) && array_is_list($groups)) {
+            $safeGroups = [];
+            $seen = [];
+            foreach ($groups as $groupId) {
+                if (! is_string($groupId)
+                    || ! isset(self::SIDEBAR_RAIL_GROUP_VALUES[$groupId])
+                    || isset($seen[$groupId])
+                ) {
+                    continue;
+                }
+
+                $safeGroups[] = $groupId;
+                $seen[$groupId] = true;
+                if (count($safeGroups) === count(self::SIDEBAR_RAIL_GROUP_VALUES)) {
+                    break;
+                }
+            }
+            $safe['collapsed_groups'] = $safeGroups;
+        }
+
+        if (isset($value['collapsed']) && is_bool($value['collapsed'])) {
+            $safe['collapsed'] = $value['collapsed'];
+        }
+
+        return $safe === [] ? null : $safe;
     }
 
     /**

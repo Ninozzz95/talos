@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     Activity,
-    Archive,
     BarChart3,
     BookOpen,
     Globe2,
@@ -12,31 +11,28 @@ import {
     ChevronDown,
     ChevronLeft,
     ChevronRight,
-    Copy,
     FileArchive,
     Folder,
-    FolderInput,
     FlaskConical,
     Image,
     ListTodo,
     MessageSquarePlus,
     Moon,
-    MoreHorizontal,
     NotebookPen,
     Palette,
-    Pencil,
     Search,
     Settings,
-    Square,
-    Star,
     Stethoscope,
     Sun,
-    Trash2,
     Wrench,
     X,
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import Chip from '../../ui/Chip.vue'
 import TalosAdvancedRailGroup, { type TalosAdvancedRailItem } from './TalosAdvancedRailGroup.vue'
+import TalosSessionEditDialog from './TalosSessionEditDialog.vue'
+
+const TalosSessionRowMenu = defineAsyncComponent(() => import('./TalosSessionRowMenu.vue'))
 import { sessionChatState } from '../../../composables/useTalosSessions'
 import { talosThemeIsLight, type TalosThemeId } from '../../../lib/talosThemes'
 import type { TalosSession } from '../../../lib/talosTypes'
@@ -44,6 +40,7 @@ import type { TalosSession } from '../../../lib/talosTypes'
 type RailItem = {
     id: string
     label: string
+    code: string
     description: string
     icon: unknown
     disabledReason?: string
@@ -51,6 +48,7 @@ type RailItem = {
 
 const emit = defineEmits<{
     open: [id: string, event?: PointerEvent]
+    moveItem: [id: string, delta: number]
     newChat: []
     selectSession: [session: TalosSession]
     toggleTheme: []
@@ -69,28 +67,28 @@ const emit = defineEmits<{
 }>()
 
 const primaryItems: RailItem[] = [
-    { id: 'runtime', label: 'Runtime', description: 'Runs, replay and recovery.', icon: Activity },
-    { id: 'calendar', label: 'Calendar', description: 'Calendar drafts.', icon: CalendarDays },
-    { id: 'compare', label: 'Compare', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
-    { id: 'model_lab', label: 'Model Lab', description: 'Cookbook previews, provider profiles and probes.', icon: FlaskConical },
-    { id: 'research', label: 'Deep Research', description: 'Research reports and claims.', icon: BookOpen },
-    { id: 'gallery', label: 'Artifacts', description: 'Run artifacts and previews.', icon: Image },
-    { id: 'library', label: 'Library', description: 'Documents and file context.', icon: FileArchive },
-    { id: 'browse', label: 'Browse', description: 'Read-only browser evidence.', icon: Globe2 },
+    { id: 'runtime', label: 'Cockpit', code: 'RUN', description: 'Runs, replay and recovery.', icon: Activity },
+    { id: 'calendar', label: 'Calendar', code: 'CAL', description: 'Calendar drafts.', icon: CalendarDays },
+    { id: 'compare', label: 'Benchmarks', code: 'BNC', description: 'AVM ON/OFF benchmark evidence.', icon: BarChart3 },
+    { id: 'model_lab', label: 'Model Lab', code: 'LAB', description: 'Cookbook previews, provider profiles and probes.', icon: FlaskConical },
+    { id: 'research', label: 'Research', code: 'RES', description: 'Research reports and claims.', icon: BookOpen },
+    { id: 'gallery', label: 'Artifacts', code: 'ART', description: 'Run artifacts and previews.', icon: Image },
+    { id: 'library', label: 'Library', code: 'LIB', description: 'Documents and file context.', icon: FileArchive },
+    { id: 'browse', label: 'Browse', code: 'BRW', description: 'Read-only browser evidence.', icon: Globe2 },
 ]
 
 const advancedItems: TalosAdvancedRailItem[] = [
     { id: 'tasks', label: 'Tasks', description: 'Persisted task queue.', icon: ListTodo },
     { id: 'notes', label: 'Notes', description: 'Untrusted notes with provenance.', icon: NotebookPen },
-    { id: 'search', label: 'Knowledge', description: 'Persisted files, context sets and generated documents.', icon: Search },
-    { id: 'brain', label: 'Brain', description: 'Memory and approved skills.', icon: Brain },
+    { id: 'search', label: 'Vault', description: 'Persisted files, context sets and generated documents.', icon: Search },
+    { id: 'brain', label: 'Memory', description: 'Memory and approved skills.', icon: Brain },
     { id: 'tools', label: 'Tools', description: 'Connector and tool registry.', icon: Wrench },
     { id: 'doctor', label: 'Doctor', description: 'Control-plane readiness.', icon: Stethoscope },
 ]
 
 const systemItems: RailItem[] = [
-    { id: 'settings', label: 'Settings', description: 'Workspace setup and appearance.', icon: Settings },
-    { id: 'theme', label: 'Theme', description: 'Local theme switcher.', icon: Palette },
+    { id: 'settings', label: 'Settings', code: 'SET', description: 'Workspace setup and appearance.', icon: Settings },
+    { id: 'theme', label: 'Theme', code: 'THM', description: 'Local theme switcher.', icon: Palette },
 ]
 
 const props = defineProps<{
@@ -104,6 +102,7 @@ const props = defineProps<{
     activeSessionId?: string | null
     advancedExpanded?: boolean
     mobileOpen?: boolean
+    itemOrder?: string[]
 }>()
 
 const effectiveCollapsed = computed(() => props.mobileOpen ? false : Boolean(props.collapsed))
@@ -111,23 +110,37 @@ const railStyle = computed(() => ({
     width: `${effectiveCollapsed.value ? 64 : props.width}px`,
     maxWidth: props.mobileOpen ? '88vw' : undefined,
 }))
-const openMenuRowKey = ref<string | null>(null)
-const openMenuSession = ref<TalosSession | null>(null)
-const menuElement = ref<HTMLElement | null>(null)
 const railElement = ref<HTMLElement | null>(null)
-const menuPosition = ref({ left: 8, top: 8 })
-const menuThemeStyle = ref<Record<string, string>>({})
-const renamingRowKey = ref<string | null>(null)
-const movingRowKey = ref<string | null>(null)
-const renameValue = ref('')
-const folderValue = ref('')
+const editDialogOpen = ref(false)
+const editDialogMode = ref<'rename' | 'move'>('rename')
+const editDialogSession = ref<TalosSession | null>(null)
 const collapsedGroups = ref<Record<string, boolean>>({})
 const collapsedAdvancedOpen = ref(false)
 const lightThemeActive = computed(() => talosThemeIsLight(props.theme))
 let returnFocusTarget: HTMLElement | null = null
 let backgroundIsolation: { element: HTMLElement; ariaHidden: string | null; hadInert: boolean } | null = null
 let desktopMediaQuery: MediaQueryList | null = null
-const visiblePrimaryItems = computed(() => primaryItems.filter((item) => {
+const orderedPrimaryItems = computed(() => {
+    if (!props.itemOrder?.length) return primaryItems
+    const byId = new Map(primaryItems.map((item) => [item.id, item]))
+    const ordered: RailItem[] = []
+    for (const id of props.itemOrder) {
+        const item = byId.get(id)
+        if (item) {
+            ordered.push(item)
+            byId.delete(id)
+        }
+    }
+    return [...ordered, ...byId.values()]
+})
+
+function handleItemReorderKeydown(event: KeyboardEvent, id: string) {
+    if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
+    event.preventDefault()
+    emit('moveItem', id, event.key === 'ArrowUp' ? -1 : 1)
+}
+
+const visiblePrimaryItems = computed(() => orderedPrimaryItems.value.filter((item) => {
     if (item.id === 'search') {
         return props.visibility.search !== false || props.visibility.library !== false
     }
@@ -231,10 +244,6 @@ function groupOpen(groupId: string) {
     return collapsedGroups.value[groupId] !== true
 }
 
-function sessionRowKey(groupId: string, sessionId: string) {
-    return `${groupId}:${sessionId}`
-}
-
 function toggleGroup(groupId: string) {
     collapsedGroups.value = {
         ...collapsedGroups.value,
@@ -242,87 +251,13 @@ function toggleGroup(groupId: string) {
     }
 }
 
-async function positionSessionMenu(trigger: HTMLElement) {
-    const viewportPadding = 8
-    const gap = 4
-    const triggerRect = trigger.getBoundingClientRect()
-    const triggerStyle = window.getComputedStyle(trigger)
-    const menuWidth = 192
-    menuThemeStyle.value = {
-        '--talos-card': triggerStyle.getPropertyValue('--talos-card').trim(),
-        '--talos-border': triggerStyle.getPropertyValue('--talos-border').trim(),
-        '--talos-text': triggerStyle.getPropertyValue('--talos-text').trim(),
-        '--talos-muted': triggerStyle.getPropertyValue('--talos-muted').trim(),
-        '--talos-accent': triggerStyle.getPropertyValue('--talos-accent').trim(),
-        '--talos-panel-soft': triggerStyle.getPropertyValue('--talos-panel-soft').trim(),
-        '--talos-ring': triggerStyle.getPropertyValue('--talos-ring').trim(),
-        '--talos-font-ui': triggerStyle.getPropertyValue('--talos-font-ui').trim(),
-    }
-    const left = Math.min(
-        Math.max(viewportPadding, triggerRect.right - menuWidth),
-        window.innerWidth - menuWidth - viewportPadding,
-    )
-
-    menuPosition.value = {
-        left,
-        top: Math.min(triggerRect.bottom + gap, window.innerHeight - viewportPadding),
-    }
-    await nextTick()
-
-    const menuHeight = menuElement.value?.getBoundingClientRect().height ?? 0
-    const preferredTop = triggerRect.bottom + gap
-    const flippedTop = triggerRect.top - menuHeight - gap
-    menuPosition.value = {
-        left,
-        top: preferredTop + menuHeight <= window.innerHeight - viewportPadding
-            ? preferredTop
-            : Math.max(viewportPadding, flippedTop),
-    }
-}
-
-async function toggleSessionMenu(rowKey: string, session: TalosSession, event: MouseEvent) {
-    if (openMenuRowKey.value === rowKey) {
-        closeSessionMenu()
-        return
-    }
-
-    openMenuRowKey.value = rowKey
-    openMenuSession.value = session
-    renamingRowKey.value = null
-    movingRowKey.value = null
-    await positionSessionMenu(event.currentTarget as HTMLElement)
-    menuElement.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
-}
-
-function closeSessionMenu() {
-    openMenuRowKey.value = null
-    openMenuSession.value = null
-}
-
-const sessionMenuStyle = computed(() => ({
-    ...menuThemeStyle.value,
-    left: `${menuPosition.value.left}px`,
-    top: `${menuPosition.value.top}px`,
-    fontFamily: 'var(--talos-font-ui)',
-}))
-
-function handleGlobalPointerDown(event: PointerEvent) {
-    const target = event.target as HTMLElement | null
-    if (!target || menuElement.value?.contains(target) || target.closest('[data-talos-session-menu-trigger="true"]')) {
-        return
-    }
-    closeSessionMenu()
-}
-
 function handleGlobalKeyDown(event: KeyboardEvent) {
     if (!props.mobileOpen) {
-        if (event.key === 'Escape') closeSessionMenu()
         return
     }
 
     if (event.key === 'Escape') {
         event.preventDefault()
-        closeSessionMenu()
         emit('closeMobile')
         return
     }
@@ -411,17 +346,14 @@ watch(() => props.mobileOpen, async (open) => {
 })
 
 function handleViewportChange() {
-    closeSessionMenu()
     if (!desktopMediaQuery && window.innerWidth >= 1024 && props.mobileOpen) emit('closeMobile')
 }
 
 function handleDesktopBreakpointChange(event: MediaQueryListEvent | MediaQueryList) {
-    closeSessionMenu()
     if (event.matches && props.mobileOpen) emit('closeMobile')
 }
 
 onMounted(() => {
-    document.addEventListener('pointerdown', handleGlobalPointerDown)
     document.addEventListener('keydown', handleGlobalKeyDown)
     window.addEventListener('scroll', handleViewportChange, true)
     window.addEventListener('resize', handleViewportChange)
@@ -434,7 +366,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     restoreMobileNavigationBackground()
-    document.removeEventListener('pointerdown', handleGlobalPointerDown)
     document.removeEventListener('keydown', handleGlobalKeyDown)
     window.removeEventListener('scroll', handleViewportChange, true)
     window.removeEventListener('resize', handleViewportChange)
@@ -442,32 +373,20 @@ onBeforeUnmount(() => {
     desktopMediaQuery = null
 })
 
-function startRename(session: TalosSession, rowKey: string) {
-    renameValue.value = session.title || 'Untitled chat'
-    renamingRowKey.value = rowKey
-    movingRowKey.value = null
-    closeSessionMenu()
+function openSessionEdit(session: TalosSession, mode: 'rename' | 'move') {
+    editDialogSession.value = session
+    editDialogMode.value = mode
+    editDialogOpen.value = true
 }
 
-function submitRename(session: TalosSession) {
-    emit('renameSession', session, renameValue.value)
-    renamingRowKey.value = null
-}
-
-function startMove(session: TalosSession, rowKey: string) {
-    folderValue.value = sessionChatState(session).folder
-    movingRowKey.value = rowKey
-    renamingRowKey.value = null
-    closeSessionMenu()
-}
-
-function submitMove(session: TalosSession) {
-    emit('moveSessionToFolder', session, folderValue.value)
-    movingRowKey.value = null
+function submitSessionEdit(value: string) {
+    const session = editDialogSession.value
+    if (!session) return
+    if (editDialogMode.value === 'rename') emit('renameSession', session, value)
+    else emit('moveSessionToFolder', session, value)
 }
 
 function deleteWithConfirmation(session: TalosSession) {
-    closeSessionMenu()
     emit('deleteSession', session)
 }
 
@@ -622,53 +541,18 @@ function startNewChat() {
                                     </span>
                                     <span class="shrink-0 text-[10px] text-[var(--talos-muted)]">{{ sessionTimestamp(session) }}</span>
                                 </button>
-                                <button
-                                    type="button"
-                                    data-talos-session-menu-trigger="true"
-                                    class="mr-1 inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-[var(--talos-muted)] opacity-80 transition hover:bg-[var(--talos-panel)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] group-hover:opacity-100"
-                                    :aria-label="`Chat actions for ${session.title || 'Untitled chat'}`"
-                                    aria-haspopup="menu"
-                                    :aria-expanded="openMenuRowKey === sessionRowKey(group.id, session.id)"
-                                    @click.stop="toggleSessionMenu(sessionRowKey(group.id, session.id), session, $event)"
-                                >
-                                    <MoreHorizontal class="h-4 w-4" />
-                                </button>
+                                <TalosSessionRowMenu
+                                    :session="session"
+                                    :inline-portal="mobileOpen"
+                                    @rename="openSessionEdit($event, 'rename')"
+                                    @favorite="emit('favoriteSession', $event)"
+                                    @toggle-selected="emit('toggleSessionSelected', $event)"
+                                    @copy="emit('copySession', $event)"
+                                    @move="openSessionEdit($event, 'move')"
+                                    @archive="emit('archiveSession', $event)"
+                                    @delete="deleteWithConfirmation($event)"
+                                />
                             </div>
-                            <form
-                                v-if="renamingRowKey === sessionRowKey(group.id, session.id)"
-                                class="mt-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-2"
-                                @submit.prevent="submitRename(session)"
-                            >
-                                <label class="sr-only" :for="`rename-chat-${session.id}`">Rename chat</label>
-                                <input
-                                    :id="`rename-chat-${session.id}`"
-                                    v-model="renameValue"
-                                    aria-label="Rename chat"
-                                    class="h-8 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input)] px-2 text-xs text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                                />
-                                <div class="mt-2 flex justify-end gap-1">
-                                    <button type="button" class="rounded px-2 py-1 text-[11px] text-[var(--talos-muted)] hover:bg-[var(--talos-panel-soft)]" @click="renamingRowKey = null">Cancel</button>
-                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-text)]">Save name</button>
-                                </div>
-                            </form>
-                            <form
-                                v-if="movingRowKey === sessionRowKey(group.id, session.id)"
-                                class="mt-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-2"
-                                @submit.prevent="submitMove(session)"
-                            >
-                                <label class="sr-only" :for="`folder-chat-${session.id}`">Folder name</label>
-                                <input
-                                    :id="`folder-chat-${session.id}`"
-                                    v-model="folderValue"
-                                    aria-label="Folder name"
-                                    placeholder="Folder name"
-                                    class="h-8 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input)] px-2 text-xs text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                                />
-                                <div class="mt-2 flex justify-end gap-1">
-                                    <button type="button" class="rounded px-2 py-1 text-[11px] text-[var(--talos-muted)] hover:bg-[var(--talos-panel-soft)]" @click="movingRowKey = null">Cancel</button>
-                                    <button type="submit" class="rounded bg-[var(--talos-accent)] px-2 py-1 text-[11px] font-semibold text-[var(--talos-accent-text)]">Move chat</button>
-                                </div>
-                            </form>
                         </div>
                     </div>
                 </div>
@@ -676,38 +560,12 @@ function startNewChat() {
             <p v-else class="px-1 text-xs leading-5 text-[var(--talos-muted)]">No chats yet.</p>
         </section>
 
-        <Teleport to="body" :disabled="mobileOpen">
-            <div
-                v-if="openMenuRowKey && openMenuSession"
-                ref="menuElement"
-                role="menu"
-                aria-label="Chat actions"
-                :style="sessionMenuStyle"
-                class="fixed z-[90] max-h-[calc(100dvh-1rem)] w-48 overflow-y-auto rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[12px] text-[var(--talos-text)] shadow-xl"
-            >
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="startRename(openMenuSession, openMenuRowKey)">
-                    <Pencil class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Rename
-                </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('favoriteSession', openMenuSession); closeSessionMenu()">
-                    <Star class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> {{ sessionChatState(openMenuSession).favorite ? 'Unfavorite' : 'Favorite' }}
-                </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('toggleSessionSelected', openMenuSession); closeSessionMenu()">
-                    <component :is="sessionChatState(openMenuSession).selected ? CheckSquare : Square" class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Select
-                </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('copySession', openMenuSession); closeSessionMenu()">
-                    <Copy class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Copy Chat
-                </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="startMove(openMenuSession, openMenuRowKey)">
-                    <FolderInput class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Move to folder
-                </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]" @click="emit('archiveSession', openMenuSession); closeSessionMenu()">
-                    <Archive class="h-3.5 w-3.5 text-[var(--talos-accent)]" /> Archive
-                </button>
-                <button type="button" role="menuitem" class="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-[var(--talos-danger)] hover:bg-[var(--talos-danger-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-danger)]" @click="deleteWithConfirmation(openMenuSession)">
-                    <Trash2 class="h-3.5 w-3.5" /> Delete
-                </button>
-            </div>
-        </Teleport>
+        <TalosSessionEditDialog
+            v-model:open="editDialogOpen"
+            :mode="editDialogMode"
+            :session="editDialogSession"
+            @submit="submitSessionEdit"
+        />
 
         <nav class="mt-3 min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="TALOS modules">
             <div
@@ -718,9 +576,9 @@ function startNewChat() {
             >
                 <button
                     type="button"
-                    class="group flex min-w-0 flex-1 cursor-pointer items-center rounded-md border text-left transition hover:shadow-[inset_2px_0_0_var(--talos-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                    class="group flex min-w-0 flex-1 cursor-pointer items-center rounded-md border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-60"
                     :class="[
-                        effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-1.5',
+                        effectiveCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2 py-2',
                         activeIds.includes(item.id)
                             ? 'border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]'
                             : 'border-transparent text-[var(--talos-muted)] hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)]',
@@ -730,10 +588,17 @@ function startNewChat() {
                     :title="item.disabledReason || item.description"
                     :disabled="Boolean(item.disabledReason)"
                     @click="openRailItem(item.id, $event)"
+                    @keydown="handleItemReorderKeydown($event, item.id)"
                 >
-                    <component :is="item.icon" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
-                    <span v-if="!effectiveCollapsed" class="min-w-0">
-                        <span class="block truncate text-[13px] font-medium">{{ item.label }}</span>
+                    <span
+                        v-if="!effectiveCollapsed && activeIds.includes(item.id)"
+                        class="talos-rule-ticks shrink-0"
+                        aria-hidden="true"
+                    ><i class="talos-rule-tick"></i><i class="talos-rule-tick"></i><i class="talos-rule-tick"></i></span>
+                    <component :is="item.icon" class="h-4 w-4 shrink-0" />
+                    <span v-if="!effectiveCollapsed" class="flex min-w-0 flex-1 items-center justify-between gap-2">
+                        <span class="talos-type-label block truncate">{{ item.label }}</span>
+                        <Chip :code="item.code" aria-hidden="true" class="shrink-0" />
                         <span class="sr-only">{{ item.description }}</span>
                     </span>
                 </button>
@@ -779,14 +644,15 @@ function startNewChat() {
             <button
                 v-if="visibility.theme !== false"
                 type="button"
-                class="mt-2 flex w-full cursor-pointer items-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] py-2 text-[13px] text-[var(--talos-text)] transition hover:border-[var(--talos-accent)] hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :class="effectiveCollapsed ? 'justify-center px-0' : 'justify-between px-2.5'"
+                class="mt-1 flex min-w-0 cursor-pointer items-center rounded-md border border-transparent text-[var(--talos-muted)] transition hover:border-[var(--talos-border)] hover:bg-[var(--talos-panel-soft)] hover:text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                :class="effectiveCollapsed ? 'w-full justify-center px-0 py-2' : 'gap-2.5 px-2 py-2'"
                 aria-label="Toggle theme"
+                title="Switch between light and dark"
                 @click="emit('toggleTheme')"
             >
-                <span v-if="!effectiveCollapsed">Theme</span>
-                <Moon v-if="lightThemeActive" class="h-4 w-4" />
-                <Sun v-else class="h-4 w-4" />
+                <Moon v-if="lightThemeActive" class="h-4 w-4 shrink-0" />
+                <Sun v-else class="h-4 w-4 shrink-0" />
+                <span v-if="!effectiveCollapsed" class="talos-type-label truncate">Light / Dark</span>
             </button>
         </div>
         <button

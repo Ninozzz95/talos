@@ -39,7 +39,7 @@ function selectCommand(command: TalosCommand) {
 </script>
 
 <template>
-    <section class="talos-command-palette talos-action-surface rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] shadow-lg shadow-[var(--talos-shadow)]">
+    <section class="talos-command-palette talos-action-surface talos-elev-2 rounded-md">
         <div class="flex items-center gap-2 border-b border-[var(--talos-border)] px-3 py-2">
             <Search class="h-4 w-4 shrink-0 text-[var(--talos-muted)]" />
             <input

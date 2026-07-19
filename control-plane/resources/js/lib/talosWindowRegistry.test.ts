@@ -92,4 +92,35 @@ describe('TALOS window registry', () => {
             expect(source).not.toMatch(new RegExp(`^import ${component} `, 'm'))
         }
     })
+
+    it('every window carries the frozen v7 station identity (title + 3-letter code)', () => {
+        const expected: Record<string, { title: string; code: string }> = {
+            runtime: { title: 'Cockpit', code: 'RUN' },
+            calendar: { title: 'Calendar', code: 'CAL' },
+            compare: { title: 'Benchmarks', code: 'BNC' },
+            model_lab: { title: 'Model Lab', code: 'LAB' },
+            research: { title: 'Research', code: 'RES' },
+            gallery: { title: 'Artifacts', code: 'ART' },
+            library: { title: 'Library', code: 'LIB' },
+            search: { title: 'Vault', code: 'VLT' },
+            brain: { title: 'Memory', code: 'MEM' },
+            notes: { title: 'Notes', code: 'NTS' },
+            tasks: { title: 'Tasks', code: 'TSK' },
+            tools: { title: 'Tools', code: 'TLS' },
+            doctor: { title: 'Doctor', code: 'DOC' },
+            settings: { title: 'Settings', code: 'SET' },
+            theme: { title: 'Theme', code: 'THM' },
+        }
+
+        for (const [id, identity] of Object.entries(expected)) {
+            const descriptor = TALOS_WINDOW_REGISTRY[id as keyof typeof TALOS_WINDOW_REGISTRY]
+            expect(descriptor, `descriptor ${id} must exist`).toBeTruthy()
+            expect(descriptor.title, `title for ${id}`).toBe(identity.title)
+            expect(descriptor.stationCode, `stationCode for ${id}`).toBe(identity.code)
+        }
+
+        for (const descriptor of Object.values(TALOS_WINDOW_REGISTRY)) {
+            expect(descriptor.stationCode).toMatch(/^[A-Z]{3}$/)
+        }
+    })
 })

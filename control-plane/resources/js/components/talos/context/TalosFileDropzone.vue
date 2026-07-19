@@ -52,6 +52,8 @@ function handleDrop(event: DragEvent) {
             ref="fileInput"
             type="file"
             class="sr-only"
+            aria-label="Upload source file"
+            data-testid="talos-context-upload-input"
             accept=".txt,.md,.json,.csv,text/plain,text/markdown,application/json,text/csv"
             :disabled="uploading"
             @change="handleInput"

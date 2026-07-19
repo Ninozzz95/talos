@@ -35,6 +35,7 @@ const TALOS_INTERACTION_PRESENTATION_V6: Readonly<Record<TalosThemeId, TalosInte
     violet: Object.freeze({ open: 'depth', surface: 'scale-fade', feedback: 'pulse', hover: 'edge-glow' }),
     claudius: Object.freeze({ open: 'soft-fade', surface: 'fade', feedback: 'none', hover: 'underline' }),
     basicus: Object.freeze({ open: 'standard', surface: 'fade', feedback: 'edge-flash', hover: 'lift' }),
+    telemetry: Object.freeze({ open: 'standard', surface: 'slide-fade', feedback: 'trace', hover: 'underline' }),
 })
 
 function duration(plan: TalosInteractionMotionPlan): string {

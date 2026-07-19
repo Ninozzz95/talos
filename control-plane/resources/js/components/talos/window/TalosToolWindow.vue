@@ -7,6 +7,7 @@ import TalosWindowTitleBar from './TalosWindowTitleBar.vue'
 const props = defineProps<{
     id: string
     title: string
+    stationCode?: string
     description?: string
     active?: boolean
     docked?: boolean
@@ -80,6 +81,7 @@ onMounted(() => {
         <TalosWindowTitleBar
             :id="id"
             :title="title"
+            :station-code="stationCode"
             :description="description"
             :docked="docked"
             :fullscreen="fullscreen"

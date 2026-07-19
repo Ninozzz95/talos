@@ -389,6 +389,7 @@ function resetFloatingWindowSize(id: string) {
             <TalosToolWindow
                 :id="id"
                 :title="TALOS_WINDOW_REGISTRY[id].title"
+                :station-code="TALOS_WINDOW_REGISTRY[id].stationCode"
                 :description="TALOS_WINDOW_REGISTRY[id].description"
                 :active="activeWindowId === id"
                 :width="floatingWindowSize(id).width"
@@ -440,6 +441,7 @@ function resetFloatingWindowSize(id: string) {
             :id="id"
             :key="`dock-${id}`"
             :title="TALOS_WINDOW_REGISTRY[id].title"
+                :station-code="TALOS_WINDOW_REGISTRY[id].stationCode"
             :description="TALOS_WINDOW_REGISTRY[id].description"
             :active="activeWindowId === id"
             docked

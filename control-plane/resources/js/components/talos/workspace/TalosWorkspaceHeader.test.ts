@@ -7,7 +7,9 @@ const workspaceSource = readFileSync(new URL('./TalosWorkspace.vue', import.meta
 describe('TalosWorkspaceHeader', () => {
     it('keeps the header operational without duplicating TALOS branding', () => {
         expect(headerSource).toContain('data-testid="talos-workspace-header"')
-        expect(headerSource).toContain('justify-end')
+        expect(headerSource).toContain('justify-between')
+        expect(headerSource).toContain('aria-label="Open navigation menu"')
+        expect(headerSource).toMatch(/class="lg:hidden"[\s\S]{0,120}aria-label="Open navigation menu"/)
         expect(headerSource).not.toContain('talos-header-brand')
         expect(headerSource).not.toContain('talos-short-logo')
         expect(headerSource).not.toContain('workspaceSubtitle')

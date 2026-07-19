@@ -69,6 +69,7 @@ function updateTooltip(open: boolean) {
                 :align="align"
                 :side-offset="8"
                 :collision-padding="8"
+                tabindex="0"
                 class="z-[115] max-h-[min(26rem,calc(100dvh-1rem))] w-[min(22rem,calc(100vw-1rem))] overflow-y-auto rounded-md border-[var(--talos-border)] bg-[var(--talos-card)] p-3 text-[var(--talos-text)] shadow-xl"
                 @click.stop
             >

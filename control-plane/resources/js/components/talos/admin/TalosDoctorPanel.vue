@@ -91,7 +91,7 @@ function statusTone(status: string) {
                 <Badge tone="neutral">validator_health {{ doctorReport.checks.validator_health?.status }}</Badge>
             </div>
 
-            <div v-if="doctorState === 'ready'" class="max-h-[260px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]">
+            <div v-if="doctorState === 'ready'" class="max-h-[260px] divide-y divide-[var(--talos-border)] overflow-y-auto rounded-md border border-[var(--talos-border)]" tabindex="0">
                 <div v-for="(check, name) in doctorReport.checks" :key="name" class="grid grid-cols-[minmax(0,1fr)_86px] gap-3 bg-[var(--talos-panel-soft)] px-3 py-2 text-sm">
                     <span class="min-w-0">
                         <span class="block truncate font-mono text-xs text-[var(--talos-text)]">{{ name }}</span>
