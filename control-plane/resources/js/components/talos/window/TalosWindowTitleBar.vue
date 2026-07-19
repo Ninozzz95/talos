@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Dock, Eye, EyeOff, Maximize2, Minimize2, Minus, RotateCcw, X } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
+import Chip from '../../ui/Chip.vue'
 
 const props = defineProps<{
     id: string
     title: string
+    stationCode?: string
     description?: string
     docked?: boolean
     fullscreen?: boolean
@@ -60,7 +62,10 @@ function handleTitleKeydown(event: KeyboardEvent) {
             @dblclick="toggleFullscreen"
             @keydown="handleTitleKeydown"
         >
-            <h2 class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ title }}</h2>
+            <h2 class="flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-[var(--talos-text)]">
+                <span class="truncate">{{ title }}</span>
+                <Chip v-if="stationCode" :code="stationCode" aria-hidden="true" />
+            </h2>
             <p v-if="description" class="truncate text-[11px] text-[var(--talos-muted)]">{{ description }}</p>
         </div>
         <div class="flex items-center gap-1">

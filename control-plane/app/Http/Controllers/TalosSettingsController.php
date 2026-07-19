@@ -37,12 +37,16 @@ final class TalosSettingsController extends Controller
         $userId = $request->user()?->id;
         abort_unless($userId !== null, 401);
 
-        $rawThemeMotionV6 = $this->extractRawThemeMotionV6($request);
-        if ($rawThemeMotionV6['empty']) {
+        $rawPreferenceValues = $this->extractRawPreferenceValues($request);
+        if ($rawPreferenceValues['empty']) {
             $settings = $this->settingsForUpdate((int) $userId);
 
             return response()->json(['data' => $this->settingsPayload($settings, (int) $userId)]);
         }
+
+        $request->validate([
+            'preferences.sensitive_censor' => ['sometimes', 'boolean:strict'],
+        ]);
 
         $validated = $request->validate([
             'expected_revision' => ['sometimes', 'integer', 'min:0'],
@@ -50,13 +54,16 @@ final class TalosSettingsController extends Controller
             'default_context_set_id' => ['sometimes', 'nullable', 'string', 'exists:talos_context_sets,id'],
             'preferences' => ['sometimes', 'nullable', 'array'],
         ]);
-        $this->canonicalizeThemeMotionV6($validated, $rawThemeMotionV6);
+        $this->canonicalizeThemeMotionV6($validated, $rawPreferenceValues['theme_motion_v6']);
 
         DB::beginTransaction();
         try {
             $settings = $this->settingsForUpdate((int) $userId, true);
             $this->assertExpectedRevision($settings, $validated['expected_revision'] ?? null, (int) $userId);
-            $storedPreferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
+            $storedPreferences = TalosWorkspaceSetting::sanitizePreferences(
+                $settings->preferences ?? [],
+                $settings->getRawOriginal('preferences'),
+            );
             $effectivePreferences = $storedPreferences;
 
             if (array_key_exists('preferences', $validated)) {
@@ -68,10 +75,14 @@ final class TalosSettingsController extends Controller
                     $storedPreferences,
                     $validated['preferences'],
                 );
+                $sidebarRailErrors = $rawPreferenceValues['sidebar_rail']['present']
+                    ? TalosWorkspaceSetting::validateRawSidebarRailForWrite($rawPreferenceValues['sidebar_rail']['value'])
+                    : TalosWorkspaceSetting::validateSidebarRailPreferencesForWrite($validated['preferences']);
                 $themeErrors = array_replace_recursive(
                     $themeErrors,
                     TalosThemeContrast::validatePreferences($effectivePreferences),
                     TalosWorkspaceSetting::validateBrowserHmiPreferencesForWrite($validated['preferences']),
+                    $sidebarRailErrors,
                 );
                 if ($themeErrors !== []) {
                     throw ValidationException::withMessages($themeErrors);
@@ -182,7 +193,7 @@ final class TalosSettingsController extends Controller
 
     /**
      * @param  array<string, mixed>  $validated
-     * @param  array{present: bool, value: mixed, empty: bool}  $rawThemeMotionV6
+     * @param  array{present: bool, value: mixed}  $rawThemeMotionV6
      */
     private function canonicalizeThemeMotionV6(array &$validated, array $rawThemeMotionV6): void
     {
@@ -206,17 +217,30 @@ final class TalosSettingsController extends Controller
     }
 
     /**
-     * @return array{present: bool, value: mixed, empty: bool}
+     * @return array{
+     *     empty: bool,
+     *     theme_motion_v6: array{present: bool, value: mixed},
+     *     sidebar_rail: array{present: bool, value: mixed}
+     * }
      */
-    private function extractRawThemeMotionV6(Request $request): array
+    private function extractRawPreferenceValues(Request $request): array
     {
+        $missing = ['present' => false, 'value' => null];
         if (! $request->isJson()) {
-            return ['present' => false, 'value' => null, 'empty' => false];
+            return [
+                'empty' => false,
+                'theme_motion_v6' => $missing,
+                'sidebar_rail' => $missing,
+            ];
         }
 
         $content = $request->getContent();
         if ($content === '' || strspn($content, " \t\r\n") === strlen($content)) {
-            return ['present' => false, 'value' => null, 'empty' => true];
+            return [
+                'empty' => true,
+                'theme_motion_v6' => $missing,
+                'sidebar_rail' => $missing,
+            ];
         }
 
         try {
@@ -229,17 +253,28 @@ final class TalosSettingsController extends Controller
             ]);
         }
 
+        $themeMotionV6 = $missing;
+        $sidebarRail = $missing;
         if ($root instanceof stdClass
             && $root::class === stdClass::class
             && property_exists($root, 'preferences')
             && $root->preferences instanceof stdClass
             && $root->preferences::class === stdClass::class
-            && property_exists($root->preferences, 'theme_motion_v6')
         ) {
-            return ['present' => true, 'value' => $root->preferences->theme_motion_v6, 'empty' => false];
+            if (property_exists($root->preferences, 'theme_motion_v6')) {
+                $themeMotionV6 = ['present' => true, 'value' => $root->preferences->theme_motion_v6];
+            }
+
+            if (property_exists($root->preferences, 'sidebar_rail')) {
+                $sidebarRail = ['present' => true, 'value' => $root->preferences->sidebar_rail];
+            }
         }
 
-        return ['present' => false, 'value' => null, 'empty' => false];
+        return [
+            'empty' => false,
+            'theme_motion_v6' => $themeMotionV6,
+            'sidebar_rail' => $sidebarRail,
+        ];
     }
 
     /**
@@ -286,7 +321,10 @@ final class TalosSettingsController extends Controller
 
     private function themePolicyLocked(TalosWorkspaceSetting $settings): bool
     {
-        $preferences = TalosWorkspaceSetting::sanitizePreferences($settings->preferences ?? []);
+        $preferences = TalosWorkspaceSetting::sanitizePreferences(
+            $settings->preferences ?? [],
+            $settings->getRawOriginal('preferences'),
+        );
 
         return ($preferences['theme_policy_locked'] ?? false) === true;
     }

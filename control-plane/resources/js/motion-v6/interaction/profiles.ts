@@ -30,6 +30,7 @@ const TUNING: Readonly<Record<TalosMotionSceneId, ProfileTuning>> = Object.freez
     violet: { duration: 1.22, x: 1.1, y: 1.1, scale: 1.2, rotate: 1.05, stagger: 1.25, easing: 'cubic-bezier(0.34, 1.15, 0.64, 1)' },
     claudius: { duration: 1.28, x: 0.4, y: 0.65, scale: 0.5, rotate: 0.35, stagger: 0.95, easing: 'cubic-bezier(0.2, 0.7, 0.25, 1)' },
     basicus: { duration: 0.98, x: 0.9, y: 0.9, scale: 0.75, rotate: 0.5, stagger: 0.75, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+    telemetry: { duration: 0.9, x: 0.85, y: 0.7, scale: 0.6, rotate: 0.3, stagger: 0.7, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
 })
 
 function tunePose(pose: TalosInteractionPose, tuning: ProfileTuning): TalosInteractionPose {

@@ -48,7 +48,7 @@ async function flushDismissableLayer() {
 describe('TalosGuideInfoButton', () => {
     it('opens canonical content in the TALOS portal without activating its parent', async () => {
         const mounted = mountGuideButton('rail.runtime')
-        expect(mounted.button?.getAttribute('aria-label')).toBe('Information about Runtime')
+        expect(mounted.button?.getAttribute('aria-label')).toBe('Information about Cockpit')
 
         mounted.button?.click()
         await nextTick()
@@ -56,7 +56,7 @@ describe('TalosGuideInfoButton', () => {
 
         expect(mounted.parentClicks()).toBe(0)
         expect(mounted.portalRoot.textContent).toContain('Inspect persisted runs, events and execution evidence.')
-        expect(mounted.portalRoot.textContent).toContain('Use Runtime to review node state')
+        expect(mounted.portalRoot.textContent).toContain('Use Cockpit to review node state')
     })
 
     it('closes on Escape and restores focus to the information trigger', async () => {

@@ -92,13 +92,13 @@ async function openAdvancedNavigation(page: Page, isMobile: boolean) {
             await page.getByRole('button', { name: 'Open navigation menu', exact: true }).click()
             await expect(navigation).toBeVisible()
         }
-        const advanced = navigation.getByRole('button', { name: 'Advanced', exact: true })
+        const advanced = navigation.getByRole('button', { name: 'Workbench', exact: true })
         if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
 
         return navigation
     }
 
-    const advanced = page.getByRole('button', { name: 'Advanced', exact: true })
+    const advanced = page.getByRole('button', { name: 'Workbench', exact: true })
     if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
 
     return page.locator('body')
@@ -169,12 +169,14 @@ test('persisted Browser clarification choices survive reload and only fill the c
 
 test('Browse keeps every real module available on desktop and mobile', async ({ page, isMobile }) => {
     await page.getByRole('button', { name: 'Browse', exact: true }).click()
-    const modules = ['Runtime', 'Compare', 'Model Lab', 'Deep Research', 'Artifacts', 'Library', 'Calendar', 'Settings']
+    const modules = ['Cockpit', 'Benchmarks', 'Model Lab', 'Research', 'Artifacts', 'Library', 'Calendar', 'Settings']
 
     for (const module of modules) {
         await page.getByRole('button', { name: module, exact: true }).first().click()
         const windowId = {
-            'Deep Research': 'research',
+            Cockpit: 'runtime',
+            Benchmarks: 'compare',
+            Research: 'research',
             Artifacts: 'gallery',
             'Model Lab': 'model_lab',
         }[module] ?? module.toLowerCase()
@@ -185,12 +187,12 @@ test('Browse keeps every real module available on desktop and mobile', async ({ 
 
     let advancedNavigation = await openAdvancedNavigation(page, isMobile)
     const advancedLabels = await advancedNavigation.locator('[id^="talos-advanced-items-"] button').allTextContents()
-    expect(advancedLabels.map((label) => label.trim())).toEqual(['Tasks', 'Notes', 'Knowledge', 'Brain', 'Tools', 'Doctor'])
-    for (const module of ['Tasks', 'Notes', 'Knowledge', 'Brain', 'Tools', 'Doctor']) {
+    expect(advancedLabels.map((label) => label.trim())).toEqual(['Tasks', 'Notes', 'Vault', 'Memory', 'Tools', 'Doctor'])
+    for (const module of ['Tasks', 'Notes', 'Vault', 'Memory', 'Tools', 'Doctor']) {
         advancedNavigation = await openAdvancedNavigation(page, isMobile)
         const moduleButton = advancedNavigation.getByRole('button', { name: module, exact: true })
         await moduleButton.click()
-        const windowId = module === 'Knowledge' ? 'search' : module.toLowerCase()
+        const windowId = { Vault: 'search', Memory: 'brain' }[module] ?? module.toLowerCase()
         const window = page.locator(`[data-window-id="${windowId}"]`)
         await expect(window).toBeVisible()
         await window.getByRole('button', { name: new RegExp(`Close ${module}|Close ${windowId}`, 'i') }).click()

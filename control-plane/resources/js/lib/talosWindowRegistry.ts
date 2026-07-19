@@ -41,6 +41,7 @@ export type TalosWindowSection = {
 export type TalosWindowDescriptor = {
     id: TalosWindowId
     title: string
+    stationCode: string
     description: string
     sections: readonly TalosWindowSection[]
     defaultSection?: string
@@ -82,7 +83,8 @@ const contextSections = [
 export const TALOS_WINDOW_REGISTRY = {
     runtime: descriptor({
         id: 'runtime',
-        title: 'Runtime',
+        title: 'Cockpit',
+        stationCode: 'RUN',
         description: 'Runs, replay and recovery evidence.',
         sections: [],
         minDesktopSize: { width: 840, height: 560 },
@@ -91,7 +93,8 @@ export const TALOS_WINDOW_REGISTRY = {
     }),
     search: descriptor({
         id: 'search',
-        title: 'Knowledge',
+        title: 'Vault',
+        stationCode: 'VLT',
         description: 'Persisted files, context sets and generated documents.',
         sections: contextSections,
         minDesktopSize: { width: 760, height: 520 },
@@ -100,7 +103,8 @@ export const TALOS_WINDOW_REGISTRY = {
     }),
     brain: descriptor({
         id: 'brain',
-        title: 'Brain',
+        title: 'Memory',
+        stationCode: 'MEM',
         description: 'Memory, skills and planning context.',
         sections: [
             { id: 'memory', label: 'Memory', description: 'Approved and scoped memories.' },
@@ -114,6 +118,7 @@ export const TALOS_WINDOW_REGISTRY = {
     calendar: descriptor({
         id: 'calendar',
         title: 'Calendar',
+        stationCode: 'CAL',
         description: 'Calendar drafts, no external write without confirmation.',
         sections: [],
         minDesktopSize: { width: 860, height: 620 },
@@ -122,7 +127,8 @@ export const TALOS_WINDOW_REGISTRY = {
     }),
     compare: descriptor({
         id: 'compare',
-        title: 'Compare',
+        title: 'Benchmarks',
+        stationCode: 'BNC',
         description: 'AVM ON/OFF benchmark workbench.',
         sections: [],
         minDesktopSize: { width: 760, height: 520 },
@@ -132,6 +138,7 @@ export const TALOS_WINDOW_REGISTRY = {
     model_lab: descriptor({
         id: 'model_lab',
         title: 'Model Lab',
+        stationCode: 'LAB',
         description: 'Cookbook previews, provider profiles and probes.',
         sections: [
             { id: 'cookbook', label: 'Cookbook', description: 'Local model cookbook and dependency readiness.' },
@@ -144,7 +151,8 @@ export const TALOS_WINDOW_REGISTRY = {
     }),
     research: descriptor({
         id: 'research',
-        title: 'Deep Research',
+        title: 'Research',
+        stationCode: 'RES',
         description: 'Research reports, sources and claims.',
         sections: [],
         minDesktopSize: { width: 760, height: 520 },
@@ -154,6 +162,7 @@ export const TALOS_WINDOW_REGISTRY = {
     gallery: descriptor({
         id: 'gallery',
         title: 'Artifacts',
+        stationCode: 'ART',
         description: 'Run artifacts and previews with provenance.',
         sections: [],
         minDesktopSize: { width: 760, height: 520 },
@@ -163,6 +172,7 @@ export const TALOS_WINDOW_REGISTRY = {
     library: descriptor({
         id: 'library',
         title: 'Library',
+        stationCode: 'LIB',
         description: 'Files, context sets and generated documents.',
         sections: contextSections,
         minDesktopSize: { width: 760, height: 520 },
@@ -172,6 +182,7 @@ export const TALOS_WINDOW_REGISTRY = {
     notes: descriptor({
         id: 'notes',
         title: 'Notes',
+        stationCode: 'NTS',
         description: 'Untrusted notes, never silently injected.',
         sections: [],
         minDesktopSize: { width: 420, height: 360 },
@@ -181,6 +192,7 @@ export const TALOS_WINDOW_REGISTRY = {
     tasks: descriptor({
         id: 'tasks',
         title: 'Tasks',
+        stationCode: 'TSK',
         description: 'Persisted tasks and workflow follow-up.',
         sections: [
             { id: 'tasks', label: 'Tasks', description: 'Persisted tasks and workflow follow-up.' },
@@ -193,6 +205,7 @@ export const TALOS_WINDOW_REGISTRY = {
     settings: descriptor({
         id: 'settings',
         title: 'Settings',
+        stationCode: 'SET',
         description: 'Workspace setup and safe configuration.',
         sections: [],
         minDesktopSize: { width: 760, height: 520 },
@@ -202,6 +215,7 @@ export const TALOS_WINDOW_REGISTRY = {
     theme: descriptor({
         id: 'theme',
         title: 'Theme',
+        stationCode: 'THM',
         description: 'Appearance controls for this workspace.',
         sections: [],
         minDesktopSize: { width: 560, height: 340 },
@@ -211,6 +225,7 @@ export const TALOS_WINDOW_REGISTRY = {
     doctor: descriptor({
         id: 'doctor',
         title: 'Doctor',
+        stationCode: 'DOC',
         description: 'Readiness, policy, audit and backup controls.',
         sections: [
             { id: 'doctor', label: 'Doctor', description: 'Readiness diagnostics.' },
@@ -226,6 +241,7 @@ export const TALOS_WINDOW_REGISTRY = {
     tools: descriptor({
         id: 'tools',
         title: 'Tools',
+        stationCode: 'TLS',
         description: 'Connectors and tool registry.',
         sections: [],
         minDesktopSize: { width: 720, height: 520 },

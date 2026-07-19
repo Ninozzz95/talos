@@ -245,7 +245,7 @@ function formatEvidence(value: unknown) {
 
             <section class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3" aria-label="Raw payload evidence">
                 <h5 class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Raw payload</h5>
-                <pre class="mt-2 max-h-[260px] overflow-auto text-xs leading-5 text-[var(--talos-text)]"><code>{{ payloadJson }}</code></pre>
+                <pre class="mt-2 max-h-[260px] overflow-auto text-xs leading-5 text-[var(--talos-text)]" tabindex="0"><code>{{ payloadJson }}</code></pre>
             </section>
         </div>
     </aside>

@@ -1829,6 +1829,10 @@ button {
     letter-spacing: 0.08em;
 }
 
+[data-reka-popper-content-wrapper]:has(> [data-talos-tooltip-content]) {
+    pointer-events: none;
+}
+
 /* end v7 R0 */
 
 /* v7 R2 */
@@ -1880,3 +1884,75 @@ button {
 }
 
 /* end v7 R2 */
+
+/* v7 R1 - telemetry preset (id-flip gated on the BE allowlist; see R1 ledger 2b) */
+
+.talos-theme-forge {
+    --talos-accent: #c98b32;
+    --talos-accent-border: #a87224;
+    --talos-accent-hover: #d99f49;
+    --talos-accent-soft: #2f2415;
+    --talos-accent-text: #171006;
+    --talos-active: #17202b;
+    --talos-background: #080b11;
+    --talos-border: #27313e;
+    --talos-border-strong: #354252;
+    --talos-card: #0f151e;
+    --talos-header: #0b1017;
+    --talos-input: #303b49;
+    --talos-muted: #98a5b6;
+    --talos-panel: #10161f;
+    --talos-panel-soft: #0c121a;
+    --talos-ring: #d99f49;
+    --talos-ring-soft: rgba(217, 159, 73, 0.22);
+    --talos-secondary: #151d28;
+    --talos-sidebar: #080d14;
+    --talos-text: #edf2f7;
+    --talos-track: #202a36;
+}
+
+.talos-theme-telemetry {
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "JetBrains Mono", ui-monospace, monospace;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --talos-accent: #6ad4d4;
+    --talos-accent-border: #4aa8a8;
+    --talos-accent-hover: #8ae0e0;
+    --talos-accent-soft: #0e2226;
+    --talos-accent-text: #04171a;
+    --talos-active: #0e2226;
+    --talos-background: #0b0f11;
+    --talos-border: #1f3238;
+    --talos-border-strong: #345056;
+    --talos-card: #10171a;
+    --talos-danger: #ef8589;
+    --talos-danger-border: #6f3035;
+    --talos-danger-soft: #2b1418;
+    --talos-header: #0c1214;
+    --talos-input: #2e474c;
+    --talos-muted: #7f9aa1;
+    --talos-panel: #121a1e;
+    --talos-panel-soft: #0d1416;
+    --talos-ring: #6ad4d4;
+    --talos-ring-soft: rgba(106, 212, 212, 0.20);
+    --talos-secondary: #142124;
+    --talos-sidebar: #0a0e10;
+    --talos-success: #63f08e;
+    --talos-success-border: #2d7042;
+    --talos-success-soft: #0d2a18;
+    --talos-text: #dcefef;
+    --talos-track: #1c2c31;
+    --talos-user: #d9f3f3;
+    --talos-user-text: #04171a;
+    --talos-warning: #e3b85c;
+    --talos-warning-border: #6c5124;
+    --talos-warning-soft: #2b2112;
+    --talos-workspace-glow-a: rgba(106, 212, 212, 0.09);
+    --talos-workspace-glow-b: rgba(99, 240, 142, 0.06);
+    --talos-grid-color: rgba(127, 154, 161, 0.08);
+    --talos-line-a: rgba(106, 212, 212, 0.34);
+    --talos-line-b: rgba(99, 240, 142, 0.28);
+    --talos-node: rgba(106, 212, 212, 0.66);
+}
+
+/* end v7 R1 */

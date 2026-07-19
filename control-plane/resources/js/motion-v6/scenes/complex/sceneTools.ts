@@ -610,6 +610,50 @@ function drawBasicus(context: CanvasContext, geometry: ComplexSceneGeometry, pha
     }
 }
 
+function drawTelemetry(context: CanvasContext, geometry: ComplexSceneGeometry, phase: number): void {
+    context.setLineDash([])
+    const rulerRows = geometry.mobile ? 2 : 3
+    for (let row = 0; row < rulerRows; row += 1) {
+        const baseY = geometry.height * (0.22 + (row * 0.26))
+        context.strokeStyle = row === 0 ? geometry.accent : geometry.secondary
+        context.lineWidth = 1
+        context.globalAlpha = opacity(geometry, 0.3 - (row * 0.05))
+        strokeLine(context, geometry.width * 0.04, baseY, geometry.width * 0.96, baseY)
+        const tickCount = geometry.mobile ? 18 : 30
+        for (let tick = 0; tick <= tickCount; tick += 1) {
+            const x = geometry.width * (0.04 + (0.92 * tick) / tickCount)
+            const tall = tick % 5 === 0
+            const sway = Math.sin(phase + (tick * 0.35) + row) * geometry.height * 0.004
+            const tickHeight = (tall ? geometry.height * 0.028 : geometry.height * 0.013) + sway
+            strokeLine(context, x, baseY, x, baseY - tickHeight)
+        }
+    }
+    context.strokeStyle = gradient(context, geometry)
+    context.lineWidth = 1.4
+    context.globalAlpha = opacity(geometry, 0.4)
+    const traceY = geometry.height * 0.55
+    context.beginPath()
+    context.moveTo(geometry.width * 0.04, traceY)
+    const steps = geometry.mobile ? 20 : 36
+    for (let step = 1; step <= steps; step += 1) {
+        const x = geometry.width * (0.04 + (0.92 * step) / steps)
+        const carrier = Math.sin((step * 0.42) + phase) * geometry.height * 0.045
+        const burst = Math.sin((step * 1.7) + (phase * 1.6)) * geometry.height * 0.012
+        context.lineTo(x, traceY + carrier + burst)
+    }
+    context.stroke()
+    const nodeCount = geometry.mobile ? 3 : 5
+    context.fillStyle = geometry.accent
+    for (let node = 0; node < nodeCount; node += 1) {
+        const x = geometry.width * (0.12 + (node * 0.19))
+        const y = traceY + (Math.sin((node * 2.1) + phase) * geometry.height * 0.05)
+        context.globalAlpha = opacity(geometry, 0.5)
+        context.beginPath()
+        context.arc(x, y, 1.6 + ((node % 2) * 0.8), 0, TAU)
+        context.fill()
+    }
+}
+
 const DRAWERS: Readonly<Record<TalosMotionSceneId, (context: CanvasContext, geometry: ComplexSceneGeometry, phase: number) => void>> = Object.freeze({
     forge: drawForge,
     paper: drawPaper,
@@ -623,6 +667,7 @@ const DRAWERS: Readonly<Record<TalosMotionSceneId, (context: CanvasContext, geom
     violet: drawViolet,
     claudius: drawClaudius,
     basicus: drawBasicus,
+    telemetry: drawTelemetry,
 })
 
 export function createComplexDefinition(

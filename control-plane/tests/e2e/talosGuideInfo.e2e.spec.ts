@@ -172,13 +172,13 @@ test('contextual Info is non-activating, contained and focus-safe across desktop
     const rail = page.locator('[aria-label="TALOS workspace rail"]').filter({ visible: true }).first()
     await expect(rail.locator('[data-guide-id]')).toHaveCount(0)
 
-    await page.getByRole('button', { name: 'Runtime', exact: true }).filter({ visible: true }).first().click()
+    await page.getByRole('button', { name: 'Cockpit', exact: true }).filter({ visible: true }).first().click()
     let runtimeWindow = page.locator('[data-window-id="runtime"]')
     await expect(runtimeWindow).toBeVisible()
     const timelineTab = runtimeWindow.getByRole('tab', { name: 'Timeline', exact: true })
     await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
 
-    const runtimeGuide = await openGuide(page, 'rail.runtime', 'Runtime')
+    const runtimeGuide = await openGuide(page, 'rail.runtime', 'Cockpit')
     await expect(timelineTab).toHaveAttribute('aria-selected', 'true')
     await page.keyboard.press('Escape')
     await expect(runtimeGuide.trigger).toBeFocused()
@@ -206,7 +206,7 @@ test('contextual Info is non-activating, contained and focus-safe across desktop
         await page.keyboard.press('Escape')
         await expect(recoveryGuide.trigger).toBeFocused()
 
-        await runtimeWindow.getByRole('button', { name: 'Dock Runtime in right sidebar', exact: true }).click()
+        await runtimeWindow.getByRole('button', { name: 'Dock Cockpit in right sidebar', exact: true }).click()
         const dock = page.getByTestId('talos-right-dock')
         await expect(dock).toBeVisible()
         runtimeWindow = dock.locator('[data-window-id="runtime"]')

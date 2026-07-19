@@ -72,7 +72,7 @@ describe('TalosLeftRail guide placement', () => {
 
         expect(mounted.mountPoint.querySelector('.talos-advanced-rail-popover')).toBeNull()
 
-        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Advanced"]')?.click()
+        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Workbench"]')?.click()
         await nextTick()
         await vi.waitFor(() => {
             expect(mounted.portalRoot.querySelector('.talos-advanced-rail-popover')).not.toBeNull()
@@ -92,7 +92,7 @@ describe('TalosLeftRail guide placement', () => {
     it('keeps the module command available after guide actions leave the rail', () => {
         const mounted = mountRail(false)
 
-        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Runtime"]')?.click()
+        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Cockpit"]')?.click()
         expect(mounted.opened).toEqual(['runtime'])
     })
 })

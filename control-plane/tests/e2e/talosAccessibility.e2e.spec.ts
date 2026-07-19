@@ -99,9 +99,9 @@ test('conversation, evidence, menus, composer popovers, and mobile history pass 
 
     if (isMobile) {
         await assistant.getByRole('button', { name: 'More message actions' }).click()
-        await expect(assistant.getByRole('menu', { name: 'More message actions' })).toBeVisible()
+        await expect(page.getByRole('menu', { name: 'More message actions' })).toBeVisible()
         await expectNoAccessibilityViolations(page, 'message actions menu')
-        await assistant.getByRole('menuitem', { name: 'Open evidence' }).click()
+        await page.getByRole('menu', { name: 'More message actions' }).getByRole('menuitem', { name: 'Open evidence' }).click()
     } else {
         await assistant.getByRole('button', { name: 'Open evidence' }).click()
     }

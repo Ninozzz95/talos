@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TalosExportDialog from '../chat/TalosExportDialog.vue'
 import TalosDeleteSessionDialog from '../chat/TalosDeleteSessionDialog.vue'
 import TalosChatSurface from './TalosChatSurface.vue'
@@ -23,6 +23,8 @@ import { useTalosPromptEnhancement } from '../../../composables/useTalosPromptEn
 import { useTalosRailResize } from '../../../composables/useTalosRailResize'
 import { sessionChatState, useTalosSessions } from '../../../composables/useTalosSessions'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
+import { useTalosRailPreferences } from '../../../composables/useTalosRailPreferences'
+import { dismissTopTalosOverlay, registerTalosDismiss } from '../../../composables/useTalosDismissStack'
 import { useTalosShortcuts } from '../../../composables/useTalosShortcuts'
 import { useTalosWorkspaceWindows } from '../../../composables/useTalosWorkspaceWindows'
 import { useTalosWorkspaceLocalPreferences } from '../../../composables/useTalosWorkspaceLocalPreferences'
@@ -317,6 +319,30 @@ const {
     loadSettings: loadWorkspaceSettings,
     updateSettings: updateWorkspaceSettings,
 } = useTalosSettings()
+const railPreferences = useTalosRailPreferences({
+    load: async () => {
+        const stored = workspaceSettings.value?.preferences?.sidebar_rail
+        if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return null
+        const record = stored as Record<string, unknown>
+        return {
+            order: Array.isArray(record.order) ? record.order.filter((id): id is string => typeof id === 'string') : undefined,
+            collapsedGroups: Array.isArray(record.collapsed_groups) ? record.collapsed_groups.filter((id): id is string => typeof id === 'string') : undefined,
+            collapsed: typeof record.collapsed === 'boolean' ? record.collapsed : undefined,
+        }
+    },
+    persist: async (value) => {
+        await updateWorkspaceSettings({
+            preferences: {
+                sidebar_rail: {
+                    order: value.order,
+                    collapsed_groups: value.collapsedGroups,
+                    collapsed: value.collapsed,
+                },
+            },
+        }, 'Sidebar layout saved.')
+    },
+    knownItemIds: ['runtime', 'calendar', 'compare', 'model_lab', 'research', 'gallery', 'library', 'browse'],
+})
 const {
     loading: enhancingPrompt,
     error: promptEnhancementError,
@@ -792,21 +818,51 @@ useTalosShortcuts(workspaceKeyboardShortcuts, {
 async function refreshModelAndContext() {
     return workspaceBootstrap.refreshModelAndContext()
 }
+let unregisterPaletteDismiss: (() => void) | null = null
+
+function handleWorkspaceEscape(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return
+    if (dismissTopTalosOverlay()) {
+        event.preventDefault()
+        event.stopPropagation()
+    }
+}
+
+watch(commandPaletteOpen, (open) => {
+    if (!open) {
+        unregisterPaletteDismiss?.()
+        unregisterPaletteDismiss = null
+        return
+    }
+    unregisterPaletteDismiss = registerTalosDismiss(() => {
+        commandPaletteOpen.value = false
+    })
+})
+
 onMounted(async () => {
+    document.addEventListener('keydown', handleWorkspaceEscape, true)
     try {
         await workspaceBootstrap.initialize()
     } finally {
         workspaceRuntimeReady.value = true
     }
+    void railPreferences.hydrate().then(() => {
+        railCollapsed.value = railPreferences.collapsed.value
+    })
+})
+
+onBeforeUnmount(() => {
+    document.removeEventListener('keydown', handleWorkspaceEscape, true)
+    unregisterPaletteDismiss?.()
 })
 </script>
 <template>
     <main ref="workspaceRoot" :class="['talos-shell talos-workspace talos-chat-layout flex h-[100dvh] min-h-[100dvh] overflow-hidden', shellClass]" :style="workspaceStyle" :data-motion-scene="workspaceMotionV6SceneId" :data-theme-preset="theme" :data-theme-mode="workspaceResolvedThemeMode" :data-theme-mode-preference="workspaceThemeMode" :data-ui-animation-profile="workspaceUiAnimationProfile" :data-ui-motion-disabled="workspaceUiMotionDisabled ? 'true' : 'false'" :data-motion-v6-requested="workspaceMotionV6Decision.requestedMode" :data-motion-v6-effective="workspaceMotionV6Decision.effectiveMode" :data-motion-v6-reason="workspaceMotionV6Decision.reason" :data-motion-v6-degradation-stage="String(workspaceMotionV6Decision.degradationStage)" :data-motion-v6-renderer-fault="workspaceMotionV6GovernorSnapshot.rendererFault ? 'true' : 'false'" :data-motion-v6-recovery-locked="workspaceMotionV6GovernorSnapshot.recoveryLocked ? 'true' : 'false'" :data-motion-v6-frame-p95-ms="workspaceMotionV6GovernorSnapshot.lastFrameP95Ms ?? ''" data-testid="talos-workspace">
-        <TalosLeftRail :active-ids="[...openWindowIds, ...(isBrowseSurface ? ['browse'] : [])]" :theme="theme" :creating-session="creatingSession" :collapsed="railCollapsed" :width="railWidth" :visibility="workspaceAppearanceVisibility.sidebar" :sessions="sessions" :active-session-id="activeSession?.id ?? null" :advanced-expanded="advancedRailExpanded" :mobile-open="mobileNavigationOpen" @open="openModule" @new-chat="startNewChat" @select-session="chooseSession" @rename-session="renameChatSession" @favorite-session="favoriteChatSession" @toggle-session-selected="toggleChatSelection" @archive-session="archiveChatSession" @move-session-to-folder="moveChatSession" @delete-session="requestDeleteSession" @copy-session="copyChatSession" @toggle-theme="toggleTheme()" @collapse="railCollapsed = true" @expand="railCollapsed = false" @resize-start="startRailResize" @toggle-advanced="toggleAdvancedRail" @close-mobile="mobileNavigationOpen = false" />
+        <TalosLeftRail :active-ids="[...openWindowIds, ...(isBrowseSurface ? ['browse'] : [])]" :theme="theme" :creating-session="creatingSession" :collapsed="railCollapsed" :width="railWidth" :visibility="workspaceAppearanceVisibility.sidebar" :sessions="sessions" :active-session-id="activeSession?.id ?? null" :advanced-expanded="advancedRailExpanded" :mobile-open="mobileNavigationOpen" :item-order="railPreferences.order.value" @move-item="railPreferences.moveItem" @open="openModule" @new-chat="startNewChat" @select-session="chooseSession" @rename-session="renameChatSession" @favorite-session="favoriteChatSession" @toggle-session-selected="toggleChatSelection" @archive-session="archiveChatSession" @move-session-to-folder="moveChatSession" @delete-session="requestDeleteSession" @copy-session="copyChatSession" @toggle-theme="toggleTheme()" @collapse="railCollapsed = true; railPreferences.setCollapsed(true)" @expand="railCollapsed = false; railPreferences.setCollapsed(false)" @resize-start="startRailResize" @toggle-advanced="toggleAdvancedRail" @close-mobile="mobileNavigationOpen = false" />
         <section class="talos-chat-scroll-root relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden" :style="windowReflowStyle" :data-window-reflow="windowReflow.mode">
             <TalosProceduralBackground v-if="workspaceRuntimeReady" :requested-mode="workspaceMotionV6Decision.requestedMode" :effective-mode="workspaceMotionV6Decision.effectiveMode" :scene-id="workspaceMotionV6SceneId" :input="workspaceMotionV6SceneInput" :background-enabled="workspaceMotionV6Decision.backgroundEnabled" :glow-intensity="workspaceMotionV6Preferences.glow_intensity" :paused="workspaceMotionV6Decision.paused" :runtime-reason="workspaceMotionV6Decision.reason" :degradation-stage="workspaceMotionV6Decision.degradationStage" :recovery-locked="workspaceMotionV6GovernorSnapshot.recoveryLocked" @motion-frame="recordWorkspaceMotionFrame" @renderer-fault="recordWorkspaceMotionRendererFault" @stable-window="recordWorkspaceMotionStableWindow" />
             <div v-else class="pointer-events-none absolute inset-0 bg-[var(--talos-background)]" aria-hidden="true" data-testid="talos-workspace-bootstrap-background" />
-            <TalosWorkspaceHeader v-if="workspaceAppearanceVisibility.chat_area.session_header" :status-text="statusText" :temporary-session="activeSessionIsTemporary" :has-active-session="Boolean(activeSession)" :exporting-session="exportingSession" :authenticated="authenticated" :auth-label="authLabel" :login-url="loginUrl" :logout-url="logoutUrl" :csrf-token="csrfToken" :bubble-scale="bubbleScale" :bubble-scale-label="bubbleScaleLabel" :chat-layout-locked="chatLayoutPolicyLocked" @open-commands="openCommandPalette" @open-export="openSessionExportDialog" @open-account="openAccountSettings" @decrease-message-scale="decrementBubbleScale" @increase-message-scale="incrementBubbleScale" @reset-message-scale="resetBubbleScale" />
+            <TalosWorkspaceHeader v-if="workspaceAppearanceVisibility.chat_area.session_header" :status-text="statusText" :temporary-session="activeSessionIsTemporary" :has-active-session="Boolean(activeSession)" :exporting-session="exportingSession" :authenticated="authenticated" :auth-label="authLabel" :login-url="loginUrl" :logout-url="logoutUrl" :csrf-token="csrfToken" :bubble-scale="bubbleScale" :bubble-scale-label="bubbleScaleLabel" :chat-layout-locked="chatLayoutPolicyLocked" :navigation-open="mobileNavigationOpen" @open-navigation="mobileNavigationOpen = true" @open-commands="openCommandPalette" @open-export="openSessionExportDialog" @open-account="openAccountSettings" @decrease-message-scale="decrementBubbleScale" @increase-message-scale="incrementBubbleScale" @reset-message-scale="resetBubbleScale" />
             <TalosMobileRail :creating-session="creatingSession" :visibility="workspaceAppearanceVisibility.sidebar" :active-ids="[...openWindowIds, ...(isBrowseSurface ? ['browse'] : [])]" :navigation-open="mobileNavigationOpen" @new-chat="startNewChat" @focus-chat="focusChatFromMobileRail" @open-navigation="mobileNavigationOpen = true" @open-window="openModule" />
             <div class="relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden"><TalosChatSurface ref="chatSurface" :ui-error="uiError || toolApprovalError" :session-error="sessionError" :message-error="messageError" :model-profile-error="modelProfileError || modelRoutingProfileError" :context-set-error="contextSetError" :loading-messages="loadingMessages" :messages="messages" :logo-url="talosShortLogoUrl" :selected-model-profile-is-usable="selectedModelSelectionIsUsable" :context-selected="Boolean(selectedContextSet)" :context-sets-count="contextSets.length" :session-ready="Boolean(activeSession)" :message-evidence-ready="messageEvidenceReady" :sending="sending" :benchmarking-run-id="benchmarkingRunId" :expanded-evidence-message-ids="expandedEvidenceMessageIds" :welcome-prompt-id="activeWelcomePromptId" :show-welcome-message="workspaceAppearanceVisibility.chat_area.welcome_message" :show-mission-path="showMissionPath" :full-width-chat="workspaceAppearanceVisibility.chat_area.full_width_chat" :sensitive-blur="workspaceAppearanceVisibility.chat_area.sensitive_blur" :bubble-scale="bubbleScale" :browser-activities="visibleBrowserActivities" :browser-snapshot="latestBrowserSnapshot" :active-browser-session="activeBrowserSession" :browser-interaction-pending="browserInteractionPending" :browser-interaction-locked="browserMode.status === 'recovery_required'" :browser-interaction-error="browserInteractionError" :pending-browser-interaction-approval="pendingBrowserInteractionApproval" :pending-tool-approvals="pendingToolApprovals" :deciding-tool-approval-ids="decidingApprovalIds" :browser-tasks="browserTasks" :browser-task-busy="browserTaskBusy" :browser-task-error="browserTaskError" :browser-task-command-target-id="browserTaskCommandTargetId" :dev-browser-evidence="devBrowserEvidence" :active-talos-session-id="activeSession?.id ?? null" :mobile="breakpoint !== 'desktop'" :mobile-window-presentation="mobileWindowPresentation" :viewport="chatViewport" @open-model="openWindowFromSource('model_lab', undefined, 'command')" @open-context="openWindowFromSource('library', undefined, 'command')" @set-prompt="prompt = $event" @message-copied="commandFeedback = 'Message copied.'" @message-copy-failed="uiError = 'TALOS could not access the clipboard. Use your browser copy shortcut.'" @message-edited="commandFeedback = 'Prompt loaded for reuse.'" @resend-message="resendMessage" @retry-assistant-message="retryAssistantMessage" @toggle-message-evidence="toggleMessageEvidence" @benchmark-message-run="benchmarkMessageRun" @interact-browser-frame="interactWithBrowserFrame" @confirm-browser-frame-interaction="confirmBrowserFrameInteraction" @decide-tool-approval="handleToolApprovalDecision" @cancel-browser-task="cancelBrowserTask" /></div>
             <div data-testid="talos-window-layer"><TalosWindowLayer :breakpoint="breakpoint" :visible-window-ids="visibleWindowIds" :minimized-window-ids="minimizedWindowIds" :docked-window-ids="dockedWindowIds" :fullscreen-window-ids="fullscreenWindowIds" :active-window-id="activeWindowId" :window-positions="windowPositions" :window-sizes="windowSizes" :window-restore-bounds="windowRestoreBounds" :window-tile-targets="windowTileTargets" :window-z-indexes="windowZIndexes" :window-area="windowArea" :window-maximize-area="windowMaximizeArea" :window-fullscreen-area="windowFullscreenArea" :current-rail-width="currentRailWidth" :runtime-requested-tab="runtimeRequestedTab" :runtime-requested-tab-revision="runtimeRequestedTabRevision" :selected-benchmark-group-id="selectedBenchmarkGroupId" :selected-benchmark-scenario-ref="selectedBenchmarkScenarioRef" :model-profiles="modelProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-context-set-id="selectedContextSetId" :settings-requested-tab="settingsRequestedTab" :settings-requested-tab-revision="settingsRequestedTabRevision" :authenticated="authenticated" :auth-user-name="authUserName" :logout-url="logoutUrl" :csrf-token="csrfToken" :active-talos-session-id="activeSession?.id ?? null" :theme="theme" :motion-preferences="workspaceMotionV6Preferences" :reduced-motion="workspaceMotionV6Decision.reducedMotionApplied" :ui-motion-disabled="workspaceUiMotionDisabled" :mobile-window-presentation="mobileWindowPresentation" :window-launch-origins="windowLaunchOrigins" :window-launch-revisions="windowLaunchRevisions" :requested-window-sections="requestedWindowSections" :requested-window-section-revision="requestedWindowSectionRevision" @close-window="closeWindow" @minimize-window="minimizeWindow" @dock-window="toggleDock" @fullscreen-window="toggleFullscreenWindow" @focus-window="focusWindow" @open-window="openWindowFromSource($event, undefined, 'command')" @restore-window="restoreWindow" @set-window-position="setWindowPosition" @set-window-bounds="setWindowBounds" @reset-window-size="resetWindowSize" @save-window-layout="saveWindowLayout" @open-audit-log="openAuditLogFromRuntime" @context-set-created="handleContextSetCreated" @snap-window="snapWindow" @tile-window="tileWindow" @untile-window="untileWindow" @benchmark-scenario-selected="handleBenchmarkScenarioSelected" @select-model="selectModelProfile" @select-context="selectContextSet" @change-theme="toggleTheme" @open-module="openModule" @settings-saved="handleWorkspaceSettingsSaved" @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate" @theme-draft-changed="handleThemeDraftChanged" /></div>

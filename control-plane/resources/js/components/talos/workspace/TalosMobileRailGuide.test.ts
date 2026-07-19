@@ -44,23 +44,17 @@ function mountRail() {
 }
 
 describe('TalosMobileRail guide placement', () => {
-    it('keeps Chat and the complete-navigation hamburger as independent commands', () => {
+    it('keeps Chat as a quick command and moves the navigation hamburger to the workspace header (v7 R1)', () => {
         const mounted = mountRail()
 
         const chat = mounted.mountPoint.querySelector<HTMLButtonElement>('[aria-label="Chat"]')
-        const menu = mounted.mountPoint.querySelector<HTMLButtonElement>('[aria-label="Open navigation menu"]')
         expect(chat).not.toBeNull()
-        expect(menu).not.toBeNull()
-        expect(mounted.mountPoint.querySelector('[aria-label="Open navigation menu"]')).not.toBeNull()
+        expect(mounted.mountPoint.querySelector('[aria-label="Open navigation menu"]')).toBeNull()
         expect(mounted.mountPoint.querySelector('[aria-label="Open chat history"]')).toBeNull()
 
         chat?.click()
         expect(mounted.focusChat).toHaveBeenCalledOnce()
         expect(mounted.openNavigation).not.toHaveBeenCalled()
-
-        menu?.click()
-        expect(mounted.openNavigation).toHaveBeenCalledOnce()
-        expect(mounted.focusChat).toHaveBeenCalledOnce()
     })
 
     it('keeps Advanced out of the quick rail so it remains inside the complete sidebar', async () => {
@@ -81,7 +75,7 @@ describe('TalosMobileRail guide placement', () => {
     it('keeps the module command available after guide actions leave the rail', () => {
         const mounted = mountRail()
 
-        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Runtime"]')?.click()
+        mounted.mountPoint.querySelector<HTMLButtonElement>('button[aria-label="Cockpit"]')?.click()
         expect(mounted.opened).toEqual(['runtime'])
     })
 })

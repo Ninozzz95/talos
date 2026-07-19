@@ -12,11 +12,13 @@ import { signalComplexScene } from './signal'
 import { violetComplexScene } from './violet'
 import { claudiusComplexScene } from './claudius'
 import { basicusComplexScene } from './basicus'
+import { telemetryComplexScene } from './telemetry'
 
 export const TALOS_COMPLEX_SCENE_DEFINITIONS = Object.freeze([
     forgeComplexScene, paperComplexScene, terminalComplexScene, auroraComplexScene,
     glacierComplexScene, emberComplexScene, atlasComplexScene, noirComplexScene,
     signalComplexScene, violetComplexScene, claudiusComplexScene, basicusComplexScene,
+    telemetryComplexScene,
 ] as const)
 
 export function createTalosComplexSceneRegistrations(

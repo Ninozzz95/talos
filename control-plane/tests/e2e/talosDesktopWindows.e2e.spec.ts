@@ -92,7 +92,7 @@ async function openDesktopWindow(page: Page, id: TalosWindowId) {
     const launcher = rail.getByRole('button', { name: title, exact: true })
 
     if (!await launcher.isVisible().catch(() => false)) {
-        const advanced = rail.getByRole('button', { name: 'Advanced', exact: true })
+        const advanced = rail.getByRole('button', { name: 'Workbench', exact: true })
         if (await advanced.getAttribute('aria-expanded') !== 'true') {
             await advanced.click()
         }
@@ -451,7 +451,7 @@ test.describe('TALOS right-sidebar dock', () => {
         await page.goto('/', { waitUntil: 'domcontentloaded' })
         await waitForWorkspaceReady(page)
         const runtime = await openDesktopWindow(page, 'runtime')
-        await runtime.window.getByRole('button', { name: 'Dock Runtime in right sidebar', exact: true }).click()
+        await runtime.window.getByRole('button', { name: 'Dock Cockpit in right sidebar', exact: true }).click()
         const calendar = await openDesktopWindow(page, 'calendar')
         await calendar.window.getByRole('button', { name: 'Dock Calendar in right sidebar', exact: true }).click()
 
@@ -476,7 +476,7 @@ test.describe('TALOS right-sidebar dock', () => {
         await waitForWorkspaceReady(page)
 
         const runtime = await openDesktopWindow(page, 'runtime')
-        await runtime.window.getByRole('button', { name: 'Dock Runtime in right sidebar', exact: true }).click()
+        await runtime.window.getByRole('button', { name: 'Dock Cockpit in right sidebar', exact: true }).click()
         const calendar = await openDesktopWindow(page, 'calendar')
         await calendar.window.getByRole('button', { name: 'Dock Calendar in right sidebar', exact: true }).click()
 
@@ -640,7 +640,7 @@ test.describe('TALOS complete desktop window painted lifecycle', () => {
 
             try {
                 if (!await launcher.isVisible().catch(() => false)) {
-                    const advanced = rail.getByRole('button', { name: 'Advanced', exact: true })
+                    const advanced = rail.getByRole('button', { name: 'Workbench', exact: true })
                     if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
                 }
                 await expect(launcher).toBeVisible()
@@ -719,7 +719,7 @@ test.describe('TALOS complete desktop window painted lifecycle', () => {
 
             try {
                 if (!await launcher.isVisible().catch(() => false)) {
-                    const advanced = rail.getByRole('button', { name: 'Advanced', exact: true })
+                    const advanced = rail.getByRole('button', { name: 'Workbench', exact: true })
                     if (await advanced.getAttribute('aria-expanded') !== 'true') await advanced.click()
                 }
                 await launcher.click()

@@ -65,7 +65,7 @@ function contrast(first: string, second: string) {
 }
 
 describe('TALOS theme token contract', () => {
-    it('keeps the authoritative 12 preset registry', () => {
+    it('keeps the authoritative 13 preset registry', () => {
         expect(TALOS_THEME_PRESETS.map((preset) => preset.id)).toEqual([
             'forge',
             'paper',
@@ -79,6 +79,7 @@ describe('TALOS theme token contract', () => {
             'violet',
             'claudius',
             'basicus',
+    'telemetry',
         ])
     })
 

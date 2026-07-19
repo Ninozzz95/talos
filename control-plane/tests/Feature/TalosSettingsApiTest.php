@@ -32,6 +32,46 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertTrue(Schema::hasColumn('talos_workspace_settings', 'user_id'));
     }
 
+    public function test_sensitive_censor_preference_is_strict_boolean_and_defaults_enabled(): void
+    {
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonMissingPath('data.preferences.sensitive_censor');
+
+        $this->assertTrue(TalosWorkspaceSetting::sensitiveCensorEnabled([]));
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'density' => 'compact',
+                'sensitive_censor' => false,
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.sensitive_censor', false);
+
+        foreach (['false', 0, null, []] as $invalidValue) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => ['sensitive_censor' => $invalidValue],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('preferences.sensitive_censor');
+        }
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.sensitive_censor', false);
+
+        $preferences = TalosWorkspaceSetting::query()
+            ->where('user_id', $this->user->id)
+            ->firstOrFail()
+            ->preferences;
+
+        $this->assertFalse($preferences['sensitive_censor']);
+        $this->assertFalse(TalosWorkspaceSetting::sensitiveCensorEnabled($preferences));
+    }
+
     public function test_settings_can_store_and_return_only_safe_preferences(): void
     {
         $profile = TalosModelProfile::query()->create([
@@ -65,6 +105,7 @@ final class TalosSettingsApiTest extends TestCase
                     'theme' => 'forge',
                 ],
                 'theme' => 'terminal',
+                'sensitive_censor' => false,
                 'ai_defaults' => [
                     'utility_model_mode' => 'same_as_chat',
                     'vision_enabled' => true,
@@ -108,6 +149,7 @@ final class TalosSettingsApiTest extends TestCase
             ->assertJsonPath('data.preferences.density', 'compact')
             ->assertJsonPath('data.preferences.nested.theme', 'forge')
             ->assertJsonPath('data.preferences.theme', 'terminal')
+            ->assertJsonPath('data.preferences.sensitive_censor', false)
             ->assertJsonPath('data.preferences.search.provider', 'searxng')
             ->assertJsonPath('data.preferences.search.results_per_query', 7)
             ->assertJsonPath('data.preferences.search.deep_research.max_tokens', 16384)
@@ -343,6 +385,7 @@ final class TalosSettingsApiTest extends TestCase
     public function test_settings_persist_each_theme_preset_via_settings_api(): void
     {
         $themes = [
+            'telemetry',
             'forge',
             'paper',
             'terminal',
@@ -374,6 +417,226 @@ final class TalosSettingsApiTest extends TestCase
                 ->assertOk()
                 ->assertJsonPath('data.preferences.theme', $theme);
         }
+    }
+
+    public function test_telemetry_theme_is_accepted_and_unknown_theme_still_fails(): void
+    {
+        $motion = $this->motionV6Defaults();
+        $motion['scene_override'] = 'telemetry';
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'telemetry',
+                'workspace_default_theme' => 'telemetry',
+                'theme_motion_v6' => $motion,
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme', 'telemetry')
+            ->assertJsonPath('data.preferences.workspace_default_theme', 'telemetry')
+            ->assertJsonPath('data.preferences.theme_motion_v6.scene_override', 'telemetry');
+
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['theme' => 'telemetry-unknown'],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preferences.theme');
+
+        $this->assertSame($before, $this->storedPreferencesForCurrentUser());
+    }
+
+    public function test_sidebar_rail_preferences_validate_known_ids_and_strip_unknown(): void
+    {
+        $rail = [
+            'order' => ['browse', 'runtime', 'calendar', 'compare', 'model_lab', 'research', 'gallery', 'library'],
+            'collapsed_groups' => ['workbench'],
+            'collapsed' => true,
+        ];
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['sidebar_rail' => $rail],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.sidebar_rail', $rail);
+
+        $settings = TalosWorkspaceSetting::query()
+            ->where('user_id', $this->user->id)
+            ->firstOrFail();
+        $settings->preferences = [
+            'density' => 'compact',
+            'sidebar_rail' => [
+                'order' => ['browse', 'unknown-station', 'browse', 'runtime', 17],
+                'collapsed_groups' => ['workbench', 'unknown-group', 'workbench', 17],
+                'collapsed' => true,
+                'unexpected' => 'legacy-value',
+            ],
+        ];
+        $settings->save();
+
+        $response = $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.sidebar_rail.order.0', 'browse')
+            ->assertJsonPath('data.preferences.sidebar_rail.order.1', 'runtime')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed_groups.0', 'workbench')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed', true)
+            ->assertJsonMissingPath('data.preferences.sidebar_rail.unexpected');
+
+        $response->assertJsonCount(2, 'data.preferences.sidebar_rail.order');
+        $response->assertJsonCount(1, 'data.preferences.sidebar_rail.collapsed_groups');
+    }
+
+    public function test_sidebar_rail_invalid_writes_fail_atomically_with_exact_paths(): void
+    {
+        $baseline = [
+            'order' => ['runtime', 'calendar', 'compare', 'model_lab', 'research', 'gallery', 'library', 'browse'],
+            'collapsed_groups' => [],
+            'collapsed' => false,
+        ];
+
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'compact',
+                'sidebar_rail' => $baseline,
+            ],
+        ]);
+        $before = $this->storedPreferencesForCurrentUser();
+
+        $invalidCases = [
+            [null, 'preferences.sidebar_rail'],
+            ['invalid', 'preferences.sidebar_rail'],
+            [['runtime'], 'preferences.sidebar_rail'],
+            [[
+                'order' => $baseline['order'],
+                'collapsed_groups' => [],
+            ], 'preferences.sidebar_rail.collapsed'],
+            [$baseline + ['unexpected' => true], 'preferences.sidebar_rail.unexpected'],
+            [[
+                'order' => ['first' => 'runtime'],
+                'collapsed_groups' => [],
+                'collapsed' => false,
+            ], 'preferences.sidebar_rail.order'],
+            [[
+                'order' => ['runtime', 'unknown-station'],
+                'collapsed_groups' => [],
+                'collapsed' => false,
+            ], 'preferences.sidebar_rail.order.1'],
+            [[
+                'order' => ['runtime', 'runtime'],
+                'collapsed_groups' => [],
+                'collapsed' => false,
+            ], 'preferences.sidebar_rail.order.1'],
+            [[
+                'order' => ['runtime'],
+                'collapsed_groups' => ['first' => 'workbench'],
+                'collapsed' => false,
+            ], 'preferences.sidebar_rail.collapsed_groups'],
+            [[
+                'order' => ['runtime'],
+                'collapsed_groups' => ['unknown-group'],
+                'collapsed' => false,
+            ], 'preferences.sidebar_rail.collapsed_groups.0'],
+            [[
+                'order' => ['runtime'],
+                'collapsed_groups' => ['workbench', 'workbench'],
+                'collapsed' => false,
+            ], 'preferences.sidebar_rail.collapsed_groups.1'],
+            [[
+                'order' => ['runtime'],
+                'collapsed_groups' => [],
+                'collapsed' => 'false',
+            ], 'preferences.sidebar_rail.collapsed'],
+        ];
+
+        foreach ($invalidCases as [$rail, $errorPath]) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => ['sidebar_rail' => $rail],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($errorPath);
+
+            $this->assertSame($before, $this->storedPreferencesForCurrentUser(), $errorPath);
+        }
+    }
+
+    public function test_sidebar_rail_raw_json_preserves_object_and_list_shapes_atomically(): void
+    {
+        $this->patchRawSettingsJson(<<<'JSON'
+{"preferences":{"sidebar_rail":{"order":["runtime","browse"],"collapsed_groups":["workbench"],"collapsed":false}}}
+JSON)
+            ->assertOk()
+            ->assertJsonPath('data.preferences.sidebar_rail.order.0', 'runtime')
+            ->assertJsonPath('data.preferences.sidebar_rail.order.1', 'browse')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed_groups.0', 'workbench')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed', false);
+
+        $before = $this->storedPreferencesForCurrentUser();
+        $invalidBodies = [
+            [<<<'JSON'
+{"preferences":{"sidebar_rail":{"order":{},"collapsed_groups":[],"collapsed":false}}}
+JSON, 'preferences.sidebar_rail.order'],
+            [<<<'JSON'
+{"preferences":{"sidebar_rail":{"order":{"0":"runtime"},"collapsed_groups":[],"collapsed":false}}}
+JSON, 'preferences.sidebar_rail.order'],
+            [<<<'JSON'
+{"preferences":{"sidebar_rail":{"order":[],"collapsed_groups":{},"collapsed":false}}}
+JSON, 'preferences.sidebar_rail.collapsed_groups'],
+            [<<<'JSON'
+{"preferences":{"sidebar_rail":{"order":[],"collapsed_groups":{"0":"workbench"},"collapsed":false}}}
+JSON, 'preferences.sidebar_rail.collapsed_groups'],
+        ];
+
+        foreach ($invalidBodies as [$body, $errorPath]) {
+            $this->patchRawSettingsJson($body)
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($errorPath);
+
+            $this->assertSame($before, $this->storedPreferencesForCurrentUser(), $errorPath);
+        }
+    }
+
+    public function test_sidebar_rail_legacy_raw_shape_is_omitted_without_read_mutation_or_reappearance(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => ['density' => 'compact'],
+        ]);
+
+        $raw = <<<'JSON'
+{"density":"compact","sidebar_rail":{"order":{"0":"runtime"},"collapsed_groups":["workbench"],"collapsed":true,"unexpected":"legacy"}}
+JSON;
+        DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->update(['preferences' => $raw]);
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed_groups.0', 'workbench')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed', true)
+            ->assertJsonMissingPath('data.preferences.sidebar_rail.order')
+            ->assertJsonMissingPath('data.preferences.sidebar_rail.unexpected');
+        $this->assertSame($raw, $this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['density' => 'comfortable'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.density', 'comfortable')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed_groups.0', 'workbench')
+            ->assertJsonPath('data.preferences.sidebar_rail.collapsed', true)
+            ->assertJsonMissingPath('data.preferences.sidebar_rail.order')
+            ->assertJsonMissingPath('data.preferences.sidebar_rail.unexpected');
+
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertArrayNotHasKey('order', $stored['sidebar_rail']);
+        $this->assertSame(['workbench'], $stored['sidebar_rail']['collapsed_groups']);
+        $this->assertTrue($stored['sidebar_rail']['collapsed']);
     }
 
     public function test_settings_persist_safe_theme_mode_separately_from_theme_preset(): void

@@ -331,7 +331,7 @@ test('renders independent glow as a visible effect beneath the readability scrim
 
 test('applies background intensity, contrast and independent glow through preview, save, reset and reload', async ({ page, isMobile }) => {
     const ledger = await bootstrap(page, {
-        initialSettings: { preferences: { theme_motion_v6: cloneMotion() } },
+        initialSettings: { preferences: { theme_motion_v6: cloneMotion({ mode: 'adaptive' }) } },
     })
     await openThemeMotion(page, isMobile)
     ledger.clear()
@@ -412,6 +412,7 @@ test('applies background intensity, contrast and independent glow through previe
 
 test('rolls back the first rejected save and retries the exact failed draft', async ({ page, isMobile }) => {
     const ledger = await bootstrap(page, {
+        initialSettings: { preferences: { theme_motion_v6: cloneMotion({ mode: 'adaptive' }) } },
         settingsPatchFailure: { status: 422, message: 'Deterministic V6 settings rejection.' },
     })
     await openThemeMotion(page, isMobile)

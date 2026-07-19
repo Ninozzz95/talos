@@ -43,7 +43,7 @@ function platform() {
 describe('TALOS V6 Simple scene library', () => {
     it('contains exactly one independently addressable scene for every preset', () => {
         expect(TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => scene.id)).toEqual(TALOS_MOTION_SCENE_IDS)
-        expect(new Set(TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => scene.resolve)).size).toBe(12)
+        expect(new Set(TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => scene.resolve)).size).toBe(13)
     })
 
     it('creates a complete registry-ready factory set without a parallel scene map', () => {
@@ -57,7 +57,7 @@ describe('TALOS V6 Simple scene library', () => {
             instance.renderOrUpdate(input())
             instance.dispose()
         }
-        expect(registry.snapshot()).toHaveLength(12)
+        expect(registry.snapshot()).toHaveLength(13)
     })
 
     it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id stays inside the low-tier budget and has moving transform/opacity keyframes', (scene) => {
@@ -76,7 +76,7 @@ describe('TALOS V6 Simple scene library', () => {
 
     it('distinguishes every scene by geometry and temporal grammar rather than palette', () => {
         const fingerprints = TALOS_SIMPLE_SCENE_DEFINITIONS.map((scene) => geometryFingerprint(scene.resolve(input())))
-        expect(new Set(fingerprints).size).toBe(12)
+        expect(new Set(fingerprints).size).toBe(13)
     })
 
     it.each(TALOS_SIMPLE_SCENE_DEFINITIONS)('$id resolves the active light/dark palette deterministically', (scene) => {

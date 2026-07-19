@@ -29,6 +29,7 @@ const props = defineProps({
   asChild: { type: Boolean, required: false },
   as: { type: null, required: false },
   to: { type: null, required: false, default: "#talos-portal-root" },
+  portalDisabled: { type: Boolean, required: false, default: false },
   class: {
     type: [Boolean, null, String, Object, Array],
     required: false,
@@ -44,13 +45,13 @@ const emits = defineEmits([
   "closeAutoFocus",
 ]);
 
-const delegatedProps = reactiveOmit(props, "class", "to");
+const delegatedProps = reactiveOmit(props, "class", "to", "portalDisabled");
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <DropdownMenuPortal :to="to">
+  <DropdownMenuPortal :to="to" :disabled="portalDisabled">
     <DropdownMenuContent
       v-bind="{ ...forwarded, ...$attrs }"
       :class="
