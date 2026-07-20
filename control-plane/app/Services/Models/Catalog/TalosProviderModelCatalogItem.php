@@ -24,6 +24,9 @@ final class TalosProviderModelCatalogItem
     private const LIFECYCLE = ['stable', 'preview', 'experimental', 'deprecated', 'unknown'];
     private const CAPABILITY_KEYS = ['text', 'vision', 'tools', 'reasoning', 'embeddings', 'image_output', 'audio_output'];
 
+    /** Canonical reasoning-effort vocabulary, ordered by intensity. */
+    private const EFFORT_LEVELS = ['minimal', 'low', 'medium', 'high', 'max', 'xhigh'];
+
     private readonly string $id;
     private readonly string $displayName;
     private readonly string $provider;
@@ -36,11 +39,14 @@ final class TalosProviderModelCatalogItem
     private readonly string $lifecycle;
     private readonly ?string $canonicalSlug;
     private readonly ?string $localDigest;
+    /** @var list<string>|null */
+    private readonly ?array $effortLevels;
     /** @var array<string, scalar|array<int, scalar>> */
     private readonly array $metadata;
 
     /**
      * @param  array<string, mixed>  $capabilities
+     * @param  list<string>|null  $effortLevels
      * @param  array<string, mixed>  $metadata
      */
     public function __construct(
@@ -56,6 +62,7 @@ final class TalosProviderModelCatalogItem
         ?string $canonicalSlug,
         ?string $localDigest,
         array $metadata,
+        ?array $effortLevels = null,
     ) {
         $this->id = self::requireBoundedNonEmpty($id, self::MAX_ID_BYTES, 'id');
         $this->displayName = self::requireBoundedNonEmpty($displayName, self::MAX_LABEL_BYTES, 'display_name');
@@ -81,7 +88,7 @@ final class TalosProviderModelCatalogItem
             throw new InvalidArgumentException('local_digest must be a lowercase SHA-256 string.');
         }
         $this->localDigest = $localDigest;
-
+        $this->effortLevels = self::normalizeEffortLevels($effortLevels);
         $this->metadata = self::normalizeMetadata($metadata);
     }
 
@@ -113,6 +120,7 @@ final class TalosProviderModelCatalogItem
             'lifecycle' => $this->lifecycle,
             'canonical_slug' => $this->canonicalSlug,
             'local_digest' => $this->localDigest,
+            'effort_levels' => $this->effortLevels,
             'metadata' => $this->metadata,
         ];
     }
@@ -179,6 +187,37 @@ final class TalosProviderModelCatalogItem
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  list<string>|null  $levels
+     * @return list<string>|null
+     */
+    private static function normalizeEffortLevels(?array $levels): ?array
+    {
+        if ($levels === null) {
+            return null;
+        }
+
+        $byIntensity = [];
+        foreach ($levels as $level) {
+            if (! is_string($level)) {
+                throw new InvalidArgumentException('Effort levels must be strings.');
+            }
+            $normalized = strtolower(trim($level));
+            $index = array_search($normalized, self::EFFORT_LEVELS, true);
+            if ($index === false) {
+                throw new InvalidArgumentException("Unsupported effort level: {$normalized}.");
+            }
+            $byIntensity[$index] = $normalized;
+        }
+
+        if ($byIntensity === []) {
+            return null;
+        }
+        ksort($byIntensity);
+
+        return array_values($byIntensity);
     }
 
     /**
