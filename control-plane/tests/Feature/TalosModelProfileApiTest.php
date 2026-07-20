@@ -489,6 +489,20 @@ final class TalosModelProfileApiTest extends TestCase
             ->assertJsonMissing(['abc']);
     }
 
+    public function test_static_fallback_models_use_current_lifecycle_ids(): void
+    {
+        // DeepSeek retires deepseek-chat/deepseek-reasoner on 2026-07-24; the
+        // static fallback moves to deepseek-v4-flash. Live catalog discovery
+        // stays authoritative. Anthropic pins claude-sonnet-4-6.
+        $this->postJson('/api/talos/model-profiles', ['provider' => 'deepseek', 'secret' => 'deepseek-secret'])
+            ->assertCreated()
+            ->assertJsonPath('data.model', 'deepseek-v4-flash');
+
+        $this->postJson('/api/talos/model-profiles', ['provider' => 'anthropic', 'secret' => 'anthropic-secret'])
+            ->assertCreated()
+            ->assertJsonPath('data.model', 'claude-sonnet-4-6');
+    }
+
     public function test_provider_catalog_accepts_anthropic_and_gemini_without_client_side_defaults(): void
     {
         $this->postJson('/api/talos/model-profiles', [
@@ -497,7 +511,7 @@ final class TalosModelProfileApiTest extends TestCase
         ])
             ->assertCreated()
             ->assertJsonPath('data.provider', 'anthropic')
-            ->assertJsonPath('data.model', 'claude-sonnet')
+            ->assertJsonPath('data.model', 'claude-sonnet-4-6')
             ->assertJsonPath('data.base_url', 'https://api.anthropic.com/v1');
 
         $this->postJson('/api/talos/model-profiles', [

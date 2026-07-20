@@ -29,7 +29,7 @@ final class TalosModelProviderCatalog
         ],
         'deepseek' => [
             'label' => 'DeepSeek',
-            'default_model' => 'deepseek-chat',
+            'default_model' => 'deepseek-v4-flash',
             'default_base_url' => 'https://api.deepseek.com/v1',
             'default_timeout_seconds' => 60,
             'requires_secret' => true,
@@ -38,7 +38,7 @@ final class TalosModelProviderCatalog
         ],
         'anthropic' => [
             'label' => 'Anthropic',
-            'default_model' => 'claude-sonnet',
+            'default_model' => 'claude-sonnet-4-6',
             'default_base_url' => 'https://api.anthropic.com/v1',
             'default_timeout_seconds' => 60,
             'requires_secret' => true,
