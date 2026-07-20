@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "talos-human-journey"
+version = "0.1.0"
+description = "Isolated adaptive and release evaluation sidecar for TALOS"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "browsergym-webarena==0.14.3",
+    "browsergym-webarena-verified==0.14.3",
+    "fastapi==0.139.2",
+    "httpx==0.28.1",
+    "nltk==3.10.0",
+    "pydantic==2.12.0",
+    "tau2 @ git+https://github.com/sierra-research/tau2-bench.git@58e5e1ace69302e6982d27014569c03e0ffccdd2",
+    "uvicorn==0.51.0",
+    "webarena-verified==1.2.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/talos_human_journey"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.uv]
+default-groups = ["dev"]

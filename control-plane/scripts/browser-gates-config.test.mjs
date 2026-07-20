@@ -90,6 +90,19 @@ test('browser-worker-live workflow installs both workspaces before executing the
     ])
 })
 
+test('live browser worker gate resolves the repo npm wrapper before lifecycle commands', () => {
+    const script = readFileSync(path.join(workspaceRoot, 'scripts/tests/talos-live-browser-worker-ci.sh'), 'utf8')
+
+    assert.match(script, /resolve_npm_bin\(\)/)
+    assert.match(script, /TALOS_NPM_BIN/)
+    assert.match(script, /\.tools\/bin\/npm\.cmd/)
+    assert.match(script, /command -v npm/)
+    assert.match(script, /NPM_BIN="\$\(resolve_npm_bin\)"/)
+    assert.match(script, /"\$NPM_BIN" test --/)
+    assert.match(script, /"\$NPM_BIN" run build/)
+    assert.doesNotMatch(script, /^\s+npm (?:test|run build)\b/m)
+})
+
 test('browser worker Compose wiring has the required production protocol and fail-closed dependency', () => {
     assertComposeModel(readYaml('docker-compose.yml'))
 })

@@ -41,7 +41,7 @@ export type TalosWorkspaceChatActionDependencies = {
     createMessage: (sessionId: string, payload: CreateTalosMessagePayload) => Promise<TalosMessage>
     acceptPersistedMessage: (message: TalosMessage) => void
     centerMessage: (messageId: string) => Promise<void>
-    recordBrowserActivities: (value: unknown) => void
+    recordBrowserActivities: (value: unknown) => Promise<void>
     recordPendingToolApprovals: (value: unknown) => void
     openSettings: () => void
     openModelPopover: () => void
@@ -133,7 +133,7 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
                 deps.acceptPersistedMessage(chatResult.assistantMessage)
             }
             if (attachmentFileIds.length > 0) deps.attachmentTray?.reset()
-            deps.recordBrowserActivities(
+            await deps.recordBrowserActivities(
                 chatResult.response?.browser_activities
                 ?? chatResult.assistantMessage?.metadata?.browser_activities,
             )

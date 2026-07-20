@@ -28,7 +28,20 @@ resolve_php_bin() {
   command -v php
 }
 
+resolve_npm_bin() {
+  if [ -n "${TALOS_NPM_BIN:-}" ]; then
+    printf '%s\n' "$TALOS_NPM_BIN"
+    return
+  fi
+  if [ -f "$ROOT_DIR/.tools/bin/npm.cmd" ]; then
+    printf '%s\n' "$ROOT_DIR/.tools/bin/npm.cmd"
+    return
+  fi
+  command -v npm
+}
+
 PHP_BIN="$(resolve_php_bin)"
+NPM_BIN="$(resolve_npm_bin)"
 
 generate_strong_token() {
   if command -v openssl >/dev/null 2>&1; then
@@ -242,7 +255,7 @@ echo "Live browser worker ready at $WORKER_URL"
 
 (
   cd "$ROOT_DIR/browser-worker"
-  npm test -- \
+  "$NPM_BIN" test -- \
     --run tests/browserMcpTransport.test.ts \
     -t "round-trips the allowlisted real Playwright MCP tools through official Streamable HTTP"
 )
@@ -269,7 +282,7 @@ run_restart_phase after
 
 (
   cd "$ROOT_DIR/control-plane"
-  npm run build
+  "$NPM_BIN" run build
   env \
     TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
     TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \

@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import { BrowserSessionManager } from "./BrowserSessionManager.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import { BrowserError, errorPayload } from "./BrowserErrors.js";
 import { assertAllowedBrowserUrl, browserEvidenceUrl } from "./BrowserUrlPolicy.js";
 import { captureSnapshot } from "./BrowserSnapshot.js";
@@ -48,6 +49,7 @@ export interface BrowserWorkerServerOptions {
   sessions?: BrowserSessionManager;
   internalToken?: string;
   runtimeEnvironment?: string;
+  environment?: Readonly<Record<string, string | undefined>>;
   mcpAllowedHosts?: string[];
   onUnexpectedError?: (event: BrowserWorkerUnexpectedErrorEvent) => void;
   workerInstanceId?: string;
@@ -57,22 +59,24 @@ export interface BrowserWorkerServerOptions {
 }
 
 export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyInstance {
-  const runtimeEnvironment = options.runtimeEnvironment ?? process.env.NODE_ENV;
-  const internalToken = options.internalToken ?? process.env.TALOS_BROWSER_WORKER_TOKEN;
+  const environment = options.environment ?? process.env;
+  const runtimeEnvironment = options.runtimeEnvironment ?? environment.NODE_ENV;
+  const fixturePermit = BrowserTestFixturePermit.fromEnvironment(environment, runtimeEnvironment);
+  const internalToken = options.internalToken ?? environment.TALOS_BROWSER_WORKER_TOKEN;
   assertWorkerTokenConfiguration(internalToken, runtimeEnvironment);
   const app = Fastify({ logger: false });
   const fileStaging = options.fileStaging ?? new BrowserFileStagingStore();
-  const sessions = options.sessions ?? new BrowserSessionManager();
+  const sessions = options.sessions ?? new BrowserSessionManager({ fixturePermit });
   sessions.onSessionDisposed(({ ownerRef, sessionId }) => fileStaging.discardSession(ownerRef, sessionId));
-  const browserTools = new BrowserToolDispatcher(sessions, fileStaging);
+  const browserTools = new BrowserToolDispatcher(sessions, fileStaging, fixturePermit);
   const browserAutomation = options.automationAdapter ?? new PlaywrightMcpAdapter(sessions, {
     allowTestFixtureFileAccess: runtimeEnvironment === "test",
   });
   const browserHmi = new BrowserHmiService(sessions);
-  const mcpAllowedHosts = allowedMcpHosts(options.mcpAllowedHosts, process.env.TALOS_BROWSER_MCP_ALLOWED_HOSTS);
+  const mcpAllowedHosts = allowedMcpHosts(options.mcpAllowedHosts, environment.TALOS_BROWSER_MCP_ALLOWED_HOSTS);
   const workerInstanceId = options.workerInstanceId ?? randomUUID();
   const actionCapabilityVerifier = options.actionCapabilityVerifier
-    ?? BrowserActionCapabilityVerifier.fromEnvironment(process.env, runtimeEnvironment);
+    ?? BrowserActionCapabilityVerifier.fromEnvironment(environment, runtimeEnvironment);
 
   const reportUnexpectedError = options.onUnexpectedError ?? reportUnexpectedWorkerError;
 
@@ -192,7 +196,7 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
     const parsed = navigateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "Invalid navigation payload.", code: "TALOS_BROWSER_INVALID_NAVIGATION_PAYLOAD", details: parsed.error.flatten() });
     await ownedSession(sessions, request);
-    await assertAllowedBrowserUrl(parsed.data.url);
+    await assertAllowedBrowserUrl(parsed.data.url, fixturePermit);
     const data = await sessions.runExclusive(request.params.id, async () => {
       const session = await sessions.navigate(request.params.id, parsed.data);
       const page = await sessions.get(request.params.id);

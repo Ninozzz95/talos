@@ -105,6 +105,24 @@ final class TalosBrowserFollowUpResolverTest extends TestCase
         ], app(TalosBrowserFollowUpResolver::class)->resolveNavigation("Apri {$url}", null));
     }
 
+    public function test_container_resolved_follow_up_honors_only_the_exact_human_journey_fixture_origin(): void
+    {
+        config(['services.talos.browser.test_fixture_origin' => 'http://127.0.0.1:43125']);
+        $this->app->forgetInstance(TalosBrowserPolicy::class);
+        $this->app->forgetInstance(TalosBrowserUrlIntentResolver::class);
+        $this->app->forgetInstance(TalosBrowserFollowUpResolver::class);
+
+        $resolver = $this->app->make(TalosBrowserFollowUpResolver::class);
+        $allowed = $resolver->resolve('Apri http://127.0.0.1:43125/catalog e dimmi cosa vedi', null);
+        $blocked = $resolver->resolve('Apri http://127.0.0.1:43126/catalog e dimmi cosa vedi', null);
+
+        $this->assertTrue($allowed->isExecutable());
+        $this->assertSame(TalosBrowserFollowUpDecision::INSPECT, $allowed->effectiveOperation());
+        $this->assertSame('http://127.0.0.1:43125/catalog', $allowed->targetUrl);
+        $this->assertSame(TalosBrowserFollowUpDecision::CLARIFY, $blocked->operation);
+        $this->assertSame('url_policy_denied', $blocked->reason);
+    }
+
     public function test_current_page_pronoun_requires_one_owned_operable_browser_page(): void
     {
         $session = $this->chatSession();

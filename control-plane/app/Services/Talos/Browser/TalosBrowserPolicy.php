@@ -10,7 +10,11 @@ use App\Services\Security\PublicHttpUrlPolicy;
 final class TalosBrowserPolicy
 {
     /** @param null|callable(string): list<string> $resolver */
-    public function __construct(private readonly ?PublicHttpUrlPolicy $publicPolicy = null, private readonly mixed $resolver = null) {}
+    public function __construct(
+        private readonly ?PublicHttpUrlPolicy $publicPolicy = null,
+        private readonly mixed $resolver = null,
+        private readonly ?TalosBrowserTestFixturePermit $fixturePermit = null,
+    ) {}
 
     /** @return array{allowed: bool, reason: string, host: string, resolved_ips: list<string>} */
     public function inspect(string $url, bool $requireResolution = true): array
@@ -19,6 +23,10 @@ final class TalosBrowserPolicy
             $host = CanonicalHttpUrl::fromString($url)->asciiHost;
         } catch (\InvalidArgumentException) {
             return $this->deny('invalid or unsupported URL', '');
+        }
+
+        if ($this->fixturePermit?->allows($url) === true) {
+            return ['allowed' => true, 'reason' => 'test fixture origin', 'host' => $host, 'resolved_ips' => [$host]];
         }
 
         $policy = $this->publicPolicy ?? new PublicHttpUrlPolicy;

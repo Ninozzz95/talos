@@ -1,0 +1,253 @@
+{
+    "contract": "talos.human_journey.tau2.conformance_fixture",
+    "schema_version": 1,
+    "valid": {
+        "create_trial": {
+            "contract": "talos.human_journey.tau2.create_trial",
+            "schema_version": 1,
+            "owner_id": "hj_contract_fixture_001",
+            "trial_index": 2,
+            "seed": 42,
+            "scenario": {
+                "scenario_id": "BROWSER-NATURAL-001",
+                "goal": "Inspect a controlled page and retain grounded browser evidence.",
+                "user_facts": [
+                    "The user knows the visible target URL."
+                ],
+                "persona": {
+                    "id": "hurried_typo_it",
+                    "language": "it-IT",
+                    "traits": [
+                        "hurried",
+                        "typo_prone",
+                        "ambiguous"
+                    ]
+                },
+                "allowed_actions": [
+                    "send_message",
+                    "end_trial"
+                ],
+                "budgets": {
+                    "max_turns": 16,
+                    "max_provider_tokens": 12000,
+                    "max_cost_usd": 2,
+                    "max_duration_ms": 180000
+                }
+            },
+            "model_under_test": {
+                "provider_id": "talos-fixture-provider",
+                "model": "talos-fixture-model",
+                "endpoint_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+        },
+        "trial_created": {
+            "contract": "talos.human_journey.tau2.trial_created",
+            "schema_version": 1,
+            "trial_id": "trial_fixture_001",
+            "trial_token": "fixture-trial-token-000000000001",
+            "status": "ready",
+            "max_turns": 16
+        },
+        "next_turn": {
+            "contract": "talos.human_journey.tau2.next_turn",
+            "schema_version": 1,
+            "checkpoint_id": "owned-screenshot-visible",
+            "assistant_message": "Ho aperto la pagina. Cosa vuoi verificare?",
+            "observation_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "created_at": "2026-07-20T12:00:01.000Z"
+        },
+        "message_response": {
+            "contract": "talos.human_journey.tau2.turn_response",
+            "schema_version": 1,
+            "kind": "message",
+            "turn_index": 1,
+            "content": "Riprova col link di prima.",
+            "metrics": {
+                "prompt_tokens": 120,
+                "completion_tokens": 12,
+                "cost_usd": 0.001,
+                "latency_ms": 240
+            },
+            "provider_response_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "terminal_response": {
+            "contract": "talos.human_journey.tau2.turn_response",
+            "schema_version": 1,
+            "kind": "terminal",
+            "turn_index": 2,
+            "outcome": "goal_reached",
+            "reason": "The simulated user goal is complete.",
+            "metrics": {
+                "prompt_tokens": 140,
+                "completion_tokens": 4,
+                "cost_usd": 0.0012,
+                "latency_ms": 210
+            },
+            "provider_response_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+    },
+    "invalid": [
+        {
+            "name": "create trial rejects an unknown key",
+            "parser": "create_trial",
+            "value": {
+                "contract": "talos.human_journey.tau2.create_trial",
+                "schema_version": 1,
+                "owner_id": "hj_contract_fixture_001",
+                "trial_index": 2,
+                "seed": 42,
+                "scenario": {
+                    "scenario_id": "BROWSER-NATURAL-001",
+                    "goal": "Inspect a controlled page.",
+                    "user_facts": ["The user knows the visible target URL."],
+                    "persona": {
+                        "id": "hurried_typo_it",
+                        "language": "it-IT",
+                        "traits": ["hurried"]
+                    },
+                    "allowed_actions": ["send_message", "end_trial"],
+                    "budgets": {
+                        "max_turns": 16,
+                        "max_provider_tokens": 12000,
+                        "max_cost_usd": 2,
+                        "max_duration_ms": 180000
+                    }
+                },
+                "model_under_test": {
+                    "provider_id": "talos-fixture-provider",
+                    "model": "talos-fixture-model",
+                    "endpoint_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                },
+                "unknown": true
+            }
+        },
+        {
+            "name": "create trial rejects numeric coercion",
+            "parser": "create_trial",
+            "value": {
+                "contract": "talos.human_journey.tau2.create_trial",
+                "schema_version": 1,
+                "owner_id": "hj_contract_fixture_001",
+                "trial_index": "2",
+                "seed": 42,
+                "scenario": {
+                    "scenario_id": "BROWSER-NATURAL-001",
+                    "goal": "Inspect a controlled page.",
+                    "user_facts": ["The user knows the visible target URL."],
+                    "persona": {
+                        "id": "hurried_typo_it",
+                        "language": "it-IT",
+                        "traits": ["hurried"]
+                    },
+                    "allowed_actions": ["send_message", "end_trial"],
+                    "budgets": {
+                        "max_turns": 16,
+                        "max_provider_tokens": 12000,
+                        "max_cost_usd": 2,
+                        "max_duration_ms": 180000
+                    }
+                },
+                "model_under_test": {
+                    "provider_id": "talos-fixture-provider",
+                    "model": "talos-fixture-model",
+                    "endpoint_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+            }
+        },
+        {
+            "name": "create trial rejects duplicate facts",
+            "parser": "create_trial",
+            "value": {
+                "contract": "talos.human_journey.tau2.create_trial",
+                "schema_version": 1,
+                "owner_id": "hj_contract_fixture_001",
+                "trial_index": 2,
+                "seed": 42,
+                "scenario": {
+                    "scenario_id": "BROWSER-NATURAL-001",
+                    "goal": "Inspect a controlled page.",
+                    "user_facts": ["same", "same"],
+                    "persona": {
+                        "id": "hurried_typo_it",
+                        "language": "it-IT",
+                        "traits": ["hurried"]
+                    },
+                    "allowed_actions": ["send_message", "end_trial"],
+                    "budgets": {
+                        "max_turns": 16,
+                        "max_provider_tokens": 12000,
+                        "max_cost_usd": 2,
+                        "max_duration_ms": 180000
+                    }
+                },
+                "model_under_test": {
+                    "provider_id": "talos-fixture-provider",
+                    "model": "talos-fixture-model",
+                    "endpoint_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                }
+            }
+        },
+        {
+            "name": "trial creation response rejects a short token",
+            "parser": "trial_created",
+            "value": {
+                "contract": "talos.human_journey.tau2.trial_created",
+                "schema_version": 1,
+                "trial_id": "trial_fixture_001",
+                "trial_token": "short",
+                "status": "ready",
+                "max_turns": 16
+            }
+        },
+        {
+            "name": "next turn rejects a timestamp without timezone",
+            "parser": "next_turn",
+            "value": {
+                "contract": "talos.human_journey.tau2.next_turn",
+                "schema_version": 1,
+                "checkpoint_id": "owned-screenshot-visible",
+                "assistant_message": "Ho aperto la pagina.",
+                "observation_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "created_at": "2026-07-20T12:00:01"
+            }
+        },
+        {
+            "name": "turn response rejects an unprefixed digest",
+            "parser": "turn_response",
+            "value": {
+                "contract": "talos.human_journey.tau2.turn_response",
+                "schema_version": 1,
+                "kind": "message",
+                "turn_index": 1,
+                "content": "Riprova.",
+                "metrics": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "cost_usd": 0,
+                    "latency_ms": 1
+                },
+                "provider_response_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }
+        },
+        {
+            "name": "turn response rejects branch drift",
+            "parser": "turn_response",
+            "value": {
+                "contract": "talos.human_journey.tau2.turn_response",
+                "schema_version": 1,
+                "kind": "terminal",
+                "turn_index": 2,
+                "outcome": "goal_reached",
+                "reason": "Complete.",
+                "content": "not allowed",
+                "metrics": {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "cost_usd": 0,
+                    "latency_ms": 1
+                },
+                "provider_response_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+        }
+    ]
+}

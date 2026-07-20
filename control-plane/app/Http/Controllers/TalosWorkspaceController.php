@@ -52,6 +52,11 @@ final class TalosWorkspaceController extends Controller
             'bootAccent' => TalosThemeContrast::resolveAccent($preferences),
             'devBrowserEvidence' => $this->browserEvidenceEnvironment->rawEvidenceEnabled(),
             'developmentMode' => app()->environment(['local', 'testing']),
+            'talosPublicLinks' => [
+                'avm_deep_dive' => config('services.talos.public_links.avm_deep_dive'),
+                'patreon' => config('services.talos.public_links.patreon'),
+                'kofi' => config('services.talos.public_links.kofi'),
+            ],
         ])->withHeaders([
             'Cache-Control' => 'private, no-store, max-age=0, must-revalidate',
             'Pragma' => 'no-cache',

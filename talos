@@ -19,6 +19,8 @@ Usage:
   talos logs            Follow stack logs
   talos doctor          Check container-runtime and native development readiness
   talos doctor --repair Repair the repo-local native toolchain and dependencies
+  talos verify human-browser [options]
+                        Run the isolated TALOS human-browser verification lane
   talos open            Open the TALOS URL in the default browser
   talos fresh           Development-only reset of Compose volumes, then start
   talos help            Show this help
@@ -701,6 +703,10 @@ doctor() {
   return 1
 }
 
+verify_human_browser() {
+  bash "$ROOT_DIR/scripts/human-journey/run.sh" "$@"
+}
+
 args=()
 for arg in "$@"; do
   case "$arg" in
@@ -758,6 +764,14 @@ case "$cmd" in
     ;;
   doctor)
     doctor "${2:-}"
+    ;;
+  verify)
+    if [ "${2:-}" != "human-browser" ]; then
+      echo "Usage: talos verify human-browser [options]" >&2
+      exit 2
+    fi
+    shift 2
+    verify_human_browser "$@"
     ;;
   open)
     print_step "Opening TALOS workspace"

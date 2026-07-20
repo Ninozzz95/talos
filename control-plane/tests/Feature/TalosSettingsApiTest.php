@@ -639,6 +639,197 @@ JSON;
         $this->assertTrue($stored['sidebar_rail']['collapsed']);
     }
 
+    public function test_onboarding_preferences_accept_canonical_outcomes_and_version_bounds(): void
+    {
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => [
+                'onboarding' => [
+                    'intro_version' => 1,
+                    'intro_outcome' => 'completed',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.revision', 1)
+            ->assertJsonPath('data.preferences.onboarding.intro_version', 1)
+            ->assertJsonPath('data.preferences.onboarding.intro_outcome', 'completed');
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 1,
+            'preferences' => [
+                'onboarding' => [
+                    'intro_version' => 65535,
+                    'intro_outcome' => 'skipped',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.revision', 2)
+            ->assertJsonPath('data.preferences.onboarding.intro_version', 65535)
+            ->assertJsonPath('data.preferences.onboarding.intro_outcome', 'skipped');
+
+        $stored = TalosWorkspaceSetting::query()
+            ->where('user_id', $this->user->id)
+            ->firstOrFail();
+
+        $this->assertSame(2, (int) $stored->revision);
+        $this->assertSame([
+            'intro_version' => 65535,
+            'intro_outcome' => 'skipped',
+        ], $stored->preferences['onboarding']);
+    }
+
+    public function test_onboarding_preferences_reject_invalid_shapes_and_values_atomically(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'density' => 'compact',
+                'onboarding' => [
+                    'intro_version' => 1,
+                    'intro_outcome' => 'completed',
+                ],
+            ],
+            'revision' => 7,
+        ]);
+
+        $before = $this->storedPreferencesForCurrentUser();
+        $invalidCases = [
+            [['intro_version' => 0, 'intro_outcome' => 'completed'], 'preferences.onboarding.intro_version'],
+            [['intro_version' => 65536, 'intro_outcome' => 'completed'], 'preferences.onboarding.intro_version'],
+            [['intro_version' => '1', 'intro_outcome' => 'completed'], 'preferences.onboarding.intro_version'],
+            [['intro_version' => 1, 'intro_outcome' => 'dismissed'], 'preferences.onboarding.intro_outcome'],
+            [['intro_version' => 1, 'intro_outcome' => 1], 'preferences.onboarding.intro_outcome'],
+            [['intro_outcome' => 'completed'], 'preferences.onboarding.intro_version'],
+            [['intro_version' => 1], 'preferences.onboarding.intro_outcome'],
+            [[
+                'intro_version' => 1,
+                'intro_outcome' => 'completed',
+                'unexpected' => true,
+            ], 'preferences.onboarding.unexpected'],
+            [null, 'preferences.onboarding'],
+            ['completed', 'preferences.onboarding'],
+            [['completed'], 'preferences.onboarding'],
+            [(object) [], 'preferences.onboarding.intro_version'],
+        ];
+
+        foreach ($invalidCases as [$onboarding, $errorPath]) {
+            $this->patchJson('/api/talos/settings', [
+                'expected_revision' => 7,
+                'preferences' => ['onboarding' => $onboarding],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($errorPath);
+
+            $this->assertSame($before, $this->storedPreferencesForCurrentUser(), $errorPath);
+            $this->assertSame(
+                7,
+                (int) TalosWorkspaceSetting::query()->where('user_id', $this->user->id)->value('revision'),
+                $errorPath,
+            );
+        }
+    }
+
+    public function test_invalid_stored_onboarding_is_omitted_and_legacy_intro_seen_is_never_promoted(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [],
+            'revision' => 3,
+        ]);
+
+        $raw = <<<'JSON'
+{"density":"compact","intro_seen":true,"onboarding":[]}
+JSON;
+        DB::table('talos_workspace_settings')
+            ->where('user_id', $this->user->id)
+            ->update(['preferences' => $raw]);
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.revision', 3)
+            ->assertJsonPath('data.preferences.density', 'compact')
+            ->assertJsonPath('data.preferences.intro_seen', true)
+            ->assertJsonMissingPath('data.preferences.onboarding');
+
+        $this->assertSame($raw, $this->storedPreferencesForCurrentUser());
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 3,
+            'preferences' => ['density' => 'comfortable'],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.revision', 4)
+            ->assertJsonPath('data.preferences.density', 'comfortable')
+            ->assertJsonPath('data.preferences.intro_seen', true)
+            ->assertJsonMissingPath('data.preferences.onboarding');
+
+        $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertArrayNotHasKey('onboarding', $stored);
+        $this->assertTrue($stored['intro_seen']);
+    }
+
+    public function test_onboarding_revision_conflict_and_user_ownership_return_only_authoritative_snapshots(): void
+    {
+        $otherUser = User::factory()->create();
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser((int) $otherUser->id),
+            'user_id' => $otherUser->id,
+            'preferences' => [
+                'onboarding' => [
+                    'intro_version' => 42,
+                    'intro_outcome' => 'skipped',
+                ],
+            ],
+            'revision' => 3,
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => [
+                'onboarding' => [
+                    'intro_version' => 1,
+                    'intro_outcome' => 'completed',
+                ],
+            ],
+        ])->assertOk();
+
+        $this->patchJson('/api/talos/settings', [
+            'expected_revision' => 0,
+            'preferences' => [
+                'onboarding' => [
+                    'intro_version' => 2,
+                    'intro_outcome' => 'skipped',
+                ],
+            ],
+        ])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'TALOS_SETTINGS_REVISION_CONFLICT')
+            ->assertJsonPath('data.user_id', $this->user->id)
+            ->assertJsonPath('data.revision', 1)
+            ->assertJsonPath('data.preferences.onboarding.intro_version', 1)
+            ->assertJsonPath('data.preferences.onboarding.intro_outcome', 'completed')
+            ->assertJsonMissing(['intro_version' => 42]);
+
+        $this->actingAs($otherUser);
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.user_id', $otherUser->id)
+            ->assertJsonPath('data.revision', 3)
+            ->assertJsonPath('data.preferences.onboarding.intro_version', 42)
+            ->assertJsonPath('data.preferences.onboarding.intro_outcome', 'skipped')
+            ->assertJsonMissing(['intro_version' => 1]);
+
+        $this->actingAs($this->user);
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.onboarding.intro_version', 1)
+            ->assertJsonPath('data.preferences.onboarding.intro_outcome', 'completed');
+    }
+
     public function test_settings_persist_safe_theme_mode_separately_from_theme_preset(): void
     {
         foreach (['system', 'light', 'dark'] as $mode) {

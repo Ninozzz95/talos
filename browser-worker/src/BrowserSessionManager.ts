@@ -3,6 +3,7 @@ import { chromium, type Browser, type BrowserContext, type Download, type FileCh
 import { BrowserError } from "./BrowserErrors.js";
 import { installBrowserRequestPolicy } from "./BrowserUrlPolicy.js";
 import { BrowserEgressProxy } from "./BrowserEgressProxy.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import type { BrowserSnapshotResult } from "./BrowserSnapshot.js";
 import { BrowserHmiCommandLedger } from "./BrowserHmiCommandLedger.js";
 import type { Capabilities, CreateSessionInput, NavigateInput } from "./schemas.js";
@@ -69,8 +70,9 @@ export interface BrowserSessionManagerOptions {
   cleanupIntervalMs?: number;
   scheduleCleanup?: (callback: () => Promise<void>, intervalMs: number) => unknown;
   cancelCleanup?: (handle: unknown) => void;
-  proxyFactory?: () => BrowserEgressProxyLike;
+  proxyFactory?: (fixturePermit: BrowserTestFixturePermit) => BrowserEgressProxyLike;
   browserLauncher?: (options: BrowserLaunchOptions) => Promise<Browser>;
+  fixturePermit?: BrowserTestFixturePermit;
 }
 
 export interface BrowserSessionDisposedEvent {
@@ -104,8 +106,9 @@ export class BrowserSessionManager {
   private readonly now: () => number;
   private readonly cancelCleanup: (handle: unknown) => void;
   private cleanupHandle?: unknown;
-  private readonly proxyFactory: () => BrowserEgressProxyLike;
+  private readonly proxyFactory: (fixturePermit: BrowserTestFixturePermit) => BrowserEgressProxyLike;
   private readonly browserLauncher: (options: BrowserLaunchOptions) => Promise<Browser>;
+  private readonly fixturePermit: BrowserTestFixturePermit;
   private readonly sessionDisposedListeners = new Set<BrowserSessionDisposedListener>();
   private egressProxy?: BrowserEgressProxyLike;
 
@@ -113,7 +116,8 @@ export class BrowserSessionManager {
     this.browserFactory = options.browserFactory ?? BrowserSessionManager.defaultBrowserFactory;
     this.now = options.now ?? Date.now;
     this.cancelCleanup = options.cancelCleanup ?? ((handle) => clearInterval(handle as NodeJS.Timeout));
-    this.proxyFactory = options.proxyFactory ?? (() => new BrowserEgressProxy());
+    this.fixturePermit = options.fixturePermit ?? BrowserTestFixturePermit.disabled();
+    this.proxyFactory = options.proxyFactory ?? ((fixturePermit) => new BrowserEgressProxy({ fixturePermit }));
     this.browserLauncher = options.browserLauncher ?? ((launchOptions) => chromium.launch(launchOptions));
     const scheduleCleanup = options.scheduleCleanup ?? ((callback, intervalMs) => setInterval(() => void callback(), intervalMs));
     this.cleanupHandle = scheduleCleanup(() => this.pruneExpired(), options.cleanupIntervalMs ?? 1_000);
@@ -177,7 +181,7 @@ export class BrowserSessionManager {
       const context = await browser.newContext({ viewport: input.viewport, deviceScaleFactor: 1, acceptDownloads: false, serviceWorkers: "block" });
       try {
         this.assertAccepting();
-        await installBrowserRequestPolicy(context);
+        await installBrowserRequestPolicy(context, this.fixturePermit);
         this.assertAccepting();
         const page = await context.newPage();
         this.assertAccepting();
@@ -542,7 +546,7 @@ export class BrowserSessionManager {
       this.assertAccepting();
       return browser;
     }
-    const proxy = this.proxyFactory();
+    const proxy = this.proxyFactory(this.fixturePermit);
     this.egressProxy = proxy;
     const initialization = (async () => {
       try {

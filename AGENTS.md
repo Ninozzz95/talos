@@ -16,6 +16,21 @@ This file defines how agentic coding work must be done in this repository. It is
 - TALOS UI is the user-facing product surface. It must show real behavior from Laravel/core/validator APIs, not disconnected mock panels.
 - Kadmos CLI is the operator shell. It must stay usable for beginners while preserving expert commands.
 
+## Persistent Three-Lane Collaboration
+
+- Codex owns backend, core architecture, security, integration contracts,
+  orchestration harnesses and coordinated cross-stack gates.
+- Fable owns the TALOS desktop/web frontend: Vue, frontend TypeScript, CSS,
+  accessibility and UI-focused tests. A feature that needs Laravel changes is
+  split at the API boundary; Fable does not edit backend files assigned to
+  Codex.
+- Kimi owns TALOS mobile and any other explicitly isolated program lane. Mobile
+  work must not edit desktop/backend files unless a new file-level handoff is
+  recorded first.
+- Every concurrent task must declare an exact file ownership list. Full builds,
+  full Playwright, full Laravel suites, dependency installation and shared
+  server ports remain single-runner operations coordinated by Codex.
+
 ## Before Coding
 
 1. Identify the owned subsystem: `core`, `validator`, `control-plane`, `TALOS UI`, `docs`, `benchmarks`, or `security`.

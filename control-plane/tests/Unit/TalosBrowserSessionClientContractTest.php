@@ -1054,6 +1054,13 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $this->assertSame(700, $client->requests[3]['timeoutMilliseconds']);
     }
 
+    public function test_fake_inspection_fallback_reports_the_pinned_device_scale_factor(): void
+    {
+        $summary = (new FakeBrowserSessionClient)->inspect('owner-1', 'worker-without-create');
+
+        $this->assertSame(1, $summary['deviceScaleFactor'] ?? null);
+    }
+
     public function test_fake_hmi_v2_result_uses_the_canonical_snapshot_digest_and_stable_target(): void
     {
         $client = new FakeBrowserSessionClient;
