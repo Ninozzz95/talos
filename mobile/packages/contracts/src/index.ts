@@ -115,6 +115,9 @@ const EXECUTION_LOCATIONS: readonly MobileExecutionLocation[] = [
 
 const FEATURE_ID_PATTERN = /^[a-z][a-z0-9_]*$/
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+// C0 controls, DEL and C1 controls are never legitimate parity prose. Non-ASCII
+// human text (accents, symbols) is above this range and stays accepted.
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/
 const MAX_STRING_LENGTH = 4096
 const MAX_LIST_ITEMS = 256
 
@@ -140,6 +143,17 @@ const ENTRY_KEYS = [
     'test_ids',
     'desktop_revision',
 ]
+
+/** True only for a real Gregorian calendar date (shape already checked). */
+function isRealCalendarDate(value: string): boolean {
+    const year = Number(value.slice(0, 4))
+    const month = Number(value.slice(5, 7))
+    const day = Number(value.slice(8, 10))
+    if (year < 1970 || month < 1 || month > 12 || day < 1) return false
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+    const monthLengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return day <= monthLengths[month - 1]
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -175,6 +189,9 @@ function assertNoUnknownKeys(value: Record<string, unknown>, allowed: readonly s
 function assertNonEmptyString(value: unknown, field: string): asserts value is string {
     if (typeof value !== 'string' || value.trim() === '' || value.length > MAX_STRING_LENGTH) {
         throw new TalosContractError('invalid_shape', `${field} must be a bounded non-empty string`)
+    }
+    if (CONTROL_CHARS.test(value)) {
+        throw new TalosContractError('invalid_shape', `${field} must not contain control characters`)
     }
 }
 
@@ -333,6 +350,9 @@ function parseMobileFeatureParityPayload(value: unknown): MobileFeatureParityPay
     assertNonEmptyString(value.generated_at, 'payload.generated_at')
     if (!ISO_DATE_PATTERN.test(value.generated_at)) {
         throw new TalosContractError('invalid_shape', 'payload.generated_at must use YYYY-MM-DD')
+    }
+    if (!isRealCalendarDate(value.generated_at)) {
+        throw new TalosContractError('invalid_shape', 'payload.generated_at must be a real calendar date')
     }
     assertNonEmptyString(value.generated_by, 'payload.generated_by')
 

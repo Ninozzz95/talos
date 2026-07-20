@@ -127,6 +127,23 @@ describe('verify-parity-ledger', () => {
         }
     })
 
+    it('rejects impossible dates and control characters identically in both validators', () => {
+        for (const generated_at of ['2026-13-45', '2026-02-30', '0000-01-01']) {
+            assertBothReject(validLedger({ generated_at }), 'generated_at')
+        }
+        assertBothReject(validLedger({ features: [validEntry({ mobile_surface: 'Chat\u0000Screen' })] }))
+        assertBothReject(validLedger({ features: [validEntry({ desktop_contract: 'line1\nline2' })] }))
+
+        // Real calendar dates and accented human text remain accepted by both validators.
+        const accented = validLedger({ features: [validEntry({ mobile_surface: 'sovranità è qui' })] })
+        assert.equal(validateParityLedger(accented).ok, true)
+        assert.deepEqual(parseMobileFeatureParityContract(accented), accented)
+
+        const leapDay = validLedger({ generated_at: '2024-02-29' })
+        assert.equal(validateParityLedger(leapDay).ok, true)
+        assert.deepEqual(parseMobileFeatureParityContract(leapDay), leapDay)
+    })
+
     it('verifyParityLedgerFile reads and validates a ledger from disk', () => {
         const directory = mkdtempSync(join(tmpdir(), 'talos-parity-'))
         const file = join(directory, 'feature-parity.json')

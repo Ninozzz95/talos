@@ -151,4 +151,39 @@ describe('talos mobile contracts conformance', () => {
     it('parses the complete canonical parity contract', () => {
         assert.deepEqual(parseMobileFeatureParityContract(validContract()), validContract())
     })
+
+    it('rejects impossible calendar dates and control characters, keeping real human text', () => {
+        for (const generated_at of ['2026-13-45', '2026-02-30', '2026-00-10', '2026-04-31', '0000-01-01']) {
+            assert.throws(
+                () => parseMobileFeatureParityContract({
+                    ...validContract(),
+                    payload: { ...validContract().payload, generated_at },
+                }),
+                (error) => error instanceof TalosContractError
+                    && error.code === 'invalid_shape'
+                    && error.message.includes('generated_at'),
+                `impossible date ${generated_at} must fail closed`,
+            )
+        }
+        // Real calendar dates, including a leap day, stay accepted verbatim.
+        for (const generated_at of ['2026-07-18', '2024-02-29', '2026-12-31']) {
+            const contract = { ...validContract(), payload: { ...validContract().payload, generated_at } }
+            assert.deepEqual(parseMobileFeatureParityContract(contract), contract)
+        }
+        // Control characters in any bounded string fail closed in both parsers.
+        for (const control of ['\u0000', '\u001b', '\n', '\u007f', '\u009f']) {
+            assert.throws(
+                () => parseMobileFeatureParityEntry({ ...validEntry(), mobile_surface: `Chat${control}Screen` }),
+                (error) => error instanceof TalosContractError && error.code === 'invalid_shape',
+                `control char ${JSON.stringify(control)} must fail closed`,
+            )
+            assert.throws(
+                () => parseMobileFeatureParityEntry({ ...validEntry(), test_ids: [`mobile/tests/x${control}.ts`] }),
+                (error) => error instanceof TalosContractError && error.code === 'invalid_shape',
+            )
+        }
+        // Non-ASCII human text (accents, symbols) is legitimate parity prose and stays accepted.
+        const accented = parseMobileFeatureParityEntry({ ...validEntry(), mobile_surface: 'sovranità è qui ✓' })
+        assert.equal(accented.mobile_surface, 'sovranità è qui ✓')
+    })
 })

@@ -204,7 +204,7 @@ function readExactRecord(value: unknown, expectedKeys: readonly string[], path: 
 
 function parseMetadata(value: unknown, path: string): string {
     if (typeof value !== 'string'
-        || value.length === 0
+        || value.trim().length === 0
         || value.length > MAX_METADATA_LENGTH
         || !SAFE_METADATA.test(value)) {
         throw new TalosDesignTokenError('invalid_shape', `${path} must be bounded printable ASCII metadata`)
