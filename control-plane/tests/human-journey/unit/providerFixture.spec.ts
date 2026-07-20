@@ -493,6 +493,17 @@ test('HJ-PROVIDER-004 emits only declared navigate snapshot read screenshot and 
     }
 })
 
+test('HJ-PROVIDER-015 recognizes the hurried screenshot shorthand and emits a screenshot call', async ({ request: api }) => {
+    const provider = await startProvider()
+    try {
+        const shorthandMessages = [{ role: 'user', content: productionPrompt([], 'screen?') }]
+        const shorthand = await responseJson(await postJson(api, provider.chatCompletionsUrl, request(shorthandMessages)))
+        expect(toolCallName(shorthand)).toBe('browser_take_screenshot')
+    } finally {
+        await provider.close()
+    }
+})
+
 test('HJ-PROVIDER-005/HJ-PROVIDER-006 withholds grounded and screenshot claims until durable evidence exists', async ({ request: api }) => {
     const provider = await startProvider()
     try {
