@@ -270,7 +270,7 @@ function decide(request) {
         ?? (isContextualRetry(userText)
             ? latestPriorUserHttpUrl(request.messages, userEnvelope.priorUserTurns)
             : null)
-    const wantsScreenshot = /\b(?:screenshot|schermata|cattura)\b/i.test(userText)
+    const wantsScreenshot = /\b(?:screen(?:shot)?|schermata|cattura)\b/i.test(userText)
     const wantsClick = /\b(?:cookie|modale|nascond|accett|clic|click)\w*/i.test(userText)
     const wantsRead = /\b(?:leggi|read)\b/i.test(userText)
 
