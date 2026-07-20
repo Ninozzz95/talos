@@ -32,6 +32,7 @@ final class TalosProviderModelCatalogAdapterTest extends TestCase
             canonicalSlug: 'openai/gpt-4.1-mini',
             localDigest: null,
             metadata: ['family' => 'gpt-4.1'],
+            effortLevels: ['high', 'low', 'medium'],
         );
 
         self::assertSame([
@@ -54,8 +55,44 @@ final class TalosProviderModelCatalogAdapterTest extends TestCase
             'lifecycle' => 'stable',
             'canonical_slug' => 'openai/gpt-4.1-mini',
             'local_digest' => null,
+            'effort_levels' => ['low', 'medium', 'high'],
             'metadata' => ['family' => 'gpt-4.1'],
         ], $item->toArray());
+    }
+
+    public function test_catalog_item_effort_levels_default_to_null(): void
+    {
+        $item = new TalosProviderModelCatalogItem(
+            id: 'x', displayName: 'x', provider: 'openai', ownedBy: null,
+            chatCompatibility: 'unknown', capabilities: [], contextWindow: null,
+            maxOutputTokens: null, lifecycle: 'unknown', canonicalSlug: null,
+            localDigest: null, metadata: [],
+        );
+
+        self::assertNull($item->toArray()['effort_levels']);
+    }
+
+    public function test_catalog_item_rejects_an_unknown_effort_level(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        new TalosProviderModelCatalogItem(
+            id: 'x', displayName: 'x', provider: 'openai', ownedBy: null,
+            chatCompatibility: 'unknown', capabilities: [], contextWindow: null,
+            maxOutputTokens: null, lifecycle: 'unknown', canonicalSlug: null,
+            localDigest: null, metadata: [], effortLevels: ['ultra'],
+        );
+    }
+
+    public function test_catalog_item_maps_an_empty_effort_list_to_null(): void
+    {
+        $item = new TalosProviderModelCatalogItem(
+            id: 'x', displayName: 'x', provider: 'openai', ownedBy: null,
+            chatCompatibility: 'unknown', capabilities: [], contextWindow: null,
+            maxOutputTokens: null, lifecycle: 'unknown', canonicalSlug: null,
+            localDigest: null, metadata: [], effortLevels: [],
+        );
+
+        self::assertNull($item->toArray()['effort_levels']);
     }
 
     public function test_catalog_item_rejects_invariant_violations(): void
