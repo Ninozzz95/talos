@@ -99,6 +99,8 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::get('/model-profiles', [TalosModelProfileController::class, 'index']);
         Route::post('/model-profiles', [TalosModelProfileController::class, 'store']);
         Route::post('/model-profiles/probe-draft', [TalosModelProfileController::class, 'probeDraft']);
+        Route::post('/model-profiles/discover-draft', [TalosModelProfileController::class, 'discoverDraft']);
+        Route::get('/model-profiles/{profile}/models', [TalosModelProfileController::class, 'catalog']);
         Route::get('/model-profiles/{profile}', [TalosModelProfileController::class, 'show']);
         Route::patch('/model-profiles/{profile}', [TalosModelProfileController::class, 'update']);
         Route::delete('/model-profiles/{profile}', [TalosModelProfileController::class, 'destroy']);

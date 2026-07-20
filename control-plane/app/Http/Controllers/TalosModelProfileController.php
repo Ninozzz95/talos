@@ -6,8 +6,10 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosAuditEvent;
 use App\Models\TalosModelProfile;
+use App\Services\Models\Catalog\TalosProviderModelCatalogException;
 use App\Services\Models\TalosModelProviderCatalog;
 use App\Services\Models\TalosModelProbeService;
+use App\Services\Models\TalosProviderModelCatalogService;
 use App\Services\Security\PublicHttpUrlPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -102,6 +104,39 @@ final class TalosModelProfileController extends Controller
         $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
 
         return response()->json(['data' => $probeService->probeDraft($validated)]);
+    }
+
+    public function discoverDraft(Request $request, TalosProviderModelCatalogService $catalogService): JsonResponse
+    {
+        $validated = $request->validate([
+            'provider' => ['required', 'string', Rule::in(TalosModelProviderCatalog::ids())],
+            'secret' => ['sometimes', 'nullable', 'string', 'min:1', 'max:4096'],
+            'base_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+        ]);
+
+        $validated = TalosModelProviderCatalog::applyCreateDefaults($validated);
+        $this->assertSafeBaseUrl((string) $validated['provider'], $validated['base_url'] ?? null);
+
+        try {
+            $envelope = $catalogService->discoverDraft($validated);
+        } catch (TalosProviderModelCatalogException $exception) {
+            return response()->json(['error' => $exception->toApiArray()], $exception->httpStatus());
+        }
+
+        return response()->json(['data' => $envelope]);
+    }
+
+    public function catalog(Request $request, TalosModelProfile $profile, TalosProviderModelCatalogService $catalogService): JsonResponse
+    {
+        $this->abortUnlessOwnedByCurrentUser($request, $profile);
+
+        try {
+            $envelope = $catalogService->discoverForProfile($profile);
+        } catch (TalosProviderModelCatalogException $exception) {
+            return response()->json(['error' => $exception->toApiArray()], $exception->httpStatus());
+        }
+
+        return response()->json(['data' => $envelope]);
     }
 
     public function show(Request $request, TalosModelProfile $profile): JsonResponse
