@@ -4,6 +4,7 @@ import { captureSnapshot } from "./BrowserSnapshot.js";
 import { captureCanonicalBrowserFrame } from "./BrowserFrameCapture.js";
 import { BrowserSessionManager, type BrowserSession } from "./BrowserSessionManager.js";
 import { BrowserFileStagingStore, type StagedBrowserFile } from "./BrowserFileStagingStore.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import {
   BrowserToolCallSchema,
   BrowserToolResultSchema,
@@ -38,6 +39,7 @@ export class BrowserToolDispatcher {
   constructor(
     private readonly sessions: BrowserSessionManager,
     private readonly fileStaging: BrowserFileStagingStore = new BrowserFileStagingStore(),
+    private readonly fixturePermit: BrowserTestFixturePermit = BrowserTestFixturePermit.disabled(),
   ) {}
 
   async call(sessionId: string, rawCall: unknown, context: BrowserToolRequestContext = {}): Promise<CanonicalToolResult> {
@@ -136,7 +138,7 @@ export class BrowserToolDispatcher {
     const parsed = NavigateToolArgumentsSchema.safeParse(call.arguments);
     if (!parsed.success) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_INVALID_TOOL_ARGUMENTS", "Invalid browser_navigate arguments.");
     this.sessions.assertState(session.sessionId, parsed.data.state_version);
-    await assertAllowedBrowserUrl(parsed.data.url);
+    await assertAllowedBrowserUrl(parsed.data.url, this.fixturePermit);
     await this.sessions.navigate(session.sessionId, {
       url: parsed.data.url,
       waitUntil: parsed.data.waitUntil ?? "domcontentloaded",

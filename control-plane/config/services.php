@@ -49,6 +49,11 @@ return [
     ],
 
     'talos' => [
+        'public_links' => [
+            'avm_deep_dive' => env('TALOS_AVM_DEEP_DIVE_URL'),
+            'patreon' => env('TALOS_PATREON_URL'),
+            'kofi' => env('TALOS_KOFI_URL'),
+        ],
         'browser' => [
             'client_driver' => env('TALOS_BROWSER_CLIENT_DRIVER'),
             'worker_url' => env('TALOS_BROWSER_WORKER_URL'),
@@ -59,6 +64,7 @@ return [
             'dev_evidence' => env('TALOS_DEV_BROWSER_EVIDENCE', false),
             'hmi_min_mode' => env('TALOS_BROWSER_HMI_MIN_MODE'),
             'legacy_writes_enabled' => env('TALOS_BROWSER_LEGACY_WRITES_ENABLED', true),
+            'test_fixture_origin' => env('TALOS_BROWSER_TEST_FIXTURE_ORIGIN'),
         ],
         'web' => [
             'search' => [

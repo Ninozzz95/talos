@@ -428,6 +428,55 @@ describe('POST /chat', () => {
     expect(response.json().received_tool_context.tools[0].name).toBe('HTTP_REQUEST');
   });
 
+  it('propagates its bound validator origin to the core chat process', async () => {
+    const boundServer = buildServer();
+    const previousValidatorUrl = process.env.KADMOS_VALIDATOR_URL;
+    const previousValidatorHealthUrl = process.env.KADMOS_VALIDATOR_HEALTH_URL;
+
+    process.env.PHP_BIN = process.execPath;
+    process.env.KADMOS_CHAT_SCRIPT = resolve(__dirname, 'fixtures/chat-validator-env.mjs');
+    delete process.env.KADMOS_VALIDATOR_URL;
+    delete process.env.KADMOS_VALIDATOR_HEALTH_URL;
+
+    try {
+      await boundServer.listen({ host: '127.0.0.1', port: 0 });
+      const address = boundServer.server.address();
+      expect(address).not.toBeNull();
+      expect(typeof address).toBe('object');
+      if (address === null || typeof address === 'string') throw new Error('Expected an IP listener.');
+
+      const response = await boundServer.inject({
+        method: 'POST',
+        url: '/chat',
+        payload: { message: 'Verify the bound validator callback.' },
+      });
+
+      const origin = `http://127.0.0.1:${address.port}`;
+      expect(response.json()).toEqual({
+        validator_url: `${origin}/validate`,
+        validator_health_url: `${origin}/health`,
+      });
+
+      process.env.KADMOS_VALIDATOR_URL = 'http://validator.internal:7300/custom-validate';
+      process.env.KADMOS_VALIDATOR_HEALTH_URL = 'http://validator.internal:7300/custom-health';
+      const overridden = await boundServer.inject({
+        method: 'POST',
+        url: '/chat',
+        payload: { message: 'Preserve explicit validator endpoints.' },
+      });
+      expect(overridden.json()).toEqual({
+        validator_url: 'http://validator.internal:7300/custom-validate',
+        validator_health_url: 'http://validator.internal:7300/custom-health',
+      });
+    } finally {
+      await boundServer.close();
+      if (previousValidatorUrl === undefined) delete process.env.KADMOS_VALIDATOR_URL;
+      else process.env.KADMOS_VALIDATOR_URL = previousValidatorUrl;
+      if (previousValidatorHealthUrl === undefined) delete process.env.KADMOS_VALIDATOR_HEALTH_URL;
+      else process.env.KADMOS_VALIDATOR_HEALTH_URL = previousValidatorHealthUrl;
+    }
+  });
+
   it('returns structured core process errors instead of generic chat error', async () => {
     process.env.PHP_BIN = process.execPath;
     process.env.KADMOS_CHAT_SCRIPT = resolve(__dirname, 'fixtures/chat-stderr-fail.mjs');

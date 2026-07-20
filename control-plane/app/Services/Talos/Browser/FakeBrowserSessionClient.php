@@ -260,6 +260,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'status' => 'ready',
             'mode' => 'read_only',
             'viewport' => ['width' => 1280, 'height' => 800],
+            'deviceScaleFactor' => 1,
             'capabilities' => [
                 'navigation' => true,
                 'screenshots' => true,

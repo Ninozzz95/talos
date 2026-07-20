@@ -43,6 +43,16 @@ final class TalosWorkspaceSetting extends Model
         'collapsed' => true,
     ];
 
+    private const ONBOARDING_KEYS = [
+        'intro_version' => true,
+        'intro_outcome' => true,
+    ];
+
+    private const ONBOARDING_OUTCOME_VALUES = [
+        'completed' => true,
+        'skipped' => true,
+    ];
+
     private const THEME_COLOR_KEYS = [
         'background' => true,
         'panel' => true,
@@ -505,6 +515,15 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'onboarding') {
+                $onboarding = self::sanitizeOnboardingValue($value, false);
+                if ($onboarding !== null) {
+                    $safe[$key] = $onboarding;
+                }
+
+                continue;
+            }
+
             if (is_string($key) && self::isThemePreferenceKeyCandidate($key)) {
                 continue;
             }
@@ -512,7 +531,10 @@ final class TalosWorkspaceSetting extends Model
             $safe[$key] = is_array($value) ? self::sanitizePreferences($value) : $value;
         }
 
-        return self::applyRawSidebarRailShape($safe, $rawPreferencesJson);
+        return self::applyRawOnboardingShape(
+            self::applyRawSidebarRailShape($safe, $rawPreferencesJson),
+            $rawPreferencesJson,
+        );
     }
 
     /**
@@ -554,6 +576,74 @@ final class TalosWorkspaceSetting extends Model
     public static function validateRawSidebarRailForWrite(mixed $rail): array
     {
         return self::validateSidebarRailValueForWrite($rail, true);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateOnboardingPreferencesForWrite(mixed $preferences): array
+    {
+        if (! is_array($preferences) || ! array_key_exists('onboarding', $preferences)) {
+            return [];
+        }
+
+        return self::validateOnboardingValueForWrite($preferences['onboarding'], false);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateRawOnboardingForWrite(mixed $onboarding): array
+    {
+        return self::validateOnboardingValueForWrite($onboarding, true);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private static function validateOnboardingValueForWrite(mixed $onboarding, bool $rawJson): array
+    {
+        $path = 'preferences.onboarding';
+        if ($rawJson) {
+            if (! $onboarding instanceof stdClass || $onboarding::class !== stdClass::class) {
+                return [$path => ['Onboarding preferences must be an object.']];
+            }
+
+            $onboarding = get_object_vars($onboarding);
+        } elseif (! is_array($onboarding) || array_is_list($onboarding)) {
+            return [$path => ['Onboarding preferences must be an object.']];
+        }
+
+        $errors = [];
+        foreach ($onboarding as $key => $_value) {
+            if (! is_string($key) || ! isset(self::ONBOARDING_KEYS[$key])) {
+                $errorPath = is_string($key) ? "{$path}.{$key}" : $path;
+                $errors[$errorPath] = ['Unknown onboarding preference key.'];
+            }
+        }
+
+        foreach (self::ONBOARDING_KEYS as $key => $_allowed) {
+            if (! array_key_exists($key, $onboarding)) {
+                $errors["{$path}.{$key}"] = ['Onboarding preference is required.'];
+            }
+        }
+
+        if (array_key_exists('intro_version', $onboarding)
+            && (! is_int($onboarding['intro_version'])
+                || $onboarding['intro_version'] < 1
+                || $onboarding['intro_version'] > 65535)
+        ) {
+            $errors["{$path}.intro_version"] = ['Intro version must be an integer from 1 through 65535.'];
+        }
+
+        if (array_key_exists('intro_outcome', $onboarding)
+            && (! is_string($onboarding['intro_outcome'])
+                || ! isset(self::ONBOARDING_OUTCOME_VALUES[$onboarding['intro_outcome']]))
+        ) {
+            $errors["{$path}.intro_outcome"] = ['Intro outcome must be completed or skipped.'];
+        }
+
+        return $errors;
     }
 
     /**
@@ -1264,6 +1354,39 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
+     * @param  array<string, mixed>  $safe
+     * @return array<string, mixed>
+     */
+    private static function applyRawOnboardingShape(array $safe, mixed $rawPreferencesJson): array
+    {
+        if (! is_string($rawPreferencesJson) || $rawPreferencesJson === '') {
+            return $safe;
+        }
+
+        try {
+            $rawPreferences = json_decode($rawPreferencesJson, false, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return $safe;
+        }
+
+        if (! $rawPreferences instanceof stdClass
+            || $rawPreferences::class !== stdClass::class
+            || ! property_exists($rawPreferences, 'onboarding')
+        ) {
+            return $safe;
+        }
+
+        $onboarding = self::sanitizeOnboardingValue($rawPreferences->onboarding, true);
+        if ($onboarding === null) {
+            unset($safe['onboarding']);
+        } else {
+            $safe['onboarding'] = $onboarding;
+        }
+
+        return $safe;
+    }
+
+    /**
      * @return array{order?: array<int, string>, collapsed_groups?: array<int, string>, collapsed?: bool}|null
      */
     private static function sanitizeSidebarRailValue(mixed $value, bool $rawJson): ?array
@@ -1326,6 +1449,40 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return $safe === [] ? null : $safe;
+    }
+
+    /**
+     * @return array{intro_version: int, intro_outcome: string}|null
+     */
+    private static function sanitizeOnboardingValue(mixed $value, bool $rawJson): ?array
+    {
+        if ($rawJson) {
+            if (! $value instanceof stdClass || $value::class !== stdClass::class) {
+                return null;
+            }
+
+            $value = get_object_vars($value);
+        } elseif (! is_array($value) || array_is_list($value)) {
+            return null;
+        }
+
+        if (count($value) !== count(self::ONBOARDING_KEYS)
+            || array_diff_key($value, self::ONBOARDING_KEYS) !== []
+            || ! array_key_exists('intro_version', $value)
+            || ! array_key_exists('intro_outcome', $value)
+            || ! is_int($value['intro_version'])
+            || $value['intro_version'] < 1
+            || $value['intro_version'] > 65535
+            || ! is_string($value['intro_outcome'])
+            || ! isset(self::ONBOARDING_OUTCOME_VALUES[$value['intro_outcome']])
+        ) {
+            return null;
+        }
+
+        return [
+            'intro_version' => $value['intro_version'],
+            'intro_outcome' => $value['intro_outcome'],
+        ];
     }
 
     /**

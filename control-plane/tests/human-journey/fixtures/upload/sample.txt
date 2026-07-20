@@ -1,0 +1,1 @@
+TALOS deterministic upload fixture.

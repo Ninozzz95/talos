@@ -78,11 +78,15 @@ final class TalosSettingsController extends Controller
                 $sidebarRailErrors = $rawPreferenceValues['sidebar_rail']['present']
                     ? TalosWorkspaceSetting::validateRawSidebarRailForWrite($rawPreferenceValues['sidebar_rail']['value'])
                     : TalosWorkspaceSetting::validateSidebarRailPreferencesForWrite($validated['preferences']);
+                $onboardingErrors = $rawPreferenceValues['onboarding']['present']
+                    ? TalosWorkspaceSetting::validateRawOnboardingForWrite($rawPreferenceValues['onboarding']['value'])
+                    : TalosWorkspaceSetting::validateOnboardingPreferencesForWrite($validated['preferences']);
                 $themeErrors = array_replace_recursive(
                     $themeErrors,
                     TalosThemeContrast::validatePreferences($effectivePreferences),
                     TalosWorkspaceSetting::validateBrowserHmiPreferencesForWrite($validated['preferences']),
                     $sidebarRailErrors,
+                    $onboardingErrors,
                 );
                 if ($themeErrors !== []) {
                     throw ValidationException::withMessages($themeErrors);
@@ -220,7 +224,8 @@ final class TalosSettingsController extends Controller
      * @return array{
      *     empty: bool,
      *     theme_motion_v6: array{present: bool, value: mixed},
-     *     sidebar_rail: array{present: bool, value: mixed}
+     *     sidebar_rail: array{present: bool, value: mixed},
+     *     onboarding: array{present: bool, value: mixed}
      * }
      */
     private function extractRawPreferenceValues(Request $request): array
@@ -231,6 +236,7 @@ final class TalosSettingsController extends Controller
                 'empty' => false,
                 'theme_motion_v6' => $missing,
                 'sidebar_rail' => $missing,
+                'onboarding' => $missing,
             ];
         }
 
@@ -240,6 +246,7 @@ final class TalosSettingsController extends Controller
                 'empty' => true,
                 'theme_motion_v6' => $missing,
                 'sidebar_rail' => $missing,
+                'onboarding' => $missing,
             ];
         }
 
@@ -255,6 +262,7 @@ final class TalosSettingsController extends Controller
 
         $themeMotionV6 = $missing;
         $sidebarRail = $missing;
+        $onboarding = $missing;
         if ($root instanceof stdClass
             && $root::class === stdClass::class
             && property_exists($root, 'preferences')
@@ -268,12 +276,17 @@ final class TalosSettingsController extends Controller
             if (property_exists($root->preferences, 'sidebar_rail')) {
                 $sidebarRail = ['present' => true, 'value' => $root->preferences->sidebar_rail];
             }
+
+            if (property_exists($root->preferences, 'onboarding')) {
+                $onboarding = ['present' => true, 'value' => $root->preferences->onboarding];
+            }
         }
 
         return [
             'empty' => false,
             'theme_motion_v6' => $themeMotionV6,
             'sidebar_rail' => $sidebarRail,
+            'onboarding' => $onboarding,
         ];
     }
 

@@ -271,7 +271,7 @@ async function handleToolApprovalDecision(approval: TalosPendingToolApproval, de
     try {
         const response = await decideToolApproval(approval, decision)
         if (activeSession.value?.id !== sessionId) return
-        recordBrowserActivities(response.browser_activities)
+        await recordBrowserActivities(response.browser_activities)
         const assistantMessage = await persistAssistantMessage(sessionId, response, createMessage)
         if (assistantMessage) acceptPersistedMessage(assistantMessage)
         setCommandFeedback(decision === 'approve'

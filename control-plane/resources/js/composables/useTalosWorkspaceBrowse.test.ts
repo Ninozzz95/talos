@@ -316,6 +316,7 @@ describe('useTalosWorkspaceBrowse async chat isolation', () => {
             }
             if (url === '/api/talos/browser/sessions' && options?.method === 'POST') return { data: newSession } as never
             if (url === `/api/talos/browser/sessions/${oldSession.id}`) return { data: oldSession } as never
+            if (url === `/api/talos/browser/sessions/${newSession.id}`) return { data: newSession } as never
             if (url === `/api/talos/browser/sessions/${newSession.id}/events`) return { data: [] } as never
             if (url === `/api/talos/browser/sessions/${oldSession.id}/events`) return { data: [] } as never
             throw new Error(`Unexpected request: ${url}`)
@@ -323,7 +324,7 @@ describe('useTalosWorkspaceBrowse async chat isolation', () => {
         const workspace = useTalosWorkspaceBrowse(false, ref<string | null>(null), ref('chat-a'), async () => 'chat-a')
 
         await workspace.handleEnableBrowse()
-        workspace.recordBrowserActivities([{
+        await workspace.recordBrowserActivities([{
             id: 'activity-old', operation: 'read', status: 'succeeded', label: 'Old read',
             run_id: null, browser_session_id: oldSession.id, artifact_ids: [], occurred_at: oldSession.updated_at,
         }])
@@ -331,12 +332,153 @@ describe('useTalosWorkspaceBrowse async chat isolation', () => {
 
         await workspace.handleRestartBrowse()
 
-        workspace.recordBrowserActivities([{
+        await workspace.recordBrowserActivities([{
             id: 'activity-new', operation: 'read', status: 'succeeded', label: 'New read',
             run_id: null, browser_session_id: newSession.id, artifact_ids: [], occurred_at: newSession.updated_at,
         }])
         expect(workspace.activeBrowserSession.value?.id).toBe(newSession.id)
         expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).toEqual(expect.arrayContaining(['activity-new']))
         expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).not.toContain('activity-old')
+    })
+})
+
+describe('HJ9-042 browser session reconciliation after chat tool activity', () => {
+    const reconciliationSession: TalosBrowserSession = {
+        id: 'browser-hj9',
+        talos_session_id: 'chat-a',
+        status: 'active',
+        mode: 'read_only',
+        capabilities: ['navigate', 'screenshot', 'snapshot'],
+        current_url: 'https://example.com/start',
+        current_title: 'Start page',
+        last_screenshot_artifact_id: null,
+        last_snapshot_artifact_id: null,
+        created_at: '2026-07-20T10:00:00Z',
+        updated_at: '2026-07-20T10:00:00Z',
+    }
+
+    function screenshotActivity(browserSessionId: string) {
+        return {
+            id: 'activity-chat-screenshot',
+            operation: 'screenshot',
+            status: 'succeeded',
+            label: 'Screenshot',
+            run_id: 'run-hj9',
+            browser_session_id: browserSessionId,
+            artifact_ids: ['artifact-shot-1'],
+            occurred_at: '2026-07-20T10:00:05Z',
+        }
+    }
+
+    it('HJREG-003 refreshes active Browser session after an owned chat screenshot activity', async () => {
+        const refreshedSession: TalosBrowserSession = {
+            ...reconciliationSession,
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'],
+            last_screenshot_artifact_id: 'artifact-shot-1',
+            updated_at: '2026-07-20T10:00:06Z',
+        }
+        let sessionReads = 0
+        let releaseRefresh: (() => void) | null = null
+        talosFetchMock.mockReset()
+        talosFetchMock.mockImplementation(async (url) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [reconciliationSession] } as never
+            if (url === `/api/talos/browser/sessions/${reconciliationSession.id}`) {
+                sessionReads += 1
+                if (sessionReads === 1) return { data: reconciliationSession } as never
+                return await new Promise((resolve) => {
+                    releaseRefresh = () => resolve({ data: refreshedSession })
+                }) as never
+            }
+            if (url === `/api/talos/browser/sessions/${reconciliationSession.id}/events`) return { data: [] } as never
+            throw new Error(`Unexpected request: ${url}`)
+        })
+        const workspace = useTalosWorkspaceBrowse(false, ref<string | null>(null), ref('chat-a'), async () => 'chat-a')
+
+        await workspace.handleEnableBrowse()
+        expect(workspace.activeBrowserSession.value?.last_screenshot_artifact_id).toBeNull()
+
+        const pending = workspace.recordBrowserActivities([screenshotActivity(reconciliationSession.id)])
+        expect(pending).toBeInstanceOf(Promise)
+        let settled = false
+        void Promise.resolve(pending).then(() => { settled = true })
+
+        await vi.waitFor(() => expect(sessionReads).toBe(2))
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(settled).toBe(false)
+        expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).toContain('activity-chat-screenshot')
+
+        releaseRefresh?.()
+        await pending
+
+        expect(workspace.activeBrowserSession.value?.last_screenshot_artifact_id).toBe('artifact-shot-1')
+        expect(workspace.activeBrowserSession.value?.capabilities).toContain('interact')
+        expect(sessionReads).toBe(2)
+    })
+
+    it('rejects foreign and superseded chat activity refreshes', async () => {
+        let staleReads = 0
+        let releaseStale: (() => void) | null = null
+        talosFetchMock.mockReset()
+        talosFetchMock.mockImplementation(async (url) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [reconciliationSession] } as never
+            if (url === `/api/talos/browser/sessions/${reconciliationSession.id}`) {
+                staleReads += 1
+                if (staleReads === 1) return { data: reconciliationSession } as never
+                return await new Promise((resolve) => {
+                    releaseStale = () => resolve({ data: { ...reconciliationSession, current_url: 'https://stale.example/late' } })
+                }) as never
+            }
+            if (url === `/api/talos/browser/sessions/${reconciliationSession.id}/events`) return { data: [] } as never
+            throw new Error(`Unexpected request: ${url}`)
+        })
+        const activeTalosSessionId = ref<string | null>('chat-a')
+        const workspace = useTalosWorkspaceBrowse(false, ref<string | null>(null), activeTalosSessionId, async () => activeTalosSessionId.value ?? 'chat-a')
+
+        await workspace.handleEnableBrowse()
+        const requestsAfterEnable = talosFetchMock.mock.calls.length
+
+        await workspace.recordBrowserActivities([screenshotActivity('browser-foreign')])
+        expect(talosFetchMock.mock.calls.length).toBe(requestsAfterEnable)
+        expect(workspace.visibleBrowserActivities.value).toEqual([])
+
+        const superseded = workspace.recordBrowserActivities([screenshotActivity(reconciliationSession.id)])
+        await vi.waitFor(() => expect(releaseStale).not.toBeNull())
+        activeTalosSessionId.value = 'chat-b'
+        releaseStale?.()
+        await expect(superseded).resolves.toBeUndefined()
+
+        expect(workspace.activeBrowserSession.value).toBeNull()
+        expect(workspace.visibleBrowserActivities.value).toEqual([])
+    })
+
+    it('records nothing and issues no request for an ordinary chat without browser activity', async () => {
+        talosFetchMock.mockReset()
+        talosFetchMock.mockImplementation(async (url) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [reconciliationSession] } as never
+            if (url === `/api/talos/browser/sessions/${reconciliationSession.id}`) return { data: reconciliationSession } as never
+            if (url === `/api/talos/browser/sessions/${reconciliationSession.id}/events`) return { data: [] } as never
+            throw new Error(`Unexpected request: ${url}`)
+        })
+        const workspace = useTalosWorkspaceBrowse(false, ref<string | null>(null), ref('chat-a'), async () => 'chat-a')
+
+        await workspace.handleEnableBrowse()
+        const requestsAfterEnable = talosFetchMock.mock.calls.length
+
+        await workspace.recordBrowserActivities(undefined)
+        await workspace.recordBrowserActivities([])
+        await workspace.recordBrowserActivities([{
+            id: 'activity-session-start',
+            operation: 'session_start',
+            status: 'succeeded',
+            label: 'Session started',
+            run_id: null,
+            browser_session_id: reconciliationSession.id,
+            artifact_ids: [],
+            occurred_at: '2026-07-20T10:00:01Z',
+        }])
+
+        expect(talosFetchMock.mock.calls.length).toBe(requestsAfterEnable)
+        expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).toEqual(['activity-session-start'])
     })
 })

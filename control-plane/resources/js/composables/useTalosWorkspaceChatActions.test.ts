@@ -225,6 +225,88 @@ describe('useTalosWorkspaceChatActions', () => {
         expect(deps.recordPendingToolApprovals).toHaveBeenCalledWith(pending)
     })
 
+    it('awaits Browser state reconciliation before completing a tool-backed reply', async () => {
+        const deps = dependencies()
+        const activity = {
+            id: 'browser-command-await',
+            operation: 'screenshot',
+            status: 'succeeded',
+            label: 'Screenshot',
+            run_id: 'run-await',
+            browser_session_id: 'browser-1',
+            artifact_ids: ['artifact-await'],
+            occurred_at: '2026-07-20T10:00:01Z',
+        }
+        const assistant: TalosMessage = {
+            id: 'assistant-await',
+            session_id: session.id,
+            role: 'assistant',
+            content: 'Screenshot captured.',
+            run_id: 'run-await',
+            metadata: { browser_activities: [activity] },
+            created_at: '2026-07-20T10:00:01Z',
+        }
+        deps.sendPersistentChat.mockResolvedValue({ assistantMessage: assistant } as never)
+        let releaseReconciliation: (() => void) | null = null
+        deps.recordBrowserActivities = vi.fn(() => new Promise<void>((resolve) => {
+            releaseReconciliation = resolve
+        }))
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        let settled: boolean | null = null
+        const sendPromise = actions.sendChatText('Capture a screenshot.').then((result) => {
+            settled = result
+            return result
+        })
+
+        await vi.waitFor(() => expect(deps.recordBrowserActivities).toHaveBeenCalledWith([activity]))
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(settled).toBeNull()
+        expect(deps.acceptPersistedMessage).toHaveBeenCalledWith(assistant)
+
+        releaseReconciliation?.()
+        await expect(sendPromise).resolves.toBe(true)
+        expect(settled).toBe(true)
+        expect(deps.uiError.value).toBeNull()
+    })
+
+    it('surfaces a reconciliation failure as an actionable error while keeping the accepted assistant reply', async () => {
+        const deps = dependencies()
+        const assistant: TalosMessage = {
+            id: 'assistant-retained',
+            session_id: session.id,
+            role: 'assistant',
+            content: 'Screenshot captured.',
+            run_id: 'run-retained',
+            metadata: {
+                browser_activities: [{
+                    id: 'browser-command-retained',
+                    operation: 'screenshot',
+                    status: 'succeeded',
+                    label: 'Screenshot',
+                    run_id: 'run-retained',
+                    browser_session_id: 'browser-1',
+                    artifact_ids: ['artifact-retained'],
+                    occurred_at: '2026-07-20T10:00:01Z',
+                }],
+            },
+            created_at: '2026-07-20T10:00:01Z',
+        }
+        deps.sendPersistentChat.mockResolvedValue({ assistantMessage: assistant } as never)
+        deps.recordBrowserActivities = vi.fn(async () => {
+            throw new Error('Browser evidence was saved, but TALOS could not refresh the Browser session. Reload it from the Browser card.')
+        })
+        const actions = useTalosWorkspaceChatActions(deps)
+
+        await expect(actions.sendChatText('Capture a screenshot.')).resolves.toBe(false)
+
+        expect(deps.uiError.value).toMatch(/could not refresh the Browser session/)
+        expect(deps.acceptPersistedMessage).toHaveBeenCalledOnce()
+        expect(deps.acceptPersistedMessage).toHaveBeenCalledWith(assistant)
+        expect(actions.sending.value).toBe(false)
+    })
+
     it('creates a benchmark for a run, persists the system notice, and opens Compare', async () => {
         vi.mocked(talosFetch).mockResolvedValue({ benchmark_group: { id: 'group-1' } })
         const deps = dependencies()

@@ -210,20 +210,44 @@ export function useTalosWorkspaceBrowse(
             uiError.value = error instanceof Error ? error.message : 'TALOS could not open the requested browser URL.'
         }
     }
-    function recordActivities(value: unknown) {
+    const stateRelevantOperations = new Set(['navigate', 'snapshot', 'screenshot', 'read'])
+    const committedHmiOperations = new Set(['click', 'upload'])
+
+    function activityIsStateRelevant(activity: TalosBrowserActivity) {
+        if (stateRelevantOperations.has(activity.operation)) return true
+        return committedHmiOperations.has(activity.operation) && activity.status === 'succeeded'
+    }
+
+    async function recordActivities(value: unknown): Promise<void> {
         if (!Array.isArray(value)) return
         const activeBrowserSessionId = browse.activeSession.value?.id ?? null
         if (!activeBrowserSessionId) return
         const activities = new Map(chatActivities.value.map((activity) => [activity.id, activity]))
+        const accepted: TalosBrowserActivity[] = []
         for (const activity of value) {
             if (activity
                 && typeof activity === 'object'
                 && typeof (activity as Record<string, unknown>).id === 'string'
                 && (activity as Record<string, unknown>).browser_session_id === activeBrowserSessionId) {
-                activities.set((activity as TalosBrowserActivity).id, activity as TalosBrowserActivity)
+                const candidate = activity as TalosBrowserActivity
+                if (!activities.has(candidate.id)) accepted.push(candidate)
+                activities.set(candidate.id, candidate)
             }
         }
         chatActivities.value = [...activities.values()]
+        if (!accepted.some(activityIsStateRelevant)) return
+
+        const scope = { talosSessionId: activeTalosSessionId.value, revision: workspaceScopeRevision }
+        const scopeStillCurrent = () => activeTalosSessionId.value === scope.talosSessionId
+            && workspaceScopeRevision === scope.revision
+        try {
+            await browse.selectSession(activeBrowserSessionId)
+        } catch (error) {
+            if (!scopeStillCurrent()) return
+            throw new Error(error instanceof Error
+                ? `Browser evidence was saved, but TALOS could not refresh the Browser session. ${error.message}`
+                : 'Browser evidence was saved, but TALOS could not refresh the Browser session.')
+        }
     }
     async function restoreForActiveSession(force = false) {
         let scope: { talosSessionId: string; revision: number } | null = null

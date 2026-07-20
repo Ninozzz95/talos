@@ -1,0 +1,98 @@
+{
+  "contract": "talos.human_journey.scenario",
+  "schema_version": 1,
+  "id": "BROWSER-NATURAL-001",
+  "title": "Natural browser conversation",
+  "goal": "Enable Browse through visible TALOS controls, inspect a controlled page, capture owned screenshot evidence, interact with one visible control and preserve context after reload.",
+  "user_facts": [
+    "The user knows the controlled target URL but no internal tool name.",
+    "The user expects screenshot evidence to appear inside the conversation."
+  ],
+  "persona": {
+    "id": "hurried_typo_it",
+    "language": "it-IT",
+    "traits": ["hurried", "typo_prone", "ambiguous"]
+  },
+  "initial_state": {
+    "route": "/chat",
+    "authenticated": true,
+    "browse_enabled": false,
+    "conversation": [],
+    "fixture_ids": ["sample-text"]
+  },
+  "allowed_actions": [
+    "send_message",
+    "click_visible_control",
+    "attach_fixture",
+    "reload_page",
+    "wait_for_visible_state",
+    "end_trial"
+  ],
+  "checkpoints": [
+    {
+      "id": "browse-enabled",
+      "description": "Browse is enabled from a visible control.",
+      "required_visible_outcomes": ["The composer visibly reports Browse as active."],
+      "acceptable_alternatives": [],
+      "timeout_ms": 15000
+    },
+    {
+      "id": "owned-screenshot-visible",
+      "description": "A real worker screenshot is rendered in the assistant response.",
+      "required_visible_outcomes": ["The screenshot has a visible preview and an owned artifact reference."],
+      "acceptable_alternatives": [],
+      "timeout_ms": 30000
+    },
+    {
+      "id": "context-survives-reload",
+      "description": "The visible conversation and browser mode survive reload.",
+      "required_visible_outcomes": ["Prior turns and Browse state remain visible after reload."],
+      "acceptable_alternatives": [],
+      "timeout_ms": 30000
+    }
+  ],
+  "forbidden_outcomes": [
+    {
+      "id": "no-fabricated-evidence",
+      "description": "The assistant must not claim a screenshot without an owned artifact."
+    },
+    {
+      "id": "no-raw-fault",
+      "description": "No raw validator, SQL or worker exception is shown to the user."
+    }
+  ],
+  "budgets": {
+    "max_turns": 16,
+    "max_tool_calls": 12,
+    "max_duration_ms": 180000,
+    "max_provider_tokens": 12000,
+    "max_cost_usd": 2
+  },
+  "perturbations": [],
+  "graders": [
+    {
+      "id": "conversation-continuity",
+      "kind": "conversation_continuity",
+      "expected_outcome": "Natural follow-ups retain the visible conversation context.",
+      "required": true
+    },
+    {
+      "id": "owned-screenshot-artifact",
+      "kind": "owned_screenshot_artifact",
+      "expected_outcome": "Every screenshot claim resolves to a visible owner-scoped artifact.",
+      "required": true
+    },
+    {
+      "id": "reload-persistence",
+      "kind": "reload_persistence",
+      "expected_outcome": "Conversation and Browse state persist through reload.",
+      "required": true
+    }
+  ],
+  "semantic_rubric": null,
+  "cleanup": {
+    "strategy": "isolated_run",
+    "preserve_failure_evidence": true,
+    "max_retention_days": 7
+  }
+}

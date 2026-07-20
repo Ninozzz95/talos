@@ -18,6 +18,8 @@ use App\Services\Talos\Browser\BrowserWorkerConfiguration;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserActionCapabilityIssuer;
+use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBrowserTestFixturePermit;
 use App\Services\Talos\Web\UnavailableWebSearchProvider;
 use App\Services\Talos\Web\WebSearchProvider;
 use App\Services\Talos\Web\WebSearchProviderFactory;
@@ -56,6 +58,17 @@ class AppServiceProvider extends ServiceProvider
             return new TalosBrowserActionCapabilityIssuer(
                 (string) config('services.talos.browser.action_private_key_b64', ''),
                 (string) config('services.talos.browser.action_key_id', ''),
+            );
+        });
+
+        $this->app->singleton(TalosBrowserPolicy::class, static function (Application $app): TalosBrowserPolicy {
+            $configuredOrigin = config('services.talos.browser.test_fixture_origin');
+
+            return new TalosBrowserPolicy(
+                fixturePermit: TalosBrowserTestFixturePermit::fromEnvironment(
+                    is_string($configuredOrigin) ? $configuredOrigin : null,
+                    $app->environment('testing'),
+                ),
             );
         });
 
