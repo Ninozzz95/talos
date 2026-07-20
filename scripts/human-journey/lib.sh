@@ -57,6 +57,33 @@ hj_resolve_npm() {
   return 1
 }
 
+hj_ensure_frontend_build() {
+  local node_bin
+  node_bin="${TALOS_NODE_BIN:-}"
+  if [ -z "$node_bin" ]; then
+    node_bin="$(hj_resolve_node)" || return 1
+  fi
+
+  if (cd "$HJ_REPO_ROOT/control-plane" \
+    && _hj_run_clean_env "$node_bin" scripts/vite-build.mjs --verify) >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf 'TALOS Human Journey frontend bundle is missing or stale; rebuilding once.\n' >&2
+  (cd "$HJ_REPO_ROOT/control-plane" \
+    && _hj_run_clean_env "$node_bin" \
+      "$HJ_REPO_ROOT/.tools/node/node_modules/npm/bin/npm-cli.js" run build) || {
+    printf 'TALOS Human Journey frontend rebuild failed.\n' >&2
+    return 1
+  }
+
+  (cd "$HJ_REPO_ROOT/control-plane" \
+    && _hj_run_clean_env "$node_bin" scripts/vite-build.mjs --verify) >/dev/null || {
+    printf 'TALOS Human Journey frontend rebuild did not produce verifiable provenance.\n' >&2
+    return 1
+  }
+}
+
 hj_verify_repo_toolchain() {
   TALOS_NODE_BIN="$(hj_resolve_node)" || return 1
   TALOS_PHP_BIN="$(hj_resolve_php)" || return 1
@@ -106,6 +133,7 @@ hj_verify_repo_toolchain() {
     "$TALOS_NODE_BIN" \
     "$HJ_REPO_ROOT/.tools/node/node_modules/npm/bin/npm-cli.js" \
     --version >/dev/null || return 1
+  hj_ensure_frontend_build || return 1
   export TALOS_NODE_BIN TALOS_PHP_BIN TALOS_NPM_BIN
 }
 

@@ -145,13 +145,13 @@ NODE
 
 if ! HJ_REPO_ROOT="$FRONTEND_BUILD_ROOT" TALOS_NODE_BIN="$ROOT_DIR/.tools/node/node.exe" bash -c '
   set -euo pipefail
-  source "$1/scripts/human-journey/lib.sh"
+  source "$2/scripts/human-journey/lib.sh"
   declare -F hj_ensure_frontend_build >/dev/null
   declare -f hj_verify_repo_toolchain | grep -Fq "hj_ensure_frontend_build"
   hj_ensure_frontend_build
   hj_ensure_frontend_build
   [ "$(wc -l < "$1/control-plane/build-invocations.log")" -eq 1 ]
-' _ "$FRONTEND_BUILD_ROOT"; then
+' _ "$FRONTEND_BUILD_ROOT" "$ROOT_DIR"; then
   fail "HJ9-045 frontend build provenance was not reconciled exactly once"
 fi
 
@@ -536,7 +536,7 @@ if ! bash -c '
   playwright_status=$?
   set -e
   [ "$playwright_status" -eq 5 ]
-  [ "$HJ_PLAYWRIGHT_FAILURE_CODE" = "HJ_PRODUCT_JOURNEY_MISSING" ]
+  [ "$HJ_PLAYWRIGHT_FAILURE_CODE" = "HJ_JOURNEY_FAILED" ]
   [ "$HJ_PLAYWRIGHT_REPORT_PATH" = "reports/playwright/results.json" ]
   [ -s "$HJ_RUN_ROOT/logs/playwright.log" ]
   [ -f "$HJ_RUN_ROOT/reports/playwright/results.json" ]
@@ -550,11 +550,11 @@ if ! bash -c '
   "$TALOS_NODE_BIN" - "$HJ_RUN_ROOT/result.json" <<NODE
 const fs = require("node:fs");
 const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-if (result.status !== "failed" || result.exit_code !== 5 || result.failure_code !== "HJ_PRODUCT_JOURNEY_MISSING" || result.promotional !== false) process.exit(1);
+if (result.status !== "failed" || result.exit_code !== 5 || result.failure_code !== "HJ_JOURNEY_FAILED" || result.promotional !== false) process.exit(1);
 NODE
   trap - EXIT
 ' _ "$ROOT_DIR" "$PLAYWRIGHT_STATE_ROOT"; then
-  fail "HJPLAY-001 missing product spec was not a controlled Playwright failure"
+  fail "HJPLAY-001 dead-stack product journey was not a controlled Playwright failure"
 fi
 
 grep -Fq 'baseURL:' "$ROOT_DIR/control-plane/playwright.human-journey.config.ts" \
@@ -771,20 +771,21 @@ if [ "${TALOS_HJ_SKIP_STACK_CONTRACT:-0}" != "1" ]; then
   hj_run_playwright
   playwright_status=$?
   set -e
-  [ "$playwright_status" -eq 5 ]
-  [ "$HJ_PLAYWRIGHT_FAILURE_CODE" = "HJ_PRODUCT_JOURNEY_MISSING" ]
+  [ "$playwright_status" -eq 0 ]
+  [ -z "$HJ_PLAYWRIGHT_FAILURE_CODE" ]
   [ -s "$HJ_RUN_ROOT/logs/playwright.log" ]
+  [ -f "$HJ_RUN_ROOT/reports/playwright/results.json" ]
   set +e
-  hj_finalize_failure "5" "$HJ_PLAYWRIGHT_FAILURE_CODE" "0" "failed"
+  hj_finalize_success "1" "$HJ_PLAYWRIGHT_REPORT_PATH" ""
   final_status=$?
   set -e
-  [ "$final_status" -eq 5 ]
+  [ "$final_status" -eq 0 ]
   [ ! -e "$HJ_RUN_ROOT/runtime/secrets" ]
   [ ! -e "$2/active.lock" ]
   "$TALOS_NODE_BIN" - "$HJ_RUN_ROOT/result.json" "$HJ_RUN_ROOT/runtime/processes.jsonl" <<NODE
 const fs = require("node:fs");
 const result = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-if (result.status !== "failed" || result.exit_code !== 5 || result.failure_code !== "HJ_PRODUCT_JOURNEY_MISSING" || result.promotional !== false) process.exit(1);
+if (result.status !== "passed" || result.exit_code !== 0 || result.failure_code !== null || result.promotional !== false) process.exit(1);
 const events = fs.readFileSync(process.argv[3], "utf8").trim().split(/\r?\n/u).filter(Boolean).map(JSON.parse);
 const latest = new Map(events.map((event) => [event.pid, event]));
 if ([...latest.values()].some((event) => event.terminal_status === "running")) process.exit(2);
