@@ -19,6 +19,7 @@ const SUPPORT_STATES = ['unassessed', 'blocked', 'planned', 'implemented', 'veri
 const EXECUTION_LOCATIONS = ['local_mobile', 'trusted_node', 'remote_provider', 'unavailable']
 const FEATURE_ID_PATTERN = /^[a-z][a-z0-9_]*$/
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/
 const MAX_STRING_LENGTH = 4096
 const MAX_LIST_ITEMS = 256
 
@@ -55,10 +56,21 @@ function isPlainObject(value) {
     }
 }
 
+function isRealCalendarDate(value) {
+    const year = Number(value.slice(0, 4))
+    const month = Number(value.slice(5, 7))
+    const day = Number(value.slice(8, 10))
+    if (year < 1970 || month < 1 || month > 12 || day < 1) return false
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+    const monthLengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    return day <= monthLengths[month - 1]
+}
+
 function isNonEmptyString(value) {
     return typeof value === 'string'
         && value.trim() !== ''
         && value.length <= MAX_STRING_LENGTH
+        && !CONTROL_CHARS.test(value)
 }
 
 function validateExactKeys(value, allowed, where, errors) {
@@ -195,6 +207,8 @@ export function validateParityLedger(value) {
     }
     if (!isNonEmptyString(payload.generated_at) || !ISO_DATE_PATTERN.test(payload.generated_at)) {
         errors.push('payload.generated_at must use YYYY-MM-DD')
+    } else if (!isRealCalendarDate(payload.generated_at)) {
+        errors.push('payload.generated_at must be a real calendar date')
     }
     if (!isNonEmptyString(payload.generated_by)) {
         errors.push('payload.generated_by must be a bounded non-empty string')

@@ -141,4 +141,32 @@ describe('talos mobile design tokens', () => {
             (error) => error instanceof TalosDesignTokenError && error.code === 'invalid_shape',
         )
     })
+
+    it('rejects whitespace-only typography metadata to match the contracts non-empty discipline', () => {
+        const blankFamily = canonicalIdentity()
+        blankFamily.typography.ui.family = '   '
+        assert.throws(
+            () => parseTalosMobileDesignTokens(blankFamily),
+            (error) => error instanceof TalosDesignTokenError && error.code === 'invalid_shape',
+        )
+
+        const blankSystemUi = canonicalIdentity()
+        blankSystemUi.typography.fallback_metadata.system_ui = '   '
+        assert.throws(
+            () => parseTalosMobileDesignTokens(blankSystemUi),
+            (error) => error instanceof TalosDesignTokenError && error.code === 'invalid_shape',
+        )
+
+        const blankFallback = canonicalIdentity()
+        blankFallback.typography.ui.fallback_families = ['   ', 'system-ui']
+        assert.throws(
+            () => parseTalosMobileDesignTokens(blankFallback),
+            (error) => error instanceof TalosDesignTokenError && error.code === 'invalid_shape',
+        )
+
+        // A real family with internal spacing is still accepted.
+        const spaced = canonicalIdentity()
+        spaced.typography.ui.family = 'Instrument Sans'
+        assert.equal(parseTalosMobileDesignTokens(spaced).typography.ui.family, 'Instrument Sans')
+    })
 })
