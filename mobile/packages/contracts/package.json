@@ -1,0 +1,13 @@
+{
+    "name": "@talos-mobile/contracts",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "TALOS Mobile canonical contracts: versioned envelopes and feature-parity entry validation. Zero runtime dependencies; consumed through Node type stripping.",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "test": "node --test tests/conformance.test.ts"
+    }
+}
