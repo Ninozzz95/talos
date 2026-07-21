@@ -149,6 +149,43 @@ export const BrowserHmiResultResponseSchema = z.object({
   }
 });
 
+export const BrowserHmiScrollRequestSchema = z.object({
+  schema_version: z.literal("talos_browser_hmi_scroll_v2"),
+  interaction_id: interactionIdSchema,
+  state_version: safeStateVersionSchema,
+  expected_frame_sha256: sha256Schema,
+  delta_y: z.number().finite().min(-10_000).max(10_000),
+}).strict();
+
+export const BrowserHmiScrollResponseSchema = z.object({
+  schema_version: z.literal("talos_browser_hmi_scroll_v2"),
+  interaction_id: interactionIdSchema,
+  session_id: boundedUtf8Schema(128).min(1),
+  source_state_version: safeStateVersionSchema,
+  state_version: safeStateVersionSchema,
+  frame_sha256: sha256Schema,
+  url: canonicalEvidenceUrlSchema,
+  title: boundedUtf8Schema(512),
+  screenshot: z.object({
+    mime_type: z.literal("image/png"),
+    width: z.number().int().positive().max(3_840),
+    height: z.number().int().positive().max(2_160),
+    sha256: sha256Schema,
+    base64: z.string().min(1),
+  }).strict(),
+  snapshot: z.object({
+    snapshot_id: z.string().regex(/^snap_[A-Za-z0-9-]+$/),
+    format: z.literal("accessibility_refs_v1"),
+    text_digest: boundedUtf8Schema(4_000),
+    sha256: sha256Schema,
+    nodes: z.array(snapshotNodeSchema).max(500),
+  }).strict(),
+  captured_at: z.string().datetime(),
+}).strict();
+
+export type BrowserHmiScrollRequest = z.infer<typeof BrowserHmiScrollRequestSchema>;
+export type BrowserHmiScrollResponse = z.infer<typeof BrowserHmiScrollResponseSchema>;
+
 function canonicalHttpHref(url: URL): string {
   return url.pathname === "/" ? url.origin : `${url.origin}${url.pathname}`;
 }

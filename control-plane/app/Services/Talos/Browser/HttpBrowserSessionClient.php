@@ -267,6 +267,11 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         return $this->request('post', "/sessions/{$workerSessionId}/snapshot", $ownerRef, [], $timeoutMilliseconds);
     }
 
+    public function scroll(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
+    {
+        return $this->request('post', "/sessions/{$workerSessionId}/hmi/scroll", $ownerRef, $payload, $timeoutMilliseconds);
+    }
+
     public function preflightPointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
     {
         $this->validatePointerPayload($payload, false);

@@ -173,6 +173,84 @@ final class TalosBrowserHmiController extends Controller
         );
     }
 
+    public function scroll(Request $request, TalosBrowserSession $browserSession): JsonResponse
+    {
+        $this->legacyWrites->assertEnabled('browser.hmi.pointer');
+
+        if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+        $validated = $request->validate([
+            'state_version' => ['required', 'integer', 'min:0'],
+            'artifact_id' => ['required', 'string'],
+            'artifact_sha256' => ['required', 'string', 'regex:/^sha256:[a-f0-9]{64}$/'],
+            'delta_y' => ['required', 'numeric', 'min:-10000', 'max:10000'],
+        ]);
+        $interactionId = (string) \Illuminate\Support\Str::uuid();
+        $input = [
+            'state_version' => (int) $validated['state_version'],
+            'artifact_id' => (string) $validated['artifact_id'],
+            'artifact_sha256' => (string) $validated['artifact_sha256'],
+        ];
+        if (($error = $this->operable($browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+        $frame = $this->currentFrame($browserSession, $input, $interactionId);
+        if ($frame instanceof JsonResponse) {
+            return $frame;
+        }
+
+        $payload = [
+            'schema_version' => 'talos_browser_hmi_scroll_v2',
+            'interaction_id' => $interactionId,
+            'state_version' => (int) $validated['state_version'],
+            'expected_frame_sha256' => (string) $validated['artifact_sha256'],
+            'delta_y' => (float) $validated['delta_y'],
+        ];
+        try {
+            $result = $this->client->scroll(
+                TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
+                (string) $browserSession->worker_session_id,
+                $payload,
+            );
+        } catch (BrowserWorkerException $exception) {
+            $status = match ($exception->errorCode) {
+                'TALOS_BROWSER_WORKER_UNAVAILABLE' => 503,
+                'TALOS_BROWSER_FRAME_STALE', 'TALOS_BROWSER_STALE_STATE', 'TALOS_BROWSER_TARGET_STALE' => 409,
+                default => 502,
+            };
+
+            return $this->error($exception->errorCode, $exception->getMessage(), $status);
+        }
+
+        try {
+            $stored = $this->artifacts->storeHmiScroll($browserSession, $result);
+        } catch (Throwable) {
+            return $this->error(
+                'TALOS_BROWSER_HMI_SCROLL_COMMIT_FAILED',
+                'The browser scrolled but the new frame could not be committed.',
+                409,
+            );
+        }
+
+        try {
+            $this->event($stored['session'], 'hmi.scroll', 'user', [
+                'interaction_id' => $interactionId,
+                'source_state_version' => $input['state_version'],
+                'state_version' => (int) $stored['session']->worker_state_version,
+                'delta_y' => (float) $validated['delta_y'],
+            ]);
+        } catch (Throwable) {
+            // The scroll and its evidence committed; a best-effort audit write must not fail it.
+        }
+
+        return response()->json(['data' => [
+            'session' => $stored['session']->toApiArray(),
+            'screenshot' => $this->artifactPayload($stored['screenshot'], true),
+            'snapshot' => $this->artifactPayload($stored['snapshot'], false),
+        ]], 200);
+    }
+
     public function confirm(Request $request, string $browserHmiApproval): JsonResponse
     {
         $this->legacyWrites->assertEnabled('browser.hmi.confirm');
@@ -600,37 +678,45 @@ final class TalosBrowserHmiController extends Controller
         }
 
         try {
-            $stored = $this->artifacts->storeHmiCapture(
+            // Storage/DB commit races are transient and this capture write is
+            // idempotent (fenced by command id), so retry briefly before locking
+            // the whole session into recovery — the click already happened once.
+            $stored = retry(3, fn (): array => $this->artifacts->storeHmiCapture(
                 $session,
                 $commandId,
                 $result,
                 $approvalId,
                 $executionLeaseToken,
-            );
+            ), 120);
         } catch (Throwable) {
             return $this->recoveryRequired($session, $commandId, $approvalId, 'TALOS_BROWSER_EVIDENCE_COMMIT_FAILED', $executionLeaseToken);
         }
 
         try {
             $interactionId = (string) $payload['interaction_id'];
-            $this->eventOnce($stored['session'], 'hmi.pointer.executed', 'worker', $commandId, [
-                'command_id' => $commandId,
-                'interaction_id' => $interactionId,
-                'approval_id' => $approvalId,
-                'target_fingerprint' => $result['target']['fingerprint'] ?? null,
-                'source_state_version' => $payload['state_version'],
-                'source_frame_sha256' => $payload['expected_frame_sha256'],
-                'state_version' => $stored['session']->worker_state_version,
-            ]);
-            $this->eventOnce($stored['session'], 'hmi.evidence.persisted', 'system', $commandId, [
-                'command_id' => $commandId,
-                'interaction_id' => $interactionId,
-                'approval_id' => $approvalId,
-                'operation' => 'screenshot',
-                'screenshot_artifact_id' => $stored['screenshot']->id,
-                'snapshot_artifact_id' => $stored['snapshot']->id,
-                'artifact_ids' => [$stored['screenshot']->id, $stored['snapshot']->id],
-            ]);
+            // These append-only audit writes are idempotent (deduped by command
+            // id), so a transient store race is retried rather than locking the
+            // session — re-running simply no-ops the already-written event.
+            retry(3, function () use ($stored, $commandId, $interactionId, $approvalId, $result, $payload): void {
+                $this->eventOnce($stored['session'], 'hmi.pointer.executed', 'worker', $commandId, [
+                    'command_id' => $commandId,
+                    'interaction_id' => $interactionId,
+                    'approval_id' => $approvalId,
+                    'target_fingerprint' => $result['target']['fingerprint'] ?? null,
+                    'source_state_version' => $payload['state_version'],
+                    'source_frame_sha256' => $payload['expected_frame_sha256'],
+                    'state_version' => $stored['session']->worker_state_version,
+                ]);
+                $this->eventOnce($stored['session'], 'hmi.evidence.persisted', 'system', $commandId, [
+                    'command_id' => $commandId,
+                    'interaction_id' => $interactionId,
+                    'approval_id' => $approvalId,
+                    'operation' => 'screenshot',
+                    'screenshot_artifact_id' => $stored['screenshot']->id,
+                    'snapshot_artifact_id' => $stored['snapshot']->id,
+                    'artifact_ids' => [$stored['screenshot']->id, $stored['snapshot']->id],
+                ]);
+            }, 120);
         } catch (Throwable) {
             return $this->recoveryRequired($stored['session'], $commandId, $approvalId, 'TALOS_BROWSER_AUDIT_COMMIT_FAILED', $executionLeaseToken);
         }

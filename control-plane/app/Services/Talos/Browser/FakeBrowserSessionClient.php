@@ -296,6 +296,27 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         return $this->respond('snapshot', compact('ownerRef', 'workerSessionId', 'timeoutMilliseconds'), $this->snapshotResponse ?? ['snapshotId' => 'snap_fake_legacy_1', 'format' => 'accessibility_refs_v1', 'textDigest' => hash('sha256', 'snapshot'), 'nodes' => [['ref' => 'r1', 'role' => 'heading', 'name' => 'Example', 'visible' => true]], 'url' => 'https://example.com', 'title' => 'Example page']);
     }
 
+    public function scroll(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
+    {
+        $screenshotBytes = self::pngBytes(1280, 800);
+        $snapshotCanonical = ['format' => 'accessibility_refs_v1', 'nodes' => [], 'snapshot_id' => 'snap_fake-scroll-1', 'text_digest' => ''];
+        $response = [
+            'schema_version' => 'talos_browser_hmi_scroll_v2',
+            'interaction_id' => $payload['interaction_id'] ?? null,
+            'session_id' => $workerSessionId,
+            'source_state_version' => $payload['state_version'] ?? 0,
+            'state_version' => ((int) ($payload['state_version'] ?? 0)) + 1,
+            'frame_sha256' => 'sha256:'.hash('sha256', $screenshotBytes),
+            'url' => 'https://example.com/',
+            'title' => 'Example page',
+            'screenshot' => ['mime_type' => 'image/png', 'width' => 1280, 'height' => 800, 'sha256' => 'sha256:'.hash('sha256', $screenshotBytes), 'base64' => base64_encode($screenshotBytes)],
+            'snapshot' => ['snapshot_id' => 'snap_fake-scroll-1', 'format' => 'accessibility_refs_v1', 'text_digest' => '', 'nodes' => [], 'sha256' => 'sha256:'.hash('sha256', json_encode($snapshotCanonical, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))],
+            'captured_at' => now()->toJSON(),
+        ];
+
+        return $this->respond('scroll', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
+    }
+
     public function preflightPointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
     {
         $response = $this->preflightPointerResponse ?? [

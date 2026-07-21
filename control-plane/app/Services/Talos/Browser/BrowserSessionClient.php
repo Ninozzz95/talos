@@ -63,6 +63,9 @@ interface BrowserSessionClient
     public function snapshot(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): array;
 
     /** @param array<string, mixed> $payload @return array<string, mixed> */
+    public function scroll(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array;
+
+    /** @param array<string, mixed> $payload @return array<string, mixed> */
     public function preflightPointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array;
 
     /** @param array<string, mixed> $payload @return array<string, mixed> */

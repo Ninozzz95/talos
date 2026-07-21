@@ -17,6 +17,7 @@ import {
 import {
   BrowserHmiExecuteRequestSchema,
   BrowserHmiPreflightRequestSchema,
+  BrowserHmiScrollRequestSchema,
 } from "./BrowserHmiContracts.js";
 import { BrowserHmiService } from "./BrowserHmiService.js";
 import { assertWorkerTokenConfiguration, workerTokensEqual } from "./BrowserWorkerAuth.js";
@@ -346,6 +347,19 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
       request: parsed.data,
     });
     return reply.code(200).send({ data: await browserHmi.execute(request.params.id, parsed.data) });
+  });
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/hmi/scroll", async (request, reply) => {
+    const parsed = BrowserHmiScrollRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        message: "Invalid browser HMI scroll payload.",
+        code: "TALOS_BROWSER_HMI_INVALID_SCROLL",
+        details: parsed.error.flatten(),
+      });
+    }
+    await ownedSession(sessions, request);
+    return reply.code(200).send({ data: await browserHmi.scroll(request.params.id, parsed.data) });
   });
 
   app.post<{ Params: { id: string } }>("/sessions/:id/screenshot", async (request) => {
