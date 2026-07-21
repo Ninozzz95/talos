@@ -172,4 +172,20 @@ describe('TalosProviderModelCombobox', () => {
         mountCombobox([item()])
         expect(document.querySelector('[data-testid="talos-model-manual-toggle"]')).toBeNull()
     })
+
+    it('keeps the search input always mounted and opens the list on input focus', async () => {
+        mountCombobox([item({ id: 'openai/gpt-4.1', display_name: 'GPT-4.1' })])
+
+        // The input is present before any open interaction (not portal-gated),
+        // so a real browser can reach it and focusing it opens the typeahead.
+        const search = document.querySelector<HTMLInputElement>('[aria-label="Search models"]')
+        expect(search, 'search input must be mounted while closed').not.toBeNull()
+        expect(options()).toHaveLength(0)
+
+        search!.dispatchEvent(new FocusEvent('focus', { bubbles: true }))
+        await nextTick()
+        await nextTick()
+
+        expect(optionById('openai/gpt-4.1'), 'focusing the search input must open the list').not.toBeNull()
+    })
 })

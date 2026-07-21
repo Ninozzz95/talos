@@ -1598,8 +1598,10 @@ test('MODEL-P0 Gemini discovery quick add creates, probes and reaches chat witho
     await discoverRequest
 
     // A distant model in a 500-row catalog is reachable by keyboard search.
-    await quickAdd.getByTestId('talos-model-combobox-trigger').click()
-    await page.getByRole('textbox', { name: 'Search models' }).fill('gemini-2.5-pro')
+    // Focusing the always-present search input opens the typeahead list.
+    const searchBox = page.getByRole('textbox', { name: 'Search models' })
+    await searchBox.click()
+    await searchBox.fill('gemini-2.5-pro')
     const proOption = page.locator('[data-testid="talos-model-option"][data-model-id="gemini-2.5-pro"]')
     await expect(proOption).toBeVisible()
     await proOption.click()
@@ -1665,7 +1667,7 @@ test('MODEL-P0 OpenRouter rotation through Save and verify refreshes the persist
     await page.getByTestId('talos-model-load-catalog').click()
     await catalogRequest
 
-    await page.getByTestId('talos-model-combobox-trigger').click()
+    await page.getByRole('textbox', { name: 'Search models' }).click()
     await page.locator('[data-testid="talos-model-option"][data-model-id="anthropic/claude-sonnet-4-6"]').click()
     await expect(page.getByTestId('talos-edit-model')).toHaveValue('anthropic/claude-sonnet-4-6')
 
@@ -1772,7 +1774,7 @@ test('MODEL-P0 discovery reports rate-limited and empty catalog states with type
     await empty.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
     await empty.getByTestId('talos-provider-secret').fill('sk-openrouter')
     await empty.getByTestId('talos-model-discover').click()
-    await empty.getByTestId('talos-model-combobox-trigger').click()
+    await page.getByRole('textbox', { name: 'Search models' }).click()
     await expect(page.getByText('No provider model matches this search.')).toBeVisible()
 })
 

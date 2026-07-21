@@ -5,8 +5,15 @@ import type { TalosMessage } from '../../../lib/talosTypes'
 import { talosPersistedRunActivity, type TalosRunActivityStatus } from '../../../lib/talosMessageState'
 import Badge from '../../ui/Badge.vue'
 
-const props = defineProps<{ message: TalosMessage }>()
-const activity = computed(() => talosPersistedRunActivity(props.message))
+const props = withDefaults(defineProps<{
+    message: TalosMessage
+    developmentMode?: boolean
+}>(), {
+    developmentMode: false,
+})
+// Run metadata (status, provider/model, run id) is a development-only affordance;
+// the server-owned developmentMode flag gates it out of production entirely.
+const activity = computed(() => (props.developmentMode ? talosPersistedRunActivity(props.message) : null))
 
 const labels: Record<TalosRunActivityStatus, string> = {
     queued: 'Run queued',

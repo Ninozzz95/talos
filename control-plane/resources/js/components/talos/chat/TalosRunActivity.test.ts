@@ -12,8 +12,8 @@ afterEach(() => {
     document.body.replaceChildren()
 })
 
-function mountStatus(status: string) {
-    const message: TalosMessage = {
+function runMessage(status: string): TalosMessage {
+    return {
         id: `message-${status}`,
         session_id: 'session-1',
         role: 'assistant',
@@ -29,9 +29,12 @@ function mountStatus(status: string) {
             },
         },
     }
+}
+
+function mountStatus(status: string, developmentMode = true) {
     const container = document.createElement('div')
     document.body.append(container)
-    const app = createApp({ render: () => h(TalosRunActivity, { message }) })
+    const app = createApp({ render: () => h(TalosRunActivity, { message: runMessage(status), developmentMode }) })
     mounted.push(app)
     app.mount(container)
     return container
@@ -67,6 +70,40 @@ describe('TalosRunActivity', () => {
             metadata: {},
         }
         const app = createApp({ render: () => h(TalosRunActivity, { message }) })
+        mounted.push(app)
+        app.mount(container)
+
+        expect(container.querySelector('[data-talos-run-activity]')).toBeNull()
+    })
+
+    it('does not render run metadata in production mode', () => {
+        const container = document.createElement('div')
+        document.body.append(container)
+        const app = createApp({ render: () => h(TalosRunActivity, { message: runMessage('succeeded'), developmentMode: false }) })
+        mounted.push(app)
+        app.mount(container)
+
+        // In production the metadata must not exist in the DOM at all, not merely be hidden.
+        expect(container.querySelector('[data-talos-run-activity]')).toBeNull()
+        expect(container.textContent).not.toContain('Run succeeded')
+        expect(container.textContent).not.toContain('deepseek / deepseek-chat')
+        expect(container.textContent).not.toContain('run-succeeded')
+    })
+
+    it('renders run metadata in development mode', () => {
+        const container = mountStatus('succeeded', true)
+        const row = container.querySelector<HTMLElement>('[data-talos-run-activity]')
+
+        expect(row).not.toBeNull()
+        expect(row?.textContent).toContain('Run succeeded')
+        expect(row?.textContent).toContain('deepseek / deepseek-chat')
+        expect(row?.textContent).toContain('run-succeeded')
+    })
+
+    it('defaults to production-safe (no metadata) when developmentMode is omitted', () => {
+        const container = document.createElement('div')
+        document.body.append(container)
+        const app = createApp({ render: () => h(TalosRunActivity, { message: runMessage('succeeded') }) })
         mounted.push(app)
         app.mount(container)
 

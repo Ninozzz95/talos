@@ -18,13 +18,20 @@ beforeEach(() => {
     Object.values(toastMock).forEach((mock) => mock.mockClear())
 })
 
+// The vue-sonner runtime is loaded lazily on first toast, so dispatch is
+// fire-and-forget; flush the dynamic-import microtask before asserting.
+async function flush() {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
 describe('useTalosToast', () => {
-    it('maps every TALOS tone to the corresponding native Sonner method', () => {
+    it('maps every TALOS tone to the corresponding native Sonner method', async () => {
         const toast = useTalosToast()
         toast.info('i')
         toast.success('s')
         toast.warning('w')
         toast.error('e')
+        await flush()
 
         expect(toastMock.info).toHaveBeenCalledWith(TalosSonnerToastContent, expect.objectContaining({ componentProps: { message: 'i', tone: 'info' } }))
         expect(toastMock.success).toHaveBeenCalledWith(TalosSonnerToastContent, expect.objectContaining({ componentProps: { message: 's', tone: 'success' } }))
@@ -32,32 +39,34 @@ describe('useTalosToast', () => {
         expect(toastMock.error).toHaveBeenCalledWith(TalosSonnerToastContent, expect.objectContaining({ componentProps: { message: 'e', tone: 'error' } }))
     })
 
-    it('reuses a stable id so repeated feedback updates one toast', () => {
+    it('reuses a stable id so repeated feedback updates one toast', async () => {
         const toast = useTalosToast()
         toast.info('first', { id: 'command-feedback' })
         toast.info('second', { id: 'command-feedback' })
+        await flush()
 
         expect(toastMock.info).toHaveBeenCalledTimes(2)
         expect(toastMock.info).toHaveBeenNthCalledWith(1, TalosSonnerToastContent, expect.objectContaining({ id: 'command-feedback', componentProps: { message: 'first', tone: 'info' } }))
         expect(toastMock.info).toHaveBeenNthCalledWith(2, TalosSonnerToastContent, expect.objectContaining({ id: 'command-feedback', componentProps: { message: 'second', tone: 'info' } }))
     })
 
-    it('forwards a deterministic native action label and callback', () => {
+    it('forwards a deterministic native action label and callback', async () => {
         const toast = useTalosToast()
         const onClick = vi.fn()
-        const id = toast.error('failed', { action: { label: 'Retry', onClick } })
+        toast.error('failed', { action: { label: 'Retry', onClick } })
+        await flush()
 
-        expect(id).toBe('id-error')
         const options = toastMock.error.mock.calls[0][1]
         expect(options.action).toEqual({ label: 'Retry', onClick })
         options.action.onClick()
         expect(onClick).toHaveBeenCalledTimes(1)
     })
 
-    it('passes accessible content component props without replacing native action handling', () => {
+    it('passes accessible content component props without replacing native action handling', async () => {
         const toast = useTalosToast()
         const onClick = vi.fn()
         toast.warning('careful', { id: 'x', action: { label: 'Undo', onClick } })
+        await flush()
 
         const [component, options] = toastMock.warning.mock.calls[0]
         expect(component).toBe(TalosSonnerToastContent)

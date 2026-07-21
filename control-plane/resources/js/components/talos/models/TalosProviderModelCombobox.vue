@@ -36,10 +36,10 @@ const manualMode = ref(false)
 const manualId = ref('')
 
 const selectedModel = computed(() => props.models.find((model) => model.id === props.modelValue) ?? null)
-const triggerLabel = computed(() => {
+const inputPlaceholder = computed(() => {
     if (selectedModel.value) return selectedModel.value.display_name
     if (props.modelValue.trim()) return props.modelValue
-    return 'Select a model'
+    return 'Search or select a model'
 })
 
 const filteredModels = computed(() => {
@@ -100,22 +100,37 @@ watch(() => props.modelValue, (value) => {
             :model-value="modelValue"
             :open="open"
             ignore-filter
+            open-on-focus
             :disabled="loading"
             @update:model-value="onSelect"
             @update:open="open = $event"
         >
-            <ComboboxAnchor as-child>
+            <!--
+                reka Combobox is a typeahead primitive: the search input lives in
+                the always-mounted anchor (not the open-gated portal), so focusing
+                it opens the list reliably in a real browser. A separate chevron
+                trigger toggles the list for pointer users.
+            -->
+            <ComboboxAnchor class="flex h-10 w-full items-center gap-1 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 focus-within:border-[var(--talos-accent)]">
+                <ComboboxInput
+                    class="h-full min-w-0 flex-1 border-0 bg-transparent px-1 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] disabled:cursor-not-allowed disabled:opacity-60"
+                    :placeholder="inputPlaceholder"
+                    aria-label="Search models"
+                    data-testid="talos-model-combobox-input"
+                    :disabled="loading"
+                    @input="onSearchInput"
+                    @focus="open = true"
+                />
                 <ComboboxTrigger as-child>
                     <button
                         type="button"
                         data-testid="talos-model-combobox-trigger"
-                        class="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-left text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                        class="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[var(--talos-muted)] outline-none hover:bg-[var(--talos-active)] focus-visible:ring-2 focus-visible:ring-[var(--talos-accent)] disabled:cursor-not-allowed disabled:opacity-60"
                         :disabled="loading"
                         aria-label="Choose a provider model"
                     >
-                        <span class="min-w-0 truncate" :class="selectedModel ? '' : 'text-[var(--talos-muted)]'">{{ triggerLabel }}</span>
-                        <Loader2 v-if="loading" class="h-4 w-4 shrink-0 animate-spin text-[var(--talos-muted)]" />
-                        <ChevronsUpDown v-else class="h-4 w-4 shrink-0 text-[var(--talos-muted)]" />
+                        <Loader2 v-if="loading" class="h-4 w-4 animate-spin" />
+                        <ChevronsUpDown v-else class="h-4 w-4" />
                     </button>
                 </ComboboxTrigger>
             </ComboboxAnchor>
@@ -124,15 +139,6 @@ watch(() => props.modelValue, (value) => {
                 data-testid="talos-model-combobox-list"
                 class="max-h-[288px] w-[var(--reka-combobox-trigger-width)] min-w-[16rem] overflow-y-auto border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[var(--talos-text)]"
             >
-                <div class="flex items-center gap-2 border-b border-[var(--talos-border)] px-2 pb-2">
-                    <ComboboxInput
-                        class="h-8 flex-1 border-0 bg-transparent px-1 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)]"
-                        placeholder="Search every provider model"
-                        aria-label="Search models"
-                        @input="onSearchInput"
-                    />
-                </div>
-
                 <ComboboxEmpty class="px-2 py-3 text-sm text-[var(--talos-muted)]">
                     No provider model matches this search.
                 </ComboboxEmpty>
@@ -156,6 +162,11 @@ watch(() => props.modelValue, (value) => {
                 </ComboboxGroup>
             </ComboboxList>
         </Combobox>
+
+        <p v-if="selectedModel" class="truncate text-[11px] text-[var(--talos-muted)]" data-testid="talos-model-combobox-selected">
+            Selected: <span class="font-medium text-[var(--talos-text)]">{{ selectedModel.display_name }}</span>
+            <span class="font-mono"> · {{ selectedModel.id }}</span>
+        </p>
 
         <div v-if="error" class="flex items-start justify-between gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
             <span class="min-w-0">{{ error }}</span>

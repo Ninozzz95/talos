@@ -268,7 +268,11 @@ describe('TALOS source token contract', () => {
         }
 
         const workspace = readFileSync(join(resourcesRoot, 'components', 'talos', 'workspace', 'TalosWorkspace.vue'), 'utf8')
-        expect(workspace).toMatch(/import \{ Toaster \} from '\.\.\/\.\.\/ui\/sonner'/)
+        // The Toaster loads behind a dynamic boundary to keep the vue-sonner
+        // runtime out of the initial chunk (chunk-budget contract), but the
+        // native Sonner region is still the single mounted toaster.
+        expect(workspace).toMatch(/defineAsyncComponent\(\(\) => import\('\.\.\/\.\.\/ui\/sonner'\)\.then\(\(module\) => module\.Toaster\)\)/)
+        expect(workspace).not.toMatch(/import \{ Toaster \} from/)
         expect(workspace.match(/<Toaster\b/g) ?? []).toHaveLength(1)
 
         expect(existsSync(join(resourcesRoot, 'components', 'ui', 'sonner', 'Sonner.vue'))).toBe(true)

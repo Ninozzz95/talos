@@ -91,12 +91,14 @@ describe('useTalosWorkspaceCommandActions', () => {
         expect(actions.contextPopoverOpen.value).toBe(true)
     })
 
-    it('routes setFeedback through one command-feedback native toast', () => {
+    it('routes setFeedback through one command-feedback native toast', async () => {
         toastMock.info.mockClear()
         const actions = useTalosWorkspaceCommandActions(baseDeps())
 
         actions.setFeedback('New session opened.')
         actions.setFeedback('Chat archived.')
+        // vue-sonner is loaded lazily; flush the dynamic-import microtask.
+        await new Promise((resolve) => setTimeout(resolve, 0))
 
         expect(actions).not.toHaveProperty('commandFeedback')
         expect(toastMock.info).toHaveBeenCalledTimes(2)
