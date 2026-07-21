@@ -259,4 +259,19 @@ describe('TALOS source token contract', () => {
         expect(messageContent).toContain('border-left: 2px solid var(--talos-code-accent)')
         expect(messageContent).not.toMatch(/(?:color|outline):\s*[^;]*var\(--talos-code-accent\)/)
     })
+
+    it('mounts one native Sonner toaster and contains no legacy ToastRegion source or import', () => {
+        expect(existsSync(join(resourcesRoot, 'components', 'ui', 'ToastRegion.vue'))).toBe(false)
+
+        for (const path of contractSourceFiles()) {
+            expect(readFileSync(path, 'utf8'), `${path} must not reference the legacy ToastRegion`).not.toMatch(/ToastRegion/)
+        }
+
+        const workspace = readFileSync(join(resourcesRoot, 'components', 'talos', 'workspace', 'TalosWorkspace.vue'), 'utf8')
+        expect(workspace).toMatch(/import \{ Toaster \} from '\.\.\/\.\.\/ui\/sonner'/)
+        expect(workspace.match(/<Toaster\b/g) ?? []).toHaveLength(1)
+
+        expect(existsSync(join(resourcesRoot, 'components', 'ui', 'sonner', 'Sonner.vue'))).toBe(true)
+        expect(existsSync(join(resourcesRoot, 'components', 'ui', 'sonner', 'index.ts'))).toBe(true)
+    })
 })

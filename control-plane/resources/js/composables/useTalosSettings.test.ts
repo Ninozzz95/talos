@@ -70,3 +70,47 @@ describe('useTalosSettings revision contract', () => {
         expect(settings.settings.value?.revision).toBe(9)
     })
 })
+
+describe('useTalosSettings load state', () => {
+    it('settings load state transitions idle loading loaded and error without faking a loaded snapshot', async () => {
+        let releaseLoad: (response: Response) => void = () => undefined
+        globalThis.fetch = vi.fn(() => new Promise<Response>((resolve) => {
+            releaseLoad = resolve
+        })) as typeof fetch
+        const settings = useTalosSettings()
+
+        expect(settings.settingsLoadState.value).toBe('idle')
+
+        const loading = settings.loadSettings()
+        expect(settings.settingsLoadState.value).toBe('loading')
+
+        releaseLoad(jsonResponse({ data: { id: 'settings-1', revision: 1, preferences: {} } }))
+        await loading
+        expect(settings.settingsLoadState.value).toBe('loaded')
+        expect(settings.settings.value?.id).toBe('settings-1')
+
+        globalThis.fetch = vi.fn(async () => jsonResponse({ message: 'boom' }, 500)) as typeof fetch
+        const failing = useTalosSettings()
+        expect(failing.settingsLoadState.value).toBe('idle')
+        await expect(failing.loadSettings()).rejects.toBeInstanceOf(TalosApiError)
+        expect(failing.settingsLoadState.value).toBe('error')
+        expect(failing.settings.value).toBeNull()
+    })
+
+    it('a later successful load recovers from error', async () => {
+        let attempt = 0
+        globalThis.fetch = vi.fn(async () => {
+            attempt += 1
+            if (attempt === 1) return jsonResponse({ message: 'boom' }, 500)
+            return jsonResponse({ data: { id: 'settings-1', revision: 2, preferences: {} } })
+        }) as typeof fetch
+        const settings = useTalosSettings()
+
+        await expect(settings.loadSettings()).rejects.toBeInstanceOf(TalosApiError)
+        expect(settings.settingsLoadState.value).toBe('error')
+
+        await settings.loadSettings()
+        expect(settings.settingsLoadState.value).toBe('loaded')
+        expect(settings.settings.value?.revision).toBe(2)
+    })
+})

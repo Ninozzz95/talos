@@ -91,6 +91,13 @@ const composerPrompt = computed({
     set: (value: string) => emit('updatePrompt', value),
 })
 const composerRoot = ref<HTMLElement | null>(null)
+const slimComposer = ref<InstanceType<typeof TalosSlimComposer> | null>(null)
+
+function focusPrompt() {
+    slimComposer.value?.focusPrompt()
+}
+
+defineExpose({ focusPrompt })
 
 function enhancementOverlayOpen() {
     return Boolean(props.promptEnhancementResult || props.enhancingPrompt || props.promptEnhancementError)
@@ -287,6 +294,7 @@ onBeforeUnmount(() => {
             </Transition>
 
             <TalosSlimComposer
+                ref="slimComposer"
                 v-model:prompt="composerPrompt"
                 :commands="commands"
                 :can-send="canSend"

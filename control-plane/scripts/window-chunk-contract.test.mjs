@@ -38,6 +38,8 @@ test('production manifest keeps every registered window behind a dynamic boundar
 })
 
 test('initial application chunk stays below the warning threshold', () => {
+    // The vue-sonner runtime (F0 Toaster) is shell furniture and intentionally
+    // lives inside this entry closure; this budget is what measures it.
     const bytes = statSync(resolve(root, 'public/build', entry.file)).size
     assert.ok(bytes < 500 * 1024, `initial app chunk is ${bytes} bytes; expected less than 512000`)
 })

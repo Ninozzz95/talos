@@ -102,7 +102,22 @@ const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve pro
 const sendTitle = computed(() => props.sendDisabledReason || 'Send message')
 const browseMenuOpen = ref(false)
 const promptRow = ref<HTMLElement | null>(null)
+const promptField = ref<{ $el?: unknown } | HTMLTextAreaElement | null>(null)
 const activeSlashIndex = ref(0)
+
+function promptFieldElement(): HTMLTextAreaElement | null {
+    const candidate = promptField.value
+    const element = candidate && typeof candidate === 'object' && '$el' in candidate ? candidate.$el : candidate
+    return element instanceof HTMLTextAreaElement ? element : null
+}
+
+function focusPrompt() {
+    const field = promptFieldElement()
+    if (!field || field.disabled) return
+    field.focus()
+}
+
+defineExpose({ focusPrompt })
 const slashQuery = computed(() => {
     const value = prompt.value
     if (!value.startsWith('/')) return null
@@ -135,7 +150,7 @@ function resizePromptField(event?: Event) {
     const eventTarget = event?.target
     const field = eventTarget instanceof HTMLTextAreaElement
         ? eventTarget
-        : promptRow.value?.querySelector<HTMLTextAreaElement>('textarea')
+        : promptFieldElement()
 
     if (!field) return
     field.style.height = 'auto'
@@ -249,6 +264,7 @@ onBeforeUnmount(() => {
 
         <div ref="promptRow" data-testid="talos-composer-prompt-row" class="relative min-w-0">
             <Textarea
+                ref="promptField"
                 v-model="prompt"
                 rows="1"
                 class="talos-composer-textarea max-h-[min(16rem,35vh)] min-h-14 min-w-0 resize-none overflow-y-auto border-0 bg-transparent px-2 py-2 pr-14 shadow-none focus-visible:ring-0"

@@ -1302,6 +1302,63 @@ function modelProfilePayload(overrides: Record<string, unknown> = {}) {
     }
 }
 
+function catalogItemPayload(provider: string, overrides: TalosCatalogModelFixture = {}) {
+    return {
+        id: overrides.id ?? 'model-e2e',
+        display_name: overrides.display_name ?? 'Model E2E',
+        provider,
+        owned_by: overrides.owned_by ?? null,
+        chat_compatibility: overrides.chat_compatibility ?? 'supported',
+        capabilities: {
+            text: true,
+            vision: null,
+            tools: null,
+            reasoning: null,
+            embeddings: null,
+            image_output: null,
+            audio_output: null,
+            ...(overrides.capabilities ?? {}),
+        },
+        context_window: overrides.context_window ?? null,
+        max_output_tokens: overrides.max_output_tokens ?? null,
+        lifecycle: overrides.lifecycle ?? 'stable',
+        canonical_slug: overrides.canonical_slug ?? null,
+        local_digest: null,
+        metadata: overrides.metadata ?? {},
+    }
+}
+
+function catalogEnvelopePayload(
+    provider: string,
+    profileId: string | null,
+    models: TalosCatalogModelFixture[],
+    pageCount: number,
+    complete: boolean,
+    warnings: string[],
+) {
+    return {
+        profile_id: profileId,
+        provider,
+        models: models.map((model) => catalogItemPayload(provider, model)),
+        complete,
+        page_count: pageCount,
+        fetched_at: now,
+        warnings,
+    }
+}
+
+function catalogFaultResponse(route: Route, provider: string, fault: TalosCatalogFaultFixture) {
+    return json(route, {
+        error: {
+            code: fault.code,
+            message: fault.message,
+            retryable: fault.retryable ?? false,
+            retry_after_seconds: fault.retry_after_seconds ?? null,
+            provider: fault.provider ?? provider,
+        },
+    }, fault.status)
+}
+
 function modelComparisonPayload(revealed = false) {
     const lanes = [
         {
@@ -1480,6 +1537,42 @@ export type TalosSettingsPatchFailure = {
     message?: string
 }
 
+export type TalosCatalogModelFixture = Partial<{
+    id: string
+    display_name: string
+    chat_compatibility: 'supported' | 'unsupported' | 'unknown'
+    lifecycle: 'stable' | 'preview' | 'experimental' | 'deprecated' | 'unknown'
+    context_window: number | null
+    max_output_tokens: number | null
+    capabilities: Record<string, boolean | null>
+    owned_by: string | null
+    canonical_slug: string | null
+    metadata: Record<string, unknown>
+}>
+
+export type TalosCatalogFaultFixture = {
+    status: number
+    code: string
+    message: string
+    retryable?: boolean
+    retry_after_seconds?: number | null
+    provider?: string
+}
+
+export type TalosModelCatalogMockConfig = {
+    provider?: string
+    draftModels?: TalosCatalogModelFixture[]
+    draftPageCount?: number
+    draftComplete?: boolean
+    draftWarnings?: string[]
+    draftFault?: TalosCatalogFaultFixture
+    profileModels?: TalosCatalogModelFixture[]
+    profilePageCount?: number
+    profileComplete?: boolean
+    profileWarnings?: string[]
+    profileFault?: TalosCatalogFaultFixture
+}
+
 export type InstallTalosApiMocksOptions = {
     initialSessions?: Array<{
         id: string
@@ -1496,6 +1589,7 @@ export type InstallTalosApiMocksOptions = {
     }
     initialSettings?: TalosInitialSettings
     settingsPatchFailure?: TalosSettingsPatchFailure
+    modelCatalog?: TalosModelCatalogMockConfig
     chatDelayMs?: number
     proceduralServerPersistedAssistant?: boolean
     proceduralBrowserApproval?: boolean
@@ -1536,6 +1630,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             model: 'claude-e2e',
         }),
     ]
+    const modelCatalog = options.modelCatalog ?? {}
     const proceduralApprovalsBySession = new Map<string, ProceduralApprovalMockState>()
     let createdSessionCount = 0
     const browserStatesByTalosSession = new Map<string, BrowserMockState[]>()
@@ -1605,6 +1700,7 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
                 ai_synthesis: false,
                 public_app_url: '',
             },
+            onboarding: { intro_version: 1, intro_outcome: 'completed' },
         },
         created_at: now,
         updated_at: now,
@@ -1777,6 +1873,53 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             })
         }
 
+        if (path === '/api/talos/model-profiles/discover-draft' && method === 'POST') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            const provider = modelCatalog.provider ?? String(body.provider ?? 'openai')
+
+            if (modelCatalog.draftFault) {
+                return catalogFaultResponse(route, provider, modelCatalog.draftFault)
+            }
+
+            return json(route, {
+                data: catalogEnvelopePayload(
+                    provider,
+                    null,
+                    modelCatalog.draftModels ?? [],
+                    modelCatalog.draftPageCount ?? 1,
+                    modelCatalog.draftComplete ?? true,
+                    modelCatalog.draftWarnings ?? [],
+                ),
+            })
+        }
+
+        const modelCatalogMatch = path.match(/^\/api\/talos\/model-profiles\/([^/]+)\/models$/)
+        if (modelCatalogMatch && method === 'GET') {
+            const profileId = modelCatalogMatch[1]
+            const owned = modelProfiles.find((candidate) => (candidate as { id?: unknown }).id === profileId)
+
+            if (!owned) {
+                return json(route, { message: `Model profile ${profileId} not found.` }, 404)
+            }
+
+            const provider = modelCatalog.provider ?? String((owned as { provider?: unknown }).provider ?? 'openai')
+
+            if (modelCatalog.profileFault) {
+                return catalogFaultResponse(route, provider, modelCatalog.profileFault)
+            }
+
+            return json(route, {
+                data: catalogEnvelopePayload(
+                    provider,
+                    profileId,
+                    modelCatalog.profileModels ?? modelCatalog.draftModels ?? [],
+                    modelCatalog.profilePageCount ?? 1,
+                    modelCatalog.profileComplete ?? true,
+                    modelCatalog.profileWarnings ?? [],
+                ),
+            })
+        }
+
         if (path === '/api/talos/model-profiles' && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             const provider = String(body.provider ?? 'openai')
@@ -1822,6 +1965,37 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             const profile = modelProfiles.find((candidate) => candidate.id === profileId)
 
             return json(route, { data: profile ?? modelProfilePayload({ id: profileId }) })
+        }
+
+        const modelProfileMutationMatch = path.match(/^\/api\/talos\/model-profiles\/([^/]+)$/)
+        if (modelProfileMutationMatch && method === 'PATCH') {
+            const profileId = modelProfileMutationMatch[1]
+            const body = request.postDataJSON() as Record<string, unknown>
+            let updatedProfile: Record<string, unknown> | null = null
+            modelProfiles = modelProfiles.map((profile) => {
+                if ((profile as { id?: unknown }).id !== profileId) return profile
+                // A connection-identity change invalidates stale probe evidence:
+                // the server returns an untested projection that a follow-up probe
+                // must verify before the profile is callable again.
+                updatedProfile = {
+                    ...profile,
+                    provider: body.provider ?? (profile as { provider?: unknown }).provider,
+                    display_name: body.display_name ?? (profile as { display_name?: unknown }).display_name,
+                    model: body.model ?? (profile as { model?: unknown }).model,
+                    base_url: Object.prototype.hasOwnProperty.call(body, 'base_url') ? body.base_url : (profile as { base_url?: unknown }).base_url,
+                    timeout_seconds: body.timeout_seconds ?? (profile as { timeout_seconds?: unknown }).timeout_seconds,
+                    status: 'untested',
+                    probe_result: null,
+                    capabilities: null,
+                    has_secret: typeof body.secret === 'string' && body.secret.length > 0
+                        ? true
+                        : (profile as { has_secret?: unknown }).has_secret,
+                    updated_at: now,
+                }
+                return updatedProfile
+            })
+
+            return json(route, { data: updatedProfile ?? modelProfilePayload({ id: profileId, status: 'untested', probe_result: null }) })
         }
 
         const modelProfileMatch = path.match(/^\/api\/talos\/model-profiles\/([^/]+)$/)

@@ -224,6 +224,65 @@ export type TalosModelProfile = {
     updated_at: string
 }
 
+export type TalosModelCatalogChatCompatibility = 'supported' | 'unsupported' | 'unknown'
+export type TalosModelCatalogLifecycle = 'stable' | 'preview' | 'experimental' | 'deprecated' | 'unknown'
+
+export type TalosProviderModelCatalogCapabilities = {
+    text: boolean | null
+    vision: boolean | null
+    tools: boolean | null
+    reasoning: boolean | null
+    embeddings: boolean | null
+    image_output: boolean | null
+    audio_output: boolean | null
+}
+
+export type TalosProviderModelCatalogItem = {
+    id: string
+    display_name: string
+    provider: TalosModelProfile['provider']
+    owned_by: string | null
+    chat_compatibility: TalosModelCatalogChatCompatibility
+    capabilities: TalosProviderModelCatalogCapabilities
+    context_window: number | null
+    max_output_tokens: number | null
+    lifecycle: TalosModelCatalogLifecycle
+    canonical_slug: string | null
+    local_digest: string | null
+    metadata: Record<string, unknown>
+}
+
+export type TalosProviderModelCatalog = {
+    profile_id: string | null
+    provider: TalosModelProfile['provider']
+    models: TalosProviderModelCatalogItem[]
+    complete: boolean
+    page_count: number
+    fetched_at: string
+    warnings: string[]
+}
+
+export type TalosModelCatalogFaultCode =
+    | 'MODEL_CATALOG_SECRET_MISSING'
+    | 'MODEL_CATALOG_AUTH_FAILED'
+    | 'MODEL_CATALOG_RATE_LIMITED'
+    | 'MODEL_CATALOG_POLICY_BLOCKED'
+    | 'MODEL_CATALOG_CONNECTION_FAILED'
+    | 'MODEL_CATALOG_CONNECTED_IP_MISMATCH'
+    | 'MODEL_CATALOG_REDIRECT_BLOCKED'
+    | 'MODEL_CATALOG_RESPONSE_TOO_LARGE'
+    | 'MODEL_CATALOG_RESPONSE_INVALID'
+    | 'MODEL_CATALOG_PAGINATION_INVALID'
+    | 'MODEL_CATALOG_LIMIT_EXCEEDED'
+
+export type TalosModelCatalogFault = {
+    code: TalosModelCatalogFaultCode | string
+    message: string
+    retryable: boolean
+    retry_after_seconds: number | null
+    provider: TalosModelProfile['provider'] | string
+}
+
 export type TalosModelRoutingLane = {
     model_profile_id: string
     role: string

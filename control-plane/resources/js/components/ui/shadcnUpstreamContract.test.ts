@@ -263,4 +263,66 @@ describe('shadcn-vue upstream primitive contract', () => {
             expect(parts[name], `${name} must be exported from ui/dropdown-menu`).toBeTruthy()
         }
     })
+
+    it('renders the project-pinned shadcn-vue Sonner wrapper', async () => {
+        const { Toaster } = await import('./sonner/index')
+        expect(Toaster, 'Toaster must be exported from ui/sonner').toBeTruthy()
+
+        const mountPoint = document.createElement('div')
+        document.body.append(mountPoint)
+        app = createApp(defineComponent({
+            setup() {
+                return () => h(Toaster, { closeButton: true, position: 'top-right' })
+            },
+        }))
+        app.mount(mountPoint)
+        await nextTick()
+
+        expect(document.querySelector('[data-sonner-toaster]'), 'native Sonner toaster region must mount').not.toBeNull()
+    })
+
+    it('ships the pinned shadcn-vue Combobox wrapper set generated from the 2.7.4 registry', async () => {
+        const parts = await import('./combobox/index.js')
+        for (const name of [
+            'Combobox',
+            'ComboboxAnchor',
+            'ComboboxEmpty',
+            'ComboboxGroup',
+            'ComboboxInput',
+            'ComboboxItem',
+            'ComboboxList',
+            'ComboboxSeparator',
+            'ComboboxTrigger',
+        ]) {
+            expect(parts[name], `${name} must be exported from ui/combobox`).toBeTruthy()
+        }
+        // The pinned registry payload re-exports these reka primitives verbatim;
+        // their presence proves the generated index tracks upstream provenance.
+        expect(parts.ComboboxCancel, 'ComboboxCancel must re-export from reka-ui').toBeTruthy()
+        expect(parts.ComboboxItemIndicator, 'ComboboxItemIndicator must re-export from reka-ui').toBeTruthy()
+    })
+
+    it('mounts the pinned Combobox as a reka-backed searchable input', async () => {
+        const { Combobox, ComboboxAnchor, ComboboxInput } = await import('./combobox/index.js')
+        const shell = document.createElement('div')
+        shell.className = 'talos-shell talos-ui-motion-disabled'
+        const mountPoint = document.createElement('div')
+        shell.append(mountPoint)
+        document.body.append(shell)
+
+        app = createApp(defineComponent({
+            setup() {
+                return () => h(Combobox, { open: true }, {
+                    default: () => h(ComboboxAnchor, {}, {
+                        default: () => h(ComboboxInput, { 'aria-label': 'Search models' }),
+                    }),
+                })
+            },
+        }))
+        app.mount(mountPoint)
+        await nextTick()
+
+        const input = shell.querySelector('input[aria-label="Search models"]')
+        expect(input, 'reka ComboboxInput must render a searchable input').not.toBeNull()
+    })
 })
