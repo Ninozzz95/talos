@@ -289,6 +289,224 @@ final class TalosBrowserArtifactStore
     }
 
     /**
+     * Persist a scroll's fresh frame + snapshot and atomically advance the
+     * session state. A scroll carries no command/approval/lease/fingerprint: it
+     * simply supersedes the pre-scroll frame at the next state version.
+     *
+     * @param  array<string, mixed>  $workerResult
+     * @return array{screenshot: TalosBrowserArtifact, snapshot: TalosBrowserArtifact, session: TalosBrowserSession}
+     */
+    public function storeHmiScroll(TalosBrowserSession $session, array $workerResult): array
+    {
+        $this->legacyWrites->assertEnabled('browser.artifact.store_hmi_capture');
+
+        $capture = $this->validatedHmiScroll($session, $workerResult);
+        $created = [];
+
+        try {
+            /** @var array{screenshot: TalosBrowserArtifact, snapshot: TalosBrowserArtifact} $stored */
+            $stored = DB::transaction(function () use ($session, $capture, &$created): array {
+                $chat = TalosSession::query()
+                    ->whereKey($session->talos_session_id)
+                    ->where('user_id', $session->user_id)
+                    ->lockForUpdate()
+                    ->first();
+                $lease = TalosBrowserSession::query()
+                    ->whereKey($session->id)
+                    ->where('user_id', $session->user_id)
+                    ->where('talos_session_id', $session->talos_session_id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $chat instanceof TalosSession || ! $lease instanceof TalosBrowserSession) {
+                    throw new \RuntimeException('Browser HMI scroll lease is no longer active.');
+                }
+                if (! $lease->isOperable()) {
+                    throw new \RuntimeException('Browser HMI scroll lease is no longer active.');
+                }
+                if ((int) $lease->worker_state_version !== $capture['source_state_version']) {
+                    throw new \RuntimeException('Browser HMI scroll was superseded by newer state.');
+                }
+
+                $provenance = [
+                    'source_state_version' => $capture['source_state_version'],
+                    'state_version' => $capture['state_version'],
+                    'source_frame_sha256' => $capture['frame_sha256'],
+                    'interaction_id' => $capture['interaction_id'],
+                    'trust_boundary' => 'untrusted_browser_content',
+                ];
+                $sharedMetadata = array_filter([
+                    'source_state_version' => $capture['source_state_version'],
+                    'state_version' => $capture['state_version'],
+                    'source_frame_sha256' => $capture['frame_sha256'],
+                    'interaction_id' => $capture['interaction_id'],
+                    'captured_at' => $capture['captured_at'],
+                    'operation' => 'scroll',
+                ], static fn (mixed $value): bool => $value !== null);
+
+                $screenshot = $this->store(
+                    $lease,
+                    'screenshot',
+                    'image/png',
+                    $capture['screenshot_bytes'],
+                    [...$sharedMetadata, 'width' => $capture['width'], 'height' => $capture['height']],
+                    $provenance,
+                );
+                $created[] = $screenshot;
+
+                $snapshot = $this->store(
+                    $lease,
+                    'snapshot',
+                    'application/json',
+                    $capture['snapshot_json'],
+                    [...$sharedMetadata, 'format' => 'accessibility_refs_v1', 'text_digest' => $capture['text_digest'], 'node_count' => $capture['node_count']],
+                    $provenance,
+                );
+                $created[] = $snapshot;
+
+                $updated = TalosBrowserSession::query()
+                    ->whereKey($lease->id)
+                    ->where('user_id', $lease->user_id)
+                    ->where('status', $lease->status)
+                    ->where('worker_state_version', $capture['source_state_version'])
+                    ->update([
+                        'worker_state_version' => $capture['state_version'],
+                        'last_screenshot_artifact_id' => $screenshot->id,
+                        'last_snapshot_artifact_id' => $snapshot->id,
+                        'current_url' => $capture['url'],
+                        'current_title' => $capture['title'],
+                        'status' => 'active',
+                        'last_seen_at' => now(),
+                    ]);
+                if ($updated !== 1) {
+                    throw new \RuntimeException('Browser HMI scroll was superseded by newer state.');
+                }
+
+                return compact('screenshot', 'snapshot');
+            });
+        } catch (\Throwable $exception) {
+            $cleanupFailures = [];
+            foreach (array_reverse($created) as $artifact) {
+                try {
+                    $this->discard($artifact);
+                } catch (\Throwable $cleanupFailure) {
+                    $cleanupFailures[] = $cleanupFailure;
+                }
+            }
+            if ($cleanupFailures !== []) {
+                throw new \RuntimeException('Browser HMI scroll rollback left an artifact cleanup failure.', previous: $exception);
+            }
+
+            throw $exception;
+        }
+
+        $session->refresh();
+
+        return [...$stored, 'session' => $session];
+    }
+
+    /**
+     * @param  array<string, mixed>  $workerResult
+     * @return array{interaction_id: string, source_state_version: int, state_version: int, frame_sha256: string, screenshot_bytes: string, width: int, height: int, snapshot_json: string, text_digest: string, node_count: int, url: string, title: string, captured_at: string}
+     */
+    private function validatedHmiScroll(TalosBrowserSession $session, array $workerResult): array
+    {
+        if (! $this->hasExactKeys($workerResult, [
+            'schema_version', 'interaction_id', 'session_id', 'source_state_version', 'state_version',
+            'frame_sha256', 'url', 'title', 'screenshot', 'snapshot', 'captured_at',
+        ])
+            || ($workerResult['schema_version'] ?? null) !== 'talos_browser_hmi_scroll_v2'
+            || ! is_string($workerResult['interaction_id'] ?? null)
+            || ! Str::isUuid($workerResult['interaction_id'])
+            || ($workerResult['session_id'] ?? null) !== $session->worker_session_id
+            || ! $this->nonNegativeInteger($workerResult['source_state_version'] ?? null)
+            || ! $this->nonNegativeInteger($workerResult['state_version'] ?? null)
+            || $workerResult['state_version'] !== $workerResult['source_state_version'] + 1
+            || ! $this->isSha256($workerResult['frame_sha256'] ?? null)
+            || ! is_string($workerResult['url'] ?? null)
+            || $workerResult['url'] === ''
+            || mb_strlen($workerResult['url']) > 2048
+            || ! is_string($workerResult['title'] ?? null)
+            || mb_strlen($workerResult['title']) > 512
+            || ! is_string($workerResult['captured_at'] ?? null)
+            || $workerResult['captured_at'] === ''
+            || mb_strlen($workerResult['captured_at']) > 64
+            || ! $this->validTimestamp($workerResult['captured_at'])) {
+            throw new \RuntimeException('Browser HMI scroll contract is invalid.');
+        }
+
+        $screenshot = $workerResult['screenshot'] ?? null;
+        if (! is_array($screenshot)
+            || ! $this->hasExactKeys($screenshot, ['mime_type', 'width', 'height', 'sha256', 'base64'])
+            || ($screenshot['mime_type'] ?? null) !== 'image/png'
+            || ! $this->positiveInteger($screenshot['width'] ?? null)
+            || ! $this->positiveInteger($screenshot['height'] ?? null)
+            || $screenshot['width'] !== (int) $session->viewport_width
+            || $screenshot['height'] !== (int) $session->viewport_height
+            || ! $this->isSha256($screenshot['sha256'] ?? null)
+            || ! is_string($screenshot['base64'] ?? null)) {
+            throw new \RuntimeException('Browser HMI scroll screenshot contract is invalid.');
+        }
+        $screenshotBytes = base64_decode($screenshot['base64'], true);
+        if (! is_string($screenshotBytes) || $screenshotBytes === '' || strlen($screenshotBytes) > self::MAX_SCREENSHOT_BYTES) {
+            throw new \RuntimeException('Browser HMI scroll screenshot payload is invalid.');
+        }
+        if (($screenshot['sha256'] ?? null) !== 'sha256:'.hash('sha256', $screenshotBytes)) {
+            throw new \RuntimeException('Browser HMI scroll screenshot hash is invalid.');
+        }
+
+        $snapshot = $workerResult['snapshot'] ?? null;
+        if (! is_array($snapshot)
+            || ! $this->hasExactKeys($snapshot, ['snapshot_id', 'format', 'text_digest', 'sha256', 'nodes'])
+            || ! is_string($snapshot['snapshot_id'] ?? null)
+            || preg_match('/^snap_[A-Za-z0-9-]+$/', $snapshot['snapshot_id']) !== 1
+            || ($snapshot['format'] ?? null) !== 'accessibility_refs_v1'
+            || ! is_string($snapshot['text_digest'] ?? null)
+            || mb_strlen($snapshot['text_digest']) > 4000
+            || ! is_array($snapshot['nodes'] ?? null)
+            || ! array_is_list($snapshot['nodes'])
+            || count($snapshot['nodes']) > 500
+            || ! $this->validSnapshotNodes($snapshot['nodes'])) {
+            throw new \RuntimeException('Browser HMI scroll snapshot contract is invalid.');
+        }
+        $snapshotForHash = [
+            'snapshot_id' => $snapshot['snapshot_id'],
+            'format' => $snapshot['format'],
+            'text_digest' => $snapshot['text_digest'],
+            'nodes' => $snapshot['nodes'],
+        ];
+        if (($snapshot['sha256'] ?? null) !== 'sha256:'.hash('sha256', $this->canonicalJson($snapshotForHash))) {
+            throw new \RuntimeException('Browser HMI scroll snapshot hash is invalid.');
+        }
+        $snapshotJson = json_encode([
+            'snapshotId' => $snapshot['snapshot_id'],
+            'format' => $snapshot['format'],
+            'url' => $this->redactedPersistedUrl($workerResult['url']),
+            'title' => $workerResult['title'],
+            'nodes' => $snapshot['nodes'],
+            'textDigest' => $snapshot['text_digest'],
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        if (strlen($snapshotJson) > self::MAX_SNAPSHOT_BYTES) {
+            throw new \RuntimeException('Browser HMI scroll snapshot payload is invalid.');
+        }
+
+        return [
+            'interaction_id' => $workerResult['interaction_id'],
+            'source_state_version' => $workerResult['source_state_version'],
+            'state_version' => $workerResult['state_version'],
+            'frame_sha256' => $workerResult['frame_sha256'],
+            'screenshot_bytes' => $screenshotBytes,
+            'width' => $screenshot['width'],
+            'height' => $screenshot['height'],
+            'snapshot_json' => $snapshotJson,
+            'text_digest' => $snapshot['text_digest'],
+            'node_count' => count($snapshot['nodes']),
+            'url' => $this->redactedPersistedUrl($workerResult['url']),
+            'title' => $workerResult['title'],
+            'captured_at' => $workerResult['captured_at'],
+        ];
+    }
+
+    /**
      * @param  array{capture_id: string, interaction_id: string, source_state_version: int, state_version: int, frame_sha256: string, screenshot_bytes: string, width: int, height: int, snapshot_json: string, text_digest: string, node_count: int, url: string, title: string, captured_at: string}  $capture
      * @param  list<TalosBrowserArtifact>  $artifacts
      * @return array{screenshot: TalosBrowserArtifact, snapshot: TalosBrowserArtifact}

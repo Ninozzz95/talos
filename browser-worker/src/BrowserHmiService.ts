@@ -13,11 +13,14 @@ import { waitForBrowserPresentationBoundary } from "./BrowserPresentationBoundar
 import {
   BrowserHmiPreflightResponseSchema,
   BrowserHmiResultResponseSchema,
+  BrowserHmiScrollResponseSchema,
   BrowserHmiTargetDescriptorSchema,
   type BrowserHmiExecuteRequest,
   type BrowserHmiPreflightRequest,
   type BrowserHmiPreflightResponse,
   type BrowserHmiResultResponse,
+  type BrowserHmiScrollRequest,
+  type BrowserHmiScrollResponse,
   type BrowserHmiTargetDescriptor,
 } from "./BrowserHmiContracts.js";
 import { captureSnapshot } from "./BrowserSnapshot.js";
@@ -64,6 +67,66 @@ export class BrowserHmiService {
         point,
         target,
       });
+    });
+  }
+
+  async scroll(sessionId: string, input: BrowserHmiScrollRequest): Promise<BrowserHmiScrollResponse> {
+    return this.sessions.runExclusive(sessionId, async (session) => {
+      this.sessions.assertOperational(sessionId);
+      this.assertCapability(session);
+      this.sessions.assertState(sessionId, input.state_version);
+      const sourceStateVersion = session.stateVersion;
+      const domProbeKey = `${session.hmiIdentityKey}_scroll`;
+      let quiescence: QuiescenceTracker | undefined;
+      try {
+        quiescence = createQuiescenceTracker(session.page);
+        await installDomProbe(session.page, domProbeKey);
+        // A scroll changes only the viewport: it dispatches no effect and needs
+        // no target fingerprint. It advances state so the fresh frame/snapshot
+        // (and their coordinates) supersede the pre-scroll view; a click bound to
+        // the old state_version then correctly 409s as stale.
+        await session.page.mouse.wheel(0, input.delta_y);
+        const current = this.sessions.advanceState(sessionId);
+        await quiescence.waitFor(current.page, domProbeKey);
+        this.sessions.assertSinglePage(sessionId);
+        const screenshot = await captureCanonicalBrowserFrame(current.page);
+        const snapshot = await captureSnapshot(current.page);
+        this.sessions.assertOperational(sessionId);
+        this.sessions.recordSnapshot(sessionId, snapshot);
+        await this.sessions.recordFrame(sessionId, screenshot, current.stateVersion);
+        const snapshotValue = {
+          snapshot_id: snapshot.snapshotId,
+          format: snapshot.format,
+          text_digest: snapshot.textDigest,
+          nodes: snapshot.nodes,
+        };
+
+        return BrowserHmiScrollResponseSchema.parse({
+          schema_version: "talos_browser_hmi_scroll_v2",
+          interaction_id: input.interaction_id,
+          session_id: sessionId,
+          source_state_version: sourceStateVersion,
+          state_version: current.stateVersion,
+          frame_sha256: sha256(screenshot),
+          url: browserEvidenceUrl(current.page.url()),
+          title: boundedUtf8(await current.page.title(), 512),
+          screenshot: {
+            mime_type: "image/png",
+            width: current.viewport.width,
+            height: current.viewport.height,
+            sha256: sha256(screenshot),
+            base64: screenshot.toString("base64"),
+          },
+          snapshot: {
+            ...snapshotValue,
+            sha256: sha256(canonicalJson(snapshotValue)),
+          },
+          captured_at: new Date().toISOString(),
+        });
+      } finally {
+        quiescence?.dispose();
+        await removeDomProbe(session.page, domProbeKey);
+      }
     });
   }
 

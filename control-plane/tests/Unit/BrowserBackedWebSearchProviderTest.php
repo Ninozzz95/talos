@@ -413,6 +413,11 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
         throw new \LogicException('Browser search must not discard staged upload files.');
     }
 
+    public function scroll(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
+    {
+        throw new \LogicException('Browser search must not scroll via the HMI API.');
+    }
+
     public function create(string $ownerRef, int $width, int $height, int $timeoutMilliseconds = 15000, int $ttlSeconds = 3600): array
     {
         $this->timeouts['create'][] = $timeoutMilliseconds;
