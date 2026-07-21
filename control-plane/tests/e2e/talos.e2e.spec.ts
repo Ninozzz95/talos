@@ -417,7 +417,7 @@ async function selectDashboardTab(page: Page, name: string) {
 
 async function chooseModelProfile(page: Page, profileId = 'profile-e2e') {
     await page.getByRole('button', { name: 'Choose model profile' }).click()
-    await page.getByLabel('Server-side model profile').selectOption(profileId)
+    await page.locator(`[data-testid="talos-model-picker-option"][data-model-profile-id="${profileId}"]`).filter({ visible: true }).first().click()
 }
 
 async function chooseContextSet(page: Page, contextSetId = 'context-set-e2e') {
@@ -1629,7 +1629,7 @@ test('MODEL-P0 Gemini discovery quick add creates, probes and reaches chat witho
     // The composer selects the new profile immediately, with no window reopening.
     await page.getByRole('button', { name: 'Close Model Lab' }).click().catch(() => undefined)
     await page.getByRole('button', { name: 'Choose model profile' }).click()
-    await page.getByLabel('Server-side model profile').selectOption('profile-gemini-quick-add')
+    await page.locator('[data-testid="talos-model-picker-option"][data-model-profile-id="profile-gemini-quick-add"]').filter({ visible: true }).first().click()
     await page.getByLabel('Message TALOS').fill('Use the freshly discovered Gemini profile without reopening setup.')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     await expect(page.locator('.talos-chat-message[data-message-role="assistant"]').last()).toContainText('E2E response from AVM')
