@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Loader2 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Select from '../../ui/Select.vue'
 import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
-import TalosComposerModelPicker from './TalosComposerModelPicker.vue'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
 import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+
+// Lives behind the model popover's v-if, so it is loaded on demand and kept
+// out of the initial app chunk (the composer sits in the static entry closure).
+const TalosComposerModelPicker = defineAsyncComponent(() => import('./TalosComposerModelPicker.vue'))
 
 const props = withDefaults(defineProps<{
     prompt: string
