@@ -79,6 +79,14 @@ final class OpenAiResponsesTurnAdapter implements ProviderTurnAdapter
         if ($request->temperature !== null) {
             $payload['temperature'] = $request->temperature;
         }
+        foreach (ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_OPENAI_RESPONSES,
+            $request->reasoningEffort,
+            $request->reasoningVisible ?? false,
+            $request->maxTokens,
+        ) as $reasoningKey => $reasoningValue) {
+            $payload[$reasoningKey] = $reasoningValue;
+        }
         if ($request->tools !== []) {
             $payload['tools'] = array_map($this->providerTool(...), $request->tools);
             $payload['tool_choice'] = 'auto';
@@ -145,7 +153,7 @@ final class OpenAiResponsesTurnAdapter implements ProviderTurnAdapter
                 $state->pendingToolCallIds,
             ),
         ];
-        foreach (['max_output_tokens', 'temperature', 'tools', 'tool_choice'] as $field) {
+        foreach (['max_output_tokens', 'temperature', 'reasoning', 'tools', 'tool_choice'] as $field) {
             if (array_key_exists($field, $native)) {
                 $payload[$field] = $native[$field];
             }
@@ -272,7 +280,7 @@ final class OpenAiResponsesTurnAdapter implements ProviderTurnAdapter
                 'previous_response_id' => $responseId,
                 'instructions' => $requestPayload['instructions'],
             ];
-            foreach (['max_output_tokens', 'temperature', 'tools', 'tool_choice'] as $field) {
+            foreach (['max_output_tokens', 'temperature', 'reasoning', 'tools', 'tool_choice'] as $field) {
                 if (array_key_exists($field, $requestPayload)) {
                     $native[$field] = $requestPayload[$field];
                 }

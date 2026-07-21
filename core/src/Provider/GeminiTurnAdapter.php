@@ -87,6 +87,14 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
         if ($request->temperature !== null) {
             $generationConfig['temperature'] = $request->temperature;
         }
+        foreach (ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_GEMINI,
+            $request->reasoningEffort,
+            $request->reasoningVisible ?? false,
+            $request->maxTokens,
+        ) as $reasoningKey => $reasoningValue) {
+            $generationConfig[$reasoningKey] = $reasoningValue;
+        }
         if ($generationConfig !== []) {
             $payload['generationConfig'] = $generationConfig;
         }

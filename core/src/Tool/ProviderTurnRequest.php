@@ -25,6 +25,8 @@ final readonly class ProviderTurnRequest
         public ?int $maxTokens = null,
         public ?float $temperature = null,
         public array $resources = [],
+        public ?string $reasoningEffort = null,
+        public ?bool $reasoningVisible = null,
     ) {
         ToolContractGuard::nonEmptyString($provider, 'Provider turn provider', 64);
         ToolContractGuard::nonEmptyString($model, 'Provider turn model', 256);
@@ -77,6 +79,12 @@ final readonly class ProviderTurnRequest
         if ($temperature !== null && ($temperature < 0.0 || $temperature > 2.0)) {
             throw new InvalidArgumentException('Provider turn temperature must be between 0 and 2 when set.');
         }
+        if ($reasoningEffort !== null) {
+            // The canonical ladder is validated by ReasoningEffortMap (single source
+            // of truth) and by the controller against the model's advertised levels;
+            // here we only fail closed on an empty or over-long token.
+            ToolContractGuard::nonEmptyString($reasoningEffort, 'Provider turn reasoning effort', 16);
+        }
     }
 
     /** @return array<string, mixed> */
@@ -91,6 +99,8 @@ final readonly class ProviderTurnRequest
             'resources' => array_map(static fn (ProviderInputResource $resource): array => $resource->toAuditArray(), $this->resources),
             'max_tokens' => $this->maxTokens,
             'temperature' => $this->temperature,
+            'reasoning_effort' => $this->reasoningEffort,
+            'reasoning_visible' => $this->reasoningVisible,
         ]);
     }
 }
