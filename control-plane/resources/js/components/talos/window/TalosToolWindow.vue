@@ -8,6 +8,7 @@ const props = defineProps<{
     id: string
     title: string
     stationCode?: string
+    developmentMode?: boolean
     description?: string
     active?: boolean
     docked?: boolean
@@ -82,6 +83,7 @@ onMounted(() => {
             :id="id"
             :title="title"
             :station-code="stationCode"
+            :development-mode="developmentMode"
             :description="description"
             :docked="docked"
             :fullscreen="fullscreen"
