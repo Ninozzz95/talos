@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import Select from '../../ui/Select.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import Switch from '../../ui/Switch.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
@@ -57,6 +57,7 @@ const props = defineProps<{
     }>
 }>()
 const activePreset = computed(() => TALOS_THEME_PRESETS.find((preset) => preset.id === props.theme) ?? TALOS_THEME_PRESETS[0])
+const themePresetOptions = computed(() => TALOS_THEME_PRESETS.map((preset) => ({ value: preset.id, label: preset.label })))
 
 function selectTheme(value: unknown) {
     emit('updateTheme', value as TalosThemeId)
@@ -86,52 +87,39 @@ function selectThemeMode(value: unknown) {
     >
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Theme preset</span>
-            <Select :model-value="theme" class="mt-2" aria-label="Theme preset" @update:model-value="selectTheme">
-                <option v-for="preset in TALOS_THEME_PRESETS" :key="preset.id" :value="preset.id">
-                    {{ preset.label }}
-                </option>
-            </Select>
+            <TalosThemedSelect :model-value="theme" class="mt-2" :items="themePresetOptions" aria-label="Theme preset" @update:model-value="selectTheme" />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat message size</span>
-            <Select
+            <TalosThemedSelect
                 :model-value="chatLayout.bubble_scale"
                 class="mt-2"
+                :items="TALOS_CHAT_BUBBLE_SCALE_OPTIONS"
                 aria-label="Chat message size"
                 :disabled="themePolicyLocked"
                 @update:model-value="(value) => emit('updateChatBubbleScale', value as TalosChatBubbleScale)"
-            >
-                <option v-for="option in TALOS_CHAT_BUBBLE_SCALE_OPTIONS" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                </option>
-            </Select>
+            />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat composer</span>
-            <Select
+            <TalosThemedSelect
                 :model-value="chatLayout.composer_mode"
                 class="mt-2"
+                :items="TALOS_CHAT_COMPOSER_MODE_OPTIONS"
                 aria-label="Chat composer mode"
                 :disabled="themePolicyLocked"
                 @update:model-value="(value) => emit('updateChatComposerMode', value as TalosComposerMode)"
-            >
-                <option v-for="option in TALOS_CHAT_COMPOSER_MODE_OPTIONS" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                </option>
-            </Select>
+            />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Mobile tool windows</span>
-            <Select
+            <TalosThemedSelect
                 :model-value="chatLayout.mobile_window_presentation"
                 class="mt-2"
+                :items="TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS"
                 aria-label="Mobile tool window presentation"
                 @update:model-value="(value) => emit('updateMobileWindowPresentation', value as TalosMobileWindowPresentation)"
-            >
-                <option v-for="option in TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS" :key="option.value" :value="option.value">
-                    {{ option.label }}
-                </option>
-            </Select>
+            />
         </label>
         <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 md:col-span-2">
             <span>
@@ -147,11 +135,7 @@ function selectThemeMode(value: unknown) {
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Color mode</span>
-            <Select :model-value="themeMode" class="mt-2" aria-label="Theme color mode" @update:model-value="selectThemeMode">
-                <option v-for="mode in TALOS_THEME_MODE_OPTIONS" :key="mode.value" :value="mode.value">
-                    {{ mode.label }}
-                </option>
-            </Select>
+            <TalosThemedSelect :model-value="themeMode" class="mt-2" :items="TALOS_THEME_MODE_OPTIONS" aria-label="Theme color mode" @update:model-value="selectThemeMode" />
         </label>
         <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
             <span class="block text-sm font-semibold text-[var(--talos-text)]">{{ activePreset.label }}</span>
