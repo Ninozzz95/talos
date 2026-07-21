@@ -41,6 +41,8 @@ function dependencies() {
         selectedModelProfileId: ref('model-1'),
         selectedModelRoutingProfileId: ref(''),
         selectedContextSetId: ref(''),
+        selectedEffort: ref('high'),
+        thinking: ref(false),
         ensureSessionForPrompt: vi.fn(async () => session),
         persistUserMessage: vi.fn(async () => userMessage),
         sendPersistentChat,
@@ -77,6 +79,8 @@ describe('useTalosWorkspaceChatActions', () => {
             sessionId: session.id,
             prompt: 'Hello',
             modelProfileId: 'model-1',
+            effort: 'high',
+            thinking: false,
         }))
         expect(actions.prompt.value).toBe('')
         expect(actions.sending.value).toBe(false)

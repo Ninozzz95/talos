@@ -319,4 +319,69 @@ describe('TalosSlimComposer', () => {
         exposed?.focusPrompt?.()
         expect(document.activeElement?.getAttribute?.('aria-label')).not.toBe('Message TALOS')
     })
+
+    it('builds the effort ladder from the model effort_levels and selects a level', async () => {
+        const selectEffort = vi.fn()
+        const container = mountComposer('full', false, {
+            selectedEffort: 'high',
+            effortLevels: ['high', 'low', 'medium'],
+            supportsThinking: false,
+            onSelectEffort: selectEffort,
+        })
+
+        const chip = container.querySelector<HTMLButtonElement>('[data-testid="talos-composer-effort-chip"]')
+        expect(chip).not.toBeNull()
+        expect(container.querySelector('[data-testid="talos-composer-effort-label"]')?.textContent).toContain('Effort · High')
+
+        chip?.click()
+        await nextTick()
+
+        const levels = [...container.querySelectorAll<HTMLButtonElement>('[data-testid="talos-effort-level"]')]
+            .map((button) => button.getAttribute('data-effort-level'))
+        // Ordered from effort_levels (never hardcoded) with an implicit Off first.
+        expect(levels).toEqual(['off', 'low', 'medium', 'high'])
+        expect(container.querySelector('[data-testid="talos-effort-level"][data-effort-level="high"]')?.getAttribute('aria-pressed')).toBe('true')
+
+        container.querySelector<HTMLButtonElement>('[data-effort-level="low"]')?.click()
+        await nextTick()
+        expect(selectEffort).toHaveBeenCalledWith('low')
+        // Popover closes after a choice.
+        expect(container.querySelector('[data-testid="talos-effort-popover"]')).toBeNull()
+    })
+
+    it('shows the extended-thinking toggle only when the model supports it', async () => {
+        const selectThinking = vi.fn()
+        const container = mountComposer('full', false, {
+            selectedEffort: 'high',
+            effortLevels: ['low', 'high'],
+            supportsThinking: true,
+            thinking: false,
+            onSelectThinking: selectThinking,
+        })
+
+        container.querySelector<HTMLButtonElement>('[data-testid="talos-composer-effort-chip"]')?.click()
+        await nextTick()
+
+        const toggle = container.querySelector<HTMLButtonElement>('[data-testid="talos-thinking-toggle"]')
+        expect(toggle).not.toBeNull()
+        expect(toggle?.getAttribute('aria-checked')).toBe('false')
+        toggle?.click()
+        expect(selectThinking).toHaveBeenCalledWith(true)
+    })
+
+    it('omits the thinking toggle and exposes only Off for a non-reasoning model', async () => {
+        const container = mountComposer('full', false, {
+            selectedEffort: 'off',
+            effortLevels: [],
+            supportsThinking: false,
+        })
+
+        container.querySelector<HTMLButtonElement>('[data-testid="talos-composer-effort-chip"]')?.click()
+        await nextTick()
+
+        const levels = [...container.querySelectorAll<HTMLButtonElement>('[data-testid="talos-effort-level"]')]
+            .map((button) => button.getAttribute('data-effort-level'))
+        expect(levels).toEqual(['off'])
+        expect(container.querySelector('[data-testid="talos-thinking-toggle"]')).toBeNull()
+    })
 })

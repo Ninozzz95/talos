@@ -143,6 +143,7 @@ export const TALOS_WINDOW_REGISTRY = {
         sections: [
             { id: 'cookbook', label: 'Cookbook', description: 'Local model cookbook and dependency readiness.' },
             { id: 'models', label: 'Models', description: 'Server-side provider profiles and probes.' },
+            { id: 'catalog', label: 'Catalog', description: 'Per-provider model catalog, effort ladders and composer visibility.' },
         ],
         defaultSection: 'models',
         minDesktopSize: { width: 720, height: 520 },

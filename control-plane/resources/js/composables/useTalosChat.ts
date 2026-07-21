@@ -45,6 +45,8 @@ type SendPersistentChatOptions = {
         enabled: boolean
         browserSessionId: string | null
     }
+    effort?: string | null
+    thinking?: boolean | null
     chatEndpoint?: string
     userMessageMetadata?: Record<string, unknown>
     persistMessage: PersistMessage
@@ -363,6 +365,10 @@ export function useTalosChat() {
                     browser_session_id: options.browserMode.browserSessionId,
                 }
             }
+            // FV2-06.0 frozen wire contract §4.1: effort (level or "off"|null) and
+            // thinking (bool|null). Always sent so both chat engines honor them.
+            payload.effort = options.effort ?? null
+            payload.thinking = options.thinking ?? null
 
             const response = await talosFetch<TalosChatProxyResponse>(options.chatEndpoint ?? '/api/talos/chat', {
                 method: 'POST',

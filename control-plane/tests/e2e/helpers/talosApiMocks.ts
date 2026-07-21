@@ -1297,6 +1297,9 @@ function modelProfilePayload(overrides: Record<string, unknown> = {}) {
             },
         },
         has_secret: overrides.has_secret ?? true,
+        effort_levels: Object.prototype.hasOwnProperty.call(overrides, 'effort_levels') ? overrides.effort_levels : [],
+        supports_thinking: overrides.supports_thinking ?? false,
+        show_in_composer: overrides.show_in_composer ?? true,
         created_at: now,
         updated_at: now,
     }

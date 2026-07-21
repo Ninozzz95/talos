@@ -208,6 +208,21 @@ export type TalosSessionExportPayload = {
 
 export type TalosModelProfileStatus = 'untested' | 'healthy' | 'degraded' | 'failed' | 'disabled'
 
+// Canonical reasoning-effort ladder (locked, FV2-06.0 spec §3):
+// off < minimal < low < medium < high < xhigh < max.
+// `off` is a request-layer concept (send no reasoning param), not a catalog level.
+export type TalosEffortLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+export const TALOS_EFFORT_ORDER: readonly TalosEffortLevel[] = [
+    'off',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+] as const
+
 export type TalosModelProfile = {
     id: string
     user_id?: number | null
@@ -220,6 +235,9 @@ export type TalosModelProfile = {
     capabilities?: Record<string, unknown> | null
     probe_result?: Record<string, unknown> | null
     has_secret: boolean
+    effort_levels: string[]
+    supports_thinking: boolean
+    show_in_composer: boolean
     created_at: string
     updated_at: string
 }
