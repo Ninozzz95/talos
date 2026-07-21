@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 import {
     ArrowUp,
     BrainCircuit,
@@ -55,8 +55,8 @@ const emit = defineEmits<{
 const composerRoot = ref<HTMLElement | null>(null)
 const promptField = ref<HTMLTextAreaElement | null>(null)
 const attachmentInput = ref<HTMLInputElement | null>(null)
-const modelTrigger = ref<HTMLButtonElement | null>(null)
-const effortTrigger = ref<HTMLButtonElement | null>(null)
+const modelTrigger = ref<ComponentPublicInstance | null>(null)
+const effortTrigger = ref<ComponentPublicInstance | null>(null)
 const modelPopover = ref<HTMLElement | null>(null)
 const modelPickerOpen = ref(false)
 const effortPickerOpen = ref(false)
@@ -132,16 +132,21 @@ async function toggleEffortPicker(): Promise<void> {
     }
 }
 
+function focusTrigger(trigger: ComponentPublicInstance | HTMLElement | null): void {
+    const element = trigger instanceof HTMLElement ? trigger : (trigger?.$el as HTMLElement | undefined)
+    element?.focus()
+}
+
 async function closeModelPicker(): Promise<void> {
     modelPickerOpen.value = false
     await nextTick()
-    modelTrigger.value?.focus()
+    focusTrigger(modelTrigger.value)
 }
 
 async function closeEffortPicker(): Promise<void> {
     effortPickerOpen.value = false
     await nextTick()
-    effortTrigger.value?.focus()
+    focusTrigger(effortTrigger.value)
 }
 
 async function selectModelProfile(profileId: string): Promise<void> {

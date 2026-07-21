@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileRail from '@/components/shell/TalosMobileRail.vue'
 import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
@@ -17,6 +18,9 @@ const route = useRoute()
 const preferences = usePreferencesStore()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
+
+// Animated brand intro over the static native splash; dismisses to the chat.
+const showBoot = ref(true)
 
 let lifecycle: NativeLifecycleController | null = null
 
@@ -87,10 +91,12 @@ onBeforeUnmount(async () => {
 
 <template>
     <div
-        class="relative flex min-h-dvh flex-col bg-[var(--talos-background)] text-[var(--talos-text)]"
+        class="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-[var(--talos-background)] text-[var(--talos-text)]"
         :data-talos-route="activeRoute"
         :data-talos-presentation="preferences.state.presentation"
     >
+        <TalosBootLogo v-if="showBoot" @done="showBoot = false" />
+
         <div
             aria-hidden="true"
             data-testid="telemetry-poster"
