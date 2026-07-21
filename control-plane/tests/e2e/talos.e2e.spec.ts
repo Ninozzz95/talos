@@ -5368,6 +5368,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
     await page.getByRole('tab', { name: 'Appearance' }).click()
     await selectThemedOption(page, 'Chat message size', 'compact')
     await selectThemedOption(page, 'Chat composer mode', 'minimal')
+    await selectThemedOption(page, 'Message style', 'bubbles')
     await page.getByRole('switch', { name: 'Expand Advanced by default' }).click()
     await page.getByRole('button', { name: 'Save settings' }).click()
 
@@ -5377,6 +5378,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return layout?.bubble_scale === 'compact'
             && layout?.composer_mode === 'minimal'
+            && layout?.message_style === 'bubbles'
             && layout?.advanced_rail_expanded === true
     })).toBe(true)
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
