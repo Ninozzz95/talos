@@ -120,6 +120,8 @@ final class TalosChatController extends Controller
             'browser_mode.browser_session_id' => ['required_if:browser_mode.enabled,true', 'string', 'max:255'],
             'memory_scope_type' => ['sometimes', 'nullable', 'string', 'in:global,project,session'],
             'memory_scope_id' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'effort' => ['sometimes', 'nullable', 'string', \Illuminate\Validation\Rule::in([...\Kadmos\Provider\ReasoningEffortMap::LEVELS, \Kadmos\Provider\ReasoningEffortMap::OFF])],
+            'thinking' => ['sometimes', 'nullable', 'boolean'],
         ]);
 
         if (is_array($validated['browser_context'] ?? null) && ! filled($validated['session_id'] ?? null)) {
@@ -129,6 +131,10 @@ final class TalosChatController extends Controller
         }
 
         $apiKey = (string) ($validated['api_key'] ?? '');
+        $reasoningEffort = filled($validated['effort'] ?? null) ? (string) $validated['effort'] : null;
+        $reasoningVisible = array_key_exists('thinking', $validated) && $validated['thinking'] !== null
+            ? (bool) $validated['thinking']
+            : null;
         $session = null;
         $profile = null;
         $routingProfile = null;
@@ -490,6 +496,8 @@ final class TalosChatController extends Controller
                 $profile,
                 $browserSession,
                 $proceduralCurrentMessage,
+                $reasoningEffort,
+                $reasoningVisible,
             );
             $pendingApprovals = $outcome->status === 'awaiting_approval'
                 ? $this->proceduralPendingApprovals((int) $user->id, $outcome->turnId, $browserSession, $browserClicks, $browserUploads)
@@ -626,6 +634,8 @@ final class TalosChatController extends Controller
                 $validatorRequest = [
                     ...$validatorBase,
                     'message' => $validatorMessage,
+                    'effort' => $reasoningEffort,
+                    'thinking' => $reasoningVisible,
                 ];
                 if ($finalizeBrowserAnswer) {
                     $validatorRequest['tool_context'] = [

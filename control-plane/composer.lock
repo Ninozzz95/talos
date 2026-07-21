@@ -1157,9 +1157,10 @@
             "dist": {
                 "type": "path",
                 "url": "../core",
-                "reference": "d876da58f83b4a23d73acaa24fa6d954bf32eaf0"
+                "reference": "6c8ac148c275c93a4a9581f06632ab156a9c6ce0"
             },
             "require": {
+                "opis/json-schema": "2.6.0",
                 "php": "^8.5"
             },
             "require-dev": {
