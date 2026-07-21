@@ -5,9 +5,9 @@ import Button from '../../ui/Button.vue'
 import Select from '../../ui/Select.vue'
 import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
+import TalosComposerModelPicker from './TalosComposerModelPicker.vue'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
-import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
 import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
 const props = withDefaults(defineProps<{
@@ -181,49 +181,18 @@ onBeforeUnmount(() => {
                     aria-label="Model selection"
                     class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md talos-elev-2 p-3"
                 >
-                <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model profile</div>
-                <label class="sr-only" for="talos-workspace-model-profile">Server-side model profile</label>
-                <Select
-                    id="talos-workspace-model-profile"
-                    :model-value="selectedModelProfileId"
+                <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model for this conversation</div>
+                <TalosComposerModelPicker
                     class="mt-2"
-                    :disabled="loadingModelProfiles || !modelProfiles.length"
-                    aria-label="Server-side model profile"
-                    @update:model-value="(value) => emit('selectModelProfile', String(value))"
-                >
-                    <option value="">{{ loadingModelProfiles ? 'Loading profiles' : 'Choose profile' }}</option>
-                    <option
-                        v-for="profile in modelProfiles"
-                        :key="profile.id"
-                        :value="profile.id"
-                        :disabled="!talosModelProfileIsCallable(profile)"
-                    >
-                        {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
-                    </option>
-                </Select>
-                <div class="mt-3 flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
-                    Auto
-                    <span class="normal-case text-[10px] font-normal text-[var(--talos-muted)]">routing profile picks the model per turn</span>
-                </div>
-                <label class="sr-only" for="talos-workspace-model-routing-profile">Auto routing profile</label>
-                <Select
-                    id="talos-workspace-model-routing-profile"
-                    :model-value="selectedModelRoutingProfileId"
-                    class="mt-2"
-                    :disabled="loadingModelRoutingProfiles || !modelRoutingProfiles.length"
-                    aria-label="Auto routing profile"
-                    @update:model-value="(value) => emit('selectModelRoutingProfile', String(value))"
-                >
-                    <option value="">{{ loadingModelRoutingProfiles ? 'Loading routes' : 'Auto off (pick a profile above)' }}</option>
-                    <option
-                        v-for="profile in modelRoutingProfiles"
-                        :key="profile.id"
-                        :value="profile.id"
-                        :disabled="profile.status !== 'enabled' || profile.lanes.length === 0"
-                    >
-                        {{ profile.name }} - {{ profile.lanes.length }} lanes - {{ profile.status }}
-                    </option>
-                </Select>
+                    :model-profiles="modelProfiles"
+                    :model-routing-profiles="modelRoutingProfiles"
+                    :selected-model-profile-id="selectedModelProfileId"
+                    :selected-model-routing-profile-id="selectedModelRoutingProfileId"
+                    :loading-model-profiles="loadingModelProfiles"
+                    :loading-model-routing-profiles="loadingModelRoutingProfiles"
+                    @select-model-profile="(value) => emit('selectModelProfile', value)"
+                    @select-model-routing-profile="(value) => emit('selectModelRoutingProfile', value)"
+                />
                 <div class="mt-3 flex justify-between gap-2">
                     <Button size="sm" variant="ghost" @click="emit('refreshModelAndContext')">Refresh</Button>
                     <Button size="sm" @click="emit('openModelLab')">Model Lab</Button>
