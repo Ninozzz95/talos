@@ -1662,7 +1662,7 @@ test('MODEL-P0 OpenRouter rotation through Save and verify refreshes the persist
     await selectDashboardTab(page, 'Agents')
 
     await page.getByRole('button').filter({ hasText: 'E2E server-side profile' }).first().click()
-    await page.getByRole('combobox', { name: 'Provider' }).selectOption('openrouter')
+    await selectThemedOption(page, 'Provider', 'openrouter')
     await page.getByLabel('Rotate secret').fill('sk-openrouter-rotated')
 
     let pageLoads = 0
@@ -5293,7 +5293,7 @@ test('chat layout controls persist bubble scale, settings-owned composer density
     await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible()
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('minimal')
+    await selectThemedOption(page, 'Chat composer mode', 'minimal')
     await page.getByRole('button', { name: 'Save settings' }).click()
     await expectComposerMode(page, 'minimal')
 
@@ -5369,8 +5369,8 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat message size').selectOption('compact')
-    await page.getByLabel('Chat composer mode').selectOption('minimal')
+    await selectThemedOption(page, 'Chat message size', 'compact')
+    await selectThemedOption(page, 'Chat composer mode', 'minimal')
     await page.getByRole('switch', { name: 'Expand Advanced by default' }).click()
     await page.getByRole('button', { name: 'Save settings' }).click()
 
@@ -5420,8 +5420,8 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await openWorkspace(page)
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('minimal')
+    await selectThemedOption(page, 'Theme chat message size', 'expanded')
+    await selectThemedOption(page, 'Theme chat composer mode', 'minimal')
     await page.getByLabel('Theme name').fill('E2E layout theme')
 
     const createRequest = page.waitForRequest((request) => {
@@ -5439,8 +5439,8 @@ test('named theme chat layout overrides current layout and reset returns to pres
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat message size', { exact: true }).selectOption('compact')
-    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('full')
+    await selectThemedOption(page, 'Chat message size', 'compact')
+    await selectThemedOption(page, 'Chat composer mode', 'full')
     await page.getByRole('button', { name: 'Save settings' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
 
