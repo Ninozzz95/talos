@@ -56,12 +56,16 @@ const props = withDefaults(defineProps<{
     enhancingPrompt: boolean
     promptEnhancementError: string | null
     visibility: Record<string, boolean>
+    dictationStatus?: string
+    dictationSupported?: boolean
 }>(), {
     devBrowserEvidence: false,
     selectedEffort: 'high',
     thinking: false,
     effortLevels: () => [],
     supportsThinking: false,
+    dictationStatus: 'idle',
+    dictationSupported: false,
 })
 
 const emit = defineEmits<{
@@ -97,6 +101,7 @@ const emit = defineEmits<{
     attachVaultFile: [fileId: string]
     removeAttachment: [id: string]
     openVaultPicker: []
+    toggleDictation: []
 }>()
 
 const composerPrompt = computed({
@@ -302,6 +307,8 @@ onBeforeUnmount(() => {
                 :browser-current-page="browserCurrentPage"
                 :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
+                :dictation-status="dictationStatus"
+                :dictation-supported="dictationSupported"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
                 :visibility="visibility"
@@ -325,6 +332,7 @@ onBeforeUnmount(() => {
                 @attach-vault-file="emit('attachVaultFile', $event)"
                 @remove-attachment="emit('removeAttachment', $event)"
                 @open-vault-picker="emit('openVaultPicker')"
+                @toggle-dictation="emit('toggleDictation')"
             />
         </div>
     </div>
