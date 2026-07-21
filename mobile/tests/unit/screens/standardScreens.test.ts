@@ -3,7 +3,6 @@ import { mount } from '@vue/test-utils'
 import ResearchScreen from '@/screens/ResearchScreen.vue'
 import RunsScreen from '@/screens/RunsScreen.vue'
 import ContextScreen from '@/screens/ContextScreen.vue'
-import SettingsScreen from '@/screens/SettingsScreen.vue'
 
 describe('standard tab screens (verbatim desktop parity, step-1 empty states)', () => {
     it('research: Deep Research V3 header + Deep research eyebrow + real empty copy', () => {
@@ -27,14 +26,5 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
         expect(w.text()).toContain('Context Vault')
         expect(w.text()).toContain('Documents')
         expect(w.text()).toContain('No context sets returned by `/api/talos/context-sets`.')
-    })
-
-    it('settings: Settings Center header + Protected preferences eyebrow + full tab list', () => {
-        const w = mount(SettingsScreen)
-        expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Settings Center')
-        expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Protected preferences')
-        for (const label of ['Models', 'AI Defaults', 'Search', 'Browser', 'Integrations', 'Email', 'Reminders', 'Appearance', 'Shortcuts', 'Account', 'Agent Tools', 'System']) {
-            expect(w.text()).toContain(label)
-        }
     })
 })

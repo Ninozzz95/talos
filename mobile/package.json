@@ -32,6 +32,7 @@
         "test:e2e": "playwright test"
     },
     "dependencies": {
+        "@aparajita/capacitor-secure-storage": "8.0.0",
         "@capacitor/android": "8.4.2",
         "@capacitor/app": "8.1.1",
         "@capacitor/core": "8.4.2",
