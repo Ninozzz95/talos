@@ -8,6 +8,7 @@ import {
     FileText,
     Globe2,
     Loader2,
+    Mic,
     MoreHorizontal,
     Paperclip,
     RefreshCw,
@@ -59,6 +60,8 @@ const props = withDefaults(defineProps<{
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
     vaultPickerLoading?: boolean
     lastUserPrompt?: string | null
+    dictationStatus?: string
+    dictationSupported?: boolean
 }>(), {
     devBrowserEvidence: false,
     browseSetupFault: null,
@@ -66,6 +69,8 @@ const props = withDefaults(defineProps<{
     vaultFiles: () => [],
     vaultPickerLoading: false,
     lastUserPrompt: null,
+    dictationStatus: 'idle',
+    dictationSupported: false,
     selectedEffort: 'high',
     thinking: false,
     effortLevels: () => [],
@@ -93,6 +98,7 @@ const emit = defineEmits<{
     attachVaultFile: [fileId: string]
     removeAttachment: [id: string]
     openVaultPicker: []
+    toggleDictation: []
 }>()
 
 const attachmentInput = ref<HTMLInputElement | null>(null)
@@ -516,6 +522,27 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
                 </div>
+                <Tooltip
+                    v-if="dictationSupported"
+                    :content="dictationStatus === 'recording' ? 'Stop dictation' : dictationStatus === 'transcribing' ? 'Transcribing…' : 'Dictate'"
+                >
+                    <button
+                        type="button"
+                        data-testid="talos-composer-dictate"
+                        :data-dictation-status="dictationStatus"
+                        class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border px-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="dictationStatus === 'recording'
+                            ? 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
+                            : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
+                        :aria-label="dictationStatus === 'recording' ? 'Stop dictation' : 'Dictate'"
+                        :aria-pressed="dictationStatus === 'recording'"
+                        :disabled="dictationStatus === 'transcribing'"
+                        @click="emit('toggleDictation')"
+                    >
+                        <Loader2 v-if="dictationStatus === 'transcribing'" class="h-4 w-4 animate-spin" />
+                        <Mic v-else class="h-3.5 w-3.5" :class="dictationStatus === 'recording' ? 'animate-pulse' : ''" />
+                    </button>
+                </Tooltip>
                 <Tooltip v-if="visibility.agent_mode_switcher !== false" content="Temporary chat">
                     <button
                         type="button"

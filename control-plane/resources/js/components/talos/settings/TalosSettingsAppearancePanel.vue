@@ -18,6 +18,8 @@ import {
     TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '../../../lib/talosChatLayout'
+import { TALOS_DICTATION_MODE_OPTIONS, type TalosDictationMode } from '../../../lib/talosDictation'
+import { useTalosDictationMode } from '../../../composables/useTalosDictation'
 import type {
     TalosChatBubbleScale,
     TalosChatLayoutPreferences,
@@ -61,6 +63,7 @@ const props = defineProps<{
 }>()
 const activePreset = computed(() => TALOS_THEME_PRESETS.find((preset) => preset.id === props.theme) ?? TALOS_THEME_PRESETS[0])
 const themePresetOptions = computed(() => TALOS_THEME_PRESETS.map((preset) => ({ value: preset.id, label: preset.label })))
+const { mode: dictationMode, setMode: setDictationMode } = useTalosDictationMode()
 
 function selectTheme(value: unknown) {
     emit('updateTheme', value as TalosThemeId)
@@ -124,6 +127,17 @@ function selectThemeMode(value: unknown) {
                 :disabled="themePolicyLocked"
                 @update:model-value="(value) => emit('updateChatMessageStyle', value as TalosMessageStyle)"
             />
+        </label>
+        <label class="block">
+            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Dictation</span>
+            <TalosThemedSelect
+                :model-value="dictationMode"
+                class="mt-2"
+                :items="TALOS_DICTATION_MODE_OPTIONS"
+                aria-label="Dictation engine"
+                @update:model-value="(value) => setDictationMode(value as TalosDictationMode)"
+            />
+            <span class="mt-1 block text-[11px] leading-5 text-[var(--talos-muted)]">On-device Whisper keeps audio private; Cloud uses the TALOS worker (when available).</span>
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Mobile tool windows</span>
