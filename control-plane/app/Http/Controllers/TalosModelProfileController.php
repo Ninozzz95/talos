@@ -65,6 +65,11 @@ final class TalosModelProfileController extends Controller
         $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
         $requestedCapabilities = $validated['capabilities'] ?? null;
 
+        $effortCapability = \App\Services\Models\ProviderEffortCapabilityTable::resolve(
+            (string) $validated['provider'],
+            (string) ($validated['model'] ?? ''),
+        );
+
         $profile = TalosModelProfile::query()->create([
             'user_id' => $userId,
             'provider' => $validated['provider'],
@@ -76,6 +81,8 @@ final class TalosModelProfileController extends Controller
             'status' => 'untested',
             'capabilities' => null,
             'probe_result' => null,
+            'effort_levels' => $effortCapability['effort_levels'],
+            'supports_thinking' => $effortCapability['supports_thinking'],
         ]);
 
         TalosAuditEvent::record('model_profile.created', 'model_profile', $profile->id, [
@@ -160,6 +167,7 @@ final class TalosModelProfileController extends Controller
             'status' => ['sometimes', 'string', Rule::in(['untested', 'healthy', 'degraded', 'failed', 'disabled'])],
             'capabilities' => ['sometimes', 'nullable', 'array'],
             'probe_result' => ['sometimes', 'nullable', 'array'],
+            'show_in_composer' => ['sometimes', 'boolean'],
         ]);
 
         $provider = (string) ($validated['provider'] ?? $profile->provider);
@@ -198,6 +206,15 @@ final class TalosModelProfileController extends Controller
         } elseif (is_string($requestedStatus) && $requestedStatus !== 'healthy') {
             // Healthy status requires a server probe; other operational status changes are valid updates.
             $validated['status'] = $requestedStatus;
+        }
+
+        if (array_key_exists('provider', $validated) || array_key_exists('model', $validated)) {
+            $effortCapability = \App\Services\Models\ProviderEffortCapabilityTable::resolve(
+                $provider,
+                (string) ($validated['model'] ?? $profile->model),
+            );
+            $validated['effort_levels'] = $effortCapability['effort_levels'];
+            $validated['supports_thinking'] = $effortCapability['supports_thinking'];
         }
 
         $profile->update($validated);

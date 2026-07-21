@@ -26,6 +26,9 @@ final class TalosModelProfile extends Model
         'status',
         'capabilities',
         'probe_result',
+        'effort_levels',
+        'supports_thinking',
+        'show_in_composer',
     ];
 
     protected $hidden = [
@@ -41,6 +44,9 @@ final class TalosModelProfile extends Model
             'timeout_seconds' => 'integer',
             'capabilities' => 'array',
             'probe_result' => 'array',
+            'effort_levels' => 'array',
+            'supports_thinking' => 'boolean',
+            'show_in_composer' => 'boolean',
         ];
     }
 
@@ -60,6 +66,9 @@ final class TalosModelProfile extends Model
             'status' => $this->status,
             'capabilities' => $this->capabilities,
             'probe_result' => $this->probe_result,
+            'effort_levels' => $this->effort_levels ?? [],
+            'supports_thinking' => (bool) $this->supports_thinking,
+            'show_in_composer' => (bool) $this->show_in_composer,
             'has_secret' => filled($this->encrypted_secret),
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
