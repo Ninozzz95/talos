@@ -219,6 +219,19 @@ final class TalosChatController extends Controller
                 ], 404);
             }
 
+            if ($reasoningEffort !== null && $reasoningEffort !== \Kadmos\Provider\ReasoningEffortMap::OFF) {
+                $effortLevels = is_array($profile->effort_levels) ? $profile->effort_levels : [];
+                if (! in_array($reasoningEffort, $effortLevels, true)) {
+                    return response()->json([
+                        'error' => [
+                            'code' => 'EFFORT_UNSUPPORTED',
+                            'message' => sprintf('The model "%s" does not support the "%s" reasoning effort.', $profile->model, $reasoningEffort),
+                            'supported' => array_values($effortLevels),
+                        ],
+                    ], 422);
+                }
+            }
+
             if ($profile->status === 'disabled') {
                 return response()->json([
                     'error' => 'Model profile is disabled.',
