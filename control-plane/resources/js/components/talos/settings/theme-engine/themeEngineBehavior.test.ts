@@ -94,13 +94,40 @@ async function fillField(container: HTMLElement, label: string, value: string) {
     await nextTick()
 }
 
-async function selectField(container: HTMLElement, label: string, value: string) {
-    const field = container.querySelector<HTMLSelectElement>(`[aria-label="${label}"]`)
-    expect(field).toBeTruthy()
-    if (!field) return
-    field.value = value
-    field.dispatchEvent(new Event('change', { bubbles: true }))
+// reka Select (themed dropdown) needs these APIs jsdom omits.
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => undefined
+}
+if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false
+    Element.prototype.setPointerCapture = () => undefined
+    Element.prototype.releasePointerCapture = () => undefined
+}
+
+function firePointer(element: Element, type: 'pointerdown' | 'pointerup') {
+    const Ctor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent
+    element.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, button: 0 }))
+}
+
+async function themedSettle() {
     await nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+}
+
+// Drives a themed TalosThemedSelect (reka) by aria-label: open, then commit the
+// target value with the keyboard (jsdom cannot settle reka's synthetic pointerup).
+async function selectField(container: HTMLElement, label: string, value: string) {
+    const trigger = container.querySelector<HTMLElement>(`[aria-label="${label}"]`)
+    expect(trigger).toBeTruthy()
+    if (!trigger) return
+    firePointer(trigger, 'pointerdown')
+    await themedSettle()
+    const option = document.querySelector<HTMLElement>(`[data-value="${value}"]`)
+    expect(option).toBeTruthy()
+    option?.focus()
+    option?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    await themedSettle()
 }
 
 beforeEach(() => {
@@ -248,7 +275,7 @@ describe('Theme Engine behavior', () => {
         await nextTick()
 
         expect(container.querySelector<HTMLInputElement>('[aria-label="Interface motion"]')?.checked).toBe(true)
-        expect(container.querySelector<HTMLSelectElement>('[aria-label="Interface motion profile"]')?.value).toBe('preset')
+        expect(container.querySelector<HTMLElement>('[aria-label="Interface motion profile"]')?.textContent).toContain('Preset')
         expect(container.querySelector('[data-testid="talos-interface-motion-state"]')?.textContent).toContain('Active')
         await clickByText(container, 'Save motion')
         await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledOnce())
@@ -716,7 +743,7 @@ describe('Theme Engine behavior', () => {
 
         expect(container.querySelector<HTMLInputElement>('[aria-label="Background intensity"]')?.value).toBe('65')
         expect(container.querySelector<HTMLInputElement>('[aria-label="Motion speed"]')?.value).toBe('100')
-        expect(container.querySelector<HTMLSelectElement>('[aria-label="Interface motion profile"]')?.value).toBe('preset')
+        expect(container.querySelector<HTMLElement>('[aria-label="Interface motion profile"]')?.textContent).toContain('Preset')
         expect(container.querySelector<HTMLInputElement>('[aria-label="Animate windows"]')?.checked).toBe(true)
         expect(settingsHarness.updateSettings).not.toHaveBeenCalled()
 
@@ -738,7 +765,7 @@ describe('Theme Engine behavior', () => {
         await vi.waitFor(() => expect(settingsHarness.updateSettings).toHaveBeenCalledTimes(1))
         expect(settingsHarness.updateSettings.mock.calls[0]?.[0]?.preferences?.theme_mode).toBe('light')
         rejectColorMode(new Error('Rejected color-mode write.'))
-        await vi.waitFor(() => expect(container.querySelector<HTMLSelectElement>('[aria-label="Theme color mode"]')?.value).toBe('dark'))
+        await vi.waitFor(() => expect(container.querySelector<HTMLElement>('[aria-label="Theme color mode"]')?.textContent).toContain('Dark'))
 
         await clickByText(container, 'Motion')
         let rejectMotionMode!: (reason?: unknown) => void

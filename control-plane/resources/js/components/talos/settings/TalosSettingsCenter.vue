@@ -20,7 +20,7 @@ import {
 import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
 import Input from '../../ui/Input.vue'
-import Select from '../../ui/Select.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import Switch from '../../ui/Switch.vue'
 import Tabs from '../../ui/Tabs.vue'
 import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
@@ -63,6 +63,16 @@ import {
     normalizeTalosBrowserHmiMode,
     type TalosBrowserHmiMode,
 } from '../../../lib/talosBrowserHmiPolicy'
+
+const AI_MODEL_MODE_OPTIONS = [
+    { value: 'same_as_chat', label: 'Same as chat' },
+    { value: 'default_profile', label: 'Use default profile' },
+]
+const REMINDER_CHANNEL_OPTIONS = [
+    { value: 'browser', label: 'Browser notification' },
+    { value: 'task', label: 'Task queue' },
+    { value: 'disabled', label: 'Disabled' },
+]
 
 type SettingsTab =
     | 'models'
@@ -520,17 +530,11 @@ watch(
                         <div class="grid gap-3 md:grid-cols-2">
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Utility model mode</span>
-                                <Select v-model="preferences.ai_defaults.utility_model_mode" class="mt-2" aria-label="Utility model mode">
-                                    <option value="same_as_chat">Same as chat</option>
-                                    <option value="default_profile">Use default profile</option>
-                                </Select>
+                                <TalosThemedSelect v-model="preferences.ai_defaults.utility_model_mode" class="mt-2" :items="AI_MODEL_MODE_OPTIONS" aria-label="Utility model mode" />
                             </label>
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Research model mode</span>
-                                <Select v-model="preferences.ai_defaults.research_model_mode" class="mt-2" aria-label="Research model mode">
-                                    <option value="same_as_chat">Same as chat</option>
-                                    <option value="default_profile">Use default profile</option>
-                                </Select>
+                                <TalosThemedSelect v-model="preferences.ai_defaults.research_model_mode" class="mt-2" :items="AI_MODEL_MODE_OPTIONS" aria-label="Research model mode" />
                             </label>
                         </div>
                         <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
@@ -579,11 +583,7 @@ watch(
                         <div class="grid gap-3 md:grid-cols-2">
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Channel</span>
-                                <Select v-model="preferences.reminders.channel" class="mt-2" aria-label="Reminder channel" :disabled="!reminderExecutionAvailable">
-                                    <option value="browser">Browser notification</option>
-                                    <option value="task">Task queue</option>
-                                    <option value="disabled">Disabled</option>
-                                </Select>
+                                <TalosThemedSelect v-model="preferences.reminders.channel" class="mt-2" :items="REMINDER_CHANNEL_OPTIONS" aria-label="Reminder channel" :disabled="!reminderExecutionAvailable" />
                             </label>
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Public app URL</span>

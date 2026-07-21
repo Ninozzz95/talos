@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import Button from '../../ui/Button.vue'
-import Select from '../../ui/Select.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import TalosProviderIcon from '../models/TalosProviderIcon.vue'
 import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
 import type { TalosContextSet, TalosModelProfile } from '../../../lib/talosTypes'
 
-defineProps<{
+const props = defineProps<{
     modelProfiles: TalosModelProfile[]
     contextSets: TalosContextSet[]
     selectedModelProfileId: string
@@ -20,49 +21,44 @@ const emit = defineEmits<{
     selectContext: [id: string]
     openModule: [id: string]
 }>()
+
+const modelProfileOptions = computed(() => props.modelProfiles.map((profile) => ({
+    value: profile.id,
+    label: `${profile.display_name} - ${profile.model} - ${profile.status}`,
+    disabled: !talosModelProfileIsCallable(profile),
+})))
+const contextSetOptions = computed(() => props.contextSets.map((contextSet) => ({
+    value: contextSet.id,
+    label: `${contextSet.name} - ${contextSet.status}`,
+    disabled: contextSet.status !== 'available' && contextSet.status !== 'draft',
+})))
 </script>
 
 <template>
     <div class="grid gap-3 md:grid-cols-2">
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Default model</span>
-            <Select
+            <TalosThemedSelect
                 class="mt-2"
                 :model-value="selectedModelProfileId"
+                :items="modelProfileOptions"
+                none-label="Choose profile"
                 aria-label="Default model profile"
                 :disabled="loadingSettings || !modelProfiles.length"
-                @update:model-value="(value) => emit('selectModel', String(value))"
-            >
-                <option value="">Choose profile</option>
-                <option
-                    v-for="profile in modelProfiles"
-                    :key="profile.id"
-                    :value="profile.id"
-                    :disabled="!talosModelProfileIsCallable(profile)"
-                >
-                    {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
-                </option>
-            </Select>
+                @update:model-value="(value) => emit('selectModel', value)"
+            />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Default context</span>
-            <Select
+            <TalosThemedSelect
                 class="mt-2"
                 :model-value="selectedContextSetId"
+                :items="contextSetOptions"
+                none-label="No grounding context"
                 aria-label="Default grounding context"
                 :disabled="loadingSettings || !contextSets.length"
-                @update:model-value="(value) => emit('selectContext', String(value))"
-            >
-                <option value="">No grounding context</option>
-                <option
-                    v-for="contextSet in contextSets"
-                    :key="contextSet.id"
-                    :value="contextSet.id"
-                    :disabled="contextSet.status !== 'available' && contextSet.status !== 'draft'"
-                >
-                    {{ contextSet.name }} - {{ contextSet.status }}
-                </option>
-            </Select>
+                @update:model-value="(value) => emit('selectContext', value)"
+            />
         </label>
     </div>
     <div class="grid gap-3 md:grid-cols-2">

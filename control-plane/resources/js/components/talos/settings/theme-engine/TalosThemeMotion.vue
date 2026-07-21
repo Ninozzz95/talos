@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { RefreshCcw, RotateCcw, Save } from '@lucide/vue'
 import Button from '../../../ui/Button.vue'
 import InfoPopover from '../../../ui/InfoPopover.vue'
-import Select from '../../../ui/Select.vue'
+import TalosThemedSelect from '../../ui/TalosThemedSelect.vue'
 import Switch from '../../../ui/Switch.vue'
 import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
@@ -90,6 +90,13 @@ const categoryControls: ReadonlyArray<{
 ]
 
 const controlsDisabled = computed(() => props.disabled || props.saving)
+
+const interfaceProfileOptions = computed(() => TALOS_INTERFACE_PROFILES.map((profile) => ({ value: profile, label: title(profile) })))
+const interfaceEasingOptions = computed(() => TALOS_INTERFACE_EASINGS.map((easing) => ({ value: easing, label: title(easing) })))
+const motionQualityOptions = computed(() => TALOS_MOTION_QUALITY_LEVELS.map((quality) => ({ value: quality, label: title(quality) })))
+const motionSceneOptions = computed(() => TALOS_MOTION_SCENE_IDS.map((scene) => ({ value: scene, label: title(scene) })))
+const motionFpsOptions = computed(() => TALOS_MOTION_FPS_CAPS.map((fps) => ({ value: String(fps), label: `${fps} FPS` })))
+const motionDprOptions = computed(() => TALOS_MOTION_DPR_CAPS.map((dpr) => ({ value: String(dpr), label: `${dpr}x` })))
 const backgroundControlValue = computed(() => props.modelValue.background_enabled && props.modelValue.mode !== 'off')
 const interfaceControlValue = computed(() => props.modelValue.interface_enabled && props.modelValue.interface.profile !== 'off')
 const backgroundMotionState = computed(() => {
@@ -286,15 +293,11 @@ function title(value: string): string {
             <div class="grid gap-4 md:grid-cols-2">
                 <label class="space-y-1 text-xs text-[var(--talos-muted)]">
                     <span>Profile</span>
-                    <Select :model-value="modelValue.interface.profile" aria-label="Interface motion profile" :disabled="controlsDisabled" @update:model-value="updateInterface('profile', $event as TalosInterfaceMotionPreferences['profile'])">
-                        <option v-for="profile in TALOS_INTERFACE_PROFILES" :key="profile" :value="profile">{{ title(profile) }}</option>
-                    </Select>
+                    <TalosThemedSelect :model-value="modelValue.interface.profile" :items="interfaceProfileOptions" aria-label="Interface motion profile" :disabled="controlsDisabled" @update:model-value="updateInterface('profile', $event as TalosInterfaceMotionPreferences['profile'])" />
                 </label>
                 <label class="space-y-1 text-xs text-[var(--talos-muted)]">
                     <span>Easing</span>
-                    <Select :model-value="modelValue.interface.easing" aria-label="Interface easing" :disabled="controlsDisabled" @update:model-value="updateInterface('easing', $event as TalosInterfaceMotionPreferences['easing'])">
-                        <option v-for="easing in TALOS_INTERFACE_EASINGS" :key="easing" :value="easing">{{ title(easing) }}</option>
-                    </Select>
+                    <TalosThemedSelect :model-value="modelValue.interface.easing" :items="interfaceEasingOptions" aria-label="Interface easing" :disabled="controlsDisabled" @update:model-value="updateInterface('easing', $event as TalosInterfaceMotionPreferences['easing'])" />
                 </label>
                 <label v-for="control in interfaceRanges" :key="control.key" class="space-y-1.5 text-xs text-[var(--talos-muted)]">
                     <span class="flex justify-between gap-3"><span>{{ control.label }}</span><output class="font-mono text-[var(--talos-text)]">{{ modelValue.interface[control.key] }}{{ control.suffix }}</output></span>
@@ -322,10 +325,10 @@ function title(value: string): string {
         <details class="border-t border-[var(--talos-border)] pt-4">
             <summary class="cursor-pointer text-xs font-semibold uppercase text-[var(--talos-muted)]">Performance and advanced</summary>
             <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>Quality policy</span><Select :model-value="modelValue.quality" aria-label="Motion quality" :disabled="controlsDisabled" @update:model-value="updateTopLevel('quality', $event as TalosMotionV6Preferences['quality'])"><option v-for="quality in TALOS_MOTION_QUALITY_LEVELS" :key="quality" :value="quality">{{ title(quality) }}</option></Select></label>
-                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>Scene override</span><Select :model-value="modelValue.scene_override ?? ''" aria-label="Motion scene override" :disabled="controlsDisabled" @update:model-value="updateTopLevel('scene_override', ($event || null) as TalosMotionV6Preferences['scene_override'])"><option value="">Follow preset</option><option v-for="scene in TALOS_MOTION_SCENE_IDS" :key="scene" :value="scene">{{ title(scene) }}</option></Select></label>
-                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>FPS cap</span><Select :model-value="modelValue.fps_cap" aria-label="Motion FPS cap" :disabled="controlsDisabled" @update:model-value="updateTopLevel('fps_cap', Number($event) as TalosMotionV6Preferences['fps_cap'])"><option v-for="fps in TALOS_MOTION_FPS_CAPS" :key="fps" :value="fps">{{ fps }} FPS</option></Select></label>
-                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>DPR cap</span><Select :model-value="modelValue.dpr_cap" aria-label="Motion DPR cap" :disabled="controlsDisabled" @update:model-value="updateTopLevel('dpr_cap', Number($event) as TalosMotionV6Preferences['dpr_cap'])"><option v-for="dpr in TALOS_MOTION_DPR_CAPS" :key="dpr" :value="dpr">{{ dpr }}x</option></Select></label>
+                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>Quality policy</span><TalosThemedSelect :model-value="modelValue.quality" :items="motionQualityOptions" aria-label="Motion quality" :disabled="controlsDisabled" @update:model-value="updateTopLevel('quality', $event as TalosMotionV6Preferences['quality'])" /></label>
+                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>Scene override</span><TalosThemedSelect :model-value="modelValue.scene_override ?? ''" :items="motionSceneOptions" none-label="Follow preset" aria-label="Motion scene override" :disabled="controlsDisabled" @update:model-value="(value) => updateTopLevel('scene_override', (value || null) as TalosMotionV6Preferences['scene_override'])" /></label>
+                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>FPS cap</span><TalosThemedSelect :model-value="String(modelValue.fps_cap)" :items="motionFpsOptions" aria-label="Motion FPS cap" :disabled="controlsDisabled" @update:model-value="(value) => updateTopLevel('fps_cap', Number(value) as TalosMotionV6Preferences['fps_cap'])" /></label>
+                <label class="space-y-1 text-xs text-[var(--talos-muted)]"><span>DPR cap</span><TalosThemedSelect :model-value="String(modelValue.dpr_cap)" :items="motionDprOptions" aria-label="Motion DPR cap" :disabled="controlsDisabled" @update:model-value="(value) => updateTopLevel('dpr_cap', Number(value) as TalosMotionV6Preferences['dpr_cap'])" /></label>
                 <label class="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--talos-border)] py-2 text-xs text-[var(--talos-text)]"><span>Pause when hidden</span><Switch :model-value="modelValue.pause_when_hidden" aria-label="Pause when hidden" :disabled="controlsDisabled" @change="updateTopLevel('pause_when_hidden', $event)" /></label>
                 <label class="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--talos-border)] py-2 text-xs text-[var(--talos-text)]"><span>Respect data saver</span><Switch :model-value="modelValue.respect_data_saver" aria-label="Respect data saver" :disabled="controlsDisabled" @change="updateTopLevel('respect_data_saver', $event)" /></label>
             </div>

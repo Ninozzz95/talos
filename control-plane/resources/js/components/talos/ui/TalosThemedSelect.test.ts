@@ -29,7 +29,7 @@ const PROVIDERS: TalosThemedSelectItem[] = [
     { value: 'ollama', label: 'Ollama (local)', disabled: true },
 ]
 
-function mountSelect(options: { value?: string; disabled?: boolean; items?: TalosThemedSelectItem[] } = {}) {
+function mountSelect(options: { value?: string; disabled?: boolean; items?: TalosThemedSelectItem[]; noneLabel?: string } = {}) {
     const state = reactive({ value: options.value ?? '' })
     const mountPoint = document.createElement('div')
     document.body.append(mountPoint)
@@ -41,6 +41,7 @@ function mountSelect(options: { value?: string; disabled?: boolean; items?: Talo
                 items: options.items ?? PROVIDERS,
                 disabled: options.disabled ?? false,
                 ariaLabel: 'Provider',
+                noneLabel: options.noneLabel,
                 'onUpdate:modelValue': (value: string) => { state.value = value },
             })
         },
@@ -115,5 +116,23 @@ describe('TalosThemedSelect', () => {
         await settle()
 
         expect(state.value).toBe('anthropic')
+    })
+
+    it('shows the noneLabel in the trigger when the value is empty and none is enabled', () => {
+        mountSelect({ value: '', noneLabel: 'No default' })
+        expect(trigger()?.textContent).toContain('No default')
+    })
+
+    it('emits an empty value when the none option is chosen', async () => {
+        const { state } = mountSelect({ value: 'anthropic', noneLabel: 'No default' })
+        await open()
+
+        const noneOption = document.querySelector<HTMLElement>('[data-value="__talos_none__"]')
+        expect(noneOption).not.toBeNull()
+        noneOption?.focus()
+        noneOption?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        await settle()
+
+        expect(state.value).toBe('')
     })
 })
