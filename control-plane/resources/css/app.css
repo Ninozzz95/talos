@@ -1835,6 +1835,37 @@ button {
 
 /* end v7 R0 */
 
+/* v7 F0 native Sonner cutover */
+[data-sonner-toaster] {
+    pointer-events: auto;
+    --normal-bg: var(--talos-card);
+    --normal-text: var(--talos-text);
+    --normal-border: var(--talos-border);
+    --gray1: var(--talos-card);
+    --gray12: var(--talos-text);
+}
+
+[data-sonner-toaster] [data-sonner-toast] {
+    pointer-events: auto;
+    background: var(--talos-card);
+    color: var(--talos-text);
+    border-color: var(--talos-border);
+}
+
+.talos-sonner-motion-disabled [data-sonner-toast],
+.talos-sonner-motion-disabled [data-sonner-toast] * {
+    transition: none !important;
+    animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-sonner-toast],
+    [data-sonner-toast] * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
 /* v7 R2 */
 
 .talos-censored {

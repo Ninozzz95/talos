@@ -2,8 +2,35 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
+
+const toastMock = vi.hoisted(() => ({
+    info: vi.fn(() => 'id-info'),
+    success: vi.fn(() => 'id-success'),
+    warning: vi.fn(() => 'id-warning'),
+    error: vi.fn(() => 'id-error'),
+}))
+vi.mock('vue-sonner', () => ({ toast: toastMock }))
+
 import { useTalosWorkspaceCommandActions } from './useTalosWorkspaceCommandActions'
+import TalosSonnerToastContent from '../components/ui/sonner/TalosSonnerToastContent.vue'
 import type { TalosCommand } from '../lib/talosTypes'
+
+function baseDeps() {
+    return {
+        workspaceCommands: commands,
+        setFeedback: vi.fn(),
+        openWindowFromSource: vi.fn(),
+        dockedWindowIds: ref([]),
+        toggleDock: vi.fn(),
+        toggleBrowseMode: vi.fn(async () => undefined),
+        onNewSession: vi.fn(async () => undefined),
+        onSendChat: vi.fn(async () => undefined),
+        onOpenBrowse: vi.fn(async () => undefined),
+        onRunBenchmark: vi.fn(async () => undefined),
+        onOpenExport: vi.fn(),
+        exportDisabledReason: ref(''),
+    }
+}
 
 const commands = ref<TalosCommand[]>([
     { id: 'open_trace_replay', label: 'Trace replay', description: 'Open replay', category: 'run', risk: 'low' },
@@ -62,5 +89,18 @@ describe('useTalosWorkspaceCommandActions', () => {
         actions.toggleContextPopover()
         expect(actions.modelPopoverOpen.value).toBe(false)
         expect(actions.contextPopoverOpen.value).toBe(true)
+    })
+
+    it('routes setFeedback through one command-feedback native toast', () => {
+        toastMock.info.mockClear()
+        const actions = useTalosWorkspaceCommandActions(baseDeps())
+
+        actions.setFeedback('New session opened.')
+        actions.setFeedback('Chat archived.')
+
+        expect(actions).not.toHaveProperty('commandFeedback')
+        expect(toastMock.info).toHaveBeenCalledTimes(2)
+        expect(toastMock.info).toHaveBeenNthCalledWith(1, TalosSonnerToastContent, expect.objectContaining({ id: 'command-feedback', componentProps: { message: 'New session opened.', tone: 'info' } }))
+        expect(toastMock.info).toHaveBeenNthCalledWith(2, TalosSonnerToastContent, expect.objectContaining({ id: 'command-feedback', componentProps: { message: 'Chat archived.', tone: 'info' } }))
     })
 })

@@ -139,6 +139,7 @@ const emit = defineEmits<{
     changeTheme: [theme: TalosThemeId, persist?: boolean]
     openModule: [id: string, section?: string]
     saved: []
+    replayIntro: []
 }>()
 
 const tabs: Array<{ id: SettingsTab; label: string; icon: unknown; group?: string }> = [
@@ -635,6 +636,11 @@ watch(
                                 <input type="hidden" name="_token" :value="csrfToken">
                                 <Button type="submit" size="sm" variant="destructive">Sign out</Button>
                             </form>
+                        </div>
+                        <div data-testid="talos-settings-intro-replay" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                            <div class="text-sm font-semibold text-[var(--talos-text)]">Introduction</div>
+                            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Watch the TALOS introduction again at any time.</p>
+                            <Button class="mt-3" type="button" size="sm" variant="secondary" @click="emit('replayIntro')">Replay introduction</Button>
                         </div>
                     </template>
 

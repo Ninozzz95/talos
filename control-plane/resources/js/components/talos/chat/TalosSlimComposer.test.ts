@@ -293,4 +293,30 @@ describe('TalosSlimComposer', () => {
         emptyArea?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
         expect(emptyUpdates).toEqual([])
     })
+
+    it('focusPrompt focuses the enabled message textarea', async () => {
+        let exposed: { focusPrompt?: () => void } | null = null
+        const container = mountComposer('full', false, {
+            ref: (instance: unknown) => { exposed = instance as { focusPrompt?: () => void } },
+        })
+        await nextTick()
+
+        expect(typeof exposed?.focusPrompt).toBe('function')
+        exposed?.focusPrompt?.()
+        const field = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+        expect(field).toBeTruthy()
+        expect(document.activeElement).toBe(field)
+    })
+
+    it('disabled or sending state produces no invalid focus claim', async () => {
+        let exposed: { focusPrompt?: () => void } | null = null
+        mountComposer('full', false, {
+            sending: true,
+            ref: (instance: unknown) => { exposed = instance as { focusPrompt?: () => void } },
+        })
+        await nextTick()
+
+        exposed?.focusPrompt?.()
+        expect(document.activeElement?.getAttribute?.('aria-label')).not.toBe('Message TALOS')
+    })
 })

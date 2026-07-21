@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp, defineComponent, h } from 'vue'
 import Switch from './Switch.vue'
-import ToastRegion from './ToastRegion.vue'
+import TalosSonnerToastContent from './sonner/TalosSonnerToastContent.vue'
 
 const mounted: Array<ReturnType<typeof createApp>> = []
 
@@ -34,13 +34,13 @@ describe('owned motion surface classes', () => {
     })
 
     it('maps toast tone to a semantic motion intent', () => {
-        const container = mount(() => h(ToastRegion, {
-            items: [{ id: 'toast-error', message: 'Failed', tone: 'error' }],
-        }))
+        const container = mount(() => h(TalosSonnerToastContent, { message: 'Failed', tone: 'error' }))
         const toast = container.querySelector('[data-motion-intent]')
 
         expect(toast?.classList.contains('talos-motion-feedback')).toBe(true)
         expect(toast?.getAttribute('data-motion-intent')).toBe('error-attention')
+        expect(toast?.getAttribute('role')).toBe('alert')
+        expect(toast?.getAttribute('aria-atomic')).toBe('true')
     })
 
     it('marks delete and export dialogs as semantic surfaces', () => {

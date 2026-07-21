@@ -99,6 +99,7 @@ const emit = defineEmits<{
     settingsSaved: []
     themeCustomizationChanged: [settings?: { preferences?: Record<string, unknown> }]
     themeDraftChanged: [customization: TalosThemeCustomization | null]
+    replayIntro: []
 }>()
 
 const {
@@ -205,6 +206,7 @@ function moduleContextFor(id: TalosWindowId): TalosWindowModuleContext {
         settingsSaved: () => emit('settingsSaved'),
         themeCustomizationChanged: (settings) => emit('themeCustomizationChanged', settings),
         themeDraftChanged: (customization) => emit('themeDraftChanged', customization),
+        replayIntro: () => emit('replayIntro'),
     }
 }
 

@@ -32,4 +32,5 @@ export type TalosWindowModuleContext = {
     settingsSaved: () => void
     themeCustomizationChanged: (settings?: { preferences?: Record<string, unknown> }) => void
     themeDraftChanged: (customization: TalosThemeCustomization | null) => void
+    replayIntro: () => void
 }

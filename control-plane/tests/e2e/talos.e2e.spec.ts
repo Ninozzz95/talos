@@ -1565,145 +1565,215 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     })
 })
 
-test('model center offers provider-first quick add with optional draft test', async ({ page }, testInfo) => {
+test('MODEL-P0 Gemini discovery quick add creates, probes and reaches chat without a reload', async ({ page }) => {
+    const catalogModels = Array.from({ length: 500 }, (_unused, index) => ({
+        id: `gemini-2.5-model-${index}`,
+        display_name: `Gemini 2.5 Model ${index}`,
+    }))
+    catalogModels[420] = { id: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro' }
+
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: { provider: 'gemini', draftModels: catalogModels, draftPageCount: 3, draftComplete: true },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await openWorkspace(page)
     await selectDashboardTab(page, 'Agents')
 
-    await expect(page.getByText('Provider-first model setup', { exact: true })).toBeVisible()
     const quickAdd = page.getByTestId('talos-model-quick-add')
+    await quickAdd.getByRole('button', { name: 'Choose Google Gemini provider' }).click()
+    await quickAdd.getByTestId('talos-provider-secret').fill('gemini-e2e-key')
 
-    for (const provider of ['OpenAI', 'DeepSeek', 'Anthropic', 'Google Gemini', 'OpenRouter', 'Ollama Local']) {
-        await expect(quickAdd.getByRole('button', { name: `Choose ${provider} provider` })).toBeVisible()
-    }
+    let pageLoads = 0
+    page.on('load', () => { pageLoads += 1 })
 
-    await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
-    await expect(quickAdd.getByLabel('Provider API key')).toBeVisible()
-    await expect(quickAdd.getByLabel('Model name')).toBeHidden()
-    await expect(quickAdd.getByLabel('Base URL')).toBeHidden()
-
-    await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
-    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
-    await quickAdd.getByRole('button', { name: 'Advanced options' }).click()
-    await expect(quickAdd.getByLabel('Timeout seconds')).toBeVisible()
-    await quickAdd.getByLabel('Timeout seconds').fill('45')
-    const draftProbeRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/model-profiles/probe-draft') || request.method() !== 'POST') {
+    const discoverRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/model-profiles/discover-draft') || request.method() !== 'POST') {
             return false
         }
-
         const body = request.postDataJSON() as Record<string, unknown>
-
-        return body.provider === 'openrouter'
-            && body.secret === 'sk-openrouter-e2e-secret'
-            && body.model === 'openai/gpt-4.1-mini'
-            && body.base_url === 'https://openrouter.ai/api/v1'
-            && body.timeout_seconds === 45
+        return body.provider === 'gemini' && body.secret === 'gemini-e2e-key'
     })
+    await quickAdd.getByTestId('talos-model-discover').click()
+    await discoverRequest
 
-    await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
-    await draftProbeRequest
-    await expect(quickAdd.getByText('Draft probe healthy').first()).toBeVisible()
+    // A distant model in a 500-row catalog is reachable by keyboard search.
+    await quickAdd.getByTestId('talos-model-combobox-trigger').click()
+    await page.getByRole('textbox', { name: 'Search models' }).fill('gemini-2.5-pro')
+    const proOption = page.locator('[data-testid="talos-model-option"][data-model-id="gemini-2.5-pro"]')
+    await expect(proOption).toBeVisible()
+    await proOption.click()
+
+    const addButton = quickAdd.getByTestId('talos-model-add')
+    await expect(addButton).toBeEnabled()
 
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/model-profiles') || request.method() !== 'POST') {
             return false
         }
-
         const body = request.postDataJSON() as Record<string, unknown>
-
-        return body.provider === 'openrouter'
-            && body.secret === 'sk-openrouter-e2e-secret'
-            && body.model === 'openai/gpt-4.1-mini'
-            && body.base_url === 'https://openrouter.ai/api/v1'
-            && body.timeout_seconds === 45
+        return body.provider === 'gemini' && body.model === 'gemini-2.5-pro' && body.secret === 'gemini-e2e-key'
     })
-    const persistedProbeRequest = page.waitForRequest((request) => (
-        request.url().endsWith('/api/talos/model-profiles/profile-openrouter-quick-add/probe')
+    const probeRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/model-profiles/profile-gemini-quick-add/probe')
         && request.method() === 'POST'
     ))
-    await quickAdd.getByRole('button', { name: 'Add profile' }).click()
+    await addButton.click()
     await createRequest
-    await persistedProbeRequest
+    await probeRequest
     await expect(quickAdd.getByText('Profile saved and verified. It is ready in chat.')).toBeVisible()
+    await expect(page.getByText('gemini-e2e-key')).toBeHidden()
 
-    const openRouterProfile = page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })
-    await expect(openRouterProfile).toBeVisible()
-    await expect(openRouterProfile.getByText('Secret stored server-side.')).toBeVisible()
-    await expect(page.getByText('sk-openrouter-e2e-secret')).toBeHidden()
-    await expect(page.getByText('encrypted_secret')).toBeHidden()
-
-    await quickAdd.getByRole('button', { name: 'Choose Ollama Local provider' }).click()
-    await expect(quickAdd.getByLabel('Local endpoint')).toBeVisible()
-    await expect(quickAdd.getByLabel('Provider API key')).toBeHidden()
-    await expect(page.getByText('Local providers are allowed only without bearer tokens.')).toBeVisible()
-
-    await testInfo.attach(`model-center-quick-add-${testInfo.project.name}.png`, {
-        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
-        contentType: 'image/png',
-    })
-
-    await page.getByRole('button', { name: 'Close Model Lab' }).click()
+    // The composer selects the new profile immediately, with no window reopening.
+    await page.getByRole('button', { name: 'Close Model Lab' }).click().catch(() => undefined)
     await page.getByRole('button', { name: 'Choose model profile' }).click()
-    await expect(page.getByLabel('Server-side model profile').locator('option', { hasText: 'OpenRouter quick profile' })).toHaveCount(1)
-    await page.getByLabel('Server-side model profile').selectOption('profile-openrouter-quick-add')
-    await page.getByLabel('Message TALOS').fill('Verify the newly added profile without opening setup again.')
+    await page.getByLabel('Server-side model profile').selectOption('profile-gemini-quick-add')
+    await page.getByLabel('Message TALOS').fill('Use the freshly discovered Gemini profile without reopening setup.')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     await expect(page.locator('.talos-chat-message[data-message-role="assistant"]').last()).toContainText('E2E response from AVM')
     await expect(page.locator('[data-window-id="settings"]')).toHaveCount(0)
     await expect(page.locator('[data-window-id="model_lab"]')).toHaveCount(0)
+    expect(pageLoads).toBe(0)
 })
 
-test('model center can save a provider profile after a failed optional draft probe', async ({ page }) => {
-    await page.route('**/api/talos/model-profiles/probe-draft', async (route) => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                data: {
-                    status: 'failed',
-                    result: {
-                        ok: false,
-                        code: 'PROVIDER_HTTP_ERROR',
-                        message: 'Provider rejected the test request.',
-                    },
-                },
-            }),
-        })
+test('MODEL-P0 OpenRouter rotation through Save and verify refreshes the persisted catalog without a reload', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: {
+            provider: 'openrouter',
+            profileComplete: true,
+            profileModels: [
+                { id: 'openai/gpt-4.1', display_name: 'GPT-4.1' },
+                { id: 'anthropic/claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6' },
+            ],
+        },
     })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
 
+    await page.getByRole('button').filter({ hasText: 'E2E server-side profile' }).first().click()
+    await page.getByLabel('Provider').selectOption('openrouter')
+    await page.getByLabel('Rotate secret').fill('sk-openrouter-rotated')
+
+    let pageLoads = 0
+    page.on('load', () => { pageLoads += 1 })
+
+    const catalogRequest = page.waitForRequest((request) => (
+        /\/api\/talos\/model-profiles\/[^/]+\/models$/.test(request.url()) && request.method() === 'GET'
+    ))
+    await page.getByTestId('talos-model-load-catalog').click()
+    await catalogRequest
+
+    await page.getByTestId('talos-model-combobox-trigger').click()
+    await page.locator('[data-testid="talos-model-option"][data-model-id="anthropic/claude-sonnet-4-6"]').click()
+    await expect(page.getByTestId('talos-edit-model')).toHaveValue('anthropic/claude-sonnet-4-6')
+
+    const patchRequest = page.waitForRequest((request) => {
+        if (!/\/api\/talos\/model-profiles\/[^/]+$/.test(request.url()) || request.method() !== 'PATCH') {
+            return false
+        }
+        const body = request.postDataJSON() as Record<string, unknown>
+        return body.provider === 'openrouter'
+            && body.model === 'anthropic/claude-sonnet-4-6'
+            && body.secret === 'sk-openrouter-rotated'
+    })
+    const probeRequest = page.waitForRequest((request) => request.url().endsWith('/probe') && request.method() === 'POST')
+
+    await page.getByTestId('talos-model-save-verify').click()
+    await patchRequest
+    await probeRequest
+    await expect(page.getByText('Saved and verified. Secret input cleared and ready in chat.')).toBeVisible()
+    await expect(page.getByText('sk-openrouter-rotated')).toBeHidden()
+    expect(pageLoads).toBe(0)
+})
+
+test('MODEL-P0 discovery auth fault surfaces typed recovery and an advanced manual model ID', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: {
+            provider: 'gemini',
+            draftFault: {
+                status: 401,
+                code: 'MODEL_CATALOG_AUTH_FAILED',
+                message: 'Provider rejected the credential.',
+                retryable: false,
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await openWorkspace(page)
     await selectDashboardTab(page, 'Agents')
 
     const quickAdd = page.getByTestId('talos-model-quick-add')
-    await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
-    await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
-    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
+    await quickAdd.getByRole('button', { name: 'Choose Google Gemini provider' }).click()
+    await quickAdd.getByTestId('talos-provider-secret').fill('bad-key')
+    await quickAdd.getByTestId('talos-model-discover').click()
 
-    await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
-    await expect(quickAdd.getByText('Draft probe failed').first()).toBeVisible()
-    await expect(quickAdd.getByText('Provider rejected the test request.').first()).toBeVisible()
-    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
+    await expect(quickAdd.getByTestId('talos-discovery-fault')).toContainText('Provider rejected the credential.')
+    // An AUTH_FAILED provider fault must not send the operator to the login gate.
+    await expect(page.locator('#talos-workspace-root')).toBeVisible()
+    await expect(page.locator('#talos-login-form')).toHaveCount(0)
+    await expect(page.locator('[data-testid="talos-model-option"]')).toHaveCount(0)
+
+    // The advanced manual model ID is the deliberate catalog-outage escape hatch.
+    await quickAdd.getByTestId('talos-model-manual-toggle').click()
+    await quickAdd.getByTestId('talos-model-manual-input').fill('gemini-2.5-flash')
+    await quickAdd.getByTestId('talos-model-manual-apply').click()
+    await expect(quickAdd.getByTestId('talos-model-add')).toBeEnabled()
 
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/model-profiles') || request.method() !== 'POST') {
             return false
         }
-
         const body = request.postDataJSON() as Record<string, unknown>
-
-        return body.provider === 'openrouter'
-            && body.secret === 'sk-openrouter-e2e-secret'
-            && body.status === undefined
+        return body.provider === 'gemini' && body.model === 'gemini-2.5-flash'
     })
-    const persistedProbeRequest = page.waitForRequest((request) => (
-        request.url().endsWith('/api/talos/model-profiles/profile-openrouter-quick-add/probe')
-        && request.method() === 'POST'
-    ))
-
-    await quickAdd.getByRole('button', { name: 'Add profile' }).click()
+    await quickAdd.getByTestId('talos-model-add').click()
     await createRequest
-    await persistedProbeRequest
-    await expect(page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })).toBeVisible()
+    await expect(page.getByRole('button').filter({ hasText: 'Google Gemini quick profile' })).toBeVisible()
+})
+
+test('MODEL-P0 discovery reports rate-limited and empty catalog states with typed recovery', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: {
+            provider: 'openrouter',
+            draftFault: {
+                status: 429,
+                code: 'MODEL_CATALOG_RATE_LIMITED',
+                message: 'Provider rate limit reached.',
+                retryable: true,
+                retry_after_seconds: 30,
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
+
+    const rateLimited = page.getByTestId('talos-model-quick-add')
+    await rateLimited.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
+    await rateLimited.getByTestId('talos-provider-secret').fill('sk-openrouter')
+    await rateLimited.getByTestId('talos-model-discover').click()
+    await expect(rateLimited.getByTestId('talos-discovery-fault')).toContainText('Provider rate limit reached.')
+    await expect(rateLimited.getByTestId('talos-discovery-fault')).toContainText('after 30s')
+
+    // Empty catalog: discovery succeeds but returns no models.
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: { provider: 'openrouter', draftModels: [], draftComplete: true },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
+
+    const empty = page.getByTestId('talos-model-quick-add')
+    await empty.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
+    await empty.getByTestId('talos-provider-secret').fill('sk-openrouter')
+    await empty.getByTestId('talos-model-discover').click()
+    await empty.getByTestId('talos-model-combobox-trigger').click()
+    await expect(page.getByText('No provider model matches this search.')).toBeVisible()
 })
 
 test('cookbook model lab shows hardware scan fit score and preview-only commands', async ({ page }, testInfo) => {
