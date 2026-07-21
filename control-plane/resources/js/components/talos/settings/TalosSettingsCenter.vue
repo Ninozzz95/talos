@@ -612,6 +612,7 @@ watch(
                             @open-theme-engine="openModule('theme', 'motion')"
                             @update-chat-bubble-scale="preferences.chat_layout.bubble_scale = $event"
                             @update-chat-composer-mode="preferences.chat_layout.composer_mode = $event"
+                            @update-chat-message-style="preferences.chat_layout.message_style = $event"
                             @update-mobile-window-presentation="preferences.chat_layout.mobile_window_presentation = $event"
                             @update-advanced-rail-expanded="preferences.chat_layout.advanced_rail_expanded = $event"
                             @update-appearance="updateAppearancePreference"

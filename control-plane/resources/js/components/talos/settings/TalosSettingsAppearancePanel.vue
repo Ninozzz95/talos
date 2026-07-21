@@ -15,12 +15,14 @@ import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../l
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_COMPOSER_MODE_OPTIONS,
+    TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '../../../lib/talosChatLayout'
 import type {
     TalosChatBubbleScale,
     TalosChatLayoutPreferences,
     TalosComposerMode,
+    TalosMessageStyle,
     TalosMobileWindowPresentation,
 } from '../../../lib/talosTypes'
 
@@ -30,6 +32,7 @@ const emit = defineEmits<{
     openThemeEngine: []
     updateChatBubbleScale: [scale: TalosChatBubbleScale]
     updateChatComposerMode: [mode: TalosComposerMode]
+    updateChatMessageStyle: [style: TalosMessageStyle]
     updateAdvancedRailExpanded: [expanded: boolean]
     updateMobileWindowPresentation: [presentation: TalosMobileWindowPresentation]
     updateAppearance: [group: TalosAppearanceGroup, key: string, enabled: boolean]
@@ -109,6 +112,17 @@ function selectThemeMode(value: unknown) {
                 aria-label="Chat composer mode"
                 :disabled="themePolicyLocked"
                 @update:model-value="(value) => emit('updateChatComposerMode', value as TalosComposerMode)"
+            />
+        </label>
+        <label class="block">
+            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Message style</span>
+            <TalosThemedSelect
+                :model-value="chatLayout.message_style"
+                class="mt-2"
+                :items="TALOS_CHAT_MESSAGE_STYLE_OPTIONS"
+                aria-label="Message style"
+                :disabled="themePolicyLocked"
+                @update:model-value="(value) => emit('updateChatMessageStyle', value as TalosMessageStyle)"
             />
         </label>
         <label class="block">
