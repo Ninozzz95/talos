@@ -167,6 +167,23 @@ export function useTalosModelProfiles() {
         }
     }
 
+    async function setModelProfileComposerVisibility(profileId: string, showInComposer: boolean) {
+        modelProfileError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosModelProfile>>(`/api/talos/model-profiles/${profileId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ show_in_composer: showInComposer }),
+                validationMessage: 'TALOS could not update composer visibility for this model profile.',
+            })
+
+            return storeModelProfile(response.data)
+        } catch (error) {
+            modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not update composer visibility.'
+            throw error
+        }
+    }
+
     async function deleteModelProfile(profileId: string) {
         modelProfileError.value = null
 
@@ -265,6 +282,7 @@ export function useTalosModelProfiles() {
         createAndProbeModelProfile,
         updateModelProfile,
         updateAndProbeModelProfile,
+        setModelProfileComposerVisibility,
         deleteModelProfile,
         probeModelProfile,
         probeDraftModelProfile,

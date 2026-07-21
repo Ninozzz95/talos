@@ -90,6 +90,49 @@ describe('useTalosChat server-persisted procedural responses', () => {
         })
     })
 
+    it('threads the frozen effort and thinking wire fields into the chat POST body', async () => {
+        const user = message('user', 'Reason carefully.', 'user-effort')
+        const assistant = message('assistant', 'Reasoned.', 'assistant-effort')
+        const persistMessage = vi.fn(async () => user)
+        talosFetchMock.mockResolvedValue({
+            text: assistant.content,
+            assistant_message: assistant,
+            agent_turn: { id: 'turn-1', status: 'completed', failure_code: null },
+        } as never)
+
+        await useTalosChat().sendPersistentChat({
+            sessionId: 'session-1',
+            prompt: user.content,
+            modelProfileId: 'profile-1',
+            effort: 'high',
+            thinking: true,
+            persistMessage,
+        })
+
+        const [, options] = talosFetchMock.mock.calls[0]
+        expect(JSON.parse(String(options?.body))).toMatchObject({ effort: 'high', thinking: true })
+    })
+
+    it('sends null effort and thinking when the composer leaves them unset', async () => {
+        const user = message('user', 'Default reasoning.', 'user-default')
+        const assistant = message('assistant', 'Answered.', 'assistant-default')
+        const persistMessage = vi.fn(async () => user)
+        talosFetchMock.mockResolvedValue({
+            text: assistant.content,
+            assistant_message: assistant,
+            agent_turn: { id: 'turn-1', status: 'completed', failure_code: null },
+        } as never)
+
+        await useTalosChat().sendPersistentChat({
+            sessionId: 'session-1',
+            prompt: user.content,
+            modelProfileId: 'profile-1',
+            persistMessage,
+        })
+
+        expect(JSON.parse(String(talosFetchMock.mock.calls[0][1]?.body))).toMatchObject({ effort: null, thinking: null })
+    })
+
     it('persists attachment provenance on a fallback assistant message', async () => {
         const user = message('user', 'Summarize the attached report.', 'user-attachment')
         const assistant = message('assistant', 'The report is summarized.', 'assistant-attachment')

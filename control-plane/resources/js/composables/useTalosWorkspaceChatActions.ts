@@ -23,6 +23,8 @@ export type TalosWorkspaceChatActionDependencies = {
     selectedModelProfileId: Readonly<Ref<string>>
     selectedModelRoutingProfileId: Readonly<Ref<string>>
     selectedContextSetId: Readonly<Ref<string>>
+    selectedEffort: Readonly<Ref<string>>
+    thinking: Readonly<Ref<boolean>>
     ensureSessionForPrompt: (message: string) => Promise<TalosSession>
     persistUserMessage: (sessionId: string, content: string, persistMessage: (sessionId: string, payload: CreateTalosMessagePayload) => Promise<TalosMessage>, metadata?: Record<string, unknown>) => Promise<TalosMessage>
     sendPersistentChat: (options: {
@@ -123,6 +125,8 @@ export function useTalosWorkspaceChatActions(deps: TalosWorkspaceChatActionDepen
                     enabled: deps.browseModeEnabled.value,
                     browserSessionId: deps.browseModeEnabled.value ? deps.activeBrowserSession.value?.id ?? null : null,
                 },
+                effort: deps.selectedEffort.value,
+                thinking: deps.thinking.value,
                 chatEndpoint: '/api/talos/chat',
                 userMessageMetadata,
                 persistMessage: async (sessionId, payload) => payload.role === 'user'

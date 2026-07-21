@@ -42,6 +42,10 @@ const props = withDefaults(defineProps<{
     selectedModelRoutingProfileId: string
     selectedContextSetId: string
     selectedContextSet: TalosContextSet | null
+    selectedEffort?: string
+    thinking?: boolean
+    effortLevels?: string[]
+    supportsThinking?: boolean
     loadingModelProfiles: boolean
     loadingModelRoutingProfiles: boolean
     loadingContextSets: boolean
@@ -51,6 +55,10 @@ const props = withDefaults(defineProps<{
     visibility: Record<string, boolean>
 }>(), {
     devBrowserEvidence: false,
+    selectedEffort: 'high',
+    thinking: false,
+    effortLevels: () => [],
+    supportsThinking: false,
 })
 
 const emit = defineEmits<{
@@ -65,6 +73,8 @@ const emit = defineEmits<{
     browseOpen: [url: string | null]
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
+    selectEffort: [level: string]
+    selectThinking: [enabled: boolean]
     selectContextSet: [contextSetId: string]
     refreshModelAndContext: []
     openModelLab: []
@@ -191,17 +201,20 @@ onBeforeUnmount(() => {
                         {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
                     </option>
                 </Select>
-                <div class="mt-3 text-xs font-semibold uppercase text-[var(--talos-muted)]">Routing profile</div>
-                <label class="sr-only" for="talos-workspace-model-routing-profile">Model routing profile</label>
+                <div class="mt-3 flex items-center gap-2 text-xs font-semibold uppercase text-[var(--talos-muted)]">
+                    Auto
+                    <span class="normal-case text-[10px] font-normal text-[var(--talos-muted)]">routing profile picks the model per turn</span>
+                </div>
+                <label class="sr-only" for="talos-workspace-model-routing-profile">Auto routing profile</label>
                 <Select
                     id="talos-workspace-model-routing-profile"
                     :model-value="selectedModelRoutingProfileId"
                     class="mt-2"
                     :disabled="loadingModelRoutingProfiles || !modelRoutingProfiles.length"
-                    aria-label="Model routing profile"
+                    aria-label="Auto routing profile"
                     @update:model-value="(value) => emit('selectModelRoutingProfile', String(value))"
                 >
-                    <option value="">{{ loadingModelRoutingProfiles ? 'Loading routes' : 'No routing profile' }}</option>
+                    <option value="">{{ loadingModelRoutingProfiles ? 'Loading routes' : 'Auto off (pick a profile above)' }}</option>
                     <option
                         v-for="profile in modelRoutingProfiles"
                         :key="profile.id"
@@ -302,6 +315,10 @@ onBeforeUnmount(() => {
                 :status-text="statusText"
                 :model-label="modelLabel"
                 :model-provider="modelProvider"
+                :selected-effort="selectedEffort"
+                :thinking="thinking"
+                :effort-levels="effortLevels"
+                :supports-thinking="supportsThinking"
                 :context-label="contextLabel"
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
@@ -318,6 +335,8 @@ onBeforeUnmount(() => {
                 :visibility="visibility"
                 @send="emit('send')"
                 @open-model="emit('openModel')"
+                @select-effort="emit('selectEffort', $event)"
+                @select-thinking="emit('selectThinking', $event)"
                 @open-context="emit('openContext')"
                 @open-settings="emit('openSettings')"
                 @toggle-temporary="emit('toggleTemporary')"

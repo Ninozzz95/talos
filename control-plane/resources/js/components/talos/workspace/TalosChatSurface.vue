@@ -10,6 +10,7 @@ import Skeleton from '../../ui/Skeleton.vue'
 import TalosMessageContent from '../chat/TalosMessageContent.vue'
 import TalosMessageActions from '../chat/TalosMessageActions.vue'
 import TalosRunActivity from '../chat/TalosRunActivity.vue'
+import TalosAutoReceipt from '../chat/TalosAutoReceipt.vue'
 import TalosStatusMessage from '../chat/TalosStatusMessage.vue'
 import TalosGuidedStart from './TalosGuidedStart.vue'
 import TalosLiveEdgeControl from './TalosLiveEdgeControl.vue'
@@ -595,6 +596,10 @@ defineExpose({ scrollToBottom })
                             v-if="message.role === 'assistant'"
                             :message="message"
                             :development-mode="developmentMode"
+                        />
+                        <TalosAutoReceipt
+                            v-if="message.role === 'assistant'"
+                            :message="message"
                         />
                         <p
                             v-if="message.role !== 'assistant' && message.role !== 'system'"
