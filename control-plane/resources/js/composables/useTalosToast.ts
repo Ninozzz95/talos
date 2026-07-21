@@ -1,5 +1,4 @@
 import { markRaw } from 'vue'
-import { toast } from 'vue-sonner'
 import TalosSonnerToastContent from '../components/ui/sonner/TalosSonnerToastContent.vue'
 
 export type TalosToastTone = 'info' | 'success' | 'warning' | 'error'
@@ -15,17 +14,24 @@ export interface TalosToastOptions {
     action?: TalosToastAction
 }
 
-export type TalosToastMethod = (message: string, options?: TalosToastOptions) => TalosToastId
+export type TalosToastMethod = (message: string, options?: TalosToastOptions) => void
 
 const content = markRaw(TalosSonnerToastContent)
+let sonnerModule: Promise<typeof import('vue-sonner')> | null = null
 
-function dispatch(tone: TalosToastTone, message: string, options?: TalosToastOptions): TalosToastId {
-    return toast[tone](content, {
-        id: options?.id,
-        componentProps: { message, tone },
-        action: options?.action
-            ? { label: options.action.label, onClick: options.action.onClick }
-            : undefined,
+// The vue-sonner runtime is loaded on first toast so it stays out of the
+// initial static chunk. No caller consumes the toast id, so dispatch is
+// fire-and-forget; queued toasts render once the Toaster region mounts.
+function dispatch(tone: TalosToastTone, message: string, options?: TalosToastOptions): void {
+    sonnerModule ??= import('vue-sonner')
+    void sonnerModule.then(({ toast }) => {
+        toast[tone](content, {
+            id: options?.id,
+            componentProps: { message, tone },
+            action: options?.action
+                ? { label: options.action.label, onClick: options.action.onClick }
+                : undefined,
+        })
     })
 }
 

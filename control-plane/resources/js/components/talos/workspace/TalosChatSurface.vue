@@ -87,12 +87,14 @@ const props = withDefaults(defineProps<{
     browserTaskError: string | null
     browserTaskCommandTargetId: string | null
     devBrowserEvidence: boolean
+    developmentMode?: boolean
     activeTalosSessionId: string | null
     mobile: boolean
     mobileWindowPresentation: TalosMobileWindowPresentation
     viewport: TalosChatViewportController
 }>(), {
     censorEnabled: true,
+    developmentMode: false,
 })
 
 const emit = defineEmits<{
@@ -512,8 +514,8 @@ defineExpose({ scrollToBottom })
             <div v-else class="space-y-5">
                 <template v-for="message in messages" :key="message.id">
                     <article
-                        class="talos-chat-message flex"
-                        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
+                        class="talos-chat-message flex flex-col"
+                        :class="message.role === 'user' ? 'items-end' : 'items-start'"
                         :data-message-role="message.role"
                         :data-message-id="message.id"
                     >
@@ -592,6 +594,7 @@ defineExpose({ scrollToBottom })
                         <TalosRunActivity
                             v-if="message.role === 'assistant'"
                             :message="message"
+                            :development-mode="developmentMode"
                         />
                         <p
                             v-if="message.role !== 'assistant' && message.role !== 'system'"
@@ -611,23 +614,6 @@ defineExpose({ scrollToBottom })
                                 <span class="truncate">{{ attachment.name }}</span>
                             </span>
                         </div>
-                        <TalosMessageActions
-                            v-if="message.role !== 'system'"
-                            class="mt-3"
-                            :message="message"
-                            :busy="sending"
-                            :can-retry="canRetryAssistantMessage(message)"
-                            :has-evidence="messageHasEvidence(message)"
-                            :evidence-open="messageEvidenceOpen(message)"
-                            :has-benchmark="Boolean(message.run_id)"
-                            :benchmarking="benchmarkingRunId === message.run_id"
-                            @copy="copyMessage"
-                            @edit="editMessage"
-                            @resend="emit('resendMessage', $event)"
-                            @retry="emit('retryAssistantMessage', $event)"
-                            @toggle-evidence="emit('toggleMessageEvidence', $event)"
-                            @benchmark="emit('benchmarkMessageRun', $event)"
-                        />
                         <div v-if="message.role === 'assistant'" class="mt-3 flex flex-wrap gap-2">
                             <Badge v-if="messageMutations(message).length" tone="success">{{ messageMutations(message).length }} JMP</Badge>
                             <Badge tone="neutral">Persisted</Badge>
@@ -650,6 +636,23 @@ defineExpose({ scrollToBottom })
                             </div>
                         </div>
                     </div>
+                    <TalosMessageActions
+                        v-if="message.role !== 'system'"
+                        class="talos-message-actions mt-1"
+                        :message="message"
+                        :busy="sending"
+                        :can-retry="canRetryAssistantMessage(message)"
+                        :has-evidence="messageHasEvidence(message)"
+                        :evidence-open="messageEvidenceOpen(message)"
+                        :has-benchmark="Boolean(message.run_id)"
+                        :benchmarking="benchmarkingRunId === message.run_id"
+                        @copy="copyMessage"
+                        @edit="editMessage"
+                        @resend="emit('resendMessage', $event)"
+                        @retry="emit('retryAssistantMessage', $event)"
+                        @toggle-evidence="emit('toggleMessageEvidence', $event)"
+                        @benchmark="emit('benchmarkMessageRun', $event)"
+                    />
                     </article>
 
                     <article
@@ -773,5 +776,34 @@ defineExpose({ scrollToBottom })
 .talos-chat-message:has([aria-expanded='true']) {
     position: relative;
     z-index: 40;
+}
+
+/*
+ * Message actions live below the bubble and stay reachable without a pointer:
+ * hovering the message reveals them, keyboard focus-within surfaces them, and
+ * on touch (no hover) they are always visible. They remain in the tab order
+ * while dimmed so Tab can reach and reveal them.
+ */
+.talos-message-actions {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.talos-chat-message:hover > .talos-message-actions,
+.talos-chat-message:focus-within > .talos-message-actions,
+.talos-message-actions:focus-within {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .talos-message-actions {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .talos-message-actions {
+        transition: none;
+    }
 }
 </style>
