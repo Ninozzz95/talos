@@ -273,6 +273,14 @@ final class TalosProviderModelCatalogAdapterTest extends TestCase
                     'structured_outputs' => ['supported' => true],
                     'thinking' => ['supported' => true],
                     'code_execution' => ['supported' => false],
+                    'effort' => [
+                        'supported' => true,
+                        'high' => ['supported' => true],
+                        'low' => ['supported' => true],
+                        'medium' => ['supported' => true],
+                        'max' => ['supported' => false],
+                        'xhigh' => ['supported' => true],
+                    ],
                 ],
             ]],
             'has_more' => true,
@@ -292,6 +300,15 @@ final class TalosProviderModelCatalogAdapterTest extends TestCase
         self::assertTrue($item['capabilities']['text']);
         self::assertSame(200000, $item['context_window']);
         self::assertSame(64000, $item['max_output_tokens']);
+        self::assertSame(['low', 'medium', 'high', 'xhigh'], $item['effort_levels']);
+    }
+
+    public function test_openai_compatible_adapter_leaves_effort_levels_null(): void
+    {
+        $adapter = new TalosOpenAiCompatibleModelCatalogAdapter;
+        $page = $adapter->parsePage('openai', ['object' => 'list', 'data' => [['id' => 'gpt-4.1', 'owned_by' => 'openai']]]);
+
+        self::assertNull($page->items()[0]->toArray()['effort_levels']);
     }
 
     public function test_anthropic_adapter_stops_pagination_when_has_more_is_false(): void
