@@ -1,0 +1,57 @@
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
+import { Keyboard, KeyboardResize } from '@capacitor/keyboard'
+import type { TalosColorScheme } from '@/theme/applyDesignTokens'
+
+export type NativeFramingErrorCode = 'NATIVE_STATUSBAR_FAILED' | 'NATIVE_KEYBOARD_FAILED'
+
+export class NativeFramingError extends Error {
+    readonly code: NativeFramingErrorCode
+
+    constructor(code: NativeFramingErrorCode, message: string) {
+        super(message)
+        this.name = 'NativeFramingError'
+        this.code = code
+    }
+}
+
+export interface ConfigureNativeFramingOptions {
+    /** Active color scheme; drives status-bar content contrast. */
+    scheme: TalosColorScheme
+    /** Canonical background color (Android status-bar fill under the safe area). */
+    background: string
+    /** Controlled, observable failure channel; never throws into the caller. */
+    onError?(error: NativeFramingError): void
+}
+
+function messageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Frame the native chrome so the web view sits inside the OS safe area with a
+ * status bar that matches the active theme. No-op on the web platform. Each
+ * native channel fails closed independently through `onError`: a failure in one
+ * never blocks the other and never throws into the render path. Safe-area insets
+ * themselves are handled in CSS via `env(safe-area-inset-*)`.
+ */
+export async function configureNativeFraming(options: ConfigureNativeFramingOptions): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return
+
+    try {
+        await StatusBar.setStyle({ style: options.scheme === 'dark' ? Style.Dark : Style.Light })
+        // setBackgroundColor / setOverlaysWebView are Android-only APIs.
+        if (Capacitor.getPlatform() === 'android') {
+            await StatusBar.setBackgroundColor({ color: options.background })
+            await StatusBar.setOverlaysWebView({ overlay: false })
+        }
+    } catch (error) {
+        options.onError?.(new NativeFramingError('NATIVE_STATUSBAR_FAILED', messageOf(error)))
+    }
+
+    try {
+        await Keyboard.setResizeMode({ mode: KeyboardResize.Native })
+    } catch (error) {
+        options.onError?.(new NativeFramingError('NATIVE_KEYBOARD_FAILED', messageOf(error)))
+    }
+}

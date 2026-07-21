@@ -1,0 +1,133 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import { mount, type VueWrapper } from '@vue/test-utils'
+import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
+import type {
+    TalosMobileModelProfileView,
+    TalosMobileRoutingProfileView,
+} from '@/components/chat/mobileChatTypes'
+
+let wrapper: VueWrapper | null = null
+
+afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+})
+
+function profile(overrides: Partial<TalosMobileModelProfileView> = {}): TalosMobileModelProfileView {
+    return {
+        id: 'profile-openai',
+        provider: 'openai',
+        model: 'gpt-5.2',
+        display_name: 'GPT-5.2',
+        status: 'healthy',
+        has_secret: true,
+        effort_levels: ['low', 'medium', 'high'],
+        supports_thinking: false,
+        show_in_composer: true,
+        capabilities: null,
+        probe_ok: true,
+        ...overrides,
+    }
+}
+
+function route(overrides: Partial<TalosMobileRoutingProfileView> = {}): TalosMobileRoutingProfileView {
+    return {
+        id: 'route-balanced',
+        name: 'Balanced routing',
+        status: 'enabled',
+        lane_count: 2,
+        ...overrides,
+    }
+}
+
+function mountPicker(overrides: Record<string, unknown> = {}) {
+    wrapper = mount(TalosMobileComposerModelPicker, {
+        attachTo: document.body,
+        props: {
+            modelProfiles: [
+                profile(),
+                profile({ id: 'profile-deepseek', provider: 'deepseek', display_name: 'DeepSeek', model: 'deepseek-chat' }),
+            ],
+            routingProfiles: [route()],
+            selectedModelProfileId: 'profile-openai',
+            selectedRoutingProfileId: null,
+            ...overrides,
+        },
+    })
+    return wrapper
+}
+
+describe('TalosMobileComposerModelPicker', () => {
+    it('is a themed listbox with grouped Auto and model rows and no native select', () => {
+        const view = mountPicker()
+
+        expect(view.get('[role="listbox"]').attributes('aria-label')).toBe('Model for this conversation')
+        expect(view.find('select').exists()).toBe(false)
+        expect(view.find('option').exists()).toBe(false)
+        expect(view.findAll('[data-testid="talos-mobile-model-route-option"]')).toHaveLength(1)
+        expect(view.findAll('[data-testid="talos-mobile-model-option"]')).toHaveLength(2)
+        expect(view.text()).toContain('Auto')
+        expect(view.text()).toContain('Models')
+    })
+
+    it('emits exact IDs for callable model and enabled Auto route', async () => {
+        const view = mountPicker()
+
+        await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
+        await view.get('[data-routing-profile-id="route-balanced"]').trigger('click')
+
+        expect(view.emitted('selectModelProfile')).toEqual([['profile-deepseek']])
+        expect(view.emitted('selectModelRoutingProfile')).toEqual([['route-balanced']])
+    })
+
+    it('keeps unavailable profiles visible but disabled and unselectable', async () => {
+        const view = mountPicker({
+            modelProfiles: [profile({ id: 'profile-disabled', status: 'failed' })],
+            routingProfiles: [route({ id: 'route-disabled', lane_count: 0 })],
+        })
+
+        const model = view.get<HTMLButtonElement>('[data-model-profile-id="profile-disabled"]')
+        const routing = view.get<HTMLButtonElement>('[data-routing-profile-id="route-disabled"]')
+        expect(model.element.disabled).toBe(true)
+        expect(routing.element.disabled).toBe(true)
+        await model.trigger('click')
+        await routing.trigger('click')
+        expect(view.emitted('selectModelProfile')).toBeUndefined()
+        expect(view.emitted('selectModelRoutingProfile')).toBeUndefined()
+    })
+
+    it('marks the selected profile independently from DOM focus', () => {
+        const view = mountPicker()
+        expect(view.get('[data-model-profile-id="profile-openai"]').attributes('aria-selected')).toBe('true')
+        expect(view.get('[data-model-profile-id="profile-deepseek"]').attributes('aria-selected')).toBe('false')
+    })
+
+    it('moves focus across enabled rows with Arrow keys and Home End', async () => {
+        const view = mountPicker()
+        const routeOption = view.get<HTMLButtonElement>('[data-routing-profile-id="route-balanced"]')
+        const firstModel = view.get<HTMLButtonElement>('[data-model-profile-id="profile-openai"]')
+        const lastModel = view.get<HTMLButtonElement>('[data-model-profile-id="profile-deepseek"]')
+
+        routeOption.element.focus()
+        await routeOption.trigger('keydown', { key: 'ArrowDown' })
+        expect(document.activeElement).toBe(firstModel.element)
+
+        await firstModel.trigger('keydown', { key: 'End' })
+        expect(document.activeElement).toBe(lastModel.element)
+
+        await lastModel.trigger('keydown', { key: 'ArrowDown' })
+        expect(document.activeElement).toBe(routeOption.element)
+
+        await routeOption.trigger('keydown', { key: 'Home' })
+        expect(document.activeElement).toBe(routeOption.element)
+
+        await routeOption.trigger('keydown', { key: 'ArrowUp' })
+        expect(document.activeElement).toBe(lastModel.element)
+    })
+
+    it('emits a close request on Escape', async () => {
+        const view = mountPicker()
+        await view.get('[role="listbox"]').trigger('keydown', { key: 'Escape' })
+        expect(view.emitted('requestClose')).toHaveLength(1)
+    })
+})
