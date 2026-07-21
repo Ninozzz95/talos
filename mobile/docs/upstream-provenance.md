@@ -25,9 +25,9 @@ Fonti primarie ispezionate il 2026-07-18 (charter §3):
 
 | Dipendenza | Versione | Licenza | Uso previsto | Compatibilita |
 |---|---:|---|---|---|
-| `@capacitor/core` | 8.4.2 | MIT | bridge nativo | Android/iOS, Node 20+ |
+| `@capacitor/core` | 8.4.2 | MIT | bridge nativo | Android/iOS; Capacitor 8 CLI richiede Node 22+ |
 | `@capacitor/cli` | 8.4.2 | MIT | `cap sync/add` | allineata a core |
-| `@capacitor/android` | 8.4.2 | MIT | piattaforma Android | richiede JDK 17+, Android SDK, AGP 8.x |
+| `@capacitor/android` | 8.4.2 | MIT | piattaforma Android | richiede JDK 21 (capacitor.build.gradle -> JavaVersion.VERSION_21), Android SDK, AGP 8.13.0 |
 | `@capacitor/app` | 8.1.1 | MIT | lifecycle/back button | plugin ufficiale |
 | `@capacitor/keyboard` | 8.0.5 | MIT | tastiera virtuale | plugin ufficiale |
 | `@capacitor/status-bar` | 8.0.3 | MIT | safe area/status bar | plugin ufficiale |
@@ -35,9 +35,9 @@ Fonti primarie ispezionate il 2026-07-18 (charter §3):
 | `vue` | 3.5.40 | MIT | UI framework | allineata al desktop |
 | `vue-router` | 5.2.0 | MIT | routing shell | history Capacitor-safe |
 | `@vueuse/core` | 14.3.0 | MIT | composable utility | gia in uso desktop |
-| `vite` | 8.1.5 | MIT | build | allineata al desktop |
-| `@vitejs/plugin-vue` | 6.0.8 | MIT | SFC | con vite 8 |
-| `typescript` | 7.0.2 | Apache-2.0 | tipizzazione | erasable-syntax per type stripping |
+| `vite` | 7.3.6 | MIT | build (baseline mobile compatibile con gli SFC upstream congelati) | pin amendment 2026-07-20 |
+| `@vitejs/plugin-vue` | 6.0.8 | MIT | SFC | con vite 7 |
+| `typescript` | 5.9.3 | Apache-2.0 | compilatore classico richiesto da vue-tsc@3.3.7 | pin amendment 2026-07-20 |
 | `vitest` | 4.1.10 | MIT | unit test M1+ | solo dopo autorizzazione install |
 | `shadcn-vue` CLI | 2.8.0 | MIT | generatore Drawer/Dialog | output hand-authored nel repo |
 | `reka-ui` | 2.10.1 | MIT | primitive headless | stessa base del desktop |
@@ -56,6 +56,33 @@ Android, code di persistenza o bridge nativi quando un upstream approvato li
 possiede. M2 encryption, M3 inference, M6 cryptography e M7 WASM runtime
 restano **unpinned e bloccati** finche le loro decisioni dedicate di
 ricerca/sicurezza non vengono approvate.
+
+## Decisione pin toolchain build (amendment Codex 2026-07-20)
+
+Al primo install+build reale i pin `typescript@7.0.2` e `vite@8.1.5` non
+compilano il progetto. Amendment autorevole Codex
+`CODEX-TO-KIMI-M1-PIN-AMENDMENT.md`:
+
+- **ADOPT `typescript@5.9.3`** (Apache-2.0): compilatore classico compatibile
+  con `vue-tsc@3.3.7`, che risolve `typescript/lib/tsc`. Baseline richiesta dal
+  gate `vue-tsc -b`.
+- **ADOPT `vite@7.3.6`** (MIT): baseline mobile di produzione; il suo transform
+  SFC risolve i props base reka-ui degli SFC upstream congelati senza alias,
+  `@vue-ignore`, patch o modifica delle export map.
+- **DEFER `typescript@7.0.2` (toolchain nativa/tsgo):** non esporta l'API
+  Strada `typescript/lib/tsc` usata da `vue-tsc`; rivalutabile solo quando
+  `vue-tsc` dichiara e prova una API compatibile. Nessun secondo compiler
+  installato ora.
+- **DEFER `vite@8.1.5` (Rolldown):** richiede un conformance gate dedicato che
+  compili i 24 file upstream senza workaround. Fino ad allora resta upgrade
+  differito.
+- **REJECT** upgrade di `reka-ui`, modifica di `Button.vue`, `paths` speciali,
+  `@vue-ignore`, patch di `node_modules`: la combinazione conservativa risolve
+  la causa senza intaccare provenance o hash conformance (24/24 invariata).
+
+Rollback: ripristinare le due righe pin ai valori precedenti e rigenerare il
+lockfile; nessun altro file cambia. Le altre dipendenze e i 24 file
+hash-locked restano invariati.
 
 ## Decisione contratti M0 (remediation 2026-07-18)
 
@@ -86,10 +113,12 @@ ricerca/sicurezza non vengono approvate.
 
 ## Compatibilita host (da K0 audit 2026-07-18)
 
-- Node 24.18.0 e npm 11.16.0 presenti; type stripping attivo. Il baseline
-  documentato per eseguire direttamente i package `.ts` e Node 22.18.0.
-- JDK 17.0.4 presente ma fuori PATH (PATH = Java 8, JAVA_HOME = JDK 11):
-  Capacitor 8/AGP richiedono JDK 17 esplicito.
+- Node 24.18.0 e npm 11.16.0 presenti; runtime M1 pinnato a
+  `engines.node >=24.18.0 <25` (Capacitor 8 CLI richiede solo Node 22+).
+- Requisito compilazione Android: JDK 21 (il `capacitor.build.gradle`
+  generato fissa `JavaVersion.VERSION_21`; supera il precedente requisito
+  documentato). Sull'host JDK 21 non e presente: gate gradlew (S20/S21)
+  bloccati finche la toolchain non esiste.
 - Android SDK, Android Studio, adb, emulatore, Rust/rustup: assenti. Gate
   APK/emulatore/dispositivo fisico bloccati finche la toolchain non esiste.
 

@@ -1,0 +1,234 @@
+/*
+ * TALOS Mobile base stylesheet (hand-authored, offline-first).
+ * - No remote font or CSS imports: fonts are self-hosted via @fontsource
+ *   imports in main.ts.
+ * - The reka-nova shadcn variables hold raw color values; the runtime adapter
+ *   (applyDesignTokens.ts) overrides them from the validated Telemetry
+ *   identity. The :root / .dark blocks below are the fail-closed defaults used
+ *   when the identity cannot be applied.
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans: var(--talos-font-ui);
+    --font-display: var(--talos-font-display);
+    --font-mono: var(--talos-font-mono);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-talos-info: var(--talos-info);
+    --color-talos-warning: var(--talos-warning);
+    --color-talos-success: var(--talos-success);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) + 0.125rem);
+    --radius-md: calc(var(--radius) + 0.25rem);
+    --radius-lg: calc(var(--radius) + 0.5rem);
+    --radius-xl: calc(var(--radius) + 0.75rem);
+}
+
+:root {
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --talos-density-scale: 1;
+    --radius: 0rem;
+
+    --background: #f1f8fa;
+    --foreground: #111827;
+    --card: #f2f9fa;
+    --card-foreground: #111827;
+    --popover: #f2f9fa;
+    --popover-foreground: #111827;
+    --primary: #6ad4d4;
+    --primary-foreground: #111827;
+    --secondary: #e6fded;
+    --secondary-foreground: #111827;
+    --muted: #f4fafb;
+    --muted-foreground: #59606b;
+    --accent: #6ad4d4;
+    --accent-foreground: #111827;
+    --destructive: #7f1d1d;
+    --border: #536269;
+    --input: #30424a;
+    --ring: #000000;
+    --talos-success: #14532d;
+    --talos-warning: #713f12;
+    --talos-info: #1e3a8a;
+    --sidebar: #f3f9fb;
+    --sidebar-foreground: #111827;
+    --sidebar-primary: #6ad4d4;
+    --sidebar-primary-foreground: #111827;
+    --sidebar-accent: #6ad4d4;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #536269;
+    --sidebar-ring: #000000;
+}
+
+.dark {
+    --background: #0b0f11;
+    --foreground: #edf2f7;
+    --card: #0c1114;
+    --card-foreground: #edf2f7;
+    --popover: #0c1114;
+    --popover-foreground: #edf2f7;
+    --primary: #6ad4d4;
+    --primary-foreground: #111827;
+    --secondary: #193325;
+    --secondary-foreground: #edf2f7;
+    --muted: #0a0e11;
+    --muted-foreground: #a5a9ad;
+    --accent: #6ad4d4;
+    --accent-foreground: #111827;
+    --destructive: #fee2e2;
+    --border: #1b2b34;
+    --input: #41535a;
+    --ring: #6ad4d4;
+    --talos-success: #dcfce7;
+    --talos-warning: #fef3c7;
+    --talos-info: #dbeafe;
+    --sidebar: #0c1013;
+    --sidebar-foreground: #edf2f7;
+    --sidebar-primary: #6ad4d4;
+    --sidebar-primary-foreground: #111827;
+    --sidebar-accent: #6ad4d4;
+    --sidebar-accent-foreground: #111827;
+    --sidebar-border: #1b2b34;
+    --sidebar-ring: #6ad4d4;
+}
+
+/*
+ * Desktop parity token vocabulary. These `--talos-*` variables let ported desktop
+ * components (`bg-[var(--talos-panel)]`, `text-[var(--talos-muted)]`, …) render
+ * byte-for-byte identical to desktop. Values vendored VERBATIM from the desktop
+ * telemetry preset — provenance: control-plane/resources/css/app.css:1945-1987
+ * (theme id "telemetry"). `applyDesignTokens` stamps `talos-shell` +
+ * `data-theme-preset`/`data-theme-mode` on the root so this block is in scope.
+ */
+.talos-shell[data-theme-preset="telemetry"] {
+    --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+    --talos-font-display: "JetBrains Mono", ui-monospace, monospace;
+    --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --talos-accent: #6ad4d4;
+    --talos-accent-border: #4aa8a8;
+    --talos-accent-hover: #8ae0e0;
+    --talos-accent-soft: #0e2226;
+    --talos-accent-text: #04171a;
+    --talos-active: #0e2226;
+    --talos-background: #0b0f11;
+    --talos-border: #1f3238;
+    --talos-border-strong: #345056;
+    --talos-card: #10171a;
+    --talos-danger: #ef8589;
+    --talos-danger-border: #6f3035;
+    --talos-danger-soft: #2b1418;
+    --talos-header: #0c1214;
+    --talos-input: #2e474c;
+    --talos-muted: #7f9aa1;
+    --talos-panel: #121a1e;
+    --talos-panel-soft: #0d1416;
+    --talos-ring: #6ad4d4;
+    --talos-ring-soft: rgba(106, 212, 212, 0.20);
+    --talos-secondary: #142124;
+    --talos-sidebar: #0a0e10;
+    --talos-success: #63f08e;
+    --talos-success-border: #2d7042;
+    --talos-success-soft: #0d2a18;
+    --talos-text: #dcefef;
+    --talos-track: #1c2c31;
+    --talos-user: #d9f3f3;
+    --talos-user-text: #04171a;
+    --talos-warning: #e3b85c;
+    --talos-warning-border: #6c5124;
+    --talos-warning-soft: #2b2112;
+    --talos-surface-1: #10171a;
+    /* surface_elevated: not in the telemetry preset override; the desktop derives
+       it at runtime. Alias to the elevated card surface so ported components that
+       use --talos-window-bg (e.g. the tool-sheet) resolve. */
+    --talos-window-bg: var(--talos-card);
+}
+
+/*
+ * TALOS brand mark + wordmark. Vendored verbatim from the desktop —
+ * provenance: control-plane/resources/css/app.css:209-243. The logo mask asset
+ * is served locally at /talos/brand/logo-short.svg (mobile/public/...), a copy of
+ * control-plane/resources/images/logo-short.svg.
+ */
+.talos-orbitron-brand {
+    font-family: Orbitron, var(--talos-font-display), var(--talos-font-ui), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0;
+    line-height: 1;
+}
+
+.talos-short-logo {
+    display: inline-flex;
+    width: 3rem;
+    height: 3rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--talos-accent);
+    overflow: hidden;
+}
+
+.talos-short-logo-mark {
+    display: block;
+    width: 92%;
+    height: 92%;
+    background: currentColor;
+    mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+    -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat;
+}
+
+.talos-short-logo-hero {
+    width: 4.5rem;
+    height: 4.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background text-foreground font-sans;
+        min-height: 100dvh;
+    }
+    :focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+}

@@ -1,0 +1,15 @@
+# Build output
+dist/
+
+# Test artifacts
+test-results/
+playwright-report/
+coverage/
+
+# Dependencies (also covered by the repo root ignore)
+node_modules/
+
+# Local env
+.env
+.env.local
+.env.*.local
