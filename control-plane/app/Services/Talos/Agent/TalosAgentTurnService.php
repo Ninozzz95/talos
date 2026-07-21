@@ -63,6 +63,8 @@ PROMPT;
         TalosModelProfile $profile,
         ?TalosBrowserSession $browserSession = null,
         ?string $currentUserMessage = null,
+        ?string $reasoningEffort = null,
+        ?bool $reasoningVisible = null,
     ): TalosAgentTurnOutcome {
         [$run, $session, $profile] = $this->ownedContext($ownerUserId, $run, $profile);
         $this->assertBrowserOwnership($ownerUserId, $session, $browserSession);
@@ -146,6 +148,8 @@ PROMPT;
                     systemPrompt: $this->systemPrompt($session, $run, $browserSession),
                     messages: $this->durableMessages($session, $run, $currentUserMessage),
                     tools: array_values(TalosProceduralToolRegistry::definitions()),
+                    reasoningEffort: $reasoningEffort,
+                    reasoningVisible: $reasoningVisible,
                 ),
                 $leaseToken,
             );

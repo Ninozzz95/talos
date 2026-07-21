@@ -6,6 +6,7 @@ namespace Kadmos;
 
 use Kadmos\Provider\ProviderRequestException;
 use Kadmos\Provider\PinnedProviderHttpTransport;
+use Kadmos\Provider\ReasoningEffortMap;
 use Kadmos\Security\ExecutionPolicy;
 use Kadmos\Security\PolicyDecision;
 
@@ -43,6 +44,8 @@ final class OpenAIClient implements LLMClientInterface
     private array $lastToolCalls = [];
 
     private bool $nativeToolsUnsupported = false;
+
+    private ?string $reasoningEffort = null;
 
     private int $lastTotalTokens = 0;
     private int $lastPromptTokens = 0;
@@ -93,6 +96,12 @@ final class OpenAIClient implements LLMClientInterface
         return $this;
     }
 
+    public function withReasoningEffort(?string $effort): self
+    {
+        $this->reasoningEffort = $effort;
+        return $this;
+    }
+
     public function generateWithToolFallback(string $prompt): string
     {
         try {
@@ -121,6 +130,14 @@ final class OpenAIClient implements LLMClientInterface
             'temperature' => 0.0,
             'max_tokens' => 4096,
         ];
+        foreach (ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_OPENAI_CHAT,
+            $this->reasoningEffort,
+            false,
+            $request['max_tokens'],
+        ) as $reasoningKey => $reasoningValue) {
+            $request[$reasoningKey] = $reasoningValue;
+        }
         if ($this->tools !== []) {
             $request['tools'] = $this->tools;
             $request['tool_choice'] = 'auto';

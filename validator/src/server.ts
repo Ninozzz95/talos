@@ -204,7 +204,7 @@ export function buildServer() {
 
   // Chat relay to PHP
   server.post('/chat', async (request) => {
-    const { message, api_key, provider, model, base_url, tool_context, browser_mode } = request.body as {
+    const { message, api_key, provider, model, base_url, tool_context, browser_mode, effort, thinking } = request.body as {
       message?: string;
       api_key?: string;
       provider?: string;
@@ -212,6 +212,8 @@ export function buildServer() {
       base_url?: string | null;
       tool_context?: unknown;
       browser_mode?: unknown;
+      effort?: string | null;
+      thinking?: boolean | null;
     };
     if (!message) return { error: 'message required' };
 
@@ -263,7 +265,7 @@ export function buildServer() {
 
         resolve({ error: 'Core chat process returned no output.', code: 'CORE_CHAT_EMPTY_OUTPUT' });
       });
-      php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode }) + '\n');
+      php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode, effort, thinking }) + '\n');
       php.stdin.end();
     });
   });
