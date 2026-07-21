@@ -88,6 +88,7 @@ final class TalosAnthropicModelCatalogAdapter implements TalosProviderModelCatal
                 canonicalSlug: null,
                 localDigest: null,
                 metadata: [],
+                effortLevels: $this->effortLevels($capabilities),
             );
         }
 
@@ -111,6 +112,28 @@ final class TalosAnthropicModelCatalogAdapter implements TalosProviderModelCatal
         }
 
         return $entry['supported'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $capabilities
+     * @return list<string>|null
+     */
+    private function effortLevels(array $capabilities): ?array
+    {
+        $effort = $capabilities['effort'] ?? null;
+        if (! is_array($effort)) {
+            return null;
+        }
+
+        $levels = [];
+        foreach (['minimal', 'low', 'medium', 'high', 'max', 'xhigh'] as $level) {
+            $entry = $effort[$level] ?? null;
+            if (is_array($entry) && ($entry['supported'] ?? null) === true) {
+                $levels[] = $level;
+            }
+        }
+
+        return $levels === [] ? null : $levels;
     }
 
     private function combineSupport(?bool $left, ?bool $right): ?bool
