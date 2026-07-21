@@ -46,6 +46,7 @@ const props = defineProps<{
     windowLaunchOrigins: Partial<Record<TalosWindowId, TalosWindowLaunchOrigin>>
     windowLaunchRevisions: Partial<Record<TalosWindowId, number>>
     currentRailWidth: number
+    developmentMode?: boolean
     runtimeRequestedTab: 'timeline' | 'dag' | 'replay' | 'recovery' | 'artifacts'
     runtimeRequestedTabRevision: number
     selectedBenchmarkGroupId: string | null
@@ -392,6 +393,7 @@ function resetFloatingWindowSize(id: string) {
                 :id="id"
                 :title="TALOS_WINDOW_REGISTRY[id].title"
                 :station-code="TALOS_WINDOW_REGISTRY[id].stationCode"
+                :development-mode="developmentMode"
                 :description="TALOS_WINDOW_REGISTRY[id].description"
                 :active="activeWindowId === id"
                 :width="floatingWindowSize(id).width"
@@ -444,6 +446,7 @@ function resetFloatingWindowSize(id: string) {
             :key="`dock-${id}`"
             :title="TALOS_WINDOW_REGISTRY[id].title"
                 :station-code="TALOS_WINDOW_REGISTRY[id].stationCode"
+            :development-mode="developmentMode"
             :description="TALOS_WINDOW_REGISTRY[id].description"
             :active="activeWindowId === id"
             docked
