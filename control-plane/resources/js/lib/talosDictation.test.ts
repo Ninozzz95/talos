@@ -13,6 +13,7 @@ import {
     TALOS_DICTATION_MODE_OPTIONS,
     TalosDictationError,
     createTalosServerWhisperEngine,
+    resolveTalosDictationEngine,
     talosDictationFaultFrom,
 } from './talosDictation'
 
@@ -75,5 +76,25 @@ describe('server whisper engine', () => {
 describe('dictation modes', () => {
     it('exposes local, cloud and auto', () => {
         expect(TALOS_DICTATION_MODE_OPTIONS.map((option) => option.value)).toEqual(['local', 'cloud', 'auto'])
+    })
+})
+
+describe('resolveTalosDictationEngine', () => {
+    it('uses the server engine for cloud mode', async () => {
+        expect((await resolveTalosDictationEngine('cloud')).id).toBe('server-whisper')
+    })
+
+    it('uses the on-device engine for local mode', async () => {
+        expect((await resolveTalosDictationEngine('local')).id).toBe('browser-whisper')
+    })
+
+    it('prefers the reachable server engine in auto mode', async () => {
+        talosFetchMock.mockResolvedValueOnce({ available: true })
+        expect((await resolveTalosDictationEngine('auto')).id).toBe('server-whisper')
+    })
+
+    it('falls back to on-device in auto mode when the server is down', async () => {
+        talosFetchMock.mockRejectedValueOnce(new Error('down'))
+        expect((await resolveTalosDictationEngine('auto')).id).toBe('browser-whisper')
     })
 })

@@ -51,6 +51,7 @@
         "@fontsource/orbitron": "^5.2.8",
         "@fontsource/sora": "^5.2.8",
         "@fontsource/source-serif-4": "^5.2.9",
+        "@huggingface/transformers": "^4.2.0",
         "@lucide/vue": "^1.24.0",
         "@vitejs/plugin-vue": "^6.0.7",
         "@vueuse/core": "^14.3.0",

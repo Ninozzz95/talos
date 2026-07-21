@@ -117,3 +117,20 @@ export function createTalosServerWhisperEngine(): TalosDictationEngine {
         },
     }
 }
+
+// Picks the engine for the requested mode. The browser engine (and, through it, the
+// heavy transformers.js runtime) is loaded via a dynamic import so it never enters
+// the initial app chunk. `auto` prefers the reachable cloud worker, else on-device.
+export async function resolveTalosDictationEngine(mode: TalosDictationMode): Promise<TalosDictationEngine> {
+    if (mode === 'cloud') {
+        return createTalosServerWhisperEngine()
+    }
+
+    if (mode === 'auto') {
+        const server = createTalosServerWhisperEngine()
+        if (await server.isAvailable()) return server
+    }
+
+    const { createTalosBrowserWhisperEngine } = await import('./talosDictationBrowser')
+    return createTalosBrowserWhisperEngine()
+}
