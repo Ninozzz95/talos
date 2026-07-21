@@ -137,7 +137,7 @@ watch(() => props.modelValue, (value) => {
 
             <ComboboxList
                 data-testid="talos-model-combobox-list"
-                class="max-h-[288px] w-[var(--reka-combobox-trigger-width)] min-w-[16rem] overflow-y-auto border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[var(--talos-text)]"
+                class="z-[80] max-h-[288px] w-[var(--reka-combobox-trigger-width)] min-w-[16rem] overflow-y-auto border-[var(--talos-border)] bg-[var(--talos-card)] p-1 text-[var(--talos-text)]"
             >
                 <ComboboxEmpty class="px-2 py-3 text-sm text-[var(--talos-muted)]">
                     No provider model matches this search.
