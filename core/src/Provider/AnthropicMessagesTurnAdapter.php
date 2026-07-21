@@ -77,7 +77,20 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             'messages' => $messages,
             'max_tokens' => $request->maxTokens ?? 4096,
         ];
-        if ($request->temperature !== null) {
+        $reasoning = ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_ANTHROPIC,
+            $request->reasoningEffort,
+            $request->reasoningVisible ?? false,
+            $request->maxTokens,
+        );
+        if ($reasoning !== []) {
+            // Extended thinking requires temperature to be unset — Anthropic rejects a
+            // custom temperature together with a thinking block, so the reasoning budget
+            // takes its place.
+            foreach ($reasoning as $reasoningKey => $reasoningValue) {
+                $payload[$reasoningKey] = $reasoningValue;
+            }
+        } elseif ($request->temperature !== null) {
             $payload['temperature'] = $request->temperature;
         }
         if ($request->tools !== []) {
@@ -170,7 +183,7 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             'messages' => $messages,
             'max_tokens' => is_int($native['max_tokens'] ?? null) ? $native['max_tokens'] : 4096,
         ];
-        foreach (['temperature', 'tools'] as $field) {
+        foreach (['temperature', 'thinking', 'tools'] as $field) {
             if (array_key_exists($field, $native)) {
                 $payload[$field] = $native[$field];
             }
@@ -266,7 +279,7 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
                 'assistant_content' => $content,
                 'max_tokens' => $requestPayload['max_tokens'],
             ];
-            foreach (['temperature', 'tools'] as $field) {
+            foreach (['temperature', 'thinking', 'tools'] as $field) {
                 if (array_key_exists($field, $requestPayload)) {
                     $native[$field] = $requestPayload[$field];
                 }

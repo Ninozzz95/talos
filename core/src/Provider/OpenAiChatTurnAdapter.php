@@ -101,6 +101,14 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
         if ($request->temperature !== null) {
             $payload['temperature'] = $request->temperature;
         }
+        foreach (ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_OPENAI_CHAT,
+            $request->reasoningEffort,
+            $request->reasoningVisible ?? false,
+            $request->maxTokens,
+        ) as $reasoningKey => $reasoningValue) {
+            $payload[$reasoningKey] = $reasoningValue;
+        }
         if ($request->tools !== []) {
             $payload['tools'] = array_map($this->providerTool(...), $request->tools);
             $payload['tool_choice'] = 'auto';
@@ -189,7 +197,7 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             'model' => ToolContractGuard::nonEmptyString($native['model'] ?? null, 'OpenAI continuation model', 256),
             'messages' => $messages,
         ];
-        foreach (['max_tokens', 'temperature', 'tools', 'tool_choice'] as $field) {
+        foreach (['max_tokens', 'temperature', 'reasoning_effort', 'tools', 'tool_choice'] as $field) {
             if (array_key_exists($field, $native)) {
                 $payload[$field] = $native[$field];
             }
@@ -320,7 +328,7 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
                 'messages' => $requestPayload['messages'],
                 'assistant_message' => $assistantMessage,
             ];
-            foreach (['max_tokens', 'temperature', 'tools', 'tool_choice'] as $field) {
+            foreach (['max_tokens', 'temperature', 'reasoning_effort', 'tools', 'tool_choice'] as $field) {
                 if (array_key_exists($field, $requestPayload)) {
                     $nativeState[$field] = $requestPayload[$field];
                 }
