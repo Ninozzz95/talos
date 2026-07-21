@@ -450,7 +450,7 @@ describe('Theme Engine behavior', () => {
         expect(container.querySelector('[data-testid="talos-theme-preview-code"]')).toBeTruthy()
         expect(container.querySelector('[data-testid="talos-theme-preview-input"]')).toBeTruthy()
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('inter')
-        expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('balanced messages, full composer')
+        expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('balanced messages, minimal composer')
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('#c98b32')
     })
 

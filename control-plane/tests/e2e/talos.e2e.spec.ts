@@ -2224,7 +2224,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await expect(page.getByTestId('talos-theme-preview-input')).toBeVisible()
     await expect(page.getByTestId('talos-theme-preview-status')).toContainText('Run succeeded')
     await expect(page.getByTestId('talos-theme-preview-evidence')).toContainText('Evidence attached')
-    await expect(page.getByTestId('talos-theme-preview-layout')).toContainText('balanced messages, full composer')
+    await expect(page.getByTestId('talos-theme-preview-layout')).toContainText('balanced messages, minimal composer')
 
     await selectThemedOption(page, 'Theme chat message size', 'compact')
     await selectThemedOption(page, 'Theme chat composer mode', 'minimal')
@@ -2495,7 +2495,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
             && preferences?.theme_mode === 'system'
             && hasExactMotionV6(preferences)
             && chat?.bubble_scale === 'balanced'
-            && chat?.composer_mode === 'full'
+            && chat?.composer_mode === 'minimal'
     })
     await page.getByRole('button', { name: 'Reset to preset', exact: true }).click()
     const resetThemeRequest = await resetRequest
@@ -2504,7 +2504,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     expect(resetPreferences).not.toHaveProperty('ui_animation_profile')
     expect(resetPreferences).not.toHaveProperty('ui_animation_customization')
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
     await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible()
     const settingsAfterReset = await page.evaluate(async () => {
         const response = await fetch('/api/talos/settings', { headers: { Accept: 'application/json' } })
@@ -3353,7 +3353,7 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     await waitForWorkspaceReady(page)
     await expect(page.getByRole('button', { name: 'Decrease message size' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Increase message size' })).toBeDisabled()
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
 
     const advancedRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
@@ -5311,7 +5311,7 @@ test('chat layout controls persist bubble scale, settings-owned composer density
     })).toBe(true)
 })
 
-test('composer exposes every real capability on desktop and mobile', async ({ page, isMobile }) => {
+test('composer exposes every real capability on desktop and mobile', async ({ page }) => {
     await openWorkspace(page)
 
     for (const accessibleName of [
@@ -5330,12 +5330,9 @@ test('composer exposes every real capability on desktop and mobile', async ({ pa
         'talos-composer-context-label',
         'talos-composer-browse-label',
     ]) {
-        const label = page.getByTestId(testId)
-        if (isMobile) {
-            await expect(label).toBeHidden()
-        } else {
-            await expect(label).toBeVisible()
-        }
+        // Icon-only is now the default composer mode, so the text labels stay
+        // hidden on every breakpoint until the operator opts into the full composer.
+        await expect(page.getByTestId(testId)).toBeHidden()
     }
 
     await expect(page.getByRole('button', { name: 'Use minimal composer' })).toHaveCount(0)
@@ -5467,5 +5464,5 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByRole('button', { name: 'Reset to preset' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Balanced')
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
 })

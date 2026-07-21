@@ -32,7 +32,7 @@ export const TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS: Array<{
 
 export const TALOS_DEFAULT_CHAT_LAYOUT: TalosChatLayoutPreferences = {
     bubble_scale: 'balanced',
-    composer_mode: 'full',
+    composer_mode: 'minimal',
     advanced_rail_expanded: false,
     mobile_window_presentation: 'drawer',
 }
