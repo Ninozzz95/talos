@@ -28,6 +28,8 @@ const TALOS_INTERACTION_PRESENTATION_V6: Readonly<Record<TalosThemeId, TalosInte
     terminal: Object.freeze({ open: 'terminal-snap', surface: 'scanline', feedback: 'trace', hover: 'underline' }),
     aurora: Object.freeze({ open: 'depth', surface: 'scale-fade', feedback: 'pulse', hover: 'node-glow' }),
     glacier: Object.freeze({ open: 'standard', surface: 'slide-fade', feedback: 'edge-flash', hover: 'edge-glow' }),
+    // F1 calm refactor: soft fades, subtle pulse feedback, gentle lift hover.
+    calm: Object.freeze({ open: 'soft-fade', surface: 'fade', feedback: 'pulse', hover: 'lift' }),
     ember: Object.freeze({ open: 'standard', surface: 'scale-fade', feedback: 'edge-flash', hover: 'edge-glow' }),
     atlas: Object.freeze({ open: 'standard', surface: 'axis-shift', feedback: 'trace', hover: 'node-glow' }),
     noir: Object.freeze({ open: 'soft-fade', surface: 'fade', feedback: 'status-lock', hover: 'underline' }),

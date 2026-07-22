@@ -1,11 +1,13 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
 
-const RAIL = '[data-testid="talos-mobile-rail"]'
+const MENU = '[aria-label="Open menu"]'
+const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
 async function openModelSettings(page: Page): Promise<void> {
     await page.goto('/')
-    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
     await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()

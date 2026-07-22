@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const RAIL = '[data-testid="talos-mobile-rail"]'
+const MENU = '[aria-label="Open menu"]'
+const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
 const initialPrompt = 'Render the verified mobile thread proof.'
@@ -33,7 +34,8 @@ function geminiResponse(text: string) {
 
 async function configureGemini(page: Page): Promise<void> {
     await page.goto('/')
-    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-thread-parity-key')

@@ -62,7 +62,7 @@ async function activateTab(wrapper: VueWrapper, label: string): Promise<void> {
 }
 
 describe('TalosMobileSettingsAppearancePanel', () => {
-    it('offers all thirteen presets and changes preset and color mode through the theme store', async () => {
+    it('offers all fourteen presets and changes preset and color mode through the theme store', async () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
             global: { stubs: { TalosThemedSelect: true } },
@@ -70,7 +70,7 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
         const theme = selects.find((select) => select.props('ariaLabel') === 'Theme preset')
         const mode = selects.find((select) => select.props('ariaLabel') === 'Theme color mode')
-        expect(theme?.props('items')).toHaveLength(13)
+        expect(theme?.props('items')).toHaveLength(14)
 
         theme?.vm.$emit('update:modelValue', 'aurora')
         mode?.vm.$emit('update:modelValue', 'dark')

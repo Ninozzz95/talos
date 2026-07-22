@@ -1,6 +1,7 @@
 import { expect, test, type FileChooser, type Page } from '@playwright/test'
 
-const RAIL = '[data-testid="talos-mobile-rail"]'
+const MENU = '[aria-label="Open menu"]'
+const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 const ONE_PIXEL_PNG = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z3S4AAAAASUVORK5CYII=',
@@ -42,7 +43,8 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
     })
 
     await page.goto('/')
-    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
     await page.getByLabel('OpenAI API key').fill('e2e-files-openai-key')

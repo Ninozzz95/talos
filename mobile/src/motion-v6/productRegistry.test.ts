@@ -15,7 +15,7 @@ describe('TALOS product scene registry V6', () => {
             scheduler, createSurface: (id: string) => ({ id }), appendSurface: () => {}, resizeSurface: () => {}, getContext: () => ({}), removeSurface: () => {},
         }
         const registry = createTalosProductSceneRegistry({ simplePlatform, complexPlatform })
-        expect(registry.snapshot()).toHaveLength(39)
+        expect(registry.snapshot()).toHaveLength(42)
         for (const kind of ['complex', 'simple', 'static'] as const) {
             expect(registry.snapshot().filter((entry) => entry.kind === kind).map((entry) => entry.id)).toEqual(TALOS_MOTION_SCENE_IDS)
         }

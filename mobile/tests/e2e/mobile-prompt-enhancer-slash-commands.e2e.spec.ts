@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const RAIL = '[data-testid="talos-mobile-rail"]'
+const MENU = '[aria-label="Open menu"]'
+const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
 interface GeminiRequestBody {
@@ -21,7 +22,8 @@ function firstUserText(body: GeminiRequestBody): string {
 
 async function configureGemini(page: Page): Promise<void> {
     await page.goto('/')
-    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-enhancer-gemini-key')
@@ -164,7 +166,7 @@ test('operates slash commands and disabled reasons at 360px without overflow', a
     await composer.fill('/new')
     await composer.press('Enter')
     await expect(composer).toHaveValue('')
-    await page.getByLabel('Open chat history').click()
+    await page.getByLabel('Open menu').click()
     await expect(page.getByText('1 conversation on this device', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Open chat New chat')).toHaveAttribute('aria-current', 'page')
 

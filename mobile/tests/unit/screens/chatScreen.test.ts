@@ -382,7 +382,7 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(controller.retryAssistantMessage).toHaveBeenCalledWith('assistant-1')
     })
 
-    it('shows the active session title and opens durable chat history', async () => {
+    it('exposes the orchestrated session actions to the app shell (F1-T3 header/sidebar)', async () => {
         const controller = makeController()
         controller.chat.sessions.push(
             { id: 'chat-2', title: 'Release review' },
@@ -392,11 +392,10 @@ describe('ChatScreen (functional, local-first)', () => {
         mockState.controller = controller
         const wrapper = mount(ChatScreen, { attachTo: document.body })
 
-        expect(wrapper.get('[data-testid="talos-mobile-chat-title"]').text()).toBe('Release review')
-        await wrapper.get('[aria-label="Open chat history"]').trigger('click')
-        await vi.waitFor(() => {
-            expect(document.body.querySelector('[data-testid="talos-mobile-session-drawer"]')).not.toBeNull()
-        })
+        const exposed = wrapper.vm as unknown as { selectSession: (id: string) => void }
+        exposed.selectSession('chat-1')
+        await vi.waitFor(() => expect(controller.selectSession).toHaveBeenCalledWith('chat-1'))
+        expect(controller.attachments.discardAll).toHaveBeenCalledTimes(1)
     })
 
     it('routes new, select, rename, and delete session actions to the controller', async () => {
@@ -406,14 +405,20 @@ describe('ChatScreen (functional, local-first)', () => {
         mockState.controller = controller
         const wrapper = mount(ChatScreen, { attachTo: document.body })
 
-        await wrapper.get('[aria-label="New Chat"]').trigger('click')
-        expect(controller.newSession).toHaveBeenCalledTimes(1)
+        const exposed = wrapper.vm as unknown as {
+            newSession: () => void
+            renameSession: (id: string, title: string) => void
+            deleteSession: (id: string) => void
+        }
+        exposed.newSession()
+        await vi.waitFor(() => expect(controller.newSession).toHaveBeenCalledTimes(1))
         expect(controller.attachments.discardAll).toHaveBeenCalledTimes(1)
 
-        await wrapper.get('[aria-label="Open chat history"]').trigger('click')
-        await vi.waitFor(() => expect(document.body.querySelector('[aria-label="Open chat Architecture notes"]')).not.toBeNull())
-        document.body.querySelector<HTMLButtonElement>('[aria-label="Open chat Architecture notes"]')?.click()
-        await vi.waitFor(() => expect(controller.selectSession).toHaveBeenCalledWith('chat-1'))
+        exposed.renameSession('chat-1', 'Renamed notes')
+        await vi.waitFor(() => expect(controller.renameSession).toHaveBeenCalledWith('chat-1', 'Renamed notes'))
+
+        exposed.deleteSession('chat-1')
+        await vi.waitFor(() => expect(controller.deleteSession).toHaveBeenCalledWith('chat-1'))
     })
 
     it('shows an actionable persistence failure and retries without opening Settings', async () => {
@@ -523,7 +528,7 @@ describe('ChatScreen (functional, local-first)', () => {
         await field.trigger('keydown', { key: 'Enter' })
         await vi.waitFor(() => expect(controller.send).toHaveBeenCalled())
 
-        await wrapper.get('[aria-label="New Chat"]').trigger('click')
+        ;(wrapper.vm as unknown as { newSession: () => void }).newSession()
         await vi.waitFor(() => expect(controller.newSession).toHaveBeenCalled())
         expect(controller.clearPromptEnhancement.mock.calls.length).toBeGreaterThanOrEqual(2)
     })
