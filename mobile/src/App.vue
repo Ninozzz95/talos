@@ -3,21 +3,26 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileBackground from '@/components/talos/workspace/TalosMobileBackground.vue'
-import TalosMobileRail from '@/components/shell/TalosMobileRail.vue'
+import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
+import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
 import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
 import { TALOS_MOBILE_ROUTES, type TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { usePreferencesStore } from '@/stores/preferences'
+import { useThemeStore } from '@/stores/theme'
 import {
     registerNativeAppLifecycle,
     type NativeLifecycleController,
 } from '@/services/nativeAppLifecycle'
 import { talosDisabledSubsystems } from '@/main'
+import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
+import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
 import { useChatController } from '@/stores/chatController'
 
 const router = useRouter()
 const route = useRoute()
 const preferences = usePreferencesStore()
+const themeStore = useThemeStore()
 const chatController = useChatController()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
@@ -25,6 +30,50 @@ const uiFallback = disabled.has('ui')
 // Animated brand intro over the static native splash; dismisses to the chat.
 const showBoot = ref(true)
 const creatingSession = ref(false)
+
+// F1-T4 animation mandate: theme-tuned interaction-motion CSS vars from the
+// motion-v6 engine, applied at the shell root; components consume the vars.
+const reducedMotion = ref(typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
+    themeId: themeStore.state.theme,
+    preferences: createDefaultTalosMotionV6Preferences(),
+    reducedMotion: reducedMotion.value,
+    paused: false,
+}))
+
+// F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
+// (attachment revocation + draft scoping stay orchestrated in one place).
+const sidebarOpen = ref(false)
+const chatScreen = ref<InstanceType<typeof ChatScreen> | null>(null)
+const headerTitle = computed(() => chatController.chat.activeSession.value?.title ?? '')
+const sessionBusy = computed(() => Boolean((chatScreen.value as { sessionActionBusy?: boolean } | null)?.sessionActionBusy) || creatingSession.value)
+
+function sidebarNavigate(name: TalosMobileRouteName): void {
+    sidebarOpen.value = false
+    void navigate(name)
+}
+
+function sidebarNewChat(): void {
+    sidebarOpen.value = false
+    const screen = chatScreen.value as { newSession?: () => void } | null
+    if (screen?.newSession) screen.newSession()
+    else void onNewChat()
+}
+
+function sidebarSelect(sessionId: string): void {
+    sidebarOpen.value = false
+    ;(chatScreen.value as { selectSession?: (id: string) => void } | null)?.selectSession?.(sessionId)
+}
+
+function sidebarRename(sessionId: string, title: string): void {
+    ;(chatScreen.value as { renameSession?: (id: string, t: string) => void } | null)?.renameSession?.(sessionId, title)
+}
+
+function sidebarDelete(sessionId: string): void {
+    ;(chatScreen.value as { deleteSession?: (id: string) => void } | null)?.deleteSession?.(sessionId)
+}
 
 let lifecycle: NativeLifecycleController | null = null
 
@@ -79,7 +128,11 @@ onMounted(async () => {
     if (!disabled.has('lifecycle')) {
         lifecycle = registerNativeAppLifecycle({
             onBack: (event) => {
-                // Android Back closes an open station sheet before navigating.
+                // Android Back: sidebar first, then an open station sheet.
+                if (sidebarOpen.value) {
+                    sidebarOpen.value = false
+                    return 'handled'
+                }
                 if (isStation.value) {
                     void navigate('chat')
                     return 'handled'
@@ -104,10 +157,12 @@ onBeforeUnmount(async () => {
         class="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-[var(--talos-background)] text-[var(--talos-text)]"
         :data-talos-route="activeRoute"
         :data-talos-presentation="preferences.state.presentation"
+        :style="interactionMotionStyle"
     >
         <TalosBootLogo v-if="showBoot" @done="showBoot = false" />
 
         <div
+            v-if="themeStore.state.theme !== 'calm'"
             aria-hidden="true"
             data-testid="telemetry-poster"
             class="pointer-events-none fixed inset-0 -z-10 bg-cover bg-center opacity-20"
@@ -139,16 +194,30 @@ onBeforeUnmount(async () => {
         </template>
 
         <template v-else>
-            <TalosMobileRail
-                class="relative z-10"
-                :active-route="activeRoute"
-                :creating-session="creatingSession || chatController.chat.state.persistenceStatus !== 'ready'"
-                @navigate="navigate"
-                @new-chat="onNewChat"
+            <TalosMobileHeader
+                :title="headerTitle"
+                :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
+                @open-menu="sidebarOpen = true"
+                @new-chat="sidebarNewChat"
+            />
+
+            <TalosMobileSidebar
+                v-model:open="sidebarOpen"
+                :sessions="chatController.chat.sessions"
+                :active-session-id="chatController.chat.activeSession.value?.id ?? null"
+                :busy="sessionBusy"
+                :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
+                @new-chat="sidebarNewChat"
+                @select="sidebarSelect"
+                @rename="sidebarRename"
+                @delete="sidebarDelete"
+                @navigate="sidebarNavigate"
+                @open-model-lab="sidebarNavigate('settings')"
+                @open-settings="sidebarNavigate('settings')"
             />
 
             <main class="relative z-10 flex-1 overflow-hidden">
-                <ChatScreen />
+                <ChatScreen ref="chatScreen" />
             </main>
 
             <TalosMobileToolSheet

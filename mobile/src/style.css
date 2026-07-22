@@ -232,3 +232,24 @@
         outline-offset: 2px;
     }
 }
+
+/* F1-T4 animation mandate: every interactive element gets a simple, engine-tuned
+   micro-interaction. Durations/easings come from the motion-v6 interaction CSS
+   vars published on the shell root (talosInteractionMotionStyleV6); the engine
+   zeroes them under prefers-reduced-motion. */
+.talos-pressable {
+    transition:
+        transform var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+        background-color var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1)),
+        opacity var(--talos-motion-duration-control, 160ms) var(--talos-motion-ease, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+.talos-pressable:active {
+    transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+    .talos-pressable,
+    .talos-pressable:active {
+        transition: none;
+        transform: none;
+    }
+}

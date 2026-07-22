@@ -13,7 +13,7 @@ const emit = defineEmits<{ close: [] }>()
     <div class="fixed inset-0 z-[70] flex flex-col justify-end">
         <div
             data-testid="talos-mobile-sheet-backdrop"
-            class="absolute inset-0 bg-black/40"
+            class="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
             aria-hidden="true"
             @click="emit('close')"
         ></div>
@@ -22,13 +22,13 @@ const emit = defineEmits<{ close: [] }>()
             aria-modal="true"
             :aria-label="title"
             data-testid="talos-mobile-tool-sheet"
-            class="relative z-10 flex max-h-[min(88dvh,900px)] flex-col overflow-hidden rounded-t-md border border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]"
+            class="relative z-10 flex max-h-[min(88dvh,900px)] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]"
         >
-            <header class="flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)] px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            <header class="flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
                 <button
                     type="button"
                     aria-label="Back to chat"
-                    class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
+                    class="talos-pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
                     @click="emit('close')"
                 >
                     <ArrowLeft class="h-4 w-4" aria-hidden="true" />
@@ -40,7 +40,7 @@ const emit = defineEmits<{ close: [] }>()
                 <button
                     type="button"
                     :aria-label="`Close ${title}`"
-                    class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
+                    class="talos-pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
                     @click="emit('close')"
                 >
                     <X class="h-4 w-4" aria-hidden="true" />

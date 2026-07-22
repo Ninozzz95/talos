@@ -47,6 +47,13 @@ const AMBIENT_GLYPHS: Readonly<Record<TalosMotionSceneId, readonly SimpleGlyph[]
         { role: 'glacier-refraction', x: 12, y: 12, width: 71, height: 62, motionX: 5, motionY: -3, rotation: 4, opacity: 0.22, phase: 13 },
         { role: 'glacier-depth-grid', x: 29, y: 10, width: 61, height: 68, motionX: -2, motionY: 5, opacity: 0.18, phase: 17 },
     ]),
+    // F1 calm refactor: quietest ambient in the library — two slow drifting
+    // fields, low opacity, reusing glacier's shipped CSS roles.
+    calm: Object.freeze([
+        { role: 'glacier-facet-field', x: 8, y: 14, width: 82, height: 66, motionX: -1, motionY: 1, opacity: 0.14, phase: 19 },
+        { role: 'glacier-refraction', x: 18, y: 22, width: 60, height: 48, motionX: 2, motionY: -1, rotation: 2, opacity: 0.12, phase: 23 },
+        { role: 'glacier-depth-grid', x: 30, y: 30, width: 44, height: 36, motionX: -1, motionY: 2, opacity: 0.1, phase: 29 },
+    ]),
     ember: Object.freeze([
         { role: 'ember-heat-field', x: 4, y: 12, width: 92, height: 73, motionX: 5, motionY: -5, opacity: 0.24, phase: 11 },
         { role: 'ember-recovery-wave', x: 8, y: 31, width: 82, height: 39, motionX: -8, motionY: 3, opacity: 0.3, phase: 13 },

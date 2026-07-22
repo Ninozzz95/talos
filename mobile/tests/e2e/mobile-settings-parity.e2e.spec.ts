@@ -2,8 +2,9 @@ import { expect, test } from '@playwright/test'
 
 async function openSettings(page: import('@playwright/test').Page): Promise<void> {
     await page.goto('/')
-    await expect(page.locator('[data-testid="talos-mobile-rail"]')).toBeVisible()
-    await page.locator('[data-testid="talos-mobile-rail"] [aria-label="Settings"]').click()
+    await expect(page.locator('[data-testid="talos-mobile-header"]')).toBeVisible()
+    await page.locator('[aria-label="Open menu"]').click()
+    await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Settings Center', exact: true })).toBeVisible()
 }

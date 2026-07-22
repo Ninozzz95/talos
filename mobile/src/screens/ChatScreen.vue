@@ -3,10 +3,8 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 import { AlertTriangle, Globe2 } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
-import TalosMobileChatHeader from '@/components/chat/TalosMobileChatHeader.vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
-import TalosMobileSessionDrawer from '@/components/chat/TalosMobileSessionDrawer.vue'
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
 import {
     createTalosManualBrowserActivity,
@@ -60,13 +58,11 @@ const draft = createTalosMobileComposerDraftController({
 const prompt = draft.prompt
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const composerWrap = ref<HTMLElement | null>(null)
-const historyOpen = ref(false)
 const sessionActionBusy = ref(false)
 const messageActionError = ref<string | null>(null)
 const browserError = ref<string | null>(null)
 const browserBusy = ref(false)
 const browserStatus = ref('')
-const activeTitle = computed(() => chat.activeSession.value?.title ?? 'New chat')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
 const refreshingModels = computed(() => Object.values(catalogs).some((catalog) => catalog.status === 'loading'))
 const attachmentBusy = computed(() => attachments.selecting.value)
@@ -168,13 +164,16 @@ async function runSessionAction(action: () => Promise<void>): Promise<void> {
     }
 }
 
+// Exposed to the app shell: the header/sidebar (F1-T3) drive these orchestrated
+// actions so attachment revocation + draft scoping stay in one place.
+defineExpose({ newSession, selectSession, renameSession, deleteSession, sessionActionBusy })
+
 function newSession(): void {
     void runSessionAction(async () => {
         controller.clearPromptEnhancement()
         await draft.flush()
         await attachments.discardAll()
         await controller.newSession()
-        historyOpen.value = false
         await draft.activateScope(activeSessionId.value ?? 'new')
     })
 }
@@ -185,7 +184,6 @@ function selectSession(sessionId: string): void {
         await draft.flush()
         if (sessionId !== activeSessionId.value) await attachments.discardAll()
         await controller.selectSession(sessionId)
-        historyOpen.value = false
         await draft.activateScope(activeSessionId.value ?? 'new')
     })
 }
@@ -294,8 +292,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
         if (commandId === 'new_session') {
             await attachments.discardAll()
             await controller.newSession()
-            historyOpen.value = false
-            await draft.activateScope(activeSessionId.value ?? 'new')
+                await draft.activateScope(activeSessionId.value ?? 'new')
             return
         }
         if (commandId === 'open_browse') {
@@ -371,14 +368,6 @@ onBeforeUnmount(() => {
         aria-label="Chat"
         class="relative flex h-full min-h-0 flex-1 flex-col bg-[var(--talos-background)]"
     >
-        <TalosMobileChatHeader
-            :title="activeTitle"
-            :session-count="chat.sessions.length"
-            :creating-session="sessionActionBusy"
-            @open-history="historyOpen = true"
-            @new-chat="newSession"
-        />
-
         <div
             v-if="chat.state.persistenceStatus === 'error'"
             role="alert"
@@ -516,15 +505,5 @@ onBeforeUnmount(() => {
             />
         </div>
 
-        <TalosMobileSessionDrawer
-            v-model:open="historyOpen"
-            :sessions="chat.sessions"
-            :active-session-id="activeSessionId"
-            :busy="sessionActionBusy"
-            @new-chat="newSession"
-            @select="selectSession"
-            @rename="renameSession"
-            @delete="deleteSession"
-        />
     </section>
 </template>

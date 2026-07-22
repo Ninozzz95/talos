@@ -24,6 +24,7 @@ export const TALOS_THEME_IDS = [
     'claudius',
     'basicus',
     'telemetry',
+    'calm',
 ] as const
 
 export type TalosThemeId = typeof TALOS_THEME_IDS[number]
@@ -128,7 +129,7 @@ export type TalosThemeExportV2 = {
     }
 }
 
-export const TALOS_DEFAULT_THEME: TalosThemeId = 'telemetry'
+export const TALOS_DEFAULT_THEME: TalosThemeId = 'calm'
 
 export const TALOS_BACKGROUND_EFFECTS: Array<{ value: TalosBackgroundEffect; label: string; description: string }> = [
     { value: 'dag-flow', label: 'DAG Flow', description: 'Execution graph pulses for normal AVM work.' },
@@ -466,6 +467,25 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         preview: { background: '#0b0f11', accent: '#6ad4d4', secondary: '#63f08e', line: '#1f3238' },
         poster: themePoster('telemetry'),
         defaultEffect: 'signal-mesh',
+    },
+    {
+        // Ribrand-soft default (F1-T2): warm quiet surfaces, refined TALOS gold
+        // as a sparing signature accent, no procedural decoration by default.
+        id: 'calm',
+        label: 'Calm',
+        shortLabel: 'Calm',
+        description: 'Quiet warm surfaces, typography-led hierarchy, gold kept as a sparing signature.',
+        mood: 'Warm paper, soft charcoal, refined bronze',
+        motion: 'Subtle micro-motion',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'soft',
+        defaultMotion: 'subtle',
+        isLight: false,
+        fontUi: 'Instrument Sans',
+        fontMono: 'JetBrains Mono',
+        preview: { background: '#211f1a', accent: '#c08b3c', secondary: '#8a8578', line: '#3a382f' },
+        poster: themePoster('calm'),
+        defaultEffect: 'none',
     },
 ]
 

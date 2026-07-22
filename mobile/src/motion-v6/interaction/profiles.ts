@@ -23,6 +23,8 @@ const TUNING: Readonly<Record<TalosMotionSceneId, ProfileTuning>> = Object.freez
     terminal: { duration: 0.72, x: 0.8, y: 0.25, scale: 0.25, rotate: 0, stagger: 0.35, easing: 'linear' },
     aurora: { duration: 1.18, x: 1.15, y: 1.25, scale: 0.85, rotate: 1.25, stagger: 1.15, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
     glacier: { duration: 1.06, x: 0.5, y: 0.7, scale: 0.55, rotate: 0.2, stagger: 0.65, easing: 'cubic-bezier(0.18, 0.82, 0.22, 1)' },
+    // F1 calm refactor: quietest interaction profile — micro travel, no rotation.
+    calm: { duration: 0.92, x: 0.4, y: 0.5, scale: 0.45, rotate: 0, stagger: 0.6, easing: 'cubic-bezier(0.22, 0.8, 0.24, 1)' },
     ember: { duration: 0.88, x: 1.25, y: 1, scale: 1.1, rotate: 1.4, stagger: 0.5, easing: 'cubic-bezier(0.3, 0.9, 0.25, 1)' },
     atlas: { duration: 1.12, x: 1.35, y: 0.8, scale: 0.7, rotate: 0.55, stagger: 1.05, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
     noir: { duration: 0.94, x: 0.7, y: 0.45, scale: 0.8, rotate: 0.1, stagger: 0.25, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' },

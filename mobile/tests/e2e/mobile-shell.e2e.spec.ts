@@ -1,8 +1,13 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
 
+// F1-T6 shell journeys — hamburger header + full-width sidebar (D5/D6) replace
+// the retired top icon rail; default theme is now `calm` (D3/D4), with the
+// legacy telemetry poster contract preserved behind an explicit theme opt-in.
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost'])
-const RAIL = '[data-testid="talos-mobile-rail"]'
+const HEADER = '[data-testid="talos-mobile-header"]'
+const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
+const MENU = '[aria-label="Open menu"]'
 
 function trackExternalRequests(page: Page): string[] {
     const external: string[] = []
@@ -25,9 +30,14 @@ async function disableSubsystems(page: Page, names: string[]): Promise<void> {
     }, names)
 }
 
+async function openStation(page: Page, label: string): Promise<void> {
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open ${label}"]`).click()
+}
+
 test('mission path has no visible or focusable phone representation', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator(RAIL)).toBeVisible()
+    await expect(page.locator(HEADER)).toBeVisible()
     await expect(page.getByText(/mission path/i)).toHaveCount(0)
     const focusableMission = await page.locator('a, button, [tabindex]').filter({ hasText: /mission path/i }).count()
     expect(focusableMission).toBe(0)
@@ -37,33 +47,42 @@ test('320x800 375x812 and tablet viewports show no horizontal overflow', async (
     for (const size of [{ width: 320, height: 800 }, { width: 375, height: 812 }, { width: 768, height: 1024 }]) {
         await page.setViewportSize(size)
         await page.goto('/')
-        await expect(page.locator(RAIL)).toBeVisible()
+        await expect(page.locator(HEADER)).toBeVisible()
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
         expect(overflow, `viewport ${size.width}x${size.height}`).toBeLessThanOrEqual(0)
     }
 })
 
-test('icon-only rail actions expose accessible names and 44x44 touch targets', async ({ page }) => {
+test('header and sidebar actions expose accessible names and 44x44 touch targets', async ({ page }) => {
     await page.goto('/')
-    const buttons = page.locator(`${RAIL} button`)
-    const count = await buttons.count()
-    expect(count).toBe(6) // New Chat + Chat + 4 stations
-    for (let i = 0; i < count; i += 1) {
-        const button = buttons.nth(i)
+    const headerButtons = page.locator(`${HEADER} button`)
+    expect(await headerButtons.count()).toBe(2) // hamburger + New Chat
+    for (let i = 0; i < 2; i += 1) {
+        const button = headerButtons.nth(i)
         expect(await button.getAttribute('aria-label')).toBeTruthy()
         const box = await button.boundingBox()
-        expect(box, `button ${i} box`).not.toBeNull()
+        expect(box, `header button ${i} box`).not.toBeNull()
         expect(box!.width).toBeGreaterThanOrEqual(44)
+        expect(box!.height).toBeGreaterThanOrEqual(44)
+    }
+
+    await page.locator(MENU).click()
+    await expect(page.locator(SIDEBAR)).toBeVisible()
+    for (const label of ['Open Research', 'Open Cockpit', 'Open Library', 'Open Model Lab', 'Open Settings']) {
+        const entry = page.locator(`${SIDEBAR} [aria-label="${label}"]`)
+        await expect(entry).toBeVisible()
+        const box = await entry.boundingBox()
+        expect(box, `${label} box`).not.toBeNull()
         expect(box!.height).toBeGreaterThanOrEqual(44)
     }
 })
 
-test('a station opens in a tool-sheet over the chat base and returns to chat', async ({ page }) => {
+test('a station opens from the sidebar in a tool-sheet over the chat base and returns to chat', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator(RAIL)).toBeVisible()
+    await expect(page.locator(HEADER)).toBeVisible()
     await expect(page.locator(SHEET)).toHaveCount(0)
 
-    await page.locator(`${RAIL} [aria-label="Research"]`).click()
+    await openStation(page, 'Research')
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'research')
     await expect(page.locator(SHEET)).toBeVisible()
     // chat base persists behind the sheet
@@ -93,24 +112,35 @@ test('reload restores the active route and presentation preference', async ({ pa
 
 test('shell opens and navigates locally in airplane mode', async ({ page, context }) => {
     await page.goto('/')
-    await expect(page.locator(RAIL)).toBeVisible()
+    await expect(page.locator(HEADER)).toBeVisible()
     await context.setOffline(true)
-    await page.locator(`${RAIL} [aria-label="Research"]`).click()
+    await openStation(page, 'Research')
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'research')
     await expect(page.locator(SHEET)).toBeVisible()
     await context.setOffline(false)
 })
 
-test('startup applies the bundled telemetry identity without network', async ({ page }) => {
+test('startup applies the bundled calm identity without network', async ({ page }) => {
     const external = trackExternalRequests(page)
     await page.goto('/')
-    await expect(page.locator('html')).toHaveAttribute('data-talos-theme', 'telemetry')
+    await expect(page.locator('html')).toHaveAttribute('data-talos-theme', 'calm')
     expect(external, external.join('\n')).toEqual([])
 })
 
-test('telemetry poster renders offline from the bundled asset with zero network requests', async ({ page }) => {
+test('calm hides the poster layer; legacy telemetry still serves its bundled poster offline', async ({ page }) => {
     const external = trackExternalRequests(page)
     await page.goto('/')
+    // AUD-001: under the calm default the decorative poster layer is absent.
+    await expect(page.locator('[data-testid="telemetry-poster"]')).toHaveCount(0)
+
+    // Legacy opt-in keeps the offline poster contract intact.
+    await page.addInitScript(() => {
+        window.localStorage.setItem(
+            'CapacitorStorage.talos.mobile.theme',
+            JSON.stringify({ theme: 'telemetry', mode: 'system' }),
+        )
+    })
+    await page.reload()
     const poster = page.locator('[data-testid="telemetry-poster"]')
     await expect(poster).toHaveCount(1)
     const bg = await poster.evaluate((el) => getComputedStyle(el).backgroundImage)
@@ -136,10 +166,10 @@ test('shell stays functional with the theme adapter disabled and default tokens'
     await disableSubsystems(page, ['theme'])
     await page.goto('/')
     // adapter did not run: no theme id attribute stamped.
-    await expect(page.locator('html')).not.toHaveAttribute('data-talos-theme', 'telemetry')
+    await expect(page.locator('html')).not.toHaveAttribute('data-talos-theme', 'calm')
     // shell still functional with the style.css defaults.
-    await expect(page.locator(RAIL)).toBeVisible()
-    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await expect(page.locator(HEADER)).toBeVisible()
+    await openStation(page, 'Settings')
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'settings')
 })
 
@@ -148,8 +178,8 @@ test('shell stays functional with lifecycle registration disabled and default ba
     page.on('pageerror', (e) => errors.push(String(e)))
     await disableSubsystems(page, ['lifecycle'])
     await page.goto('/')
-    await expect(page.locator(RAIL)).toBeVisible()
-    await page.locator(`${RAIL} [aria-label="Cockpit"]`).click()
+    await expect(page.locator(HEADER)).toBeVisible()
+    await openStation(page, 'Cockpit')
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'runs')
     expect(errors, errors.join('\n')).toEqual([])
 })
@@ -158,8 +188,8 @@ test('shell renders a fail-closed fallback when upstream ui components are disab
     await disableSubsystems(page, ['ui'])
     await page.goto('/')
     await expect(page.locator('[data-testid="ui-fallback"]')).toBeVisible()
-    // the rail/sheet shell is not mounted in the fallback.
-    await expect(page.locator(RAIL)).toHaveCount(0)
+    // the header/sidebar shell is not mounted in the fallback.
+    await expect(page.locator(HEADER)).toHaveCount(0)
     await page.locator('[data-testid="ui-fallback"] [data-nav="context"]').click()
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'context')
 })

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const RAIL = '[data-testid="talos-mobile-rail"]'
+const MENU = '[aria-label="Open menu"]'
+const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
 const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
 
 function geminiResponse(text: string) {
@@ -12,7 +13,8 @@ function geminiResponse(text: string) {
 
 async function configureGemini(page: Page): Promise<void> {
     await page.goto('/')
-    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-durable-gemini-key')
@@ -87,18 +89,18 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     expect(JSON.stringify(completions[1])).toContain(firstTitle)
     expect(JSON.stringify(completions[1])).toContain('Alpha is recorded.')
 
-    await page.getByTestId('talos-mobile-chat-header').getByLabel('New Chat').click()
+    await page.getByTestId('talos-mobile-header').getByLabel('New Chat').click()
     await expect(page.getByTestId('talos-empty-brand')).toBeVisible()
 
     const secondTitle = 'Draft a secondary release plan.'
     await sendAndExpect(page, secondTitle, 'Secondary thread is isolated.')
-    await expect(page.getByTestId('talos-mobile-chat-title')).toHaveText(secondTitle)
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle)
 
     await page.reload()
-    await expect(page.getByTestId('talos-mobile-chat-title')).toHaveText(secondTitle, { timeout: 15_000 })
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle, { timeout: 15_000 })
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toBeVisible()
 
-    await page.getByLabel('Open chat history').click()
+    await page.getByLabel('Open menu').click()
     await expect(page.getByRole('list', { name: 'Chat history' })).toBeVisible()
     await expect(page.getByText('2 conversations on this device', { exact: true })).toBeVisible()
     await page.getByLabel(`Open chat ${firstTitle}`).click()
@@ -106,30 +108,30 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     await expect(page.getByText('The earlier value was alpha.', { exact: true })).toBeVisible()
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toHaveCount(0)
 
-    await page.getByLabel('Open chat history').click()
+    await page.getByLabel('Open menu').click()
     await page.getByLabel(`Rename ${firstTitle}`).click()
     await page.getByLabel('Chat name').fill('Primary evidence')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByLabel('Open chat Primary evidence')).toBeVisible()
-    await page.getByLabel('Close chat history').click()
-    await expect(page.getByTestId('talos-mobile-chat-title')).toHaveText('Primary evidence')
+    await page.getByLabel('Close menu').click()
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveText('Primary evidence')
 
     await page.reload()
-    await expect(page.getByTestId('talos-mobile-chat-title')).toHaveText('Primary evidence', { timeout: 15_000 })
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveText('Primary evidence', { timeout: 15_000 })
     await expect(page.getByText('The earlier value was alpha.', { exact: true })).toBeVisible()
 
-    await page.getByLabel('Open chat history').click()
+    await page.getByLabel('Open menu').click()
     await page.getByLabel('Delete Primary evidence').click()
     await expect(page.getByRole('heading', { name: 'Delete chat?' })).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(page.getByText('1 conversation on this device', { exact: true })).toBeVisible()
-    await page.getByLabel('Close chat history').click()
-    await expect(page.getByTestId('talos-mobile-chat-title')).toHaveText(secondTitle)
+    await page.getByLabel('Close menu').click()
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle)
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toBeVisible()
 
     await page.reload()
-    await expect(page.getByTestId('talos-mobile-chat-title')).toHaveText(secondTitle, { timeout: 15_000 })
-    await page.getByLabel('Open chat history').click()
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle, { timeout: 15_000 })
+    await page.getByLabel('Open menu').click()
     await expect(page.getByLabel('Open chat Primary evidence')).toHaveCount(0)
     await expect(page.getByLabel(`Open chat ${secondTitle}`)).toHaveAttribute('aria-current', 'page')
 

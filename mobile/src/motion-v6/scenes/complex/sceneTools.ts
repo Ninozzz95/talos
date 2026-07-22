@@ -335,6 +335,17 @@ function drawAurora(context: CanvasContext, geometry: ComplexSceneGeometry, phas
     }
 }
 
+// F1 calm refactor: glacier quiet language + one slow horizon line, giving calm
+// its own rendered-operation grammar while staying the quietest complex scene.
+function drawCalm(context: CanvasContext, geometry: ComplexSceneGeometry, phase: number): void {
+    drawGlacier(context, geometry, phase)
+    const y = geometry.height * (0.68 + 0.01 * Math.sin(phase * 0.2))
+    context.beginPath()
+    context.moveTo(geometry.width * 0.12, y)
+    context.lineTo(geometry.width * 0.88, y)
+    context.stroke()
+}
+
 function drawGlacier(context: CanvasContext, geometry: ComplexSceneGeometry, phase: number): void {
     const points = geometry.points.slice(0, geometry.mobile ? 16 : 24).map((point) => movingPoint(point, geometry, phase * 0.35))
     context.setLineDash([])
@@ -660,6 +671,7 @@ const DRAWERS: Readonly<Record<TalosMotionSceneId, (context: CanvasContext, geom
     terminal: drawTerminal,
     aurora: drawAurora,
     glacier: drawGlacier,
+    calm: drawCalm,
     ember: drawEmber,
     atlas: drawAtlas,
     noir: drawNoir,

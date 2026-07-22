@@ -78,7 +78,7 @@ function makeRouter(): Router {
     })
 }
 
-describe('App shell (rail + chat base + station sheets)', () => {
+describe('App shell (header/sidebar + chat base + station sheets)', () => {
     beforeEach(() => {
         // Skip the native lifecycle listener in jsdom via the fail-closed switch.
         window.__TALOS_M1_DISABLE__ = ['lifecycle']
@@ -88,14 +88,14 @@ describe('App shell (rail + chat base + station sheets)', () => {
         window.__TALOS_M1_DISABLE__ = undefined
     })
 
-    it('renders the rail and the persistent chat base at /, with no sheet open', async () => {
+    it('renders the header and the persistent chat base at /, with no sheet open', async () => {
         const router = makeRouter()
         router.push('/')
         await router.isReady()
         const w = mount(App, { global: { plugins: [router] } })
         await flushPromises()
 
-        expect(w.find('[data-testid="talos-mobile-rail"]').exists()).toBe(true)
+        expect(w.find('[data-testid="talos-mobile-header"]').exists()).toBe(true)
         expect(w.text()).toContain('What claim should we benchmark?') // chat base welcome
         expect(w.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(false)
         // bottom-nav is gone

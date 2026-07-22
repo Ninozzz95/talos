@@ -27,6 +27,9 @@ const EXPECTED_THEME_IDS = [
     'claudius',
     'basicus',
     'telemetry',
+    // F1-T2 calm refactor (mobile design-lead): 14th preset; desktop adopts the
+    // same row + this contract update at style alignment (see backport ledger).
+    'calm',
 ] as const
 
 const EXPECTED_PALETTE_TOKENS = {
@@ -122,9 +125,9 @@ describe('TALOS shared theme identity V6', () => {
         expect(isTalosThemeIdentityCanonicalColor('var(--talos-accent)')).toBe(false)
     })
 
-    it('uses the independent literal list of exactly thirteen preset IDs', () => {
-        expect(EXPECTED_THEME_IDS).toHaveLength(13)
-        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(13)
+    it('uses the independent literal list of exactly fourteen preset IDs', () => {
+        expect(EXPECTED_THEME_IDS).toHaveLength(14)
+        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(14)
         expect(TALOS_THEME_PRESETS.map((preset) => preset.id)).toEqual(EXPECTED_THEME_IDS)
         expect(TALOS_THEME_IDENTITIES_V6.map((identity) => identity.id)).toEqual(EXPECTED_THEME_IDS)
     })
@@ -138,14 +141,20 @@ describe('TALOS shared theme identity V6', () => {
             source: 'getComputedStyle(element).color',
             channel_space: 'srgb-normalized',
         })
-        expect(fixture.ids).toEqual(EXPECTED_THEME_IDS)
+        expect(fixture.ids).toEqual(EXPECTED_THEME_IDS.filter((id) => id !== 'calm'))
         expect(fixture.roles).toEqual(Object.keys(EXPECTED_PALETTE_TOKENS))
         expect(TALOS_THEME_IDENTITY_PALETTE_ROLES).toEqual(Object.keys(EXPECTED_PALETTE_TOKENS))
+
+        // The Chromium oracle snapshot covers the 13 legacy presets; `calm`
+        // (F1 mobile design-lead) gets its oracle entry at desktop alignment.
+        const oracleIds = EXPECTED_THEME_IDS.filter((id) => id in fixture.colors)
+        expect(oracleIds).toHaveLength(13)
+        expect(oracleIds).not.toContain('calm')
 
         let channelComparisons = 0
         let mismatchCount = 0
         let maxDelta = 0
-        for (const id of EXPECTED_THEME_IDS) {
+        for (const id of oracleIds) {
             const identity = identityPayload(id)
             for (const mode of ['light', 'dark'] as const) {
                 const style = talosThemeModeVariantStyle(id, mode)
