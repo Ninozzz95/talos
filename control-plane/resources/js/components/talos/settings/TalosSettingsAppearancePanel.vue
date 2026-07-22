@@ -18,7 +18,7 @@ import {
     TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '../../../lib/talosChatLayout'
-import { TALOS_DICTATION_MODE_OPTIONS, type TalosDictationMode } from '../../../lib/talosDictation'
+import { TALOS_DICTATION_MODE_OPTIONS, type TalosDictationMode } from '../../../lib/talosDictationModes'
 import { useTalosDictationMode } from '../../../composables/useTalosDictation'
 import type {
     TalosChatBubbleScale,
