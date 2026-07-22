@@ -4220,15 +4220,23 @@ test('prompt enhancer exposes pending and controlled provider failure states wit
 
 test('dictation driver records browser audio from the mic immediately right of prompt enhancer', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium-dictation-driver', 'Requires the dedicated Chromium fake microphone driver.')
+    await page.setViewportSize({ width: 1920, height: 1080 })
 
     let capturedAudioBytes = 0
     let capturedContentType = ''
+    let releaseTranscription!: () => void
+    const transcriptionGate = new Promise<void>((resolve) => { releaseTranscription = resolve })
+    const chatRequests: string[] = []
+    page.on('request', (request) => {
+        if (request.url().endsWith('/api/talos/chat') && request.method() === 'POST') chatRequests.push(request.url())
+    })
 
     await page.route('**/api/talos/stt/transcribe', async (route) => {
         const request = route.request()
         const body = request.postDataBuffer()
         capturedAudioBytes = body?.byteLength ?? 0
         capturedContentType = request.headers()['content-type'] ?? ''
+        await transcriptionGate
 
         await route.fulfill({
             status: 200,
@@ -4249,6 +4257,9 @@ test('dictation driver records browser audio from the mic immediately right of p
     const mic = page.getByTestId('talos-composer-dictate')
     await expect(enhancer).toBeVisible()
     await expect(mic).toBeVisible()
+    const composer = page.getByLabel('Message TALOS')
+    await composer.fill('Keyboard focus check.')
+    await expect(enhancer).toBeEnabled()
 
     const [enhancerBox, micBox] = await Promise.all([enhancer.boundingBox(), mic.boundingBox()])
     expect(enhancerBox).not.toBeNull()
@@ -4257,15 +4268,45 @@ test('dictation driver records browser audio from the mic immediately right of p
     expect(micBox?.x ?? 0).toBeGreaterThanOrEqual((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))
     expect((micBox?.x ?? 0) - ((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))).toBeLessThanOrEqual(8)
 
-    await mic.click()
+    await enhancer.focus()
+    await expect(enhancer).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(mic).toBeFocused()
+    await page.keyboard.press('Enter')
     await expect(mic).toHaveAttribute('data-dictation-status', 'recording')
-    await page.waitForTimeout(750)
-    await mic.click()
+    const dictationStatus = page.getByTestId('talos-dictation-status')
+    const dictationAnnouncement = dictationStatus.getByTestId('talos-dictation-announcement')
+    await expect(dictationAnnouncement).toHaveAttribute('role', 'status')
+    await expect(dictationAnnouncement).toHaveText('Recording on this device')
+    await expect(dictationStatus).toContainText('Recording on this device')
+    await expect(dictationStatus).toContainText('00:01', { timeout: 3_000 })
+    await expect(dictationAnnouncement).toHaveText('Recording on this device')
+    const finishDictation = dictationStatus.getByRole('button', { name: 'Finish dictation' })
+    const cancelDictation = dictationStatus.getByRole('button', { name: 'Cancel dictation' })
+    await expect(finishDictation).toBeVisible()
+    await expect(cancelDictation).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+    const desktopRecordingPath = testInfo.outputPath('dictation-driver-desktop-recording-1920x1080.png')
+    await page.screenshot({ path: desktopRecordingPath, fullPage: true, animations: 'disabled' })
+    await testInfo.attach('dictation-driver-desktop-recording-1920x1080.png', {
+        path: desktopRecordingPath,
+        contentType: 'image/png',
+    })
+    await finishDictation.focus()
+    await page.keyboard.press('Tab')
+    await expect(cancelDictation).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(finishDictation).toBeFocused()
+    await page.keyboard.press('Space')
+    await expect(dictationStatus).toContainText('Transcribing with cloud speech service')
+    releaseTranscription()
 
-    await expect(page.getByLabel('Message TALOS')).toHaveValue('dettatura registrata dal driver')
+    await expect(composer).toHaveValue('Keyboard focus check. dettatura registrata dal driver')
     await expect(mic).toHaveAttribute('data-dictation-status', 'idle')
+    await expect(dictationStatus).toBeHidden()
     expect(capturedContentType).toContain('multipart/form-data; boundary=')
     expect(capturedAudioBytes).toBeGreaterThan(1_024)
+    expect(chatRequests).toHaveLength(0)
 
     await testInfo.attach('dictation-driver-evidence.json', {
         body: Buffer.from(JSON.stringify({ capturedAudioBytes, capturedContentType }, null, 2)),
@@ -4273,6 +4314,105 @@ test('dictation driver records browser audio from the mic immediately right of p
     })
     await testInfo.attach('dictation-driver-composer.png', {
         body: await page.getByTestId('talos-composer-capability-row').screenshot(),
+        contentType: 'image/png',
+    })
+})
+
+test('dictation driver cancellation discards audio and preserves the existing prompt', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-driver', 'Requires the dedicated Chromium fake microphone driver.')
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    let transcriptionRequests = 0
+    page.on('request', (request) => {
+        if (request.url().endsWith('/api/talos/stt/transcribe') && request.method() === 'POST') transcriptionRequests += 1
+    })
+
+    await page.evaluate(() => window.localStorage.setItem('talos.dictation_mode', 'cloud'))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const prompt = 'Keep this typed prompt.'
+    const mic = page.getByTestId('talos-composer-dictate')
+    await page.getByLabel('Message TALOS').fill(prompt)
+    await mic.click()
+    await expect(mic).toHaveAttribute('data-dictation-status', 'recording')
+
+    const dictationStatus = page.getByTestId('talos-dictation-status')
+    const finishDictation = dictationStatus.getByRole('button', { name: 'Finish dictation' })
+    const cancelDictation = dictationStatus.getByRole('button', { name: 'Cancel dictation' })
+    await expect(finishDictation).toBeVisible()
+    await expect(cancelDictation).toBeVisible()
+    const [finishBox, cancelBox] = await Promise.all([finishDictation.boundingBox(), cancelDictation.boundingBox()])
+    expect(finishBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    expect(cancelBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    await expectNoHorizontalOverflow(page)
+    const mobileRecordingPath = testInfo.outputPath('dictation-driver-mobile-recording-390x844.png')
+    await page.screenshot({ path: mobileRecordingPath, fullPage: true, animations: 'disabled' })
+    await testInfo.attach('dictation-driver-mobile-recording-390x844.png', {
+        path: mobileRecordingPath,
+        contentType: 'image/png',
+    })
+    await finishDictation.focus()
+    await page.keyboard.press('Tab')
+    await expect(cancelDictation).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(mic).toHaveAttribute('data-dictation-status', 'idle')
+    await expect(dictationStatus).toBeHidden()
+    await expect(page.getByLabel('Message TALOS')).toHaveValue(prompt)
+    await page.waitForTimeout(250)
+    expect(transcriptionRequests).toBe(0)
+
+    await testInfo.attach('dictation-driver-cancelled.png', {
+        body: await page.getByTestId('talos-composer-capability-row').screenshot(),
+        contentType: 'image/png',
+    })
+})
+
+test('dictation permission denial is visible and retryable through the native browser boundary', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-denied', 'Requires Chromium automatic native permission denial.')
+
+    await openWorkspace(page)
+    await page.evaluate(() => {
+        const mediaDevices = navigator.mediaDevices
+        const nativeGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices)
+        let nativeCalls = 0
+        mediaDevices.getUserMedia = (constraints) => {
+            nativeCalls += 1
+            return nativeGetUserMedia(constraints)
+        }
+        Object.defineProperty(window, '__talosNativeGetUserMediaCallCount', {
+            configurable: true,
+            value: () => nativeCalls,
+        })
+    })
+
+    const mic = page.getByTestId('talos-composer-dictate')
+    await expect(mic).toBeVisible()
+    await mic.click()
+
+    const permissionAlert = page.getByTestId('talos-dictation-status')
+    await expect(permissionAlert.getByRole('alert')).toBeVisible()
+    await expect(permissionAlert).toContainText('Check your browser site controls')
+    await expect(permissionAlert.getByRole('button', { name: 'Retry dictation' })).toBeVisible()
+    await expect(mic).toHaveAttribute('data-dictation-status', 'error')
+    await expect.poll(() => page.evaluate(() => (
+        window as typeof window & { __talosNativeGetUserMediaCallCount: () => number }
+    ).__talosNativeGetUserMediaCallCount())).toBe(1)
+
+    const retryDictation = permissionAlert.getByRole('button', { name: 'Retry dictation' })
+    await retryDictation.focus()
+    await page.keyboard.press('Enter')
+    await expect(mic).toHaveAttribute('data-dictation-status', 'error')
+    await expect(permissionAlert).toBeVisible()
+    await expect.poll(() => page.evaluate(() => (
+        window as typeof window & { __talosNativeGetUserMediaCallCount: () => number }
+    ).__talosNativeGetUserMediaCallCount())).toBe(2)
+
+    const permissionDeniedPath = testInfo.outputPath('dictation-permission-denied.png')
+    await page.screenshot({ path: permissionDeniedPath, fullPage: true, animations: 'disabled' })
+    await testInfo.attach('dictation-permission-denied.png', {
+        path: permissionDeniedPath,
         contentType: 'image/png',
     })
 })

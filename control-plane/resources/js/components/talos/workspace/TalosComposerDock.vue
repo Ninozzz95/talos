@@ -7,6 +7,8 @@ import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
+import type { TalosDictationStatus, TalosResolvedDictationMode } from '../../../composables/useTalosDictation'
+import type { TalosDictationMode } from '../../../lib/talosDictationModes'
 import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 import { talosUrlHost } from '../../../lib/talosUrlDetect'
 
@@ -57,7 +59,11 @@ const props = withDefaults(defineProps<{
     enhancingPrompt: boolean
     promptEnhancementError: string | null
     visibility: Record<string, boolean>
-    dictationStatus?: string
+    dictationStatus?: TalosDictationStatus
+    dictationError?: string | null
+    dictationMode?: TalosDictationMode
+    dictationRecordingStartedAt?: number | null
+    dictationResolvedMode?: TalosResolvedDictationMode | null
     dictationSupported?: boolean
     autoBrowseUrl?: string | null
 }>(), {
@@ -67,6 +73,10 @@ const props = withDefaults(defineProps<{
     effortLevels: () => [],
     supportsThinking: false,
     dictationStatus: 'idle',
+    dictationError: null,
+    dictationMode: 'local',
+    dictationRecordingStartedAt: null,
+    dictationResolvedMode: null,
     dictationSupported: false,
     autoBrowseUrl: null,
 })
@@ -105,6 +115,9 @@ const emit = defineEmits<{
     removeAttachment: [id: string]
     openVaultPicker: []
     toggleDictation: []
+    finishDictation: []
+    cancelDictation: []
+    retryDictation: []
     acceptAutoBrowse: []
     dismissAutoBrowse: []
 }>()
@@ -321,6 +334,10 @@ onBeforeUnmount(() => {
                 :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
                 :dictation-status="dictationStatus"
+                :dictation-error="dictationError"
+                :dictation-mode="dictationMode"
+                :dictation-recording-started-at="dictationRecordingStartedAt"
+                :dictation-resolved-mode="dictationResolvedMode"
                 :dictation-supported="dictationSupported"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
@@ -346,6 +363,9 @@ onBeforeUnmount(() => {
                 @remove-attachment="emit('removeAttachment', $event)"
                 @open-vault-picker="emit('openVaultPicker')"
                 @toggle-dictation="emit('toggleDictation')"
+                @finish-dictation="emit('finishDictation')"
+                @cancel-dictation="emit('cancelDictation')"
+                @retry-dictation="emit('retryDictation')"
             />
         </div>
     </div>
