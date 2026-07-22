@@ -296,6 +296,11 @@ final class TalosWorkspaceSetting extends Model
         'minimal' => true,
     ];
 
+    private const CHAT_MESSAGE_STYLE_VALUES = [
+        'sections' => true,
+        'bubbles' => true,
+    ];
+
     private const CHAT_MOBILE_WINDOW_PRESENTATION_VALUES = [
         'drawer' => true,
         'fullscreen' => true,
@@ -1154,6 +1159,8 @@ final class TalosWorkspaceSetting extends Model
                 self::validateThemeEnum($layoutValue, self::CHAT_BUBBLE_SCALE_VALUES, $layoutPath, 'Chat bubble scale is invalid.', $errors);
             } elseif ($key === 'composer_mode') {
                 self::validateThemeEnum($layoutValue, self::CHAT_COMPOSER_MODE_VALUES, $layoutPath, 'Chat composer mode is invalid.', $errors);
+            } elseif ($key === 'message_style') {
+                self::validateThemeEnum($layoutValue, self::CHAT_MESSAGE_STYLE_VALUES, $layoutPath, 'Chat message style must be sections or bubbles.', $errors);
             } elseif ($key === 'advanced_rail_expanded') {
                 if (! is_bool($layoutValue)) {
                     self::addThemeWriteError($errors, $layoutPath, 'Advanced rail setting must be a boolean.');
@@ -1686,6 +1693,11 @@ final class TalosWorkspaceSetting extends Model
         $composerMode = $value['composer_mode'] ?? null;
         if (is_string($composerMode) && isset(self::CHAT_COMPOSER_MODE_VALUES[$composerMode])) {
             $safe['composer_mode'] = $composerMode;
+        }
+
+        $messageStyle = $value['message_style'] ?? null;
+        if (is_string($messageStyle) && isset(self::CHAT_MESSAGE_STYLE_VALUES[$messageStyle])) {
+            $safe['message_style'] = $messageStyle;
         }
 
         if (isset($value['advanced_rail_expanded']) && is_bool($value['advanced_rail_expanded'])) {
