@@ -245,6 +245,35 @@ final class TalosSettingsApiTest extends TestCase
             ]);
     }
 
+    public function test_settings_persist_bounded_message_style_in_both_directions_and_reject_unknown_values(): void
+    {
+        foreach (['bubbles', 'sections'] as $messageStyle) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => [
+                    'chat_layout' => ['message_style' => $messageStyle],
+                ],
+            ])
+                ->assertOk()
+                ->assertJsonPath('data.preferences.chat_layout.message_style', $messageStyle);
+        }
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.chat_layout.message_style', 'sections');
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'chat_layout' => ['message_style' => 'cards'],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preferences.chat_layout.message_style');
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.chat_layout.message_style', 'sections');
+    }
+
     public function test_theme_policy_lock_blocks_visual_chat_layout_writes_but_not_advanced_disclosure(): void
     {
         TalosWorkspaceSetting::query()->create([
