@@ -425,6 +425,13 @@ async function chooseContextSet(page: Page, contextSetId = 'context-set-e2e') {
     await page.getByLabel('Grounding context set').selectOption(contextSetId)
 }
 
+// Selects a value on a themed TalosThemedSelect (reka) — open the trigger by its
+// accessible name, then click the option carrying the target value.
+async function selectThemedOption(page: Page, label: string, value: string) {
+    await page.getByLabel(label, { exact: true }).click()
+    await page.locator(`[data-testid="talos-themed-select-item"][data-value="${value}"]`).click()
+}
+
 async function clickMessageAction(scope: Page | Locator, name: string) {
     const action = scope.locator(`[aria-label="${name}"]`).first()
     const inlineAction = action.filter({ visible: true })
@@ -1655,7 +1662,7 @@ test('MODEL-P0 OpenRouter rotation through Save and verify refreshes the persist
     await selectDashboardTab(page, 'Agents')
 
     await page.getByRole('button').filter({ hasText: 'E2E server-side profile' }).first().click()
-    await page.getByRole('combobox', { name: 'Provider' }).selectOption('openrouter')
+    await selectThemedOption(page, 'Provider', 'openrouter')
     await page.getByLabel('Rotate secret').fill('sk-openrouter-rotated')
 
     let pageLoads = 0
@@ -1914,9 +1921,9 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByText('Workspace customization', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Background effect')).toHaveCount(0)
     await expect(page.getByLabel('Effect intensity')).toHaveCount(0)
-    await page.getByLabel('Font', { exact: true }).selectOption('serif')
-    await page.getByLabel('Density').selectOption('spacious')
-    await page.getByLabel('Corner radius').selectOption('soft')
+    await selectThemedOption(page, 'Font', 'serif')
+    await selectThemedOption(page, 'Density', 'spacious')
+    await selectThemedOption(page, 'Corner radius', 'soft')
     const customizationPatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -2016,7 +2023,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     await page.getByRole('button', { name: 'Discard changes' }).click()
     await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /#7c3aed/)
 
-    await page.getByLabel('Font', { exact: true }).selectOption('mono')
+    await selectThemedOption(page, 'Font', 'mono')
     const saveNamedThemeRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -2145,7 +2152,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     await page.getByRole('tab', { name: 'Advanced' }).evaluate((element) => {
         (element as HTMLElement).click()
     })
-    await page.getByLabel('Area', { exact: true }).selectOption('composer')
+    await selectThemedOption(page, 'Area', 'composer')
     let areaPatchCount = 0
     page.on('request', (request) => {
         if (request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH') areaPatchCount += 1
@@ -2217,10 +2224,10 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await expect(page.getByTestId('talos-theme-preview-input')).toBeVisible()
     await expect(page.getByTestId('talos-theme-preview-status')).toContainText('Run succeeded')
     await expect(page.getByTestId('talos-theme-preview-evidence')).toContainText('Evidence attached')
-    await expect(page.getByTestId('talos-theme-preview-layout')).toContainText('balanced messages, full composer')
+    await expect(page.getByTestId('talos-theme-preview-layout')).toContainText('balanced messages, minimal composer')
 
-    await page.getByLabel('Theme chat message size').selectOption('compact')
-    await page.getByLabel('Theme chat composer mode').selectOption('minimal')
+    await selectThemedOption(page, 'Theme chat message size', 'compact')
+    await selectThemedOption(page, 'Theme chat composer mode', 'minimal')
     const conflictingLayoutRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
         const body = request.postDataJSON() as Record<string, unknown>
@@ -2234,8 +2241,8 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
     await expectComposerMode(page, 'minimal')
 
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('full')
+    await selectThemedOption(page, 'Theme chat message size', 'expanded')
+    await selectThemedOption(page, 'Theme chat composer mode', 'full')
     await page.getByLabel('Theme name').fill('Lifecycle Theme')
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
@@ -2387,7 +2394,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await activeDeleteRequest
     await expect(page.getByText('Lifecycle Renamed', { exact: true })).toHaveCount(0)
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
 
     const beforeInvalidImport = themePatchCount
     await page.getByLabel('Import theme JSON').fill(JSON.stringify({ schema: 'talos_theme_export_v2' }))
@@ -2488,7 +2495,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
             && preferences?.theme_mode === 'system'
             && hasExactMotionV6(preferences)
             && chat?.bubble_scale === 'balanced'
-            && chat?.composer_mode === 'full'
+            && chat?.composer_mode === 'minimal'
     })
     await page.getByRole('button', { name: 'Reset to preset', exact: true }).click()
     const resetThemeRequest = await resetRequest
@@ -2497,7 +2504,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     expect(resetPreferences).not.toHaveProperty('ui_animation_profile')
     expect(resetPreferences).not.toHaveProperty('ui_animation_customization')
     await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
     await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible()
     const settingsAfterReset = await page.evaluate(async () => {
         const response = await fetch('/api/talos/settings', { headers: { Accept: 'application/json' } })
@@ -2633,7 +2640,7 @@ test('Claudius font-only customization preserves palette and active background m
 
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Font', { exact: true }).selectOption('manrope')
+    await selectThemedOption(page, 'Font', 'manrope')
     await expect.poll(() => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-font-ui').trim()
     ))).toContain('Manrope')
@@ -2701,8 +2708,8 @@ test('theme engine v6 persists interface motion, previews the product surface, a
     } as const
 
     await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
-    await page.getByLabel('Interface motion profile').selectOption('custom')
-    await page.getByLabel('Interface easing').selectOption('cinematic')
+    await selectThemedOption(page, 'Interface motion profile', 'custom')
+    await selectThemedOption(page, 'Interface easing', 'cinematic')
     await page.getByRole('slider', { name: 'Interface duration' }).fill('125')
     await page.getByRole('slider', { name: 'Interface intensity' }).fill('86')
     await page.getByRole('slider', { name: 'Interface stagger' }).fill('65')
@@ -2725,8 +2732,8 @@ test('theme engine v6 persists interface motion, previews the product surface, a
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByLabel('Interface motion profile')).toHaveValue('custom')
-    await expect(page.getByLabel('Interface easing')).toHaveValue('cinematic')
+    await expect(page.getByLabel('Interface motion profile')).toContainText('Custom')
+    await expect(page.getByLabel('Interface easing')).toContainText('Cinematic')
     await expect(page.getByRole('slider', { name: 'Interface duration' })).toHaveValue('125')
     await expect(page.getByRole('slider', { name: 'Interface intensity' })).toHaveValue('86')
     await expect(page.getByRole('slider', { name: 'Interface stagger' })).toHaveValue('65')
@@ -2999,7 +3006,7 @@ test('theme switches disable motion separately from the procedural background', 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByLabel('Interface motion profile')).toHaveValue('off')
+    await expect(page.getByLabel('Interface motion profile')).toContainText('Off')
     await expect(page.getByRole('switch', { name: 'Interface motion' })).not.toBeChecked()
 })
 
@@ -3023,7 +3030,7 @@ test('settings preset changes refresh procedural background immediately', async 
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Theme preset').selectOption('terminal')
+    await selectThemedOption(page, 'Theme preset', 'terminal')
     const settingsPresetRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -3140,7 +3147,7 @@ test('theme color mode forces light and dark variants across presets and chat bu
         return hasSettingsExpectedRevision(body)
             && preferences?.theme_mode === 'light'
     })
-    await page.getByLabel('Theme color mode').selectOption('light')
+    await selectThemedOption(page, 'Theme color mode', 'light')
     await lightModeRequest
 
     const terminalRequest = page.waitForRequest((request) => {
@@ -3187,7 +3194,7 @@ test('theme color mode forces light and dark variants across presets and chat bu
         return hasSettingsExpectedRevision(body)
             && preferences?.theme_mode === 'dark'
     })
-    await page.getByLabel('Theme color mode').selectOption('dark')
+    await selectThemedOption(page, 'Theme color mode', 'dark')
     await darkModeRequest
 
     const paperRequest = page.waitForRequest((request) => {
@@ -3275,7 +3282,7 @@ test('V6 theme visual matrix covers every preset in forced light and dark', asyn
             const preferences = body.preferences as Record<string, unknown> | undefined
             return preferences?.theme_mode === mode
         })
-        await page.getByLabel('Theme color mode').selectOption(mode)
+        await selectThemedOption(page, 'Theme color mode', mode)
         settingsPatchBody(await modeRequest)
 
         for (const [id, label] of presets) {
@@ -3346,7 +3353,7 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     await waitForWorkspaceReady(page)
     await expect(page.getByRole('button', { name: 'Decrease message size' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Increase message size' })).toBeDisabled()
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
 
     const advancedRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
@@ -5286,7 +5293,7 @@ test('chat layout controls persist bubble scale, settings-owned composer density
     await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible()
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('minimal')
+    await selectThemedOption(page, 'Chat composer mode', 'minimal')
     await page.getByRole('button', { name: 'Save settings' }).click()
     await expectComposerMode(page, 'minimal')
 
@@ -5304,7 +5311,7 @@ test('chat layout controls persist bubble scale, settings-owned composer density
     })).toBe(true)
 })
 
-test('composer exposes every real capability on desktop and mobile', async ({ page, isMobile }) => {
+test('composer exposes every real capability on desktop and mobile', async ({ page }) => {
     await openWorkspace(page)
 
     for (const accessibleName of [
@@ -5323,12 +5330,9 @@ test('composer exposes every real capability on desktop and mobile', async ({ pa
         'talos-composer-context-label',
         'talos-composer-browse-label',
     ]) {
-        const label = page.getByTestId(testId)
-        if (isMobile) {
-            await expect(label).toBeHidden()
-        } else {
-            await expect(label).toBeVisible()
-        }
+        // Icon-only is now the default composer mode, so the text labels stay
+        // hidden on every breakpoint until the operator opts into the full composer.
+        await expect(page.getByTestId(testId)).toBeHidden()
     }
 
     await expect(page.getByRole('button', { name: 'Use minimal composer' })).toHaveCount(0)
@@ -5362,8 +5366,9 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat message size').selectOption('compact')
-    await page.getByLabel('Chat composer mode').selectOption('minimal')
+    await selectThemedOption(page, 'Chat message size', 'compact')
+    await selectThemedOption(page, 'Chat composer mode', 'minimal')
+    await selectThemedOption(page, 'Message style', 'bubbles')
     await page.getByRole('switch', { name: 'Expand Advanced by default' }).click()
     await page.getByRole('button', { name: 'Save settings' }).click()
 
@@ -5373,6 +5378,7 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
         return layout?.bubble_scale === 'compact'
             && layout?.composer_mode === 'minimal'
+            && layout?.message_style === 'bubbles'
             && layout?.advanced_rail_expanded === true
     })).toBe(true)
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
@@ -5380,8 +5386,8 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
 
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('full')
+    await selectThemedOption(page, 'Theme chat message size', 'expanded')
+    await selectThemedOption(page, 'Theme chat composer mode', 'full')
     await page.getByRole('button', { name: 'Save customization' }).click()
 
     await expect.poll(() => settingsRequests.some((request) => {
@@ -5413,8 +5419,8 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await openWorkspace(page)
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('minimal')
+    await selectThemedOption(page, 'Theme chat message size', 'expanded')
+    await selectThemedOption(page, 'Theme chat composer mode', 'minimal')
     await page.getByLabel('Theme name').fill('E2E layout theme')
 
     const createRequest = page.waitForRequest((request) => {
@@ -5432,8 +5438,8 @@ test('named theme chat layout overrides current layout and reset returns to pres
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat message size', { exact: true }).selectOption('compact')
-    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('full')
+    await selectThemedOption(page, 'Chat message size', 'compact')
+    await selectThemedOption(page, 'Chat composer mode', 'full')
     await page.getByRole('button', { name: 'Save settings' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
 
@@ -5460,5 +5466,5 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByRole('button', { name: 'Reset to preset' }).click()
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Balanced')
-    await expectComposerMode(page, 'full')
+    await expectComposerMode(page, 'minimal')
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Badge from '../../../ui/Badge.vue'
-import Select from '../../../ui/Select.vue'
+import TalosThemedSelect from '../../ui/TalosThemedSelect.vue'
 import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
@@ -42,16 +42,13 @@ const emit = defineEmits<{
         <div class="grid gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3 md:grid-cols-[minmax(0,240px)_1fr]">
             <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                 <span>Color mode</span>
-                <Select
+                <TalosThemedSelect
                     :model-value="themeMode"
+                    :items="TALOS_THEME_MODE_OPTIONS"
                     aria-label="Theme color mode"
                     :disabled="disabled || saving"
                     @update:model-value="emit('update:themeMode', $event as TalosThemeMode)"
-                >
-                    <option v-for="mode in TALOS_THEME_MODE_OPTIONS" :key="mode.value" :value="mode.value">
-                        {{ mode.label }}
-                    </option>
-                </Select>
+                />
             </label>
             <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-xs leading-5 text-[var(--talos-muted)]">
                 Every preset has an explicit light and dark runtime variant. System follows the OS preference; Light and Dark force the selected variant.

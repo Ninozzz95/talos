@@ -8,6 +8,7 @@ import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
 import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+import { talosUrlHost } from '../../../lib/talosUrlDetect'
 
 // Lives behind the model popover's v-if, so it is loaded on demand and kept
 // out of the initial app chunk (the composer sits in the static entry closure).
@@ -56,12 +57,18 @@ const props = withDefaults(defineProps<{
     enhancingPrompt: boolean
     promptEnhancementError: string | null
     visibility: Record<string, boolean>
+    dictationStatus?: string
+    dictationSupported?: boolean
+    autoBrowseUrl?: string | null
 }>(), {
     devBrowserEvidence: false,
     selectedEffort: 'high',
     thinking: false,
     effortLevels: () => [],
     supportsThinking: false,
+    dictationStatus: 'idle',
+    dictationSupported: false,
+    autoBrowseUrl: null,
 })
 
 const emit = defineEmits<{
@@ -97,12 +104,16 @@ const emit = defineEmits<{
     attachVaultFile: [fileId: string]
     removeAttachment: [id: string]
     openVaultPicker: []
+    toggleDictation: []
+    acceptAutoBrowse: []
+    dismissAutoBrowse: []
 }>()
 
 const composerPrompt = computed({
     get: () => props.prompt,
     set: (value: string) => emit('updatePrompt', value),
 })
+const autoBrowseHost = computed(() => (props.autoBrowseUrl ? talosUrlHost(props.autoBrowseUrl) : ''))
 const composerRoot = ref<HTMLElement | null>(null)
 const slimComposer = ref<InstanceType<typeof TalosSlimComposer> | null>(null)
 
@@ -174,6 +185,13 @@ onBeforeUnmount(() => {
             <div v-if="browserContext" data-testid="talos-browser-context-chip" class="pointer-events-auto mx-auto mb-2 flex w-full max-w-[820px] items-center justify-between gap-3 border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
                 <span class="min-w-0 truncate"><strong>Browse evidence</strong> <span class="text-[var(--talos-muted)]">{{ browserContext.host }} - {{ browserContext.title }}</span></span>
                 <Button size="sm" variant="ghost" aria-label="Detach browser evidence" @click="emit('detachBrowserContext')">Detach</Button>
+            </div>
+            <div v-if="autoBrowseUrl" data-testid="talos-auto-browse-prompt" class="pointer-events-auto mx-auto mb-2 flex w-full max-w-[820px] items-center justify-between gap-3 rounded-md border border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
+                <span class="min-w-0 truncate"><strong>Browse this link?</strong> <span class="text-[var(--talos-muted)]">{{ autoBrowseHost }}</span></span>
+                <span class="flex shrink-0 items-center gap-1">
+                    <Button size="sm" @click="emit('acceptAutoBrowse')">Enable Browse</Button>
+                    <Button size="sm" variant="ghost" aria-label="Dismiss browse suggestion" @click="emit('dismissAutoBrowse')">Dismiss</Button>
+                </span>
             </div>
             <Transition name="talos-popover" @leave="completePopoverLeave">
                 <div
@@ -302,6 +320,8 @@ onBeforeUnmount(() => {
                 :browser-current-page="browserCurrentPage"
                 :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
+                :dictation-status="dictationStatus"
+                :dictation-supported="dictationSupported"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
                 :visibility="visibility"
@@ -325,6 +345,7 @@ onBeforeUnmount(() => {
                 @attach-vault-file="emit('attachVaultFile', $event)"
                 @remove-attachment="emit('removeAttachment', $event)"
                 @open-vault-picker="emit('openVaultPicker')"
+                @toggle-dictation="emit('toggleDictation')"
             />
         </div>
     </div>

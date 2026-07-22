@@ -8,6 +8,7 @@ import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosModelQuickAdd from './TalosModelQuickAdd.vue'
 import TalosProviderModelCombobox from './TalosProviderModelCombobox.vue'
 import TalosProviderIcon from './TalosProviderIcon.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import {
     useTalosModelProfiles,
     TalosModelCatalogError,
@@ -665,18 +666,16 @@ onMounted(() => {
                 </div>
 
                 <div class="grid gap-2">
-                    <label class="space-y-1">
+                    <div class="space-y-1">
                         <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider</span>
-                        <select
-                            v-model="editForm.provider"
-                            class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                        <TalosThemedSelect
+                            :model-value="editForm.provider"
+                            :items="providerOptions"
                             :disabled="selectedProfileIsBusy"
-                        >
-                            <option v-for="provider in providerOptions" :key="provider.value" :value="provider.value">
-                                {{ provider.label }}
-                            </option>
-                        </select>
-                    </label>
+                            aria-label="Provider"
+                            @update:model-value="editForm.provider = $event"
+                        />
+                    </div>
                 </div>
 
                 <label class="block space-y-1">

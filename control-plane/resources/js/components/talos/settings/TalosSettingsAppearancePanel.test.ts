@@ -6,6 +6,27 @@ import { TALOS_DEFAULT_CHAT_LAYOUT } from '../../../lib/talosChatLayout'
 import { TALOS_APPEARANCE_DEFAULTS, TALOS_APPEARANCE_GROUPS } from '../../../lib/talosAppearancePreferences'
 import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
 
+// reka Select (themed dropdown) needs these APIs jsdom omits.
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => undefined
+}
+if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false
+    Element.prototype.setPointerCapture = () => undefined
+    Element.prototype.releasePointerCapture = () => undefined
+}
+
+async function settle() {
+    await nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+}
+
+function firePointer(element: Element, type: 'pointerdown' | 'pointerup') {
+    const Ctor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent
+    element.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, button: 0 }))
+}
+
 const mounted: Array<ReturnType<typeof createApp>> = []
 
 afterEach(() => {
@@ -113,16 +134,21 @@ describe('TalosSettingsAppearancePanel tabs', () => {
 
     it('offers the persisted Drawer/fullscreen choice in Appearance design settings', async () => {
         const { container, mobilePresentationUpdates } = mountAppearance()
-        const presentation = container.querySelector<HTMLSelectElement>('[aria-label="Mobile tool window presentation"]')
+        const trigger = container.querySelector<HTMLElement>('[aria-label="Mobile tool window presentation"]')
+        expect(trigger?.tagName).toBe('BUTTON')
 
-        expect(presentation?.value).toBe('drawer')
-        expect(Array.from(presentation?.options ?? []).map((option) => option.value)).toEqual(['drawer', 'fullscreen'])
+        if (trigger) firePointer(trigger, 'pointerdown')
+        await settle()
 
-        if (presentation) {
-            presentation.value = 'fullscreen'
-            presentation.dispatchEvent(new Event('change', { bubbles: true }))
-            await nextTick()
-        }
+        const values = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="talos-themed-select-item"]'))
+            .map((option) => option.getAttribute('data-value'))
+        expect(values).toEqual(['drawer', 'fullscreen'])
+
+        const fullscreen = document.querySelector<HTMLElement>('[data-value="fullscreen"]')
+        fullscreen?.focus()
+        fullscreen?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        await settle()
+
         expect(mobilePresentationUpdates).toEqual(['fullscreen'])
     })
 })

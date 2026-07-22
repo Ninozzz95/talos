@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { MousePointerClick, ShieldCheck } from '@lucide/vue'
-import Select from '../../ui/Select.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import TalosFileAuthorityPanel from './TalosFileAuthorityPanel.vue'
 import {
     TALOS_BROWSER_HMI_MODES,
@@ -28,8 +28,14 @@ function choiceDisabled(mode: TalosBrowserHmiMode) {
     return talosBrowserHmiStrictness(mode) < talosBrowserHmiStrictness(floor)
 }
 
-function updateMode(event: Event) {
-    emit('update:modelValue', (event.target as HTMLSelectElement).value as TalosBrowserHmiMode)
+const browserModeOptions = computed(() => TALOS_BROWSER_HMI_MODES.map((mode) => ({
+    value: mode,
+    label: talosBrowserHmiModeLabel(mode),
+    disabled: choiceDisabled(mode),
+})))
+
+function updateMode(value: string) {
+    emit('update:modelValue', value as TalosBrowserHmiMode)
 }
 </script>
 
@@ -39,26 +45,17 @@ function updateMode(event: Event) {
             <div class="flex items-start gap-3">
                 <MousePointerClick class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
                 <div class="min-w-0 flex-1">
-                    <label for="talos-browser-hmi-mode" class="text-sm font-semibold text-[var(--talos-text)]">Human browser interaction policy</label>
+                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Human browser interaction policy</span>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
                         Controls what happens when you click an integrity-verified browser capture. Page content and AI output can never approve an action.
                     </p>
-                    <Select
-                        id="talos-browser-hmi-mode"
+                    <TalosThemedSelect
                         :model-value="modelValue"
                         class="mt-3"
+                        :items="browserModeOptions"
                         aria-label="Browser interaction policy"
-                        @change="updateMode"
-                    >
-                        <option
-                            v-for="mode in TALOS_BROWSER_HMI_MODES"
-                            :key="mode"
-                            :value="mode"
-                            :disabled="choiceDisabled(mode)"
-                        >
-                            {{ talosBrowserHmiModeLabel(mode) }}
-                        </option>
-                    </Select>
+                        @update:model-value="updateMode"
+                    />
                 </div>
             </div>
         </section>

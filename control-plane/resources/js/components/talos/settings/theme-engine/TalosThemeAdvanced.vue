@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Button from '../../../ui/Button.vue'
 import Input from '../../../ui/Input.vue'
-import Select from '../../../ui/Select.vue'
+import TalosThemedSelect from '../../ui/TalosThemedSelect.vue'
 import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_THEME_AREA_OPTIONS,
@@ -48,9 +48,7 @@ function updateToken(key: TalosThemeAreaTokenKey, value: unknown) {
         </div>
         <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
             <span>Area</span>
-            <Select :model-value="selectedArea" aria-label="Area" :disabled="disabled" @update:model-value="emit('update:selectedArea', $event as TalosThemeAreaId)">
-                <option v-for="area in TALOS_THEME_AREA_OPTIONS" :key="area.value" :value="area.value">{{ area.label }}</option>
-            </Select>
+            <TalosThemedSelect :model-value="selectedArea" :items="TALOS_THEME_AREA_OPTIONS" aria-label="Area" :disabled="disabled" @update:model-value="emit('update:selectedArea', $event as TalosThemeAreaId)" />
         </label>
         <div class="grid gap-3 sm:grid-cols-2">
             <label v-for="token in TALOS_THEME_AREA_TOKEN_OPTIONS" :key="token.value" class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">

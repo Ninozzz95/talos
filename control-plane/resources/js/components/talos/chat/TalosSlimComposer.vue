@@ -8,6 +8,7 @@ import {
     FileText,
     Globe2,
     Loader2,
+    Mic,
     MoreHorizontal,
     Paperclip,
     RefreshCw,
@@ -22,6 +23,7 @@ import {
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
+import Tooltip from '../../ui/Tooltip.vue'
 import Textarea from '../../ui/Textarea.vue'
 import TalosSlashCommandMenu from './TalosSlashCommandMenu.vue'
 import TalosProviderIcon from '../models/TalosProviderIcon.vue'
@@ -58,6 +60,8 @@ const props = withDefaults(defineProps<{
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
     vaultPickerLoading?: boolean
     lastUserPrompt?: string | null
+    dictationStatus?: string
+    dictationSupported?: boolean
 }>(), {
     devBrowserEvidence: false,
     browseSetupFault: null,
@@ -65,6 +69,8 @@ const props = withDefaults(defineProps<{
     vaultFiles: () => [],
     vaultPickerLoading: false,
     lastUserPrompt: null,
+    dictationStatus: 'idle',
+    dictationSupported: false,
     selectedEffort: 'high',
     thinking: false,
     effortLevels: () => [],
@@ -92,6 +98,7 @@ const emit = defineEmits<{
     attachVaultFile: [fileId: string]
     removeAttachment: [id: string]
     openVaultPicker: []
+    toggleDictation: []
 }>()
 
 const attachmentInput = ref<HTMLInputElement | null>(null)
@@ -313,18 +320,19 @@ onBeforeUnmount(() => {
                 @input="resizePromptField"
                 @keydown="handleKeydown"
             />
-            <Button
-                type="button"
-                size="icon"
-                class="absolute bottom-1 right-1"
-                aria-label="Send"
-                :title="sendTitle"
-                :disabled="!canSend"
-                @click="emit('send')"
-            >
-                <Loader2 v-if="sending" class="h-4 w-4 animate-spin" />
-                <Send v-else class="h-4 w-4" />
-            </Button>
+            <Tooltip :content="sendTitle">
+                <Button
+                    type="button"
+                    size="icon"
+                    class="absolute bottom-1 right-1"
+                    aria-label="Send"
+                    :disabled="!canSend"
+                    @click="emit('send')"
+                >
+                    <Loader2 v-if="sending" class="h-4 w-4 animate-spin" />
+                    <Send v-else class="h-4 w-4" />
+                </Button>
+            </Tooltip>
         </div>
 
         <div
@@ -371,31 +379,35 @@ onBeforeUnmount(() => {
         </div>
         <div data-testid="talos-composer-capability-row" class="mt-1 flex min-w-0 items-end justify-between gap-2 px-1 pb-1">
             <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                <button
-                    type="button"
-                    class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                    :class="composerMode === 'full' ? 'sm:max-w-[min(13rem,45vw)] sm:justify-start sm:px-2.5' : ''"
-                    aria-label="Choose model profile"
-                    @click="emit('openModel')"
-                >
-                    <TalosProviderIcon v-if="modelProvider" :provider="modelProvider" class="h-6 w-6 border-0 bg-transparent" />
-                    <BrainCircuit v-else class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
-                    <span data-testid="talos-composer-model-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ modelLabel }}</span>
-                </button>
-                <div ref="effortChipRoot" class="relative flex shrink-0 items-center">
+                <Tooltip content="Model">
                     <button
                         type="button"
-                        data-testid="talos-composer-effort-chip"
                         class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                        :class="composerMode === 'full' ? 'sm:max-w-[min(11rem,45vw)] sm:justify-start sm:px-2.5' : ''"
-                        aria-label="Choose reasoning effort"
-                        aria-haspopup="true"
-                        :aria-expanded="effortPopoverOpen"
-                        @click="toggleEffortPopover"
+                        :class="composerMode === 'full' ? 'sm:max-w-[min(13rem,45vw)] sm:justify-start sm:px-2.5' : ''"
+                        aria-label="Choose model profile"
+                        @click="emit('openModel')"
                     >
-                        <Gauge class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
-                        <span data-testid="talos-composer-effort-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ effortChipLabel }}</span>
+                        <TalosProviderIcon v-if="modelProvider" :provider="modelProvider" class="h-6 w-6 border-0 bg-transparent" />
+                        <BrainCircuit v-else class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
+                        <span data-testid="talos-composer-model-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ modelLabel }}</span>
                     </button>
+                </Tooltip>
+                <div ref="effortChipRoot" class="relative flex shrink-0 items-center">
+                    <Tooltip content="Reasoning effort">
+                        <button
+                            type="button"
+                            data-testid="talos-composer-effort-chip"
+                            class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                            :class="composerMode === 'full' ? 'sm:max-w-[min(11rem,45vw)] sm:justify-start sm:px-2.5' : ''"
+                            aria-label="Choose reasoning effort"
+                            aria-haspopup="true"
+                            :aria-expanded="effortPopoverOpen"
+                            @click="toggleEffortPopover"
+                        >
+                            <Gauge class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
+                            <span data-testid="talos-composer-effort-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ effortChipLabel }}</span>
+                        </button>
+                    </Tooltip>
                     <div
                         v-if="effortPopoverOpen"
                         data-testid="talos-effort-popover"
@@ -444,17 +456,18 @@ onBeforeUnmount(() => {
                         </p>
                     </div>
                 </div>
-                <button
-                    v-if="visibility.attach_files !== false"
-                    type="button"
-                    class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                    :class="composerMode === 'full' ? 'sm:max-w-[min(13rem,45vw)] sm:justify-start sm:px-2.5' : ''"
-                    aria-label="Choose grounding context"
-                    @click="emit('openContext')"
-                >
-                    <Database class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
-                    <span data-testid="talos-composer-context-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ contextLabel }}</span>
-                </button>
+                <Tooltip v-if="visibility.attach_files !== false" content="Grounding context">
+                    <button
+                        type="button"
+                        class="inline-flex min-h-11 min-w-11 max-w-11 items-center justify-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs font-medium text-[var(--talos-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="composerMode === 'full' ? 'sm:max-w-[min(13rem,45vw)] sm:justify-start sm:px-2.5' : ''"
+                        aria-label="Choose grounding context"
+                        @click="emit('openContext')"
+                    >
+                        <Database class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" />
+                        <span data-testid="talos-composer-context-label" :class="composerMode === 'full' ? 'hidden truncate sm:inline' : 'hidden'">{{ contextLabel }}</span>
+                    </button>
+                </Tooltip>
                 <div v-if="visibility.attach_files !== false" class="relative flex shrink-0 items-center">
                     <input
                         ref="attachmentInput"
@@ -464,18 +477,19 @@ onBeforeUnmount(() => {
                         aria-label="Attachment file input"
                         @change="handleAttachmentInput"
                     >
-                    <button
-                        type="button"
-                        data-testid="talos-attachment-button"
-                        class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                        aria-label="Attach a file"
-                        title="Attach a file"
-                        aria-haspopup="menu"
-                        :aria-expanded="attachmentMenuOpen"
-                        @click="openAttachmentMenu"
-                    >
-                        <Paperclip class="h-3.5 w-3.5" />
-                    </button>
+                    <Tooltip content="Attach a file">
+                        <button
+                            type="button"
+                            data-testid="talos-attachment-button"
+                            class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                            aria-label="Attach a file"
+                            aria-haspopup="menu"
+                            :aria-expanded="attachmentMenuOpen"
+                            @click="openAttachmentMenu"
+                        >
+                            <Paperclip class="h-3.5 w-3.5" />
+                        </button>
+                    </Tooltip>
                     <div
                         v-if="attachmentMenuOpen"
                         role="menu"
@@ -508,33 +522,55 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
                 </div>
-                <button
-                    v-if="visibility.agent_mode_switcher !== false"
-                    type="button"
-                    class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                    :class="[
-                        temporaryMode ? 'border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]',
-                        composerMode === 'full' ? 'px-2' : 'px-0',
-                    ]"
-                    aria-label="Temporary chat"
-                    :aria-pressed="temporaryMode"
-                    @click="emit('toggleTemporary')"
+                <Tooltip
+                    v-if="dictationSupported"
+                    :content="dictationStatus === 'recording' ? 'Stop dictation' : dictationStatus === 'transcribing' ? 'Transcribing…' : 'Dictate'"
                 >
-                    <ShieldAlert class="h-3.5 w-3.5 shrink-0" />
-                    <span :class="composerMode === 'full' ? 'hidden sm:inline' : 'hidden'">{{ temporaryMode ? 'Temporary' : 'Persistent' }}</span>
-                </button>
-                <button
-                    v-if="!browserMode.enabled"
-                    type="button"
-                    class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                    :class="composerMode === 'full' ? 'sm:px-2' : 'sm:px-0'"
-                    aria-label="Enable Browse"
-                    title="Enable Browse"
-                    @click="emit('enableBrowse')"
-                >
-                    <Globe2 class="h-3.5 w-3.5" />
-                    <span data-testid="talos-composer-browse-label" :class="composerMode === 'full' ? 'hidden sm:inline' : 'hidden'">Browse</span>
-                </button>
+                    <button
+                        type="button"
+                        data-testid="talos-composer-dictate"
+                        :data-dictation-status="dictationStatus"
+                        class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border px-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="dictationStatus === 'recording'
+                            ? 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
+                            : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
+                        :aria-label="dictationStatus === 'recording' ? 'Stop dictation' : 'Dictate'"
+                        :aria-pressed="dictationStatus === 'recording'"
+                        :disabled="dictationStatus === 'transcribing'"
+                        @click="emit('toggleDictation')"
+                    >
+                        <Loader2 v-if="dictationStatus === 'transcribing'" class="h-4 w-4 animate-spin" />
+                        <Mic v-else class="h-3.5 w-3.5" :class="dictationStatus === 'recording' ? 'animate-pulse' : ''" />
+                    </button>
+                </Tooltip>
+                <Tooltip v-if="visibility.agent_mode_switcher !== false" content="Temporary chat">
+                    <button
+                        type="button"
+                        class="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="[
+                            temporaryMode ? 'border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] text-[var(--talos-text)]' : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]',
+                            composerMode === 'full' ? 'px-2' : 'px-0',
+                        ]"
+                        aria-label="Temporary chat"
+                        :aria-pressed="temporaryMode"
+                        @click="emit('toggleTemporary')"
+                    >
+                        <ShieldAlert class="h-3.5 w-3.5 shrink-0" />
+                        <span :class="composerMode === 'full' ? 'hidden sm:inline' : 'hidden'">{{ temporaryMode ? 'Temporary' : 'Persistent' }}</span>
+                    </button>
+                </Tooltip>
+                <Tooltip v-if="!browserMode.enabled" content="Enable browsing">
+                    <button
+                        type="button"
+                        class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-0 text-xs text-[var(--talos-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="composerMode === 'full' ? 'sm:px-2' : 'sm:px-0'"
+                        aria-label="Enable Browse"
+                        @click="emit('enableBrowse')"
+                    >
+                        <Globe2 class="h-3.5 w-3.5" />
+                        <span data-testid="talos-composer-browse-label" :class="composerMode === 'full' ? 'hidden sm:inline' : 'hidden'">Browse</span>
+                    </button>
+                </Tooltip>
                 <div v-else class="relative flex shrink-0 items-center gap-1">
                     <button
                         type="button"
@@ -585,8 +621,12 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="flex shrink-0 items-center gap-1">
-                <Button type="button" variant="ghost" size="icon" aria-label="Improve prompt" :title="enhanceTitle" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
-                <Button v-if="visibility.more_tools !== false" type="button" variant="ghost" size="icon" aria-label="Open settings" title="Open settings" @click="emit('openSettings')"><SlidersHorizontal class="h-4 w-4" /></Button>
+                <Tooltip :content="enhanceTitle">
+                    <Button type="button" variant="ghost" size="icon" aria-label="Improve prompt" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
+                </Tooltip>
+                <Tooltip v-if="visibility.more_tools !== false" content="More tools">
+                    <Button type="button" variant="ghost" size="icon" aria-label="Open settings" @click="emit('openSettings')"><SlidersHorizontal class="h-4 w-4" /></Button>
+                </Tooltip>
             </div>
         </div>
     </Card>

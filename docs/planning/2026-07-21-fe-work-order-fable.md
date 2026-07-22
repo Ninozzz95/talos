@@ -1,72 +1,67 @@
-# FE work-order → Fable (all outstanding front-end requests)
+# FE Work-Order → Fable (tabella di marcia)
 
-**Compiled:** 2026-07-21 · **From:** Codex (integration) · **For:** Fable (desktop FE lane).
-**Rule for every item:** flag `mobile-relevant: sì/no + cosa` in your delivery report so Codex can relay a mirror ticket to Kimi ([[desktop-mobile-parity-mirror]]). Only the user commits. Items needing visual sign-off are marked **[mockup first]**.
+Fonte: work-order utente relayato 2026-07-21. Ordine consigliato (riordinabile): **C → B → A → D → E → F/G**.
+Per OGNI item: chiudere il report con `mobile-relevant: sì/no + cosa` (Codex relaya il mirror a Kimi); **commit dell'utente**.
 
-**Suggested order** (user priorities; user can reorder): C (themed-select sweep, quick) → B (composer icon-controls) → A (message rendering) → D (voice/STT) → E (auto-prompt browse) → F/G (browser + upload FE ripple, land when Codex ships the contracts).
-
----
-
-## A. Message-rendering refactor — bubbles → full-width sections **[mockup first]**
-**What:**
-- **Default**: assistant messages render as **full-width sections, NO bubble** — and must **always widen to the FULL width of the chat section** (user was explicit: "la risposta si deve allargare sempre a larghezza piena").
-- **User (send) messages keep the bubble**; long user messages are **truncated with Espandi/Riduci** (expand/collapse).
-- **Settings → Appearance**: a toggle **"Sezioni / Bolle"** — "Bolle" restores today's bubble style for both roles (nothing is lost, it becomes an option).
-**Why:** match Claude/ChatGPT reading experience (full-width answers), keep send messages compact.
-**Do first:** review competitors (Claude, ChatGPT) and one-up; produce mockups for user approval before building.
-**Acceptance:** default = assistant full-width sections; user bubble + collapse on long; Appearance toggle switches both; no regressions in copy/markdown/code rendering.
-**mobile-relevant:** SÌ — mirror the section/bubble modes + Appearance toggle.
-
-## B. Composer icon-controls default + custom tooltips
-**What:**
-- **Settings → Appearance**: the chat composer defaults to **icon controls** (icon-only mode on by default; text-label mode stays available).
-- **Custom tooltips on hover** for every composer icon: model picker, reasoning effort, grounding context, attach file, browse, temporary chat, improve prompt, send — clear, human labels.
-**Why:** cleaner composer by default; discoverability via tooltips.
-**Acceptance:** fresh install shows icon-only composer; each icon has a tooltip with the right label + keyboard/a11y (aria-label unchanged); toggle in Appearance flips label/icon mode.
-**mobile-relevant:** SÌ — mobile is already icon-only 44px (FV2-06.0); mirror the tooltips + the Appearance toggle semantics.
-
-## C. TalosThemedSelect sweep — remaining native `<select>` **[approved]**
-**What:** replace the remaining **8 native `<select>`** in Settings/Theme with **TalosThemedSelect** (the themed, portalized, keyboard-accessible select already built) — kills the OS-white dropdowns on the dark theme.
-**Status:** TalosThemedSelect + the Model Center "Provider" select already shipped in your last drop; this is the sweep of the other 8.
-**Acceptance:** zero native `<select>` left in settings/theme surfaces; each themed select keyboard + a11y correct; E2E selectors updated (they use `combobox`/option now, not native `selectOption`).
-**mobile-relevant:** SÌ — mirror any themed-select usage (Kimi already uses themed selects, 12/12).
-
-## D. Voice chat / STT — dictate into the composer
-**What:** a **mic button** in the composer that records and transcribes speech to text **into the input** (write in chat by voice).
-**Why:** parity-or-better with competitors; user asked for it explicitly.
-**Do first:** research an **upstreamable** STT lib (Whisper family) — must be **extremely reliable** ([[prefer-upstream-libraries-best-practices]]); propose the approach (in-browser vs server STT) before building. Coordinate the backend/endpoint with Codex.
-**Acceptance:** mic → live/near-live transcription into the composer; clear recording state; cancel/retry; a11y; graceful fallback if unsupported.
-**mobile-relevant:** SÌ — mirror the mic affordance (native mic permissions handled by Kimi/GPT5 build).
-
-## E. Browsing UX — auto-prompt to enable Browse on a URL
-**What:** in a **non-browser** conversation, when the user's message contains a **URL / site**, show a **smooth, prod-ready prompt** asking whether to **enable browsing mode** (one tap to turn Browse on and go).
-**Why:** removes the manual step of enabling Browse when the user clearly wants to visit a link.
-**Acceptance:** URL detected in composer/message → non-intrusive inline prompt → accepting enables Browse for that turn; dismissable; never fires spuriously on non-URL text; respects the Browse capability gating.
-**mobile-relevant:** SÌ — mirror the prompt.
-
-## F. Browser Stage-2 — FE affordances (land when Codex ships the worker contract)
-**What (FE side of the Stage-2 rework Codex is building):**
-- **Scrollable snapshot**: the browse evidence stage must **scroll** and drive a worker scroll → new frame (today it's a static viewport frame).
-- **Retry affordance** in `useTalosBrowse`: for **recoverable** browse states show "Recupera/Riprova" (no full restart); for **terminal** show "Riavvia sessione". (Codex classifies transient vs terminal in the response.)
-- Click target moves from x/y to a **ref** (aria-snapshot ref) — FE sends the ref Codex's new contract exposes.
-**Depends on:** Codex's Stage-2 worker/control-plane contract (in design now). Fable builds the FE stage/affordance once the contract lands.
-**mobile-relevant:** SÌ.
-
-## G. File upload — attachment tray polish (Part 2 FE)
-**What:** now that images ingest as **vision-only** attachments (Codex fixed the backend), the composer tray should:
-- show an **image thumbnail/preview** for image attachments,
-- label vision-only vs text-extracted,
-- surface **clear failure reasons** (e.g. malware-quarantined) instead of a generic fail.
-**Depends on:** Codex's Part 2 (image → vision content to the model) for the end-to-end; the tray polish is independent and can ship first.
-**mobile-relevant:** SÌ.
+Legenda consapevolezza: ✅ noto · 🟡 parz. noto · 🆕 nuovo.
 
 ---
 
-### Already delivered (no action — for context)
-- FV2-06.0 composer model + effort selector (themed picker, Auto+Models, effort chip, Extended-thinking toggle) — shipped (C3).
-- TalosThemedSelect + Provider Model Center — shipped.
-- Prod-gate dev acronyms (rail + window title bar) — shipped.
+## C) SWEEP TalosThemedSelect — ✅ noto — **FATTO (2026-07-21)**
+Rimpiazzare gli ~~8~~ **26** native `<select>` di Settings/Theme con `TalosThemedSelect` (basta dropdown bianchi OS su tema scuro). Aggiornare i selettori E2E (combobox/option, **non** `selectOption`).
 
-### Backend already fixed (2026-07-21, so FE can rely on it)
-- Browser recovery-lock resolved (SQLite WAL + busy_timeout) — the "could not commit current evidence" lock no longer forces a new session.
-- Image upload resolved (vision-passthrough) — png/jpg ingest as `available` instead of failing with `TALOS_OCR_REQUIRED`.
+**Esito:** 26 select migrati in 9 file (settings: SearchPanel 2, SettingsCenter 3, Appearance 5, Browser 1, ModelsPanel 2; theme-engine: ThemePresets 1, ThemeAdvanced 1, ThemeCustomize 5, ThemeMotion 6). `TalosThemedSelect` esteso (`noneLabel` per le opzioni `value=""`, wrapper `<div>` per class fallthrough). Test riscritti reka-aware; E2E: helper `selectThemedOption` + fix `chooseModelProfile` (debito dal drop picker). **Full vitest 168/1337 verde**; E2E authored+syntax-OK (Codex gira Playwright al gate). Ledger: `docs/superpowers/ledgers/2026-07-21-themedselect-sweep-ledger.md`.
+`ui/Select.vue` residuo SOLO nel context-set del composer (fuori scope). **mobile-relevant: parziale** — Kimi usa già select tematizzati (12/12); nessun nuovo mirror atteso.
+
+## B) COMPOSER ICON-CONTROLS + TOOLTIP — ✅ noto — **FATTO**
+- Settings→Appearance: composer di DEFAULT a icon-controls (`composer_mode` default → `minimal`).
+- Tooltip custom all'hover di OGNI icona composer (modello, effort, context, attach, browse, temporary, improve, send) — label umane, a11y invariata.
+**Esito:** `TalosSlimComposer.vue` icone con `ui/Tooltip.vue` (portalizzato, self-contained); default `composer_mode: 'minimal'` in `talosChatLayout.ts` con audit E2E completo (~6 spec riallineati). Full vitest verde. **mobile-relevant: sì** — mirror composer icon+tooltip a Kimi.
+
+## A) MESSAGE-RENDERING (bolle → sezioni) — ✅ noto — **FATTO**
+- Default: risposte assistant = SEZIONI full-width, NO bolla, larghezza piena della sezione chat.
+- Messaggi utente: restano bolla; se lunghi → troncati con Espandi/Riduci.
+- Settings→Appearance: toggle "Sezioni / Bolle" (Bolle = stile attuale, niente si perde).
+**Esito:** `message_style` ('sections'|'bubbles', default 'sections') in `talosChatLayout.ts`/`talosTypes.ts`; `TalosChatSurface.vue` (`messageSurfaceClass` + collapse utente), toggle in Appearance, whitelist `themeEngineState.ts` (`message_style`). Full vitest verde. **mobile-relevant: sì** — mirror stile messaggi a Kimi. Mockup: artifact `be2515e3-…`.
+
+## D) VOCE / STT — ✅ noto — **PARZIALE (Fase 1 FE integrata; gate prod aperti)**
+- Bottone mic nel composer → dettatura speech-to-text nell'input.
+- Lib upstreamabile (famiglia Whisper), estremamente reliable. In-browser (default, privacy) + cloud (worker BE) + auto.
+**Esito:** contratto engine `lib/talosDictation.ts` (server-whisper cloud-ready + fault mapping `TALOS_STT_*`), browser Whisper `lib/talosDictationBrowser.ts` (`@huggingface/transformers` q8, lazy via doppio dynamic import → mai in entry chunk), composable `useTalosDictation.ts` (MediaRecorder push-to-talk, mode FE-owned localStorage condiviso), mic in `TalosSlimComposer.vue`, selettore "Dictation" in Appearance. **Chunk-budget fix:** engine estratto dietro dynamic import + `talosDictationModes.ts` minimale (entry-safe) → entry sotto 512 kB. Handoff BE: `2026-07-21-fable-to-codex-stt-cloud-endpoint.md` (Codex ACK). Ledger: `2026-07-22-stt-dictation-ledger.md`. **mobile-relevant: sì** — mirror mic+STT a Kimi (Fase 1 FE già usabile in locale).
+
+**Audit integrazione (2026-07-22):** la slice non è ancora chiusa rispetto all'acceptance originale. `useTalosDictation` espone `error` e `cancel()`, ma il workspace inoltra al composer soltanto stato/supporto/toggle: mancano quindi errore visibile, cancel e retry espliciti. Serve inoltre un gate browser reale microfono → primo download modello → trascrizione nell'input. L'audit dipendenze passa da 6 finding nel baseline a 10 dopo Transformers.js: i 4 high aggiuntivi sono nella catena Node-only di build (`onnxruntime-node` → `adm-zip`, `sharp`), assente dal bundle browser e dall'immagine runtime finale, ma senza fix upstream disponibile al momento dell'audit. La promozione production richiede una decisione di rischio/remediation registrata; il solo lazy-loading non chiude il finding.
+
+## E) AUTO-PROMPT BROWSE — ✅ — **FATTO (FE-only, 2026-07-22)**
+In chat NON-browser, se compare un URL → prompt smooth prod-ready "abiliti la navigazione?" (un tap → Browse on). Mai spurio su testo non-URL, dismissable, rispetta il gating Browse.
+**Esito:** `lib/talosUrlDetect.ts` (`talosFirstUrl` — richiede scheme `http(s)://`, trim punteggiatura, valida `new URL()`; `talosUrlHost`); `TalosComposerDock.vue` banner `data-testid="talos-auto-browse-prompt"` (border `--talos-accent-border` / bg `--talos-accent-soft`, host-only, "Enable Browse" + "Dismiss"); `TalosWorkspace.vue` `autoBrowseUrl` computed (gate `browserMode.enabled || browseSetupFault`, dedup via `dismissedAutoBrowseUrl`) + `acceptAutoBrowse` (riusa `openBrowse`, auto-abilita+naviga) / `dismissAutoBrowse`. **FE-only**: nessun endpoint BE (riusa la macchina Browse esistente). Full vitest **175/1368 verde**, chunk gate 4/4, entry **511.75 kB**. Mockup: artifact `ed52f11b-…`. **mobile-relevant: sì** — mirror banner auto-browse a Kimi.
+
+## F) BROWSER STAGE-2 (FE) — 🆕 — [dipende dal contratto worker di Codex]
+- Snapshot SCROLLABILE (lo stage guida uno scroll del worker → nuovo frame).
+- Retry affordance in `useTalosBrowse`: recoverable → "Recupera/Riprova" (no restart); terminal → "Riavvia".
+- Target click da x/y → ref (aria-snapshot).
+
+**Stato integrazione:** aperto. Il verbo backend/worker Stage-2a scroll è disponibile da `564b275`, quindi la parte FE scroll può partire. Stage-2b ref/locator e la classificazione finale recoverable/terminal restano dipendenze di contratto; non sono inclusi nel drop Fable integrato.
+
+## G) UPLOAD tray (Parte 2 FE) — 🆕 — [BE vision-passthrough già fixato]
+- Thumbnail/preview per immagini allegate; label vision-only vs testo; motivi di fallimento chiari.
+
+**Stato integrazione:** aperto. Il wiring multimodale backend è atterrato in `5dd0c0b`; thumbnail, label di trattamento e fault specifici nel tray non sono inclusi nel drop Fable integrato.
+
+---
+
+**Già fatti (contesto):** FV2-06.0 composer model+effort picker, TalosThemedSelect+Provider, prod-gate acronimi (rail+title bar), sweep C.
+**Backend fixato oggi (affidabile):** recovery-lock (WAL) + upload immagini (vision-passthrough).
+
+## Chiusura audit FE all'integrazione
+
+| Item | Stato verificato | Residuo esplicito |
+|---|---|---|
+| C — themed selects | Fatto | Nessun native `<select>` in Settings/Theme. |
+| B — icon controls/tooltips | Fatto | Gate E2E Appearance/Theme al merge. |
+| A — message sections | Fatto | Gate E2E visuale sezioni/bolle + collapse al merge. |
+| D — voice/STT | Parziale | Error/cancel/retry visibili, gate microfono reale, decisione audit dipendenze; cloud worker resta una fase separata. |
+| E — auto Browse | Fatto FE | Gate capability/dismiss/dedup al merge. |
+| F — Browser Stage-2 FE | Aperto | Scroll UI, retry UX e poi click ref quando il contratto Stage-2b è pronto. |
+| G — upload tray | Aperto | Preview/thumbnail, tipo di trattamento e fault specifici. |
+
+Nessun item parziale/aperto va presentato come debito chiuso solo perché il relativo backend è disponibile.
