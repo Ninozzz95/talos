@@ -1,0 +1,84 @@
+import { expect, test, type Page } from '@playwright/test'
+
+const RAIL = '[data-testid="talos-mobile-rail"]'
+const SHEET = '[data-testid="talos-mobile-tool-sheet"]'
+
+async function configureReasoningModel(page: Page): Promise<void> {
+    await page.route('https://api.openai.com/v1/models', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                data: [{
+                    id: 'gpt-e2e-reasoner',
+                    name: 'GPT E2E Reasoner',
+                    supported_parameters: ['reasoning_effort'],
+                }],
+            }),
+        })
+    })
+
+    await page.goto('/')
+    await page.locator(`${RAIL} [aria-label="Settings"]`).click()
+    await expect(page.locator(SHEET)).toBeVisible()
+    await page.locator('[data-settings-tab="models"]').click()
+    await page.getByLabel('OpenAI API key').fill('e2e-composer-openai-key')
+    await page.getByLabel('Save OpenAI key').click()
+    await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
+    await page.getByLabel('Default chat model').click()
+    await page.locator('[data-testid="talos-themed-select-item"][data-value="openai:gpt-e2e-reasoner"]').click()
+    await page.getByLabel('Back to chat').click()
+    await expect(page.locator(SHEET)).toHaveCount(0)
+}
+
+async function verifyDurableComposerState(page: Page, viewport: { width: number; height: number }): Promise<void> {
+    await page.setViewportSize(viewport)
+    await configureReasoningModel(page)
+
+    const composer = page.getByLabel('Message TALOS')
+    await composer.fill('Keep this unsent mobile draft exactly.')
+
+    await page.getByLabel('Choose reasoning effort').click()
+    await page.locator('[data-effort-level="medium"]').click()
+    await page.getByLabel('Choose reasoning effort').click()
+    await page.getByTestId('talos-mobile-thinking-toggle').click()
+    await expect(page.getByTestId('talos-mobile-thinking-toggle')).toHaveAttribute('aria-checked', 'true')
+    await page.keyboard.press('Escape')
+
+    await page.waitForTimeout(500)
+    await expect(page.locator(SHEET)).toHaveCount(0)
+    await page.reload()
+
+    await expect(composer).toHaveValue('Keep this unsent mobile draft exactly.', { timeout: 15_000 })
+    await expect(page.getByLabel('Choose model profile')).toHaveAttribute('title', 'GPT E2E Reasoner')
+    await expect(page.getByLabel('Choose reasoning effort')).toHaveAttribute('title', 'Effort: medium')
+    await expect(page.locator(SHEET)).toHaveCount(0)
+
+    await page.getByLabel('Choose reasoning effort').click()
+    await expect(page.getByTestId('talos-mobile-thinking-toggle')).toHaveAttribute('aria-checked', 'true')
+    await page.keyboard.press('Escape')
+
+    await page.getByLabel('Choose model profile').click()
+    await page.getByTestId('talos-mobile-composer-model-picker')
+        .getByRole('button', { name: 'Open Model Lab', exact: true })
+        .click()
+
+    await expect(page).toHaveURL(/\/settings\?tab=models$/)
+    await expect(page.locator(SHEET)).toHaveCount(1)
+    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
+    await expect(page.locator('[data-testid="settings-category-pane"]')).toBeHidden()
+
+    const horizontalOverflow = await page.evaluate(() => (
+        document.documentElement.scrollWidth - document.documentElement.clientWidth
+    ))
+    expect(horizontalOverflow).toBeLessThanOrEqual(0)
+}
+
+test('persists draft and model controls across reload without opening unrelated UI', async ({ page }) => {
+    await verifyDurableComposerState(page, { width: 390, height: 844 })
+})
+
+test('keeps the durable composer and direct Model Lab path reachable at 360x640', async ({ page }) => {
+    await verifyDurableComposerState(page, { width: 360, height: 640 })
+})

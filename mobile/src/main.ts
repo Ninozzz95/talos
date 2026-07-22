@@ -6,11 +6,15 @@ import '@fontsource/instrument-sans/600.css'
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/orbitron/600.css'
+import '@/css/talos-motion-v6-simple.css'
+import '@/css/talos-motion-v6-complex.css'
+import '@/css/talos-interaction-motion-v6.css'
 import App from './App.vue'
 import { router } from './router'
-import { bootstrapTelemetryIdentity } from './theme/applyDesignTokens'
 import { configureNativeFraming } from './services/nativeFraming'
-import telemetryIdentity from './theme/telemetry.identity.json'
+import { applyTalosTheme, DEFAULT_THEME_STATE, useThemeStore } from '@/stores/theme'
+import { useSettingsStore } from '@/stores/settings'
+import { preloadTalosMobileRoutes } from '@/lib/mobileRoutes'
 
 declare global {
     interface Window {
@@ -35,8 +39,15 @@ const prefersDark = typeof window !== 'undefined'
 // Fail-closed: with the theme adapter disabled, or on any identity error, the
 // style.css defaults remain in place and the shell stays usable.
 if (!disabled.has('theme')) {
-    bootstrapTelemetryIdentity(telemetryIdentity, prefersDark ? 'dark' : 'light')
+    // Apply the default preset synchronously for first paint, then hydrate the
+    // persisted preset + color mode (async), which re-applies if it differs.
+    applyTalosTheme(DEFAULT_THEME_STATE.theme, DEFAULT_THEME_STATE.mode)
+    void useThemeStore().hydrate()
 }
+
+// Non-secret local preferences drive layout, visibility, shortcuts and Motion V6.
+// Hydration is independent from provider credentials and never requires a server.
+void useSettingsStore().hydrate()
 
 // Frame the native chrome (status bar / keyboard) to the applied theme. No-op on
 // web; fail-closed so a native error never blocks boot. Safe-area inset PADDING is
@@ -52,4 +63,14 @@ if (!disabled.has('native')) {
     })
 }
 
-createApp(App).use(router).mount('#app')
+async function bootstrapTalosMobileApp(): Promise<void> {
+    try {
+        await preloadTalosMobileRoutes()
+    } catch (error) {
+        console.error('[mobile-routes] Packaged station preload failed; starting Chat in degraded mode.', error)
+    }
+
+    createApp(App).use(router).mount('#app')
+}
+
+void bootstrapTalosMobileApp()

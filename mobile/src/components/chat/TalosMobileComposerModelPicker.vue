@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Check, WandSparkles } from '@lucide/vue'
+import { Check, FlaskConical, RefreshCw, WandSparkles } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import type {
     TalosMobileModelProfileView,
@@ -15,22 +15,48 @@ const props = withDefaults(defineProps<{
     selectedRoutingProfileId?: string | null
     loadingModels?: boolean
     loadingRoutes?: boolean
+    refreshingModels?: boolean
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
     loadingModels: false,
     loadingRoutes: false,
+    refreshingModels: false,
 })
 
 const emit = defineEmits<{
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
     requestClose: []
+    refreshModels: []
+    openModelLab: []
 }>()
 
 const listbox = ref<HTMLElement | null>(null)
 const visibleProfiles = computed(() => props.modelProfiles.filter((profile) => profile.show_in_composer))
+
+function capabilityValue(profile: TalosMobileModelProfileView, key: string): unknown {
+    return profile.capabilities?.[key]
+}
+
+function compatibilityLabel(profile: TalosMobileModelProfileView): string {
+    const value = capabilityValue(profile, 'chat_compatibility')
+    return typeof value === 'string' ? value : 'unknown'
+}
+
+function contextLabel(profile: TalosMobileModelProfileView): string | null {
+    const value = capabilityValue(profile, 'context_length')
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+    return value >= 1000 ? `${Math.round(value / 1000)}k context` : `${value} context`
+}
+
+function modalityLabel(profile: TalosMobileModelProfileView): string | null {
+    const value = capabilityValue(profile, 'input_modalities')
+    if (!Array.isArray(value)) return null
+    const modalities = value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    return modalities.length ? modalities.join(' + ') : null
+}
 
 function routingIsSelectable(profile: TalosMobileRoutingProfileView): boolean {
     return profile.status === 'enabled' && profile.lane_count > 0
@@ -202,6 +228,11 @@ function onListKeydown(event: KeyboardEvent): void {
                         <span class="truncate font-mono text-[0.6875rem] text-[var(--talos-muted,var(--muted-foreground))]">
                             {{ profile.model }} - {{ profile.status }}
                         </span>
+                        <span class="truncate text-[0.6875rem] text-[var(--talos-muted,var(--muted-foreground))]">
+                            {{ compatibilityLabel(profile) }}
+                            <template v-if="contextLabel(profile)"> - {{ contextLabel(profile) }}</template>
+                            <template v-if="modalityLabel(profile)"> - {{ modalityLabel(profile) }}</template>
+                        </span>
                     </span>
                     <Check
                         v-if="profile.id === selectedModelProfileId"
@@ -211,6 +242,27 @@ function onListKeydown(event: KeyboardEvent): void {
                 </button>
             </section>
         </div>
+        <footer class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+            <button
+                type="button"
+                aria-label="Refresh model catalog"
+                :disabled="refreshingModels"
+                class="inline-flex min-h-11 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-muted,var(--muted-foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] hover:text-[var(--talos-text,var(--foreground))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:opacity-50"
+                @click="emit('refreshModels')"
+            >
+                <RefreshCw :class="['size-4', refreshingModels ? 'animate-spin' : '']" aria-hidden="true" />
+                Refresh
+            </button>
+            <button
+                type="button"
+                aria-label="Open Model Lab"
+                class="inline-flex min-h-11 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-text,var(--foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
+                @click="emit('openModelLab')"
+            >
+                <FlaskConical class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
+                Model Lab
+            </button>
+        </footer>
     </div>
 </template>
 

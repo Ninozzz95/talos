@@ -45,4 +45,30 @@ export interface TalosMobileMessageView {
     content: string
     created_at: string
     state: TalosMobileMessageState
+    model_profile_id: string | null
+    run_id: string | null
+    metadata: Record<string, unknown>
+    attachments?: readonly TalosMobileMessageAttachmentView[]
+    browserActivities?: readonly TalosMobileBrowserActivityView[]
 }
+
+export interface TalosMobileBrowserActivityView {
+    id: string
+    operation: string
+    status: 'pending' | 'succeeded' | 'failed' | 'cancelled' | 'recovery_required'
+    occurred_at: string
+    evidence: TalosMobileBrowserEvidenceEnvelope | null
+    failure_code: 'TALOS_BROWSER_EVIDENCE_INVALID' | null
+}
+
+export interface TalosMobileMessageAttachmentView {
+    id: string
+    vault_file_id: string
+    grant_id: string
+    display_name: string
+    media_type: string
+    size_bytes: number
+    permissions: readonly ('model.read' | 'browser.upload')[]
+    grant_status: 'active' | 'revoked'
+}
+import type { TalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'

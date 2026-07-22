@@ -1,0 +1,790 @@
+import type { TalosSqlConnection, TalosSqlRow, TalosSqliteRuntime } from '@/persistence/sqliteTypes'
+import {
+    cloneJsonObject,
+    normalizeFileAuthorityPermissions,
+    normalizeComposerDraft,
+    normalizeComposerDraftScope,
+    normalizeChatTitle,
+    normalizeChatSurface,
+    normalizeRepositoryId,
+    normalizeToolOperation,
+    normalizeVaultDisplayName,
+    normalizeVaultMediaType,
+    normalizeVaultSha256,
+    normalizeVaultSize,
+    type AppendChatMessageInput,
+    type ChatRepositoryOptions,
+    type CreateChatSessionInput,
+    type CreateFileAuthorityGrantInput,
+    type CreateVaultFileInput,
+    type CreateToolActivityInput,
+    type TalosChatAttachmentBinding,
+    type TalosChatRepository,
+    type TalosLocalChatMessage,
+    type TalosLocalChatSession,
+    type TalosLocalToolActivity,
+    type TalosLocalFileAuthorityGrant,
+    type TalosLocalVaultFile,
+    type UpdateChatSessionInput,
+    type UpdateVaultFileInput,
+    type UpdateToolActivityInput,
+} from '@/repositories/chatRepository'
+
+const ACTIVE_SESSION_KEY = 'active_session_id'
+const COMPOSER_DRAFT_KEY_PREFIX = 'composer_draft:'
+
+function invalidRow(): never {
+    throw new Error('TALOS_CHAT_ROW_INVALID')
+}
+
+function requiredString(row: TalosSqlRow, key: string): string {
+    const value = row[key]
+    if (typeof value !== 'string') invalidRow()
+    return value
+}
+
+function nullableString(row: TalosSqlRow, key: string): string | null {
+    const value = row[key]
+    if (value === null) return null
+    if (typeof value !== 'string') invalidRow()
+    return value
+}
+
+function boundedInteger(row: TalosSqlRow, key: string): number {
+    const value = row[key]
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) invalidRow()
+    return value
+}
+
+function jsonObject(raw: unknown): Record<string, unknown> {
+    if (typeof raw !== 'string') invalidRow()
+    try {
+        const parsed: unknown = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) invalidRow()
+        return parsed as Record<string, unknown>
+    } catch {
+        return invalidRow()
+    }
+}
+
+function oneOf<T extends string>(value: string, values: readonly T[]): T {
+    if (!(values as readonly string[]).includes(value)) invalidRow()
+    return value as T
+}
+
+function parseSession(row: TalosSqlRow): TalosLocalChatSession {
+    return {
+        id: requiredString(row, 'id'),
+        title: requiredString(row, 'title'),
+        surface: oneOf(requiredString(row, 'surface'), ['chat', 'browse'] as const),
+        mode: oneOf(requiredString(row, 'mode'), ['answer_only', 'verified_execution'] as const),
+        persistence_mode: oneOf(requiredString(row, 'persistence_mode'), ['persistent', 'temporary'] as const),
+        active_model_profile_id: nullableString(row, 'active_model_profile_id'),
+        metadata: jsonObject(row.metadata_json),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function parseMessage(row: TalosSqlRow): TalosLocalChatMessage {
+    return {
+        id: requiredString(row, 'id'),
+        session_id: requiredString(row, 'session_id'),
+        role: oneOf(requiredString(row, 'role'), ['user', 'assistant', 'system', 'tool'] as const),
+        content: requiredString(row, 'content'),
+        state: oneOf(requiredString(row, 'state'), ['persisted', 'pending', 'failed'] as const),
+        model_profile_id: nullableString(row, 'model_profile_id'),
+        run_id: nullableString(row, 'run_id'),
+        ordinal: boundedInteger(row, 'ordinal'),
+        metadata: jsonObject(row.metadata_json),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function parseVaultFile(row: TalosSqlRow): TalosLocalVaultFile {
+    return {
+        id: requiredString(row, 'id'),
+        display_name: requiredString(row, 'display_name'),
+        media_type: requiredString(row, 'media_type'),
+        size_bytes: boundedInteger(row, 'size_bytes'),
+        private_uri: requiredString(row, 'private_uri'),
+        status: oneOf(requiredString(row, 'status'), ['pending', 'available', 'failed', 'revoked'] as const),
+        trust: oneOf(requiredString(row, 'trust'), ['untrusted'] as const),
+        sha256: nullableString(row, 'sha256'),
+        extracted_text: nullableString(row, 'extracted_text'),
+        failure_code: nullableString(row, 'failure_code'),
+        metadata: jsonObject(row.metadata_json),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function permissions(raw: unknown): TalosLocalFileAuthorityGrant['permissions'] {
+    if (typeof raw !== 'string') invalidRow()
+    try {
+        const value: unknown = JSON.parse(raw)
+        if (!Array.isArray(value)) invalidRow()
+        return normalizeFileAuthorityPermissions(value as TalosLocalFileAuthorityGrant['permissions'])
+    } catch {
+        return invalidRow()
+    }
+}
+
+function parseGrant(row: TalosSqlRow): TalosLocalFileAuthorityGrant {
+    return {
+        id: requiredString(row, 'id'),
+        vault_file_id: requiredString(row, 'vault_file_id'),
+        permissions: permissions(row.permissions_json),
+        status: oneOf(requiredString(row, 'status'), ['active', 'revoked'] as const),
+        label: requiredString(row, 'label'),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+        revoked_at: nullableString(row, 'revoked_at'),
+    }
+}
+
+function parseBinding(row: TalosSqlRow): TalosChatAttachmentBinding {
+    return {
+        id: requiredString(row, 'id'),
+        session_id: requiredString(row, 'session_id'),
+        message_id: requiredString(row, 'message_id'),
+        vault_file_id: requiredString(row, 'vault_file_id'),
+        grant_id: requiredString(row, 'grant_id'),
+        display_name: requiredString(row, 'display_name'),
+        media_type: requiredString(row, 'media_type'),
+        size_bytes: boundedInteger(row, 'size_bytes'),
+        permissions: permissions(row.permissions_json),
+        grant_status: oneOf(requiredString(row, 'grant_status'), ['active', 'revoked'] as const),
+        created_at: requiredString(row, 'created_at'),
+    }
+}
+
+function parseToolActivity(row: TalosSqlRow): TalosLocalToolActivity {
+    return {
+        id: requiredString(row, 'id'),
+        session_id: requiredString(row, 'session_id'),
+        message_id: nullableString(row, 'message_id'),
+        operation: requiredString(row, 'operation'),
+        status: oneOf(requiredString(row, 'status'), ['pending', 'succeeded', 'failed', 'cancelled', 'recovery_required'] as const),
+        payload: jsonObject(row.payload_json),
+        evidence: jsonObject(row.evidence_json),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function encodeObject(value: Record<string, unknown> | undefined): string {
+    return JSON.stringify(cloneJsonObject(value))
+}
+
+function composerDraftKey(scopeId: string): string {
+    return `${COMPOSER_DRAFT_KEY_PREFIX}${normalizeComposerDraftScope(scopeId)}`
+}
+
+export function createSqliteChatRepository(
+    runtime: TalosSqliteRuntime,
+    options: ChatRepositoryOptions = {},
+): TalosChatRepository {
+    const now = options.now ?? (() => new Date().toISOString())
+    let connection: TalosSqlConnection | null = null
+    let initializing: Promise<void> | null = null
+
+    async function initialize(): Promise<void> {
+        if (connection) return
+        if (!initializing) {
+            initializing = runtime.connect().then((value) => { connection = value }).finally(() => {
+                initializing = null
+            })
+        }
+        await initializing
+    }
+
+    async function db(): Promise<TalosSqlConnection> {
+        await initialize()
+        if (!connection) throw new Error('TALOS_CHAT_DB_UNAVAILABLE')
+        return connection
+    }
+
+    async function transaction<T>(operation: (database: TalosSqlConnection) => Promise<T>): Promise<T> {
+        const database = await db()
+        await database.beginTransaction()
+        try {
+            const result = await operation(database)
+            await database.commitTransaction()
+            await runtime.persist()
+            return result
+        } catch (error) {
+            try {
+                await database.rollbackTransaction()
+            } catch {
+                // Preserve the original write failure; runtime recovery owns a failed rollback.
+            }
+            throw error
+        }
+    }
+
+    async function activeSessionId(existing?: TalosSqlConnection): Promise<string | null> {
+        const database = existing ?? await db()
+        const rows = await database.query(
+            'SELECT value_json FROM talos_chat_state WHERE key = ? LIMIT 1',
+            [ACTIVE_SESSION_KEY],
+        )
+        if (rows.length === 0) return null
+        const raw = requiredString(rows[0] as TalosSqlRow, 'value_json')
+        try {
+            const value: unknown = JSON.parse(raw)
+            if (value === null || typeof value === 'string') return value
+        } catch {
+            // Fall through to one canonical validation error.
+        }
+        return invalidRow()
+    }
+
+    async function writeActiveSession(database: TalosSqlConnection, sessionId: string | null): Promise<void> {
+        if (sessionId === null) {
+            await database.run('DELETE FROM talos_chat_state WHERE key = ?', [ACTIVE_SESSION_KEY])
+            return
+        }
+        await database.run(
+            `INSERT INTO talos_chat_state (key, value_json, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+            [ACTIVE_SESSION_KEY, JSON.stringify(sessionId), now()],
+        )
+    }
+
+    async function findSession(sessionId: string, existing?: TalosSqlConnection): Promise<TalosLocalChatSession> {
+        const database = existing ?? await db()
+        const rows = await database.query(
+            `SELECT id, title, surface, mode, persistence_mode, active_model_profile_id,
+                    metadata_json, created_at, updated_at
+             FROM talos_chat_sessions WHERE id = ? LIMIT 1`,
+            [sessionId],
+        )
+        if (rows.length !== 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        return parseSession(rows[0] as TalosSqlRow)
+    }
+
+    return {
+        initialize,
+        async listSessions() {
+            const rows = await (await db()).query(
+                `SELECT id, title, surface, mode, persistence_mode, active_model_profile_id,
+                        metadata_json, created_at, updated_at
+                 FROM talos_chat_sessions
+                 ORDER BY updated_at DESC, created_at DESC, id DESC`,
+            )
+            return rows.map(parseSession)
+        },
+        getActiveSessionId: () => activeSessionId(),
+        async createSession(input: CreateChatSessionInput) {
+            const title = normalizeChatTitle(input.title)
+            const metadata = encodeObject(input.metadata)
+            const session: TalosLocalChatSession = {
+                id: input.id,
+                title,
+                surface: normalizeChatSurface(input.surface ?? 'chat'),
+                mode: input.mode ?? 'verified_execution',
+                persistence_mode: input.persistence_mode ?? 'persistent',
+                active_model_profile_id: input.active_model_profile_id,
+                metadata: JSON.parse(metadata) as Record<string, unknown>,
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            return transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_chat_sessions
+                        (id, title, surface, mode, persistence_mode, active_model_profile_id, metadata_json, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        session.id,
+                        session.title,
+                        session.surface,
+                        session.mode,
+                        session.persistence_mode,
+                        session.active_model_profile_id,
+                        metadata,
+                        session.created_at,
+                        session.updated_at,
+                    ],
+                )
+                await writeActiveSession(database, session.id)
+                return session
+            })
+        },
+        async selectSession(sessionId: string) {
+            await transaction(async (database) => {
+                await findSession(sessionId, database)
+                await writeActiveSession(database, sessionId)
+            })
+        },
+        async renameSession(sessionId: string, title: string) {
+            const normalized = normalizeChatTitle(title)
+            await transaction(async (database) => {
+                const result = await database.run(
+                    'UPDATE talos_chat_sessions SET title = ?, updated_at = ? WHERE id = ?',
+                    [normalized, now(), sessionId],
+                )
+                if (result.changes !== 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+            })
+            return findSession(sessionId)
+        },
+        async updateSession(sessionId: string, input: UpdateChatSessionInput) {
+            const current = await findSession(sessionId)
+            const title = input.title === undefined ? current.title : normalizeChatTitle(input.title)
+            const surface = input.surface === undefined ? current.surface : normalizeChatSurface(input.surface)
+            const model = input.active_model_profile_id === undefined
+                ? current.active_model_profile_id
+                : input.active_model_profile_id
+            const metadata = input.metadata === undefined ? current.metadata : cloneJsonObject(input.metadata)
+            await transaction(async (database) => {
+                const result = await database.run(
+                    `UPDATE talos_chat_sessions
+                     SET title = ?, surface = ?, active_model_profile_id = ?, metadata_json = ?, updated_at = ?
+                     WHERE id = ?`,
+                    [title, surface, model, JSON.stringify(metadata), now(), sessionId],
+                )
+                if (result.changes !== 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+            })
+            return findSession(sessionId)
+        },
+        async deleteSession(sessionId: string) {
+            return transaction(async (database) => {
+                const wasActive = await activeSessionId(database) === sessionId
+                const deleted = await database.run('DELETE FROM talos_chat_sessions WHERE id = ?', [sessionId])
+                if (deleted.changes < 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+                await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerDraftKey(sessionId)])
+                if (!wasActive) return activeSessionId(database)
+                const rows = await database.query(
+                    `SELECT id FROM talos_chat_sessions
+                     ORDER BY updated_at DESC, created_at DESC, id DESC LIMIT 1`,
+                )
+                const next = rows.length === 0 ? null : requiredString(rows[0] as TalosSqlRow, 'id')
+                await writeActiveSession(database, next)
+                return next
+            })
+        },
+        async listMessages(sessionId: string) {
+            const rows = await (await db()).query(
+                `SELECT id, session_id, role, content, state, model_profile_id, run_id,
+                        ordinal, metadata_json, created_at, updated_at
+                 FROM talos_chat_messages
+                 WHERE session_id = ?
+                 ORDER BY ordinal ASC, created_at ASC, id ASC`,
+                [sessionId],
+            )
+            return rows.map(parseMessage)
+        },
+        async appendMessage(input: AppendChatMessageInput) {
+            const metadata = encodeObject(input.metadata)
+            return transaction(async (database) => {
+                const exists = await database.query(
+                    'SELECT id FROM talos_chat_sessions WHERE id = ? LIMIT 1',
+                    [input.session_id],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+                const ordinalRows = await database.query(
+                    `SELECT COALESCE(MAX(ordinal), -1) + 1 AS next_ordinal
+                     FROM talos_chat_messages WHERE session_id = ?`,
+                    [input.session_id],
+                )
+                const ordinal = boundedInteger(ordinalRows[0] as TalosSqlRow, 'next_ordinal')
+                const message: TalosLocalChatMessage = {
+                    id: input.id,
+                    session_id: input.session_id,
+                    role: input.role,
+                    content: input.content,
+                    state: input.state,
+                    model_profile_id: input.model_profile_id ?? null,
+                    run_id: input.run_id ?? null,
+                    ordinal,
+                    metadata: JSON.parse(metadata) as Record<string, unknown>,
+                    created_at: input.created_at,
+                    updated_at: input.created_at,
+                }
+                const bindingIds = new Set<string>()
+                const fileIds = new Set<string>()
+                const bindings: Array<{
+                    id: string
+                    file: TalosLocalVaultFile
+                    grant: TalosLocalFileAuthorityGrant
+                }> = []
+                for (const binding of input.attachments ?? []) {
+                    if (bindingIds.has(binding.id) || fileIds.has(binding.vault_file_id)) {
+                        throw new Error('TALOS_CHAT_ATTACHMENT_DUPLICATE')
+                    }
+                    bindingIds.add(binding.id)
+                    fileIds.add(binding.vault_file_id)
+                    const fileRows = await database.query(
+                        `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
+                                sha256, extracted_text, failure_code, metadata_json, created_at, updated_at
+                         FROM talos_vault_files WHERE id = ? AND status != 'revoked' LIMIT 1`,
+                        [binding.vault_file_id],
+                    )
+                    if (fileRows.length !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+                    const file = parseVaultFile(fileRows[0] as TalosSqlRow)
+                    if (file.status !== 'available') throw new Error('TALOS_VAULT_FILE_UNAVAILABLE')
+                    const grantRows = await database.query(
+                        `SELECT id, vault_file_id, permissions_json, status, label,
+                                created_at, updated_at, revoked_at
+                         FROM talos_file_authority_grants WHERE id = ? LIMIT 1`,
+                        [binding.grant_id],
+                    )
+                    if (grantRows.length !== 1) throw new Error('TALOS_FILE_GRANT_NOT_FOUND')
+                    const grant = parseGrant(grantRows[0] as TalosSqlRow)
+                    if (grant.vault_file_id !== file.id) throw new Error('TALOS_FILE_GRANT_MISMATCH')
+                    if (grant.status !== 'active') throw new Error('TALOS_FILE_GRANT_INACTIVE')
+                    if (!grant.permissions.includes('model.read')) {
+                        throw new Error('TALOS_FILE_GRANT_PERMISSION_INVALID')
+                    }
+                    bindings.push({ id: normalizeRepositoryId(binding.id), file, grant })
+                }
+                await database.run(
+                    `INSERT INTO talos_chat_messages
+                        (id, session_id, role, content, state, model_profile_id, run_id, ordinal, metadata_json, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        message.id,
+                        message.session_id,
+                        message.role,
+                        message.content,
+                        message.state,
+                        message.model_profile_id,
+                        message.run_id,
+                        message.ordinal,
+                        metadata,
+                        message.created_at,
+                        message.updated_at,
+                    ],
+                )
+                for (const binding of bindings) {
+                    await database.run(
+                        `INSERT INTO talos_chat_attachments
+                            (id, session_id, message_id, vault_file_id, grant_id,
+                             display_name, media_type, size_bytes, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [
+                            binding.id,
+                            message.session_id,
+                            message.id,
+                            binding.file.id,
+                            binding.grant.id,
+                            binding.file.display_name,
+                            binding.file.media_type,
+                            binding.file.size_bytes,
+                            message.created_at,
+                        ],
+                    )
+                }
+                await database.run(
+                    'UPDATE talos_chat_sessions SET updated_at = ? WHERE id = ?',
+                    [message.created_at, message.session_id],
+                )
+                return message
+            })
+        },
+        async appendToolActivity(input: CreateToolActivityInput) {
+            const activity: TalosLocalToolActivity = {
+                id: normalizeRepositoryId(input.id),
+                session_id: normalizeRepositoryId(input.session_id),
+                message_id: input.message_id === null ? null : normalizeRepositoryId(input.message_id),
+                operation: normalizeToolOperation(input.operation),
+                status: input.status,
+                payload: cloneJsonObject(input.payload),
+                evidence: cloneJsonObject(input.evidence),
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_chat_tool_activities
+                        (id, session_id, message_id, operation, status, payload_json, evidence_json, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        activity.id,
+                        activity.session_id,
+                        activity.message_id,
+                        activity.operation,
+                        activity.status,
+                        JSON.stringify(activity.payload),
+                        JSON.stringify(activity.evidence),
+                        activity.created_at,
+                        activity.updated_at,
+                    ],
+                )
+            })
+            return activity
+        },
+        async updateToolActivity(activityId: string, input: UpdateToolActivityInput) {
+            const assignments: string[] = []
+            const values: Array<string | number | null> = []
+            if (input.status !== undefined) {
+                assignments.push('status = ?')
+                values.push(input.status)
+            }
+            if (input.payload !== undefined) {
+                assignments.push('payload_json = ?')
+                values.push(JSON.stringify(cloneJsonObject(input.payload)))
+            }
+            if (input.evidence !== undefined) {
+                assignments.push('evidence_json = ?')
+                values.push(JSON.stringify(cloneJsonObject(input.evidence)))
+            }
+            assignments.push('updated_at = ?')
+            values.push(now(), normalizeRepositoryId(activityId))
+            await transaction(async (database) => {
+                const result = await database.run(
+                    `UPDATE talos_chat_tool_activities SET ${assignments.join(', ')} WHERE id = ?`,
+                    values,
+                )
+                if (result.changes !== 1) throw new Error('TALOS_TOOL_ACTIVITY_NOT_FOUND')
+            })
+        },
+        async listMessageToolActivities(messageId: string) {
+            const rows = await (await db()).query(
+                `SELECT id, session_id, message_id, operation, status, payload_json, evidence_json, created_at, updated_at
+                 FROM talos_chat_tool_activities WHERE message_id = ?
+                 ORDER BY created_at ASC, id ASC`,
+                [messageId],
+            )
+            return rows.map(parseToolActivity)
+        },
+        async listSessionToolActivities(sessionId: string) {
+            const rows = await (await db()).query(
+                `SELECT id, session_id, message_id, operation, status, payload_json, evidence_json, created_at, updated_at
+                 FROM talos_chat_tool_activities WHERE session_id = ?
+                 ORDER BY created_at ASC, id ASC`,
+                [sessionId],
+            )
+            return rows.map(parseToolActivity)
+        },
+        async listVaultFiles() {
+            const rows = await (await db()).query(
+                `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
+                        sha256, extracted_text, failure_code, metadata_json, created_at, updated_at
+                 FROM talos_vault_files
+                 WHERE status != 'revoked'
+                 ORDER BY updated_at DESC, created_at DESC, id DESC`,
+            )
+            return rows.map(parseVaultFile)
+        },
+        async getVaultFile(fileId: string) {
+            const rows = await (await db()).query(
+                `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
+                        sha256, extracted_text, failure_code, metadata_json, created_at, updated_at
+                 FROM talos_vault_files
+                 WHERE id = ? AND status != 'revoked' LIMIT 1`,
+                [fileId],
+            )
+            if (rows.length === 0) return null
+            if (rows.length !== 1) return invalidRow()
+            return parseVaultFile(rows[0] as TalosSqlRow)
+        },
+        async createVaultFile(input: CreateVaultFileInput) {
+            const metadata = encodeObject(input.metadata)
+            const file: TalosLocalVaultFile = {
+                id: normalizeRepositoryId(input.id),
+                display_name: normalizeVaultDisplayName(input.display_name),
+                media_type: normalizeVaultMediaType(input.media_type),
+                size_bytes: normalizeVaultSize(input.size_bytes),
+                private_uri: input.private_uri,
+                status: input.status,
+                trust: input.trust,
+                sha256: normalizeVaultSha256(input.sha256),
+                extracted_text: input.extracted_text,
+                failure_code: input.failure_code,
+                metadata: JSON.parse(metadata) as Record<string, unknown>,
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_vault_files
+                        (id, display_name, media_type, size_bytes, private_uri, status, trust,
+                         sha256, extracted_text, failure_code, metadata_json, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        file.id,
+                        file.display_name,
+                        file.media_type,
+                        file.size_bytes,
+                        file.private_uri,
+                        file.status,
+                        file.trust,
+                        file.sha256,
+                        file.extracted_text,
+                        file.failure_code,
+                        metadata,
+                        file.created_at,
+                        file.updated_at,
+                    ],
+                )
+            })
+            return file
+        },
+        async updateVaultFile(fileId: string, input: UpdateVaultFileInput) {
+            const currentRows = await (await db()).query(
+                `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
+                        sha256, extracted_text, failure_code, metadata_json, created_at, updated_at
+                 FROM talos_vault_files WHERE id = ? AND status != 'revoked' LIMIT 1`,
+                [fileId],
+            )
+            if (currentRows.length !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+            const current = parseVaultFile(currentRows[0] as TalosSqlRow)
+            const updated: TalosLocalVaultFile = {
+                ...current,
+                status: input.status ?? current.status,
+                private_uri: input.private_uri ?? current.private_uri,
+                sha256: input.sha256 === undefined ? current.sha256 : normalizeVaultSha256(input.sha256),
+                extracted_text: input.extracted_text === undefined ? current.extracted_text : input.extracted_text,
+                failure_code: input.failure_code === undefined ? current.failure_code : input.failure_code,
+                metadata: input.metadata === undefined ? current.metadata : cloneJsonObject(input.metadata),
+                updated_at: now(),
+            }
+            await transaction(async (database) => {
+                const result = await database.run(
+                    `UPDATE talos_vault_files
+                     SET private_uri = ?, status = ?, sha256 = ?, extracted_text = ?,
+                         failure_code = ?, metadata_json = ?, updated_at = ?
+                     WHERE id = ? AND status != 'revoked'`,
+                    [
+                        updated.private_uri,
+                        updated.status,
+                        updated.sha256,
+                        updated.extracted_text,
+                        updated.failure_code,
+                        JSON.stringify(updated.metadata),
+                        updated.updated_at,
+                        updated.id,
+                    ],
+                )
+                if (result.changes !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+            })
+            return updated
+        },
+        async deleteVaultFile(fileId: string) {
+            await transaction(async (database) => {
+                const timestamp = now()
+                const result = await database.run(
+                    `UPDATE talos_vault_files
+                     SET status = 'revoked', private_uri = '', extracted_text = NULL, updated_at = ?
+                     WHERE id = ? AND status != 'revoked'`,
+                    [timestamp, fileId],
+                )
+                if (result.changes !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+                await database.run(
+                    `UPDATE talos_file_authority_grants
+                     SET status = 'revoked', revoked_at = ?, updated_at = ?
+                     WHERE vault_file_id = ? AND status = 'active'`,
+                    [timestamp, timestamp, fileId],
+                )
+            })
+        },
+        async createFileAuthorityGrant(input: CreateFileAuthorityGrantInput) {
+            const fileRows = await (await db()).query(
+                `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
+                        sha256, extracted_text, failure_code, metadata_json, created_at, updated_at
+                 FROM talos_vault_files WHERE id = ? AND status != 'revoked' LIMIT 1`,
+                [input.vault_file_id],
+            )
+            if (fileRows.length !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+            if (parseVaultFile(fileRows[0] as TalosSqlRow).status !== 'available') {
+                throw new Error('TALOS_VAULT_FILE_UNAVAILABLE')
+            }
+            const grant: TalosLocalFileAuthorityGrant = {
+                id: normalizeRepositoryId(input.id),
+                vault_file_id: normalizeRepositoryId(input.vault_file_id),
+                permissions: normalizeFileAuthorityPermissions(input.permissions),
+                status: 'active',
+                label: normalizeVaultDisplayName(input.label),
+                created_at: input.created_at,
+                updated_at: input.created_at,
+                revoked_at: null,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_file_authority_grants
+                        (id, vault_file_id, permissions_json, status, label,
+                         created_at, updated_at, revoked_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        grant.id,
+                        grant.vault_file_id,
+                        JSON.stringify(grant.permissions),
+                        grant.status,
+                        grant.label,
+                        grant.created_at,
+                        grant.updated_at,
+                        grant.revoked_at,
+                    ],
+                )
+            })
+            return grant
+        },
+        async revokeFileAuthorityGrant(grantId: string) {
+            await transaction(async (database) => {
+                const timestamp = now()
+                const result = await database.run(
+                    `UPDATE talos_file_authority_grants
+                     SET status = 'revoked', revoked_at = ?, updated_at = ?
+                     WHERE id = ? AND status = 'active'`,
+                    [timestamp, timestamp, grantId],
+                )
+                if (result.changes === 1) return
+                const rows = await database.query(
+                    'SELECT status FROM talos_file_authority_grants WHERE id = ? LIMIT 1',
+                    [grantId],
+                )
+                if (rows.length !== 1) throw new Error('TALOS_FILE_GRANT_NOT_FOUND')
+                if (requiredString(rows[0] as TalosSqlRow, 'status') !== 'revoked') return invalidRow()
+            })
+        },
+        async listMessageAttachments(messageId: string) {
+            const rows = await (await db()).query(
+                `SELECT attachment.id, attachment.session_id, attachment.message_id,
+                        attachment.vault_file_id, attachment.grant_id, attachment.display_name,
+                        attachment.media_type, attachment.size_bytes, attachment.created_at,
+                        grant.permissions_json, grant.status AS grant_status
+                 FROM talos_chat_attachments AS attachment
+                 INNER JOIN talos_file_authority_grants AS grant ON grant.id = attachment.grant_id
+                 WHERE attachment.message_id = ?
+                 ORDER BY attachment.created_at ASC, attachment.id ASC`,
+                [messageId],
+            )
+            return rows.map(parseBinding)
+        },
+        async loadComposerDraft(scopeId: string) {
+            const rows = await (await db()).query(
+                'SELECT value_json FROM talos_chat_state WHERE key = ? LIMIT 1',
+                [composerDraftKey(scopeId)],
+            )
+            if (rows.length === 0) return ''
+            const raw = requiredString(rows[0] as TalosSqlRow, 'value_json')
+            try {
+                const value: unknown = JSON.parse(raw)
+                if (typeof value === 'string') return normalizeComposerDraft(value)
+            } catch {
+                // Collapse malformed JSON and an invalid draft into one repository fault.
+            }
+            return invalidRow()
+        },
+        async saveComposerDraft(scopeId: string, draft: string) {
+            const key = composerDraftKey(scopeId)
+            const value = normalizeComposerDraft(draft)
+            await transaction(async (database) => {
+                if (value === '') {
+                    await database.run('DELETE FROM talos_chat_state WHERE key = ?', [key])
+                    return
+                }
+                await database.run(
+                    `INSERT INTO talos_chat_state (key, value_json, updated_at)
+                     VALUES (?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+                    [key, JSON.stringify(value), now()],
+                )
+            })
+        },
+        close: () => runtime.close(),
+    }
+}

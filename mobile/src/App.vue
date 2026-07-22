@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
+import TalosMobileBackground from '@/components/talos/workspace/TalosMobileBackground.vue'
 import TalosMobileRail from '@/components/shell/TalosMobileRail.vue'
 import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
@@ -12,15 +13,18 @@ import {
     type NativeLifecycleController,
 } from '@/services/nativeAppLifecycle'
 import { talosDisabledSubsystems } from '@/main'
+import { useChatController } from '@/stores/chatController'
 
 const router = useRouter()
 const route = useRoute()
 const preferences = usePreferencesStore()
+const chatController = useChatController()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
 
 // Animated brand intro over the static native splash; dismisses to the chat.
 const showBoot = ref(true)
+const creatingSession = ref(false)
 
 let lifecycle: NativeLifecycleController | null = null
 
@@ -56,9 +60,15 @@ async function navigate(name: TalosMobileRouteName): Promise<void> {
     await preferences.setLastRoute(name)
 }
 
-function onNewChat(): void {
-    // Step-1: focus the chat base. Real new-session wiring lands with the data layer (step-2).
-    void navigate('chat')
+async function onNewChat(): Promise<void> {
+    if (creatingSession.value || chatController.chat.state.persistenceStatus !== 'ready') return
+    creatingSession.value = true
+    try {
+        await chatController.newSession()
+        await navigate('chat')
+    } finally {
+        creatingSession.value = false
+    }
 }
 
 onMounted(async () => {
@@ -104,12 +114,15 @@ onBeforeUnmount(async () => {
             :style="{ backgroundImage: 'var(--talos-poster-url)' }"
         />
 
+        <!-- Procedural motion background (motion-v6) — behind the content. -->
+        <TalosMobileBackground v-if="!uiFallback" class="z-0" aria-hidden="true" />
+
         <!-- Fail-closed fallback: no upstream shadcn/reka components. -->
         <template v-if="uiFallback">
             <main class="flex-1 overflow-y-auto">
                 <RouterView />
             </main>
-            <nav aria-label="Primary" data-testid="ui-fallback" class="flex items-stretch justify-around border-t border-[var(--talos-border)] bg-[var(--talos-sidebar)]">
+            <nav aria-label="Primary" data-testid="ui-fallback" class="relative z-50 flex shrink-0 items-stretch justify-around border-t border-[var(--talos-border)] bg-[var(--talos-sidebar)]">
                 <button
                     v-for="item in navItems"
                     :key="item.name"
@@ -127,12 +140,14 @@ onBeforeUnmount(async () => {
 
         <template v-else>
             <TalosMobileRail
+                class="relative z-10"
                 :active-route="activeRoute"
+                :creating-session="creatingSession || chatController.chat.state.persistenceStatus !== 'ready'"
                 @navigate="navigate"
                 @new-chat="onNewChat"
             />
 
-            <main class="relative flex-1 overflow-hidden">
+            <main class="relative z-10 flex-1 overflow-hidden">
                 <ChatScreen />
             </main>
 

@@ -1,33 +1,144 @@
-/**
- * The reactive controller that ties the tested pieces together for the UI:
- * model catalog + per-provider keystore secrets → composer profiles; selection +
- * effort/thinking; the chat store; and the completion that reads the selected key from
- * the OS keystore at send time (never cached in persisted state). Injectable deps make
- * it unit-testable; `useChatController()` is the app-wide singleton over the real deps.
- */
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
-import { talosMobileModelProfiles } from '@/lib/mobileModelCatalog'
+import {
+    useTalosMobileAttachments,
+    type TalosMobileAttachmentsController,
+} from '@/composables/useTalosMobileAttachments'
+import type {
+    TalosMobileModelProfileView,
+    TalosMobileProviderId,
+} from '@/components/chat/mobileChatTypes'
+import { buildChatCompletion } from '@/lib/chat/chatCompletion'
+import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
+import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
+import type {
+    TalosMobileProviderCatalog,
+    TalosMobileProviderModel,
+    TalosMobileProviderProbeResult,
+} from '@/lib/chat/providerContracts'
+import { talosMobileHttpTransport, type TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
+import { providerAdapterFor } from '@/lib/chat/providerRegistry'
+import { manualModelToProviderModel, talosMobileModelProfiles } from '@/lib/mobileModelCatalog'
+import {
+    TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
+    parseTalosMobileModelLabPreferences,
+    type TalosMobileManualModel,
+    type TalosMobileModelLabPreferences,
+    type TalosMobileModelProbeRecord,
+} from '@/lib/modelLabContracts'
 import { clampMobileEffort, mobileEffortLadderFromLevels, type TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
+import type { TalosChatRepository } from '@/repositories/chatRepository'
+import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
+import {
+    clearProviderEndpoint as realClearEndpoint,
+    getProviderEndpoint as realGetEndpoint,
+    setProviderEndpoint as realSetEndpoint,
+} from '@/services/providerEndpointStore'
 import {
     clearProviderKey as realClearKey,
     getProviderKey as realGetKey,
     hasProviderKey as realHasKey,
     setProviderKey as realSetKey,
 } from '@/services/secureKeyStore'
-import { capacitorHttpTransport, type HttpTransport } from '@/lib/chat/anthropicClient'
-import { buildChatCompletion } from '@/lib/chat/chatCompletion'
+import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
+import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
-import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
+import {
+    TALOS_DEFAULT_COMPOSER_DEFAULTS,
+    useSettingsStore,
+    type TalosComposerDefaults,
+} from '@/stores/settings'
 
 const TALOS_SYSTEM_PROMPT = 'You are TALOS, a precise engineering copilot. Answer directly and concisely.'
+const TALOS_MANUAL_BROWSE_SYSTEM_PROMPT = `${TALOS_SYSTEM_PROMPT} Browse mode is active with a manual local browser. You have no page content, DOM, screenshot, or navigation result unless trusted browser evidence is explicitly included in the conversation. Never claim that you opened, saw, inspected, clicked, scrolled, or captured a page without that evidence. Ask the user to open the detected link or provide verified evidence when page contents are required.`
+const TALOS_MODEL_PROBE_SENTINEL = 'TALOS_PROBE_OK'
+const PROVIDER_IDS = TALOS_MOBILE_PROVIDERS.map((provider) => provider.id)
+    .filter((provider): provider is TalosMobileProviderId => provider !== 'unknown')
+
+const productionChatRepository = createLazyChatRepository(async () => {
+    const { createProductionChatRepository } = await import('@/repositories/productionChatRepository')
+    return createProductionChatRepository()
+})
+
+let productionVaultServicePromise: Promise<TalosVaultService> | null = null
+
+function loadProductionVaultService(): Promise<TalosVaultService> {
+    if (!productionVaultServicePromise) {
+        productionVaultServicePromise = Promise.all([
+            import('@/services/attachmentAnalysisClient'),
+            import('@/services/attachmentFileStore'),
+            import('@/services/talosVaultService'),
+        ]).then(([analysis, fileStore, vault]) => vault.createTalosVaultService({
+            repository: productionChatRepository,
+            fileStore: fileStore.createAttachmentFileStore(),
+            analysisClient: analysis.createAttachmentAnalysisClient(),
+        }))
+    }
+    return productionVaultServicePromise
+}
+
+const productionVaultService: TalosVaultService = {
+    ingest: async (file) => (await loadProductionVaultService()).ingest(file),
+    createGrant: async (fileId) => (await loadProductionVaultService()).createGrant(fileId),
+    revokeGrant: async (grantId) => (await loadProductionVaultService()).revokeGrant(grantId),
+    resolveMessageParts: async (messageId) => (await loadProductionVaultService()).resolveMessageParts(messageId),
+    listFiles: async () => (await loadProductionVaultService()).listFiles(),
+    deleteFile: async (fileId) => (await loadProductionVaultService()).deleteFile(fileId),
+    reconcilePending: async () => (await loadProductionVaultService()).reconcilePending(),
+}
+
+const productionFilePicker: TalosNativeFilePicker = {
+    async pickFiles() {
+        const { createNativeFilePicker } = await import('@/services/nativeFilePicker')
+        return createNativeFilePicker().pickFiles()
+    },
+}
+
+const unavailableVaultService: TalosVaultService = {
+    ingest: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    createGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    revokeGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    listFiles: async () => [],
+    deleteFile: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    reconcilePending: async () => undefined,
+}
+
+const unavailableFilePicker: TalosNativeFilePicker = {
+    pickFiles: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+}
+
+export type ProviderCatalogStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
+
+export interface ProviderCatalogState {
+    status: ProviderCatalogStatus
+    models: TalosMobileProviderModel[]
+    error: string | null
+    updatedAt: string | null
+    configured: boolean
+}
 
 export interface ChatControllerDeps {
-    hasKey: (provider: string) => Promise<boolean>
-    getKey: (provider: string) => Promise<string | null>
-    setKey: (provider: string, key: string) => Promise<void>
-    clearKey: (provider: string) => Promise<void>
-    transport: HttpTransport
+    hasKey: (provider: TalosMobileProviderId) => Promise<boolean>
+    getKey: (provider: TalosMobileProviderId) => Promise<string | null>
+    setKey: (provider: TalosMobileProviderId, key: string) => Promise<void>
+    clearKey: (provider: TalosMobileProviderId) => Promise<void>
+    getEndpoint: (provider: TalosMobileProviderId) => Promise<string | null>
+    setEndpoint: (provider: TalosMobileProviderId, endpoint: string) => Promise<void>
+    clearEndpoint: (provider: TalosMobileProviderId) => Promise<void>
+    transport: TalosMobileHttpTransport
+    chatRepository: TalosChatRepository
+    filePicker?: TalosNativeFilePicker
+    vaultService?: TalosVaultService
+    settings: {
+        readonly state: {
+            readonly composer_defaults: TalosComposerDefaults
+            readonly model_lab: TalosMobileModelLabPreferences
+        }
+        hydrate(): Promise<void>
+        setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
+        setModelLabPreferences(value: TalosMobileModelLabPreferences): Promise<void>
+    }
 }
 
 const realDeps: ChatControllerDeps = {
@@ -35,130 +146,764 @@ const realDeps: ChatControllerDeps = {
     getKey: realGetKey,
     setKey: realSetKey,
     clearKey: realClearKey,
-    transport: capacitorHttpTransport,
+    getEndpoint: realGetEndpoint,
+    setEndpoint: realSetEndpoint,
+    clearEndpoint: realClearEndpoint,
+    transport: talosMobileHttpTransport,
+    chatRepository: productionChatRepository,
+    filePicker: productionFilePicker,
+    vaultService: productionVaultService,
+    settings: useSettingsStore(),
 }
 
 export interface ChatController {
+    readonly catalogs: Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>
+    readonly endpoints: Readonly<Record<TalosMobileProviderId, string | null>>
+    readonly modelLabPreferences: ComputedRef<TalosMobileModelLabPreferences>
     readonly profiles: ComputedRef<TalosMobileModelProfileView[]>
     readonly selectedModelId: Ref<string | null>
     readonly selectedProfile: ComputedRef<TalosMobileModelProfileView | null>
+    readonly selectedProviderModel: ComputedRef<TalosMobileProviderModel | null>
     readonly effort: Ref<TalosMobileEffortLevel>
     readonly effortLadder: ComputedRef<TalosMobileEffortLevel[]>
     readonly thinking: Ref<boolean>
     readonly canSend: ComputedRef<boolean>
+    readonly browseMode: ComputedRef<boolean>
     readonly sendDisabledReason: ComputedRef<string>
+    readonly preferenceError: Readonly<Ref<string | null>>
+    readonly enhancingPrompt: Readonly<Ref<boolean>>
+    readonly promptEnhancement: Readonly<Ref<TalosMobilePromptEnhancementResult | null>>
+    readonly promptEnhancementError: Readonly<Ref<string | null>>
+    readonly attachments: TalosMobileAttachmentsController
     readonly chat: ChatStore
     readonly secrets: Readonly<Record<string, boolean>>
     init(): Promise<void>
     refreshSecrets(): Promise<void>
-    selectModel(id: string): void
-    selectEffort(level: TalosMobileEffortLevel): void
-    setThinking(enabled: boolean): void
-    saveKey(provider: string, key: string): Promise<void>
-    removeKey(provider: string): Promise<void>
-    send(text: string): Promise<void>
+    refreshProvider(provider: TalosMobileProviderId): Promise<TalosMobileProviderCatalog | null>
+    refreshConfiguredProviders(): Promise<void>
+    probeProvider(provider: TalosMobileProviderId): Promise<TalosMobileProviderProbeResult>
+    probeModel(profileId: string): Promise<TalosMobileModelProbeRecord>
+    setModelVisibility(profileId: string, visible: boolean): Promise<void>
+    setModelDisplayName(profileId: string, displayName: string): Promise<void>
+    saveManualModel(model: TalosMobileManualModel): Promise<void>
+    removeManualModel(id: string): Promise<void>
+    setProviderTimeout(provider: TalosMobileProviderId, seconds: number): Promise<void>
+    selectModel(id: string): Promise<void>
+    selectEffort(level: TalosMobileEffortLevel): Promise<void>
+    setThinking(enabled: boolean): Promise<void>
+    setBrowseMode(enabled: boolean): Promise<void>
+    saveKey(provider: TalosMobileProviderId, key: string): Promise<void>
+    removeKey(provider: TalosMobileProviderId): Promise<void>
+    saveEndpoint(provider: TalosMobileProviderId, endpoint: string): Promise<void>
+    removeEndpoint(provider: TalosMobileProviderId): Promise<void>
+    newSession(): Promise<void>
+    selectSession(sessionId: string): Promise<void>
+    renameSession(sessionId: string, title: string): Promise<void>
+    deleteSession(sessionId: string): Promise<void>
+    resendMessage(messageId: string): Promise<void>
+    retryAssistantMessage(messageId: string): Promise<void>
+    send(text: string): Promise<boolean>
+    enhancePrompt(text: string): Promise<TalosMobilePromptEnhancementResult | null>
+    clearPromptEnhancement(): void
+}
+
+function initialCatalogs(): Record<TalosMobileProviderId, ProviderCatalogState> {
+    return PROVIDER_IDS.reduce<Record<TalosMobileProviderId, ProviderCatalogState>>((result, provider) => {
+        result[provider] = {
+            status: 'idle',
+            models: [],
+            error: null,
+            updatedAt: null,
+            configured: false,
+        }
+        return result
+    }, {} as Record<TalosMobileProviderId, ProviderCatalogState>)
+}
+
+function initialEndpoints(): Record<TalosMobileProviderId, string | null> {
+    return Object.fromEntries(PROVIDER_IDS.map((provider) => [provider, null])) as Record<
+        TalosMobileProviderId,
+        string | null
+    >
+}
+
+function cloneModelLabPreferences(value: TalosMobileModelLabPreferences): TalosMobileModelLabPreferences {
+    return {
+        schema_version: 1,
+        manual_models: value.manual_models.map((model) => ({
+            ...model,
+            input_modalities: [...model.input_modalities],
+            output_modalities: [...model.output_modalities],
+            supported_parameters: [...model.supported_parameters],
+        })),
+        model_overrides: Object.fromEntries(
+            Object.entries(value.model_overrides).map(([profileId, override]) => [profileId, { ...override }]),
+        ),
+        provider_runtime: Object.fromEntries(
+            Object.entries(value.provider_runtime).map(([provider, options]) => [provider, { ...options }]),
+        ),
+        probe_results: Object.fromEntries(
+            Object.entries(value.probe_results).map(([profileId, result]) => [profileId, { ...result }]),
+        ),
+    }
+}
+
+function safeProviderMessage(error: unknown, secret: string | null): string {
+    let message = error instanceof Error && error.message
+        ? error.message
+        : 'The provider request failed.'
+    if (secret) message = message.replaceAll(secret, '[redacted]')
+    return message
 }
 
 export function createChatController(deps: ChatControllerDeps = realDeps): ChatController {
     const secrets = reactive<Record<string, boolean>>(
-        Object.fromEntries(TALOS_MOBILE_PROVIDERS.map((provider) => [provider.id, false])),
+        Object.fromEntries(PROVIDER_IDS.map((provider) => [provider, false])),
     )
+    const catalogs = reactive(initialCatalogs())
+    const endpoints = reactive(initialEndpoints())
     const selectedModelId = ref<string | null>(null)
     const effort = ref<TalosMobileEffortLevel>('high')
     const thinking = ref(false)
+    const preferenceError = ref<string | null>(null)
+    const enhancingPrompt = ref(false)
+    const promptEnhancement = ref<TalosMobilePromptEnhancementResult | null>(null)
+    const promptEnhancementError = ref<string | null>(null)
+    let initialized = false
+    let initialization: Promise<void> | null = null
+    let modelLabWrite: Promise<void> = Promise.resolve()
+    let promptEnhancementRevision = 0
+    const vaultService = deps.vaultService ?? unavailableVaultService
+    const attachments = useTalosMobileAttachments({
+        picker: deps.filePicker ?? unavailableFilePicker,
+        vault: vaultService,
+    })
 
-    const profiles = computed(() => talosMobileModelProfiles((provider) => secrets[provider] === true))
+    const modelLabPreferences = computed(() =>
+        deps.settings.state.model_lab ?? TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
+    )
+    const discoveredModels = computed(() => PROVIDER_IDS.flatMap((provider) => catalogs[provider].models))
+    const availableProviderModels = computed(() => {
+        const result = [...discoveredModels.value]
+        const identities = new Set(result.map((model) => `${model.provider}:${model.id}`))
+        for (const manual of modelLabPreferences.value.manual_models) {
+            const identity = `${manual.provider}:${manual.model}`
+            if (identities.has(identity)) continue
+            identities.add(identity)
+            result.push(manualModelToProviderModel(manual))
+        }
+        return result
+    })
+    const profiles = computed(() => talosMobileModelProfiles(
+        discoveredModels.value,
+        (provider) => secrets[provider] === true,
+        modelLabPreferences.value,
+    ))
     const selectedProfile = computed(() =>
         profiles.value.find((profile) => profile.id === selectedModelId.value) ?? null,
     )
-    const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
-    const canSend = computed(() =>
-        talosMobileModelProfileIsCallable(selectedProfile.value) && !chat.state.sending,
-    )
-    const sendDisabledReason = computed(() => {
-        if (!selectedProfile.value) return 'Select a model'
-        if (!talosMobileModelProfileIsCallable(selectedProfile.value)) {
-            return `Add your ${selectedProfile.value.provider} API key in Settings`
-        }
-        return ''
+    const selectedProviderModel = computed(() => {
+        const profile = selectedProfile.value
+        if (!profile) return null
+        return availableProviderModels.value.find(
+            (model) => model.provider === profile.provider && model.id === profile.model,
+        ) ?? null
     })
+    const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
 
     const complete: ChatCompletion = async (turns) => {
         const profile = selectedProfile.value
+        const providerModel = selectedProviderModel.value
         const apiKey = profile ? await deps.getKey(profile.provider) : null
-        return buildChatCompletion(
-            () => ({ profile, apiKey, effort: effort.value, thinking: thinking.value, system: TALOS_SYSTEM_PROMPT }),
-            deps.transport,
-        )(turns)
+        const endpoint = profile ? await deps.getEndpoint(profile.provider) : null
+        const timeoutSeconds = profile
+            ? modelLabPreferences.value.provider_runtime[profile.provider]?.timeout_seconds
+            : undefined
+        const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
+        try {
+            return await buildChatCompletion(
+                () => ({
+                    profile,
+                    providerModel,
+                    apiKey,
+                    endpoint,
+                    timeoutMs,
+                    effort: effort.value,
+                    thinking: thinking.value,
+                    system: chat.activeSession.value?.surface === 'browse'
+                        ? TALOS_MANUAL_BROWSE_SYSTEM_PROMPT
+                        : TALOS_SYSTEM_PROMPT,
+                }),
+                deps.transport,
+            )(turns)
+        } catch (error) {
+            const safeMessage = safeProviderMessage(error, apiKey)
+            if (error instanceof TalosMobileProviderError) {
+                throw new TalosMobileProviderError({
+                    provider: error.provider,
+                    operation: error.operation,
+                    message: safeMessage,
+                    status: error.status,
+                })
+            }
+            throw new Error(safeMessage)
+        }
     }
-    const chat = createChatStore(complete)
+    const chat = createChatStore(complete, {
+        repository: deps.chatRepository,
+        resolveMessageParts: vaultService.resolveMessageParts,
+    })
+    const browseMode = computed(() => chat.activeSession.value?.surface === 'browse')
+    const canSend = computed(() =>
+        chat.state.persistenceStatus === 'ready'
+        && chat.state.persistenceError === null
+        && talosMobileModelProfileIsCallable(selectedProfile.value)
+        && selectedProviderModel.value !== null
+        && (selectedProfile.value ? catalogs[selectedProfile.value.provider].configured : false)
+        && !chat.state.sending,
+    )
+    const sendDisabledReason = computed(() => {
+        if (chat.state.persistenceStatus === 'error') {
+            return chat.state.persistenceError ?? 'Local chat storage is unavailable'
+        }
+        if (chat.state.persistenceStatus !== 'ready') return 'Preparing local chat storage'
+        if (!selectedProfile.value) return 'Add a provider API key or local endpoint in Settings'
+        if (!talosMobileModelProfileIsCallable(selectedProfile.value)) {
+            return `Add your ${selectedProfile.value.provider} API key in Settings`
+        }
+        if (!selectedProviderModel.value) return 'Refresh the selected provider model catalog'
+        return ''
+    })
 
-    function ensureSelection(): void {
-        if (selectedModelId.value && profiles.value.some((profile) => profile.id === selectedModelId.value)) return
-        const callable = profiles.value.find((profile) => talosMobileModelProfileIsCallable(profile))
-        selectedModelId.value = (callable ?? profiles.value[0])?.id ?? null
+    function applyModelSelection(id: string | null): boolean {
+        const profile = id ? profiles.value.find((candidate) => candidate.id === id) ?? null : null
+        if (!profile || !profile.show_in_composer || !talosMobileModelProfileIsCallable(profile)) return false
+        selectedModelId.value = profile.id
+        effort.value = clampMobileEffort(profile.effort_levels, effort.value)
+        if (!profile.supports_thinking) thinking.value = false
+        return true
+    }
+
+    function ensureSelection(preferredProvider?: TalosMobileProviderId): void {
+        if (applyModelSelection(selectedModelId.value)) return
+        const preferred = preferredProvider
+            ? profiles.value.find((profile) =>
+                profile.provider === preferredProvider
+                && profile.show_in_composer
+                && talosMobileModelProfileIsCallable(profile),
+            )
+            : null
+        const callable = profiles.value.find((profile) =>
+            profile.show_in_composer && talosMobileModelProfileIsCallable(profile),
+        )
+        const next = preferred ?? callable ?? null
+        selectedModelId.value = next?.id ?? null
+        effort.value = clampMobileEffort(next?.effort_levels, effort.value)
+        if (!next?.supports_thinking) thinking.value = false
     }
 
     async function refreshSecrets(): Promise<void> {
-        await Promise.all(
-            TALOS_MOBILE_PROVIDERS.map(async (provider) => {
-                secrets[provider.id] = await deps.hasKey(provider.id)
-            }),
-        )
+        await Promise.all(PROVIDER_IDS.map(async (provider) => {
+            secrets[provider] = await deps.hasKey(provider)
+        }))
         ensureSelection()
     }
 
-    async function init(): Promise<void> {
-        await refreshSecrets()
-        effort.value = clampMobileEffort(selectedProfile.value?.effort_levels, effort.value)
+    async function refreshProvider(provider: TalosMobileProviderId): Promise<TalosMobileProviderCatalog | null> {
+        const adapter = providerAdapterFor(provider)
+        const [apiKey, endpoint] = await Promise.all([
+            deps.getKey(provider),
+            deps.getEndpoint(provider),
+        ])
+        endpoints[provider] = endpoint
+        const timeoutSeconds = modelLabPreferences.value.provider_runtime[provider]?.timeout_seconds
+        const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
+        const state = catalogs[provider]
+        state.configured = adapter.requiresSecret ? Boolean(apiKey) : Boolean(endpoint)
+        if ((adapter.requiresSecret && !apiKey) || (!adapter.requiresSecret && !endpoint)) {
+            state.status = 'idle'
+            state.error = null
+            return null
+        }
+
+        state.status = 'loading'
+        state.error = null
+        try {
+            const catalog = await adapter.listModels({ apiKey, endpoint, timeoutMs }, deps.transport)
+            state.models = [...catalog.models]
+            state.status = state.models.length > 0 ? 'ready' : 'empty'
+            state.updatedAt = new Date().toISOString()
+            ensureSelection(provider)
+            return catalog
+        } catch (error) {
+            state.status = 'error'
+            state.error = safeProviderMessage(error, apiKey)
+            throw error
+        }
     }
 
-    function selectModel(id: string): void {
-        selectedModelId.value = id
+    async function performInit(): Promise<void> {
+        try {
+            await deps.settings.hydrate()
+        } catch (error) {
+            preferenceError.value = safeProviderMessage(error, null)
+        }
+        await chat.initialize()
+        if (chat.state.persistenceStatus === 'ready') await attachments.initialize()
+        await refreshSecrets()
+        await Promise.all(PROVIDER_IDS.map(async (provider) => {
+            try {
+                await refreshProvider(provider)
+            } catch {
+                // Each provider owns its actionable error state; another provider can still initialize.
+            }
+        }))
+        const defaults = deps.settings.state.composer_defaults ?? TALOS_DEFAULT_COMPOSER_DEFAULTS
+        effort.value = defaults.effort
+        thinking.value = defaults.thinking
+        const restoredModel = chat.activeSession.value?.active_model_profile_id ?? defaults.model_profile_id
+        if (!applyModelSelection(restoredModel)) ensureSelection()
         effort.value = clampMobileEffort(selectedProfile.value?.effort_levels, effort.value)
         if (!selectedProfile.value?.supports_thinking) thinking.value = false
+        initialized = true
     }
-    function selectEffort(level: TalosMobileEffortLevel): void {
-        effort.value = level
+
+    async function init(): Promise<void> {
+        if (initialized) return
+        if (!initialization) {
+            initialization = performInit().finally(() => { initialization = null })
+        }
+        await initialization
     }
-    function setThinking(enabled: boolean): void {
-        thinking.value = enabled
+
+    async function persistComposerDefaults(): Promise<void> {
+        try {
+            await deps.settings.setComposerDefaults({
+                model_profile_id: selectedModelId.value,
+                effort: effort.value,
+                thinking: thinking.value,
+            })
+            preferenceError.value = null
+        } catch (error) {
+            preferenceError.value = `TALOS could not save composer preferences. ${safeProviderMessage(error, null)}`
+            throw error
+        }
     }
-    async function saveKey(provider: string, key: string): Promise<void> {
+
+    function updateModelLab(
+        mutation: (preferences: TalosMobileModelLabPreferences) => void,
+    ): Promise<void> {
+        const operation = modelLabWrite.then(async () => {
+            const candidate = cloneModelLabPreferences(modelLabPreferences.value)
+            mutation(candidate)
+            const parsed = parseTalosMobileModelLabPreferences(candidate)
+            if (parsed === TALOS_DEFAULT_MODEL_LAB_PREFERENCES) {
+                throw new Error('TALOS rejected invalid Model Lab preferences.')
+            }
+            await deps.settings.setModelLabPreferences(parsed)
+        })
+        modelLabWrite = operation.catch(() => undefined)
+        return operation
+    }
+
+    async function persistSelectionAfterProjectionChange(previousModelId: string | null): Promise<void> {
+        ensureSelection()
+        if (selectedModelId.value === previousModelId) return
+        const operations: Promise<unknown>[] = [persistComposerDefaults()]
+        if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(selectedModelId.value))
+        await Promise.all(operations)
+    }
+
+    async function setModelVisibility(profileId: string, visible: boolean): Promise<void> {
+        if (!profiles.value.some((profile) => profile.id === profileId)) {
+            throw new Error('The selected model no longer exists.')
+        }
+        const previousModelId = selectedModelId.value
+        await updateModelLab((preferences) => {
+            const current = preferences.model_overrides[profileId] ?? {}
+            preferences.model_overrides[profileId] = { ...current, show_in_composer: visible }
+        })
+        await persistSelectionAfterProjectionChange(previousModelId)
+    }
+
+    async function setModelDisplayName(profileId: string, displayName: string): Promise<void> {
+        if (!profiles.value.some((profile) => profile.id === profileId)) {
+            throw new Error('The selected model no longer exists.')
+        }
+        const normalized = displayName.trim()
+        if (normalized.length > 255) throw new Error('Model display names support at most 255 characters.')
+        await updateModelLab((preferences) => {
+            const current = preferences.model_overrides[profileId] ?? {}
+            const next = { ...current }
+            if (normalized) next.display_name = normalized
+            else delete next.display_name
+            if (Object.keys(next).length) preferences.model_overrides[profileId] = next
+            else delete preferences.model_overrides[profileId]
+        })
+    }
+
+    async function saveManualModel(model: TalosMobileManualModel): Promise<void> {
+        await updateModelLab((preferences) => {
+            const duplicateIdentity = preferences.manual_models.find((candidate) =>
+                candidate.id !== model.id
+                && candidate.provider === model.provider
+                && candidate.model === model.model,
+            )
+            if (duplicateIdentity) throw new Error('That provider model ID already has a manual profile.')
+            const index = preferences.manual_models.findIndex((candidate) => candidate.id === model.id)
+            const copy = {
+                ...model,
+                input_modalities: [...model.input_modalities],
+                output_modalities: [...model.output_modalities],
+                supported_parameters: [...model.supported_parameters],
+            }
+            if (index >= 0) preferences.manual_models[index] = copy
+            else preferences.manual_models.push(copy)
+        })
+        ensureSelection(model.provider)
+    }
+
+    async function removeManualModel(id: string): Promise<void> {
+        const manual = modelLabPreferences.value.manual_models.find((candidate) => candidate.id === id)
+        if (!manual) return
+        const previousModelId = selectedModelId.value
+        const profileId = `${manual.provider}:${manual.model}`
+        const observed = discoveredModels.value.some((model) =>
+            model.provider === manual.provider && model.id === manual.model,
+        )
+        await updateModelLab((preferences) => {
+            preferences.manual_models = preferences.manual_models.filter((candidate) => candidate.id !== id)
+            if (!observed) {
+                delete preferences.model_overrides[profileId]
+                delete preferences.probe_results[profileId]
+            }
+        })
+        await persistSelectionAfterProjectionChange(previousModelId)
+    }
+
+    async function setProviderTimeout(provider: TalosMobileProviderId, seconds: number): Promise<void> {
+        if (!Number.isInteger(seconds) || seconds < 5 || seconds > 300) {
+            throw new Error('Provider timeout must be an integer from 5 to 300 seconds.')
+        }
+        await updateModelLab((preferences) => {
+            preferences.provider_runtime[provider] = { timeout_seconds: seconds }
+        })
+    }
+
+    async function selectModel(id: string): Promise<void> {
+        if (!applyModelSelection(id)) return
+        const operations: Promise<unknown>[] = [persistComposerDefaults()]
+        if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(id))
+        await Promise.all(operations)
+    }
+
+    async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
+        effort.value = clampMobileEffort(selectedProfile.value?.effort_levels, level)
+        await persistComposerDefaults()
+    }
+
+    async function setThinking(enabled: boolean): Promise<void> {
+        thinking.value = selectedProfile.value?.supports_thinking === true && enabled
+        await persistComposerDefaults()
+    }
+
+    async function setBrowseMode(enabled: boolean): Promise<void> {
+        await chat.initialize()
+        await chat.setSurface(enabled ? 'browse' : 'chat')
+    }
+
+    async function saveKey(provider: TalosMobileProviderId, key: string): Promise<void> {
         await deps.setKey(provider, key)
-        await refreshSecrets()
+        secrets[provider] = true
+        await refreshProvider(provider)
+        ensureSelection(provider)
     }
-    async function removeKey(provider: string): Promise<void> {
+
+    async function removeKey(provider: TalosMobileProviderId): Promise<void> {
         await deps.clearKey(provider)
-        await refreshSecrets()
+        secrets[provider] = false
+        ensureSelection()
     }
-    async function send(text: string): Promise<void> {
-        await chat.send(text)
+
+    async function saveEndpoint(provider: TalosMobileProviderId, endpoint: string): Promise<void> {
+        await deps.setEndpoint(provider, endpoint)
+        endpoints[provider] = endpoint
+        await refreshProvider(provider)
+        ensureSelection(provider)
+    }
+
+    async function removeEndpoint(provider: TalosMobileProviderId): Promise<void> {
+        await deps.clearEndpoint(provider)
+        endpoints[provider] = null
+        const state = catalogs[provider]
+        state.configured = false
+        state.status = 'idle'
+        state.error = null
+        state.models = []
+        state.updatedAt = null
+        ensureSelection()
+    }
+
+    async function probeProvider(provider: TalosMobileProviderId): Promise<TalosMobileProviderProbeResult> {
+        try {
+            const catalog = await refreshProvider(provider)
+            if (!catalog) {
+                return { ok: false, provider, message: `Configure ${provider} before testing.` }
+            }
+            const count = catalog.models.length
+            return {
+                ok: count > 0,
+                provider,
+                modelId: catalog.models[0]?.id ?? null,
+                message: `${count} ${count === 1 ? 'model' : 'models'} available.`,
+            }
+        } catch (error) {
+            return {
+                ok: false,
+                provider,
+                message: catalogs[provider].error ?? safeProviderMessage(error, null),
+            }
+        }
+    }
+
+    async function probeModel(profileId: string): Promise<TalosMobileModelProbeRecord> {
+        const profile = profiles.value.find((candidate) => candidate.id === profileId)
+        const providerModel = availableProviderModels.value.find((candidate) =>
+            candidate.provider === profile?.provider && candidate.id === profile?.model,
+        )
+        if (!profile || !providerModel) throw new Error('The selected model no longer exists.')
+
+        const [apiKey, endpoint] = await Promise.all([
+            deps.getKey(profile.provider),
+            deps.getEndpoint(profile.provider),
+        ])
+        const timeoutSeconds = modelLabPreferences.value.provider_runtime[profile.provider]?.timeout_seconds
+        const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
+        const startedAt = Date.now()
+        let ok = false
+        let message = 'Completion probe failed.'
+        try {
+            const adapter = providerAdapterFor(profile.provider)
+            if (adapter.requiresSecret && !apiKey) throw new Error(`Add your ${profile.provider} API key before testing.`)
+            if (!adapter.requiresSecret && !endpoint) throw new Error(`Configure the ${profile.provider} endpoint before testing.`)
+            const completion = await adapter.complete({
+                model: providerModel,
+                turns: [{ role: 'user', content: `Reply exactly ${TALOS_MODEL_PROBE_SENTINEL}` }],
+                system: `Return only ${TALOS_MODEL_PROBE_SENTINEL}.`,
+                effort: 'off',
+                thinking: false,
+            }, { apiKey, endpoint, timeoutMs }, deps.transport)
+            ok = completion.text.trim() === TALOS_MODEL_PROBE_SENTINEL
+            message = ok
+                ? 'Completion probe passed.'
+                : 'The provider responded, but not with the required probe result.'
+        } catch (error) {
+            message = safeProviderMessage(error, apiKey)
+        }
+
+        const latency = Math.min(300_000, Math.max(0, Date.now() - startedAt))
+        const record: TalosMobileModelProbeRecord = {
+            profile_id: profile.id,
+            provider: profile.provider,
+            model: profile.model,
+            ok,
+            checked_at: new Date().toISOString(),
+            latency_ms: latency,
+            message: message.slice(0, 500),
+        }
+        const current = profiles.value.find((candidate) => candidate.id === profile.id)
+        if (!current || current.provider !== profile.provider || current.model !== profile.model) {
+            throw new Error('The model changed while TALOS was testing it. Retry on the current catalog.')
+        }
+        await updateModelLab((preferences) => {
+            preferences.probe_results[profile.id] = record
+        })
+        return record
+    }
+
+    async function refreshConfiguredProviders(): Promise<void> {
+        await Promise.all(PROVIDER_IDS.map(async (provider) => {
+            if (!catalogs[provider].configured) return
+            try {
+                await refreshProvider(provider)
+            } catch {
+                // The provider catalog keeps its own safe, actionable failure state.
+            }
+        }))
+    }
+
+    function clearPromptEnhancement(): void {
+        promptEnhancementRevision += 1
+        enhancingPrompt.value = false
+        promptEnhancement.value = null
+        promptEnhancementError.value = null
+    }
+
+    async function enhancePrompt(text: string): Promise<TalosMobilePromptEnhancementResult | null> {
+        const revision = ++promptEnhancementRevision
+        enhancingPrompt.value = true
+        promptEnhancement.value = null
+        promptEnhancementError.value = null
+
+        const profile = selectedProfile.value
+        const providerModel = selectedProviderModel.value
+        let apiKey: string | null = null
+        try {
+            const promptModule = await import('@/lib/chat/promptEnhancement')
+            if (revision !== promptEnhancementRevision) return null
+            const [storedKey, endpoint] = profile
+                ? await Promise.all([
+                    deps.getKey(profile.provider),
+                    deps.getEndpoint(profile.provider),
+                ])
+                : [null, null]
+            apiKey = storedKey
+            if (revision !== promptEnhancementRevision) return null
+            const timeoutSeconds = profile
+                ? modelLabPreferences.value.provider_runtime[profile.provider]?.timeout_seconds
+                : undefined
+
+            const result = await promptModule.runTalosMobilePromptEnhancement(
+                {
+                    profile,
+                    providerModel,
+                    apiKey,
+                    endpoint,
+                    timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : undefined,
+                    effort: effort.value,
+                    thinking: thinking.value,
+                },
+                text,
+                deps.transport,
+            )
+            if (revision !== promptEnhancementRevision) return null
+
+            promptEnhancement.value = result
+            return result
+        } catch (error) {
+            if (revision !== promptEnhancementRevision) return null
+            const safeMessage = safeProviderMessage(error, apiKey)
+            promptEnhancementError.value = safeMessage
+            if (error instanceof Error && error.message === safeMessage) throw error
+            throw new Error(safeMessage)
+        } finally {
+            if (revision === promptEnhancementRevision) enhancingPrompt.value = false
+        }
+    }
+
+    async function send(text: string): Promise<boolean> {
+        clearPromptEnhancement()
+        const accepted = await chat.send(
+            text,
+            selectedModelId.value,
+            {},
+            attachments.bindings.value,
+        )
+        if (accepted) attachments.clearSent()
+        return accepted
+    }
+
+    async function resendMessage(messageId: string): Promise<void> {
+        clearPromptEnhancement()
+        const message = chat.messages.find((candidate) => candidate.id === messageId)
+        if (!message || message.role !== 'user') throw new Error('TALOS could not find the message to resend.')
+        await chat.send(message.content, selectedModelId.value, {
+            command_id: 'resend_message',
+            resend_of_message_id: message.id,
+        })
+    }
+
+    async function retryAssistantMessage(messageId: string): Promise<void> {
+        clearPromptEnhancement()
+        const index = chat.messages.findIndex((candidate) => candidate.id === messageId)
+        const message = index >= 0 ? chat.messages[index] : null
+        if (!message || message.role !== 'assistant') throw new Error('TALOS could not find the response to retry.')
+        const previousUser = chat.messages.slice(0, index).reverse().find((candidate) => candidate.role === 'user')
+        if (!previousUser) throw new Error('TALOS could not find the prompt that produced this answer.')
+        await chat.send(previousUser.content, selectedModelId.value, {
+            command_id: 'retry_assistant_response',
+            retry_of_message_id: message.id,
+            resend_of_message_id: previousUser.id,
+        })
+    }
+
+    async function newSession(): Promise<void> {
+        clearPromptEnhancement()
+        await chat.createSession('New chat', selectedModelId.value)
+    }
+
+    async function selectSession(sessionId: string): Promise<void> {
+        clearPromptEnhancement()
+        await chat.selectSession(sessionId)
+        const restoredModel = chat.activeSession.value?.active_model_profile_id
+        if (restoredModel) applyModelSelection(restoredModel)
+    }
+
+    async function renameSession(sessionId: string, title: string): Promise<void> {
+        await chat.renameSession(sessionId, title)
+    }
+
+    async function deleteSession(sessionId: string): Promise<void> {
+        clearPromptEnhancement()
+        await chat.deleteSession(sessionId)
+        const restoredModel = chat.activeSession.value?.active_model_profile_id
+        if (restoredModel) applyModelSelection(restoredModel)
     }
 
     return {
+        catalogs: readonly(catalogs) as Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>,
+        endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
+        modelLabPreferences,
         profiles,
         selectedModelId,
         selectedProfile,
+        selectedProviderModel,
         effort,
         effortLadder,
         thinking,
         canSend,
+        browseMode,
         sendDisabledReason,
+        preferenceError: readonly(preferenceError),
+        enhancingPrompt: readonly(enhancingPrompt),
+        promptEnhancement: readonly(promptEnhancement),
+        promptEnhancementError: readonly(promptEnhancementError),
+        attachments,
         chat,
         secrets: readonly(secrets),
         init,
         refreshSecrets,
+        refreshProvider,
+        refreshConfiguredProviders,
+        probeProvider,
+        probeModel,
+        setModelVisibility,
+        setModelDisplayName,
+        saveManualModel,
+        removeManualModel,
+        setProviderTimeout,
         selectModel,
         selectEffort,
         setThinking,
+        setBrowseMode,
         saveKey,
         removeKey,
+        saveEndpoint,
+        removeEndpoint,
+        newSession,
+        selectSession,
+        renameSession,
+        deleteSession,
+        resendMessage,
+        retryAssistantMessage,
         send,
+        enhancePrompt,
+        clearPromptEnhancement,
     }
 }
 
 let singleton: ChatController | null = null
+
 export function useChatController(): ChatController {
     if (!singleton) singleton = createChatController()
     return singleton
