@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     BrainCircuit,
     Camera,
@@ -8,7 +8,6 @@ import {
     FileText,
     Globe2,
     Loader2,
-    Mic,
     MoreHorizontal,
     Paperclip,
     RefreshCw,
@@ -31,7 +30,39 @@ import { Gauge } from '@lucide/vue'
 import { isTalosCommandEnabled } from '../../../lib/commandRegistry'
 import { filterTalosSlashCommands } from '../../../lib/talosSlashCommands'
 import { talosEffortLabel, talosEffortLadderFromLevels } from '../../../lib/talosEffort'
+import type { TalosDictationStatus, TalosResolvedDictationMode } from '../../../composables/useTalosDictation'
+import type { TalosDictationMode } from '../../../lib/talosDictationModes'
 import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode } from '../../../lib/talosTypes'
+
+const TalosDictationStatusPanel = defineAsyncComponent(() => import('./TalosDictationStatus.vue'))
+const dictationAsyncControlClass = 'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] lg:min-h-8'
+const TalosDictationButtonLoading = defineComponent({
+    name: 'TalosDictationButtonLoading',
+    inheritAttrs: false,
+    setup: () => () => h('span', {
+        class: dictationAsyncControlClass,
+        'aria-hidden': 'true',
+    }, [h(Loader2, { class: 'h-4 w-4 animate-spin' })]),
+})
+const TalosDictationButtonError = defineComponent({
+    name: 'TalosDictationButtonError',
+    inheritAttrs: false,
+    setup: () => () => h('button', {
+        type: 'button',
+        disabled: true,
+        class: `${dictationAsyncControlClass} opacity-60`,
+        'aria-label': 'Dictation control unavailable',
+        title: 'Dictation control could not load. Reload TALOS to try again.',
+    }, [h(ShieldAlert, { class: 'h-4 w-4' })]),
+})
+const TalosDictationButton = defineAsyncComponent({
+    loader: () => import('./TalosDictationButton.vue'),
+    loadingComponent: TalosDictationButtonLoading,
+    errorComponent: TalosDictationButtonError,
+    delay: 0,
+    timeout: 10_000,
+    onError: (_error, retry, fail, attempts) => { if (attempts < 2) retry(); else fail() },
+})
 
 const prompt = defineModel<string>('prompt', { required: true })
 
@@ -60,7 +91,11 @@ const props = withDefaults(defineProps<{
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
     vaultPickerLoading?: boolean
     lastUserPrompt?: string | null
-    dictationStatus?: string
+    dictationStatus?: TalosDictationStatus
+    dictationError?: string | null
+    dictationMode?: TalosDictationMode
+    dictationRecordingStartedAt?: number | null
+    dictationResolvedMode?: TalosResolvedDictationMode | null
     dictationSupported?: boolean
 }>(), {
     devBrowserEvidence: false,
@@ -70,6 +105,10 @@ const props = withDefaults(defineProps<{
     vaultPickerLoading: false,
     lastUserPrompt: null,
     dictationStatus: 'idle',
+    dictationError: null,
+    dictationMode: 'local',
+    dictationRecordingStartedAt: null,
+    dictationResolvedMode: null,
     dictationSupported: false,
     selectedEffort: 'high',
     thinking: false,
@@ -99,6 +138,9 @@ const emit = defineEmits<{
     removeAttachment: [id: string]
     openVaultPicker: []
     toggleDictation: []
+    finishDictation: []
+    cancelDictation: []
+    retryDictation: []
 }>()
 
 const attachmentInput = ref<HTMLInputElement | null>(null)
@@ -377,6 +419,16 @@ onBeforeUnmount(() => {
                 </button>
             </span>
         </div>
+        <TalosDictationStatusPanel
+            v-if="dictationStatus !== 'idle'"
+            :status="dictationStatus"
+            :error="dictationError"
+            :recording-started-at="dictationRecordingStartedAt"
+            :resolved-mode="dictationResolvedMode"
+            @finish="emit('finishDictation')"
+            @cancel="emit('cancelDictation')"
+            @retry="emit('retryDictation')"
+        />
         <div data-testid="talos-composer-capability-row" class="mt-1 flex min-w-0 items-end justify-between gap-2 px-1 pb-1">
             <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                 <Tooltip content="Model">
@@ -603,27 +655,12 @@ onBeforeUnmount(() => {
                 <Tooltip :content="enhanceTitle">
                     <Button type="button" variant="ghost" size="icon" data-testid="talos-composer-enhance" aria-label="Improve prompt" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
                 </Tooltip>
-                <Tooltip
+                <TalosDictationButton
                     v-if="dictationSupported"
-                    :content="dictationStatus === 'recording' ? 'Stop dictation' : dictationStatus === 'transcribing' ? 'Transcribing…' : 'Dictate'"
-                >
-                    <button
-                        type="button"
-                        data-testid="talos-composer-dictate"
-                        :data-dictation-status="dictationStatus"
-                        class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border px-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                        :class="dictationStatus === 'recording'
-                            ? 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
-                            : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
-                        :aria-label="dictationStatus === 'recording' ? 'Stop dictation' : 'Dictate'"
-                        :aria-pressed="dictationStatus === 'recording'"
-                        :disabled="dictationStatus === 'transcribing'"
-                        @click="emit('toggleDictation')"
-                    >
-                        <Loader2 v-if="dictationStatus === 'transcribing'" class="h-4 w-4 animate-spin" />
-                        <Mic v-else class="h-3.5 w-3.5" :class="dictationStatus === 'recording' ? 'animate-pulse' : ''" />
-                    </button>
-                </Tooltip>
+                    :status="dictationStatus"
+                    :supported="dictationSupported"
+                    @toggle="emit('toggleDictation')"
+                />
                 <Tooltip v-if="visibility.more_tools !== false" content="More tools">
                     <Button type="button" variant="ghost" size="icon" aria-label="Open settings" @click="emit('openSettings')"><SlidersHorizontal class="h-4 w-4" /></Button>
                 </Tooltip>
