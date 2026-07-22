@@ -4218,6 +4218,65 @@ test('prompt enhancer exposes pending and controlled provider failure states wit
     expect(chatRequests).toHaveLength(0)
 })
 
+test('dictation driver records browser audio from the mic immediately right of prompt enhancer', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-driver', 'Requires the dedicated Chromium fake microphone driver.')
+
+    let capturedAudioBytes = 0
+    let capturedContentType = ''
+
+    await page.route('**/api/talos/stt/transcribe', async (route) => {
+        const request = route.request()
+        const body = request.postDataBuffer()
+        capturedAudioBytes = body?.byteLength ?? 0
+        capturedContentType = request.headers()['content-type'] ?? ''
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                text: 'dettatura registrata dal driver',
+                language: 'it',
+                duration_ms: 750,
+            }),
+        })
+    })
+
+    await page.evaluate(() => window.localStorage.setItem('talos.dictation_mode', 'cloud'))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const enhancer = page.getByTestId('talos-composer-enhance')
+    const mic = page.getByTestId('talos-composer-dictate')
+    await expect(enhancer).toBeVisible()
+    await expect(mic).toBeVisible()
+
+    const [enhancerBox, micBox] = await Promise.all([enhancer.boundingBox(), mic.boundingBox()])
+    expect(enhancerBox).not.toBeNull()
+    expect(micBox).not.toBeNull()
+    expect(Math.abs((micBox?.y ?? 0) - (enhancerBox?.y ?? 0))).toBeLessThanOrEqual(2)
+    expect(micBox?.x ?? 0).toBeGreaterThanOrEqual((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))
+    expect((micBox?.x ?? 0) - ((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))).toBeLessThanOrEqual(8)
+
+    await mic.click()
+    await expect(mic).toHaveAttribute('data-dictation-status', 'recording')
+    await page.waitForTimeout(750)
+    await mic.click()
+
+    await expect(page.getByLabel('Message TALOS')).toHaveValue('dettatura registrata dal driver')
+    await expect(mic).toHaveAttribute('data-dictation-status', 'idle')
+    expect(capturedContentType).toContain('multipart/form-data; boundary=')
+    expect(capturedAudioBytes).toBeGreaterThan(1_024)
+
+    await testInfo.attach('dictation-driver-evidence.json', {
+        body: Buffer.from(JSON.stringify({ capturedAudioBytes, capturedContentType }, null, 2)),
+        contentType: 'application/json',
+    })
+    await testInfo.attach('dictation-driver-composer.png', {
+        body: await page.getByTestId('talos-composer-capability-row').screenshot(),
+        contentType: 'image/png',
+    })
+})
+
 test('temporary chat mode creates an explicit temporary session before sending', async ({ page }, testInfo) => {
     await openWorkspace(page)
 
@@ -5400,6 +5459,125 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
     })).toBe(true)
     await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
     await expectComposerMode(page, 'full')
+})
+
+test('desktop message-style sections persist visually at the full chat-container width', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop width regression is covered at an exact 1920x1080 viewport')
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await installTalosApiMocks(page, {
+        initialSessions: [{
+            id: 'session-message-style-width-e2e',
+            title: 'Desktop message width',
+            messages: [
+                {
+                    role: 'user',
+                    content: 'Verify that desktop assistant sections use the complete chat container.',
+                    metadata: { source: 'e2e-source' },
+                },
+                {
+                    role: 'assistant',
+                    content: 'This answer is intentionally concise so its surface width comes from layout, not intrinsic content.',
+                    metadata: { source: 'talos_chat_proxy' },
+                },
+            ],
+        }],
+        initialSettings: {
+            preferences: {
+                chat_layout: {
+                    bubble_scale: 'balanced',
+                    composer_mode: 'minimal',
+                    message_style: 'sections',
+                    advanced_rail_expanded: false,
+                    mobile_window_presentation: 'drawer',
+                },
+                appearance_visibility: {
+                    chat_area: { full_width_chat: true },
+                },
+            },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const openSession = page.getByRole('button', { name: 'Open chat Desktop message width', exact: true })
+    await openSession.click()
+    const assistant = page.locator('[data-message-role="assistant"] > .talos-message-bubble[data-message-kind="assistant"]').filter({
+        hasText: 'This answer is intentionally concise',
+    }).first()
+    await expect(assistant).toBeVisible()
+
+    const geometry = async () => assistant.evaluate((element) => {
+        const surface = element.getBoundingClientRect()
+        const parent = element.parentElement?.getBoundingClientRect()
+        const computed = window.getComputedStyle(element)
+
+        return {
+            surfaceWidth: surface.width,
+            parentWidth: parent?.width ?? 0,
+            rightGap: parent ? parent.right - surface.right : Number.POSITIVE_INFINITY,
+            maxWidth: computed.maxWidth,
+            messageStyle: element.getAttribute('data-message-style'),
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+        }
+    })
+
+    const initialSectionsGeometry = await geometry()
+    await testInfo.attach('message-style-sections-initial-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+    expect(initialSectionsGeometry.parentWidth, JSON.stringify(initialSectionsGeometry)).toBeGreaterThan(900)
+    expect(initialSectionsGeometry.rightGap, JSON.stringify(initialSectionsGeometry)).toBeLessThanOrEqual(1)
+    expect(initialSectionsGeometry.maxWidth).toBe('none')
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await selectThemedOption(page, 'Message style', 'bubbles')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+
+    await expect(assistant).toHaveAttribute('data-message-style', 'bubbles')
+    const bubblesGeometry = await geometry()
+    expect(bubblesGeometry.surfaceWidth, JSON.stringify(bubblesGeometry)).toBeLessThan(bubblesGeometry.parentWidth - 100)
+    await testInfo.attach('message-style-bubbles-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await selectThemedOption(page, 'Message style', 'sections')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+
+    await expect(assistant).toHaveAttribute('data-message-style', 'sections')
+    const sectionsGeometry = await geometry()
+    expect(sectionsGeometry.rightGap, JSON.stringify(sectionsGeometry)).toBeLessThanOrEqual(1)
+    expect(sectionsGeometry.maxWidth).toBe('none')
+    await testInfo.attach('message-style-sections-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+    await testInfo.attach('message-style-geometry-1920x1080.json', {
+        body: Buffer.from(JSON.stringify({ initialSectionsGeometry, bubblesGeometry, sectionsGeometry }, null, 2)),
+        contentType: 'application/json',
+    })
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    const reloadedOpenSession = page.getByRole('button', { name: 'Open chat Desktop message width', exact: true })
+    if (await reloadedOpenSession.isVisible().catch(() => false)) {
+        await reloadedOpenSession.click()
+    }
+    await expect(assistant).toHaveAttribute('data-message-style', 'sections')
+    const reloadedGeometry = await geometry()
+    expect(reloadedGeometry.rightGap, JSON.stringify(reloadedGeometry)).toBeLessThanOrEqual(1)
+    expect(reloadedGeometry.maxWidth).toBe('none')
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
 })
 
 test('Settings opens Doctor directly on the Backup section', async ({ page, isMobile }) => {

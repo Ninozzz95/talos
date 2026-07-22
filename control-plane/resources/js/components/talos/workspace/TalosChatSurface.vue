@@ -815,6 +815,10 @@ defineExpose({ scrollToBottom })
     line-height: var(--talos-message-line-height, 1.5rem);
 }
 
+.talos-message-bubble.talos-message-section {
+    max-width: none;
+}
+
 .talos-message-bubble[data-message-kind='system'] {
     border: 0;
     background: transparent;
