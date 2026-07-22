@@ -59,4 +59,3 @@ function setVision(event: Event): void {
         </label>
     </div>
 </template>
-

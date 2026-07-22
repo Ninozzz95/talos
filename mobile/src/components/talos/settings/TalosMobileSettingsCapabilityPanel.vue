@@ -24,4 +24,3 @@ defineProps<{ tab: TalosMobileSettingsTab }>()
         </p>
     </section>
 </template>
-
