@@ -5402,6 +5402,125 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
     await expectComposerMode(page, 'full')
 })
 
+test('desktop message-style sections persist visually at the full chat-container width', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop width regression is covered at an exact 1920x1080 viewport')
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await installTalosApiMocks(page, {
+        initialSessions: [{
+            id: 'session-message-style-width-e2e',
+            title: 'Desktop message width',
+            messages: [
+                {
+                    role: 'user',
+                    content: 'Verify that desktop assistant sections use the complete chat container.',
+                    metadata: { source: 'e2e-source' },
+                },
+                {
+                    role: 'assistant',
+                    content: 'This answer is intentionally concise so its surface width comes from layout, not intrinsic content.',
+                    metadata: { source: 'talos_chat_proxy' },
+                },
+            ],
+        }],
+        initialSettings: {
+            preferences: {
+                chat_layout: {
+                    bubble_scale: 'balanced',
+                    composer_mode: 'minimal',
+                    message_style: 'sections',
+                    advanced_rail_expanded: false,
+                    mobile_window_presentation: 'drawer',
+                },
+                appearance_visibility: {
+                    chat_area: { full_width_chat: true },
+                },
+            },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const openSession = page.getByRole('button', { name: 'Open chat Desktop message width', exact: true })
+    await openSession.click()
+    const assistant = page.locator('[data-message-role="assistant"] > .talos-message-bubble[data-message-kind="assistant"]').filter({
+        hasText: 'This answer is intentionally concise',
+    }).first()
+    await expect(assistant).toBeVisible()
+
+    const geometry = async () => assistant.evaluate((element) => {
+        const surface = element.getBoundingClientRect()
+        const parent = element.parentElement?.getBoundingClientRect()
+        const computed = window.getComputedStyle(element)
+
+        return {
+            surfaceWidth: surface.width,
+            parentWidth: parent?.width ?? 0,
+            rightGap: parent ? parent.right - surface.right : Number.POSITIVE_INFINITY,
+            maxWidth: computed.maxWidth,
+            messageStyle: element.getAttribute('data-message-style'),
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+        }
+    })
+
+    const initialSectionsGeometry = await geometry()
+    await testInfo.attach('message-style-sections-initial-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+    expect(initialSectionsGeometry.parentWidth, JSON.stringify(initialSectionsGeometry)).toBeGreaterThan(900)
+    expect(initialSectionsGeometry.rightGap, JSON.stringify(initialSectionsGeometry)).toBeLessThanOrEqual(1)
+    expect(initialSectionsGeometry.maxWidth).toBe('none')
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await selectThemedOption(page, 'Message style', 'bubbles')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+
+    await expect(assistant).toHaveAttribute('data-message-style', 'bubbles')
+    const bubblesGeometry = await geometry()
+    expect(bubblesGeometry.surfaceWidth, JSON.stringify(bubblesGeometry)).toBeLessThan(bubblesGeometry.parentWidth - 100)
+    await testInfo.attach('message-style-bubbles-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await selectThemedOption(page, 'Message style', 'sections')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+
+    await expect(assistant).toHaveAttribute('data-message-style', 'sections')
+    const sectionsGeometry = await geometry()
+    expect(sectionsGeometry.rightGap, JSON.stringify(sectionsGeometry)).toBeLessThanOrEqual(1)
+    expect(sectionsGeometry.maxWidth).toBe('none')
+    await testInfo.attach('message-style-sections-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+    await testInfo.attach('message-style-geometry-1920x1080.json', {
+        body: Buffer.from(JSON.stringify({ initialSectionsGeometry, bubblesGeometry, sectionsGeometry }, null, 2)),
+        contentType: 'application/json',
+    })
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    const reloadedOpenSession = page.getByRole('button', { name: 'Open chat Desktop message width', exact: true })
+    if (await reloadedOpenSession.isVisible().catch(() => false)) {
+        await reloadedOpenSession.click()
+    }
+    await expect(assistant).toHaveAttribute('data-message-style', 'sections')
+    const reloadedGeometry = await geometry()
+    expect(reloadedGeometry.rightGap, JSON.stringify(reloadedGeometry)).toBeLessThanOrEqual(1)
+    expect(reloadedGeometry.maxWidth).toBe('none')
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+})
+
 test('Settings opens Doctor directly on the Backup section', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), 'desktop multi-window routing is covered by the desktop project')
     await openWorkspace(page)
