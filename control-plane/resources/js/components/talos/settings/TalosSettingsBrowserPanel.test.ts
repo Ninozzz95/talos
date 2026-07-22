@@ -30,6 +30,27 @@ vi.mock('../../../composables/useTalosFileAuthority', async () => {
     }
 })
 
+// reka Select (themed dropdown) needs these APIs jsdom omits.
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => undefined
+}
+if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false
+    Element.prototype.setPointerCapture = () => undefined
+    Element.prototype.releasePointerCapture = () => undefined
+}
+
+async function settle() {
+    await nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+}
+
+function firePointer(element: Element, type: 'pointerdown' | 'pointerup') {
+    const Ctor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent
+    element.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, button: 0 }))
+}
+
 let app: ReturnType<typeof createApp> | null = null
 
 afterEach(() => {
@@ -57,20 +78,24 @@ describe('TalosSettingsBrowserPanel', () => {
         app.mount(root)
         await nextTick()
 
-        const select = root.querySelector<HTMLSelectElement>('[aria-label="Browser interaction policy"]')
-        expect(select).not.toBeNull()
+        const trigger = root.querySelector<HTMLElement>('[aria-label="Browser interaction policy"]')
+        expect(trigger?.tagName).toBe('BUTTON')
         expect(root.textContent).toContain('Effective: Confirm every interaction')
         expect(root.textContent).toContain('Workspace minimum')
         expect(root.textContent).toContain('File authority')
-        expect(select?.querySelector<HTMLOptionElement>('option[value="confirm_sensitive"]')?.disabled).toBe(true)
-        expect(select?.querySelector<HTMLOptionElement>('option[value="confirm_every_interaction"]')?.disabled).toBe(false)
-        expect(select?.querySelector<HTMLOptionElement>('option[value="read_only"]')?.disabled).toBe(false)
 
-        if (select) {
-            select.value = 'read_only'
-            select.dispatchEvent(new Event('change', { bubbles: true }))
-            await nextTick()
-        }
+        if (trigger) firePointer(trigger, 'pointerdown')
+        await settle()
+
+        expect(document.querySelector('[data-value="confirm_sensitive"]')?.hasAttribute('data-disabled')).toBe(true)
+        expect(document.querySelector('[data-value="confirm_every_interaction"]')?.hasAttribute('data-disabled')).toBe(false)
+        expect(document.querySelector('[data-value="read_only"]')?.hasAttribute('data-disabled')).toBe(false)
+
+        const readOnly = document.querySelector<HTMLElement>('[data-value="read_only"]')
+        readOnly?.focus()
+        readOnly?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        await settle()
+
         expect(updates).toEqual(['read_only'])
     })
 })

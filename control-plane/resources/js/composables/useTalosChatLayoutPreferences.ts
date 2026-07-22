@@ -1,6 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { sanitizeTalosChatLayout } from '../lib/talosChatLayout'
-import type { TalosChatBubbleScale, TalosComposerMode, TalosMobileWindowPresentation } from '../lib/talosTypes'
+import type { TalosChatBubbleScale, TalosComposerMode, TalosMessageStyle, TalosMobileWindowPresentation } from '../lib/talosTypes'
 import type { TalosWorkspaceSettings, UpdateTalosSettingsPayload } from './useTalosSettings'
 
 type UpdateSettings = (payload: UpdateTalosSettingsPayload) => Promise<TalosWorkspaceSettings>
@@ -12,6 +12,7 @@ export function useTalosChatLayoutPreferences(
 ) {
     const bubbleScale = ref<TalosChatBubbleScale>('balanced')
     const composerMode = ref<TalosComposerMode>('full')
+    const messageStyle = ref<TalosMessageStyle>('sections')
     const advancedRailExpanded = ref(false)
     const mobileWindowPresentation = ref<TalosMobileWindowPresentation>('drawer')
     const policyLocked = computed(() => workspaceSettings.value?.preferences?.theme_policy_locked === true)
@@ -21,6 +22,7 @@ export function useTalosChatLayoutPreferences(
         const layout = sanitizeTalosChatLayout(value)
         bubbleScale.value = layout.bubble_scale
         composerMode.value = layout.composer_mode
+        messageStyle.value = layout.message_style
         advancedRailExpanded.value = layout.advanced_rail_expanded
         mobileWindowPresentation.value = layout.mobile_window_presentation
     }
@@ -39,6 +41,7 @@ export function useTalosChatLayoutPreferences(
                     ...(includeVisualPreferences ? {
                         bubble_scale: bubbleScale.value,
                         composer_mode: composerMode.value,
+                        message_style: messageStyle.value,
                         mobile_window_presentation: mobileWindowPresentation.value,
                     } : {}),
                     advanced_rail_expanded: advancedRailExpanded.value,
@@ -73,6 +76,12 @@ export function useTalosChatLayoutPreferences(
         persist()
     }
 
+    function setMessageStyle(next: TalosMessageStyle) {
+        if (policyLocked.value) return
+        messageStyle.value = next
+        persist()
+    }
+
     function toggleAdvancedRail() {
         advancedRailExpanded.value = !advancedRailExpanded.value
         persist(false)
@@ -82,6 +91,7 @@ export function useTalosChatLayoutPreferences(
         bubbleScale,
         bubbleScaleLabel,
         composerMode,
+        messageStyle,
         advancedRailExpanded,
         mobileWindowPresentation,
         policyLocked,
@@ -90,6 +100,7 @@ export function useTalosChatLayoutPreferences(
         incrementBubbleScale,
         resetBubbleScale,
         toggleComposerMode,
+        setMessageStyle,
         toggleAdvancedRail,
     }
 }

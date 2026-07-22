@@ -33,6 +33,7 @@ import type {
     TalosBrowserSnapshotPreview,
     TalosBrowserTask,
     TalosChatBubbleScale,
+    TalosMessageStyle,
     TalosMobileWindowPresentation,
     TalosPendingToolApproval,
 } from '../../../lib/talosTypes'
@@ -74,6 +75,7 @@ const props = withDefaults(defineProps<{
     sensitiveBlur: boolean
     censorEnabled?: boolean
     bubbleScale: TalosChatBubbleScale
+    messageStyle?: TalosMessageStyle
     browserActivities: TalosBrowserActivityItem[]
     browserSnapshot: TalosBrowserSnapshotPreview | null
     activeBrowserSession: TalosBrowserSession | null
@@ -96,6 +98,7 @@ const props = withDefaults(defineProps<{
 }>(), {
     censorEnabled: true,
     developmentMode: false,
+    messageStyle: 'sections',
 })
 
 const emit = defineEmits<{
@@ -300,6 +303,39 @@ watch(() => [props.messages.length, props.browserActivities.length, props.expand
 
 function formatTime(value: string) {
     return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+// Assistant answers render as full-width sections (no bubble) unless the operator
+// opted back into bubbles; user and system messages are unaffected by this choice.
+function messageSurfaceClass(message: TalosMessage) {
+    if (message.role === 'user') {
+        return 'max-w-[min(720px,100%)] border border-transparent bg-[var(--talos-user)] text-[var(--talos-user-text)]'
+    }
+    if (message.role === 'system') {
+        return 'w-full max-w-full border border-transparent bg-transparent text-[var(--talos-text)]'
+    }
+    if (props.messageStyle === 'sections') {
+        return 'talos-message-section w-full max-w-full border border-transparent bg-transparent text-[var(--talos-text)]'
+    }
+    return 'max-w-[min(720px,100%)] border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]'
+}
+
+// Long user messages collapse by default with an explicit Expand/Reduce control,
+// keeping the thread scannable without ever silently truncating content.
+const expandedUserMessages = ref<Set<string>>(new Set())
+function userMessageIsLong(message: TalosMessage) {
+    if (message.role !== 'user') return false
+    const content = message.content ?? ''
+    return content.length > 320 || content.split('\n').length > 6
+}
+function userMessageCollapsed(message: TalosMessage) {
+    return userMessageIsLong(message) && !expandedUserMessages.value.has(message.id)
+}
+function toggleUserMessageExpanded(id: string) {
+    const next = new Set(expandedUserMessages.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    expandedUserMessages.value = next
 }
 
 function messageLabel(message: TalosMessage) {
@@ -524,11 +560,8 @@ defineExpose({ scrollToBottom })
                         class="talos-message-bubble min-w-0 rounded-md"
                         :data-message-kind="message.role"
                         :data-bubble-scale="bubbleScale"
-                        :class="message.role === 'user'
-                            ? 'max-w-[min(720px,100%)] border border-transparent bg-[var(--talos-user)] text-[var(--talos-user-text)]'
-                            : message.role === 'system'
-                                ? 'w-full max-w-full border border-transparent bg-transparent text-[var(--talos-text)]'
-                                : 'max-w-[min(720px,100%)] border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]'"
+                        :data-message-style="messageStyle"
+                        :class="messageSurfaceClass(message)"
                     >
                         <div v-if="message.role !== 'system'" class="talos-message-meta mb-2 flex flex-wrap items-center gap-2 opacity-80">
                             <span class="font-semibold">{{ messageLabel(message) }}</span>
@@ -601,12 +634,23 @@ defineExpose({ scrollToBottom })
                             v-if="message.role === 'assistant'"
                             :message="message"
                         />
-                        <p
-                            v-if="message.role !== 'assistant' && message.role !== 'system'"
-                            class="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]"
-                        >
-                            {{ message.content }}
-                        </p>
+                        <template v-if="message.role !== 'assistant' && message.role !== 'system'">
+                            <p
+                                class="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]"
+                                :class="userMessageCollapsed(message) ? 'max-h-[7.5em] overflow-hidden [mask-image:linear-gradient(#000_65%,transparent)]' : ''"
+                            >
+                                {{ message.content }}
+                            </p>
+                            <button
+                                v-if="userMessageIsLong(message)"
+                                type="button"
+                                data-testid="talos-user-message-toggle"
+                                class="mt-1.5 text-xs font-semibold text-[var(--talos-accent)] hover:underline"
+                                @click="toggleUserMessageExpanded(message.id)"
+                            >
+                                {{ userMessageCollapsed(message) ? 'Expand' : 'Reduce' }}
+                            </button>
+                        </template>
                         <div v-if="messageAttachments(message).length > 0" class="mt-2 flex flex-wrap gap-1.5">
                             <span
                                 v-for="attachment in messageAttachments(message)"

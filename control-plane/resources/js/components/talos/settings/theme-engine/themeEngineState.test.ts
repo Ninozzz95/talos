@@ -43,6 +43,7 @@ describe('Theme Engine persistence contract', () => {
 
         expect(nextPreferences.chat_layout).toEqual({
             ...namedTheme.chat_layout,
+            message_style: 'sections',
             mobile_window_presentation: 'drawer',
         })
         expect(nextPreferences.theme_motion_v6).toEqual(motionV6)
@@ -154,6 +155,7 @@ describe('Theme Engine persistence contract', () => {
 
         expect(parseStrictTalosThemeImport(validExport)?.chat_layout).toEqual({
             ...validExport.theme.chat_layout,
+            message_style: 'sections',
             mobile_window_presentation: 'drawer',
         })
         const legacyMotionV6 = createDefaultTalosMotionV6Preferences()
