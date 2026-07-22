@@ -1,18 +1,18 @@
 import { TalosApiError, talosFetch } from './api'
+import type { TalosDictationMode } from './talosDictationModes'
 
 // TALOS dictation (speech-to-text) — a pluggable engine contract so the mic UX is
 // built once and the engine is chosen at runtime. The default is in-browser Whisper
 // (privacy/local-first, works offline and on mobile-standalone); the server engine
 // powers the optional cloud mode against the control-plane STT worker.
+//
+// The mode enum + options live in ./talosDictationModes so the always-mounted UI can
+// import them without dragging this (talosFetch + transformers.js) into the entry chunk.
+// Re-exported here for callers that already reach for the engine module.
 
-export type TalosDictationMode = 'local' | 'cloud' | 'auto'
+export { TALOS_DICTATION_MODE_OPTIONS } from './talosDictationModes'
+export type { TalosDictationMode } from './talosDictationModes'
 export type TalosDictationEngineId = 'browser-whisper' | 'server-whisper'
-
-export const TALOS_DICTATION_MODE_OPTIONS: Array<{ value: TalosDictationMode; label: string }> = [
-    { value: 'local', label: 'On device (private)' },
-    { value: 'cloud', label: 'Cloud (accurate)' },
-    { value: 'auto', label: 'Automatic' },
-]
 
 // Typed fault codes — mirror the control-plane STT contract (TALOS_STT_* prefix).
 export type TalosSttFaultCode =

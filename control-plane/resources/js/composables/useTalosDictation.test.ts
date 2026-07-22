@@ -32,8 +32,13 @@ class FakeMediaRecorder {
 
 const getUserMedia = vi.fn()
 
-async function settle() {
-    for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+// finalize() lazily `import()`s the engine module, so wait on the observable outcome
+// rather than a fixed number of ticks (the dynamic import adds an extra async hop).
+async function flushUntil(predicate: () => boolean, tries = 50) {
+    for (let i = 0; i < tries && !predicate(); i += 1) {
+        await Promise.resolve()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+    }
 }
 
 beforeEach(() => {
@@ -66,7 +71,7 @@ describe('useTalosDictation', () => {
         expect(dictation.status.value).toBe('recording')
 
         dictation.stop()
-        await settle()
+        await flushUntil(() => transcribeMock.mock.calls.length > 0)
 
         expect(transcribeMock).toHaveBeenCalledTimes(1)
         expect(onTranscript).toHaveBeenCalledWith('ciao')

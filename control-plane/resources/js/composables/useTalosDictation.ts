@@ -1,9 +1,5 @@
 import { computed, ref } from 'vue'
-import {
-    TalosDictationError,
-    resolveTalosDictationEngine,
-    type TalosDictationMode,
-} from '../lib/talosDictation'
+import type { TalosDictationMode } from '../lib/talosDictationModes'
 
 const STORAGE_KEY = 'talos.dictation_mode'
 const MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
@@ -42,19 +38,27 @@ function pickMimeType(): string | undefined {
     return MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type))
 }
 
-function dictationErrorMessage(error: unknown): string {
-    if (error instanceof TalosDictationError) {
-        switch (error.code) {
-            case 'TALOS_STT_ENGINE_UNAVAILABLE': return 'The speech model is not available. Try again in a moment.'
-            case 'TALOS_STT_AUDIO_INVALID': return 'TALOS could not read the recorded audio.'
-            case 'TALOS_STT_AUDIO_TOO_LONG': return 'That clip is too long to transcribe.'
-            case 'TALOS_STT_AUDIO_TOO_LARGE': return 'That recording is too large to transcribe.'
-            case 'TALOS_STT_RATE_LIMITED': return 'Too many dictation requests. Wait a moment and retry.'
-            case 'TALOS_STT_TIMEOUT': return 'Transcription timed out. Try a shorter clip.'
-            default: return 'TALOS could not transcribe the audio.'
-        }
+// Duck-type the STT fault code so this composable stays free of the heavy engine
+// module (loaded lazily in finalize) — dictation faults always carry a TALOS_STT_* code.
+function sttFaultCode(error: unknown): string | null {
+    if (error && typeof error === 'object' && 'code' in error) {
+        const code = (error as { code?: unknown }).code
+        if (typeof code === 'string' && code.startsWith('TALOS_STT_')) return code
     }
-    return error instanceof Error ? error.message : 'TALOS could not transcribe the audio.'
+    return null
+}
+
+function dictationErrorMessage(error: unknown): string {
+    switch (sttFaultCode(error)) {
+        case 'TALOS_STT_ENGINE_UNAVAILABLE': return 'The speech model is not available. Try again in a moment.'
+        case 'TALOS_STT_AUDIO_INVALID': return 'TALOS could not read the recorded audio.'
+        case 'TALOS_STT_AUDIO_TOO_LONG': return 'That clip is too long to transcribe.'
+        case 'TALOS_STT_AUDIO_TOO_LARGE': return 'That recording is too large to transcribe.'
+        case 'TALOS_STT_RATE_LIMITED': return 'Too many dictation requests. Wait a moment and retry.'
+        case 'TALOS_STT_TIMEOUT': return 'Transcription timed out. Try a shorter clip.'
+        case null: return error instanceof Error ? error.message : 'TALOS could not transcribe the audio.'
+        default: return 'TALOS could not transcribe the audio.'
+    }
 }
 
 export function useTalosDictation(options: { onTranscript: (text: string) => void }) {
@@ -93,6 +97,8 @@ export function useTalosDictation(options: { onTranscript: (text: string) => voi
 
         status.value = 'transcribing'
         try {
+            // Lazy — keeps the server-whisper client and transformers.js out of the entry chunk.
+            const { resolveTalosDictationEngine } = await import('../lib/talosDictation')
             const engine = await resolveTalosDictationEngine(mode.value)
             const result = await engine.transcribe(blob)
             status.value = 'idle'
