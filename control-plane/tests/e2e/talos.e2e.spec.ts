@@ -4218,6 +4218,65 @@ test('prompt enhancer exposes pending and controlled provider failure states wit
     expect(chatRequests).toHaveLength(0)
 })
 
+test('dictation driver records browser audio from the mic immediately right of prompt enhancer', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-driver', 'Requires the dedicated Chromium fake microphone driver.')
+
+    let capturedAudioBytes = 0
+    let capturedContentType = ''
+
+    await page.route('**/api/talos/stt/transcribe', async (route) => {
+        const request = route.request()
+        const body = request.postDataBuffer()
+        capturedAudioBytes = body?.byteLength ?? 0
+        capturedContentType = request.headers()['content-type'] ?? ''
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                text: 'dettatura registrata dal driver',
+                language: 'it',
+                duration_ms: 750,
+            }),
+        })
+    })
+
+    await page.evaluate(() => window.localStorage.setItem('talos.dictation_mode', 'cloud'))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const enhancer = page.getByTestId('talos-composer-enhance')
+    const mic = page.getByTestId('talos-composer-dictate')
+    await expect(enhancer).toBeVisible()
+    await expect(mic).toBeVisible()
+
+    const [enhancerBox, micBox] = await Promise.all([enhancer.boundingBox(), mic.boundingBox()])
+    expect(enhancerBox).not.toBeNull()
+    expect(micBox).not.toBeNull()
+    expect(Math.abs((micBox?.y ?? 0) - (enhancerBox?.y ?? 0))).toBeLessThanOrEqual(2)
+    expect(micBox?.x ?? 0).toBeGreaterThanOrEqual((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))
+    expect((micBox?.x ?? 0) - ((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))).toBeLessThanOrEqual(8)
+
+    await mic.click()
+    await expect(mic).toHaveAttribute('data-dictation-status', 'recording')
+    await page.waitForTimeout(750)
+    await mic.click()
+
+    await expect(page.getByLabel('Message TALOS')).toHaveValue('dettatura registrata dal driver')
+    await expect(mic).toHaveAttribute('data-dictation-status', 'idle')
+    expect(capturedContentType).toContain('multipart/form-data; boundary=')
+    expect(capturedAudioBytes).toBeGreaterThan(1_024)
+
+    await testInfo.attach('dictation-driver-evidence.json', {
+        body: Buffer.from(JSON.stringify({ capturedAudioBytes, capturedContentType }, null, 2)),
+        contentType: 'application/json',
+    })
+    await testInfo.attach('dictation-driver-composer.png', {
+        body: await page.getByTestId('talos-composer-capability-row').screenshot(),
+        contentType: 'image/png',
+    })
+})
+
 test('temporary chat mode creates an explicit temporary session before sending', async ({ page }, testInfo) => {
     await openWorkspace(page)
 

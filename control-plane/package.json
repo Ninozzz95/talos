@@ -19,6 +19,7 @@
         "test:unit": "vitest run",
         "test:window-chunks": "npm run build && node --test scripts/window-chunk-contract.test.mjs",
         "test:e2e:visible-ui": "npm run build && playwright test --workers=1 --grep \"painted-frame\"",
+        "test:e2e:dictation-driver": "npm run build && playwright test --config=playwright.dictation.config.ts --workers=1",
         "test:e2e:cross-browser-smoke": "npm run build && playwright test --config=playwright.cross-browser.config.ts",
         "test:e2e": "npm run build && node --test scripts/window-chunk-contract.test.mjs && playwright test"
     },
