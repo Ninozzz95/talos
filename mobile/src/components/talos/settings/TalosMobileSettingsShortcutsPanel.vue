@@ -123,4 +123,3 @@ onBeforeUnmount(stopCapture)
         </section>
     </div>
 </template>
-

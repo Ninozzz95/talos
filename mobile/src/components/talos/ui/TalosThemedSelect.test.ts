@@ -20,7 +20,6 @@ afterEach(() => {
     app = undefined
     document.body.replaceChildren()
 })
-
 const ITEMS: TalosThemedSelectItem[] = [
     { value: 'forge', label: 'Forge' },
     { value: 'telemetry', label: 'Telemetry' },
@@ -73,4 +72,3 @@ describe('TalosThemedSelect mobile parity', () => {
         expect(state.value).toBe('telemetry')
     })
 })
-

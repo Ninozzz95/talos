@@ -30,4 +30,3 @@ export function talosBrowserHmiModeLabel(mode: TalosBrowserHmiMode) {
 export function talosBrowserHmiStrictness(mode: TalosBrowserHmiMode | null) {
     return mode === 'read_only' ? 3 : mode === 'confirm_every_interaction' ? 2 : mode === 'confirm_sensitive' ? 1 : 0
 }
-

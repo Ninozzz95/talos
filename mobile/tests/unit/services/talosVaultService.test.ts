@@ -78,7 +78,7 @@ describe('createTalosVaultService', () => {
             deletePrivate: vi.fn().mockResolvedValue(undefined),
         }
         const analysisClient: TalosAttachmentAnalysisClient = {
-            analyze: vi.fn().mockRejectedValue(new Error('parser stack and private path')), 
+            analyze: vi.fn().mockRejectedValue(new Error('parser stack and private path')),
         }
         const service = createTalosVaultService({
             repository,

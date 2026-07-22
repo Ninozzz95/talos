@@ -59,4 +59,3 @@ describe('mobile prompt enhancement contract', () => {
             .toThrowError(TalosMobilePromptEnhancementError)
     })
 })
-

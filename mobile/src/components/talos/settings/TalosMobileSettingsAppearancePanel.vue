@@ -279,4 +279,3 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
         </TabsContent>
     </TabsRoot>
 </template>
-

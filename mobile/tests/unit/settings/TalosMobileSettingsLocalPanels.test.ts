@@ -39,7 +39,6 @@ import TalosMobileSettingsShortcutsPanel from '@/components/talos/settings/Talos
 beforeEach(() => {
     vi.clearAllMocks()
 })
-
 describe('local-first Settings panels', () => {
     it('persists utility, research, and vision defaults', async () => {
         const wrapper = mount(TalosMobileSettingsAiDefaultsPanel, {
@@ -63,4 +62,3 @@ describe('local-first Settings panels', () => {
         expect(settings.setShortcut).toHaveBeenCalledWith('search_conversations', 'Ctrl+Shift+P')
     })
 })
-

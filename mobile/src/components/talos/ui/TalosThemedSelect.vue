@@ -107,4 +107,3 @@ const ITEM_CLASS = 'relative flex w-full cursor-pointer select-none items-center
         </SelectRoot>
     </div>
 </template>
-
