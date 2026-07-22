@@ -24,12 +24,16 @@ Rimpiazzare gli ~~8~~ **26** native `<select>` di Settings/Theme con `TalosTheme
 - Settings→Appearance: toggle "Sezioni / Bolle" (Bolle = stile attuale, niente si perde).
 **Esito:** `message_style` ('sections'|'bubbles', default 'sections') in `talosChatLayout.ts`/`talosTypes.ts`; `TalosChatSurface.vue` (`messageSurfaceClass` + collapse utente), toggle in Appearance, whitelist `themeEngineState.ts` (`message_style`). Full vitest verde. **mobile-relevant: sì** — mirror stile messaggi a Kimi. Mockup: artifact `be2515e3-…`.
 
+**Chiusura regressioni desktop/API (2026-07-22):** il backend Laravel ora valida e sanitizza realmente `chat_layout.message_style` con i soli valori `sections|bubbles`; il round-trip bubbles→sections, GET/reload e il rifiuto atomico di valori sconosciuti sono coperti in `TalosSettingsApiTest`. La sezione assistant ha un override scoped `max-width: none` che non modifica user bubble, assistant bubble o browser-task. Il RED Chromium 1920×1080 misurava parent 1120 px, sezione 760 px, gap destro 360 px; il GREEN impone gap ≤1 px e `max-width: none` anche dopo switch, salvataggio e reload. Screenshot headless Sections/Bubbles/Sections ispezionati. Gate freschi: Laravel Settings **74 test / 920 assert**, Vitest **175 file / 1369 test**, build production verde, Playwright Chromium **1/1**. Ledger: `2026-07-22-chat-message-style-regression-ledger.md`.
+
 ## D) VOCE / STT — ✅ noto — **PARZIALE (Fase 1 FE integrata; gate prod aperti)**
 - Bottone mic nel composer → dettatura speech-to-text nell'input.
 - Lib upstreamabile (famiglia Whisper), estremamente reliable. In-browser (default, privacy) + cloud (worker BE) + auto.
 **Esito:** contratto engine `lib/talosDictation.ts` (server-whisper cloud-ready + fault mapping `TALOS_STT_*`), browser Whisper `lib/talosDictationBrowser.ts` (`@huggingface/transformers` q8, lazy via doppio dynamic import → mai in entry chunk), composable `useTalosDictation.ts` (MediaRecorder push-to-talk, mode FE-owned localStorage condiviso), mic in `TalosSlimComposer.vue`, selettore "Dictation" in Appearance. **Chunk-budget fix:** engine estratto dietro dynamic import + `talosDictationModes.ts` minimale (entry-safe) → entry sotto 512 kB. Handoff BE: `2026-07-21-fable-to-codex-stt-cloud-endpoint.md` (Codex ACK). Ledger: `2026-07-22-stt-dictation-ledger.md`. **mobile-relevant: sì** — mirror mic+STT a Kimi (Fase 1 FE già usabile in locale).
 
 **Audit integrazione (2026-07-22):** la slice non è ancora chiusa rispetto all'acceptance originale. `useTalosDictation` espone `error` e `cancel()`, ma il workspace inoltra al composer soltanto stato/supporto/toggle: mancano quindi errore visibile, cancel e retry espliciti. Serve inoltre un gate browser reale microfono → primo download modello → trascrizione nell'input. L'audit dipendenze passa da 6 finding nel baseline a 10 dopo Transformers.js: i 4 high aggiuntivi sono nella catena Node-only di build (`onnxruntime-node` → `adm-zip`, `sharp`), assente dal bundle browser e dall'immagine runtime finale, ma senza fix upstream disponibile al momento dell'audit. La promozione production richiede una decisione di rischio/remediation registrata; il solo lazy-loading non chiude il finding.
+
+**Avanzamento driver (2026-07-22):** il mic è ora immediatamente a destra del Prompt Enhancer. Il gate dedicato Playwright 1.61.1 / Chromium 149 registra con `getUserMedia` + `MediaRecorder` nativi su device audio virtuale Chromium, verifica geometria Enhancer→Mic, multipart audio non vuoto, inserimento trascrizione e ritorno a `idle`. Ledger: `2026-07-22-composer-dictation-driver-ledger.md`. Il gate mocka soltanto la risposta del worker STT non ancora disponibile, quindi D resta correttamente parziale: non prova ancora primo download/trascrizione Whisper reale né chiude errore/cancel/retry visibili e rischio dipendenze.
 
 ## E) AUTO-PROMPT BROWSE — ✅ — **FATTO (FE-only, 2026-07-22)**
 In chat NON-browser, se compare un URL → prompt smooth prod-ready "abiliti la navigazione?" (un tap → Browse on). Mai spurio su testo non-URL, dismissable, rispetta il gating Browse.
@@ -58,8 +62,8 @@ In chat NON-browser, se compare un URL → prompt smooth prod-ready "abiliti la 
 |---|---|---|
 | C — themed selects | Fatto | Nessun native `<select>` in Settings/Theme. |
 | B — icon controls/tooltips | Fatto | Gate E2E Appearance/Theme al merge. |
-| A — message sections | Fatto | Gate E2E visuale sezioni/bolle + collapse al merge. |
-| D — voice/STT | Parziale | Error/cancel/retry visibili, gate microfono reale, decisione audit dipendenze; cloud worker resta una fase separata. |
+| A — message sections | Fatto | Nessun residuo: persistenza Laravel e gate E2E visuale desktop 1920×1080 Sections↔Bubbles + reload coperti; collapse utente resta nella suite. |
+| D — voice/STT | Parziale | Posizione Enhancer→Mic e cattura browser/MediaRecorder coperte; restano error/cancel/retry visibili, Whisper reale, decisione audit dipendenze e cloud worker. |
 | E — auto Browse | Fatto FE | Gate capability/dismiss/dedup al merge. |
 | F — Browser Stage-2 FE | Aperto | Scroll UI, retry UX e poi click ref quando il contratto Stage-2b è pronto. |
 | G — upload tray | Aperto | Preview/thumbnail, tipo di trattamento e fault specifici. |

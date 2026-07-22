@@ -15,6 +15,7 @@ describe('TalosChatSurface message style (sections vs bubbles)', () => {
         expect(source).toContain('talos-message-section')
         expect(source).toContain(':class="messageSurfaceClass(message)"')
         expect(source).toContain(':data-message-style="messageStyle"')
+        expect(source).toMatch(/\.talos-message-bubble\.talos-message-section\s*\{[^}]*max-width:\s*none;/s)
     })
 
     it('keeps the assistant bubble surface for the bubbles fallback', () => {

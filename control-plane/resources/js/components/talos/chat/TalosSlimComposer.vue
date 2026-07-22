@@ -522,27 +522,6 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
                 </div>
-                <Tooltip
-                    v-if="dictationSupported"
-                    :content="dictationStatus === 'recording' ? 'Stop dictation' : dictationStatus === 'transcribing' ? 'Transcribing…' : 'Dictate'"
-                >
-                    <button
-                        type="button"
-                        data-testid="talos-composer-dictate"
-                        :data-dictation-status="dictationStatus"
-                        class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border px-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
-                        :class="dictationStatus === 'recording'
-                            ? 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
-                            : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
-                        :aria-label="dictationStatus === 'recording' ? 'Stop dictation' : 'Dictate'"
-                        :aria-pressed="dictationStatus === 'recording'"
-                        :disabled="dictationStatus === 'transcribing'"
-                        @click="emit('toggleDictation')"
-                    >
-                        <Loader2 v-if="dictationStatus === 'transcribing'" class="h-4 w-4 animate-spin" />
-                        <Mic v-else class="h-3.5 w-3.5" :class="dictationStatus === 'recording' ? 'animate-pulse' : ''" />
-                    </button>
-                </Tooltip>
                 <Tooltip v-if="visibility.agent_mode_switcher !== false" content="Temporary chat">
                     <button
                         type="button"
@@ -622,7 +601,28 @@ onBeforeUnmount(() => {
 
             <div class="flex shrink-0 items-center gap-1">
                 <Tooltip :content="enhanceTitle">
-                    <Button type="button" variant="ghost" size="icon" aria-label="Improve prompt" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" data-testid="talos-composer-enhance" aria-label="Improve prompt" :disabled="Boolean(enhancerDisabledReason)" @click="emit('enhance')"><WandSparkles class="h-4 w-4" /></Button>
+                </Tooltip>
+                <Tooltip
+                    v-if="dictationSupported"
+                    :content="dictationStatus === 'recording' ? 'Stop dictation' : dictationStatus === 'transcribing' ? 'Transcribing…' : 'Dictate'"
+                >
+                    <button
+                        type="button"
+                        data-testid="talos-composer-dictate"
+                        :data-dictation-status="dictationStatus"
+                        class="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border px-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] lg:min-h-8"
+                        :class="dictationStatus === 'recording'
+                            ? 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'
+                            : 'border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)]'"
+                        :aria-label="dictationStatus === 'recording' ? 'Stop dictation' : 'Dictate'"
+                        :aria-pressed="dictationStatus === 'recording'"
+                        :disabled="dictationStatus === 'transcribing'"
+                        @click="emit('toggleDictation')"
+                    >
+                        <Loader2 v-if="dictationStatus === 'transcribing'" class="h-4 w-4 animate-spin" />
+                        <Mic v-else class="h-3.5 w-3.5" :class="dictationStatus === 'recording' ? 'animate-pulse' : ''" />
+                    </button>
                 </Tooltip>
                 <Tooltip v-if="visibility.more_tools !== false" content="More tools">
                     <Button type="button" variant="ghost" size="icon" aria-label="Open settings" @click="emit('openSettings')"><SlidersHorizontal class="h-4 w-4" /></Button>
