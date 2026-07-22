@@ -1,0 +1,120 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount, type VueWrapper } from '@vue/test-utils'
+import { nextTick } from 'vue'
+
+const stores = vi.hoisted(() => ({
+    theme: {
+        state: { theme: 'telemetry', mode: 'system' },
+        setTheme: vi.fn().mockResolvedValue(undefined),
+        setMode: vi.fn().mockResolvedValue(undefined),
+    },
+    settings: {
+        state: {
+            chat_layout: {
+                bubble_scale: 'balanced',
+                composer_mode: 'full',
+                advanced_rail_expanded: false,
+                mobile_window_presentation: 'drawer',
+            },
+            appearance_visibility: {
+                chat_area: { session_header: true },
+                chat_bar: { web_search: true },
+                sidebar: { brand_name: true },
+            },
+            motion_v6: {
+                mode: 'off', background_enabled: true, interface_enabled: true,
+                speed: 100, intensity: 65, glow_intensity: 0, density: 100,
+                depth: 50, trails: 35, contrast: 60, parallax: 20,
+                quality: 'adaptive', pause_when_hidden: true, respect_data_saver: true,
+                interface: {
+                    profile: 'preset', duration_scale: 50, intensity: 65,
+                    easing: 'precise', stagger: 40,
+                    categories: { windows: true, surfaces: true, navigation: true, composer: true, messages: true, feedback: true },
+                },
+            },
+        },
+        setChatLayout: vi.fn().mockResolvedValue(undefined),
+        setVisibility: vi.fn().mockResolvedValue(undefined),
+        resetVisibility: vi.fn().mockResolvedValue(undefined),
+        setMotionPreferences: vi.fn().mockResolvedValue(undefined),
+        resetMotionPreferences: vi.fn().mockResolvedValue(undefined),
+    },
+}))
+
+vi.mock('@/stores/theme', () => ({ useThemeStore: () => stores.theme }))
+vi.mock('@/stores/settings', () => ({ useSettingsStore: () => stores.settings }))
+
+import TalosMobileSettingsAppearancePanel from '@/components/talos/settings/TalosMobileSettingsAppearancePanel.vue'
+
+beforeEach(() => {
+    vi.clearAllMocks()
+})
+
+async function activateTab(wrapper: VueWrapper, label: string): Promise<void> {
+    const tab = wrapper.findAll('[role="tab"]').find((candidate) => candidate.text().includes(label))
+    if (!tab) throw new Error(`Missing ${label} tab`)
+    ;(tab.element as HTMLElement).focus()
+    tab.element.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }))
+    tab.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
+    await nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+}
+
+describe('TalosMobileSettingsAppearancePanel', () => {
+    it('offers all thirteen presets and changes preset and color mode through the theme store', async () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+        const theme = selects.find((select) => select.props('ariaLabel') === 'Theme preset')
+        const mode = selects.find((select) => select.props('ariaLabel') === 'Theme color mode')
+        expect(theme?.props('items')).toHaveLength(13)
+
+        theme?.vm.$emit('update:modelValue', 'aurora')
+        mode?.vm.$emit('update:modelValue', 'dark')
+        expect(stores.theme.setTheme).toHaveBeenCalledWith('aurora')
+        expect(stores.theme.setMode).toHaveBeenCalledWith('dark')
+    })
+
+    it('persists bubble scale, composer mode, sheet presentation, and visibility', async () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+        selects.find((select) => select.props('ariaLabel') === 'Chat message size')?.vm.$emit('update:modelValue', 'expanded')
+        selects.find((select) => select.props('ariaLabel') === 'Chat composer mode')?.vm.$emit('update:modelValue', 'minimal')
+        selects.find((select) => select.props('ariaLabel') === 'Mobile tool window presentation')?.vm.$emit('update:modelValue', 'fullscreen')
+
+        await activateTab(wrapper, 'Visibility')
+        await wrapper.get('[aria-label="Session header"]').setValue(false)
+
+        expect(stores.settings.setChatLayout).toHaveBeenCalledWith({ bubble_scale: 'expanded' })
+        expect(stores.settings.setChatLayout).toHaveBeenCalledWith({ composer_mode: 'minimal' })
+        expect(stores.settings.setChatLayout).toHaveBeenCalledWith({ mobile_window_presentation: 'fullscreen' })
+        expect(stores.settings.setVisibility).toHaveBeenCalledWith('chat_area', 'session_header', false)
+    })
+
+    it('persists renderer, interface, performance, and visibility Motion V6 controls', async () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        await activateTab(wrapper, 'Motion')
+        wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+            .find((select) => select.props('ariaLabel') === 'Motion renderer mode')
+            ?.vm.$emit('update:modelValue', 'complex')
+        await wrapper.get('[aria-label="Background motion"]').setValue(false)
+        await wrapper.get('[aria-label="Interface motion"]').setValue(false)
+        await wrapper.get('[aria-label="Background speed"]').setValue('150')
+        await wrapper.get('[aria-label="Pause motion when hidden"]').setValue(false)
+
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ mode: 'complex' })
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ background_enabled: false })
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ interface_enabled: false })
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ speed: 150 })
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ pause_when_hidden: false })
+    })
+})

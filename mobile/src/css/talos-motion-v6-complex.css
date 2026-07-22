@@ -1,0 +1,16 @@
+[data-talos-motion-stage] .talos-v6-complex-canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    contain: strict;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-talos-motion-stage] .talos-v6-complex-canvas {
+        animation: none !important;
+        transition: none !important;
+    }
+}

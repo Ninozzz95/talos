@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 import {
     ArrowUp,
     BrainCircuit,
     Database,
     Gauge,
+    Globe2,
+    ExternalLink,
     Paperclip,
     SlidersHorizontal,
+    Sparkles,
 } from '@lucide/vue'
+import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
 import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
@@ -17,6 +21,16 @@ import type {
     TalosMobileRoutingProfileView,
 } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
+import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
+import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
+import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
+
+const TalosMobilePromptEnhancerPopover = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobilePromptEnhancerPopover.vue'),
+)
+const TalosMobileSlashCommandMenu = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileSlashCommandMenu.vue'),
+)
 
 const props = withDefaults(defineProps<{
     prompt: string
@@ -31,6 +45,20 @@ const props = withDefaults(defineProps<{
     sendDisabledReason?: string
     loadingModels?: boolean
     loadingRoutes?: boolean
+    refreshingModels?: boolean
+    attachments?: readonly TalosMobileAttachmentDraft[]
+    attachmentBusy?: boolean
+    attachmentError?: string | null
+    attachmentsAvailable?: boolean
+    attachmentDisabledReason?: string
+    contextAvailable?: boolean
+    contextDisabledReason?: string
+    enhancingPrompt?: boolean
+    promptEnhancement?: TalosMobilePromptEnhancementResult | null
+    promptEnhancementError?: string
+    browseMode?: boolean
+    browserSuggestionUrl?: string | null
+    browserBusy?: boolean
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -38,6 +66,20 @@ const props = withDefaults(defineProps<{
     sendDisabledReason: '',
     loadingModels: false,
     loadingRoutes: false,
+    refreshingModels: false,
+    attachments: () => [],
+    attachmentBusy: false,
+    attachmentError: null,
+    attachmentsAvailable: true,
+    attachmentDisabledReason: 'Vault file access is not available until the local Vault bridge is configured.',
+    contextAvailable: false,
+    contextDisabledReason: 'Context selection is not available until the local Context bridge is configured.',
+    enhancingPrompt: false,
+    promptEnhancement: null,
+    promptEnhancementError: '',
+    browseMode: false,
+    browserSuggestionUrl: null,
+    browserBusy: false,
 })
 
 const emit = defineEmits<{
@@ -47,19 +89,31 @@ const emit = defineEmits<{
     selectModelRoutingProfile: [profileId: string]
     selectEffort: [level: TalosMobileEffortLevel]
     selectThinking: [enabled: boolean]
-    attach: [files: File[]]
+    attach: []
+    removeAttachment: [itemId: string]
+    dismissAttachmentError: []
     openContext: []
     openModelLab: []
+    refreshModels: []
+    enhancePrompt: []
+    cancelPromptEnhancement: []
+    insertPromptEnhancement: []
+    replacePromptEnhancement: []
+    selectSlashCommand: [commandId: TalosMobileCommandId]
+    toggleBrowse: [enabled: boolean]
+    openBrowserUrl: [url: string]
 }>()
 
 const composerRoot = ref<HTMLElement | null>(null)
 const promptField = ref<HTMLTextAreaElement | null>(null)
-const attachmentInput = ref<HTMLInputElement | null>(null)
 const modelTrigger = ref<ComponentPublicInstance | null>(null)
 const effortTrigger = ref<ComponentPublicInstance | null>(null)
 const modelPopover = ref<HTMLElement | null>(null)
 const modelPickerOpen = ref(false)
 const effortPickerOpen = ref(false)
+const slashActiveIndex = ref(0)
+const slashCommandCount = ref(0)
+const slashMenu = ref<{ activateSelected(): void } | null>(null)
 
 const selectedProfile = computed(() => (
     props.modelProfiles.find((profile) => profile.id === props.selectedModelProfileId) ?? null
@@ -72,11 +126,31 @@ const modelTitle = computed(() => {
     if (selectedProfile.value) return selectedProfile.value.display_name
     return 'No model selected'
 })
+const hasAuthorizedAttachment = computed(() =>
+    props.attachments.some((attachment) => attachment.status === 'authorized'),
+)
+const attachmentBlocked = computed(() =>
+    props.attachmentBusy || props.attachments.some((attachment) => attachment.status !== 'authorized'),
+)
 const canSubmit = computed(() => (
-    props.canSend && !props.sending && props.prompt.trim().length > 0
+    props.canSend
+    && !props.sending
+    && !attachmentBlocked.value
+    && (props.prompt.trim().length > 0 || hasAuthorizedAttachment.value)
 ))
+const canRequestEnhancement = computed(() => (
+    selectedProfile.value !== null
+    && !props.enhancingPrompt
+    && !props.sending
+    && props.prompt.trim().length > 0
+))
+const slashMenuOpen = computed(() => /^\/[^\s\n]*$/.test(props.prompt))
 const statusText = computed(() => {
     if (props.sending) return 'Processing'
+    if (props.attachmentBusy) return 'Adding files'
+    if (attachmentBlocked.value) return 'Remove files that could not be added before sending'
+    if (props.enhancingPrompt) return 'Improving prompt'
+    if (props.promptEnhancementError) return props.promptEnhancementError
     return props.sendDisabledReason
 })
 
@@ -94,14 +168,53 @@ function updatePrompt(event: Event): void {
 }
 
 function requestSend(value = promptField.value?.value ?? props.prompt): void {
-    if (!props.canSend || props.sending || !value.trim()) return
+    if (!props.canSend || props.sending || attachmentBlocked.value
+        || (!value.trim() && !hasAuthorizedAttachment.value)) return
     emit('send')
 }
 
 function onPromptKeydown(event: KeyboardEvent): void {
+    if (slashMenuOpen.value && !event.isComposing) {
+        const count = slashCommandCount.value
+        if (event.key === 'Escape') {
+            event.preventDefault()
+            emit('update:prompt', '')
+            return
+        }
+        if (count > 0 && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            event.preventDefault()
+            if (event.key === 'Home') slashActiveIndex.value = 0
+            else if (event.key === 'End') slashActiveIndex.value = count - 1
+            else if (event.key === 'ArrowDown') slashActiveIndex.value = (slashActiveIndex.value + 1) % count
+            else slashActiveIndex.value = (slashActiveIndex.value - 1 + count) % count
+            return
+        }
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            slashMenu.value?.activateSelected()
+            return
+        }
+    }
     if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
     event.preventDefault()
     requestSend((event.currentTarget as HTMLTextAreaElement).value)
+}
+
+function requestPromptEnhancement(): void {
+    if (!canRequestEnhancement.value) return
+    modelPickerOpen.value = false
+    effortPickerOpen.value = false
+    emit('enhancePrompt')
+}
+
+function selectSlashCommand(commandId: TalosMobileCommandId): void {
+    emit('selectSlashCommand', commandId)
+}
+
+function updateSlashCommandCount(count: number): void {
+    slashCommandCount.value = count
+    if (count === 0) slashActiveIndex.value = 0
+    else slashActiveIndex.value = Math.min(slashActiveIndex.value, count - 1)
 }
 
 async function focusInitialModelOption(): Promise<void> {
@@ -164,14 +277,23 @@ async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
     await closeEffortPicker()
 }
 
-function chooseFiles(event: Event): void {
-    const input = event.currentTarget as HTMLInputElement
-    const files = Array.from(input.files ?? [])
-    if (files.length) emit('attach', files)
-    input.value = ''
+function focusPrompt(): boolean {
+    const field = promptField.value
+    if (!field || field.disabled) return false
+    field.focus()
+    return document.activeElement === field
 }
 
-watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
+defineExpose({ focusPrompt })
+
+watch(() => props.prompt, () => {
+    slashActiveIndex.value = 0
+    if (slashMenuOpen.value) {
+        modelPickerOpen.value = false
+        effortPickerOpen.value = false
+    }
+    nextTick(resizePrompt)
+}, { immediate: true })
 </script>
 
 <template>
@@ -181,6 +303,51 @@ watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
         class="relative mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-lg border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))] p-2 shadow-lg"
         aria-label="Chat composer"
     >
+        <div
+            v-if="slashMenuOpen"
+            id="talos-mobile-slash-command-popover"
+            class="absolute bottom-full left-0 right-0 z-50 mb-2"
+        >
+            <TalosMobileSlashCommandMenu
+                ref="slashMenu"
+                :query="prompt"
+                :active-index="slashActiveIndex"
+                @selected="selectSlashCommand"
+                @filtered-count="updateSlashCommandCount"
+            />
+        </div>
+
+        <div
+            v-if="enhancingPrompt || promptEnhancementError || promptEnhancement"
+            id="talos-mobile-prompt-enhancer-popover"
+            class="absolute bottom-full left-0 right-0 z-50 mb-2"
+            aria-live="polite"
+        >
+            <div
+                v-if="enhancingPrompt"
+                data-testid="talos-mobile-enhancer-status"
+                role="status"
+                class="rounded-md border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-muted,var(--muted-foreground))] shadow-xl"
+            >
+                Improving prompt with {{ modelTitle }}…
+            </div>
+            <div
+                v-else-if="promptEnhancementError"
+                data-testid="talos-mobile-enhancer-error"
+                role="alert"
+                class="rounded-md border border-[var(--talos-danger,#dc5b5b)] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-danger,#dc5b5b)] shadow-xl"
+            >
+                {{ promptEnhancementError }}
+            </div>
+            <TalosMobilePromptEnhancerPopover
+                v-else-if="promptEnhancement"
+                :result="promptEnhancement"
+                @cancel="emit('cancelPromptEnhancement')"
+                @insert="emit('insertPromptEnhancement')"
+                @replace="emit('replacePromptEnhancement')"
+            />
+        </div>
+
         <div ref="modelPopover" class="relative">
             <div
                 v-if="modelPickerOpen"
@@ -194,9 +361,12 @@ watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
                     :selected-routing-profile-id="selectedRoutingProfileId"
                     :loading-models="loadingModels"
                     :loading-routes="loadingRoutes"
+                    :refreshing-models="refreshingModels"
                     @select-model-profile="selectModelProfile"
                     @select-model-routing-profile="selectRoutingProfile"
                     @request-close="closeModelPicker"
+                    @refresh-models="emit('refreshModels')"
+                    @open-model-lab="emit('openModelLab')"
                 />
             </div>
         </div>
@@ -217,6 +387,35 @@ watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
             />
         </div>
 
+        <TalosMobileAttachmentTray
+            :items="attachments"
+            :busy="attachmentBusy"
+            :error="attachmentError"
+            @remove="emit('removeAttachment', $event)"
+            @dismiss-error="emit('dismissAttachmentError')"
+        />
+
+        <div
+            v-if="browserSuggestionUrl"
+            data-testid="talos-mobile-browser-url-suggestion"
+            class="mb-2 flex min-w-0 items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-2 py-1.5 text-xs text-[var(--talos-text)]"
+        >
+            <Globe2 class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+            <span class="min-w-0 flex-1 truncate">{{ browserSuggestionUrl.replace(/^https?:\/\//, '') }}</span>
+            <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                class="min-h-11 shrink-0 gap-1 px-2"
+                :disabled="browserBusy"
+                :aria-label="`Open detected link ${browserSuggestionUrl}`"
+                @click="emit('openBrowserUrl', browserSuggestionUrl)"
+            >
+                <ExternalLink class="size-4" aria-hidden="true" />
+                <span class="sr-only">Open detected link</span>
+            </Button>
+        </div>
+
         <div class="relative min-w-0">
             <textarea
                 ref="promptField"
@@ -234,7 +433,7 @@ watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
                 size="icon"
                 data-mobile-icon-only="true"
                 aria-label="Send message"
-                :title="sendDisabledReason || 'Send message'"
+                :title="statusText || 'Send message'"
                 :disabled="!canSubmit"
                 class="absolute bottom-1.5 right-1.5 min-h-11 min-w-11 rounded-md bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                 @click="requestSend()"
@@ -282,23 +481,29 @@ watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
                 >
                     <Gauge class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
                 </Button>
-                <input
-                    ref="attachmentInput"
-                    type="file"
-                    multiple
-                    class="sr-only"
-                    aria-label="Attachment file input"
-                    @change="chooseFiles"
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    data-mobile-icon-only="true"
+                    aria-label="Improve prompt"
+                    :title="selectedProfile ? 'Improve prompt' : (sendDisabledReason || 'Select a callable model before improving the prompt.')"
+                    :disabled="!canRequestEnhancement"
+                    class="min-h-11 min-w-11"
+                    @click="requestPromptEnhancement"
                 >
+                    <Sparkles class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
+                </Button>
                 <Button
                     type="button"
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
                     aria-label="Attach a file"
-                    title="Attach a file"
+                    :title="attachmentsAvailable ? 'Attach a file' : attachmentDisabledReason"
+                    :disabled="!attachmentsAvailable || sending || attachmentBusy"
                     class="min-h-11 min-w-11"
-                    @click="attachmentInput?.click()"
+                    @click="emit('attach')"
                 >
                     <Paperclip class="size-4" aria-hidden="true" />
                 </Button>
@@ -308,11 +513,27 @@ watch(() => props.prompt, () => nextTick(resizePrompt), { immediate: true })
                     variant="outline"
                     data-mobile-icon-only="true"
                     aria-label="Choose grounding context"
-                    title="Choose grounding context"
+                    :title="contextAvailable ? 'Choose grounding context' : contextDisabledReason"
+                    :disabled="!contextAvailable"
                     class="min-h-11 min-w-11"
                     @click="emit('openContext')"
                 >
                     <Database class="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    data-mobile-icon-only="true"
+                    :aria-label="browseMode ? 'Disable Browse mode' : 'Enable Browse mode'"
+                    :title="browseMode ? 'Disable Browse mode' : 'Enable Browse mode'"
+                    :aria-pressed="browseMode"
+                    :disabled="browserBusy"
+                    class="min-h-11 min-w-11"
+                    :class="browseMode ? 'border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent)]' : ''"
+                    @click="emit('toggleBrowse', !browseMode)"
+                >
+                    <Globe2 class="size-4" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"

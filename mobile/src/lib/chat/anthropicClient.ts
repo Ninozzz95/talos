@@ -28,6 +28,7 @@ const THINKING_BUDGET: Readonly<Record<string, number>> = Object.freeze({
 export interface AnthropicChatTurn {
     role: 'user' | 'assistant'
     content: string
+    parts?: import('@/lib/chat/attachmentContracts').TalosMobileInputPart[]
 }
 
 export interface BuildAnthropicRequestInput {
@@ -64,7 +65,32 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
     const body: Record<string, unknown> = {
         model: input.model,
         max_tokens: maxTokens,
-        messages: input.turns.map((turn) => ({ role: turn.role, content: turn.content })),
+        messages: input.turns.map((turn) => ({
+            role: turn.role,
+            content: !turn.parts?.length
+                ? turn.content
+                : [
+                    ...(turn.content ? [{ type: 'text', text: turn.content }] : []),
+                    ...turn.parts.map((part) => {
+                        if (part.type === 'image') {
+                            return {
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: part.mediaType,
+                                    data: part.base64,
+                                },
+                            }
+                        }
+                        return {
+                            type: 'text',
+                            text: part.type === 'document_text'
+                                ? `[Untrusted attachment: ${part.name}]\n${part.text}`
+                                : part.text,
+                        }
+                    }),
+                ],
+        })),
     }
     if (typeof input.system === 'string' && input.system.trim() !== '') {
         body.system = input.system

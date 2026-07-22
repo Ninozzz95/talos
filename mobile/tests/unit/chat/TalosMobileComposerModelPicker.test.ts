@@ -96,6 +96,24 @@ describe('TalosMobileComposerModelPicker', () => {
         expect(view.emitted('selectModelRoutingProfile')).toBeUndefined()
     })
 
+    it('shows compatibility and context metadata for every discovered model', () => {
+        const view = mountPicker({
+            modelProfiles: [profile({
+                capabilities: {
+                    chat_compatibility: 'supported',
+                    context_length: 128000,
+                    input_modalities: ['text', 'image'],
+                },
+            })],
+            routingProfiles: [],
+        })
+
+        const option = view.get('[data-model-profile-id="profile-openai"]')
+        expect(option.text()).toContain('supported')
+        expect(option.text()).toContain('128k context')
+        expect(option.text()).toContain('text + image')
+    })
+
     it('marks the selected profile independently from DOM focus', () => {
         const view = mountPicker()
         expect(view.get('[data-model-profile-id="profile-openai"]').attributes('aria-selected')).toBe('true')
@@ -129,5 +147,19 @@ describe('TalosMobileComposerModelPicker', () => {
         const view = mountPicker()
         await view.get('[role="listbox"]').trigger('keydown', { key: 'Escape' })
         expect(view.emitted('requestClose')).toHaveLength(1)
+    })
+
+    it('keeps Refresh and Model Lab commands outside the listbox', async () => {
+        const view = mountPicker()
+        const listbox = view.get('[role="listbox"]')
+        const refresh = view.get('[aria-label="Refresh model catalog"]')
+        const modelLab = view.get('[aria-label="Open Model Lab"]')
+
+        expect(listbox.element.contains(refresh.element)).toBe(false)
+        expect(listbox.element.contains(modelLab.element)).toBe(false)
+        await refresh.trigger('click')
+        await modelLab.trigger('click')
+        expect(view.emitted('refreshModels')).toHaveLength(1)
+        expect(view.emitted('openModelLab')).toHaveLength(1)
     })
 })

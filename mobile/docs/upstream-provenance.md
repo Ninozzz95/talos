@@ -111,16 +111,49 @@ hash-locked restano invariati.
   `.tools/research/kimi-mobile-m1/` (usa-e-getta) dopo sblocco finestra
   installazioni.
 
-## Compatibilita host (da K0 audit 2026-07-18)
+## Chat thread parity P1.3-A (2026-07-22)
+
+- **ADOPT `markdown-it@14.3.0`** (MIT, integrity
+  `sha512-RCEsPjR+sr0x+AuYp601tKTkgFG4YEPLCzHST3cQ/fhlJkqAkz1L2/Qbp1j9qw5SBwQHFBoW8+hoN5xssOF0Tw==`)
+  as the frozen desktop CommonMark renderer.
+- **ADOPT `dompurify@3.4.12`** (MPL-2.0 OR Apache-2.0, integrity
+  `sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==`)
+  as the final HTML allowlist boundary. This supersedes the initial 3.4.11
+  resolution after GitHub-reviewed advisory `GHSA-c2j3-45gr-mqc4`; 3.4.12 is
+  the patched release and the fresh npm audit reports zero vulnerabilities.
+- **ADOPT `@types/markdown-it@14.1.2`** (MIT, integrity
+  `sha512-promo4eFwuiW+TfGxhi+0x3czqTYJkG8qB17ZUJiVF10Xm7NLVRSLUsfRTU/6h1e24VvRnXCx+hG7li58lkzog==`)
+  as build-time types only.
+- **ADOPT `@capacitor/clipboard@8.0.1`** (MIT, integrity
+  `sha512-iOlbTi8MojKyLnYE+M27priXid7vHd0PlDwyHohPzkuQ8Rkp6q7ykwZmPEUD+OnU/Ink7Qw/pUOfKgraKmA6Eg==`)
+  behind the TALOS user-gesture adapter. Its peer range `@capacitor/core >=8`
+  is satisfied by the frozen `8.4.2` core.
+- **REUSE `reka-ui@2.10.1`** for the message overflow menu; no new focus or
+  menu state machine is introduced.
+
+The Markdown renderer and Reka overflow menu remain separate dynamic Vite
+entries outside the initial bundle.
+The native Clipboard plugin is not considered registered until a separately
+inventoried `npx cap sync android` gate is complete.
+
+## Compatibilita host (ultimo gate 2026-07-22)
 
 - Node 24.18.0 e npm 11.16.0 presenti; runtime M1 pinnato a
   `engines.node >=24.18.0 <25` (Capacitor 8 CLI richiede solo Node 22+).
 - Requisito compilazione Android: JDK 21 (il `capacitor.build.gradle`
   generato fissa `JavaVersion.VERSION_21`; supera il precedente requisito
-  documentato). Sull'host JDK 21 non e presente: gate gradlew (S20/S21)
-  bloccati finche la toolchain non esiste.
-- Android SDK, Android Studio, adb, emulatore, Rust/rustup: assenti. Gate
-  APK/emulatore/dispositivo fisico bloccati finche la toolchain non esiste.
+  documentato). Il gate usa Eclipse Temurin `21.0.11+10` come archivio
+  portabile sotto `.tools/jdk`, senza installazione host o modifica permanente
+  di `JAVA_HOME`; SHA-256 archivio Adoptium
+  `d3625e7cadf23787ea540229544b6e2ab494b3b54da1801879e583e1dfee0a64`.
+- Android SDK e adb sono presenti nel profilo utente con Platform 36,
+  Build Tools 35.0.0/36.0.0 e Command-line Tools `latest`; le variabili
+  `ANDROID_HOME`/`ANDROID_SDK_ROOT` vengono impostate solo nel processo di
+  build. `gradlew test assembleDebug --no-daemon` e riuscito; debug APK
+  SHA-256 `fbba81cae06b2bdaa145ab73d4ed3177e8843311c5fb47d38cd1457e2708d3bd`.
+  La verifica device resta aperta: `adb.exe` termina sull'host con
+  `0xC0000135` prima di enumerare dispositivi, quindi install e launch non sono
+  ancora dichiarati verdi.
 
 ## Rollback
 
