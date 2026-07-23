@@ -21,6 +21,8 @@ import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { talosLightImpact } from '@/services/haptics'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
+import { clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 
 const router = useRouter()
 const route = useRoute()
@@ -57,6 +59,14 @@ const TalosMobileSidebar = defineAsyncComponent(
 const TalosMobileToolSheet = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileToolSheet.vue'),
 )
+// F6 — tablet split view: persistent chat panel + draggable divider. Both
+// chunks load only when the md breakpoint engages (phones never pay).
+const TalosTabletSidebar = defineAsyncComponent(
+    () => import('@/components/shell/TalosTabletSidebar.vue'),
+)
+const TalosTabletDivider = defineAsyncComponent(
+    () => import('@/components/shell/TalosTabletDivider.vue'),
+)
 const sidebarEverOpened = ref(false)
 const locked = ref(false)
 const settingsHydrated = ref(false)
@@ -89,6 +99,13 @@ const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
     preferences: createDefaultTalosMotionV6Preferences(),
     reducedMotion: reducedMotion.value,
     paused: false,
+}))
+
+// F6 — fixed overlays (station sheet) read the rail width to spare the
+// persistent tablet panel; 0 on phones keeps them full-bleed.
+const shellStyle = computed(() => ({
+    ...interactionMotionStyle.value,
+    '--talos-tablet-rail': tabletLayout.isTablet.value ? `${tabletSidebarWidth.value}px` : '0px',
 }))
 
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
@@ -136,6 +153,38 @@ const exportSheetOpen = ref(false)
 const TalosMobileSessionExportSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSessionExportSheet.vue'),
 )
+
+// F6 — tablet split view state. The persisted setting IS the width; a local
+// override carries the live drag only, so hydration timing can never desync
+// the panel from the stored value. The settings write happens once per
+// gesture at `commit`.
+const tabletLayout = useTalosTabletLayout()
+const tabletDragWidth = ref<number | null>(null)
+const tabletSidebarWidth = computed(() => tabletDragWidth.value
+    ?? clampTalosTabletSidebarWidth(settingsStore.state.shell.tablet_sidebar_width))
+function onTabletResize(width: number): void {
+    tabletDragWidth.value = width
+}
+function commitTabletWidth(): void {
+    const width = tabletSidebarWidth.value
+    void settingsStore.setShell({ tablet_sidebar_width: width })
+        .catch(() => undefined)
+        .finally(() => {
+            // SF6-F5: never wipe a SECOND drag that started while this
+            // persist was in flight — clear only our own override.
+            if (tabletDragWidth.value === width) tabletDragWidth.value = null
+        })
+}
+// SF6-F9: leaving the tablet layout mid-drag would otherwise leak the
+// in-flight override into the next engage.
+watch(() => tabletLayout.isTablet.value, (isTablet) => {
+    if (!isTablet) tabletDragWidth.value = null
+})
+// Picking / creating a chat in the panel while a station sheet is open must
+// land in the chat — same rule as sidebarNewChat.
+function onTabletActivated(): void {
+    if (isStation.value) void navigate('chat')
+}
 
 // F2-T3.6 immersive chrome: 3-dot options act on the ACTIVE session.
 const immersiveHeader = computed(() => settingsStore.state.shell.immersive_header)
@@ -215,8 +264,13 @@ onMounted(async () => {
         const { hasAppLockPin } = await import('@/services/appLock')
         locked.value = await hasAppLockPin().catch(() => false)
     }
-    if (preferences.state.last_route && preferences.state.last_route !== activeRoute.value) {
-        await router.replace(pathFor(preferences.state.last_route))
+    // SF6-F13: a phone-persisted 'chats' route is redundant on tablet — the
+    // embedded panel IS the chats list; restoring it would open the station
+    // sheet right next to the identical panel.
+    const lastRoute = preferences.state.last_route
+    if (lastRoute && lastRoute !== activeRoute.value
+        && !(tabletLayout.isTablet.value && lastRoute === 'chats')) {
+        await router.replace(pathFor(lastRoute))
     }
     if (!disabled.has('lifecycle')) {
         lifecycle = registerNativeAppLifecycle({
@@ -250,7 +304,7 @@ onBeforeUnmount(async () => {
         class="relative flex h-[100dvh] min-h-[100dvh] flex-col overflow-hidden bg-[var(--talos-background)] text-[var(--talos-text)]"
         :data-talos-route="activeRoute"
         :data-talos-presentation="preferences.state.presentation"
-        :style="interactionMotionStyle"
+        :style="shellStyle"
     >
         <TalosBootLogo v-if="showBoot" @done="showBoot = false" />
 
@@ -300,24 +354,6 @@ onBeforeUnmount(async () => {
         </template>
 
         <template v-else>
-            <TalosMobileHeader
-                v-if="!immersiveHeader"
-                :title="headerTitle"
-                :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
-                @open-menu="sidebarOpen = true"
-                @new-chat="sidebarNewChat"
-            />
-            <TalosMobileImmersiveChrome
-                v-else
-                :active-title="headerTitle"
-                :busy="sessionBusy"
-                @open-menu="sidebarOpen = true"
-                @new-chat="sidebarNewChat"
-                @rename="immersiveRename"
-                @delete="immersiveDelete"
-                @export="exportSheetOpen = true"
-            />
-
             <TalosMobileSessionExportSheet v-if="exportSheetOpen" @close="exportSheetOpen = false" />
 
             <TalosMobileSidebar
@@ -336,9 +372,48 @@ onBeforeUnmount(async () => {
                 @open-settings="sidebarNavigate('settings')"
             />
 
-            <main class="relative z-10 flex-1 overflow-hidden">
-                <ChatScreen ref="chatScreen" />
-            </main>
+            <!-- F6 — tablet split view: [chat panel | divider | content column].
+                 On phones the row degenerates to the single content column. -->
+            <div class="relative z-10 flex min-h-0 flex-1">
+                <template v-if="tabletLayout.isTablet.value">
+                    <TalosTabletSidebar
+                        :width="tabletSidebarWidth"
+                        @activated="onTabletActivated"
+                        @open-menu="sidebarOpen = true"
+                    />
+                    <TalosTabletDivider
+                        :width="tabletSidebarWidth"
+                        @resize="onTabletResize"
+                        @commit="commitTabletWidth"
+                    />
+                </template>
+
+                <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                    <TalosMobileHeader
+                        v-if="!immersiveHeader"
+                        :title="headerTitle"
+                        :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
+                        :hide-menu="tabletLayout.isTablet.value"
+                        @open-menu="sidebarOpen = true"
+                        @new-chat="sidebarNewChat"
+                    />
+                    <TalosMobileImmersiveChrome
+                        v-else
+                        :active-title="headerTitle"
+                        :busy="sessionBusy"
+                        :hide-menu="tabletLayout.isTablet.value"
+                        @open-menu="sidebarOpen = true"
+                        @new-chat="sidebarNewChat"
+                        @rename="immersiveRename"
+                        @delete="immersiveDelete"
+                        @export="exportSheetOpen = true"
+                    />
+
+                    <main class="relative flex-1 overflow-hidden">
+                        <ChatScreen ref="chatScreen" />
+                    </main>
+                </div>
+            </div>
 
             <TalosMobileToastRegion />
 

@@ -16,6 +16,13 @@ import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosLightImpact } from '@/services/haptics'
 
+// F6 — embedded mode: the tablet split view mounts this screen as the
+// persistent left panel. Selection then must NOT navigate (the chat already
+// lives on the right); `activated` lets the shell dismiss an open station
+// sheet instead.
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const emit = defineEmits<{ activated: [] }>()
+
 const router = useRouter()
 const controller = useChatController()
 
@@ -37,13 +44,15 @@ const showArchived = ref(false)
 async function openSession(id: string): Promise<void> {
     void talosLightImpact()
     await controller.selectSession(id)
-    void router.push({ name: 'chat' })
+    if (props.embedded) emit('activated')
+    else void router.push({ name: 'chat' })
 }
 
 async function newChat(): Promise<void> {
     void talosLightImpact()
     await controller.newSession()
-    void router.push({ name: 'chat' })
+    if (props.embedded) emit('activated')
+    else void router.push({ name: 'chat' })
 }
 
 const renameTarget = ref<{ id: string; title: string } | null>(null)
@@ -124,6 +133,9 @@ async function archiveSession(session: { id: string; title: string }, value: boo
 interface RowMenuState {
     session: { id: string; title: string; archived: boolean }
     top: number
+    /** SF6-F2 (embedded): anchor the menu to the held row, not the viewport. */
+    left: number | null
+    width: number | null
 }
 const rowMenu = ref<RowMenuState | null>(null)
 // The click that ends the long-press lands on the JUST-OPENED backdrop and
@@ -151,6 +163,8 @@ function onRowPointerDown(session: { id: string; title: string }, isArchived: bo
         rowMenu.value = {
             session: { id: session.id, title: session.title, archived: isArchived },
             top: Math.min(anchor.bottom + 4, window.innerHeight - 260),
+            left: props.embedded ? anchor.left + 8 : null,
+            width: props.embedded ? Math.max(anchor.width - 16, 180) : null,
         }
         menuOpenedAt = Date.now()
         clearHold()
@@ -195,7 +209,10 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
 </script>
 
 <template>
-    <div class="flex min-h-full flex-col" data-testid="talos-chats-screen">
+    <!-- SF6-F1: min-h-full in embedded mode overflows the aside by the panel
+         header height (single-class specificity tie — stylesheet order wins),
+         clipping the last chat row behind the shell's overflow-hidden. -->
+    <div class="flex flex-col" :class="props.embedded ? 'min-h-0' : 'min-h-full'" data-testid="talos-chats-screen">
         <div class="flex items-center gap-2 px-4 pt-3">
             <div class="relative min-w-0 flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
@@ -308,8 +325,11 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     data-testid="talos-chats-row-menu"
                     role="menu"
                     :aria-label="`Actions for ${rowMenu.session.title || 'New chat'}`"
-                    class="absolute inset-x-6 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.16)]"
-                    :style="{ top: `${rowMenu.top}px` }"
+                    class="absolute rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.16)]"
+                    :class="rowMenu.left === null ? 'inset-x-6' : ''"
+                    :style="rowMenu.left === null
+                        ? { top: `${rowMenu.top}px` }
+                        : { top: `${rowMenu.top}px`, left: `${rowMenu.left}px`, width: `${rowMenu.width}px` }"
                     @click.stop
                 >
                     <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('open')">
