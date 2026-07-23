@@ -49,7 +49,9 @@ const WORK_ORPHANS = [
     'values/ic_launcher_background.xml',
 ]
 const FROZEN_DELETE_SET = [...WORK_ORPHANS].sort()
-const NAMESPACE_RE = /^(values|layout|xml|drawable(-[a-z0-9-]+)?|mipmap(-[a-z0-9-]+)?)\/[A-Za-z0-9_.-]+$/
+// #14 calm brand assets introduced qualified values dirs (values-night)
+// alongside the already-qualified drawable/mipmap namespaces.
+const NAMESPACE_RE = /^(values(-[a-z0-9-]+)?|layout|xml|drawable(-[a-z0-9-]+)?|mipmap(-[a-z0-9-]+)?)\/[A-Za-z0-9_.-]+$/
 const DOS_DEVICE_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i
 const PHASES = ['prepared', 'move_old_intent', 'old_moved', 'activate_new_intent', 'new_active', 'verify_intent', 'verified', 'restore_intent', 'old_quarantined', 'restored']
 const CRASH_MARKERS = [

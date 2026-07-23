@@ -158,18 +158,52 @@ describe('tone preference (F3-T4)', () => {
     })
 })
 
-describe('composer drawer preference (F3-T4bis owner #13)', () => {
-    it('defaults OFF and fails closed on garbage', () => {
-        expect(parseTalosMobileSettings(null).shell.composer_drawer).toBe(false)
-        expect(parseTalosMobileSettings(JSON.stringify({ shell: { composer_drawer: 'yes' } })).shell.composer_drawer).toBe(false)
+describe('composer drawer preference (F3-T4bis owner #13, defaults per owner #15)', () => {
+    it('defaults ON and garbage falls closed to the default', () => {
+        expect(parseTalosMobileSettings(null).shell.composer_drawer).toBe(true)
+        expect(parseTalosMobileSettings(JSON.stringify({ shell: { composer_drawer: 'yes' } })).shell.composer_drawer).toBe(true)
     })
 
-    it('persists through setShell and hydrate', async () => {
+    it('an explicit OFF choice persists through setShell and hydrate', async () => {
         const store = useSettingsStore()
-        await store.setShell({ composer_drawer: true })
+        await store.setShell({ composer_drawer: false })
         __resetSettingsStoreForTests()
         const fresh = useSettingsStore()
         await fresh.hydrate()
-        expect(fresh.state.shell.composer_drawer).toBe(true)
+        expect(fresh.state.shell.composer_drawer).toBe(false)
+    })
+})
+
+// Owner #15 (2026-07-23): new out-of-box experience — immersive header,
+// composer drawer, compact messages, complex renderer; one-shot migration.
+describe('defaults v3 (owner #15)', () => {
+    it('fresh installs get immersive+drawer+compact+complex', () => {
+        const parsed = parseTalosMobileSettings(null)
+        expect(parsed.shell.immersive_header).toBe(true)
+        expect(parsed.shell.composer_drawer).toBe(true)
+        expect(parsed.chat_layout.bubble_scale).toBe('compact')
+        expect(parsed.motion_v6.mode).toBe('complex')
+    })
+
+    it('pre-v3 persisted OLD defaults migrate once', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            shell: { immersive_header: false, composer_drawer: false },
+            chat_layout: { bubble_scale: 'balanced' },
+            motion_v6: null,
+        }))
+        expect(parsed.shell.immersive_header).toBe(true)
+        expect(parsed.shell.composer_drawer).toBe(true)
+        expect(parsed.chat_layout.bubble_scale).toBe('compact')
+    })
+
+    it('post-v3 explicit choices stick', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            defaults_v3: true,
+            shell: { immersive_header: false, composer_drawer: false },
+            chat_layout: { bubble_scale: 'expanded' },
+        }))
+        expect(parsed.shell.immersive_header).toBe(false)
+        expect(parsed.shell.composer_drawer).toBe(false)
+        expect(parsed.chat_layout.bubble_scale).toBe('expanded')
     })
 })

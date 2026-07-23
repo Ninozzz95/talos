@@ -10,6 +10,22 @@ const LOCK = '[data-testid="talos-lock-screen"]'
 
 const EMPTY_STATE = { cookies: [], origins: [] }
 
+// Owner #15: fresh installs boot into the NEW defaults.
+test.describe('fresh-install defaults (owner #15)', () => {
+    test.use({ storageState: EMPTY_STATE })
+
+    test('boots with immersive chrome and the drawer-mode composer', async ({ page }) => {
+        await page.goto('/')
+        const intro = page.locator(INTRO)
+        await expect(intro).toBeVisible({ timeout: 15000 })
+        await intro.getByRole('button', { name: 'Skip introduction' }).click()
+        await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
+        await expect(page.locator(HEADER)).toHaveCount(0)
+        await expect(page.locator('[aria-label="Add to chat"]')).toBeVisible()
+        await expect(page.locator('[data-testid="talos-composer-model-chip"]')).toBeVisible()
+    })
+})
+
 const SEEN_NOT_DISMISSED = {
     cookies: [],
     origins: [{
@@ -17,7 +33,10 @@ const SEEN_NOT_DISMISSED = {
         localStorage: [{
             name: 'CapacitorStorage.talos.mobile.settings',
             value: JSON.stringify({
-                onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: false },
+                defaults_v3: true,
+            presentation_v2: true,
+            shell: { immersive_header: false, composer_drawer: false },
+            onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: false },
             }),
         }],
     }],
@@ -45,9 +64,10 @@ test.describe('intro first-run (fresh install)', () => {
         await expect(intro).toContainText('Step 6 of 6')
         await page.locator('[data-testid="talos-intro-cta"]').click()
         await expect(intro).toHaveCount(0)
-        // The completed version persists — a reload must NOT re-offer the intro.
+        // The completed version persists — a reload must NOT re-offer the
+        // intro; fresh installs land in the immersive default shell (#15).
         await page.reload()
-        await expect(page.locator(HEADER)).toBeVisible({ timeout: 15000 })
+        await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
         await expect(page.locator(INTRO)).toHaveCount(0)
     })
 
@@ -58,7 +78,7 @@ test.describe('intro first-run (fresh install)', () => {
         await intro.getByRole('button', { name: 'Skip introduction' }).click()
         await expect(intro).toHaveCount(0)
         await page.reload()
-        await expect(page.locator(HEADER)).toBeVisible({ timeout: 15000 })
+        await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
         await expect(page.locator(INTRO)).toHaveCount(0)
     })
 })

@@ -74,9 +74,11 @@ export interface TalosMobileShellPreferences {
     composer_drawer: boolean
 }
 
+// Owner #15 (2026-07-23): immersive chrome and the Claude-style composer
+// drawer ARE the default mobile experience.
 const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
-    immersive_header: false,
-    composer_drawer: false,
+    immersive_header: true,
+    composer_drawer: true,
 }
 
 function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
@@ -189,6 +191,8 @@ export type TalosMotionPreferencePatch = Partial<Omit<TalosMotionV6Preferences, 
 function createMobileDefaultMotionPreferences(): TalosMotionV6Preferences {
     const defaults = createDefaultTalosMotionV6Preferences()
     defaults.intensity = 0
+    // Owner #15: the complex renderer ships ON by default.
+    defaults.mode = 'complex'
     return defaults
 }
 
@@ -246,15 +250,27 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
     if (value.presentation_v2 !== true) {
         chatLayout.mobile_window_presentation = 'fullscreen'
     }
+    // Owner #15 one-shot defaults migration: pre-existing installs persisted
+    // the OLD defaults (classic header, inline bar, balanced size, renderer
+    // off) which were never a choice — move them to the new defaults once.
+    // Post-migration persists carry `defaults_v3`; explicit choices stick.
+    const motionParsed = parseMotionPreferences(value.motion_v6 ?? createMobileDefaultMotionPreferences())
+    const shellParsed = parseShellPreferences(value.shell)
+    if (value.defaults_v3 !== true) {
+        shellParsed.immersive_header = true
+        shellParsed.composer_drawer = true
+        chatLayout.bubble_scale = 'compact'
+        if (motionParsed.mode === 'off') motionParsed.mode = 'complex'
+    }
     return {
-        shell: parseShellPreferences(value.shell),
+        shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
         tone: parseTonePreferences(value.tone),
         chat_layout: chatLayout,
         ai_defaults: parseAiDefaults(value.ai_defaults),
         composer_defaults: parseComposerDefaults(value.composer_defaults),
-        motion_v6: parseMotionPreferences(value.motion_v6 ?? createMobileDefaultMotionPreferences()),
+        motion_v6: motionParsed,
         appearance_visibility: resolveTalosAppearanceVisibility(value.appearance_visibility),
         keyboard_shortcuts: resolveTalosShortcuts(value.keyboard_shortcuts),
         model_lab: parseTalosMobileModelLabPreferences(
@@ -299,6 +315,7 @@ export function useSettingsStore(): SettingsStore {
             key: TALOS_MOBILE_SETTINGS_KEY,
             value: JSON.stringify({
                 presentation_v2: true,
+                defaults_v3: true,
                 shell: state.shell,
                 onboarding: state.onboarding,
                 security: state.security,

@@ -3,6 +3,7 @@ import { nextTick, reactive, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import { asyncRouteComponent, TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
+import { __resetSettingsStoreForTests } from '@/stores/settings'
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
@@ -83,9 +84,19 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         // Skip the native lifecycle listener in jsdom via the fail-closed switch.
         window.__TALOS_M1_DISABLE__ = ['lifecycle']
         mockState.controller = makeController()
+        __resetSettingsStoreForTests()
+        // Owner #15 made immersive/drawer the DEFAULT: these journeys exercise
+        // the still-supported classic shell, so seed an explicit classic choice.
+        window.localStorage.setItem('CapacitorStorage.talos.mobile.settings', JSON.stringify({
+            defaults_v3: true,
+            presentation_v2: true,
+            shell: { immersive_header: false, composer_drawer: false },
+            onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true },
+        }))
     })
     afterEach(() => {
         window.__TALOS_M1_DISABLE__ = undefined
+        window.localStorage.clear()
     })
 
     it('renders the header and the persistent chat base at /, with no sheet open', async () => {

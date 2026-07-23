@@ -98,8 +98,13 @@ function sidebarNavigate(name: TalosMobileRouteName): void {
 function sidebarNewChat(): void {
     sidebarOpen.value = false
     const screen = chatScreen.value as { newSession?: () => void } | null
-    if (screen?.newSession) screen.newSession()
-    else void onNewChat()
+    if (screen?.newSession) {
+        screen.newSession()
+        // New Chat always LANDS in the chat — never leaves you on a station.
+        if (isStation.value) void navigate('chat')
+    } else {
+        void onNewChat()
+    }
 }
 
 function sidebarSelect(sessionId: string): void {
