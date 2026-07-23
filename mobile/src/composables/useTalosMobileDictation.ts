@@ -29,11 +29,21 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     const status = ref<TalosMobileDictationStatus>('idle')
     const error = ref<string | null>(null)
 
-    void engine.supported().then((available) => {
-        supported.value = available
-    }).catch(() => {
-        supported.value = false
-    })
+    // Owner report (2026-07-23): the availability probe runs at app start,
+    // when Android's RecognitionService binding may not be ready yet — a
+    // single early "false" hid the mic forever. Retry with backoff; if the
+    // device genuinely has no recognizer it stays honestly hidden.
+    async function probeSupported(attempt = 0): Promise<void> {
+        try {
+            supported.value = await engine.supported()
+        } catch {
+            supported.value = false
+        }
+        if (!supported.value && attempt < 3) {
+            setTimeout(() => { void probeSupported(attempt + 1) }, [1000, 3000, 8000][attempt])
+        }
+    }
+    void probeSupported()
 
     async function start(): Promise<void> {
         error.value = null

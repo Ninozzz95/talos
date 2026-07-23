@@ -16,6 +16,13 @@ export default defineConfig({
                 localStorage: [{
                     name: 'CapacitorStorage.talos.mobile.settings',
                     value: JSON.stringify({
+                        // Owner #15 flipped the defaults (immersive+drawer):
+                        // existing journeys exercise the classic shell, seeded
+                        // as an explicit post-migration choice; fresh-default
+                        // journeys override with an empty storage.
+                        defaults_v3: true,
+                        presentation_v2: true,
+                        shell: { immersive_header: false, composer_drawer: false },
                         onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true },
                     }),
                 }],

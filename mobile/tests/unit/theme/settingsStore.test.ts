@@ -116,7 +116,7 @@ describe('parseTalosMobileSettings', () => {
 
 describe('useSettingsStore', () => {
     it('hydrates from Preferences', async () => {
-        prefs.set(TALOS_MOBILE_SETTINGS_KEY, JSON.stringify({ chat_layout: { bubble_scale: 'expanded' } }))
+        prefs.set(TALOS_MOBILE_SETTINGS_KEY, JSON.stringify({ defaults_v3: true, chat_layout: { bubble_scale: 'expanded' } }))
         const store = useSettingsStore()
         await store.hydrate()
         expect(store.state.chat_layout.bubble_scale).toBe('expanded')
