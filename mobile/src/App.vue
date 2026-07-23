@@ -68,6 +68,17 @@ const intro = useTalosMobileIntroState({
 })
 provide(TALOS_MOBILE_INTRO_KEY, intro)
 
+// F4-#18: ask for the mic permission at a MEANINGFUL moment — completing the
+// intro (the user just read what TALOS does), never at cold start. Skippers
+// get asked at the first mic tap instead.
+function onIntroClose(outcome: 'completed' | 'skipped'): void {
+    void intro.closeIntro(outcome)
+    if (outcome === 'completed') {
+        void import('@/services/dictation').then(({ requestTalosDictationPermission }) =>
+            requestTalosDictationPermission())
+    }
+}
+
 // F1-T4 animation mandate: theme-tuned interaction-motion CSS vars from the
 // motion-v6 engine, applied at the shell root; components consume the vars.
 const reducedMotion = ref(typeof window !== 'undefined'
@@ -121,6 +132,11 @@ function sidebarDelete(sessionId: string): void {
     ;(chatScreen.value as { deleteSession?: (id: string) => void } | null)?.deleteSession?.(sessionId)
 }
 
+const exportSheetOpen = ref(false)
+const TalosMobileSessionExportSheet = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileSessionExportSheet.vue'),
+)
+
 // F2-T3.6 immersive chrome: 3-dot options act on the ACTIVE session.
 const immersiveHeader = computed(() => settingsStore.state.shell.immersive_header)
 function immersiveRename(title: string): void {
@@ -146,6 +162,7 @@ const isStation = computed(() => activeRoute.value !== 'chat')
 const SHEET_TITLE: Record<TalosMobileRouteName, string> = {
     chat: 'Chat',
     chats: 'Chats',
+    memory: 'Memory',
     research: 'Deep Research V3',
     runs: 'Runtime cockpit',
     context: 'Library',
@@ -244,7 +261,7 @@ onBeforeUnmount(async () => {
         <!-- F2-T6 intro modal: mounts only when the versioned gating opens it. -->
         <TalosMobileIntroModal
             v-if="intro.introOpen.value"
-            @close="intro.closeIntro($event)"
+            @close="onIntroClose($event)"
         />
 
         <div
@@ -295,7 +312,10 @@ onBeforeUnmount(async () => {
                 @new-chat="sidebarNewChat"
                 @rename="immersiveRename"
                 @delete="immersiveDelete"
+                @export="exportSheetOpen = true"
             />
+
+            <TalosMobileSessionExportSheet v-if="exportSheetOpen" @close="exportSheetOpen = false" />
 
             <TalosMobileSidebar
                 v-if="sidebarEverOpened"

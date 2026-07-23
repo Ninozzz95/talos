@@ -13,6 +13,7 @@ import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 
 const props = defineProps<{
     canEnhance: boolean
+    enhanceReason?: string | null
     browseMode: boolean
     thinking: boolean
     supportsThinking: boolean
@@ -187,18 +188,23 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                     </div>
                 </div>
 
+                <!-- F4-#20: never a mute disabled row — the tap explains itself. -->
                 <button
                     type="button"
                     data-testid="talos-drawer-enhance"
-                    :disabled="!canEnhance"
-                    :title="canEnhance ? 'Improve prompt' : 'Type a prompt first'"
-                    class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left disabled:opacity-50"
+                    :title="enhanceReason ?? 'Improve prompt'"
+                    class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
                     @click="single('enhancePrompt')"
                 >
                     <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
                         <Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                     </span>
-                    <span class="min-w-0 flex-1 text-sm">Improve prompt</span>
+                    <span class="flex min-w-0 flex-1 flex-col">
+                        <span class="text-sm">Improve prompt</span>
+                        <span class="text-[11px] text-[var(--talos-muted)]">
+                            {{ enhanceReason ?? 'Rewrite your draft with the selected model' }}
+                        </span>
+                    </span>
                 </button>
 
             </div>

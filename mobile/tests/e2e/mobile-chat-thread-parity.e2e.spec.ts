@@ -129,12 +129,10 @@ test('renders and operates a durable safe thread through the final mobile UI', a
     await expect(firstAssistant.locator('img, form, input, a[href^="javascript:"]')).toHaveCount(0)
     expect(fabricatedImageRequests).toEqual([])
 
-    const sensitiveEmail = firstAssistant.locator('button[data-censored-kind="email"]')
-    await expect(sensitiveEmail).toHaveAttribute('aria-label', 'Reveal sensitive email')
-    await expect(sensitiveEmail).toHaveAttribute('aria-pressed', 'false')
-    await sensitiveEmail.click()
-    await expect(sensitiveEmail).toHaveAttribute('aria-pressed', 'true')
-    await expect(sensitiveEmail).toHaveAttribute('aria-label', 'Hide sensitive email')
+    // Owner F4 directive: the sensitive censor is gone for good — message text
+    // renders exactly as authored, emails included.
+    await expect(firstAssistant.locator('.talos-censored')).toHaveCount(0)
+    await expect(firstAssistant.getByText('reviewer@example.com', { exact: false })).toBeVisible()
 
     await firstAssistant.getByRole('button', { name: 'Copy code' }).click()
     await expect(firstAssistant.getByRole('status')).toHaveText('Code copied.')

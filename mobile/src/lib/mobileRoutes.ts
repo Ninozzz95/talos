@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 
-export type TalosMobileRouteName = 'chat' | 'chats' | 'research' | 'runs' | 'context' | 'settings'
+export type TalosMobileRouteName = 'chat' | 'chats' | 'memory' | 'research' | 'runs' | 'context' | 'settings'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -11,6 +11,7 @@ export interface TalosMobileRoute {
 
 const loadChatScreen = () => import('@/screens/ChatScreen.vue').then((module) => module.default)
 const loadChatsScreen = () => import('@/screens/ChatsScreen.vue').then((module) => module.default)
+const loadMemoryScreen = () => import('@/screens/MemoryScreen.vue').then((module) => module.default)
 const loadResearchScreen = () => import('@/screens/ResearchScreen.vue').then((module) => module.default)
 const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
@@ -23,6 +24,8 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'chat', path: '/', desktop_station_id: 'chat', component: loadChatScreen },
     // F3-T3 (owner #12, Claude pattern): dedicated chat-list page on mobile.
     { name: 'chats', path: '/chats', desktop_station_id: 'chat', component: loadChatsScreen },
+    // F4 Memory station — desktop `memory` feature, local registry.
+    { name: 'memory', path: '/memory', desktop_station_id: 'memory', component: loadMemoryScreen },
     { name: 'research', path: '/research', desktop_station_id: 'research', component: loadResearchScreen },
     { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },

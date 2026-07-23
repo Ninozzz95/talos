@@ -429,4 +429,95 @@ describe('createChatStore durable sessions', () => {
         resolveReply('done')
         await first
     })
+
+    // F4-#16 — export snapshot: raw session/messages/activities/attachments
+    // (sha256-enriched from the vault) assembled for the local export builders.
+    it('assembles an export snapshot of the active session with sha256-enriched attachments', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+            repository, makeId: makeIds(), now,
+        })
+        await store.initialize()
+        const session = await store.createSession('Da esportare')
+
+        await repository.createVaultFile({
+            id: 'vault-9', display_name: 'report.pdf', media_type: 'application/pdf',
+            size_bytes: 1024, private_uri: 'talos-vault/files/vault-9.pdf', status: 'available',
+            trust: 'untrusted', sha256: 'c'.repeat(64), extracted_text: 'body', metadata: {},
+            created_at: now(),
+        })
+        const grant = await repository.createFileAuthorityGrant({
+            id: 'grant-9', vault_file_id: 'vault-9', permissions: ['model.read'], label: 'report.pdf',
+            created_at: now(),
+        })
+        await repository.appendMessage({
+            id: 'm1', session_id: session.id, role: 'user', content: 'Analizza il report',
+            state: 'persisted', created_at: now(),
+            attachments: [{ id: 'b1', vault_file_id: 'vault-9', grant_id: grant.id }],
+        })
+        await repository.appendMessage({
+            id: 'm2', session_id: session.id, role: 'assistant', content: 'Fatto.',
+            state: 'persisted', created_at: now(),
+        })
+
+        const snapshot = await store.exportSnapshot()
+        expect(snapshot.session.id).toBe(session.id)
+        expect(snapshot.messages.map((message) => message.id)).toEqual(['m1', 'm2'])
+        expect(snapshot.attachments).toEqual([
+            expect.objectContaining({ message_id: 'm1', display_name: 'report.pdf', sha256: 'c'.repeat(64) }),
+        ])
+        expect(JSON.stringify(snapshot.attachments)).not.toContain('private_uri')
+    })
+
+    // F4-#23 — chat-list management: archive (swipe) and manual order
+    // (hold-to-move) live in session metadata so they survive restart and
+    // stay local-first.
+    it('archives and unarchives a session through metadata without losing other keys', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+            repository, makeId: makeIds(), now,
+        })
+        await store.initialize()
+        const session = await store.createSession('To archive')
+
+        const before = store.sessions.find((candidate) => candidate.id === session.id)?.updated_at
+        await store.setSessionArchived(session.id, true)
+        const archived = store.sessions.find((candidate) => candidate.id === session.id)
+        expect(archived?.metadata.archived).toBe(true)
+        // SF-5: archive/order are metadata-only — recency must NOT change.
+        expect(archived?.updated_at).toBe(before)
+
+        await store.setSessionArchived(session.id, false)
+        const restored = store.sessions.find((candidate) => candidate.id === session.id)
+        expect(restored?.metadata.archived).toBe(false)
+    })
+
+    it('persists a manual order as sort_index for every listed session', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+            repository, makeId: makeIds(), now,
+        })
+        await store.initialize()
+        const first = await store.createSession('First')
+        const second = await store.createSession('Second')
+        const third = await store.createSession('Third')
+
+        const recencyBefore = new Map(store.sessions.map((session) => [session.id, session.updated_at]))
+        await store.setSessionOrder([second.id, third.id, first.id])
+        const byId = new Map(store.sessions.map((session) => [session.id, session]))
+        expect(byId.get(second.id)?.metadata.sort_index).toBe(0)
+        expect(byId.get(second.id)?.updated_at).toBe(recencyBefore.get(second.id))
+        expect(byId.get(first.id)?.updated_at).toBe(recencyBefore.get(first.id))
+        expect(byId.get(third.id)?.metadata.sort_index).toBe(1)
+        expect(byId.get(first.id)?.metadata.sort_index).toBe(2)
+
+        const reloaded = createChatStore(vi.fn().mockResolvedValue('unused'), {
+            repository, makeId: makeIds(), now,
+        })
+        await reloaded.initialize()
+        expect(reloaded.sessions.find((session) => session.id === second.id)?.metadata.sort_index).toBe(0)
+    })
 })

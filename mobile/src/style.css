@@ -271,3 +271,45 @@
 @media (prefers-reduced-motion: reduce) {
     .talos-typing-dot { animation: none; opacity: 0.7; }
 }
+
+/* F4-#24 (owner): loading-answer bubble — boot-logo styled line loader. The
+   faint track echoes the first-frame hexagon (stroke-opacity .18); the sweep
+   draws left→right and each node fills exactly when the line reaches it. */
+.talos-line-loader { display: block; }
+.talos-line-loader-track {
+    stroke: var(--talos-accent, #c08b3c);
+    stroke-opacity: 0.18;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+.talos-line-loader-sweep {
+    stroke: var(--talos-accent, #c08b3c);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 88;
+    stroke-dashoffset: 88;
+    animation: talosLineSweep 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node {
+    fill: transparent;
+    stroke: var(--talos-accent, #c08b3c);
+    stroke-width: 2;
+    animation: talosLineNodeFill 1.6s ease-in-out infinite;
+}
+/* Node fill timing matches the sweep reaching x=16/48/80 over the 88px run. */
+.talos-line-loader-node:nth-of-type(1) { animation-delay: 0s; }
+.talos-line-loader-node:nth-of-type(2) { animation-delay: 0.36s; }
+.talos-line-loader-node:nth-of-type(3) { animation-delay: 0.73s; }
+@keyframes talosLineSweep {
+    0% { stroke-dashoffset: 88; }
+    70%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes talosLineNodeFill {
+    0%, 12% { fill: transparent; }
+    22%, 82% { fill: var(--talos-accent, #c08b3c); }
+    100% { fill: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
+    .talos-line-loader-node { animation: none; fill: var(--talos-accent, #c08b3c); opacity: 0.7; }
+}

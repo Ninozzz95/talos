@@ -74,40 +74,76 @@ describe('TalosMobileSettingsAccountPanel (F2-T6)', () => {
     })
 })
 
-describe('TalosMobileSettingsAccountPanel app lock (F2-T6)', () => {
-    it('enabling reveals PIN setup and arms the lock on matching PINs', async () => {
+describe('TalosMobileSettingsAccountPanel app lock (F4-#25 OTP flow)', () => {
+    it('enabling walks the OTP setup: 6-digit PIN, then confirm, arming on match', async () => {
         const { wrapper } = mountPanel()
         await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
         await wrapper.get('[data-testid="talos-applock-pin"]').setValue('123456')
+        await flushPromises()
         await wrapper.get('[data-testid="talos-applock-pin-confirm"]').setValue('123456')
-        await wrapper.get('[data-testid="talos-applock-save"]').trigger('click')
         await flushPromises()
         expect(appLock.setupAppLockPin).toHaveBeenCalledWith('123456')
         expect(settingsMock.setSecurity).toHaveBeenCalledWith({ app_lock_enabled: true })
     })
 
-    it('rejects mismatched PIN confirmation honestly without arming', async () => {
+    it('rejects a mismatched confirmation honestly and restarts the confirm step', async () => {
         const { wrapper } = mountPanel()
         await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
         await wrapper.get('[data-testid="talos-applock-pin"]').setValue('123456')
+        await flushPromises()
         await wrapper.get('[data-testid="talos-applock-pin-confirm"]').setValue('999999')
-        await wrapper.get('[data-testid="talos-applock-save"]').trigger('click')
         await flushPromises()
         expect(wrapper.text()).toMatch(/do not match/i)
         expect(appLock.setupAppLockPin).not.toHaveBeenCalled()
         expect(settingsMock.setSecurity).not.toHaveBeenCalled()
+        expect((wrapper.get('[data-testid="talos-applock-pin-confirm"]').element as HTMLInputElement).value).toBe('')
     })
 
-    it('disabling clears the Keystore record and both flags', async () => {
-        settingsMock.state.security = { app_lock_enabled: true, app_lock_biometric: true }
+    it('disabling requires the current PIN and clears only after verification', async () => {
+        settingsMock.state.security = { app_lock_enabled: true, app_lock_biometric: false }
+        appLock.verifyAppLockPin.mockResolvedValue(true)
         const { wrapper } = mountPanel()
         await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
         await flushPromises()
+        expect(appLock.clearAppLock).not.toHaveBeenCalled()
+        // SF-1: legacy PINs (4-8 digits) submit through the explicit Confirm.
+        await wrapper.get('[data-testid="talos-applock-verify"]').setValue('4321')
+        await wrapper.get('[data-testid="talos-applock-verify-submit"]').trigger('click')
+        await flushPromises()
+        expect(appLock.verifyAppLockPin).toHaveBeenCalledWith('4321')
         expect(appLock.clearAppLock).toHaveBeenCalledOnce()
         expect(settingsMock.setSecurity).toHaveBeenCalledWith({
             app_lock_enabled: false,
             app_lock_biometric: false,
         })
+    })
+
+    it('keeps the lock armed when the verification PIN is wrong', async () => {
+        settingsMock.state.security = { app_lock_enabled: true, app_lock_biometric: false }
+        appLock.verifyAppLockPin.mockResolvedValue(false)
+        const { wrapper } = mountPanel()
+        await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-applock-verify"]').setValue('999999')
+        await wrapper.get('[data-testid="talos-applock-verify-submit"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).toMatch(/not recognized/i)
+        expect(appLock.clearAppLock).not.toHaveBeenCalled()
+        expect(settingsMock.setSecurity).not.toHaveBeenCalled()
+    })
+
+    it('disables through biometrics when they are enabled and available', async () => {
+        settingsMock.state.security = { app_lock_enabled: true, app_lock_biometric: true }
+        appLock.biometricUnlockAvailable.mockResolvedValue(true)
+        appLock.requestBiometricUnlock.mockResolvedValue(true)
+        const { wrapper } = mountPanel()
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-applock-verify-biometric"]').trigger('click')
+        await flushPromises()
+        expect(appLock.requestBiometricUnlock).toHaveBeenCalled()
+        expect(appLock.clearAppLock).toHaveBeenCalledOnce()
     })
 
     it('offers the biometric toggle only when the lock is armed AND the device supports it', async () => {

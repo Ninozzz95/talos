@@ -208,4 +208,72 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     await repository.deleteSession(beta.id)
     expect(await repository.getActiveSessionId()).toBeNull()
     expect(await repository.listSessions()).toEqual([])
+
+    // F4 Memory station — desktop-parity memory registry CRUD. Untrusted by
+    // construction; disable is a status transition, delete is explicit.
+    const memory = await repository.createMemory({
+        id: 'memory-1',
+        scope_type: 'global',
+        scope_id: null,
+        kind: 'preference',
+        title: 'Tone preference',
+        content: 'The owner prefers concise italian answers.',
+        source: 'talos_mobile_station',
+        metadata: { created_from: 'contract-test' },
+        created_at: '2026-07-22T11:00:00.000Z',
+    })
+    expect(memory).toMatchObject({
+        id: 'memory-1',
+        status: 'active',
+        trust_level: 'untrusted',
+        kind: 'preference',
+        last_used_at: null,
+    })
+    await repository.createMemory({
+        id: 'memory-2',
+        scope_type: 'project',
+        scope_id: 'avm',
+        kind: 'project_fact',
+        title: 'Project fact',
+        content: 'AVM is local-first.',
+        source: null,
+        metadata: {},
+        created_at: '2026-07-22T11:00:01.000Z',
+    })
+    expect((await repository.listMemories()).map((entry) => entry.id)).toEqual(['memory-2', 'memory-1'])
+
+    const disabled = await repository.updateMemoryStatus('memory-1', 'disabled')
+    expect(disabled.status).toBe('disabled')
+    expect((await repository.listMemories()).find((entry) => entry.id === 'memory-1')?.status).toBe('disabled')
+
+    await repository.touchMemories(['memory-2'], '2026-07-22T11:05:00.000Z')
+    expect((await repository.listMemories()).find((entry) => entry.id === 'memory-2')?.last_used_at)
+        .toBe('2026-07-22T11:05:00.000Z')
+
+    await repository.deleteMemory('memory-1')
+    expect((await repository.listMemories()).map((entry) => entry.id)).toEqual(['memory-2'])
+    await expect(repository.updateMemoryStatus('memory-1', 'active'))
+        .rejects.toThrow('TALOS_MEMORY_NOT_FOUND')
+
+    // SF-10: deleting a session sweeps its session-scoped memories — they can
+    // never be injected again and must not linger as dead rows.
+    const gamma = await repository.createSession({
+        id: 'session-gamma',
+        title: 'Gamma',
+        active_model_profile_id: null,
+        created_at: '2026-07-22T12:00:00.000Z',
+    })
+    await repository.createMemory({
+        id: 'memory-gamma',
+        scope_type: 'session',
+        scope_id: gamma.id,
+        kind: 'procedure',
+        title: 'Session-scoped',
+        content: 'Dies with its session.',
+        source: null,
+        metadata: {},
+        created_at: '2026-07-22T12:00:01.000Z',
+    })
+    await repository.deleteSession(gamma.id)
+    expect((await repository.listMemories()).map((entry) => entry.id)).toEqual(['memory-2'])
 }

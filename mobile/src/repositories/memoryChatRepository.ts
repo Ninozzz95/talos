@@ -15,6 +15,7 @@ import {
     type ChatRepositoryOptions,
     type CreateChatSessionInput,
     type CreateFileAuthorityGrantInput,
+    type CreateMemoryInput,
     type CreateVaultFileInput,
     type CreateToolActivityInput,
     type TalosChatAttachmentBinding,
@@ -23,6 +24,8 @@ import {
     type TalosLocalChatSession,
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
+    type TalosLocalMemory,
+    type TalosMemoryStatus,
     type TalosLocalVaultFile,
     type UpdateChatSessionInput,
     type UpdateVaultFileInput,
@@ -77,6 +80,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     const grants = new Map<string, TalosLocalFileAuthorityGrant>()
     const attachmentBindings = new Map<string, TalosChatAttachmentBinding[]>()
     const toolActivities = new Map<string, TalosLocalToolActivity>()
+    const memories = new Map<string, TalosLocalMemory>()
     let activeSessionId: string | null = null
     const now = options.now ?? (() => new Date().toISOString())
 
@@ -166,6 +170,10 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             return copySession(session)
         },
         async deleteSession(sessionId: string) {
+            // SF-10: session-scoped memories die with their session.
+            for (const [memoryId, memory] of [...memories]) {
+                if (memory.scope_type === 'session' && memory.scope_id === sessionId) memories.delete(memoryId)
+            }
             requireSession(sessionId)
             sessions.delete(sessionId)
             const removedMessages = messages.get(sessionId) ?? []
@@ -365,6 +373,53 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             const value = normalizeComposerDraft(draft)
             if (value === '') composerDrafts.delete(scope)
             else composerDrafts.set(scope, value)
+        },
+        async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
+            const session = sessions.get(sessionId)
+            if (!session) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+            const updated = { ...session, metadata: cloneJsonObject(metadata) }
+            sessions.set(sessionId, updated)
+            return { ...updated }
+        },
+        async createMemory(input: CreateMemoryInput) {
+            const memory: TalosLocalMemory = {
+                id: normalizeRepositoryId(input.id),
+                scope_type: input.scope_type,
+                scope_id: input.scope_id,
+                kind: input.kind,
+                status: 'active',
+                title: input.title,
+                content: input.content,
+                source: input.source,
+                metadata: cloneJsonObject(input.metadata),
+                trust_level: 'untrusted',
+                last_used_at: null,
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            memories.set(memory.id, memory)
+            return { ...memory }
+        },
+        async listMemories() {
+            return [...memories.values()]
+                .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+                .map((memory) => ({ ...memory }))
+        },
+        async updateMemoryStatus(memoryId: string, status: TalosMemoryStatus) {
+            const memory = memories.get(memoryId)
+            if (!memory) throw new Error('TALOS_MEMORY_NOT_FOUND')
+            const updated: TalosLocalMemory = { ...memory, status, updated_at: now() }
+            memories.set(memoryId, updated)
+            return { ...updated }
+        },
+        async touchMemories(memoryIds: string[], usedAt: string) {
+            for (const memoryId of memoryIds) {
+                const memory = memories.get(memoryId)
+                if (memory) memories.set(memoryId, { ...memory, last_used_at: usedAt })
+            }
+        },
+        async deleteMemory(memoryId: string) {
+            if (!memories.delete(memoryId)) throw new Error('TALOS_MEMORY_NOT_FOUND')
         },
         async close() {},
     }

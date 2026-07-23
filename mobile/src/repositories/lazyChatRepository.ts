@@ -2,9 +2,11 @@ import type {
     AppendChatMessageInput,
     CreateChatSessionInput,
     CreateFileAuthorityGrantInput,
+    CreateMemoryInput,
     CreateVaultFileInput,
     CreateToolActivityInput,
     TalosChatRepository,
+    TalosMemoryStatus,
     UpdateChatSessionInput,
     UpdateVaultFileInput,
     UpdateToolActivityInput,
@@ -116,6 +118,24 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async listMessageAttachments(messageId: string) {
             return (await ready()).listMessageAttachments(messageId)
+        },
+        async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
+            return (await ready()).updateSessionMetadata(sessionId, metadata)
+        },
+        async createMemory(input: CreateMemoryInput) {
+            return (await ready()).createMemory(input)
+        },
+        async listMemories() {
+            return (await ready()).listMemories()
+        },
+        async updateMemoryStatus(memoryId: string, status: TalosMemoryStatus) {
+            return (await ready()).updateMemoryStatus(memoryId, status)
+        },
+        async touchMemories(memoryIds: string[], usedAt: string) {
+            return (await ready()).touchMemories(memoryIds, usedAt)
+        },
+        async deleteMemory(memoryId: string) {
+            return (await ready()).deleteMemory(memoryId)
         },
         async loadComposerDraft(scopeId: string) {
             return (await ready()).loadComposerDraft(scopeId)

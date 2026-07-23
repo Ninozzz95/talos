@@ -1,0 +1,262 @@
+<script setup lang="ts">
+/**
+ * F4 Memory station — desktop `TalosMemoryManager` parity on the calm mobile
+ * shell: create untrusted memories (title/content/kind/scope), list them with
+ * status + provenance, disable/enable and delete. Every row is disclosed
+ * context only — the banner says so exactly like the desktop.
+ */
+import { computed, onMounted, ref } from 'vue'
+import { BookMarked, Plus, RotateCcw, Trash2 } from '@lucide/vue'
+import { Button } from '@/components/ui/button'
+import {
+    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { useChatController } from '@/stores/chatController'
+import { talosRelativeTime } from '@/lib/relativeTime'
+import type { TalosLocalMemory } from '@/repositories/chatRepository'
+
+const controller = useChatController()
+
+const entries = ref<TalosLocalMemory[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
+const actionMessage = ref<string | null>(null)
+
+const KINDS = [
+    { id: 'preference', label: 'Preference' },
+    { id: 'project_fact', label: 'Project fact' },
+    { id: 'procedure', label: 'Procedure' },
+    { id: 'policy_note', label: 'Policy note' },
+] as const
+
+const SCOPES = [
+    { id: 'global', label: 'Global' },
+    { id: 'project', label: 'Project' },
+    { id: 'session', label: 'This chat' },
+] as const
+
+const form = ref({
+    title: '',
+    content: '',
+    kind: 'project_fact' as typeof KINDS[number]['id'],
+    scope_type: 'global' as typeof SCOPES[number]['id'],
+    scope_id: 'avm',
+})
+const saving = ref(false)
+const formOpen = ref(false)
+const deleteTarget = ref<TalosLocalMemory | null>(null)
+
+const canSave = computed(() => form.value.title.trim().length > 0 && form.value.content.trim().length > 0)
+
+function describeError(cause: unknown): string {
+    return cause instanceof Error && cause.message ? cause.message : String(cause)
+}
+
+async function refresh(): Promise<void> {
+    loading.value = true
+    error.value = null
+    try {
+        entries.value = await controller.memories.list()
+    } catch (cause) {
+        error.value = describeError(cause)
+    } finally {
+        loading.value = false
+    }
+}
+
+onMounted(refresh)
+
+async function submit(): Promise<void> {
+    if (!canSave.value || saving.value) return
+    saving.value = true
+    error.value = null
+    try {
+        await controller.memories.create({
+            title: form.value.title.trim(),
+            content: form.value.content.trim(),
+            kind: form.value.kind,
+            scope_type: form.value.scope_type,
+            scope_id: form.value.scope_type === 'project' ? (form.value.scope_id.trim() || null) : null,
+        })
+        form.value.title = ''
+        form.value.content = ''
+        formOpen.value = false
+        actionMessage.value = 'Memory saved as untrusted context.'
+        await refresh()
+    } catch (cause) {
+        error.value = describeError(cause)
+    } finally {
+        saving.value = false
+    }
+}
+
+async function toggleStatus(memory: TalosLocalMemory): Promise<void> {
+    error.value = null
+    actionMessage.value = null
+    try {
+        await controller.memories.setStatus(memory.id, memory.status === 'active' ? 'disabled' : 'active')
+        await refresh()
+    } catch (cause) {
+        error.value = describeError(cause)
+    }
+}
+
+async function confirmDelete(): Promise<void> {
+    const target = deleteTarget.value
+    if (!target) return
+    error.value = null
+    try {
+        await controller.memories.remove(target.id)
+        deleteTarget.value = null
+        actionMessage.value = 'Memory deleted.'
+        await refresh()
+    } catch (cause) {
+        error.value = describeError(cause)
+    }
+}
+
+function scopeLabel(memory: TalosLocalMemory): string {
+    if (memory.scope_type === 'global') return 'Global'
+    if (memory.scope_type === 'session') return 'Chat'
+    return memory.scope_id ? `Project · ${memory.scope_id}` : 'Project'
+}
+</script>
+
+<template>
+    <div class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3" data-testid="talos-memory-screen">
+        <p class="text-xs leading-5 text-[var(--talos-muted)]">
+            Memories are stored on this device and always injected as
+            <span class="font-semibold text-[var(--talos-text)]">untrusted disclosed context</span> —
+            they can never override system or security rules.
+        </p>
+
+        <Button
+            type="button"
+            data-testid="talos-memory-new"
+            class="talos-pressable min-h-11 gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+            @click="formOpen = !formOpen"
+        >
+            <Plus class="size-4" aria-hidden="true" />
+            New memory
+        </Button>
+
+        <form v-if="formOpen" class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3" @submit.prevent="submit">
+            <input
+                v-model="form.title"
+                data-testid="talos-memory-title"
+                aria-label="Memory title"
+                placeholder="Title"
+                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+            >
+            <textarea
+                v-model="form.content"
+                data-testid="talos-memory-content"
+                aria-label="Memory content"
+                placeholder="What should TALOS remember?"
+                rows="3"
+                class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 py-2 text-sm leading-5 text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+            />
+            <div class="flex flex-wrap gap-2">
+                <select
+                    v-model="form.kind"
+                    aria-label="Memory kind"
+                    class="min-h-11 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-2 text-sm text-[var(--talos-text)]"
+                >
+                    <option v-for="kind in KINDS" :key="kind.id" :value="kind.id">{{ kind.label }}</option>
+                </select>
+                <select
+                    v-model="form.scope_type"
+                    aria-label="Memory scope"
+                    class="min-h-11 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-2 text-sm text-[var(--talos-text)]"
+                >
+                    <option v-for="scope in SCOPES" :key="scope.id" :value="scope.id">{{ scope.label }}</option>
+                </select>
+            </div>
+            <input
+                v-if="form.scope_type === 'project'"
+                v-model="form.scope_id"
+                aria-label="Project id"
+                placeholder="Project id"
+                class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none"
+            >
+            <Button
+                type="submit"
+                data-testid="talos-memory-save"
+                :disabled="!canSave || saving"
+                class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
+            >
+                Save memory
+            </Button>
+        </form>
+
+        <p v-if="actionMessage" role="status" class="text-xs text-[var(--talos-success,#3f9d6b)]">{{ actionMessage }}</p>
+        <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
+
+        <p v-if="!entries.length && !loading" class="py-6 text-center text-sm text-[var(--talos-muted)]">
+            No memories yet — save what TALOS should remember across chats.
+        </p>
+
+        <ul v-else class="flex flex-col gap-2">
+            <li
+                v-for="memory in entries"
+                :key="memory.id"
+                data-testid="talos-memory-row"
+                :data-memory-status="memory.status"
+                class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
+                :class="memory.status !== 'active' ? 'opacity-60' : ''"
+            >
+                <div class="flex items-start gap-2">
+                    <BookMarked class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <span class="text-sm font-semibold text-[var(--talos-text)]">{{ memory.title }}</span>
+                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ memory.kind.replace('_', ' ') }}</span>
+                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ scopeLabel(memory) }}</span>
+                            <span
+                                v-if="memory.status !== 'active'"
+                                class="rounded-full bg-[var(--talos-danger,#dc5b5b)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-danger,#dc5b5b)]"
+                            >{{ memory.status }}</span>
+                        </div>
+                        <p class="mt-1 line-clamp-2 text-xs leading-5 text-[var(--talos-muted)]">{{ memory.content }}</p>
+                        <p v-if="memory.last_used_at" class="mt-1 text-[11px] text-[var(--talos-muted)]">
+                            Used {{ talosRelativeTime(memory.last_used_at) }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        :aria-label="`${memory.status === 'active' ? 'Disable' : 'Enable'} memory ${memory.title}`"
+                        class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                        @click="toggleStatus(memory)"
+                    >
+                        <RotateCcw class="size-4" aria-hidden="true" />
+                    </button>
+                    <button
+                        type="button"
+                        :aria-label="`Delete memory ${memory.title}`"
+                        class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                        @click="deleteTarget = memory"
+                    >
+                        <Trash2 class="size-4" aria-hidden="true" />
+                    </button>
+                </div>
+            </li>
+        </ul>
+
+        <Dialog :open="deleteTarget !== null" @update:open="(open) => { if (!open) deleteTarget = null }">
+            <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
+                <DialogHeader>
+                    <DialogTitle>Delete memory?</DialogTitle>
+                    <DialogDescription class="text-[var(--talos-muted)]">
+                        This permanently removes "{{ deleteTarget?.title }}" from this device.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button type="button" variant="ghost" @click="deleteTarget = null">Cancel</Button>
+                    <Button type="button" variant="destructive" @click="confirmDelete">
+                        <Trash2 class="size-4" aria-hidden="true" /> Delete
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    </div>
+</template>

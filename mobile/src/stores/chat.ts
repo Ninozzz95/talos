@@ -65,6 +65,14 @@ export interface ChatStore {
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<void>
+    setSessionArchived(sessionId: string, archived: boolean): Promise<void>
+    setSessionOrder(orderedIds: string[]): Promise<void>
+    exportSnapshot(sessionId?: string): Promise<{
+        session: TalosLocalChatSession
+        messages: TalosLocalChatMessage[]
+        activities: TalosLocalToolActivity[]
+        attachments: Array<TalosChatAttachmentBinding & { sha256: string | null }>
+    }>
     loadComposerDraft(scopeId?: string | null): Promise<string>
     saveComposerDraft(draft: string, scopeId?: string | null): Promise<void>
     setActiveModelProfile(modelProfileId: string | null): Promise<void>
@@ -423,6 +431,63 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         }
     }
 
+    // F4-#16 — raw snapshot for the local export builders: session, ordered
+    // messages, session tool activities, and attachment bindings enriched
+    // with the vault sha256 (name+hash provenance, never storage paths).
+    async function exportSnapshot(sessionId?: string) {
+        requirePersistence()
+        const targetId = sessionId ?? activeSession.value?.id
+        if (!targetId) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        const session = sessions.find((candidate) => candidate.id === targetId)
+        if (!session) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        const exportMessages = await repository.listMessages(targetId)
+        const activities = await repository.listSessionToolActivities(targetId)
+        const attachments = []
+        for (const message of exportMessages) {
+            for (const binding of await repository.listMessageAttachments(message.id)) {
+                const vaultFile = await repository.getVaultFile(binding.vault_file_id).catch(() => null)
+                attachments.push({ ...binding, sha256: vaultFile?.sha256 ?? null })
+            }
+        }
+        return { session, messages: exportMessages, activities, attachments }
+    }
+
+    // F4-#23 — archive flag and manual order live in session metadata: they
+    // survive restart, stay local-first, and need no schema migration.
+    async function setSessionArchived(sessionId: string, archived: boolean): Promise<void> {
+        requirePersistence()
+        const current = sessions.find((session) => session.id === sessionId)
+        if (!current) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        try {
+            const updated = await repository.updateSessionMetadata(sessionId, {
+                ...current.metadata, archived,
+            })
+            if (activeSession.value?.id === sessionId) activeSession.value = updated
+            await refreshSessionList()
+        } catch (error) {
+            markPersistenceFailure(error)
+            throw error
+        }
+    }
+
+    async function setSessionOrder(orderedIds: string[]): Promise<void> {
+        requirePersistence()
+        try {
+            for (const [index, sessionId] of orderedIds.entries()) {
+                const current = sessions.find((session) => session.id === sessionId)
+                if (!current) continue
+                const updated = await repository.updateSessionMetadata(sessionId, {
+                    ...current.metadata, sort_index: index,
+                })
+                if (activeSession.value?.id === sessionId) activeSession.value = updated
+            }
+            await refreshSessionList()
+        } catch (error) {
+            markPersistenceFailure(error)
+            throw error
+        }
+    }
+
     async function setSurface(surface: TalosLocalChatSurface): Promise<void> {
         requirePersistence()
         let active = activeSession.value
@@ -619,6 +684,9 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         selectSession,
         renameSession,
         deleteSession,
+        setSessionArchived,
+        setSessionOrder,
+        exportSnapshot,
         loadComposerDraft,
         saveComposerDraft,
         setActiveModelProfile,

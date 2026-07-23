@@ -1,8 +1,8 @@
 /**
  * Local-first settings preferences — the desktop `preferences` subtrees that are pure
  * client render/behaviour prefs (chat layout, AI defaults, appearance visibility,
- * keyboard shortcuts). Each subtree is fail-closed through the ported desktop resolvers
- * (`sanitizeTalosChatLayout`, `resolveTalosAppearanceVisibility`, `resolveTalosShortcuts`)
+ * F4-#25: keyboard shortcuts REMOVED — hardware bindings make no sense on a phone). Each subtree is fail-closed through the ported desktop resolvers
+ * (`sanitizeTalosChatLayout`, `resolveTalosAppearanceVisibility`)
  * so parity is exact. Persisted in Capacitor Preferences; theme + color mode live in the
  * theme store. Server-coupled tabs (search/browser/integrations/…) are replicated in the
  * UI as gated/read-only per the identical-to-desktop rule but hold no live state here.
@@ -16,7 +16,6 @@ import {
     type TalosAppearanceGroup,
     type TalosAppearanceVisibility,
 } from '@/lib/talosAppearancePreferences'
-import { defaultTalosShortcuts, resolveTalosShortcuts, type TalosShortcutActionId } from '@/lib/talosShortcuts'
 import {
     parseTalosMotionV6Preferences,
     type TalosInterfaceMotionCategories,
@@ -173,7 +172,6 @@ export interface TalosMobileSettingsState {
     composer_defaults: TalosComposerDefaults
     motion_v6: TalosMotionV6Preferences
     appearance_visibility: TalosAppearanceVisibility
-    keyboard_shortcuts: Record<TalosShortcutActionId, string>
     model_lab: TalosMobileModelLabPreferences
     browser: TalosMobileBrowserPreferences
 }
@@ -272,7 +270,6 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         composer_defaults: parseComposerDefaults(value.composer_defaults),
         motion_v6: motionParsed,
         appearance_visibility: resolveTalosAppearanceVisibility(value.appearance_visibility),
-        keyboard_shortcuts: resolveTalosShortcuts(value.keyboard_shortcuts),
         model_lab: parseTalosMobileModelLabPreferences(
             value.model_lab ?? TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
         ),
@@ -300,8 +297,6 @@ export interface SettingsStore {
     resetMotionPreferences(): Promise<void>
     setVisibility(group: TalosAppearanceGroup, key: string, value: boolean): Promise<void>
     resetVisibility(group?: TalosAppearanceGroup): Promise<void>
-    setShortcut(action: TalosShortcutActionId, binding: string): Promise<void>
-    resetShortcuts(): Promise<void>
 }
 
 let singleton: SettingsStore | null = null
@@ -325,7 +320,6 @@ export function useSettingsStore(): SettingsStore {
                 composer_defaults: state.composer_defaults,
                 motion_v6: state.motion_v6,
                 appearance_visibility: state.appearance_visibility,
-                keyboard_shortcuts: state.keyboard_shortcuts,
                 model_lab: state.model_lab,
                 browser: state.browser,
             }),
@@ -342,7 +336,6 @@ export function useSettingsStore(): SettingsStore {
             state.composer_defaults = parsed.composer_defaults
             state.motion_v6 = parsed.motion_v6
             state.appearance_visibility = parsed.appearance_visibility
-            state.keyboard_shortcuts = parsed.keyboard_shortcuts
             state.model_lab = parsed.model_lab
             state.browser = parsed.browser
             state.shell = parsed.shell
@@ -429,14 +422,6 @@ export function useSettingsStore(): SettingsStore {
             } else {
                 state.appearance_visibility = defaults
             }
-            await persist()
-        },
-        async setShortcut(action, binding) {
-            state.keyboard_shortcuts = { ...state.keyboard_shortcuts, [action]: binding }
-            await persist()
-        },
-        async resetShortcuts() {
-            state.keyboard_shortcuts = defaultTalosShortcuts()
             await persist()
         },
     }

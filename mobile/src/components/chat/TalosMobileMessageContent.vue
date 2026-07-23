@@ -1,30 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { renderTalosMarkdown } from '@/lib/talosMessageMarkdown'
 import { writeTalosClipboardText } from '@/services/clipboard'
 
 const props = withDefaults(defineProps<{
     content: string
     sensitive?: boolean
-    censorEnabled?: boolean
 }>(), {
     sensitive: false,
-    censorEnabled: true,
 })
 
 const copyStatus = ref('')
-const contentRoot = ref<HTMLElement | null>(null)
 const rendered = computed(() => renderTalosMarkdown(props.content))
-
-function applyCensor(): void {
-    if (!props.censorEnabled || !contentRoot.value) return
-    void import('@/lib/talosSensitiveCensor').then(({ censorSensitiveText }) => {
-        if (props.censorEnabled && contentRoot.value) censorSensitiveText(contentRoot.value)
-    }).catch(() => undefined)
-}
-
-onMounted(applyCensor)
-watch(rendered, () => { void nextTick(applyCensor) })
 
 async function handleContentClick(event: MouseEvent): Promise<void> {
     const target = event.target instanceof Element
@@ -49,7 +36,6 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 
 <template>
     <div
-        ref="contentRoot"
         data-testid="talos-mobile-message-content"
         class="talos-message-content min-w-0 max-w-full"
         :class="sensitive ? 'talos-sensitive-output' : ''"
@@ -101,8 +87,4 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 .talos-message-content .talos-task-marker { display: inline-flex; width: 1rem; justify-content: center; color: var(--talos-success); }
 .talos-message-content .talos-external-image-omitted { color: var(--talos-muted); font-style: italic; }
 .talos-sensitive-output { filter: blur(5px); }
-.talos-censored { display: inline; margin: 0; padding: 0 2px; border: 0; border-radius: 3px; background: color-mix(in srgb, var(--talos-accent) 15%, var(--talos-panel-soft)); color: transparent; text-shadow: 0 0 7px var(--talos-text); cursor: pointer; }
-.talos-censored:hover { background: color-mix(in srgb, var(--talos-accent) 22%, var(--talos-panel-soft)); }
-.talos-censored:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
-.talos-censored[data-revealed="true"] { color: inherit; text-shadow: none; background: color-mix(in srgb, var(--talos-accent) 10%, transparent); }
 </style>

@@ -18,8 +18,10 @@ import {
     createTalosInAppBrowserService,
     type TalosInAppBrowserEvent,
 } from '@/services/inAppBrowserService'
+import { createSessionActionRunner } from '@/lib/sessionActionRunner'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosMobileToasts } from '@/stores/toasts'
 
 const TalosMobileBrowserActivity = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileBrowserActivity.vue'),
@@ -65,7 +67,11 @@ const dictation = useTalosMobileDictation({
 })
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const composerWrap = ref<HTMLElement | null>(null)
-const sessionActionBusy = ref(false)
+// F4-#22: shared guard — failed session actions surface as toasts, never as
+// swallowed unhandled rejections (owner saw silent no-ops on device).
+const toasts = useTalosMobileToasts()
+const sessionActions = createSessionActionRunner(toasts)
+const sessionActionBusy = sessionActions.busy
 const messageActionError = ref<string | null>(null)
 const browserError = ref<string | null>(null)
 const browserBusy = ref(false)
@@ -229,22 +235,12 @@ async function onSend(): Promise<void> {
     await draft.activateScope(activeSessionId.value ?? 'new')
 }
 
-async function runSessionAction(action: () => Promise<void>): Promise<void> {
-    if (sessionActionBusy.value) return
-    sessionActionBusy.value = true
-    try {
-        await action()
-    } finally {
-        sessionActionBusy.value = false
-    }
-}
-
 // Exposed to the app shell: the header/sidebar (F1-T3) drive these orchestrated
 // actions so attachment revocation + draft scoping stay in one place.
 defineExpose({ newSession, selectSession, renameSession, deleteSession, sessionActionBusy })
 
 function newSession(): void {
-    void runSessionAction(async () => {
+    void sessionActions.run('New chat', async () => {
         controller.clearPromptEnhancement()
         await draft.flush()
         await attachments.discardAll()
@@ -254,7 +250,7 @@ function newSession(): void {
 }
 
 function selectSession(sessionId: string): void {
-    void runSessionAction(async () => {
+    void sessionActions.run('Open chat', async () => {
         controller.clearPromptEnhancement()
         await draft.flush()
         if (sessionId !== activeSessionId.value) await attachments.discardAll()
@@ -264,11 +260,11 @@ function selectSession(sessionId: string): void {
 }
 
 function renameSession(sessionId: string, title: string): void {
-    void runSessionAction(() => controller.renameSession(sessionId, title))
+    void sessionActions.run('Rename chat', () => controller.renameSession(sessionId, title))
 }
 
 function deleteSession(sessionId: string): void {
-    void runSessionAction(async () => {
+    void sessionActions.run('Delete chat', async () => {
         controller.clearPromptEnhancement()
         await draft.flush()
         if (sessionId === activeSessionId.value) await attachments.discardAll()
@@ -278,7 +274,7 @@ function deleteSession(sessionId: string): void {
 }
 
 function retryPersistence(): void {
-    void runSessionAction(() => chat.retryPersistence())
+    void sessionActions.run('Reconnect storage', () => chat.retryPersistence())
 }
 
 function selectAttachments(): void {
@@ -329,6 +325,13 @@ function requestPromptEnhancement(): void {
     })
 }
 
+// F4-#20: a blocked enhancement surfaces its reason and puts the user where
+// the fix happens — in the composer.
+function onEnhanceBlocked(reason: string): void {
+    toasts.push({ message: reason, durationMs: 5000 })
+    focusComposer()
+}
+
 function cancelPromptEnhancement(): void {
     controller.clearPromptEnhancement()
     focusComposer()
@@ -359,7 +362,7 @@ function replacePromptEnhancement(): void {
 
 function selectSlashCommand(commandId: TalosMobileCommandId): void {
     if (!['new_session', 'open_browse', 'open_context_vault', 'open_model_center'].includes(commandId)) return
-    void runSessionAction(async () => {
+    void sessionActions.run('Run command', async () => {
         draft.updatePrompt('')
         await draft.flush()
         controller.clearPromptEnhancement()
@@ -383,7 +386,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
 }
 
 function toggleBrowseMode(enabled: boolean): void {
-    void runSessionAction(async () => {
+    void sessionActions.run('Toggle browsing', async () => {
         browserError.value = null
         await controller.setBrowseMode(enabled)
         if (!enabled) {
@@ -616,7 +619,7 @@ onBeforeUnmount(() => {
                 :browse-mode="browseMode"
                 :browser-suggestion-url="browserSuggestionUrl"
                 :browser-busy="browserBusy"
-                :dictation-supported="dictation.supported.value"
+                :dictation-supported="dictation.visible.value"
                 :dictation-listening="dictation.status.value === 'listening'"
                 :drawer-mode="settings.state.shell.composer_drawer"
                 @update:prompt="draft.updatePrompt($event)"
@@ -633,6 +636,7 @@ onBeforeUnmount(() => {
                 @open-model-lab="router.push({ name: 'settings', query: { tab: 'models' } })"
                 @open-context="router.push({ name: 'context' })"
                 @enhance-prompt="requestPromptEnhancement"
+                @enhance-blocked="onEnhanceBlocked"
                 @cancel-prompt-enhancement="cancelPromptEnhancement"
                 @insert-prompt-enhancement="insertPromptEnhancement"
                 @replace-prompt-enhancement="replacePromptEnhancement"

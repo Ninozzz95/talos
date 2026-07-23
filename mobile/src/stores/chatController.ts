@@ -29,6 +29,7 @@ import { clampMobileEffort, mobileEffortLadderFromLevels, type TalosMobileEffort
 import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import type { TalosChatRepository } from '@/repositories/chatRepository'
 import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
+import { newTalosMobileId } from '@/lib/mobileIds'
 import {
     clearProviderEndpoint as realClearEndpoint,
     getProviderEndpoint as realGetEndpoint,
@@ -44,6 +45,11 @@ import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
+import {
+    buildTalosMemoryContextMessage,
+    selectTalosMemoriesForSession,
+    talosMemoryDisclosure,
+} from '@/lib/chat/memoryContext'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import {
     TALOS_DEFAULT_COMPOSER_DEFAULTS,
@@ -205,6 +211,21 @@ export interface ChatController {
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<void>
     deleteSession(sessionId: string): Promise<void>
+    memories: {
+        list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
+        create(input: {
+            title: string
+            content: string
+            kind: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
+            scope_type: 'global' | 'project' | 'session'
+            scope_id: string | null
+        }): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
+        setStatus(
+            memoryId: string,
+            status: 'active' | 'disabled' | 'quarantined' | 'rejected',
+        ): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
+        remove(memoryId: string): Promise<void>
+    }
     resendMessage(messageId: string): Promise<void>
     retryAssistantMessage(messageId: string): Promise<void>
     send(text: string): Promise<boolean>
@@ -317,6 +338,39 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
 
     const toasts = useTalosMobileToasts()
+    // F4 Memory station — retrieval happens per send: the untrusted block is
+    // applied to the LAST user turn of the PROVIDER payload only, the
+    // persisted message stays verbatim (disclosure in its metadata).
+    let pendingMemoryBlock: string | null = null
+
+    async function prepareMemoryInjection(): Promise<Record<string, unknown>> {
+        // SF-4 invariant: disclosure and injection are set TOGETHER or not at
+        // all — any failure resets both, and a send already in flight keeps
+        // its own selection untouched (the follow-up chat.send is a no-op).
+        if (chat.state.sending) return {}
+        pendingMemoryBlock = null
+        memorySelection = []
+        try {
+            const all = await deps.chatRepository.listMemories()
+            const selected = selectTalosMemoriesForSession(all, chat.activeSession.value?.id ?? null)
+                .filter((memory) => memory.content !== '')
+            if (selected.length === 0) return {}
+            memorySelection = selected
+            pendingMemoryBlock = 'pending'
+            // Usage stamp is best-effort bookkeeping: it must never block or
+            // desync the injection/disclosure pair.
+            void deps.chatRepository
+                .touchMemories(selected.map((memory) => memory.id), new Date().toISOString())
+                .catch(() => undefined)
+            return { used_memories: talosMemoryDisclosure(selected) }
+        } catch {
+            pendingMemoryBlock = null
+            memorySelection = []
+            return {}
+        }
+    }
+    let memorySelection: ReturnType<typeof selectTalosMemoriesForSession> = []
+
     const complete: ChatCompletion = async (turns, stream) => {
         const profile = selectedProfile.value
         const providerModel = selectedProviderModel.value
@@ -328,6 +382,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         try {
             const tonePrompt = buildTalosSystemPrompt(deps.settings.state.tone.preset)
+            let payloadTurns = turns
+            if (pendingMemoryBlock !== null && memorySelection.length > 0) {
+                const lastUserIndex = turns.map((turn) => turn.role).lastIndexOf('user')
+                if (lastUserIndex >= 0) {
+                    payloadTurns = turns.map((turn, index) => index === lastUserIndex
+                        ? { ...turn, content: buildTalosMemoryContextMessage(turn.content, memorySelection) }
+                        : turn)
+                }
+                pendingMemoryBlock = null
+                memorySelection = []
+            }
             const raw = await buildChatCompletion(
                 () => ({
                     profile,
@@ -342,7 +407,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         : tonePrompt,
                 }),
                 deps.transport,
-            )(turns, stream)
+            )(payloadTurns, stream)
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
             const { text, suggestion } = extractToneSuggestion(raw)
@@ -810,12 +875,40 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     }
 
+    // F4 Memory station — thin CRUD facade for the station screen. Rows are
+    // untrusted by construction; the station is the only writer.
+    const memories = {
+        list: () => deps.chatRepository.listMemories(),
+        create: (input: {
+            title: string
+            content: string
+            kind: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
+            scope_type: 'global' | 'project' | 'session'
+            scope_id: string | null
+        }) => deps.chatRepository.createMemory({
+            id: newTalosMobileId(),
+            scope_type: input.scope_type,
+            scope_id: input.scope_type === 'session'
+                ? (chat.activeSession.value?.id ?? null)
+                : input.scope_id,
+            kind: input.kind,
+            title: input.title,
+            content: input.content,
+            source: 'talos_mobile_station',
+            metadata: { created_from: 'talos_mobile_station' },
+            created_at: new Date().toISOString(),
+        }),
+        setStatus: (memoryId: string, status: 'active' | 'disabled' | 'quarantined' | 'rejected') =>
+            deps.chatRepository.updateMemoryStatus(memoryId, status),
+        remove: (memoryId: string) => deps.chatRepository.deleteMemory(memoryId),
+    }
+
     async function send(text: string): Promise<boolean> {
         clearPromptEnhancement()
         const accepted = await chat.send(
             text,
             selectedModelId.value,
-            {},
+            await prepareMemoryInjection(),
             attachments.bindings.value,
         )
         if (accepted) attachments.clearSent()
@@ -827,6 +920,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const message = chat.messages.find((candidate) => candidate.id === messageId)
         if (!message || message.role !== 'user') throw new Error('TALOS could not find the message to resend.')
         await chat.send(message.content, selectedModelId.value, {
+            ...await prepareMemoryInjection(),
             command_id: 'resend_message',
             resend_of_message_id: message.id,
         })
@@ -840,6 +934,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const previousUser = chat.messages.slice(0, index).reverse().find((candidate) => candidate.role === 'user')
         if (!previousUser) throw new Error('TALOS could not find the prompt that produced this answer.')
         await chat.send(previousUser.content, selectedModelId.value, {
+            ...await prepareMemoryInjection(),
             command_id: 'retry_assistant_response',
             retry_of_message_id: message.id,
             resend_of_message_id: previousUser.id,
@@ -913,6 +1008,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         selectSession,
         renameSession,
         deleteSession,
+        memories,
         resendMessage,
         retryAssistantMessage,
         send,

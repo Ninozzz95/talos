@@ -1,134 +1,134 @@
 {
-  "schema_version": 1,
-  "description": "Frozen hash-conformance manifest for the 24 shadcn-vue 2.8.0 upstream files (drawer, dialog, button, lib/utils). Regenerated in a disposable directory and hash-matched before promotion; never hand-copied.",
-  "generator": {
-    "name": "shadcn-vue",
-    "version": "2.8.0",
-    "integrity": "sha512-iCRrUYGJ52rJkivBpk+O2ZW+2u30UOvA4sMTu8kw24r2UPkpO57NwLBMegPeC/ifPESSiOOrtMjvYTV5lpCf9w=="
-  },
-  "source_evidence": "generated-checksums.txt (55 file, Codex-verified 55/55)",
-  "extraction_rule": "rows matching ^probe-app/src/(components/ui/(button|dialog|drawer)/|lib/utils.ts); destination = s|^probe-app/src/|mobile/src/|",
-  "file_count": 24,
-  "files": [
-    {
-      "sha256": "03dfcb658cdf0cb49bd6c6dd1e0e2de1b4f0d53014956fa6a6259bb49857ad7a",
-      "source_probe_path": "probe-app/src/components/ui/button/Button.vue",
-      "destination": "mobile/src/components/ui/button/Button.vue"
+    "schema_version": 1,
+    "description": "Frozen hash-conformance manifest for the 24 shadcn-vue 2.8.0 upstream files (drawer, dialog, button, lib/utils). Regenerated in a disposable directory and hash-matched before promotion; never hand-copied.",
+    "generator": {
+        "name": "shadcn-vue",
+        "version": "2.8.0",
+        "integrity": "sha512-iCRrUYGJ52rJkivBpk+O2ZW+2u30UOvA4sMTu8kw24r2UPkpO57NwLBMegPeC/ifPESSiOOrtMjvYTV5lpCf9w=="
     },
-    {
-      "sha256": "bab5edf1158d08608d96eaddd15f1e0cc875d77a816495adcb2425262a37ea08",
-      "source_probe_path": "probe-app/src/components/ui/button/index.ts",
-      "destination": "mobile/src/components/ui/button/index.ts"
-    },
-    {
-      "sha256": "cfcdd7074ff971dc847fc00481958665596298cf2d5d0395b756dd18f9479496",
-      "source_probe_path": "probe-app/src/components/ui/dialog/Dialog.vue",
-      "destination": "mobile/src/components/ui/dialog/Dialog.vue"
-    },
-    {
-      "sha256": "75b7d12d7e43d639baad26f890b66353882c1bc26b538f6d71b739fdcf47f421",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogClose.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogClose.vue"
-    },
-    {
-      "sha256": "162aa1e930f9e2ee2f02b7214d923993511d4facd6cc1fe1b978642af2fcdd7d",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogContent.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogContent.vue"
-    },
-    {
-      "sha256": "2be897fa1a484a3ace4a43a412b46ca5c70e68b765a878142bdb0dc5cc7e3d68",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogDescription.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogDescription.vue"
-    },
-    {
-      "sha256": "40a892cf52426684fdcf05a9c987db69c5097a620273166f2ceccd435c51d91a",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogFooter.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogFooter.vue"
-    },
-    {
-      "sha256": "334b2370e26a7e483186647540df261e6c426867f6a95f46bae9228d5efd2042",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogHeader.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogHeader.vue"
-    },
-    {
-      "sha256": "5763d7ebe5de0b5671cbd68b27957983bdf1bfe3da2c7af2d299921544112481",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogOverlay.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogOverlay.vue"
-    },
-    {
-      "sha256": "44aca8ded817ca375d1338bc8a66dbee1709a4d38d66dc64ec6af70cb99ff449",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogScrollContent.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogScrollContent.vue"
-    },
-    {
-      "sha256": "becb227509b4b2dd0f0598051f33556935f1983b7f526298b2f146776ca374cb",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogTitle.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogTitle.vue"
-    },
-    {
-      "sha256": "31f97f38f9e317528615a34b00cad92bd73c5b6f8018d4e6f8367361f1afdf4c",
-      "source_probe_path": "probe-app/src/components/ui/dialog/DialogTrigger.vue",
-      "destination": "mobile/src/components/ui/dialog/DialogTrigger.vue"
-    },
-    {
-      "sha256": "6d073055ba93b6c2f440644ecb4b79644b0eb67d038f6685d8f6d173880cfc10",
-      "source_probe_path": "probe-app/src/components/ui/dialog/index.ts",
-      "destination": "mobile/src/components/ui/dialog/index.ts"
-    },
-    {
-      "sha256": "ee107d20eaaeb30ff54347aa12ed8e2ffd9cf4119f43e0440a244dd85045a766",
-      "source_probe_path": "probe-app/src/components/ui/drawer/Drawer.vue",
-      "destination": "mobile/src/components/ui/drawer/Drawer.vue"
-    },
-    {
-      "sha256": "c5bcb387a324e36156a56a187289e647c0b4882754f740ad75047a862f9c736f",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerClose.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerClose.vue"
-    },
-    {
-      "sha256": "b302cd9969ba7b05c5e6ae93357df220db3cf3e280bd2a965136246846c58cf7",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerContent.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerContent.vue"
-    },
-    {
-      "sha256": "389d36ce3983e60fd9b8655bd80162b3ce77302b711b5ebfe0af2fd30376e667",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerDescription.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerDescription.vue"
-    },
-    {
-      "sha256": "cd1e45a9375cfb6cdb47453c14ed929ebbbf1252a302e9169e462a928953b2d4",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerFooter.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerFooter.vue"
-    },
-    {
-      "sha256": "41bba93cfd04e2b0d789d70df43c3d1f54454ef1f22d635e25698a9b69c7bea7",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerHeader.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerHeader.vue"
-    },
-    {
-      "sha256": "42a11f37c764d2f0472a105e7bb5248f7e64087248d444f3b7927bc56fabee71",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerOverlay.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerOverlay.vue"
-    },
-    {
-      "sha256": "f8754a56e79195b125da08bca5e2e01f36a8eca8c266deb0c87acf09f9b3a29e",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerTitle.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerTitle.vue"
-    },
-    {
-      "sha256": "5c684ded4b2c1cf6fd1ba9a01f1eb333312675b8e12cfd8f86319c76b8d2fae1",
-      "source_probe_path": "probe-app/src/components/ui/drawer/DrawerTrigger.vue",
-      "destination": "mobile/src/components/ui/drawer/DrawerTrigger.vue"
-    },
-    {
-      "sha256": "cd8d4f32b7db2bb233f60e75eb3597cd320f1f3ab9d2d4201ce1a8266d9d8df2",
-      "source_probe_path": "probe-app/src/components/ui/drawer/index.ts",
-      "destination": "mobile/src/components/ui/drawer/index.ts"
-    },
-    {
-      "sha256": "0da744307f9203d07688bda682e904348ba8c56beb141a83cd50fab16a9e56e7",
-      "source_probe_path": "probe-app/src/lib/utils.ts",
-      "destination": "mobile/src/lib/utils.ts"
-    }
-  ]
+    "source_evidence": "generated-checksums.txt (55 file, Codex-verified 55/55)",
+    "extraction_rule": "rows matching ^probe-app/src/(components/ui/(button|dialog|drawer)/|lib/utils.ts); destination = s|^probe-app/src/|mobile/src/|",
+    "file_count": 24,
+    "files": [
+        {
+            "sha256": "03dfcb658cdf0cb49bd6c6dd1e0e2de1b4f0d53014956fa6a6259bb49857ad7a",
+            "source_probe_path": "probe-app/src/components/ui/button/Button.vue",
+            "destination": "mobile/src/components/ui/button/Button.vue"
+        },
+        {
+            "sha256": "bab5edf1158d08608d96eaddd15f1e0cc875d77a816495adcb2425262a37ea08",
+            "source_probe_path": "probe-app/src/components/ui/button/index.ts",
+            "destination": "mobile/src/components/ui/button/index.ts"
+        },
+        {
+            "sha256": "cfcdd7074ff971dc847fc00481958665596298cf2d5d0395b756dd18f9479496",
+            "source_probe_path": "probe-app/src/components/ui/dialog/Dialog.vue",
+            "destination": "mobile/src/components/ui/dialog/Dialog.vue"
+        },
+        {
+            "sha256": "75b7d12d7e43d639baad26f890b66353882c1bc26b538f6d71b739fdcf47f421",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogClose.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogClose.vue"
+        },
+        {
+            "sha256": "162aa1e930f9e2ee2f02b7214d923993511d4facd6cc1fe1b978642af2fcdd7d",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogContent.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogContent.vue"
+        },
+        {
+            "sha256": "2be897fa1a484a3ace4a43a412b46ca5c70e68b765a878142bdb0dc5cc7e3d68",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogDescription.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogDescription.vue"
+        },
+        {
+            "sha256": "40a892cf52426684fdcf05a9c987db69c5097a620273166f2ceccd435c51d91a",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogFooter.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogFooter.vue"
+        },
+        {
+            "sha256": "334b2370e26a7e483186647540df261e6c426867f6a95f46bae9228d5efd2042",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogHeader.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogHeader.vue"
+        },
+        {
+            "sha256": "84e1b180acf5902e098beec08a661811e6d4559431a6e7ed22861486c4acb349",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogOverlay.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogOverlay.vue"
+        },
+        {
+            "sha256": "44aca8ded817ca375d1338bc8a66dbee1709a4d38d66dc64ec6af70cb99ff449",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogScrollContent.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogScrollContent.vue"
+        },
+        {
+            "sha256": "becb227509b4b2dd0f0598051f33556935f1983b7f526298b2f146776ca374cb",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogTitle.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogTitle.vue"
+        },
+        {
+            "sha256": "31f97f38f9e317528615a34b00cad92bd73c5b6f8018d4e6f8367361f1afdf4c",
+            "source_probe_path": "probe-app/src/components/ui/dialog/DialogTrigger.vue",
+            "destination": "mobile/src/components/ui/dialog/DialogTrigger.vue"
+        },
+        {
+            "sha256": "6d073055ba93b6c2f440644ecb4b79644b0eb67d038f6685d8f6d173880cfc10",
+            "source_probe_path": "probe-app/src/components/ui/dialog/index.ts",
+            "destination": "mobile/src/components/ui/dialog/index.ts"
+        },
+        {
+            "sha256": "ee107d20eaaeb30ff54347aa12ed8e2ffd9cf4119f43e0440a244dd85045a766",
+            "source_probe_path": "probe-app/src/components/ui/drawer/Drawer.vue",
+            "destination": "mobile/src/components/ui/drawer/Drawer.vue"
+        },
+        {
+            "sha256": "c5bcb387a324e36156a56a187289e647c0b4882754f740ad75047a862f9c736f",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerClose.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerClose.vue"
+        },
+        {
+            "sha256": "b302cd9969ba7b05c5e6ae93357df220db3cf3e280bd2a965136246846c58cf7",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerContent.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerContent.vue"
+        },
+        {
+            "sha256": "389d36ce3983e60fd9b8655bd80162b3ce77302b711b5ebfe0af2fd30376e667",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerDescription.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerDescription.vue"
+        },
+        {
+            "sha256": "cd1e45a9375cfb6cdb47453c14ed929ebbbf1252a302e9169e462a928953b2d4",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerFooter.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerFooter.vue"
+        },
+        {
+            "sha256": "41bba93cfd04e2b0d789d70df43c3d1f54454ef1f22d635e25698a9b69c7bea7",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerHeader.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerHeader.vue"
+        },
+        {
+            "sha256": "0343548a695428eed3ce1ab5f67880d743b076eaac9a312be4226f3c569229ed",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerOverlay.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerOverlay.vue"
+        },
+        {
+            "sha256": "f8754a56e79195b125da08bca5e2e01f36a8eca8c266deb0c87acf09f9b3a29e",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerTitle.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerTitle.vue"
+        },
+        {
+            "sha256": "5c684ded4b2c1cf6fd1ba9a01f1eb333312675b8e12cfd8f86319c76b8d2fae1",
+            "source_probe_path": "probe-app/src/components/ui/drawer/DrawerTrigger.vue",
+            "destination": "mobile/src/components/ui/drawer/DrawerTrigger.vue"
+        },
+        {
+            "sha256": "cd8d4f32b7db2bb233f60e75eb3597cd320f1f3ab9d2d4201ce1a8266d9d8df2",
+            "source_probe_path": "probe-app/src/components/ui/drawer/index.ts",
+            "destination": "mobile/src/components/ui/drawer/index.ts"
+        },
+        {
+            "sha256": "0da744307f9203d07688bda682e904348ba8c56beb141a83cd50fab16a9e56e7",
+            "source_probe_path": "probe-app/src/lib/utils.ts",
+            "destination": "mobile/src/lib/utils.ts"
+        }
+    ]
 }

@@ -16,6 +16,7 @@ import {
     type ChatRepositoryOptions,
     type CreateChatSessionInput,
     type CreateFileAuthorityGrantInput,
+    type CreateMemoryInput,
     type CreateVaultFileInput,
     type CreateToolActivityInput,
     type TalosChatAttachmentBinding,
@@ -24,6 +25,10 @@ import {
     type TalosLocalChatSession,
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
+    type TalosLocalMemory,
+    type TalosMemoryKind,
+    type TalosMemoryScopeType,
+    type TalosMemoryStatus,
     type TalosLocalVaultFile,
     type UpdateChatSessionInput,
     type UpdateVaultFileInput,
@@ -81,6 +86,24 @@ function parseSession(row: TalosSqlRow): TalosLocalChatSession {
         persistence_mode: oneOf(requiredString(row, 'persistence_mode'), ['persistent', 'temporary'] as const),
         active_model_profile_id: nullableString(row, 'active_model_profile_id'),
         metadata: jsonObject(row.metadata_json),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function parseMemory(row: TalosSqlRow): TalosLocalMemory {
+    return {
+        id: requiredString(row, 'id'),
+        scope_type: oneOf(requiredString(row, 'scope_type'), ['global', 'project', 'session'] as const) as TalosMemoryScopeType,
+        scope_id: nullableString(row, 'scope_id'),
+        kind: oneOf(requiredString(row, 'kind'), ['preference', 'project_fact', 'procedure', 'policy_note', 'rejected'] as const) as TalosMemoryKind,
+        status: oneOf(requiredString(row, 'status'), ['active', 'disabled', 'quarantined', 'rejected'] as const) as TalosMemoryStatus,
+        title: requiredString(row, 'title'),
+        content: requiredString(row, 'content'),
+        source: nullableString(row, 'source'),
+        metadata: jsonObject(row.metadata_json),
+        trust_level: 'untrusted',
+        last_used_at: nullableString(row, 'last_used_at'),
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
@@ -206,22 +229,32 @@ export function createSqliteChatRepository(
         return connection
     }
 
+    // SF-6: one connection, one transaction at a time — concurrent writers
+    // (reorder + archive tap, double-tapped delete) queue instead of throwing
+    // "transaction within a transaction" and poisoning the store.
+    let writeQueue: Promise<unknown> = Promise.resolve()
+
     async function transaction<T>(operation: (database: TalosSqlConnection) => Promise<T>): Promise<T> {
-        const database = await db()
-        await database.beginTransaction()
-        try {
-            const result = await operation(database)
-            await database.commitTransaction()
-            await runtime.persist()
-            return result
-        } catch (error) {
+        const run = async (): Promise<T> => {
+            const database = await db()
+            await database.beginTransaction()
             try {
-                await database.rollbackTransaction()
-            } catch {
-                // Preserve the original write failure; runtime recovery owns a failed rollback.
+                const result = await operation(database)
+                await database.commitTransaction()
+                await runtime.persist()
+                return result
+            } catch (error) {
+                try {
+                    await database.rollbackTransaction()
+                } catch {
+                    // Preserve the original write failure; runtime recovery owns a failed rollback.
+                }
+                throw error
             }
-            throw error
         }
+        const chained = writeQueue.then(run, run)
+        writeQueue = chained.catch(() => undefined)
+        return chained
     }
 
     async function activeSessionId(existing?: TalosSqlConnection): Promise<string | null> {
@@ -320,13 +353,25 @@ export function createSqliteChatRepository(
             })
         },
         async renameSession(sessionId: string, title: string) {
+            // F4-#22: never trust the driver's `changes` counter — the native
+            // Android driver under a manual transaction is the only surface
+            // where these writes run, and it is exactly where the owner saw
+            // rename/delete fail. Guard existence and verify the write by
+            // reading back inside the transaction instead.
             const normalized = normalizeChatTitle(title)
             await transaction(async (database) => {
-                const result = await database.run(
+                await findSession(sessionId, database)
+                await database.run(
                     'UPDATE talos_chat_sessions SET title = ?, updated_at = ? WHERE id = ?',
                     [normalized, now(), sessionId],
                 )
-                if (result.changes !== 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+                const rows = await database.query(
+                    'SELECT title FROM talos_chat_sessions WHERE id = ? LIMIT 1',
+                    [sessionId],
+                )
+                if (rows.length !== 1 || requiredString(rows[0] as TalosSqlRow, 'title') !== normalized) {
+                    throw new Error('TALOS_CHAT_RENAME_UNVERIFIED')
+                }
             })
             return findSession(sessionId)
         },
@@ -339,22 +384,46 @@ export function createSqliteChatRepository(
                 : input.active_model_profile_id
             const metadata = input.metadata === undefined ? current.metadata : cloneJsonObject(input.metadata)
             await transaction(async (database) => {
-                const result = await database.run(
+                await findSession(sessionId, database)
+                await database.run(
                     `UPDATE talos_chat_sessions
                      SET title = ?, surface = ?, active_model_profile_id = ?, metadata_json = ?, updated_at = ?
                      WHERE id = ?`,
                     [title, surface, model, JSON.stringify(metadata), now(), sessionId],
                 )
-                if (result.changes !== 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+            })
+            return findSession(sessionId)
+        },
+        async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
+            const cloned = cloneJsonObject(metadata)
+            await transaction(async (database) => {
+                await findSession(sessionId, database)
+                await database.run(
+                    'UPDATE talos_chat_sessions SET metadata_json = ? WHERE id = ?',
+                    [JSON.stringify(cloned), sessionId],
+                )
             })
             return findSession(sessionId)
         },
         async deleteSession(sessionId: string) {
             return transaction(async (database) => {
+                // F4-#22: existence guarded by SELECT, deletion verified by
+                // reading back — the driver's `changes` counter is never
+                // consulted (see renameSession).
+                await findSession(sessionId, database)
                 const wasActive = await activeSessionId(database) === sessionId
-                const deleted = await database.run('DELETE FROM talos_chat_sessions WHERE id = ?', [sessionId])
-                if (deleted.changes < 1) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+                await database.run('DELETE FROM talos_chat_sessions WHERE id = ?', [sessionId])
+                const remaining = await database.query(
+                    'SELECT id FROM talos_chat_sessions WHERE id = ? LIMIT 1',
+                    [sessionId],
+                )
+                if (remaining.length !== 0) throw new Error('TALOS_CHAT_DELETE_UNVERIFIED')
                 await database.run('DELETE FROM talos_chat_state WHERE key = ?', [composerDraftKey(sessionId)])
+                // SF-10: session-scoped memories die with their session.
+                await database.run(
+                    "DELETE FROM talos_memories WHERE scope_type = 'session' AND scope_id = ?",
+                    [sessionId],
+                )
                 if (!wasActive) return activeSessionId(database)
                 const rows = await database.query(
                     `SELECT id FROM talos_chat_sessions
@@ -534,11 +603,15 @@ export function createSqliteChatRepository(
             assignments.push('updated_at = ?')
             values.push(now(), normalizeRepositoryId(activityId))
             await transaction(async (database) => {
-                const result = await database.run(
+                const exists = await database.query(
+                    'SELECT id FROM talos_chat_tool_activities WHERE id = ? LIMIT 1',
+                    [normalizeRepositoryId(activityId)],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_TOOL_ACTIVITY_NOT_FOUND')
+                await database.run(
                     `UPDATE talos_chat_tool_activities SET ${assignments.join(', ')} WHERE id = ?`,
                     values,
                 )
-                if (result.changes !== 1) throw new Error('TALOS_TOOL_ACTIVITY_NOT_FOUND')
             })
         },
         async listMessageToolActivities(messageId: string) {
@@ -643,7 +716,12 @@ export function createSqliteChatRepository(
                 updated_at: now(),
             }
             await transaction(async (database) => {
-                const result = await database.run(
+                const exists = await database.query(
+                    "SELECT id FROM talos_vault_files WHERE id = ? AND status != 'revoked' LIMIT 1",
+                    [updated.id],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+                await database.run(
                     `UPDATE talos_vault_files
                      SET private_uri = ?, status = ?, sha256 = ?, extracted_text = ?,
                          failure_code = ?, metadata_json = ?, updated_at = ?
@@ -659,20 +737,23 @@ export function createSqliteChatRepository(
                         updated.id,
                     ],
                 )
-                if (result.changes !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
             })
             return updated
         },
         async deleteVaultFile(fileId: string) {
             await transaction(async (database) => {
                 const timestamp = now()
-                const result = await database.run(
+                const exists = await database.query(
+                    "SELECT id FROM talos_vault_files WHERE id = ? AND status != 'revoked' LIMIT 1",
+                    [fileId],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+                await database.run(
                     `UPDATE talos_vault_files
                      SET status = 'revoked', private_uri = '', extracted_text = NULL, updated_at = ?
                      WHERE id = ? AND status != 'revoked'`,
                     [timestamp, fileId],
                 )
-                if (result.changes !== 1) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
                 await database.run(
                     `UPDATE talos_file_authority_grants
                      SET status = 'revoked', revoked_at = ?, updated_at = ?
@@ -725,13 +806,14 @@ export function createSqliteChatRepository(
         async revokeFileAuthorityGrant(grantId: string) {
             await transaction(async (database) => {
                 const timestamp = now()
-                const result = await database.run(
+                await database.run(
                     `UPDATE talos_file_authority_grants
                      SET status = 'revoked', revoked_at = ?, updated_at = ?
                      WHERE id = ? AND status = 'active'`,
                     [timestamp, timestamp, grantId],
                 )
-                if (result.changes === 1) return
+                // SF-3: the read-back ALWAYS decides — the driver's changes
+                // counter is never trusted on this security-relevant path.
                 const rows = await database.query(
                     'SELECT status FROM talos_file_authority_grants WHERE id = ? LIMIT 1',
                     [grantId],
@@ -753,6 +835,88 @@ export function createSqliteChatRepository(
                 [messageId],
             )
             return rows.map(parseBinding)
+        },
+        async createMemory(input: CreateMemoryInput) {
+            const memory: TalosLocalMemory = {
+                id: normalizeRepositoryId(input.id),
+                scope_type: input.scope_type,
+                scope_id: input.scope_id,
+                kind: input.kind,
+                status: 'active',
+                title: input.title,
+                content: input.content,
+                source: input.source,
+                metadata: cloneJsonObject(input.metadata),
+                trust_level: 'untrusted',
+                last_used_at: null,
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_memories
+                        (id, scope_type, scope_id, kind, status, title, content, source,
+                         metadata_json, trust_level, last_used_at, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'untrusted', NULL, ?, ?)`,
+                    [
+                        memory.id, memory.scope_type, memory.scope_id, memory.kind, memory.status,
+                        memory.title, memory.content, memory.source, JSON.stringify(memory.metadata),
+                        memory.created_at, memory.updated_at,
+                    ],
+                )
+            })
+            return memory
+        },
+        async listMemories() {
+            const rows = await (await db()).query(
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                 FROM talos_memories
+                 ORDER BY updated_at DESC, id DESC`,
+            )
+            return rows.map((row) => parseMemory(row as TalosSqlRow))
+        },
+        async updateMemoryStatus(memoryId: string, status: TalosMemoryStatus) {
+            // Driver-independent (F4-#22 pattern): guard by SELECT, never
+            // consult the driver's changes counter.
+            await transaction(async (database) => {
+                const exists = await database.query(
+                    'SELECT id FROM talos_memories WHERE id = ? LIMIT 1',
+                    [memoryId],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_MEMORY_NOT_FOUND')
+                await database.run(
+                    'UPDATE talos_memories SET status = ?, updated_at = ? WHERE id = ?',
+                    [status, now(), memoryId],
+                )
+            })
+            const rows = await (await db()).query(
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                 FROM talos_memories WHERE id = ? LIMIT 1`,
+                [memoryId],
+            )
+            if (rows.length !== 1) throw new Error('TALOS_MEMORY_NOT_FOUND')
+            return parseMemory(rows[0] as TalosSqlRow)
+        },
+        async touchMemories(memoryIds: string[], usedAt: string) {
+            if (memoryIds.length === 0) return
+            await transaction(async (database) => {
+                for (const memoryId of memoryIds) {
+                    await database.run(
+                        'UPDATE talos_memories SET last_used_at = ? WHERE id = ?',
+                        [usedAt, memoryId],
+                    )
+                }
+            })
+        },
+        async deleteMemory(memoryId: string) {
+            await transaction(async (database) => {
+                const exists = await database.query(
+                    'SELECT id FROM talos_memories WHERE id = ? LIMIT 1',
+                    [memoryId],
+                )
+                if (exists.length !== 1) throw new Error('TALOS_MEMORY_NOT_FOUND')
+                await database.run('DELETE FROM talos_memories WHERE id = ?', [memoryId])
+            })
         },
         async loadComposerDraft(scopeId: string) {
             const rows = await (await db()).query(
