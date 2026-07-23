@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 
-export type TalosMobileRouteName = 'chat' | 'research' | 'runs' | 'context' | 'settings'
+export type TalosMobileRouteName = 'chat' | 'chats' | 'research' | 'runs' | 'context' | 'settings'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -10,6 +10,7 @@ export interface TalosMobileRoute {
 }
 
 const loadChatScreen = () => import('@/screens/ChatScreen.vue').then((module) => module.default)
+const loadChatsScreen = () => import('@/screens/ChatsScreen.vue').then((module) => module.default)
 const loadResearchScreen = () => import('@/screens/ResearchScreen.vue').then((module) => module.default)
 const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
@@ -20,6 +21,8 @@ const loadSettingsScreen = () => import('@/screens/SettingsScreen.vue').then((mo
 // `desktop_station_id` values are canonical feature ids from the M0 parity ledger.
 export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'chat', path: '/', desktop_station_id: 'chat', component: loadChatScreen },
+    // F3-T3 (owner #12, Claude pattern): dedicated chat-list page on mobile.
+    { name: 'chats', path: '/chats', desktop_station_id: 'chat', component: loadChatsScreen },
     { name: 'research', path: '/research', desktop_station_id: 'research', component: loadResearchScreen },
     { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },
@@ -34,10 +37,26 @@ let routePreloadPromise: Promise<void> | null = null
 
 // Preserve route-level code splitting while making every packaged station
 // available before the offline-capable shell becomes interactive.
+// F3-T0/T6: lazily-split SHELL surfaces (sidebar, tool sheet, immersive
+// chrome, composer drawer, lock, intro, toasts live in the entry) must also be
+// warm before the shell claims offline readiness — on device everything is a
+// local asset, but the offline contract is proven in the browser harness too.
+const SHELL_CHUNKS: Array<() => Promise<unknown>> = [
+    () => import('@/components/shell/TalosMobileSidebar.vue'),
+    () => import('@/components/shell/TalosMobileToolSheet.vue'),
+    () => import('@/components/shell/TalosMobileImmersiveChrome.vue'),
+    () => import('@/components/chat/TalosMobileComposerDrawer.vue'),
+    () => import('@/components/security/TalosMobileLockScreen.vue'),
+    () => import('@/components/intro/TalosMobileIntroModal.vue'),
+]
+
 export function preloadTalosMobileRoutes(): Promise<void> {
     if (routePreloadPromise) return routePreloadPromise
 
-    routePreloadPromise = Promise.all(TALOS_MOBILE_ROUTES.map((route) => route.component()))
+    routePreloadPromise = Promise.all([
+        ...TALOS_MOBILE_ROUTES.map((route) => route.component()),
+        ...SHELL_CHUNKS.map((load) => load()),
+    ])
         .then(() => undefined)
         .catch((error: unknown) => {
             routePreloadPromise = null

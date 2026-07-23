@@ -6,7 +6,8 @@ async function openSettings(page: import('@playwright/test').Page): Promise<void
     await page.locator('[aria-label="Open menu"]').click()
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Settings Center', exact: true })).toBeVisible()
+    // F3-T3 chrome dedup: ONE title per surface — the sheet header owns it.
+    await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]').getByText('Settings Center').first()).toBeVisible()
 }
 
 test('Settings exposes all twelve desktop categories, real Browser controls, and honest remaining gates', async ({ page }) => {

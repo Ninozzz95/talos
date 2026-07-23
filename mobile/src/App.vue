@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileBackground from '@/components/talos/workspace/TalosMobileBackground.vue'
 import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
-import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
-import TalosMobileToolSheet from '@/components/shell/TalosMobileToolSheet.vue'
+import TalosMobileToastRegion from '@/components/shell/TalosMobileToastRegion.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
 import { TALOS_MOBILE_ROUTES, type TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { usePreferencesStore } from '@/stores/preferences'
@@ -50,6 +49,15 @@ const TalosMobileLockScreen = defineAsyncComponent(
 const TalosMobileImmersiveChrome = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileImmersiveChrome.vue'),
 )
+// F3-T0 entry split: the sidebar chunk loads at the FIRST hamburger tap and the
+// tool sheet only when a station opens — neither belongs to the first paint.
+const TalosMobileSidebar = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileSidebar.vue'),
+)
+const TalosMobileToolSheet = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileToolSheet.vue'),
+)
+const sidebarEverOpened = ref(false)
 const locked = ref(false)
 const settingsHydrated = ref(false)
 const intro = useTalosMobileIntroState({
@@ -75,6 +83,9 @@ const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
 // (attachment revocation + draft scoping stay orchestrated in one place).
 const sidebarOpen = ref(false)
+watch(sidebarOpen, (open) => {
+    if (open) sidebarEverOpened.value = true
+})
 const chatScreen = ref<InstanceType<typeof ChatScreen> | null>(null)
 const headerTitle = computed(() => chatController.chat.activeSession.value?.title ?? '')
 const sessionBusy = computed(() => Boolean((chatScreen.value as { sessionActionBusy?: boolean } | null)?.sessionActionBusy) || creatingSession.value)
@@ -129,6 +140,7 @@ const isStation = computed(() => activeRoute.value !== 'chat')
 
 const SHEET_TITLE: Record<TalosMobileRouteName, string> = {
     chat: 'Chat',
+    chats: 'Chats',
     research: 'Deep Research V3',
     runs: 'Runtime cockpit',
     context: 'Library',
@@ -281,6 +293,7 @@ onBeforeUnmount(async () => {
             />
 
             <TalosMobileSidebar
+                v-if="sidebarEverOpened"
                 v-model:open="sidebarOpen"
                 :sessions="chatController.chat.sessions"
                 :active-session-id="chatController.chat.activeSession.value?.id ?? null"
@@ -299,13 +312,21 @@ onBeforeUnmount(async () => {
                 <ChatScreen ref="chatScreen" />
             </main>
 
-            <TalosMobileToolSheet
-                v-if="isStation"
-                :title="sheetTitle"
-                @close="navigate('chat')"
+            <TalosMobileToastRegion />
+
+            <Transition
+                leave-active-class="transition duration-200 ease-in"
+                leave-to-class="opacity-0 translate-y-4"
             >
-                <RouterView />
-            </TalosMobileToolSheet>
+                <TalosMobileToolSheet
+                    v-if="isStation"
+                    :title="sheetTitle"
+                    :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
+                    @close="navigate('chat')"
+                >
+                    <RouterView />
+                </TalosMobileToolSheet>
+            </Transition>
         </template>
     </div>
 </template>

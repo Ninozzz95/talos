@@ -126,6 +126,7 @@ function makeDeps() {
             provider_runtime: {},
             probe_results: {},
         } as TalosMobileModelLabPreferences,
+        tone: { preset: 'balanced' as const },
     })
     const settings = {
         state: settingsState,
@@ -135,6 +136,9 @@ function makeDeps() {
         }),
         setModelLabPreferences: vi.fn(async (value: TalosMobileModelLabPreferences) => {
             settingsState.model_lab = structuredClone(value)
+        }),
+        setTone: vi.fn(async (preset: 'balanced' | 'engineering' | 'friendly' | 'concise') => {
+            settingsState.tone = { preset } as never
         }),
     }
     const deps: ChatControllerDeps = {

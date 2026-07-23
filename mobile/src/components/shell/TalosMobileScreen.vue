@@ -4,8 +4,14 @@
  * in-body header (parity map). Renders a single screen H1 (+ optional eyebrow)
  * over a scrollable content region. Uses the shared `--talos-*` tokens so it
  * renders identically to desktop once the `talos-shell` scope is applied.
+ * F3-T3 chrome dedup: inside the tool sheet (which already titles the surface)
+ * the header self-hides — one title per surface.
  */
+import { inject } from 'vue'
+import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
+
 defineProps<{ title: string; eyebrow?: string }>()
+const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 </script>
 
 <template>
@@ -14,7 +20,7 @@ defineProps<{ title: string; eyebrow?: string }>()
         :aria-label="title"
         class="flex min-h-full flex-col bg-[var(--talos-background)] text-[var(--talos-text)]"
     >
-        <header class="border-b border-[var(--talos-border)] p-4">
+        <header v-if="!insideSheet" class="border-b border-[var(--talos-border)] p-4">
             <p
                 v-if="eyebrow"
                 data-testid="mobile-screen-eyebrow"

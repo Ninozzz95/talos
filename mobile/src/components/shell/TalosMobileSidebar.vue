@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import {
-    Activity, BookOpen, Check, FileArchive, FlaskConical, MessageSquarePlus,
+    Activity, BookOpen, Check, FileArchive, FlaskConical, MessageSquarePlus, MessageSquareText,
     Pencil, Settings, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -81,9 +81,12 @@ function confirmDelete(): void {
         :dismissible="!props.busy"
         @update:open="emit('update:open', $event)"
     >
+        <!-- F3-T1 (owner #5): the vendored DrawerContent forces w-3/4 +
+             sm:max-w-sm via direction variants that outrank plain w-full —
+             override with the SAME variants so full-width really applies. -->
         <DrawerContent
             data-testid="talos-mobile-sidebar"
-            class="h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)]"
+            class="h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)] data-[vaul-drawer-direction=left]:w-full data-[vaul-drawer-direction=left]:max-w-none data-[vaul-drawer-direction=left]:rounded-none data-[vaul-drawer-direction=left]:border-0 data-[vaul-drawer-direction=left]:sm:max-w-none"
         >
             <DrawerHeader class="flex-row items-center gap-3 border-b border-[var(--talos-border)] px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] text-left">
                 <div class="min-w-0 flex-1">
@@ -110,10 +113,27 @@ function confirmDelete(): void {
                     </Button>
                 </div>
 
+                <!-- F3-T3 (owner #12, Claude pattern): on phones the Chats entry
+                     opens the dedicated list page; tablets keep the inline list. -->
+                <div class="px-3 pt-2 md:hidden">
+                    <button
+                        type="button"
+                        data-testid="talos-sidebar-chats-entry"
+                        class="talos-pressable flex min-h-12 w-full items-center gap-2 rounded-xl border border-[var(--talos-border)] px-3 text-left text-sm font-medium text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
+                        @click="emit('navigate', 'chats')"
+                    >
+                        <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                        <span class="min-w-0 flex-1 truncate">Chats</span>
+                        <span class="text-xs text-[var(--talos-muted)]">{{ props.sessions.length }}</span>
+                    </button>
+                </div>
+
+                <span class="flex-1 md:hidden" aria-hidden="true" />
+
                 <nav
                     data-testid="talos-sidebar-recents"
                     aria-label="Recent chats"
-                    class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3"
+                    class="hidden min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 md:block"
                 >
                     <p class="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Recents</p>
                     <p class="px-1 pb-2 text-xs text-[var(--talos-muted)]">

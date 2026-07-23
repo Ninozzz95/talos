@@ -1,12 +1,25 @@
 <script setup lang="ts">
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore, type TalosUtilityModelMode } from '@/stores/settings'
+import { TALOS_TONE_PRESETS, isTalosToneId } from '@/lib/tone'
 
 const settings = useSettingsStore()
 const modeItems = [
     { value: 'same_as_chat', label: 'Same as chat' },
     { value: 'default_profile', label: 'Use default profile' },
 ]
+
+// F3-T4 (owner #11): selectable assistant tone; the model may suggest a
+// better fit via toast, but only the user switches it (here or from the toast).
+const toneItems = TALOS_TONE_PRESETS.map((preset) => ({
+    value: preset.id,
+    label: preset.label,
+}))
+
+function setTone(value: string): void {
+    if (!isTalosToneId(value)) return
+    void settings.setTone(value)
+}
 
 function setMode(key: 'utility_model_mode' | 'research_model_mode', value: string): void {
     if (value !== 'same_as_chat' && value !== 'default_profile') return
@@ -20,6 +33,20 @@ function setVision(event: Event): void {
 
 <template>
     <div class="space-y-4">
+        <label class="block">
+            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Assistant tone</span>
+            <TalosThemedSelect
+                class="mt-2"
+                :model-value="settings.state.tone.preset"
+                :items="toneItems"
+                aria-label="Assistant tone"
+                @update:model-value="setTone"
+            />
+            <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
+                The model may suggest a better-fitting tone for a conversation — you decide from the notification.
+            </span>
+        </label>
+
         <div class="grid gap-4 sm:grid-cols-2">
             <label class="block">
                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Utility model mode</span>

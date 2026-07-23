@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { reactive, ref } from 'vue'
+import { nextTick, reactive, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import { asyncRouteComponent, TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
@@ -110,10 +110,9 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         await flushPromises()
 
         await router.push('/research')
-        await flushPromises()
-
-        const sheet = w.find('[data-testid="talos-mobile-tool-sheet"]')
-        expect(sheet.exists()).toBe(true)
+        // F3-T0: the tool sheet is an async chunk — resolving needs a real
+        // macrotask, so poll with waitFor instead of microtask flushes.
+        await vi.waitFor(() => expect(w.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(true))
         expect(w.text()).toContain('Deep Research V3')
         // chat base still mounted behind the sheet
         expect(w.text()).toContain('What claim should we benchmark?')
@@ -135,6 +134,6 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         await flushPromises()
 
         expect((mockState.controller as ReturnType<typeof makeController>).newSession).toHaveBeenCalledTimes(1)
-        expect(router.currentRoute.value.name).toBe('chat')
+        await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('chat'))
     })
 })

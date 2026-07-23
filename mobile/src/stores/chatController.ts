@@ -43,14 +43,17 @@ import {
 import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
+import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import {
     TALOS_DEFAULT_COMPOSER_DEFAULTS,
     useSettingsStore,
     type TalosComposerDefaults,
 } from '@/stores/settings'
 
-const TALOS_SYSTEM_PROMPT = 'You are TALOS, a precise engineering copilot. Answer directly and concisely.'
-const TALOS_MANUAL_BROWSE_SYSTEM_PROMPT = `${TALOS_SYSTEM_PROMPT} Browse mode is active with a manual local browser. You have no page content, DOM, screenshot, or navigation result unless trusted browser evidence is explicitly included in the conversation. Never claim that you opened, saw, inspected, clicked, scrolled, or captured a page without that evidence. Ask the user to open the detected link or provide verified evidence when page contents are required.`
+// F3-T4 (owner #11): the system prompt is tone-driven (lib/tone.ts) — the old
+// hardwired "precise engineering copilot" made every reply engineering-grade.
+const TALOS_BROWSE_APPENDIX = ' Browse mode is active with a manual local browser. You have no page content, DOM, screenshot, or navigation result unless trusted browser evidence is explicitly included in the conversation. Never claim that you opened, saw, inspected, clicked, scrolled, or captured a page without that evidence. Ask the user to open the detected link or provide verified evidence when page contents are required.'
 const TALOS_MODEL_PROBE_SENTINEL = 'TALOS_PROBE_OK'
 const PROVIDER_IDS = TALOS_MOBILE_PROVIDERS.map((provider) => provider.id)
     .filter((provider): provider is TalosMobileProviderId => provider !== 'unknown')
@@ -134,10 +137,12 @@ export interface ChatControllerDeps {
         readonly state: {
             readonly composer_defaults: TalosComposerDefaults
             readonly model_lab: TalosMobileModelLabPreferences
+            readonly tone: { readonly preset: TalosToneId }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
         setModelLabPreferences(value: TalosMobileModelLabPreferences): Promise<void>
+        setTone(preset: TalosToneId): Promise<void>
     }
 }
 
@@ -311,6 +316,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     })
     const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
 
+    const toasts = useTalosMobileToasts()
     const complete: ChatCompletion = async (turns, stream) => {
         const profile = selectedProfile.value
         const providerModel = selectedProviderModel.value
@@ -321,7 +327,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             : undefined
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         try {
-            return await buildChatCompletion(
+            const tonePrompt = buildTalosSystemPrompt(deps.settings.state.tone.preset)
+            const raw = await buildChatCompletion(
                 () => ({
                     profile,
                     providerModel,
@@ -331,11 +338,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     effort: effort.value,
                     thinking: thinking.value,
                     system: chat.activeSession.value?.surface === 'browse'
-                        ? TALOS_MANUAL_BROWSE_SYSTEM_PROMPT
-                        : TALOS_SYSTEM_PROMPT,
+                        ? tonePrompt + TALOS_BROWSE_APPENDIX
+                        : tonePrompt,
                 }),
                 deps.transport,
             )(turns, stream)
+            // F3-T4: a final-line tone suggestion is stripped from the durable
+            // reply and surfaced as a toast — the user decides, never auto-applied.
+            const { text, suggestion } = extractToneSuggestion(raw)
+            if (suggestion && suggestion !== deps.settings.state.tone.preset) {
+                const preset = TALOS_TONE_PRESETS.find((candidate) => candidate.id === suggestion)
+                toasts.push({
+                    message: `The model suggests the ${preset?.label ?? suggestion} tone for this conversation.`,
+                    action: { label: 'Switch', run: () => { void deps.settings.setTone(suggestion) } },
+                    durationMs: 12000,
+                })
+            }
+            return text
         } catch (error) {
             const safeMessage = safeProviderMessage(error, apiKey)
             if (error instanceof TalosMobileProviderError) {

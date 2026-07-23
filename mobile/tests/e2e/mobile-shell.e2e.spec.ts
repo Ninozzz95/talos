@@ -55,8 +55,9 @@ test('320x800 375x812 and tablet viewports show no horizontal overflow', async (
 
 test('header and sidebar actions expose accessible names and 44x44 touch targets', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator(HEADER)).toBeVisible()
     const headerButtons = page.locator(`${HEADER} button`)
-    expect(await headerButtons.count()).toBe(2) // hamburger + New Chat
+    await expect(headerButtons).toHaveCount(2) // hamburger + New Chat
     for (let i = 0; i < 2; i += 1) {
         const button = headerButtons.nth(i)
         expect(await button.getAttribute('aria-label')).toBeTruthy()
@@ -133,11 +134,23 @@ test('calm hides the poster layer; legacy telemetry still serves its bundled pos
     // AUD-001: under the calm default the decorative poster layer is absent.
     await expect(page.locator('[data-testid="telemetry-poster"]')).toHaveCount(0)
 
-    // Legacy opt-in keeps the offline poster contract intact.
+    // F3-T1 (owner #9): a PRE-calm persisted telemetry default (no flag) is a
+    // leftover default, not a choice — it migrates to calm once.
     await page.addInitScript(() => {
         window.localStorage.setItem(
             'CapacitorStorage.talos.mobile.theme',
             JSON.stringify({ theme: 'telemetry', mode: 'system' }),
+        )
+    })
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('data-talos-theme', 'calm')
+    await expect(page.locator('[data-testid="telemetry-poster"]')).toHaveCount(0)
+
+    // An EXPLICIT post-migration telemetry choice keeps the offline poster contract.
+    await page.addInitScript(() => {
+        window.localStorage.setItem(
+            'CapacitorStorage.talos.mobile.theme',
+            JSON.stringify({ theme: 'telemetry', mode: 'system', calm_migrated: true }),
         )
     })
     await page.reload()
