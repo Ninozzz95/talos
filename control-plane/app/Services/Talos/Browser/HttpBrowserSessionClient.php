@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Talos\Browser;
 
+use App\Services\Security\CanonicalHttpUrl;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -288,6 +289,49 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         );
     }
 
+    public function refTargets(
+        string $ownerRef,
+        string $workerSessionId,
+        int $stateVersion,
+        string $expectedFrameSha256,
+        int $timeoutMilliseconds = 15000,
+    ): array {
+        if ($stateVersion < 0 || preg_match('/^sha256:[a-f0-9]{64}$/D', $expectedFrameSha256) !== 1) {
+            throw new BrowserWorkerException('TALOS_BROWSER_HMI_INVALID_REF', 'Browser worker rejected the HMI ref contract.');
+        }
+        $query = http_build_query([
+            'state_version' => $stateVersion,
+            'expected_frame_sha256' => $expectedFrameSha256,
+        ], '', '&', PHP_QUERY_RFC3986);
+
+        return $this->requestHmiRefTargets(
+            "/sessions/{$workerSessionId}/hmi/ref/targets?{$query}",
+            $ownerRef,
+            $timeoutMilliseconds,
+            $stateVersion,
+            $expectedFrameSha256,
+        );
+    }
+
+    public function preflightRef(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
+    {
+        $this->validateRefPayload($payload, false);
+
+        return $this->requestHmi(
+            'post',
+            "/sessions/{$workerSessionId}/hmi/ref/preflight",
+            $ownerRef,
+            $payload,
+            $timeoutMilliseconds,
+            'talos_browser_hmi_ref_preflight_v2',
+            (string) $payload['expected_frame_sha256'],
+            (string) $payload['interaction_id'],
+            expectedSnapshotId: (string) $payload['snapshot_id'],
+            expectedRef: (string) $payload['ref'],
+            strictRefResponse: true,
+        );
+    }
+
     public function executePointer(
         string $ownerRef,
         string $workerSessionId,
@@ -319,6 +363,43 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             (string) $payload['effect_classification'],
             (bool) $payload['sensitive_effect_authorized'],
             $actionCapability,
+        );
+    }
+
+    public function executeRef(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array {
+        $this->validateRefPayload($payload, true);
+        $actionCapability = $this->actionCapabilityFor(
+            $ownerRef,
+            $workerSessionId,
+            'hmi_ref_execute',
+            (int) $payload['state_version'],
+            $payload,
+            $authorization,
+        );
+
+        return $this->requestHmi(
+            'post',
+            "/sessions/{$workerSessionId}/hmi/ref/execute",
+            $ownerRef,
+            $payload,
+            $timeoutMilliseconds,
+            'talos_browser_hmi_result_v2',
+            (string) $payload['expected_frame_sha256'],
+            (string) $payload['interaction_id'],
+            (string) $payload['expected_fingerprint'],
+            (string) $payload['command_id'],
+            (string) $payload['effect_classification'],
+            (bool) $payload['sensitive_effect_authorized'],
+            $actionCapability,
+            expectedSnapshotId: (string) $payload['snapshot_id'],
+            expectedRef: (string) $payload['ref'],
+            strictRefResponse: true,
         );
     }
 
@@ -410,6 +491,9 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         ?string $expectedEffectClassification = null,
         ?bool $expectedSensitiveAuthorization = null,
         ?string $actionCapability = null,
+        ?string $expectedSnapshotId = null,
+        ?string $expectedRef = null,
+        bool $strictRefResponse = false,
     ): array {
         $response = $this->send($method, $path, $ownerRef, $payload, $timeoutMilliseconds, $actionCapability);
         if ($response->status() === 204 || strlen($response->body()) > 16 * 1024 * 1024) {
@@ -438,7 +522,62 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             $expectedCommandId,
             $expectedEffectClassification,
             $expectedSensitiveAuthorization,
+            $expectedSnapshotId,
+            $expectedRef,
+            $strictRefResponse,
         );
+
+        return $data;
+    }
+
+    /** @return array<string, mixed> */
+    private function requestHmiRefTargets(
+        string $path,
+        string $ownerRef,
+        int $timeoutMilliseconds,
+        int $expectedStateVersion,
+        string $expectedFrameSha256,
+    ): array {
+        $response = $this->send('get', $path, $ownerRef, [], $timeoutMilliseconds);
+        if ($response->status() === 204 || strlen($response->body()) > 256 * 1024) {
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI ref target response.');
+        }
+        $this->throwForFailure($response);
+
+        try {
+            $root = json_decode($response->body(), false, 64, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI ref target response.');
+        }
+        if (! $root instanceof stdClass || ! $root->data instanceof stdClass) {
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI ref target response.');
+        }
+        $data = $this->preserveWireValue($root->data);
+        if (! is_array($data)
+            || array_is_list($data)
+            || ! $this->hasExactKeys($data, ['schema_version', 'session_id', 'state_version', 'frame_sha256', 'snapshot_id', 'targets'])
+            || ($data['schema_version'] ?? null) !== 'talos_browser_hmi_ref_targets_v2'
+            || ! is_string($data['session_id'] ?? null) || trim($data['session_id']) === '' || strlen($data['session_id']) > 128
+            || ($data['state_version'] ?? null) !== $expectedStateVersion
+            || ! is_string($data['frame_sha256'] ?? null) || ! hash_equals($expectedFrameSha256, $data['frame_sha256'])
+            || ! is_string($data['snapshot_id'] ?? null) || preg_match('/^hmi_ref_[a-f0-9]{64}$/D', $data['snapshot_id']) !== 1
+            || ! is_array($data['targets'] ?? null) || ! array_is_list($data['targets']) || count($data['targets']) > 250) {
+            throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI ref target response.');
+        }
+        $refs = [];
+        foreach ($data['targets'] as $target) {
+            if (! is_array($target)
+                || array_is_list($target)
+                || ! $this->hasExactKeys($target, ['ref', 'role', 'name', 'destination'])
+                || ! is_string($target['ref'] ?? null) || preg_match('/^e[1-9][0-9]{0,9}$/D', $target['ref']) !== 1
+                || ! is_string($target['role'] ?? null) || $target['role'] === '' || strlen($target['role']) > 64
+                || ! is_string($target['name'] ?? null) || $target['name'] === '' || strlen($target['name']) > 256
+                || ! $this->validRefDestination($target['destination'] ?? null)
+                || isset($refs[$target['ref']])) {
+                throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI ref target response.');
+            }
+            $refs[$target['ref']] = true;
+        }
 
         return $data;
     }
@@ -492,6 +631,52 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         }
     }
 
+    /** @param array<string, mixed> $payload */
+    private function validateRefPayload(array $payload, bool $execute): void
+    {
+        $expectedKeys = [
+            'schema_version', 'interaction_id', 'state_version', 'expected_frame_sha256',
+            'snapshot_id', 'ref', 'button', 'click_count',
+        ];
+        if ($execute) {
+            array_push(
+                $expectedKeys,
+                'command_id',
+                'expected_fingerprint',
+                'effect_classification',
+                'sensitive_effect_authorized',
+            );
+        }
+        $actualKeys = array_keys($payload);
+        sort($actualKeys);
+        sort($expectedKeys);
+
+        if (array_is_list($payload)
+            || $actualKeys !== $expectedKeys
+            || ($payload['schema_version'] ?? null) !== 'talos_browser_hmi_ref_v2'
+            || ! is_string($payload['interaction_id'] ?? null) || ! Str::isUuid($payload['interaction_id'])
+            || ! is_int($payload['state_version'] ?? null) || $payload['state_version'] < 0
+            || ! is_string($payload['expected_frame_sha256'] ?? null)
+            || preg_match('/^sha256:[a-f0-9]{64}$/D', $payload['expected_frame_sha256']) !== 1
+            || ! is_string($payload['snapshot_id'] ?? null)
+            || preg_match('/^hmi_ref_[a-f0-9]{64}$/D', $payload['snapshot_id']) !== 1
+            || ! is_string($payload['ref'] ?? null) || preg_match('/^e[1-9][0-9]{0,9}$/D', $payload['ref']) !== 1
+            || ($payload['button'] ?? null) !== 'left'
+            || ! in_array($payload['click_count'] ?? null, [1, 2], true)
+            || ($execute && (
+                ! is_string($payload['command_id'] ?? null)
+                || preg_match('/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/D', $payload['command_id']) !== 1
+                || ! is_string($payload['expected_fingerprint'] ?? null)
+                || preg_match('/^sha256:[a-f0-9]{64}$/D', $payload['expected_fingerprint']) !== 1
+                || ! in_array($payload['effect_classification'] ?? null, ['ordinary', 'sensitive'], true)
+                || ! is_bool($payload['sensitive_effect_authorized'] ?? null)
+                || (($payload['effect_classification'] ?? null) === 'sensitive' && $payload['sensitive_effect_authorized'] !== true)
+                || (($payload['effect_classification'] ?? null) === 'ordinary' && $payload['sensitive_effect_authorized'] !== false)
+            ))) {
+            throw new BrowserWorkerException('TALOS_BROWSER_HMI_INVALID_REF', 'Browser worker rejected the HMI ref contract.');
+        }
+    }
+
     /** @param array<string, mixed> $data */
     private function validateHmiEnvelope(
         array $data,
@@ -502,6 +687,9 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         ?string $expectedCommandId,
         ?string $expectedEffectClassification,
         ?bool $expectedSensitiveAuthorization,
+        ?string $expectedSnapshotId,
+        ?string $expectedRef,
+        bool $strictRefResponse,
     ): void {
         foreach (['session_id', 'schema_version'] as $field) {
             if (! is_string($data[$field] ?? null) || trim($data[$field]) === '') {
@@ -516,7 +704,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             || ! hash_equals($expectedFrameSha256, $data['frame_sha256'])) {
             throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI response.');
         }
-        if ($schemaVersion === 'talos_browser_hmi_preflight_v2') {
+        if (in_array($schemaVersion, ['talos_browser_hmi_preflight_v2', 'talos_browser_hmi_ref_preflight_v2'], true)) {
             $point = $data['point'] ?? null;
             $target = $data['target'] ?? null;
             if (! is_string($data['origin'] ?? null) || strlen($data['origin']) > 2048
@@ -530,8 +718,19 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
                 || (! is_int($point['y'] ?? null) && ! is_float($point['y'] ?? null))
                 || ! is_finite((float) ($point['x'] ?? NAN)) || (float) $point['x'] < 0
                 || ! is_finite((float) ($point['y'] ?? NAN)) || (float) $point['y'] < 0
-                || ! $this->validHmiTarget($target)) {
+                || ($strictRefResponse && (! $this->hasExactKeys($data, ['schema_version', 'interaction_id', 'session_id', 'state_version', 'frame_sha256', 'snapshot_id', 'ref', 'origin', 'point', 'target'])
+                    || ! $this->hasExactKeys($point, ['normalized_x', 'normalized_y', 'x', 'y'])))
+                || ! $this->validHmiTarget($target, $strictRefResponse)) {
                 throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI preflight response.');
+            }
+            if ($schemaVersion === 'talos_browser_hmi_ref_preflight_v2'
+                && (! is_string($data['snapshot_id'] ?? null)
+                    || preg_match('/^hmi_ref_[a-f0-9]{64}$/D', $data['snapshot_id']) !== 1
+                    || ! is_string($data['ref'] ?? null)
+                    || preg_match('/^e[1-9][0-9]{0,9}$/D', $data['ref']) !== 1
+                    || ! is_string($expectedSnapshotId) || ! hash_equals($expectedSnapshotId, $data['snapshot_id'])
+                    || ! is_string($expectedRef) || ! hash_equals($expectedRef, $data['ref']))) {
+                throw new BrowserWorkerException('TALOS_BROWSER_WORKER_FAILURE', 'Browser worker returned an invalid HMI ref preflight response.');
             }
 
             return;
@@ -547,7 +746,8 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             || ! hash_equals($expectedCommandId, $data['command_id'])
             || ($data['effect_classification'] ?? null) !== $expectedEffectClassification
             || ($data['sensitive_effect_authorized'] ?? null) !== $expectedSensitiveAuthorization
-            || ! $this->validHmiTarget($data['target'] ?? null)
+            || ($strictRefResponse && ! $this->validStrictHmiResultShape($data))
+            || ! $this->validHmiTarget($data['target'] ?? null, $strictRefResponse)
             || ! is_string($expectedFingerprint)
             || ! hash_equals($expectedFingerprint, (string) $data['target']['fingerprint'])
             || ! is_array($data['screenshot'] ?? null)
@@ -576,7 +776,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         }
     }
 
-    private function validHmiTarget(mixed $target): bool
+    private function validHmiTarget(mixed $target, bool $exact = false): bool
     {
         if (! is_array($target) || array_is_list($target)) {
             return false;
@@ -585,6 +785,9 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             if (! array_key_exists($field, $target)) {
                 return false;
             }
+        }
+        if ($exact && ! $this->hasExactKeys($target, ['tag', 'role', 'name', 'input_type', 'href', 'form_method', 'is_editable', 'is_submit', 'is_download', 'opens_new_context', 'effect_attestation', 'required_effect_classification', 'visible', 'disabled', 'fingerprint'])) {
+            return false;
         }
         foreach (['role', 'input_type', 'href', 'form_method'] as $nullableString) {
             if ($target[$nullableString] !== null && ! is_string($target[$nullableString])) {
@@ -608,6 +811,77 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
             && $target['required_effect_classification'] === ($target['effect_attestation'] === 'browser_default' ? 'ordinary' : 'sensitive')
             && is_string($target['fingerprint'])
             && preg_match('/^sha256:[a-f0-9]{64}$/', $target['fingerprint']) === 1;
+    }
+
+    /** @param array<string, mixed> $data */
+    private function validStrictHmiResultShape(array $data): bool
+    {
+        if (! $this->hasExactKeys($data, [
+            'schema_version', 'capture_id', 'interaction_id', 'command_id', 'session_id',
+            'source_state_version', 'state_version', 'frame_sha256', 'url', 'title',
+            'effect_classification', 'sensitive_effect_authorized', 'target', 'screenshot',
+            'snapshot', 'captured_at',
+        ])) {
+            return false;
+        }
+        $screenshot = $data['screenshot'] ?? null;
+        $snapshot = $data['snapshot'] ?? null;
+        if (! is_array($screenshot) || array_is_list($screenshot)
+            || ! $this->hasExactKeys($screenshot, ['mime_type', 'width', 'height', 'sha256', 'base64'])
+            || ! is_array($snapshot) || array_is_list($snapshot)
+            || ! $this->hasExactKeys($snapshot, ['snapshot_id', 'format', 'text_digest', 'sha256', 'nodes'])
+            || ! is_array($snapshot['nodes'] ?? null) || ! array_is_list($snapshot['nodes'])) {
+            return false;
+        }
+        foreach ($snapshot['nodes'] as $node) {
+            if (! is_array($node) || array_is_list($node)) {
+                return false;
+            }
+            $required = ['ref', 'role', 'name', 'visible'];
+            $allowed = [...$required, 'href', 'level'];
+            $actual = array_keys($node);
+            sort($actual);
+            sort($allowed);
+            foreach ($required as $field) {
+                if (! array_key_exists($field, $node)) {
+                    return false;
+                }
+            }
+            if (array_diff($actual, $allowed) !== []) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param array<string, mixed> $value @param list<string> $expected */
+    private function hasExactKeys(array $value, array $expected): bool
+    {
+        $actual = array_keys($value);
+        sort($actual);
+        sort($expected);
+
+        return $actual === $expected;
+    }
+
+    private function validRefDestination(mixed $destination): bool
+    {
+        if ($destination === null) {
+            return true;
+        }
+        if (! is_string($destination) || $destination === '' || strlen($destination) > 2048) {
+            return false;
+        }
+        try {
+            $url = CanonicalHttpUrl::fromString($destination);
+        } catch (InvalidArgumentException) {
+            return false;
+        }
+
+        return $url->query === null
+            && $url->fragment === null
+            && hash_equals($destination, $url->toAsciiString());
     }
 
     private function preserveWireValue(mixed $value): mixed
@@ -678,7 +952,7 @@ final class HttpBrowserSessionClient implements BrowserSessionClient
         array $request,
         ?BrowserActionAuthorization $authorization,
     ): ?string {
-        $consequential = in_array($operation, ['browser_click', 'browser_file_upload', 'hmi_pointer_execute'], true);
+        $consequential = in_array($operation, ['browser_click', 'browser_file_upload', 'hmi_pointer_execute', 'hmi_ref_execute'], true);
         if (! $consequential) {
             if ($authorization instanceof BrowserActionAuthorization) {
                 throw new BrowserWorkerException(

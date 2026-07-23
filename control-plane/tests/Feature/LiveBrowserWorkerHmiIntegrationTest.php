@@ -303,4 +303,141 @@ final class LiveBrowserWorkerHmiIntegrationTest extends TestCase
             }
         }
     }
+
+    public function test_stage2b_live_worker_lists_and_clicks_a_real_semantic_ref_while_an_obscured_ref_fails_cleanly(): void
+    {
+        $baseUrl = trim((string) getenv('TALOS_LIVE_BROWSER_WORKER_URL'));
+        $token = trim((string) getenv('TALOS_LIVE_BROWSER_WORKER_TOKEN'));
+        $actionPrivateKey = trim((string) getenv('TALOS_BROWSER_ACTION_PRIVATE_KEY_B64'));
+        $actionKeyId = trim((string) getenv('TALOS_BROWSER_ACTION_KEY_ID'));
+        if ($baseUrl === '' || $token === '' || $actionPrivateKey === '' || $actionKeyId === '') {
+            $this->markTestSkipped('Set the live worker URL/token and browser action capability key configuration to run STAGE2B-010.');
+        }
+
+        $ordinaryFixture = realpath(base_path('../browser-worker/tests/fixtures/hmi-page.html'));
+        $obscuredFixture = realpath(base_path('../browser-worker/tests/fixtures/hmi-ref-obscured-page.html'));
+        $this->assertNotFalse($ordinaryFixture, 'The Browser Worker HMI fixture must exist.');
+        $this->assertNotFalse($obscuredFixture, 'The Browser Worker obscured-ref fixture must exist.');
+        $ordinaryUrl = 'file:///'.str_replace('\\', '/', ltrim((string) $ordinaryFixture, '/'));
+        $obscuredUrl = 'file:///'.str_replace('\\', '/', ltrim((string) $obscuredFixture, '/'));
+        $client = new HttpBrowserSessionClient(
+            $baseUrl,
+            $token,
+            20,
+            new TalosBrowserActionCapabilityIssuer($actionPrivateKey, $actionKeyId),
+        );
+        $ownerRef = 'talos-live-hmi-ref:'.bin2hex(random_bytes(8));
+        $workerSessionIds = [];
+
+        try {
+            $created = $client->create($ownerRef, 800, 600, 20_000, 300);
+            $workerSessionId = $created['sessionId'] ?? null;
+            $this->assertIsString($workerSessionId);
+            $workerSessionIds[] = $workerSessionId;
+            $navigated = $client->navigate($ownerRef, $workerSessionId, $ordinaryUrl, 20_000);
+            $stateVersion = $navigated['stateVersion'] ?? null;
+            $this->assertSame(1, $stateVersion);
+            $frame = $client->screenshot($ownerRef, $workerSessionId, 20_000);
+            $frameSha256 = 'sha256:'.($frame['sha256'] ?? '');
+            $targets = $client->refTargets($ownerRef, $workerSessionId, $stateVersion, $frameSha256, 20_000);
+            $this->assertSame('talos_browser_hmi_ref_targets_v2', $targets['schema_version'] ?? null);
+            $this->assertSame($stateVersion, $targets['state_version'] ?? null);
+            $this->assertSame($frameSha256, $targets['frame_sha256'] ?? null);
+            $target = collect($targets['targets'] ?? [])->first(
+                static fn (mixed $candidate): bool => is_array($candidate)
+                    && ($candidate['name'] ?? null) === 'Reject optional cookies',
+            );
+            $this->assertIsArray($target);
+            $this->assertSame(['ref', 'role', 'name', 'destination'], array_keys($target));
+            $this->assertMatchesRegularExpression('/^e[1-9][0-9]{0,9}$/D', (string) ($target['ref'] ?? ''));
+            $this->assertStringNotContainsString('Cookie preferences', json_encode($targets, JSON_THROW_ON_ERROR));
+
+            $interactionId = (string) Str::uuid();
+            $preflightPayload = [
+                'schema_version' => 'talos_browser_hmi_ref_v2',
+                'interaction_id' => $interactionId,
+                'state_version' => $stateVersion,
+                'expected_frame_sha256' => $frameSha256,
+                'snapshot_id' => $targets['snapshot_id'],
+                'ref' => $target['ref'],
+                'button' => 'left',
+                'click_count' => 1,
+            ];
+            $preflight = $client->preflightRef($ownerRef, $workerSessionId, $preflightPayload, 20_000);
+            $this->assertSame($targets['snapshot_id'], $preflight['snapshot_id'] ?? null);
+            $this->assertSame($target['ref'], $preflight['ref'] ?? null);
+            $this->assertSame('Reject optional cookies', data_get($preflight, 'target.name'));
+            $classification = data_get($preflight, 'target.required_effect_classification');
+            $this->assertContains($classification, ['ordinary', 'sensitive']);
+            $commandId = 'hmi_ref_live_'.bin2hex(random_bytes(16));
+            $command = [
+                ...$preflightPayload,
+                'command_id' => $commandId,
+                'expected_fingerprint' => data_get($preflight, 'target.fingerprint'),
+                'effect_classification' => $classification,
+                'sensitive_effect_authorized' => $classification === 'sensitive',
+            ];
+            $authorization = BrowserActionAuthorization::userApproval(
+                $commandId,
+                (string) Str::uuid(),
+                'sha256:'.hash('sha256', json_encode($command, JSON_THROW_ON_ERROR)),
+                'live-hmi-ref-lease-'.bin2hex(random_bytes(16)),
+            );
+            $result = $client->executeRef($ownerRef, $workerSessionId, $command, 20_000, $authorization);
+            $this->assertSame('talos_browser_hmi_result_v2', $result['schema_version'] ?? null);
+            $this->assertSame($stateVersion + 1, $result['state_version'] ?? null);
+            $this->assertSame('Reject optional cookies', data_get($result, 'target.name'));
+            $this->assertSame($result, $client->executeRef(
+                $ownerRef,
+                $workerSessionId,
+                $command,
+                20_000,
+                $authorization,
+            ));
+
+            $obscuredCreated = $client->create($ownerRef, 800, 600, 20_000, 300);
+            $obscuredSessionId = $obscuredCreated['sessionId'] ?? null;
+            $this->assertIsString($obscuredSessionId);
+            $workerSessionIds[] = $obscuredSessionId;
+            $obscuredNavigation = $client->navigate($ownerRef, $obscuredSessionId, $obscuredUrl, 20_000);
+            $obscuredStateVersion = $obscuredNavigation['stateVersion'] ?? null;
+            $this->assertSame(1, $obscuredStateVersion);
+            $obscuredFrame = $client->screenshot($ownerRef, $obscuredSessionId, 20_000);
+            $obscuredFrameSha256 = 'sha256:'.($obscuredFrame['sha256'] ?? '');
+            $obscuredTargets = $client->refTargets(
+                $ownerRef,
+                $obscuredSessionId,
+                $obscuredStateVersion,
+                $obscuredFrameSha256,
+                20_000,
+            );
+            $obscuredTarget = collect($obscuredTargets['targets'] ?? [])->first(
+                static fn (mixed $candidate): bool => is_array($candidate)
+                    && ($candidate['name'] ?? null) === 'Obscured semantic target',
+            );
+            $this->assertIsArray($obscuredTarget);
+            usleep(4_500_000);
+
+            try {
+                $client->preflightRef($ownerRef, $obscuredSessionId, [
+                    'schema_version' => 'talos_browser_hmi_ref_v2',
+                    'interaction_id' => (string) Str::uuid(),
+                    'state_version' => $obscuredStateVersion,
+                    'expected_frame_sha256' => $obscuredFrameSha256,
+                    'snapshot_id' => $obscuredTargets['snapshot_id'],
+                    'ref' => $obscuredTarget['ref'],
+                    'button' => 'left',
+                    'click_count' => 1,
+                ], 20_000);
+                $this->fail('An obscured semantic ref passed Playwright actionability.');
+            } catch (BrowserWorkerException $exception) {
+                $this->assertSame('TALOS_BROWSER_TARGET_STALE', $exception->errorCode);
+            }
+            $this->assertSame(1, $client->inspect($ownerRef, $obscuredSessionId, 20_000)['stateVersion'] ?? null);
+        } finally {
+            foreach (array_reverse($workerSessionIds) as $workerSessionId) {
+                $client->close($ownerRef, $workerSessionId, 20_000);
+            }
+        }
+    }
 }

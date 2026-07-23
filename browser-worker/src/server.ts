@@ -17,6 +17,9 @@ import {
 import {
   BrowserHmiExecuteRequestSchema,
   BrowserHmiPreflightRequestSchema,
+  BrowserHmiRefPreflightRequestSchema,
+  BrowserHmiRefExecuteRequestSchema,
+  BrowserHmiRefTargetsRequestSchema,
   BrowserHmiScrollRequestSchema,
 } from "./BrowserHmiContracts.js";
 import { BrowserHmiService } from "./BrowserHmiService.js";
@@ -314,6 +317,53 @@ export function buildServer(options: BrowserWorkerServerOptions = {}): FastifyIn
       },
     });
   }
+
+  app.get<{ Params: { id: string } }>("/sessions/:id/hmi/ref/targets", async (request, reply) => {
+    const parsed = BrowserHmiRefTargetsRequestSchema.safeParse(request.query);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        message: "Invalid browser HMI ref target query.",
+        code: "TALOS_BROWSER_HMI_INVALID_REF",
+        details: parsed.error.flatten(),
+      });
+    }
+    await ownedSession(sessions, request);
+    return reply.code(200).send({ data: await browserHmi.targets(request.params.id, parsed.data) });
+  });
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/hmi/ref/preflight", async (request, reply) => {
+    const parsed = BrowserHmiRefPreflightRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        message: "Invalid browser HMI ref payload.",
+        code: "TALOS_BROWSER_HMI_INVALID_REF",
+        details: parsed.error.flatten(),
+      });
+    }
+    await ownedSession(sessions, request);
+    return reply.code(200).send({ data: await browserHmi.preflightRef(request.params.id, parsed.data) });
+  });
+
+  app.post<{ Params: { id: string } }>("/sessions/:id/hmi/ref/execute", async (request, reply) => {
+    const parsed = BrowserHmiRefExecuteRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        message: "Invalid browser HMI ref payload.",
+        code: "TALOS_BROWSER_HMI_INVALID_REF",
+        details: parsed.error.flatten(),
+      });
+    }
+    await ownedSession(sessions, request);
+    await actionCapabilityVerifier.verifyAndConsume(authorizationFromRequest(request), {
+      ownerRef: ownerFromRequest(request),
+      workerSessionId: request.params.id,
+      actionId: parsed.data.command_id,
+      operation: "hmi_ref_execute",
+      preconditionStateVersion: parsed.data.state_version,
+      request: parsed.data,
+    });
+    return reply.code(200).send({ data: await browserHmi.executeRef(request.params.id, parsed.data) });
+  });
 
   app.post<{ Params: { id: string } }>("/sessions/:id/hmi/pointer/preflight", async (request, reply) => {
     const parsed = BrowserHmiPreflightRequestSchema.safeParse(request.body);

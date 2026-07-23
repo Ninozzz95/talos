@@ -85,6 +85,337 @@ final class TalosBrowserHmiApiTest extends TestCase
         ));
     }
 
+    public function test_current_interaction_targets_return_only_owned_safe_worker_projection(): void
+    {
+        $this->client->refTargetsResponse = $this->refTargets();
+
+        $response = $this->getJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interaction-targets",
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.schema_version', 'talos_browser_hmi_ref_targets_v2')
+            ->assertJsonPath('data.browser_session_id', (string) $this->browser->id)
+            ->assertJsonPath('data.state_version', 7)
+            ->assertJsonPath('data.frame_sha256', 'sha256:'.$this->frame->sha256)
+            ->assertJsonPath('data.snapshot_id', 'hmi_ref_'.str_repeat('d', 64))
+            ->assertJsonPath('data.screenshot.id', (string) $this->frame->id)
+            ->assertJsonPath('data.targets.0', [
+                'ref' => 'e1',
+                'role' => 'button',
+                'name' => 'Reject optional cookies',
+                'destination' => null,
+            ])
+            ->assertJsonMissingPath('data.session_id')
+            ->assertJsonMissingPath('data.raw_snapshot')
+            ->assertJsonMissingPath('data.text_digest')
+            ->assertJsonMissingPath('data.targets.0.box');
+
+        $this->assertSame(['refTargets'], array_column($this->client->requests, 'method'));
+        $this->assertSame('talos-user:'.$this->user->id, $this->client->requests[0]['ownerRef']);
+        $this->assertSame(7, $this->client->requests[0]['stateVersion']);
+        $this->assertSame('sha256:'.$this->frame->sha256, $this->client->requests[0]['expectedFrameSha256']);
+    }
+
+    public function test_ordinary_ref_executes_and_persists_the_promoted_screenshot_and_snapshot(): void
+    {
+        $interactionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $this->client->preflightRefResponse = $this->refPreflight($interactionId);
+        $this->client->executeRefResponse = $this->workerResult();
+
+        $response = $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/ref",
+            $this->refPayload(['interaction_id' => $interactionId]),
+        );
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('data.interaction.status', 'executed')
+            ->assertJsonPath('data.interaction.interaction_id', $interactionId)
+            ->assertJsonPath('data.session.state_version', 8)
+            ->assertJsonPath('data.screenshot.type', 'screenshot')
+            ->assertJsonPath('data.screenshot.state_version', 8)
+            ->assertJsonPath('data.snapshot.type', 'snapshot')
+            ->assertJsonPath('data.snapshot.state_version', 8);
+
+        $this->assertSame(['preflightRef', 'executeRef'], array_column($this->client->requests, 'method'));
+        $this->assertSame('talos_browser_hmi_ref_v2', $this->client->requests[0]['payload']['schema_version']);
+        $this->assertSame('hmi_ref_'.str_repeat('d', 64), $this->client->requests[0]['payload']['snapshot_id']);
+        $this->assertSame('e1', $this->client->requests[0]['payload']['ref']);
+        $this->assertSame($interactionId, $this->client->requests[1]['payload']['interaction_id']);
+        $this->assertSame('ordinary', $this->client->requests[1]['payload']['effect_classification']);
+        $this->assertFalse($this->client->requests[1]['payload']['sensitive_effect_authorized']);
+        $this->assertArrayNotHasKey('normalized_x', $this->client->requests[1]['payload']);
+        $this->assertArrayNotHasKey('normalized_y', $this->client->requests[1]['payload']);
+
+        $approval = TalosBrowserHmiApproval::query()->sole();
+        $this->assertSame('talos_browser_hmi_ref_v2', $approval->payload_version);
+        $this->assertSame('hmi_ref_'.str_repeat('d', 64), $approval->payload['snapshot_id']);
+        $this->assertSame('e1', $approval->payload['ref']);
+        $this->assertSame(0.25, $approval->normalized_x);
+        $this->assertSame(0.5, $approval->normalized_y);
+        $this->assertSame('consumed', $approval->status);
+        $this->assertSame($response->json('data.screenshot.id'), $this->browser->fresh()->last_screenshot_artifact_id);
+        $this->assertDatabaseCount('talos_browser_artifacts', 3);
+    }
+
+    public function test_sensitive_ref_requires_confirmation_and_confirm_repreflights_the_same_snapshot_ref(): void
+    {
+        $interactionId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+        $this->client->preflightRefResponse = $this->refPreflight(
+            $interactionId,
+            'Buy now',
+            [
+                'is_submit' => true,
+                'form_method' => 'post',
+                'effect_attestation' => 'unattestable',
+                'required_effect_classification' => 'sensitive',
+            ],
+        );
+        $this->client->executeRefResponse = $this->workerResult();
+
+        $challenge = $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/ref",
+            $this->refPayload(['interaction_id' => $interactionId]),
+        )
+            ->assertStatus(428)
+            ->assertJsonPath('code', 'TALOS_BROWSER_HMI_CONFIRMATION_REQUIRED')
+            ->assertJsonPath('details.action.label', 'Buy now')
+            ->assertJsonPath('details.action.category', 'sensitive');
+
+        $approvalId = (string) $challenge->json('details.approval_id');
+        $requestHash = (string) $challenge->json('details.request_hash');
+        $this->postJson("/api/talos/browser/interactions/{$approvalId}/confirm", [
+            'decision' => 'approve',
+            'request_hash' => $requestHash,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.interaction.status', 'executed')
+            ->assertJsonPath('data.interaction.approval_id', $approvalId)
+            ->assertJsonPath('data.session.state_version', 8);
+
+        $this->assertSame(['preflightRef', 'preflightRef', 'executeRef'], array_column($this->client->requests, 'method'));
+        $this->assertSame('hmi_ref_'.str_repeat('d', 64), $this->client->requests[1]['payload']['snapshot_id']);
+        $this->assertSame('e1', $this->client->requests[1]['payload']['ref']);
+        $this->assertSame($interactionId, $this->client->requests[1]['payload']['interaction_id']);
+        $this->assertSame('hmi_ref_'.str_repeat('d', 64), $this->client->requests[2]['payload']['snapshot_id']);
+        $this->assertSame('e1', $this->client->requests[2]['payload']['ref']);
+        $this->assertSame('sensitive', $this->client->requests[2]['payload']['effect_classification']);
+        $this->assertTrue($this->client->requests[2]['payload']['sensitive_effect_authorized']);
+        $authorization = $this->client->requests[2]['authorization'] ?? null;
+        $this->assertInstanceOf(BrowserActionAuthorization::class, $authorization);
+        $this->assertSame('user_approval', $authorization->toCapabilityAttestation()['kind']);
+        $this->assertSame('consumed', TalosBrowserHmiApproval::query()->findOrFail($approvalId)->status);
+    }
+
+    public function test_stale_or_cross_owner_ref_frame_is_rejected_before_worker_dispatch(): void
+    {
+        $this->client->preflightRefResponse = $this->refPreflight();
+
+        $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/ref",
+            $this->refPayload(['artifact_sha256' => 'sha256:'.str_repeat('f', 64)]),
+        )
+            ->assertConflict()
+            ->assertJsonPath('code', 'TALOS_BROWSER_FRAME_STALE');
+
+        $foreignUser = User::factory()->create();
+        $foreignChat = TalosSession::query()->create([
+            'user_id' => $foreignUser->id,
+            'title' => 'Foreign semantic browser',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $foreignBrowser = TalosBrowserSession::query()->create([
+            'user_id' => $foreignUser->id,
+            'talos_session_id' => $foreignChat->id,
+            'worker_session_id' => 'foreign-ref-worker',
+            'status' => 'active',
+            'mode' => 'read_only',
+            'viewport_width' => 800,
+            'viewport_height' => 600,
+            'capabilities' => ['hmiActions' => true],
+            'policy' => [],
+            'worker_state_version' => 7,
+            'expires_at' => now()->addHour(),
+        ]);
+
+        $this->postJson(
+            "/api/talos/browser/sessions/{$foreignBrowser->id}/interactions/ref",
+            $this->refPayload(),
+        )
+            ->assertNotFound()
+            ->assertJsonPath('code', 'TALOS_BROWSER_NOT_FOUND');
+        $this->getJson(
+            "/api/talos/browser/sessions/{$foreignBrowser->id}/interaction-targets",
+        )
+            ->assertNotFound()
+            ->assertJsonPath('code', 'TALOS_BROWSER_NOT_FOUND');
+
+        $this->assertSame([], $this->client->requests);
+        $this->assertDatabaseCount('talos_browser_hmi_approvals', 0);
+        $this->assertDatabaseCount('talos_browser_artifacts', 1);
+    }
+
+    public function test_ref_worker_unavailable_preserves_coordinate_fallback_and_current_evidence(): void
+    {
+        $this->client->failure = new BrowserWorkerException(
+            'TALOS_BROWSER_WORKER_UNAVAILABLE',
+            'Browser worker is temporarily unavailable.',
+        );
+
+        $this->getJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interaction-targets",
+        )
+            ->assertServiceUnavailable()
+            ->assertJsonPath('code', 'TALOS_BROWSER_WORKER_UNAVAILABLE');
+
+        $fresh = $this->browser->fresh();
+        $this->assertSame('active', $fresh->status);
+        $this->assertSame(7, $fresh->worker_state_version);
+        $this->assertSame($this->frame->id, $fresh->last_screenshot_artifact_id);
+        $this->assertDatabaseCount('talos_browser_artifacts', 1);
+        $this->assertDatabaseCount('talos_browser_hmi_approvals', 0);
+
+        $this->client->failure = null;
+        $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/pointer",
+            $this->pointerPayload([
+                'schema_version' => 'talos_browser_hmi_pointer_v2',
+                'interaction_id' => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            ]),
+        )
+            ->assertCreated()
+            ->assertJsonPath('data.interaction.status', 'executed')
+            ->assertJsonPath('data.session.state_version', 8);
+
+        $this->assertSame(
+            ['refTargets', 'preflightPointer', 'executePointer'],
+            array_column($this->client->requests, 'method'),
+        );
+    }
+
+    public function test_scroll_persists_and_returns_the_new_frame_and_snapshot_atomically(): void
+    {
+        $this->client->scrollResponse = $this->scrollWorkerResult();
+
+        $response = $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/scroll",
+            $this->scrollPayload(),
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.session.state_version', 8)
+            ->assertJsonPath('data.session.status', 'active')
+            ->assertJsonPath('data.screenshot.type', 'screenshot')
+            ->assertJsonPath('data.screenshot.state_version', 8)
+            ->assertJsonPath('data.snapshot.type', 'snapshot')
+            ->assertJsonPath('data.snapshot.state_version', 8)
+            ->assertJsonMissingPath('data.screenshot.storage_path')
+            ->assertJsonMissingPath('data.screenshot.base64');
+
+        $this->assertSame(['scroll'], array_column($this->client->requests, 'method'));
+        $request = $this->client->requests[0];
+        $this->assertSame('talos-user:'.$this->user->id, $request['ownerRef']);
+        $this->assertSame('talos_browser_hmi_scroll_v2', $request['payload']['schema_version']);
+        $this->assertSame(7, $request['payload']['state_version']);
+        $this->assertSame('sha256:'.$this->frame->sha256, $request['payload']['expected_frame_sha256']);
+        $this->assertSame(480.0, $request['payload']['delta_y']);
+        $this->assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', (string) $request['payload']['interaction_id']);
+
+        $fresh = $this->browser->fresh();
+        $this->assertSame(8, $fresh->worker_state_version);
+        $this->assertSame($response->json('data.screenshot.id'), $fresh->last_screenshot_artifact_id);
+        $this->assertSame($response->json('data.snapshot.id'), $fresh->last_snapshot_artifact_id);
+        $this->assertDatabaseCount('talos_browser_artifacts', 3);
+        $event = TalosBrowserEvent::query()
+            ->where('browser_session_id', $this->browser->id)
+            ->where('type', 'hmi.scroll')
+            ->sole();
+        $this->assertSame('screenshot', $event->payload['operation'] ?? null);
+        $this->assertSame($response->json('data.screenshot.id'), $event->payload['screenshot_artifact_id'] ?? null);
+        $this->assertSame($response->json('data.snapshot.id'), $event->payload['snapshot_artifact_id'] ?? null);
+        $this->assertSame([$response->json('data.screenshot.id')], $event->payload['artifact_ids'] ?? null);
+    }
+
+    public function test_stale_scroll_is_rejected_before_worker_dispatch(): void
+    {
+        $this->client->scrollResponse = $this->scrollWorkerResult();
+
+        $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/scroll",
+            $this->scrollPayload(['state_version' => 6]),
+        )
+            ->assertConflict()
+            ->assertJsonPath('code', 'TALOS_BROWSER_FRAME_STALE');
+
+        $this->assertSame([], $this->client->requests);
+        $this->assertSame(7, $this->browser->fresh()->worker_state_version);
+        $this->assertSame($this->frame->id, $this->browser->fresh()->last_screenshot_artifact_id);
+    }
+
+    public function test_scroll_worker_unavailable_preserves_the_current_committed_frame(): void
+    {
+        $this->client->failure = new BrowserWorkerException(
+            'TALOS_BROWSER_WORKER_UNAVAILABLE',
+            'Browser worker is temporarily unavailable.',
+        );
+
+        $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/scroll",
+            $this->scrollPayload(),
+        )
+            ->assertServiceUnavailable()
+            ->assertJsonPath('code', 'TALOS_BROWSER_WORKER_UNAVAILABLE');
+
+        $fresh = $this->browser->fresh();
+        $this->assertSame('active', $fresh->status);
+        $this->assertSame(7, $fresh->worker_state_version);
+        $this->assertSame($this->frame->id, $fresh->last_screenshot_artifact_id);
+        $this->assertDatabaseCount('talos_browser_artifacts', 1);
+        $this->assertSame(['scroll'], array_column($this->client->requests, 'method'));
+    }
+
+    public function test_scroll_commit_failure_marks_recovery_required_and_cannot_be_blindly_retried(): void
+    {
+        $this->client->scrollResponse = $this->scrollWorkerResult();
+        DB::unprepared(<<<'SQL'
+            CREATE TRIGGER fail_hmi_scroll_artifact
+            BEFORE INSERT ON talos_browser_artifacts
+            BEGIN
+                SELECT RAISE(ABORT, 'scroll evidence unavailable');
+            END
+        SQL);
+
+        $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/scroll",
+            $this->scrollPayload(),
+        )
+            ->assertConflict()
+            ->assertJsonPath('code', 'TALOS_BROWSER_HMI_SCROLL_COMMIT_FAILED')
+            ->assertJsonPath('details.recovery_required', true);
+
+        $fresh = $this->browser->fresh();
+        $this->assertSame('recovery_required', $fresh->status);
+        $this->assertSame(7, $fresh->worker_state_version);
+        $this->assertSame($this->frame->id, $fresh->last_screenshot_artifact_id);
+        $this->assertDatabaseCount('talos_browser_artifacts', 1);
+        $this->assertDatabaseHas('talos_browser_events', [
+            'browser_session_id' => $this->browser->id,
+            'type' => 'hmi.recovery_required',
+        ]);
+
+        $this->postJson(
+            "/api/talos/browser/sessions/{$this->browser->id}/interactions/scroll",
+            $this->scrollPayload(),
+        )
+            ->assertConflict()
+            ->assertJsonPath('code', 'TALOS_BROWSER_INVALID_STATE');
+        $this->assertSame(['scroll'], array_column($this->client->requests, 'method'));
+    }
+
     public function test_an_ordinary_authenticated_pointer_action_persists_the_resulting_frame_atomically(): void
     {
         $interactionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -1115,6 +1446,73 @@ final class TalosBrowserHmiApiTest extends TestCase
         ], $overrides);
     }
 
+    /** @param array<string, mixed> $overrides */
+    private function scrollPayload(array $overrides = []): array
+    {
+        return array_replace([
+            'artifact_id' => $this->frame->id,
+            'artifact_sha256' => 'sha256:'.$this->frame->sha256,
+            'state_version' => 7,
+            'delta_y' => 480,
+        ], $overrides);
+    }
+
+    /** @param array<string, mixed> $overrides */
+    private function refPayload(array $overrides = []): array
+    {
+        return array_replace([
+            'schema_version' => 'talos_browser_hmi_ref_v2',
+            'interaction_id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'artifact_id' => $this->frame->id,
+            'artifact_sha256' => 'sha256:'.$this->frame->sha256,
+            'state_version' => 7,
+            'snapshot_id' => 'hmi_ref_'.str_repeat('d', 64),
+            'ref' => 'e1',
+            'button' => 'left',
+            'click_count' => 1,
+        ], $overrides);
+    }
+
+    /** @return array<string, mixed> */
+    private function scrollWorkerResult(): array
+    {
+        $screenshotBytes = 'hmi scroll api result png';
+        $snapshot = [
+            'snapshot_id' => 'snap_123e4567-e89b-12d3-a456-426614174111',
+            'format' => 'accessibility_refs_v1',
+            'text_digest' => 'Page after scroll',
+            'nodes' => [[
+                'ref' => 'r1',
+                'role' => 'heading',
+                'name' => 'Below the fold',
+                'visible' => true,
+            ]],
+        ];
+
+        return [
+            'schema_version' => 'talos_browser_hmi_scroll_v2',
+            'interaction_id' => null,
+            'session_id' => 'worker-hmi-api',
+            'source_state_version' => 7,
+            'state_version' => 8,
+            'frame_sha256' => 'sha256:'.hash('sha256', $screenshotBytes),
+            'url' => 'https://example.com/after-scroll',
+            'title' => 'After scroll',
+            'screenshot' => [
+                'mime_type' => 'image/png',
+                'width' => 800,
+                'height' => 600,
+                'sha256' => 'sha256:'.hash('sha256', $screenshotBytes),
+                'base64' => base64_encode($screenshotBytes),
+            ],
+            'snapshot' => [
+                ...$snapshot,
+                'sha256' => 'sha256:'.hash('sha256', $this->canonicalJson($snapshot)),
+            ],
+            'captured_at' => now()->toJSON(),
+        ];
+    }
+
     /** @param array<string, mixed> $targetOverrides @return array<string, mixed> */
     private function preflight(string $name = 'Reject optional cookies', array $targetOverrides = []): array
     {
@@ -1147,6 +1545,41 @@ final class TalosBrowserHmiApiTest extends TestCase
                 'disabled' => false,
                 'fingerprint' => 'sha256:'.str_repeat('a', 64),
             ], $targetOverrides),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function refTargets(): array
+    {
+        return [
+            'schema_version' => 'talos_browser_hmi_ref_targets_v2',
+            'session_id' => 'worker-hmi-api',
+            'state_version' => 7,
+            'frame_sha256' => 'sha256:'.$this->frame->sha256,
+            'snapshot_id' => 'hmi_ref_'.str_repeat('d', 64),
+            'targets' => [[
+                'ref' => 'e1',
+                'role' => 'button',
+                'name' => 'Reject optional cookies',
+                'destination' => null,
+            ]],
+        ];
+    }
+
+    /** @param array<string, mixed> $targetOverrides @return array<string, mixed> */
+    private function refPreflight(
+        string $interactionId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        string $name = 'Reject optional cookies',
+        array $targetOverrides = [],
+    ): array {
+        $pointer = $this->preflight($name, $targetOverrides);
+
+        return [
+            ...$pointer,
+            'schema_version' => 'talos_browser_hmi_ref_preflight_v2',
+            'interaction_id' => $interactionId,
+            'snapshot_id' => 'hmi_ref_'.str_repeat('d', 64),
+            'ref' => 'e1',
         ];
     }
 

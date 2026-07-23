@@ -79,7 +79,9 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::post('/browser/sessions/{browserSession}/navigate', [TalosBrowserController::class, 'navigate']);
         Route::post('/browser/sessions/{browserSession}/screenshot', [TalosBrowserController::class, 'screenshot']);
         Route::post('/browser/sessions/{browserSession}/snapshot', [TalosBrowserController::class, 'snapshot']);
+        Route::get('/browser/sessions/{browserSession}/interaction-targets', [TalosBrowserHmiController::class, 'targets']);
         Route::post('/browser/sessions/{browserSession}/interactions/pointer', [TalosBrowserHmiController::class, 'pointer']);
+        Route::post('/browser/sessions/{browserSession}/interactions/ref', [TalosBrowserHmiController::class, 'ref']);
         Route::post('/browser/sessions/{browserSession}/interactions/scroll', [TalosBrowserHmiController::class, 'scroll']);
         Route::post('/browser/interactions/{browserHmiApproval}/confirm', [TalosBrowserHmiController::class, 'confirm']);
         Route::get('/browser/sessions/{browserSession}/events', [TalosBrowserController::class, 'events']);

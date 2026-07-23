@@ -23,6 +23,7 @@ describe('TALOS browser evidence chat wiring', () => {
             'browserTaskCommandTargetId: string | null',
             'devBrowserEvidence: boolean',
             'interactBrowserFrame: [frame: TalosBrowserPointerFrame]',
+            'scrollBrowserFrame: [frame: TalosBrowserScrollFrame]',
             "confirmBrowserFrameInteraction: [decision: 'approve' | 'reject']",
             "decideToolApproval: [approval: TalosPendingToolApproval, decision: 'approve' | 'reject']",
             'cancelBrowserTask: [taskId: string]',
@@ -31,6 +32,7 @@ describe('TALOS browser evidence chat wiring', () => {
             '<TalosBrowserCard',
             'buildTalosBrowserCardPlacements',
             '@interact="emit(\'interactBrowserFrame\', $event)"',
+            '@scroll="emit(\'scrollBrowserFrame\', $event)"',
             '@confirm="emit(\'confirmBrowserFrameInteraction\', $event)"',
             ':pending-tool-approvals="pendingApprovalsForPlacement(placement)"',
             ':deciding-tool-approval-ids="decidingToolApprovalIds"',
@@ -57,6 +59,7 @@ describe('TALOS browser evidence chat wiring', () => {
             ':browser-task-command-target-id="browserTaskCommandTargetId"',
             ':dev-browser-evidence="devBrowserEvidence"',
             '@interact-browser-frame="interactWithBrowserFrame"',
+            '@scroll-browser-frame="scrollBrowserFrame"',
             '@confirm-browser-frame-interaction="confirmBrowserFrameInteraction"',
             '@decide-tool-approval="handleToolApprovalDecision"',
             '@cancel-browser-task="cancelBrowserTask"',
@@ -76,6 +79,9 @@ describe('TALOS browser evidence chat wiring', () => {
         expect(browserActivity).toContain("@click=\"emit('cancelTask', browserTask.id)\"")
         expect(browserCard).toContain('cancelTask: [taskId: string]')
         expect(browserCard).toContain("@cancel-task=\"emit('cancelTask', $event)\"")
+        expect(browserActivity).toContain('scroll: [frame: TalosBrowserScrollFrame]')
+        expect(browserCard).toContain('scroll: [frame: TalosBrowserScrollFrame]')
+        expect(browserCard).toContain("@scroll=\"emit('scroll', $event)\"")
     })
 
     it('routes development evidence through the single collapsed activity disclosure only', () => {
@@ -106,5 +112,46 @@ describe('TALOS browser evidence chat wiring', () => {
 
         expect(workspace).toContain(':mobile="breakpoint !== \'desktop\'"')
         expect(workspace).toContain(':mobile-window-presentation="mobileWindowPresentation"')
+    })
+
+    it('routes explicit recovery separately from healthy-session restart', () => {
+        for (const contract of [
+            ':browser-recovery-action="browserRecoveryAction"',
+            '@recover-browse="handleRecoverBrowse"',
+            '@restart-browse="handleRestartBrowse"',
+        ]) {
+            expect(workspace).toContain(contract)
+        }
+    })
+
+    it('STAGE2B-015 routes one current semantic frame and interaction through the shared chat stack', () => {
+        for (const contract of [
+            'browserRefFrame: TalosBrowserRefFrame | null',
+            'browserRefTargetsLoading: boolean',
+            'browserRefTargetsError: string | null',
+            'interactBrowserRef: [interaction: TalosBrowserRefInteraction]',
+            ':ref-frame="browserRefFrame"',
+            ':ref-targets-loading="browserRefTargetsLoading"',
+            ':ref-targets-error="browserRefTargetsError"',
+            '@interact-ref="emit(\'interactBrowserRef\', $event)"',
+        ]) {
+            expect(chatSurface).toContain(contract)
+        }
+
+        for (const contract of [
+            'browserRefFrame',
+            'browserRefTargetsLoading',
+            'browserRefTargetsError',
+            'interactWithBrowserRef',
+            ':browser-ref-frame="browserRefFrame"',
+            ':browser-ref-targets-loading="browserRefTargetsLoading"',
+            ':browser-ref-targets-error="browserRefTargetsError"',
+            '@interact-browser-ref="interactWithBrowserRef"',
+        ]) {
+            expect(workspace).toContain(contract)
+        }
+
+        expect(browserCard).toContain('interactRef: [interaction: TalosBrowserRefInteraction]')
+        expect(browserActivity).toContain('interactRef: [interaction: TalosBrowserRefInteraction]')
     })
 })

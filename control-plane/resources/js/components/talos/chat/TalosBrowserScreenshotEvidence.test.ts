@@ -8,6 +8,9 @@ import type {
     TalosBrowserArtifact,
     TalosBrowserHmiChallenge,
     TalosBrowserPointerFrame,
+    TalosBrowserRefFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserScrollFrame,
     TalosBrowserSession,
 } from '../../../lib/talosTypes'
 
@@ -48,6 +51,16 @@ const artifact: TalosBrowserArtifact = {
     created_at: '2026-07-13T10:00:00Z',
 }
 
+const refFrame: TalosBrowserRefFrame = {
+    schema_version: 'talos_browser_hmi_ref_targets_v2',
+    browser_session_id: session.id,
+    state_version: 7,
+    frame_sha256: `sha256:${'a'.repeat(64)}`,
+    snapshot_id: `hmi_ref_${'d'.repeat(64)}`,
+    screenshot: artifact,
+    targets: [{ ref: 'e1', role: 'button', name: 'Continue securely', destination: null }],
+}
+
 const challenge: TalosBrowserHmiChallenge = {
     approval_id: 'approval-1',
     request_hash: `sha256:${'b'.repeat(64)}`,
@@ -79,6 +92,8 @@ async function mountEvidence(overrides: Record<string, unknown> = {}) {
     document.body.append(shell)
 
     const interactions: TalosBrowserPointerFrame[] = []
+    const refInteractions: TalosBrowserRefInteraction[] = []
+    const scrolls: TalosBrowserScrollFrame[] = []
     const confirmations: Array<'approve' | 'reject'> = []
     const state = reactive({
         activities: [activity],
@@ -88,19 +103,24 @@ async function mountEvidence(overrides: Record<string, unknown> = {}) {
         interactionLocked: false,
         interactionError: null,
         pendingInteractionApproval: null,
+        refFrame: null as TalosBrowserRefFrame | null,
+        refTargetsLoading: false,
+        refTargetsError: null as string | null,
         ...overrides,
     })
     app = createApp({
         render: () => h(TalosBrowserScreenshotEvidence, {
             ...state,
             onInteract: (frame: TalosBrowserPointerFrame) => interactions.push(frame),
+            onInteractRef: (interaction: TalosBrowserRefInteraction) => refInteractions.push(interaction),
+            onScroll: (frame: TalosBrowserScrollFrame) => scrolls.push(frame),
             onConfirm: (decision: 'approve' | 'reject') => confirmations.push(decision),
         }),
     })
     app.mount(mountPoint)
     await nextTick()
 
-    return { shell, portal, mountPoint, interactions, confirmations, state }
+    return { shell, portal, mountPoint, interactions, refInteractions, scrolls, confirmations, state }
 }
 
 async function openViewer(mountPoint: HTMLElement) {
@@ -228,6 +248,48 @@ describe('TalosBrowserScreenshotEvidence', () => {
 
         expect(interactions).toHaveLength(0)
         expect(portal.textContent).toContain('Interaction in progress')
+    })
+
+    it('STAGE2A-003 forwards a typed scroll frame through screenshot evidence', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))
+        const { mountPoint, portal, scrolls } = await mountEvidence()
+        await openViewer(mountPoint)
+        await loadSelectedImage(portal)
+
+        portal.querySelector<HTMLButtonElement>('[aria-label="Scroll browser page down"]')?.click()
+
+        expect(scrolls).toEqual([{
+            browserSessionId: 'browser-1',
+            artifact,
+            deltaY: 480,
+        }])
+    })
+
+    it('STAGE2B-018 forwards a semantic ref interaction without exposing raw snapshot nodes', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))
+        const safeFrameWithIgnoredRawFields = {
+            ...refFrame,
+            raw_snapshot: 'TOP_SECRET_RAW_NODE',
+            nodes: [{ ref: 'r99', role: 'textbox', name: 'Private form value' }],
+        }
+        const { mountPoint, portal, refInteractions } = await mountEvidence({
+            refFrame: safeFrameWithIgnoredRawFields,
+        })
+        await openViewer(mountPoint)
+        await loadSelectedImage(portal)
+
+        portal.querySelector<HTMLButtonElement>('[data-browser-ref="e1"]')?.click()
+
+        expect(refInteractions).toEqual([{
+            browserSessionId: 'browser-1',
+            artifact,
+            snapshotId: refFrame.snapshot_id,
+            ref: 'e1',
+            clickCount: 1,
+        }])
+        expect(portal.textContent).toContain('Continue securely')
+        expect(portal.textContent).not.toContain('TOP_SECRET_RAW_NODE')
+        expect(portal.textContent).not.toContain('Private form value')
     })
 
     it('turns a native double click into one click_count=2 interaction', async () => {

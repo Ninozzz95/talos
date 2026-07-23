@@ -5,6 +5,7 @@ import { installBrowserRequestPolicy } from "./BrowserUrlPolicy.js";
 import { BrowserEgressProxy } from "./BrowserEgressProxy.js";
 import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import type { BrowserSnapshotResult } from "./BrowserSnapshot.js";
+import type { BrowserHmiRefSnapshot } from "./BrowserHmiRefSnapshot.js";
 import { BrowserHmiCommandLedger } from "./BrowserHmiCommandLedger.js";
 import type { Capabilities, CreateSessionInput, NavigateInput } from "./schemas.js";
 import type { BrowserRuntimeDescriptor } from "./BrowserWorkerProtocol.js";
@@ -40,6 +41,7 @@ export interface BrowserSession extends SessionSummary {
   context: BrowserContext;
   stateVersion: number;
   latestSnapshot?: { stateVersion: number; value: BrowserSnapshotResult };
+  latestHmiRefSnapshot?: BrowserHmiRefSnapshot;
   singlePageViolation: boolean;
   hmiIdentityKey: string;
   singlePageGuard?: (page: Page) => void;
@@ -250,6 +252,7 @@ export class BrowserSessionManager {
     this.assertOperationalSession(session);
     session.status = "active";
     session.stateVersion += 1;
+    session.latestHmiRefSnapshot = undefined;
     return this.summary(session);
   }
 
@@ -315,11 +318,35 @@ export class BrowserSessionManager {
     return this.sessions.get(sessionId)?.latestSnapshot;
   }
 
+  recordHmiRefSnapshot(sessionId: string, value: BrowserHmiRefSnapshot): BrowserSession {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
+    this.assertOperationalSession(session);
+    if (value.stateVersion !== session.stateVersion) {
+      throw new BrowserError("Browser state is stale.", "TALOS_BROWSER_STALE_STATE", 409, {
+        expected_state_version: value.stateVersion,
+        state_version: session.stateVersion,
+      });
+    }
+    session.latestHmiRefSnapshot = value;
+    return session;
+  }
+
+  hmiRefSnapshot(sessionId: string): BrowserHmiRefSnapshot | undefined {
+    return this.sessions.get(sessionId)?.latestHmiRefSnapshot;
+  }
+
   async recordFrame(sessionId: string, bytes: Buffer, stateVersion?: number): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
     const frameStateVersion = stateVersion ?? session.stateVersion;
     return session.frameEvidence.record(bytes, frameStateVersion, session.viewport);
+  }
+
+  hasFrameEvidence(sessionId: string, expectedSha256: string, stateVersion: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
+    return session.frameEvidence.has(expectedSha256, stateVersion, session.viewport);
   }
 
   async compareFrameTargetRegion(
@@ -380,6 +407,7 @@ export class BrowserSessionManager {
     if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
     this.assertOperationalSession(session);
     session.stateVersion += 1;
+    session.latestHmiRefSnapshot = undefined;
     return session;
   }
 
@@ -597,6 +625,7 @@ export class BrowserSessionManager {
       page: _page,
       context: _context,
       latestSnapshot: _latestSnapshot,
+      latestHmiRefSnapshot: _latestHmiRefSnapshot,
       singlePageViolation: _singlePageViolation,
       hmiIdentityKey: _hmiIdentityKey,
       singlePageGuard: _singlePageGuard,
@@ -649,6 +678,7 @@ export class BrowserSessionManager {
     session.frameEvidence.clear();
     const previousSnapshot = session.latestSnapshot?.value;
     session.latestSnapshot = undefined;
+    session.latestHmiRefSnapshot = undefined;
     void this.disposeSnapshot(previousSnapshot);
     session.recovery = {
       code: "TALOS_BROWSER_HMI_RECOVERY_REQUIRED",

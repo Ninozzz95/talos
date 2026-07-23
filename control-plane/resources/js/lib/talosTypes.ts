@@ -49,6 +49,8 @@ export type TalosBrowserTaskStatus =
     | 'completed'
     | 'failed'
     | 'cancelled'
+export type TalosBrowserRecoveryStrategy = 'resume' | 'reconcile' | 'fork' | 'wait_for_user' | 'fail'
+export type TalosBrowserRecoveryAction = 'recover_task' | 'start_fresh' | 'restart'
 export type TalosBrowserTask = {
     id: string
     talos_session_id: string
@@ -1054,16 +1056,64 @@ export type TalosBrowserPointerFrame = {
     clickCount: 1 | 2
 }
 
-export type TalosBrowserHmiExecution = {
+export type TalosBrowserRefTarget = {
+    ref: string
+    role: string
+    name: string
+    destination: string | null
+}
+
+export type TalosBrowserRefFrame = {
+    schema_version: 'talos_browser_hmi_ref_targets_v2'
+    browser_session_id: string
+    state_version: number
+    frame_sha256: string
+    snapshot_id: string
+    screenshot: TalosBrowserArtifact
+    targets: TalosBrowserRefTarget[]
+}
+
+export type TalosBrowserRefInteraction = {
+    browserSessionId: string
+    artifact: TalosBrowserArtifact
+    snapshotId: string
+    ref: string
+    clickCount: 1 | 2
+}
+
+export type TalosBrowserScrollFrame = {
+    browserSessionId: string
+    artifact: TalosBrowserArtifact
+    deltaY: number
+}
+
+export type TalosBrowserFrameExecution = {
+    session: TalosBrowserSession
+    screenshot: TalosBrowserArtifact
+    snapshot: TalosBrowserArtifact
+}
+
+export type TalosBrowserHmiExecution = TalosBrowserFrameExecution & {
     interaction: {
         status: 'executed'
         command_id: string
         approval_id?: string
         target?: Record<string, unknown>
     }
-    session: TalosBrowserSession
-    screenshot: TalosBrowserArtifact
-    snapshot: TalosBrowserArtifact
+}
+
+export type TalosBrowserRecoveryDecision = {
+    strategy: TalosBrowserRecoveryStrategy
+    reason_code: string
+    remediation: string
+    task_id: string
+    resulting_task_id: string | null
+}
+
+export type TalosBrowserRecoveryExecution = {
+    decision: TalosBrowserRecoveryDecision
+    task: TalosBrowserTask
+    resulting_task: TalosBrowserTask | null
 }
 
 export type TalosBrowserEvent = {

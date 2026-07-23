@@ -291,6 +291,22 @@ run_restart_phase after
     tests/e2e/talosBrowserRecovery.e2e.spec.ts \
     --project=chromium \
     --grep "renders the exact verified frame|BREG-004"
+
+  env \
+    TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+    TALOS_E2E_LIVE_BROWSER_TARGET="${TALOS_E2E_STAGE2A_SCROLL_TARGET:-https://www.w3.org/TR/uievents/}" \
+    ./node_modules/.bin/playwright test \
+    tests/e2e/talosBrowserHmi.e2e.spec.ts \
+    --grep "STAGE2A-010"
+
+  env \
+    TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+    TALOS_E2E_LIVE_BROWSER_TARGET="${TALOS_E2E_STAGE2B_REF_TARGET:-https://example.com/}" \
+    ./node_modules/.bin/playwright test \
+    tests/e2e/talosBrowserHmi.e2e.spec.ts \
+    --grep "STAGE2B-019"
 )
 
 echo "Official MCP Streamable HTTP round-trip passed against the live browser worker"
@@ -298,3 +314,5 @@ echo "LiveBrowserWorkerHmiIntegrationTest passed HMI replay and cancellation aga
 echo "Controlled worker restart fenced the prior action session before redispatch"
 echo "TALOS browser HMI Playwright gate rendered the exact worker artifact"
 echo "BREG-004 recovered one verified screenshot through reload against the live worker"
+echo "STAGE2A-010 scrolled real worker evidence on desktop and mobile"
+echo "STAGE2B-019 selected, promoted, and restored real semantic refs on desktop and mobile"

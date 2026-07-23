@@ -21,6 +21,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 docs/superpowers/
+docs/planning/
 docs/architecture/progress/
 docs/architecture/*checklist*.md
 docs/architecture/*plan*.md
