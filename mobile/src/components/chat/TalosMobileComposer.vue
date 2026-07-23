@@ -635,7 +635,7 @@ watch(() => props.prompt, () => {
             @select-effort="selectEffort"
             @select-thinking="emit('selectThinking', $event)"
             @refresh-models="emit('refreshModels')"
-            @open-model-lab="emit('openModelLab')"
+            @open-model-lab="modelPickerOpen = false; emit('openModelLab')"
         />
 
         <TalosMobileEnhancerDrawer

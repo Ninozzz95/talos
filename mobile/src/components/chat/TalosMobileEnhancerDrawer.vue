@@ -40,7 +40,7 @@ const emit = defineEmits<{
                 role="status"
                 class="flex flex-col items-center gap-3 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-6 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
             >
-                <TalosLineLoader :width="140" />
+                <TalosLineLoader :width="72" />
                 Improving prompt with {{ modelTitle }}…
             </div>
             <div

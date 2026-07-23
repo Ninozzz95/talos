@@ -44,22 +44,24 @@ const emit = defineEmits<{
                 <pre class="whitespace-pre-wrap break-words font-sans">{{ result.enhanced_prompt }}</pre>
             </div>
 
+            <!-- F5.1 (owner): aggressively compact — the summary clamps to two
+                 lines and the principles are a single quiet inline row. -->
             <p
                 id="talos-mobile-enhancer-description"
-                class="text-xs leading-5 text-[var(--talos-muted,var(--muted-foreground))]"
+                class="line-clamp-2 text-[11px] leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
             >
                 {{ result.summary || 'Review the enhanced prompt before changing your draft.' }}
             </p>
 
             <ul
                 v-if="result.applied_principles.length"
-                class="flex flex-wrap gap-1.5"
+                class="flex flex-wrap gap-1"
                 aria-label="Applied prompt principles"
             >
                 <li
                     v-for="principle in result.applied_principles"
                     :key="principle"
-                    class="rounded border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--muted))] px-2 py-1 text-[11px] text-[var(--talos-muted,var(--muted-foreground))]"
+                    class="rounded-full bg-[var(--talos-active)] px-1.5 py-0.5 text-[10px] leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
                 >
                     {{ principle }}
                 </li>

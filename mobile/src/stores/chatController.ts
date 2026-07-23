@@ -397,7 +397,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             : undefined
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         try {
-            const tonePrompt = buildTalosSystemPrompt(deps.settings.state.tone.preset)
+            const tonePrompt = buildTalosSystemPrompt(
+                deps.settings.state.tone.preset,
+                profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
+            )
             let payloadTurns = turns
             if (pendingMemoryBlock !== null && memorySelection.length > 0) {
                 const lastUserIndex = turns.map((turn) => turn.role).lastIndexOf('user')

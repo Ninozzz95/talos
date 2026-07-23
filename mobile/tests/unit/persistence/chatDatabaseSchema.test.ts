@@ -101,6 +101,9 @@ describe('TALOS chat database schema', () => {
     it('excludes databases and shared preferences from every Android backup path', () => {
         const manifest = readFileSync(resolve(process.cwd(), 'android/app/src/main/AndroidManifest.xml'), 'utf8')
         expect(manifest).toContain('android:allowBackup="false"')
+        // F5.1 #29: Android 11+ package visibility — the RecognitionService
+        // MUST be queryable or dictation dies silently on device.
+        expect(manifest).toContain('android.speech.RecognitionService')
         expect(manifest).toContain('android:dataExtractionRules="@xml/data_extraction_rules"')
         expect(manifest).toContain('android:fullBackupContent="@xml/backup_rules"')
 

@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- F5.1 #29 root cause (Android 11+ package visibility): without this
+         declaration SpeechRecognizer cannot bind the RecognitionService and
+         dictation dies silently. https://developer.android.com/about/versions/11/behavior-changes-11 -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"

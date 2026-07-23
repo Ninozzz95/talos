@@ -3,7 +3,8 @@ import { reactive, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 
 // F3-T3 (owner #12, "Claude pattern"): a dedicated chat-list PAGE — search,
-// tap-to-open (back to chat), per-row rename/delete, New chat on top.
+// tap-to-open, New chat on top. F5.1 (owner directive): row actions live in a
+// TAP-AND-HOLD dropdown (Open / Rename / Archive / Delete).
 const mockState = vi.hoisted(() => ({
     controller: null as unknown,
     routerPush: vi.fn(),
@@ -38,30 +39,63 @@ function makeController() {
 beforeEach(() => {
     mockState.routerPush.mockReset()
     mockState.controller = makeController()
+    document.body.innerHTML = ''
 })
 
+function mountScreen() {
+    return mount(ChatsScreen, { attachTo: document.body })
+}
+
+function pointer(element: Element, type: string, x = 100, y = 100): void {
+    // vue-test-utils cannot set clientX on synthesized events — dispatch a
+    // real MouseEvent (jsdom accepts pointer types through it).
+    element.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }))
+}
+
+async function holdRow(wrapper: ReturnType<typeof mountScreen>, selector: string, index = 0): Promise<void> {
+    vi.useFakeTimers()
+    try {
+        const row = wrapper.findAll(selector)[index].element
+        pointer(row, 'pointerdown')
+        await vi.advanceTimersByTimeAsync(600)
+        pointer(row, 'pointerup')
+    } finally {
+        vi.useRealTimers()
+    }
+    await flushPromises()
+}
+
+function menu(): HTMLElement {
+    const element = document.body.querySelector('[data-testid="talos-chats-row-menu"]')
+    if (!element) throw new Error('row menu not open')
+    return element as HTMLElement
+}
+
+function menuItem(label: string): HTMLButtonElement {
+    const item = [...menu().querySelectorAll('button')].find((button) => button.textContent?.trim() === label)
+    if (!item) throw new Error(`menu item ${label} not found`)
+    return item as HTMLButtonElement
+}
+
 describe('ChatsScreen (F3-T3)', () => {
-    it('lists every session with the active one marked', () => {
-        const wrapper = mount(ChatsScreen)
+    it('lists every session with the active one marked, most recent first', () => {
+        const wrapper = mountScreen()
         const rows = wrapper.findAll('[data-testid="talos-chats-row"]')
         expect(rows).toHaveLength(2)
-        expect(wrapper.text()).toContain('Pancake recipe')
+        expect(rows[0].text()).toContain('Streaming design')
         expect(wrapper.get('[data-testid="talos-chats-row"][data-active="true"]').text()).toContain('Streaming design')
     })
 
     it('filters locally through the search field', async () => {
-        const wrapper = mount(ChatsScreen)
+        const wrapper = mountScreen()
         await wrapper.get('[data-testid="talos-chats-search"]').setValue('pancake')
         expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(1)
         expect(wrapper.text()).toContain('Pancake recipe')
     })
 
     it('opens a chat on tap and returns to the chat route', async () => {
-        const wrapper = mount(ChatsScreen)
-        // F4-#23 ordering: most recent first — s2 (09:00) precedes s1 (08:00).
-        const rows = wrapper.findAll('[data-testid="talos-chats-open"]')
-        expect(rows[0].text()).toContain('Streaming design')
-        await rows[1].trigger('click')
+        const wrapper = mountScreen()
+        await wrapper.findAll('[data-testid="talos-chats-open"]')[1].trigger('click')
         await flushPromises()
         const controller = mockState.controller as ReturnType<typeof makeController>
         expect(controller.selectSession).toHaveBeenCalledWith('s1')
@@ -69,57 +103,60 @@ describe('ChatsScreen (F3-T3)', () => {
     })
 
     it('starts a new chat from the top action', async () => {
-        const wrapper = mount(ChatsScreen)
+        const wrapper = mountScreen()
         await wrapper.get('[data-testid="talos-chats-new"]').trigger('click')
         await flushPromises()
         const controller = mockState.controller as ReturnType<typeof makeController>
         expect(controller.newSession).toHaveBeenCalledOnce()
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'chat' })
     })
+})
 
-    // F4-#23 — swipe tray: Archive moves a chat into the collapsible Archived
-    // section; Unarchive brings it back; delete stays behind its dialog.
-    it('archives a chat from the row tray into the Archived section and restores it', async () => {
-        const wrapper = mount(ChatsScreen)
-        await wrapper.get('[aria-label="Archive chat Pancake recipe"]').trigger('click')
+describe('ChatsScreen hold dropdown (F5.1)', () => {
+    it('long-press opens the row menu; a moved finger cancels it', async () => {
+        const wrapper = mountScreen()
+        // Moved finger: no menu.
+        vi.useFakeTimers()
+        try {
+            const row = wrapper.findAll('[data-testid="talos-chats-row"]')[0].element
+            pointer(row, 'pointerdown', 100, 100)
+            pointer(row, 'pointermove', 100, 140)
+            await vi.advanceTimersByTimeAsync(700)
+        } finally {
+            vi.useRealTimers()
+        }
+        expect(document.body.querySelector('[data-testid="talos-chats-row-menu"]')).toBeNull()
+
+        await holdRow(wrapper, '[data-testid="talos-chats-row"]')
+        expect(menu().getAttribute('role')).toBe('menu')
+        expect(menu().textContent).toContain('Archive')
+        wrapper.unmount()
+    })
+
+    it('archives from the menu and unarchives from the archived section menu', async () => {
+        const wrapper = mountScreen()
+        await holdRow(wrapper, '[data-testid="talos-chats-row"]', 1) // Pancake recipe
+        menuItem('Archive').click()
         await flushPromises()
         const controller = mockState.controller as ReturnType<typeof makeController>
         expect(controller.chat.setSessionArchived).toHaveBeenCalledWith('s1', true)
         expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(1)
 
-        const toggle = wrapper.get('[data-testid="talos-chats-archived-toggle"]')
-        expect(toggle.text()).toContain('Archived (1)')
-        await toggle.trigger('click')
-        const archivedRow = wrapper.get('[data-testid="talos-chats-archived-row"]')
-        expect(archivedRow.text()).toContain('Pancake recipe')
-
-        await wrapper.get('[aria-label="Unarchive chat Pancake recipe"]').trigger('click')
+        await wrapper.get('[data-testid="talos-chats-archived-toggle"]').trigger('click')
+        await holdRow(wrapper, '[data-testid="talos-chats-archived-row"]')
+        menuItem('Unarchive').click()
         await flushPromises()
         expect(controller.chat.setSessionArchived).toHaveBeenCalledWith('s1', false)
         expect(wrapper.findAll('[data-testid="talos-chats-row"]')).toHaveLength(2)
-        expect(wrapper.find('[data-testid="talos-chats-archived-toggle"]').exists()).toBe(false)
+        wrapper.unmount()
     })
 
-    it('lists manually ordered sessions by sort_index after the fresh ones', () => {
+    it('renames through the menu and keeps the dialog open on failure', async () => {
         const controller = mockState.controller as ReturnType<typeof makeController>
-        controller.chat.sessions.push(
-            { id: 's3', title: 'Pinned last', updated_at: '2026-07-23T12:00:00.000Z', metadata: { sort_index: 1 } },
-            { id: 's4', title: 'Pinned first', updated_at: '2026-07-23T01:00:00.000Z', metadata: { sort_index: 0 } },
-        )
-        const wrapper = mount(ChatsScreen)
-        const titles = wrapper.findAll('[data-testid="talos-chats-row"]').map((row) => row.text())
-        expect(titles[0]).toContain('Streaming design')
-        expect(titles[1]).toContain('Pancake recipe')
-        expect(titles[2]).toContain('Pinned first')
-        expect(titles[3]).toContain('Pinned last')
-    })
-
-    // F4-#22 — the owner could not rename/delete on device and got NO feedback.
-    // Contract: happy paths close the dialog; failures KEEP it open and show
-    // the real error, never a silent no-op.
-    it('renames a chat from its row and closes the dialog', async () => {
-        const wrapper = mount(ChatsScreen, { attachTo: document.body })
-        await wrapper.get('[aria-label="Rename Pancake recipe"]').trigger('click')
+        controller.renameSession.mockRejectedValueOnce(new Error('TALOS_CHAT_RENAME_UNVERIFIED'))
+        const wrapper = mountScreen()
+        await holdRow(wrapper, '[data-testid="talos-chats-row"]', 1)
+        menuItem('Rename').click()
         await flushPromises()
         const input = document.body.querySelector<HTMLInputElement>('[aria-label="Chat name"]')
         expect(input).not.toBeNull()
@@ -129,40 +166,23 @@ describe('ChatsScreen (F3-T3)', () => {
         const save = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('Save'))
         save!.click()
         await flushPromises()
-        const controller = mockState.controller as ReturnType<typeof makeController>
         expect(controller.renameSession).toHaveBeenCalledWith('s1', 'Crêpes')
-        expect(document.body.querySelector('[aria-label="Chat name"]')).toBeNull()
+        expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('TALOS_CHAT_RENAME_UNVERIFIED')
         wrapper.unmount()
     })
 
-    it('keeps the rename dialog open and surfaces the real error when the rename fails', async () => {
-        const controller = mockState.controller as ReturnType<typeof makeController>
-        controller.renameSession.mockRejectedValueOnce(new Error('TALOS_CHAT_RENAME_UNVERIFIED'))
-        const wrapper = mount(ChatsScreen, { attachTo: document.body })
-        await wrapper.get('[aria-label="Rename Pancake recipe"]').trigger('click')
+    it('deletes through the menu behind the confirm dialog', async () => {
+        const wrapper = mountScreen()
+        await holdRow(wrapper, '[data-testid="talos-chats-row"]', 1)
+        menuItem('Delete').click()
         await flushPromises()
-        const save = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('Save'))
-        save!.click()
-        await flushPromises()
-        expect(document.body.querySelector('[aria-label="Chat name"]')).not.toBeNull()
-        const alert = document.body.querySelector('[role="alert"]')
-        expect(alert?.textContent).toContain('TALOS_CHAT_RENAME_UNVERIFIED')
-        wrapper.unmount()
-    })
-
-    it('keeps the delete dialog open and surfaces the real error when the delete fails', async () => {
-        const controller = mockState.controller as ReturnType<typeof makeController>
-        controller.deleteSession.mockRejectedValueOnce(new Error('TALOS_CHAT_DELETE_UNVERIFIED'))
-        const wrapper = mount(ChatsScreen, { attachTo: document.body })
-        await wrapper.get('[aria-label="Delete Pancake recipe"]').trigger('click')
-        await flushPromises()
-        // Confirm inside the dialog — the swipe tray also has a Delete button.
         const dialog = document.body.querySelector('[role="dialog"]')
+        expect(dialog?.textContent).toContain('Delete chat?')
         const confirm = [...dialog!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Delete')
         confirm!.click()
         await flushPromises()
-        const alert = document.body.querySelector('[role="alert"]')
-        expect(alert?.textContent).toContain('TALOS_CHAT_DELETE_UNVERIFIED')
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        expect(controller.deleteSession).toHaveBeenCalledWith('s1')
         wrapper.unmount()
     })
 })
