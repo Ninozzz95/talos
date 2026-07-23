@@ -129,7 +129,7 @@ function onListKeydown(event: KeyboardEvent): void {
             ref="listbox"
             role="listbox"
             aria-label="Model for this conversation"
-            class="max-h-[min(52dvh,22rem)] space-y-3 overflow-y-auto overscroll-contain pr-1"
+            class="max-h-[70dvh] min-h-[40dvh] space-y-3 overflow-y-auto overscroll-contain pr-1"
             @keydown="onListKeydown"
         >
             <section

@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 const settings = vi.hoisted(() => ({
+    setTone: vi.fn(async () => {}),
     state: {
+        tone: { preset: 'balanced' },
         ai_defaults: {
             utility_model_mode: 'same_as_chat',
             research_model_mode: 'same_as_chat',

@@ -172,7 +172,10 @@ function formatBytes(value: number): string {
                         <span>{{ message.state }}</span>
                     </template>
                 </div>
+                <!-- SF-critic #7: the action row renders only where the group
+                     ends (next to the meta row) — calmer per-turn chrome. -->
                 <TalosMobileMessageActions
+                    v-if="isGroupEnd(index)"
                     :message="message"
                     :busy="sending"
                     :can-retry="message.role === 'assistant' && hasPreviousUser(message.id)"

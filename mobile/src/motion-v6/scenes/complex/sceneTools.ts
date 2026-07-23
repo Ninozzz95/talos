@@ -335,15 +335,21 @@ function drawAurora(context: CanvasContext, geometry: ComplexSceneGeometry, phas
     }
 }
 
-// F1 calm refactor: glacier quiet language + one slow horizon line, giving calm
-// its own rendered-operation grammar while staying the quietest complex scene.
+// F1 calm refactor: glacier quiet language + breathing horizon, giving calm its
+// own rendered-operation grammar while staying the quietest complex scene.
+// F3-T1 (owner #6): the original 1% horizon drift read as static on device —
+// the horizon now visibly breathes and a soft veil drifts above it, still calm.
 function drawCalm(context: CanvasContext, geometry: ComplexSceneGeometry, phase: number): void {
     drawGlacier(context, geometry, phase)
-    const y = geometry.height * (0.68 + 0.01 * Math.sin(phase * 0.2))
+    const y = geometry.height * (0.68 + 0.035 * Math.sin(phase * 0.35))
     context.beginPath()
     context.moveTo(geometry.width * 0.12, y)
     context.lineTo(geometry.width * 0.88, y)
     context.stroke()
+    const veilY = geometry.height * (0.3 + 0.06 * Math.sin(phase * 0.22 + 1.7))
+    context.globalAlpha = opacity(geometry, 0.09)
+    context.fillStyle = geometry.accent
+    context.fillRect(geometry.width * 0.1, veilY, geometry.width * 0.8, geometry.height * 0.045)
 }
 
 function drawGlacier(context: CanvasContext, geometry: ComplexSceneGeometry, phase: number): void {

@@ -618,6 +618,7 @@ onBeforeUnmount(() => {
                 :browser-busy="browserBusy"
                 :dictation-supported="dictation.supported.value"
                 :dictation-listening="dictation.status.value === 'listening'"
+                :drawer-mode="settings.state.shell.composer_drawer"
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"
                 @stop="chat.stopStreaming()"

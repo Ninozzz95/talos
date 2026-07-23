@@ -159,10 +159,25 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
                         role="switch"
                         :aria-checked="settings.state.shell.immersive_header"
                         aria-label="Immersive header"
-                        class="talos-pressable h-6 w-11 shrink-0 rounded-full transition-colors"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
                         :class="settings.state.shell.immersive_header ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
                         @click="settings.setShell({ immersive_header: !settings.state.shell.immersive_header })"
-                    ></button>
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.immersive_header ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">Composer drawer</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">Minimal bar (+ / model / mic) with tools in an organized drawer.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.composer_drawer"
+                        aria-label="Composer drawer"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.composer_drawer ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ composer_drawer: !settings.state.shell.composer_drawer })"
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.composer_drawer ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
                 </label>
                 <label class="block">
                     <span :class="selectLabelClass">Chat message size</span>

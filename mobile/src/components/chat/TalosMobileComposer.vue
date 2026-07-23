@@ -10,6 +10,7 @@ import {
     Mic,
     Paperclip,
     SlidersHorizontal,
+    Plus,
     Sparkles,
     Square,
 } from '@lucide/vue'
@@ -32,6 +33,10 @@ const TalosMobilePromptEnhancerPopover = defineAsyncComponent(
 )
 const TalosMobileSlashCommandMenu = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSlashCommandMenu.vue'),
+)
+// F3-T4bis: the organized tool drawer loads only when drawer mode opens it.
+const TalosMobileComposerDrawer = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileComposerDrawer.vue'),
 )
 
 const props = withDefaults(defineProps<{
@@ -64,6 +69,8 @@ const props = withDefaults(defineProps<{
     // F2-T5: mic renders only when dictation is genuinely available (honest).
     dictationSupported?: boolean
     dictationListening?: boolean
+    // F3-T4bis (owner #13): Claude-style minimal bar + organized tool drawer.
+    drawerMode?: boolean
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -87,6 +94,7 @@ const props = withDefaults(defineProps<{
     browserBusy: false,
     dictationSupported: false,
     dictationListening: false,
+    drawerMode: false,
 })
 
 const emit = defineEmits<{
@@ -115,7 +123,7 @@ const emit = defineEmits<{
 
 const composerRoot = ref<HTMLElement | null>(null)
 const promptField = ref<HTMLTextAreaElement | null>(null)
-const modelTrigger = ref<ComponentPublicInstance | null>(null)
+const modelTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
 const effortTrigger = ref<ComponentPublicInstance | null>(null)
 const modelPopover = ref<HTMLElement | null>(null)
 const modelPickerOpen = ref(false)
@@ -123,9 +131,15 @@ const effortPickerOpen = ref(false)
 const slashActiveIndex = ref(0)
 const slashCommandCount = ref(0)
 const slashMenu = ref<{ activateSelected(): void } | null>(null)
+const toolDrawerOpen = ref(false)
 
 const selectedProfile = computed(() => (
     props.modelProfiles.find((profile) => profile.id === props.selectedModelProfileId) ?? null
+))
+// F3-T1 (owner #2): the effort control exists only when the model exposes
+// real levels beyond 'off' — hidden, never disabled.
+const effortAvailable = computed(() => (
+    (selectedProfile.value?.effort_levels ?? []).some((level) => level !== 'off')
 ))
 const selectedRoute = computed(() => (
     props.routingProfiles.find((profile) => profile.id === props.selectedRoutingProfileId) ?? null
@@ -463,7 +477,65 @@ watch(() => props.prompt, () => {
             </Button>
         </div>
 
-        <div class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+        <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic. -->
+        <div v-if="drawerMode" class="mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+            <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                data-mobile-icon-only="true"
+                aria-label="Add to chat"
+                class="talos-pressable min-h-11 min-w-11 rounded-full"
+                @click="toolDrawerOpen = true"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+            </Button>
+            <button
+                ref="modelTrigger"
+                type="button"
+                data-testid="talos-composer-model-chip"
+                aria-label="Choose model profile"
+                :title="modelTitle"
+                aria-haspopup="listbox"
+                :aria-expanded="modelPickerOpen"
+                aria-controls="talos-mobile-model-picker-popover"
+                class="talos-pressable flex min-h-11 min-w-0 items-center gap-2 rounded-full border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
+                @click="toggleModelPicker"
+            >
+                <TalosMobileProviderIcon
+                    v-if="selectedProfile"
+                    :provider="selectedProfile.provider"
+                    class="size-5 border-0 bg-transparent"
+                />
+                <span class="truncate text-sm font-medium text-[var(--talos-text,var(--foreground))]">
+                    {{ selectedProfile?.display_name ?? 'Choose model' }}
+                </span>
+                <span v-if="selectedProfile && (thinking || selectedEffort !== 'off')" class="shrink-0 text-xs text-[var(--talos-muted,var(--muted-foreground))]">
+                    {{ thinking ? 'Thinking' : selectedEffort.charAt(0).toUpperCase() + selectedEffort.slice(1) }}
+                </span>
+            </button>
+            <span class="flex-1" aria-hidden="true" />
+            <Button
+                v-if="dictationSupported"
+                type="button"
+                size="icon"
+                variant="outline"
+                data-mobile-icon-only="true"
+                :aria-label="dictationListening ? 'Stop dictation' : 'Dictate'"
+                :title="dictationListening ? 'Stop dictation' : 'Dictate'"
+                :aria-pressed="dictationListening"
+                :disabled="sending"
+                class="talos-pressable min-h-11 min-w-11 rounded-full"
+                :class="dictationListening
+                    ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
+                    : ''"
+                @click="emit('toggleDictation')"
+            >
+                <Mic class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
+            </Button>
+        </div>
+
+        <div v-else class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
             <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                 <Button
                     ref="modelTrigger"
@@ -482,11 +554,12 @@ watch(() => props.prompt, () => {
                     <TalosMobileProviderIcon
                         v-if="selectedProfile"
                         :provider="selectedProfile.provider"
-                        class="size-7 border-0 bg-transparent"
+                        class="size-5 border-0 bg-transparent"
                     />
                     <BrainCircuit v-else class="size-4" aria-hidden="true" />
                 </Button>
                 <Button
+                    v-if="effortAvailable"
                     ref="effortTrigger"
                     type="button"
                     size="icon"
@@ -500,7 +573,7 @@ watch(() => props.prompt, () => {
                     class="min-h-11 min-w-11"
                     @click="toggleEffortPicker"
                 >
-                    <Gauge class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
+                    <Gauge class="size-4" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -513,7 +586,7 @@ watch(() => props.prompt, () => {
                     class="min-h-11 min-w-11"
                     @click="requestPromptEnhancement"
                 >
-                    <Sparkles class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
+                    <Sparkles class="size-4" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -590,5 +663,31 @@ watch(() => props.prompt, () => {
         </div>
 
         <span class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
+
+        <!-- F3-T4bis: organized tool drawer (drawer mode only). -->
+        <Transition
+            leave-active-class="transition duration-200 ease-in"
+            leave-to-class="opacity-0 translate-y-4"
+        >
+        <TalosMobileComposerDrawer
+            v-if="drawerMode && toolDrawerOpen"
+            :can-enhance="canRequestEnhancement"
+            :browse-mode="browseMode"
+            :thinking="thinking"
+            :supports-thinking="selectedProfile?.supports_thinking ?? false"
+            :effort-levels="selectedProfile?.effort_levels ?? []"
+            :selected-effort="selectedEffort"
+            :attachments-available="attachmentsAvailable"
+            :context-available="contextAvailable"
+            @close="toolDrawerOpen = false"
+            @attach="emit('attach')"
+            @open-context="emit('openContext')"
+            @open-model-lab="emit('openModelLab')"
+            @toggle-browse="emit('toggleBrowse', $event)"
+            @select-thinking="emit('selectThinking', $event)"
+            @select-effort="emit('selectEffort', $event)"
+            @enhance-prompt="emit('enhancePrompt')"
+        />
+        </Transition>
     </section>
 </template>

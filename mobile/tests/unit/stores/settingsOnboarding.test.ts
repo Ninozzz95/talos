@@ -99,3 +99,77 @@ describe('security preferences (F2-T6 app lock)', () => {
         expect(fresh.state.security).toEqual({ app_lock_enabled: true, app_lock_biometric: true })
     })
 })
+
+describe('mobile motion defaults (F3-T1 owner #7)', () => {
+    it('ships background intensity at the range minimum out of the box', () => {
+        expect(parseTalosMobileSettings(null).motion_v6.intensity).toBe(0)
+    })
+
+    it('persisted user intensity always wins over the mobile default', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            motion_v6: { schema_version: 1, mode: 'simple', background_enabled: true, interface_enabled: true,
+                scene_override: null, speed: 100, intensity: 80, glow_intensity: 0, density: 100, depth: 50,
+                trails: 35, contrast: 60, parallax: 20, quality: 'adaptive', fps_cap: 30, dpr_cap: 1.25,
+                pause_when_hidden: true, respect_data_saver: true,
+                interface: { profile: 'preset', duration_scale: 50, intensity: 65, easing: 'precise', stagger: 40,
+                    categories: { windows: true, surfaces: true, navigation: true, composer: true, messages: true, feedback: true } } },
+        }))
+        expect(parsed.motion_v6.intensity).toBe(80)
+    })
+})
+
+// F3-T2 (owner #4): the presentation setting NEVER worked before F3, so a
+// persisted 'drawer' was never a real choice — one-shot migrate to the new
+// fullscreen default; explicit post-migration choices stick via the flag.
+describe('window presentation default (F3-T2)', () => {
+    it('defaults to fullscreen out of the box', () => {
+        expect(parseTalosMobileSettings(null).chat_layout.mobile_window_presentation).toBe('fullscreen')
+    })
+
+    it('migrates a pre-F3 persisted drawer (never functional) to fullscreen once', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            chat_layout: { mobile_window_presentation: 'drawer' },
+        }))
+        expect(parsed.chat_layout.mobile_window_presentation).toBe('fullscreen')
+    })
+
+    it('respects an explicit drawer choice made after the migration', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            presentation_v2: true,
+            chat_layout: { mobile_window_presentation: 'drawer' },
+        }))
+        expect(parsed.chat_layout.mobile_window_presentation).toBe('drawer')
+    })
+})
+
+describe('tone preference (F3-T4)', () => {
+    it('defaults to balanced and fails closed on garbage', () => {
+        expect(parseTalosMobileSettings(null).tone.preset).toBe('balanced')
+        expect(parseTalosMobileSettings(JSON.stringify({ tone: { preset: 'sarcastic' } })).tone.preset).toBe('balanced')
+    })
+
+    it('setTone persists and survives hydrate', async () => {
+        const store = useSettingsStore()
+        await store.setTone('friendly')
+        __resetSettingsStoreForTests()
+        const fresh = useSettingsStore()
+        await fresh.hydrate()
+        expect(fresh.state.tone.preset).toBe('friendly')
+    })
+})
+
+describe('composer drawer preference (F3-T4bis owner #13)', () => {
+    it('defaults OFF and fails closed on garbage', () => {
+        expect(parseTalosMobileSettings(null).shell.composer_drawer).toBe(false)
+        expect(parseTalosMobileSettings(JSON.stringify({ shell: { composer_drawer: 'yes' } })).shell.composer_drawer).toBe(false)
+    })
+
+    it('persists through setShell and hydrate', async () => {
+        const store = useSettingsStore()
+        await store.setShell({ composer_drawer: true })
+        __resetSettingsStoreForTests()
+        const fresh = useSettingsStore()
+        await fresh.hydrate()
+        expect(fresh.state.shell.composer_drawer).toBe(true)
+    })
+})

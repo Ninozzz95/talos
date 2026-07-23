@@ -60,15 +60,11 @@ const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border 
     <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex min-h-0 flex-col overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] md:min-h-[540px] md:flex-row">
         <aside
             data-testid="settings-category-pane"
-            class="shrink-0 border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/80 p-3 md:block md:w-56 md:border-b-0 md:border-r"
+            class="min-h-0 flex-1 border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/80 p-3 md:block md:w-56 md:flex-none md:border-b-0 md:border-r"
             :class="mobilePane === 'detail' ? 'hidden' : 'block'"
             aria-label="Settings categories"
         >
-            <div class="px-2 pb-3">
-                <h3 class="text-sm font-semibold text-[var(--talos-text)]">Settings categories</h3>
-                <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Local preferences and capability readiness.</p>
-            </div>
-            <TabsList aria-label="TALOS settings categories" class="flex max-h-56 w-full flex-col gap-1 overflow-y-auto overscroll-contain pr-1 md:max-h-none">
+            <TabsList aria-label="TALOS settings categories" class="flex max-h-none w-full flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
                 <TabsTrigger
                     v-for="tab in TALOS_MOBILE_SETTINGS_TABS"
                     :key="tab.id"

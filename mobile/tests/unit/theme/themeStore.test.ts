@@ -75,6 +75,25 @@ describe('useThemeStore', () => {
         await store.setMode('dark')
         expect(store.state.theme).toBe('violet')
         expect(store.state.mode).toBe('dark')
-        expect(JSON.parse(prefs.get(TALOS_MOBILE_THEME_KEY)!)).toEqual({ theme: 'violet', mode: 'dark' })
+        // calm_migrated marks the one-shot pre-calm default migration as done.
+        expect(JSON.parse(prefs.get(TALOS_MOBILE_THEME_KEY)!)).toEqual({ theme: 'violet', mode: 'dark', calm_migrated: true })
+    })
+})
+
+// F3-T1 (owner #9): installs that persisted the PRE-calm default ('telemetry')
+// migrate once to calm; any explicitly re-chosen theme sticks afterwards.
+describe('calm default migration (F3-T1)', () => {
+    it('migrates a persisted legacy telemetry default to calm exactly once', () => {
+        const first = parseTalosThemeState(JSON.stringify({ theme: 'telemetry', mode: 'system' }))
+        expect(first.theme).toBe('calm')
+
+        // After migration the flag persists; a deliberate telemetry choice sticks.
+        const rechosen = parseTalosThemeState(JSON.stringify({ theme: 'telemetry', mode: 'system', calm_migrated: true }))
+        expect(rechosen.theme).toBe('telemetry')
+    })
+
+    it('never touches other persisted themes', () => {
+        const aurora = parseTalosThemeState(JSON.stringify({ theme: 'aurora', mode: 'dark' }))
+        expect(aurora.theme).toBe('aurora')
     })
 })

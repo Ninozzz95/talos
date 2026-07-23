@@ -102,40 +102,48 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle, { timeout: 15_000 })
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toBeVisible()
 
-    await page.getByLabel('Open menu').click()
-    await expect(page.getByRole('list', { name: 'Chat history' })).toBeVisible()
-    await expect(page.getByText('2 conversations on this device', { exact: true })).toBeVisible()
-    await page.getByLabel(`Open chat ${firstTitle}`).click()
+    // F3-T3 (owner #12, Claude pattern): on phones the session list lives in
+    // the dedicated Chats page reached from the sidebar entry.
+    async function openChatsPage(): Promise<void> {
+        await page.getByLabel('Open menu').click()
+        await page.getByTestId('talos-sidebar-chats-entry').click()
+        await expect(page.getByTestId('talos-chats-screen')).toBeVisible()
+    }
+
+    await openChatsPage()
+    await expect(page.getByTestId('talos-sidebar-chats-entry')).toHaveCount(0)
+    await expect(page.getByTestId('talos-chats-row')).toHaveCount(2)
+    await page.getByTestId('talos-chats-row').filter({ hasText: firstTitle }).getByTestId('talos-chats-open').click()
     await expect(page.getByText('Alpha is recorded.', { exact: true })).toBeVisible()
     await expect(page.getByText('The earlier value was alpha.', { exact: true })).toBeVisible()
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toHaveCount(0)
 
-    await page.getByLabel('Open menu').click()
-    await page.getByLabel(`Rename ${firstTitle}`).click()
+    await openChatsPage()
+    await page.getByTestId('talos-chats-screen').getByLabel(`Rename ${firstTitle}`).click()
     await page.getByLabel('Chat name').fill('Primary evidence')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
-    await expect(page.getByLabel('Open chat Primary evidence')).toBeVisible()
-    await page.getByLabel('Close menu').click()
+    await expect(page.getByTestId('talos-chats-row').filter({ hasText: 'Primary evidence' })).toBeVisible()
+    await page.getByLabel('Back to chat').click()
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText('Primary evidence')
 
     await page.reload()
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText('Primary evidence', { timeout: 15_000 })
     await expect(page.getByText('The earlier value was alpha.', { exact: true })).toBeVisible()
 
-    await page.getByLabel('Open menu').click()
-    await page.getByLabel('Delete Primary evidence').click()
+    await openChatsPage()
+    await page.getByTestId('talos-chats-screen').getByLabel('Delete Primary evidence').click()
     await expect(page.getByRole('heading', { name: 'Delete chat?' })).toBeVisible()
     await page.getByRole('button', { name: 'Delete', exact: true }).click()
-    await expect(page.getByText('1 conversation on this device', { exact: true })).toBeVisible()
-    await page.getByLabel('Close menu').click()
+    await expect(page.getByTestId('talos-chats-row')).toHaveCount(1)
+    await page.getByLabel('Back to chat').click()
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle)
     await expect(page.getByText('Secondary thread is isolated.', { exact: true })).toBeVisible()
 
     await page.reload()
     await expect(page.getByTestId('talos-mobile-header-title')).toHaveText(secondTitle, { timeout: 15_000 })
-    await page.getByLabel('Open menu').click()
-    await expect(page.getByLabel('Open chat Primary evidence')).toHaveCount(0)
-    await expect(page.getByLabel(`Open chat ${secondTitle}`)).toHaveAttribute('aria-current', 'page')
+    await openChatsPage()
+    await expect(page.getByTestId('talos-chats-row').filter({ hasText: 'Primary evidence' })).toHaveCount(0)
+    await expect(page.getByTestId('talos-chats-row')).toHaveAttribute('data-active', 'true')
 
     expect(completions).toHaveLength(3)
     expect(localDataRequests).toEqual([])

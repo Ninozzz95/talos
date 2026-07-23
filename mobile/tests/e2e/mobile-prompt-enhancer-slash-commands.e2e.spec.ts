@@ -168,8 +168,9 @@ test('operates slash commands and disabled reasons at 360px without overflow', a
     await composer.press('Enter')
     await expect(composer).toHaveValue('')
     await page.getByLabel('Open menu').click()
-    await expect(page.getByText('1 conversation on this device', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Open chat New chat')).toHaveAttribute('aria-current', 'page')
+    // F3-T3 (owner #12): phones surface the count on the Chats entry; the
+    // session list lives in the dedicated Chats page.
+    await expect(page.locator('[data-testid="talos-sidebar-chats-entry"]')).toContainText('1')
 
     const horizontalOverflow = await page.evaluate(() => (
         document.documentElement.scrollWidth - document.documentElement.clientWidth

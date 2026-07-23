@@ -46,7 +46,14 @@ export function parseTalosThemeState(raw: string | null): TalosMobileThemeState 
     try { value = JSON.parse(raw) } catch { return { ...DEFAULT_THEME_STATE } }
     if (typeof value !== 'object' || value === null) return { ...DEFAULT_THEME_STATE }
     const record = value as Record<string, unknown>
-    const theme = isTalosThemeId(record.theme) ? record.theme : DEFAULT_THEME_STATE.theme
+    let theme = isTalosThemeId(record.theme) ? record.theme : DEFAULT_THEME_STATE.theme
+    // F3-T1 (owner #9) one-shot migration: 'telemetry' persisted by pre-calm
+    // builds was the OLD default, not a user choice — move it to calm once.
+    // Post-migration persists carry `calm_migrated`, so a deliberate
+    // re-selection of telemetry sticks.
+    if (theme === 'telemetry' && record.calm_migrated !== true) {
+        theme = TALOS_DEFAULT_THEME
+    }
     const mode = THEME_MODES.includes(record.mode as TalosThemeMode)
         ? (record.mode as TalosThemeMode)
         : DEFAULT_THEME_STATE.mode
@@ -94,7 +101,7 @@ export function useThemeStore(): ThemeStore {
     async function persist(): Promise<void> {
         await Preferences.set({
             key: TALOS_MOBILE_THEME_KEY,
-            value: JSON.stringify({ theme: state.theme, mode: state.mode }),
+            value: JSON.stringify({ theme: state.theme, mode: state.mode, calm_migrated: true }),
         })
     }
 

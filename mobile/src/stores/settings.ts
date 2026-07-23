@@ -38,6 +38,7 @@ import {
     parseTalosMobileBrowserPreferences,
     type TalosMobileBrowserPreferences,
 } from '@/lib/browser/browserContracts'
+import { TALOS_DEFAULT_TONE, isTalosToneId, type TalosToneId } from '@/lib/tone'
 
 export const TALOS_MOBILE_SETTINGS_KEY = 'talos.mobile.settings'
 
@@ -65,12 +66,18 @@ export const TALOS_DEFAULT_COMPOSER_DEFAULTS: TalosComposerDefaults = Object.fre
 
 // Mobile-first shell preferences (design-lead innovation; desktop adoption via
 // backport ledger). immersive_header: ChatGPT-style floating chrome over a top
-// fade instead of the solid header bar.
+// fade instead of the solid header bar. composer_drawer (F3-T4bis, owner #13):
+// Claude-style minimal composer bar (+ / model chip / mic) with the tool
+// controls organized into a bottom drawer.
 export interface TalosMobileShellPreferences {
     immersive_header: boolean
+    composer_drawer: boolean
 }
 
-const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = { immersive_header: false }
+const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
+    immersive_header: false,
+    composer_drawer: false,
+}
 
 function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
     const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
@@ -78,6 +85,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         immersive_header: typeof record.immersive_header === 'boolean'
             ? record.immersive_header
             : DEFAULT_SHELL_PREFERENCES.immersive_header,
+        composer_drawer: typeof record.composer_drawer === 'boolean'
+            ? record.composer_drawer
+            : DEFAULT_SHELL_PREFERENCES.composer_drawer,
     }
 }
 
@@ -141,10 +151,21 @@ function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreference
     }
 }
 
+// F3-T4 (owner #11) — assistant tone preference (presets in `lib/tone.ts`).
+export interface TalosMobileTonePreferences {
+    preset: TalosToneId
+}
+
+function parseTonePreferences(value: unknown): TalosMobileTonePreferences {
+    const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
+    return { preset: isTalosToneId(record.preset) ? record.preset : TALOS_DEFAULT_TONE }
+}
+
 export interface TalosMobileSettingsState {
     shell: TalosMobileShellPreferences
     onboarding: TalosMobileOnboardingState
     security: TalosMobileSecurityPreferences
+    tone: TalosMobileTonePreferences
     chat_layout: TalosChatLayoutPreferences
     ai_defaults: TalosAiDefaults
     composer_defaults: TalosComposerDefaults
@@ -161,9 +182,19 @@ export type TalosMotionPreferencePatch = Partial<Omit<TalosMotionV6Preferences, 
     }
 }
 
+// F3-T1 (owner #7): the MOBILE default ships with background intensity at the
+// range minimum (scenes stay visible — opacity factor floors at 0.5x — but
+// maximally quiet). The engine contract default stays desktop-identical; only
+// the mobile out-of-box preference differs. Persisted user values win as usual.
+function createMobileDefaultMotionPreferences(): TalosMotionV6Preferences {
+    const defaults = createDefaultTalosMotionV6Preferences()
+    defaults.intensity = 0
+    return defaults
+}
+
 function parseMotionPreferences(value: unknown): TalosMotionV6Preferences {
     const parsed = parseTalosMotionV6Preferences(value)
-    return parsed.success ? parsed.value : createDefaultTalosMotionV6Preferences()
+    return parsed.success ? parsed.value : createMobileDefaultMotionPreferences()
 }
 
 function parseAiDefaults(value: unknown): TalosAiDefaults {
@@ -207,14 +238,23 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
             if (parsed && typeof parsed === 'object') value = parsed as Record<string, unknown>
         } catch { value = {} }
     }
+    const chatLayout = sanitizeTalosChatLayout(value.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT)
+    // F3-T2 (owner #4): the presentation setting never worked pre-F3, so any
+    // persisted 'drawer' was the broken default, not a choice — migrate to the
+    // fullscreen default once. Post-migration persists carry `presentation_v2`,
+    // making an explicit drawer choice stick.
+    if (value.presentation_v2 !== true) {
+        chatLayout.mobile_window_presentation = 'fullscreen'
+    }
     return {
         shell: parseShellPreferences(value.shell),
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
-        chat_layout: sanitizeTalosChatLayout(value.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT),
+        tone: parseTonePreferences(value.tone),
+        chat_layout: chatLayout,
         ai_defaults: parseAiDefaults(value.ai_defaults),
         composer_defaults: parseComposerDefaults(value.composer_defaults),
-        motion_v6: parseMotionPreferences(value.motion_v6 ?? createDefaultTalosMotionV6Preferences()),
+        motion_v6: parseMotionPreferences(value.motion_v6 ?? createMobileDefaultMotionPreferences()),
         appearance_visibility: resolveTalosAppearanceVisibility(value.appearance_visibility),
         keyboard_shortcuts: resolveTalosShortcuts(value.keyboard_shortcuts),
         model_lab: parseTalosMobileModelLabPreferences(
@@ -235,6 +275,7 @@ export interface SettingsStore {
     setShell(patch: Partial<TalosMobileShellPreferences>): Promise<void>
     setOnboarding(patch: Partial<TalosMobileOnboardingState>): Promise<void>
     setSecurity(patch: Partial<TalosMobileSecurityPreferences>): Promise<void>
+    setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
     setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
     setModelLabPreferences(value: TalosMobileModelLabPreferences): Promise<void>
@@ -257,9 +298,11 @@ export function useSettingsStore(): SettingsStore {
         await Preferences.set({
             key: TALOS_MOBILE_SETTINGS_KEY,
             value: JSON.stringify({
+                presentation_v2: true,
                 shell: state.shell,
                 onboarding: state.onboarding,
                 security: state.security,
+                tone: state.tone,
                 chat_layout: state.chat_layout,
                 ai_defaults: state.ai_defaults,
                 composer_defaults: state.composer_defaults,
@@ -288,6 +331,7 @@ export function useSettingsStore(): SettingsStore {
             state.shell = parsed.shell
             state.onboarding = parsed.onboarding
             state.security = parsed.security
+            state.tone = parsed.tone
         },
         async setShell(patch) {
             state.shell = parseShellPreferences({ ...state.shell, ...patch })
@@ -299,6 +343,10 @@ export function useSettingsStore(): SettingsStore {
         },
         async setSecurity(patch) {
             state.security = parseSecurityPreferences({ ...state.security, ...patch })
+            await persist()
+        },
+        async setTone(preset) {
+            state.tone = parseTonePreferences({ preset })
             await persist()
         },
         async setChatLayout(patch) {
@@ -344,7 +392,7 @@ export function useSettingsStore(): SettingsStore {
             await persist()
         },
         async resetMotionPreferences() {
-            state.motion_v6 = createDefaultTalosMotionV6Preferences()
+            state.motion_v6 = createMobileDefaultMotionPreferences()
             await persist()
         },
         async setVisibility(group, key, value) {
