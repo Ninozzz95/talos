@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { ANTHROPIC_VERSION, buildAnthropicRequest } from '@/lib/chat/anthropicClient'
+import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
     malformedProviderResponse,
@@ -101,5 +102,34 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             finishReason: parsed.data.stop_reason ?? null,
             usage: parsed.data.usage ?? null,
         }
+    },
+    // F2-T4: native fetch SSE. Anthropic permits browser-origin calls only with
+    // the explicit opt-in header below; any pre-first-byte failure throws so the
+    // router falls back to the buffered CapacitorHttp path.
+    async streamComplete(input, credential, handlers) {
+        const apiKey = requireProviderApiKey('anthropic', 'complete', credential)
+        const request = buildAnthropicRequest(apiKey, {
+            model: input.model.id,
+            turns: input.turns,
+            system: input.system,
+            effort: input.effort,
+            thinking: input.thinking,
+        })
+        const text = await talosStreamText({
+            url: request.url,
+            headers: { ...request.headers, 'anthropic-dangerous-direct-browser-access': 'true' },
+            body: { ...request.body, stream: true },
+            signal: handlers.signal,
+            accumulator: createTalosSseAccumulator(),
+            extract: (payload) => {
+                const event = JSON.parse(payload) as { type?: string; delta?: { type?: string; text?: string } }
+                return event.type === 'content_block_delta' && event.delta?.type === 'text_delta'
+                    ? event.delta.text ?? ''
+                    : ''
+            },
+            onChunk: handlers.onChunk,
+        })
+        if (!text) throw malformedProviderResponse('anthropic', 'complete')
+        return { text, model: input.model.id }
     },
 }

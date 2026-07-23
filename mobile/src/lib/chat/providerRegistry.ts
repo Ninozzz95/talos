@@ -32,6 +32,20 @@ function lazyAdapter(
         async complete(input, credential, transport) {
             return (await load()).complete(input, credential, transport)
         },
+        // F2-T4: the wrapper is frozen before the module loads, so it always
+        // exposes streamComplete; a module without streaming throws BEFORE any
+        // chunk, which the attempt-and-fallback router treats as "use buffered".
+        async streamComplete(input, credential, handlers) {
+            const loaded = await load()
+            if (!loaded.streamComplete) {
+                throw new TalosMobileProviderError({
+                    provider,
+                    operation: 'complete',
+                    message: `Streaming is not supported for ${provider}.`,
+                })
+            }
+            return loaded.streamComplete(input, credential, handlers)
+        },
     }
     return Object.freeze(adapter)
 }

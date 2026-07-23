@@ -32,13 +32,16 @@
         "test:e2e": "playwright test"
     },
     "dependencies": {
+        "@aparajita/capacitor-biometric-auth": "10.0.0",
         "@aparajita/capacitor-secure-storage": "8.0.0",
+        "@capacitor-community/speech-recognition": "7.0.1",
         "@capacitor-community/sqlite": "8.1.0",
         "@capacitor/android": "8.4.2",
         "@capacitor/app": "8.1.1",
         "@capacitor/clipboard": "8.0.1",
         "@capacitor/core": "8.4.2",
         "@capacitor/filesystem": "8.1.2",
+        "@capacitor/haptics": "8.0.2",
         "@capacitor/inappbrowser": "4.0.1",
         "@capacitor/keyboard": "8.0.5",
         "@capacitor/preferences": "8.0.1",

@@ -253,3 +253,21 @@
         transform: none;
     }
 }
+
+/* F2-T2: 3-dot typing indicator (refinement-brief), engine-calm, reduced-motion safe. */
+.talos-typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--talos-accent, #c08b3c);
+    animation: talosTypingBounce 1.2s ease-in-out infinite;
+}
+.talos-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.talos-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes talosTypingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-4px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .talos-typing-dot { animation: none; opacity: 0.7; }
+}

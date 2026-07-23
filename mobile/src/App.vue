@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileBackground from '@/components/talos/workspace/TalosMobileBackground.vue'
@@ -10,6 +10,7 @@ import ChatScreen from '@/screens/ChatScreen.vue'
 import { TALOS_MOBILE_ROUTES, type TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { usePreferencesStore } from '@/stores/preferences'
 import { useThemeStore } from '@/stores/theme'
+import { useSettingsStore } from '@/stores/settings'
 import {
     registerNativeAppLifecycle,
     type NativeLifecycleController,
@@ -18,11 +19,15 @@ import { talosDisabledSubsystems } from '@/main'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
 import { useChatController } from '@/stores/chatController'
+import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
+import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
+import { talosLightImpact } from '@/services/haptics'
 
 const router = useRouter()
 const route = useRoute()
 const preferences = usePreferencesStore()
 const themeStore = useThemeStore()
+const settingsStore = useSettingsStore()
 const chatController = useChatController()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
@@ -30,6 +35,30 @@ const uiFallback = disabled.has('ui')
 // Animated brand intro over the static native splash; dismisses to the chat.
 const showBoot = ref(true)
 const creatingSession = ref(false)
+
+// F2-T6 intro modal — versioned gating (opens after settings hydration, never
+// over the boot logo); the chunk loads ONLY when gating opens it.
+const TalosMobileIntroModal = defineAsyncComponent(
+    () => import('@/components/intro/TalosMobileIntroModal.vue'),
+)
+// F2-T6 app lock: armed on cold start when the opt-in flag AND a real PIN
+// record exist; the lock screen chunk loads only when the lock is armed.
+const TalosMobileLockScreen = defineAsyncComponent(
+    () => import('@/components/security/TalosMobileLockScreen.vue'),
+)
+// Budget: the immersive chrome loads only when the (default-off) toggle is on.
+const TalosMobileImmersiveChrome = defineAsyncComponent(
+    () => import('@/components/shell/TalosMobileImmersiveChrome.vue'),
+)
+const locked = ref(false)
+const settingsHydrated = ref(false)
+const intro = useTalosMobileIntroState({
+    hydrated: () => settingsHydrated.value,
+    blocked: () => showBoot.value || locked.value,
+    onboarding: () => settingsStore.state.onboarding,
+    setOnboarding: (patch) => settingsStore.setOnboarding(patch),
+})
+provide(TALOS_MOBILE_INTRO_KEY, intro)
 
 // F1-T4 animation mandate: theme-tuned interaction-motion CSS vars from the
 // motion-v6 engine, applied at the shell root; components consume the vars.
@@ -64,6 +93,7 @@ function sidebarNewChat(): void {
 
 function sidebarSelect(sessionId: string): void {
     sidebarOpen.value = false
+    void talosLightImpact()
     ;(chatScreen.value as { selectSession?: (id: string) => void } | null)?.selectSession?.(sessionId)
 }
 
@@ -73,6 +103,17 @@ function sidebarRename(sessionId: string, title: string): void {
 
 function sidebarDelete(sessionId: string): void {
     ;(chatScreen.value as { deleteSession?: (id: string) => void } | null)?.deleteSession?.(sessionId)
+}
+
+// F2-T3.6 immersive chrome: 3-dot options act on the ACTIVE session.
+const immersiveHeader = computed(() => settingsStore.state.shell.immersive_header)
+function immersiveRename(title: string): void {
+    const id = chatController.chat.activeSession.value?.id
+    if (id) sidebarRename(id, title)
+}
+function immersiveDelete(): void {
+    const id = chatController.chat.activeSession.value?.id
+    if (id) sidebarDelete(id)
 }
 
 let lifecycle: NativeLifecycleController | null = null
@@ -122,6 +163,21 @@ async function onNewChat(): Promise<void> {
 
 onMounted(async () => {
     await preferences.hydrate()
+    // Intro gating waits for the REAL persisted onboarding state — a failed
+    // read keeps the modal closed (fail-closed, no flash).
+    try {
+        await settingsStore.hydrate()
+        settingsHydrated.value = true
+    } catch {
+        settingsHydrated.value = false
+    }
+    if (settingsStore.state.security.app_lock_enabled) {
+        // Arm only when a REAL PIN record exists — a dangling flag without a
+        // Keystore record must never brick the app (fail-open on the flag,
+        // fail-closed on the verification itself).
+        const { hasAppLockPin } = await import('@/services/appLock')
+        locked.value = await hasAppLockPin().catch(() => false)
+    }
     if (preferences.state.last_route && preferences.state.last_route !== activeRoute.value) {
         await router.replace(pathFor(preferences.state.last_route))
     }
@@ -161,6 +217,19 @@ onBeforeUnmount(async () => {
     >
         <TalosBootLogo v-if="showBoot" @done="showBoot = false" />
 
+        <!-- F2-T6 app lock: gates the workspace until a REAL unlock. -->
+        <TalosMobileLockScreen
+            v-if="locked"
+            :biometric-enabled="settingsStore.state.security.app_lock_biometric"
+            @unlocked="locked = false"
+        />
+
+        <!-- F2-T6 intro modal: mounts only when the versioned gating opens it. -->
+        <TalosMobileIntroModal
+            v-if="intro.introOpen.value"
+            @close="intro.closeIntro($event)"
+        />
+
         <div
             v-if="themeStore.state.theme !== 'calm'"
             aria-hidden="true"
@@ -195,10 +264,20 @@ onBeforeUnmount(async () => {
 
         <template v-else>
             <TalosMobileHeader
+                v-if="!immersiveHeader"
                 :title="headerTitle"
                 :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
                 @open-menu="sidebarOpen = true"
                 @new-chat="sidebarNewChat"
+            />
+            <TalosMobileImmersiveChrome
+                v-else
+                :active-title="headerTitle"
+                :busy="sessionBusy"
+                @open-menu="sidebarOpen = true"
+                @new-chat="sidebarNewChat"
+                @rename="immersiveRename"
+                @delete="immersiveDelete"
             />
 
             <TalosMobileSidebar

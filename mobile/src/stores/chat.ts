@@ -26,11 +26,20 @@ export interface ChatTurn {
     parts?: TalosMobileInputPart[]
 }
 
-export type ChatCompletion = (turns: ChatTurn[]) => Promise<string>
+// F2-T4 streaming: the completion may stream partial text through handlers.
+// Contract: chunks are LIVE-render only; the durable assistant write happens
+// exactly once (final text, or the partial marked interrupted).
+export interface TalosStreamHandlers {
+    onChunk: (text: string) => void
+    signal?: AbortSignal
+}
+
+export type ChatCompletion = (turns: ChatTurn[], stream?: TalosStreamHandlers) => Promise<string>
 export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ChatState {
     sending: boolean
+    streamingText: string | null
     lastError: string | null
     persistenceStatus: ChatPersistenceStatus
     persistenceError: string | null
@@ -44,6 +53,7 @@ export interface ChatStoreOptions {
 }
 
 export interface ChatStore {
+    stopStreaming(): void
     readonly messages: readonly TalosMobileMessageView[]
     readonly sessionBrowserActivities: readonly TalosMobileBrowserActivityView[]
     readonly sessions: readonly TalosLocalChatSession[]
@@ -191,8 +201,10 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     const sessionBrowserActivities = reactive<TalosMobileBrowserActivityView[]>([])
     const sessions = reactive<TalosLocalChatSession[]>([])
     const activeSession = ref<TalosLocalChatSession | null>(null)
+    let activeStreamAbort: AbortController | null = null
     const state = reactive<ChatState>({
         sending: false,
+        streamingText: null,
         lastError: null,
         persistenceStatus: 'idle',
         persistenceError: null,
@@ -549,26 +561,53 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             return true
         }
 
+        const abort = new AbortController()
+        activeStreamAbort = abort
+        let streamed = ''
         try {
-            const reply = await complete(turns)
+            const reply = await complete(turns, {
+                onChunk: (text) => {
+                    streamed += text
+                    state.streamingText = streamed
+                },
+                signal: abort.signal,
+            })
             await appendDurable(session.id, 'assistant', reply, 'persisted', modelProfileId)
         } catch (error) {
-            const providerError = errorMessage(error)
-            state.lastError = providerError
-            try {
-                await appendDurable(session.id, 'system', providerError, 'failed', modelProfileId, {
-                    chat_error: providerFault(error, modelProfileId),
-                })
-            } catch (persistenceError) {
-                markPersistenceFailure(persistenceError)
+            const aborted = error instanceof Error && error.name === 'AbortError'
+            // A streamed partial is preserved honestly, never re-fetched or dropped.
+            if (streamed) {
+                try {
+                    await appendDurable(session.id, 'assistant', streamed, 'persisted', modelProfileId, { interrupted: true })
+                } catch (persistenceError) {
+                    markPersistenceFailure(persistenceError)
+                }
+            }
+            if (!aborted) {
+                const providerError = errorMessage(error)
+                state.lastError = providerError
+                try {
+                    await appendDurable(session.id, 'system', providerError, 'failed', modelProfileId, {
+                        chat_error: providerFault(error, modelProfileId),
+                    })
+                } catch (persistenceError) {
+                    markPersistenceFailure(persistenceError)
+                }
             }
         } finally {
+            state.streamingText = null
+            activeStreamAbort = null
             state.sending = false
         }
         return true
     }
 
+    function stopStreaming(): void {
+        activeStreamAbort?.abort()
+    }
+
     return {
+        stopStreaming,
         messages: readonly(messages),
         sessionBrowserActivities: readonly(sessionBrowserActivities),
         sessions: readonly(sessions),

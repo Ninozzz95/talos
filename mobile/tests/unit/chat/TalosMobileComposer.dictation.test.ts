@@ -1,0 +1,46 @@
+import { describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
+import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
+import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
+
+// F2-T5 — composer mic control: hidden when dictation is unavailable (honest),
+// toggles listening with pressed state parity with the desktop composer.
+const profiles: TalosMobileModelProfileView[] = [{
+    id: 'profile-deepseek', provider: 'deepseek', model: 'deepseek-chat', display_name: 'DeepSeek Chat',
+    status: 'healthy', has_secret: true, effort_levels: ['low'], supports_thinking: false,
+    show_in_composer: true, capabilities: null, probe_ok: true,
+}]
+
+function mountComposer(overrides: Record<string, unknown> = {}) {
+    return mount(TalosMobileComposer, {
+        props: {
+            prompt: '', modelProfiles: profiles, routingProfiles: [],
+            selectedModelProfileId: 'profile-deepseek', selectedRoutingProfileId: null,
+            selectedEffort: 'low', thinking: false, canSend: true, sending: false,
+            sendDisabledReason: '',
+            ...overrides,
+        },
+    })
+}
+
+describe('TalosMobileComposer dictation (F2-T5)', () => {
+    it('hides the mic entirely when dictation is unsupported', () => {
+        const wrapper = mountComposer()
+        expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(false)
+        expect(wrapper.find('[aria-label="Stop dictation"]').exists()).toBe(false)
+    })
+
+    it('shows the mic when supported and emits toggleDictation on tap', async () => {
+        const wrapper = mountComposer({ dictationSupported: true })
+        const mic = wrapper.get('button[aria-label="Dictate"]')
+        expect(mic.attributes('aria-pressed')).toBe('false')
+        await mic.trigger('click')
+        expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
+    })
+
+    it('reflects the listening state with pressed semantics', () => {
+        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
+        const mic = wrapper.get('button[aria-label="Stop dictation"]')
+        expect(mic.attributes('aria-pressed')).toBe('true')
+    })
+})

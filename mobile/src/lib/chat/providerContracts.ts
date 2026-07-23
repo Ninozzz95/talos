@@ -54,6 +54,12 @@ export interface TalosMobileCompletionResult {
     usage?: Record<string, number> | null
 }
 
+/** F2-T4 — live streaming callbacks handed to a provider adapter. */
+export interface TalosProviderStreamHandlers {
+    onChunk: (text: string) => void
+    signal?: AbortSignal
+}
+
 export interface TalosMobileProviderAdapter {
     readonly provider: TalosMobileProviderId
     readonly requiresSecret: boolean
@@ -65,5 +71,15 @@ export interface TalosMobileProviderAdapter {
         input: TalosMobileCompletionInput,
         credential: TalosMobileProviderCredential,
         transport: TalosMobileHttpTransport,
+    ): Promise<TalosMobileCompletionResult>
+    /**
+     * Optional streaming completion via native fetch (attempt-and-fallback):
+     * MUST throw before delivering any chunk when the stream cannot start, so
+     * the caller can transparently retry through the buffered transport.
+     */
+    streamComplete?(
+        input: TalosMobileCompletionInput,
+        credential: TalosMobileProviderCredential,
+        handlers: TalosProviderStreamHandlers,
     ): Promise<TalosMobileCompletionResult>
 }

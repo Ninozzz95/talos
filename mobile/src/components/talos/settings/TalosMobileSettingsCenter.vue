@@ -7,6 +7,7 @@ import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsP
 import TalosMobileSettingsAppearancePanel from './TalosMobileSettingsAppearancePanel.vue'
 import TalosMobileSettingsShortcutsPanel from './TalosMobileSettingsShortcutsPanel.vue'
 import TalosMobileSettingsBrowserPanel from './TalosMobileSettingsBrowserPanel.vue'
+import TalosMobileSettingsAccountPanel from './TalosMobileSettingsAccountPanel.vue'
 import TalosMobileSettingsCapabilityPanel from './TalosMobileSettingsCapabilityPanel.vue'
 import { TALOS_MOBILE_SETTINGS_TABS, talosMobileSettingsTab, type TalosMobileSettingsTabId } from './settingsTabs'
 
@@ -49,6 +50,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
     appearance: TalosMobileSettingsAppearancePanel,
     shortcuts: TalosMobileSettingsShortcutsPanel,
+    account: TalosMobileSettingsAccountPanel,
 }
 
 const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border border-transparent px-2 text-left text-sm font-medium text-[var(--talos-muted)] outline-none transition-colors data-[state=active]:border-[var(--talos-accent-border)] data-[state=active]:bg-[var(--talos-panel)] data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]'

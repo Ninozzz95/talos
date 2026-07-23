@@ -311,7 +311,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     })
     const effortLadder = computed(() => mobileEffortLadderFromLevels(selectedProfile.value?.effort_levels))
 
-    const complete: ChatCompletion = async (turns) => {
+    const complete: ChatCompletion = async (turns, stream) => {
         const profile = selectedProfile.value
         const providerModel = selectedProviderModel.value
         const apiKey = profile ? await deps.getKey(profile.provider) : null
@@ -335,7 +335,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         : TALOS_SYSTEM_PROMPT,
                 }),
                 deps.transport,
-            )(turns)
+            )(turns, stream)
         } catch (error) {
             const safeMessage = safeProviderMessage(error, apiKey)
             if (error instanceof TalosMobileProviderError) {

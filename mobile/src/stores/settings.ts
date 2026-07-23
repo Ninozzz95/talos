@@ -63,7 +63,88 @@ export const TALOS_DEFAULT_COMPOSER_DEFAULTS: TalosComposerDefaults = Object.fre
     thinking: false,
 })
 
+// Mobile-first shell preferences (design-lead innovation; desktop adoption via
+// backport ledger). immersive_header: ChatGPT-style floating chrome over a top
+// fade instead of the solid header bar.
+export interface TalosMobileShellPreferences {
+    immersive_header: boolean
+}
+
+const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = { immersive_header: false }
+
+function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
+    const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
+    return {
+        immersive_header: typeof record.immersive_header === 'boolean'
+            ? record.immersive_header
+            : DEFAULT_SHELL_PREFERENCES.immersive_header,
+    }
+}
+
+// F2-T6 — versioned intro/onboarding contract (mobile-local mirror of the
+// desktop intro spec): compared against TALOS_MOBILE_INTRO_VERSION at open.
+export type TalosMobileIntroOutcome = 'completed' | 'skipped'
+
+export interface TalosMobileOnboardingState {
+    intro_version: number
+    intro_outcome: TalosMobileIntroOutcome | null
+    setup_dismissed: boolean
+}
+
+const DEFAULT_ONBOARDING_STATE: TalosMobileOnboardingState = {
+    intro_version: 0,
+    intro_outcome: null,
+    setup_dismissed: false,
+}
+
+function parseOnboarding(value: unknown): TalosMobileOnboardingState {
+    const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
+    const version = typeof record.intro_version === 'number'
+        && Number.isInteger(record.intro_version)
+        && record.intro_version >= 0
+        && record.intro_version <= 65535
+        ? record.intro_version
+        : DEFAULT_ONBOARDING_STATE.intro_version
+    const outcome = record.intro_outcome === 'completed' || record.intro_outcome === 'skipped'
+        ? record.intro_outcome
+        : null
+    return {
+        intro_version: version,
+        intro_outcome: outcome,
+        setup_dismissed: typeof record.setup_dismissed === 'boolean'
+            ? record.setup_dismissed
+            : DEFAULT_ONBOARDING_STATE.setup_dismissed,
+    }
+}
+
+// F2-T6 app lock — POLICY flags only (non-secret). The PIN derivation lives in
+// the OS Keystore (`services/appLock.ts`), never in Preferences.
+export interface TalosMobileSecurityPreferences {
+    app_lock_enabled: boolean
+    app_lock_biometric: boolean
+}
+
+const DEFAULT_SECURITY_PREFERENCES: TalosMobileSecurityPreferences = {
+    app_lock_enabled: false,
+    app_lock_biometric: false,
+}
+
+function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreferences {
+    const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
+    return {
+        app_lock_enabled: typeof record.app_lock_enabled === 'boolean'
+            ? record.app_lock_enabled
+            : DEFAULT_SECURITY_PREFERENCES.app_lock_enabled,
+        app_lock_biometric: typeof record.app_lock_biometric === 'boolean'
+            ? record.app_lock_biometric
+            : DEFAULT_SECURITY_PREFERENCES.app_lock_biometric,
+    }
+}
+
 export interface TalosMobileSettingsState {
+    shell: TalosMobileShellPreferences
+    onboarding: TalosMobileOnboardingState
+    security: TalosMobileSecurityPreferences
     chat_layout: TalosChatLayoutPreferences
     ai_defaults: TalosAiDefaults
     composer_defaults: TalosComposerDefaults
@@ -127,6 +208,9 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         } catch { value = {} }
     }
     return {
+        shell: parseShellPreferences(value.shell),
+        onboarding: parseOnboarding(value.onboarding),
+        security: parseSecurityPreferences(value.security),
         chat_layout: sanitizeTalosChatLayout(value.chat_layout ?? TALOS_DEFAULT_CHAT_LAYOUT),
         ai_defaults: parseAiDefaults(value.ai_defaults),
         composer_defaults: parseComposerDefaults(value.composer_defaults),
@@ -148,6 +232,9 @@ export interface SettingsStore {
     readonly state: Readonly<TalosMobileSettingsState>
     hydrate(): Promise<void>
     setChatLayout(patch: Partial<TalosChatLayoutPreferences>): Promise<void>
+    setShell(patch: Partial<TalosMobileShellPreferences>): Promise<void>
+    setOnboarding(patch: Partial<TalosMobileOnboardingState>): Promise<void>
+    setSecurity(patch: Partial<TalosMobileSecurityPreferences>): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
     setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
     setModelLabPreferences(value: TalosMobileModelLabPreferences): Promise<void>
@@ -170,6 +257,9 @@ export function useSettingsStore(): SettingsStore {
         await Preferences.set({
             key: TALOS_MOBILE_SETTINGS_KEY,
             value: JSON.stringify({
+                shell: state.shell,
+                onboarding: state.onboarding,
+                security: state.security,
                 chat_layout: state.chat_layout,
                 ai_defaults: state.ai_defaults,
                 composer_defaults: state.composer_defaults,
@@ -195,6 +285,21 @@ export function useSettingsStore(): SettingsStore {
             state.keyboard_shortcuts = parsed.keyboard_shortcuts
             state.model_lab = parsed.model_lab
             state.browser = parsed.browser
+            state.shell = parsed.shell
+            state.onboarding = parsed.onboarding
+            state.security = parsed.security
+        },
+        async setShell(patch) {
+            state.shell = parseShellPreferences({ ...state.shell, ...patch })
+            await persist()
+        },
+        async setOnboarding(patch) {
+            state.onboarding = parseOnboarding({ ...state.onboarding, ...patch })
+            await persist()
+        },
+        async setSecurity(patch) {
+            state.security = parseSecurityPreferences({ ...state.security, ...patch })
+            await persist()
         },
         async setChatLayout(patch) {
             state.chat_layout = sanitizeTalosChatLayout({ ...state.chat_layout, ...patch })

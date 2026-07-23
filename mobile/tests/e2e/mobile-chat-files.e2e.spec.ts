@@ -1,4 +1,5 @@
 import { expect, test, type FileChooser, type Page } from '@playwright/test'
+import { openAiCompletionFulfill } from './completionMock'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -28,18 +29,13 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
         })
     })
     await page.route('https://api.openai.com/v1/chat/completions', async (route) => {
-        completions.push(route.request().postDataJSON() as Record<string, unknown>)
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                model: 'gpt-e2e-vision',
-                choices: [{
-                    finish_reason: 'stop',
-                    message: { content: 'I received the release brief and the reference image.' },
-                }],
-            }),
-        })
+        const request = route.request().postDataJSON() as Record<string, unknown>
+        completions.push(request)
+        await route.fulfill(openAiCompletionFulfill(
+            request,
+            'gpt-e2e-vision',
+            'I received the release brief and the reference image.',
+        ))
     })
 
     await page.goto('/')

@@ -35,6 +35,7 @@ describe('TALOS mobile settings registry', () => {
 
     it('marks only real local panels available in this slice', () => {
         const available = TALOS_MOBILE_SETTINGS_TABS.filter((tab) => tab.availability === 'available')
-        expect(available.map((tab) => tab.id)).toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'shortcuts'])
+        // F2-T6: Account became a REAL local panel (replay intro + app lock).
+        expect(available.map((tab) => tab.id)).toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'shortcuts', 'account'])
     })
 })

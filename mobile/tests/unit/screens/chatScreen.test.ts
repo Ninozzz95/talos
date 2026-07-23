@@ -14,6 +14,10 @@ const mockState = vi.hoisted(() => ({
     browserOnEvent: null as null | ((event: Record<string, unknown>) => void),
     settings: {
         state: {
+            chat_layout: { message_style: 'sections' },
+            shell: { immersive_header: false },
+            motion_v6: { background_enabled: true, mode: 'off' },
+            onboarding: { intro_version: 0, intro_outcome: null as string | null, setup_dismissed: false },
             browser: {
                 schema_version: 1,
                 hmi_mode: 'confirm_sensitive',
@@ -22,6 +26,7 @@ const mockState = vi.hoisted(() => ({
                 developer_untrusted_evidence: false,
             },
         },
+        setOnboarding: vi.fn(),
     },
 }))
 
@@ -149,6 +154,9 @@ beforeEach(() => {
     mockState.settings.state.browser.suggest_for_urls = true
     mockState.settings.state.browser.presentation = 'isolated_webview'
     mockState.settings.state.browser.developer_untrusted_evidence = false
+    mockState.settings.state.onboarding = { intro_version: 0, intro_outcome: null, setup_dismissed: false }
+    mockState.settings.state.shell = { immersive_header: false }
+    mockState.settings.setOnboarding.mockReset()
     mockState.controller = makeController()
 })
 
@@ -531,5 +539,59 @@ describe('ChatScreen (functional, local-first)', () => {
         ;(wrapper.vm as unknown as { newSession: () => void }).newSession()
         await vi.waitFor(() => expect(controller.newSession).toHaveBeenCalled())
         expect(controller.clearPromptEnhancement.mock.calls.length).toBeGreaterThanOrEqual(2)
+    })
+})
+
+// F2-T6 — first-run setup checklist in the welcome state: REAL progress only
+// (key present, model chosen), dismissible with persistence, no fake steps.
+describe('welcome setup checklist (F2-T6)', () => {
+    it('shows honest not-done steps when nothing is configured', () => {
+        const wrapper = mount(ChatScreen)
+        const checklist = wrapper.get('[data-testid="talos-setup-checklist"]')
+        expect(checklist.text()).toContain('Add a provider key')
+        expect(checklist.text()).toContain('Choose your model')
+    })
+
+    it('routes the key step to Settings → Models', async () => {
+        const wrapper = mount(ChatScreen)
+        await wrapper.get('[data-testid="talos-setup-step-key"]').trigger('click')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'settings', query: { tab: 'models' } })
+    })
+
+    it('hides when setup is genuinely complete', () => {
+        const controller = makeController()
+        controller.profiles.value = [{
+            id: 'profile-a', provider: 'anthropic', model: 'claude', display_name: 'Claude',
+            status: 'healthy', has_secret: true, effort_levels: ['high'], supports_thinking: true,
+            show_in_composer: true, capabilities: null, probe_ok: true,
+        }] as never
+        controller.selectedModelId.value = 'profile-a' as never
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.find('[data-testid="talos-setup-checklist"]').exists()).toBe(false)
+    })
+
+    it('stays hidden once dismissed and persists the dismissal', async () => {
+        const wrapper = mount(ChatScreen)
+        await wrapper.get('[data-testid="talos-setup-dismiss"]').trigger('click')
+        expect(mockState.settings.setOnboarding).toHaveBeenCalledWith({ setup_dismissed: true })
+
+        mockState.settings.state.onboarding = { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true }
+        const fresh = mount(ChatScreen)
+        expect(fresh.find('[data-testid="talos-setup-checklist"]').exists()).toBe(false)
+    })
+})
+
+describe('immersive chrome clearance (F2 capture fix)', () => {
+    it('adds top padding so messages never slide under the floating pills', () => {
+        ;(mockState.settings.state as Record<string, unknown>).shell = { immersive_header: true }
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).toContain('pt-[calc(3.5rem+env(safe-area-inset-top))]')
+    })
+
+    it('keeps the flush top under the classic header', () => {
+        ;(mockState.settings.state as Record<string, unknown>).shell = { immersive_header: false }
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).not.toContain('pt-[calc(3.5rem+env(safe-area-inset-top))]')
     })
 })

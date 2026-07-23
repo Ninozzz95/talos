@@ -11,6 +11,7 @@ import {
 } from '@/lib/talosThemes'
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
+    TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
     TALOS_CHAT_COMPOSER_MODE_OPTIONS,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '@/lib/talosChatLayout'
@@ -56,7 +57,7 @@ function changeMode(value: string): void {
     void theme.setMode(value as TalosThemeMode)
 }
 
-function setChatLayout(key: 'bubble_scale' | 'composer_mode' | 'mobile_window_presentation', value: string): void {
+function setChatLayout(key: 'bubble_scale' | 'composer_mode' | 'mobile_window_presentation' | 'message_style', value: string): void {
     void settings.setChatLayout({ [key]: value })
 }
 
@@ -77,7 +78,14 @@ function setInterfaceSelect(key: 'profile' | 'easing', value: string): void {
 }
 
 function setMotionBoolean(key: 'background_enabled' | 'interface_enabled' | 'pause_when_hidden' | 'respect_data_saver', event: Event): void {
-    void settings.setMotionPreferences({ [key]: (event.target as HTMLInputElement).checked })
+    const checked = (event.target as HTMLInputElement).checked
+    const patch: TalosMotionPreferencePatch = { [key]: checked }
+    // T6.5: enabling the background while the renderer mode is 'off' would be
+    // a silent no-op — promote to 'simple' so the switch does what it says.
+    if (key === 'background_enabled' && checked && settings.state.motion_v6.mode === 'off') {
+        patch.mode = 'simple'
+    }
+    void settings.setMotionPreferences(patch)
 }
 
 function setMotionNumber(
@@ -130,6 +138,31 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
                         aria-label="Theme color mode"
                         @update:model-value="changeMode"
                     />
+                </label>
+                <label class="block">
+                    <span :class="selectLabelClass">Chat message style</span>
+                    <TalosThemedSelect
+                        class="mt-2"
+                        :model-value="settings.state.chat_layout.message_style"
+                        :items="TALOS_CHAT_MESSAGE_STYLE_OPTIONS"
+                        aria-label="Chat message style"
+                        @update:model-value="setChatLayout('message_style', $event)"
+                    />
+                </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">Immersive header</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">Floating controls over a top fade instead of the header bar.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.immersive_header"
+                        aria-label="Immersive header"
+                        class="talos-pressable h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.immersive_header ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ immersive_header: !settings.state.shell.immersive_header })"
+                    ></button>
                 </label>
                 <label class="block">
                     <span :class="selectLabelClass">Chat message size</span>
@@ -204,7 +237,7 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
 
             <label :class="switchRowClass">
                 <span><span class="block text-sm font-semibold text-[var(--talos-text)]">Background motion</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">Render the active theme scene.</span></span>
-                <input type="checkbox" role="switch" aria-label="Background motion" :checked="settings.state.motion_v6.background_enabled" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('background_enabled', $event)">
+                <input type="checkbox" role="switch" aria-label="Background motion" :checked="settings.state.motion_v6.background_enabled && settings.state.motion_v6.mode !== 'off'" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('background_enabled', $event)">
             </label>
             <label :class="switchRowClass">
                 <span><span class="block text-sm font-semibold text-[var(--talos-text)]">Interface motion</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">Animate sheets, navigation, composer and feedback.</span></span>

@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request } from '@playwright/test'
+import { geminiCompletionFulfill } from './completionMock'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -50,13 +51,14 @@ test('saving a key refreshes models immediately and preserves context across two
 
         const body = request.postDataJSON() as Record<string, unknown>
         completions.push(body)
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(geminiResponse(completions.length === 1
-                ? 'Alpha is recorded.'
-                : 'The earlier value was alpha.')),
-        })
+        const reply = completions.length === 1
+            ? 'Alpha is recorded.'
+            : 'The earlier value was alpha.'
+        await route.fulfill(geminiCompletionFulfill(
+            request.url(),
+            JSON.stringify(geminiResponse(reply)),
+            reply,
+        ))
     })
 
     await openModelSettings(page)
