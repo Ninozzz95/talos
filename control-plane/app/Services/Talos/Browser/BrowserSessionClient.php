@@ -68,8 +68,29 @@ interface BrowserSessionClient
     /** @param array<string, mixed> $payload @return array<string, mixed> */
     public function preflightPointer(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array;
 
+    /** @return array<string, mixed> */
+    public function refTargets(
+        string $ownerRef,
+        string $workerSessionId,
+        int $stateVersion,
+        string $expectedFrameSha256,
+        int $timeoutMilliseconds = 15000,
+    ): array;
+
+    /** @param array<string, mixed> $payload @return array<string, mixed> */
+    public function preflightRef(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array;
+
     /** @param array<string, mixed> $payload @return array<string, mixed> */
     public function executePointer(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array;
+
+    /** @param array<string, mixed> $payload @return array<string, mixed> */
+    public function executeRef(
         string $ownerRef,
         string $workerSessionId,
         array $payload,

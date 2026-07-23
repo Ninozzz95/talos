@@ -7,6 +7,9 @@ import type {
     TalosBrowserActivity,
     TalosBrowserHmiChallenge,
     TalosBrowserPointerFrame,
+    TalosBrowserRefFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserScrollFrame,
     TalosBrowserSession,
     TalosMobileWindowPresentation,
 } from '../../../lib/talosTypes'
@@ -20,6 +23,9 @@ const props = withDefaults(defineProps<{
     interactionLocked?: boolean
     interactionError?: string | null
     pendingInteractionApproval?: TalosBrowserHmiChallenge | null
+    refFrame?: TalosBrowserRefFrame | null
+    refTargetsLoading?: boolean
+    refTargetsError?: string | null
     excludedArtifactIds?: string[]
     loadingStrategy?: 'eager' | 'lazy'
     mobile?: boolean
@@ -31,6 +37,9 @@ const props = withDefaults(defineProps<{
     interactionLocked: false,
     interactionError: null,
     pendingInteractionApproval: null,
+    refFrame: null,
+    refTargetsLoading: false,
+    refTargetsError: null,
     excludedArtifactIds: () => [],
     loadingStrategy: 'lazy',
     mobile: false,
@@ -39,6 +48,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     interact: [frame: TalosBrowserPointerFrame]
+    interactRef: [interaction: TalosBrowserRefInteraction]
+    scroll: [frame: TalosBrowserScrollFrame]
     confirm: [decision: 'approve' | 'reject']
 }>()
 
@@ -107,9 +118,14 @@ function openArtifact(artifactId: string) {
         :interaction-locked="interactionLocked"
         :interaction-error="interactionError"
         :pending-interaction-approval="pendingInteractionApproval"
+        :ref-frame="refFrame"
+        :ref-targets-loading="refTargetsLoading"
+        :ref-targets-error="refTargetsError"
         :mobile="mobile"
         :mobile-window-presentation="mobileWindowPresentation"
         @interact="emit('interact', $event)"
+        @interact-ref="emit('interactRef', $event)"
+        @scroll="emit('scroll', $event)"
         @confirm="emit('confirm', $event)"
     />
 </template>

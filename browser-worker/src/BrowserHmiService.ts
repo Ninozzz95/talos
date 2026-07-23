@@ -5,6 +5,7 @@ import { captureCanonicalBrowserFrame } from "./BrowserFrameCapture.js";
 import {
   currentMainDocumentIdentity,
   dispatchGuardedBrowserClick,
+  dispatchGuardedBrowserRefClick,
   inspectBrowserTarget,
   type BrowserHmiTargetAttestation,
 } from "./BrowserHmiAttestation.js";
@@ -12,17 +13,30 @@ import type { BrowserFrameRegion } from "./BrowserFrameEvidenceStore.js";
 import { waitForBrowserPresentationBoundary } from "./BrowserPresentationBoundary.js";
 import {
   BrowserHmiPreflightResponseSchema,
+  BrowserHmiRefPreflightResponseSchema,
+  BrowserHmiRefTargetsResponseSchema,
   BrowserHmiResultResponseSchema,
   BrowserHmiScrollResponseSchema,
   BrowserHmiTargetDescriptorSchema,
   type BrowserHmiExecuteRequest,
   type BrowserHmiPreflightRequest,
   type BrowserHmiPreflightResponse,
+  type BrowserHmiRefPreflightRequest,
+  type BrowserHmiRefPreflightResponse,
+  type BrowserHmiRefExecuteRequest,
+  type BrowserHmiRefTargetsRequest,
+  type BrowserHmiRefTargetsResponse,
   type BrowserHmiResultResponse,
   type BrowserHmiScrollRequest,
   type BrowserHmiScrollResponse,
   type BrowserHmiTargetDescriptor,
 } from "./BrowserHmiContracts.js";
+import {
+  browserHmiRefSnapshotDocumentIdentity,
+  captureBrowserHmiRefSnapshot,
+  resolveBrowserHmiRefTarget,
+  type BrowserHmiRefTargetIdentity,
+} from "./BrowserHmiRefSnapshot.js";
 import { captureSnapshot } from "./BrowserSnapshot.js";
 import { BrowserSessionManager, type BrowserSession } from "./BrowserSessionManager.js";
 import { browserEvidenceUrl } from "./BrowserUrlPolicy.js";
@@ -33,6 +47,16 @@ type InspectedTarget = {
   attestation: BrowserHmiTargetAttestation;
   region: BrowserFrameRegion;
 };
+type InspectedRefTarget = {
+  target: BrowserHmiTargetDescriptor;
+  attestation: BrowserHmiTargetAttestation;
+  identity: BrowserHmiRefTargetIdentity;
+};
+type BrowserHmiCommonExecuteRequest = BrowserHmiExecuteRequest | BrowserHmiRefExecuteRequest;
+type PreparedHmiInteraction = {
+  target: BrowserHmiTargetDescriptor;
+  dispatch: (onDispatch: () => void) => Promise<void>;
+};
 
 const HMI_QUIESCENCE_TIMEOUT_MS = 5_000;
 const HMI_QUIESCENCE_STABLE_MS = 100;
@@ -41,6 +65,70 @@ const HMI_POST_ACTION_GUARD_MS = 400;
 
 export class BrowserHmiService {
   constructor(private readonly sessions: BrowserSessionManager) {}
+
+  async targets(sessionId: string, input: BrowserHmiRefTargetsRequest): Promise<BrowserHmiRefTargetsResponse> {
+    return this.sessions.runExclusive(sessionId, async (session) => {
+      this.sessions.assertOperational(sessionId);
+      this.assertCapability(session);
+      this.sessions.assertState(sessionId, input.state_version);
+      if (!this.sessions.hasFrameEvidence(sessionId, input.expected_frame_sha256, input.state_version)) {
+        throw new BrowserError("The browser screenshot evidence is stale or unavailable.", "TALOS_BROWSER_FRAME_STALE", 409, {
+          state_version: session.stateVersion,
+          reason_code: "source_frame_missing",
+        });
+      }
+
+      const documentBefore = await currentMainDocumentIdentity(session.page);
+      const frameBefore = await captureCanonicalBrowserFrame(session.page);
+      if (sha256(frameBefore) !== input.expected_frame_sha256) {
+        throw refSourceFrameStale(session.stateVersion);
+      }
+      const snapshot = await captureBrowserHmiRefSnapshot(session.page, {
+        stateVersion: input.state_version,
+        sourceFrameSha256: input.expected_frame_sha256,
+        viewport: session.viewport,
+        documentIdentity: documentBefore,
+      });
+      const frameAfter = await captureCanonicalBrowserFrame(session.page);
+      const documentAfter = await currentMainDocumentIdentity(session.page);
+      if (sha256(frameAfter) !== input.expected_frame_sha256
+        || !sameDocumentIdentity(documentBefore, documentAfter)) {
+        throw refSourceFrameStale(session.stateVersion);
+      }
+      this.sessions.recordHmiRefSnapshot(sessionId, snapshot);
+
+      return BrowserHmiRefTargetsResponseSchema.parse({
+        schema_version: "talos_browser_hmi_ref_targets_v2",
+        session_id: sessionId,
+        state_version: snapshot.stateVersion,
+        frame_sha256: snapshot.sourceFrameSha256,
+        snapshot_id: snapshot.snapshotId,
+        targets: snapshot.targets,
+      });
+    });
+  }
+
+  async preflightRef(sessionId: string, input: BrowserHmiRefPreflightRequest): Promise<BrowserHmiRefPreflightResponse> {
+    return this.sessions.runExclusive(sessionId, async (session) => {
+      this.sessions.assertOperational(sessionId);
+      this.assertCapability(session);
+      this.sessions.assertState(sessionId, input.state_version);
+      const inspected = await this.inspectedRefTarget(session, input, "preflight");
+
+      return BrowserHmiRefPreflightResponseSchema.parse({
+        schema_version: "talos_browser_hmi_ref_preflight_v2",
+        interaction_id: input.interaction_id,
+        session_id: sessionId,
+        state_version: session.stateVersion,
+        frame_sha256: input.expected_frame_sha256,
+        snapshot_id: input.snapshot_id,
+        ref: input.ref,
+        origin: safeOrigin(session.page.url()),
+        point: inspected.identity.point,
+        target: inspected.target,
+      });
+    });
+  }
 
   async preflight(sessionId: string, input: BrowserHmiPreflightRequest): Promise<BrowserHmiPreflightResponse> {
     return this.sessions.runExclusive(sessionId, async (session) => {
@@ -81,10 +169,13 @@ export class BrowserHmiService {
       try {
         quiescence = createQuiescenceTracker(session.page);
         await installDomProbe(session.page, domProbeKey);
-        // A scroll changes only the viewport: it dispatches no effect and needs
-        // no target fingerprint. It advances state so the fresh frame/snapshot
-        // (and their coordinates) supersede the pre-scroll view; a click bound to
-        // the old state_version then correctly 409s as stale.
+        // The v2 scroll contract carries direction but no target coordinates, so
+        // never inherit an unrelated stale cursor position from a prior action.
+        // Target the deterministic main-frame center before dispatching the real
+        // wheel event. The fresh frame/snapshot then supersede the pre-scroll view;
+        // a click bound to the old state_version correctly 409s as stale.
+        const scrollPoint = this.point(session, 0.5, 0.5);
+        await session.page.mouse.move(scrollPoint.x, scrollPoint.y);
         await session.page.mouse.wheel(0, input.delta_y);
         const current = this.sessions.advanceState(sessionId);
         await quiescence.waitFor(current.page, domProbeKey);
@@ -131,6 +222,55 @@ export class BrowserHmiService {
   }
 
   async execute(sessionId: string, input: BrowserHmiExecuteRequest): Promise<BrowserHmiResultResponse> {
+    return this.executeInteraction(sessionId, input, async (session, phase) => {
+      const point = this.point(session, input.normalized_x, input.normalized_y);
+      const frame = await captureCanonicalBrowserFrame(session.page);
+      const inspected = await this.inspectedTarget(
+        session,
+        input.state_version,
+        input.expected_frame_sha256,
+        point,
+        frame,
+        phase,
+      );
+      return {
+        target: inspected.target,
+        dispatch: (onDispatch) => dispatchGuardedBrowserClick(session.page, point, inspected.attestation, {
+          button: input.button,
+          clickCount: input.click_count,
+          effectClassification: input.effect_classification,
+          onDispatch,
+        }),
+      };
+    });
+  }
+
+  async executeRef(sessionId: string, input: BrowserHmiRefExecuteRequest): Promise<BrowserHmiResultResponse> {
+    return this.executeInteraction(sessionId, input, async (session, phase) => {
+      const inspected = await this.inspectedRefTarget(session, input, phase);
+      return {
+        target: inspected.target,
+        dispatch: (onDispatch) => dispatchGuardedBrowserRefClick(
+          session.page,
+          inspected.identity.locator,
+          inspected.identity.point,
+          inspected.attestation,
+          {
+            button: input.button,
+            clickCount: input.click_count,
+            effectClassification: input.effect_classification,
+            onDispatch,
+          },
+        ),
+      };
+    });
+  }
+
+  private async executeInteraction(
+    sessionId: string,
+    input: BrowserHmiCommonExecuteRequest,
+    inspect: (session: BrowserSession, phase: "execution" | "dispatch") => Promise<PreparedHmiInteraction>,
+  ): Promise<BrowserHmiResultResponse> {
     const { command_id: _commandId, ...idempotentRequest } = input;
     const requestSha256 = sha256(canonicalJson(idempotentRequest));
     let claimedSession: BrowserSession | undefined;
@@ -145,16 +285,7 @@ export class BrowserHmiService {
       this.sessions.assertState(sessionId, input.state_version);
       const sourceStateVersion = session.stateVersion;
       const sourceFrameSha256 = input.expected_frame_sha256;
-      const point = this.point(session, input.normalized_x, input.normalized_y);
-      const sourceFrame = await captureCanonicalBrowserFrame(session.page);
-      const { target } = await this.inspectedTarget(
-        session,
-        sourceStateVersion,
-        sourceFrameSha256,
-        point,
-        sourceFrame,
-        "execution",
-      );
+      const { target } = await inspect(session, "execution");
 
       if (target.fingerprint !== input.expected_fingerprint) {
         throw new BrowserError("The browser target changed before execution.", "TALOS_BROWSER_TARGET_STALE", 409, {
@@ -219,29 +350,16 @@ export class BrowserHmiService {
       try {
         quiescence = createQuiescenceTracker(session.page);
         await installDomProbe(session.page, domProbeKey);
-        const immediateFrame = await captureCanonicalBrowserFrame(session.page);
-        const immediateTarget = await this.inspectedTarget(
-          session,
-          sourceStateVersion,
-          sourceFrameSha256,
-          point,
-          immediateFrame,
-          "dispatch",
-        );
+        const immediateTarget = await inspect(session, "dispatch");
         if (immediateTarget.target.fingerprint !== target.fingerprint) {
-          throw new BrowserError("The browser target changed before pointer dispatch.", "TALOS_BROWSER_TARGET_STALE", 409, {
+          throw new BrowserError("The browser target changed before dispatch.", "TALOS_BROWSER_TARGET_STALE", 409, {
             state_version: session.stateVersion,
           });
         }
-        await dispatchGuardedBrowserClick(session.page, point, immediateTarget.attestation, {
-          button: input.button,
-          clickCount: input.click_count,
-          effectClassification: input.effect_classification,
-          onDispatch: () => {
-            this.sessions.armHmiDispatchFence(sessionId, sourceStateVersion + 1);
-            session.hmiCommands.markDispatched(input.command_id);
-            effectDispatched = true;
-          },
+        await immediateTarget.dispatch(() => {
+          this.sessions.armHmiDispatchFence(sessionId, sourceStateVersion + 1);
+          session.hmiCommands.markDispatched(input.command_id);
+          effectDispatched = true;
         });
         const current = session.recovery ? session : this.sessions.advanceState(sessionId);
         if (current.recovery) throw new Error(current.recovery.reasonCode);
@@ -458,6 +576,89 @@ export class BrowserHmiService {
       region,
     };
   }
+
+  private async inspectedRefTarget(
+    session: BrowserSession,
+    input: BrowserHmiRefPreflightRequest,
+    phase: "preflight" | "execution" | "dispatch",
+  ): Promise<InspectedRefTarget> {
+    const snapshot = session.latestHmiRefSnapshot;
+    const snapshotDocument = snapshot ? browserHmiRefSnapshotDocumentIdentity(snapshot) : undefined;
+    if (!snapshot
+      || !snapshotDocument
+      || snapshot.snapshotId !== input.snapshot_id
+      || snapshot.stateVersion !== input.state_version
+      || snapshot.sourceFrameSha256 !== input.expected_frame_sha256
+      || !this.sessions.hasFrameEvidence(session.sessionId, input.expected_frame_sha256, input.state_version)) {
+      throw new BrowserError(`The semantic browser target changed before ${phase}.`, "TALOS_BROWSER_TARGET_STALE", 409, {
+        state_version: session.stateVersion,
+      });
+    }
+
+    const currentDocument = await currentMainDocumentIdentity(session.page);
+    if (!sameDocumentIdentity(snapshotDocument, currentDocument)) {
+      throw new BrowserError(`The semantic browser target changed before ${phase}.`, "TALOS_BROWSER_TARGET_STALE", 409, {
+        state_version: session.stateVersion,
+      });
+    }
+
+    const identity = await resolveBrowserHmiRefTarget(session.page, snapshot, input.ref);
+    const raw = await inspectBrowserTarget(session.page, identity.point);
+    if (raw.frameId !== snapshotDocument.frameId
+      || raw.loaderId !== snapshotDocument.loaderId
+      || raw.documentUrl !== snapshotDocument.url) {
+      throw new BrowserError(`The semantic browser target changed before ${phase}.`, "TALOS_BROWSER_TARGET_STALE", 409, {
+        state_version: session.stateVersion,
+      });
+    }
+    const currentPageUrl = session.page.url();
+    if (Buffer.byteLength(currentPageUrl, "utf8") > 8_192) {
+      throw new BrowserError("The browser URL exceeds the bounded HMI contract.", "TALOS_BROWSER_HMI_TARGET_BOUNDS", 413);
+    }
+    const href = sanitizeHref(raw.href, raw.documentUrl);
+    const browserDefaultAttested = raw.browserDefaultAttestable
+      && !raw.hasRelevantEventListeners
+      && (raw.tag.toLowerCase() !== "a" || href !== null);
+    const facts: TargetFacts = {
+      tag: boundedUtf8(raw.tag.toLowerCase(), 64) || "unknown",
+      role: raw.role ? boundedUtf8(raw.role.toLowerCase(), 64) : null,
+      name: boundedUtf8(raw.name.replace(/\s+/g, " ").trim(), 256),
+      input_type: raw.inputType ? boundedUtf8(raw.inputType.toLowerCase(), 64) : null,
+      href,
+      form_method: raw.formMethod ? boundedUtf8(raw.formMethod.toLowerCase(), 16) : null,
+      is_editable: raw.isEditable,
+      is_submit: raw.isSubmit,
+      is_download: raw.isDownload,
+      opens_new_context: raw.opensNewContext,
+      effect_attestation: browserDefaultAttested ? "browser_default" : "unattestable",
+      required_effect_classification: browserDefaultAttested ? "ordinary" : "sensitive",
+      visible: raw.visible,
+      disabled: raw.disabled,
+    };
+    const fingerprint = sha256(canonicalJson({
+      session_id: session.sessionId,
+      state_version: input.state_version,
+      source_frame_sha256: input.expected_frame_sha256,
+      snapshot_id: input.snapshot_id,
+      ref: input.ref,
+      frame_id: raw.frameId,
+      loader_id: raw.loaderId,
+      backend_node_id: raw.backendNodeId,
+      document_url_digest: sha256(raw.documentUrl),
+      current_page_url_digest: sha256(currentPageUrl),
+      aria_role: identity.target.role,
+      aria_name: identity.target.name,
+      aria_destination: identity.target.destination,
+      destination_digest: raw.destination ? sha256(raw.destination) : null,
+      target: facts,
+    }));
+
+    return {
+      target: BrowserHmiTargetDescriptorSchema.parse({ ...facts, fingerprint }),
+      attestation: raw,
+      identity,
+    };
+  }
 }
 
 function targetFrameRegion(
@@ -563,6 +764,22 @@ function canonicalValue(value: unknown): unknown {
 
 function sha256(value: string | Uint8Array): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function sameDocumentIdentity(
+  left: { frameId: string; loaderId: string; url: string },
+  right: { frameId: string; loaderId: string; url: string },
+): boolean {
+  return left.frameId === right.frameId
+    && left.loaderId === right.loaderId
+    && left.url === right.url;
+}
+
+function refSourceFrameStale(stateVersion: number): BrowserError {
+  return new BrowserError("The live browser page no longer matches the verified screenshot.", "TALOS_BROWSER_FRAME_STALE", 409, {
+    state_version: stateVersion,
+    reason_code: "source_frame_changed",
+  });
 }
 
 async function closeUnexpectedPages(session: BrowserSession, baselinePages: Set<Page>, observedPages: Set<Page>): Promise<void> {

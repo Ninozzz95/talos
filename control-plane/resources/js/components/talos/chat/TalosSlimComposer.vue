@@ -32,7 +32,7 @@ import { filterTalosSlashCommands } from '../../../lib/talosSlashCommands'
 import { talosEffortLabel, talosEffortLadderFromLevels } from '../../../lib/talosEffort'
 import type { TalosDictationStatus, TalosResolvedDictationMode } from '../../../composables/useTalosDictation'
 import type { TalosDictationMode } from '../../../lib/talosDictationModes'
-import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode } from '../../../lib/talosTypes'
+import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosBrowserRecoveryAction, TalosCommand, TalosComposerMode } from '../../../lib/talosTypes'
 
 const TalosDictationStatusPanel = defineAsyncComponent(() => import('./TalosDictationStatus.vue'))
 const dictationAsyncControlClass = 'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] text-[var(--talos-muted)] lg:min-h-8'
@@ -83,6 +83,7 @@ const props = withDefaults(defineProps<{
     enhancerDisabledReason?: string
     visibility: Record<string, boolean>
     browserMode: TalosBrowserMode
+    browserRecoveryAction?: TalosBrowserRecoveryAction
     browseSetupFault?: string | null
     browserCurrentPage?: TalosBrowserCurrentPage | null
     devBrowserEvidence?: boolean
@@ -99,6 +100,7 @@ const props = withDefaults(defineProps<{
     dictationSupported?: boolean
 }>(), {
     devBrowserEvidence: false,
+    browserRecoveryAction: 'restart',
     browseSetupFault: null,
     attachments: () => [],
     vaultFiles: () => [],
@@ -129,6 +131,7 @@ const emit = defineEmits<{
     disableBrowse: []
     stopBrowse: []
     restartBrowse: []
+    recoverBrowse: []
     captureScreenshot: []
     captureSnapshot: []
     slashCommand: [id: TalosCommand['id']]
@@ -219,6 +222,12 @@ const browseStatus = computed(() => {
     return 'Ready'
 })
 const browserNeedsRetry = computed(() => ['recovery_required', 'stopped', 'failed'].includes(props.browserMode.status))
+const browserRecoveryLabel = computed(() => props.browserRecoveryAction === 'recover_task'
+    ? 'Recover browser task'
+    : 'Start fresh browser session')
+const browserRecoveryTitle = computed(() => props.browserRecoveryAction === 'recover_task'
+    ? 'Recover the durable Browser task without redispatching its action'
+    : 'Close the unusable Browser session and continue with a fresh session')
 const screenshotDisabled = computed(() => !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status) || !props.browserMode.capabilities.includes('screenshot'))
 const snapshotDisabled = computed(() => !props.devBrowserEvidence || !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status) || !props.browserMode.capabilities.includes('snapshot'))
 const stopDisabled = computed(() => !props.browserMode.enabled || !['ready', 'active'].includes(props.browserMode.status))
@@ -644,7 +653,8 @@ onBeforeUnmount(() => {
                         </div>
                         <button v-if="devBrowserEvidence" type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="snapshotDisabled" :title="snapshotDisabled ? 'Page structure capability is unavailable.' : 'Capture page structure'" @click="browseMenuOpen = false; emit('captureSnapshot')"><ScanSearch class="h-4 w-4" />Capture page structure</button>
                         <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="stopDisabled" :title="stopDisabled ? 'The browser session is not running.' : 'Stop the current browser session'" @click="browseMenuOpen = false; emit('stopBrowse')"><Square class="h-4 w-4" />Stop browser</button>
-                        <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" :title="browserNeedsRetry ? 'Start a fresh browser session' : 'Restart the current browser session'" @click="browseMenuOpen = false; emit('restartBrowse')"><RefreshCw class="h-4 w-4" />{{ browserNeedsRetry ? 'Retry browser' : 'Restart browser' }}</button>
+                        <button v-if="browserNeedsRetry" type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" :title="browserRecoveryTitle" @click="browseMenuOpen = false; emit('recoverBrowse')"><RefreshCw class="h-4 w-4" />{{ browserRecoveryLabel }}</button>
+                        <button v-else type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" title="Restart the current browser session" @click="browseMenuOpen = false; emit('restartBrowse')"><RefreshCw class="h-4 w-4" />Restart browser</button>
                         <button type="button" role="menuitem" class="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs text-[var(--talos-text)] hover:bg-[var(--talos-panel-soft)]" @click="browseMenuOpen = false; emit('disableBrowse')"><X class="h-4 w-4" />Disable Browse</button>
                     </div>
                 </div>

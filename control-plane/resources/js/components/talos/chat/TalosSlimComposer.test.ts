@@ -228,7 +228,8 @@ describe('TalosSlimComposer', () => {
         expect(captureSnapshot).toHaveBeenCalledOnce()
     })
 
-    it('labels recovery-required Browse state and exposes a Retry browser action', async () => {
+    it('labels recovery-required Browse state and exposes the exact recover-task action', async () => {
+        const recoverBrowse = vi.fn()
         const restartBrowse = vi.fn()
         const container = mountComposer('full', true, {
             browserMode: {
@@ -237,6 +238,8 @@ describe('TalosSlimComposer', () => {
                 status: 'recovery_required',
                 capabilities: ['snapshot', 'screenshot'],
             },
+            browserRecoveryAction: 'recover_task',
+            onRecoverBrowse: recoverBrowse,
             onRestartBrowse: restartBrowse,
         })
 
@@ -247,11 +250,35 @@ describe('TalosSlimComposer', () => {
         status?.click()
         await nextTick()
 
-        const retry = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
-            .find((button) => button.textContent?.includes('Retry browser'))
-        expect(retry).toBeDefined()
-        retry?.click()
-        expect(restartBrowse).toHaveBeenCalledOnce()
+        const recover = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+            .find((button) => button.textContent?.includes('Recover browser task'))
+        expect(recover).toBeDefined()
+        recover?.click()
+        expect(recoverBrowse).toHaveBeenCalledOnce()
+        expect(restartBrowse).not.toHaveBeenCalled()
+    })
+
+    it('labels terminal or session-only recovery as starting a fresh browser session', async () => {
+        const recoverBrowse = vi.fn()
+        const container = mountComposer('full', true, {
+            browserMode: {
+                enabled: true,
+                session_id: 'browser-1',
+                status: 'stopped',
+                capabilities: [],
+            },
+            browserRecoveryAction: 'start_fresh',
+            onRecoverBrowse: recoverBrowse,
+        })
+
+        container.querySelector<HTMLButtonElement>('[aria-label="Browse status: Stopped"]')?.click()
+        await nextTick()
+
+        const fresh = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+            .find((button) => button.textContent?.includes('Start fresh browser session'))
+        expect(fresh).toBeDefined()
+        fresh?.click()
+        expect(recoverBrowse).toHaveBeenCalledOnce()
     })
 
     it('arrowup on an empty composer recalls the last user prompt editable', () => {

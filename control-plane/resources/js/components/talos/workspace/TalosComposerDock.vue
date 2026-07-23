@@ -9,7 +9,7 @@ import type { TalosChatViewportController } from '../../../composables/useTalosC
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
 import type { TalosDictationStatus, TalosResolvedDictationMode } from '../../../composables/useTalosDictation'
 import type { TalosDictationMode } from '../../../lib/talosDictationModes'
-import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosBrowserRecoveryAction, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 import { talosUrlHost } from '../../../lib/talosUrlDetect'
 
 // Lives behind the model popover's v-if, so it is loaded on demand and kept
@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
     prompt: string
     browserContext?: { host: string; title: string } | null
     browserMode: TalosBrowserMode
+    browserRecoveryAction?: TalosBrowserRecoveryAction
     browseSetupFault?: string | null
     attachments?: Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
@@ -68,6 +69,7 @@ const props = withDefaults(defineProps<{
     autoBrowseUrl?: string | null
 }>(), {
     devBrowserEvidence: false,
+    browserRecoveryAction: 'restart',
     selectedEffort: 'high',
     thinking: false,
     effortLevels: () => [],
@@ -107,6 +109,7 @@ const emit = defineEmits<{
     disableBrowse: []
     stopBrowse: []
     restartBrowse: []
+    recoverBrowse: []
     captureScreenshot: []
     captureSnapshot: []
     closePopovers: []
@@ -325,6 +328,7 @@ onBeforeUnmount(() => {
                 :context-label="contextLabel"
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
+                :browser-recovery-action="browserRecoveryAction"
                 :browse-setup-fault="browseSetupFault"
                 :last-user-prompt="lastUserPrompt"
                 :attachments="attachments"
@@ -356,6 +360,7 @@ onBeforeUnmount(() => {
                 @disable-browse="emit('disableBrowse')"
                 @stop-browse="emit('stopBrowse')"
                 @restart-browse="emit('restartBrowse')"
+                @recover-browse="emit('recoverBrowse')"
                 @capture-screenshot="emit('captureScreenshot')"
                 @capture-snapshot="emit('captureSnapshot')"
                 @attach-files="emit('attachFiles', $event)"

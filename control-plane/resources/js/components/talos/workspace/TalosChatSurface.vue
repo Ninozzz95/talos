@@ -29,6 +29,9 @@ import type {
     TalosBrowserCurrentPage,
     TalosBrowserHmiChallenge,
     TalosBrowserPointerFrame,
+    TalosBrowserRefFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserScrollFrame,
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
     TalosBrowserTask,
@@ -83,6 +86,9 @@ const props = withDefaults(defineProps<{
     browserInteractionLocked: boolean
     browserInteractionError: string | null
     pendingBrowserInteractionApproval: TalosBrowserHmiChallenge | null
+    browserRefFrame: TalosBrowserRefFrame | null
+    browserRefTargetsLoading: boolean
+    browserRefTargetsError: string | null
     pendingToolApprovals: TalosPendingToolApproval[]
     decidingToolApprovalIds: string[]
     browserTasks: TalosBrowserTask[]
@@ -113,6 +119,8 @@ const emit = defineEmits<{
     toggleMessageEvidence: [message: TalosMessage]
     benchmarkMessageRun: [message: TalosMessage]
     interactBrowserFrame: [frame: TalosBrowserPointerFrame]
+    interactBrowserRef: [interaction: TalosBrowserRefInteraction]
+    scrollBrowserFrame: [frame: TalosBrowserScrollFrame]
     confirmBrowserFrameInteraction: [decision: 'approve' | 'reject']
     decideToolApproval: [approval: TalosPendingToolApproval, decision: 'approve' | 'reject']
     cancelBrowserTask: [taskId: string]
@@ -596,6 +604,9 @@ defineExpose({ scrollToBottom })
                             :interaction-locked="placementOwnsActiveSession(placement) && browserInteractionLocked"
                             :interaction-error="placementOwnsActiveSession(placement) ? browserInteractionError : null"
                             :pending-interaction-approval="placementOwnsActiveSession(placement) ? pendingBrowserInteractionApproval : null"
+                            :ref-frame="placementOwnsActiveSession(placement) ? browserRefFrame : null"
+                            :ref-targets-loading="placementOwnsActiveSession(placement) && browserRefTargetsLoading"
+                            :ref-targets-error="placementOwnsActiveSession(placement) ? browserRefTargetsError : null"
                             :pending-tool-approvals="pendingApprovalsForPlacement(placement)"
                             :deciding-tool-approval-ids="decidingToolApprovalIds"
                             :browser-task-busy="placementOwnsTaskCommand(placement) && browserTaskBusy"
@@ -605,6 +616,8 @@ defineExpose({ scrollToBottom })
                             :mobile="mobile"
                             :mobile-window-presentation="mobileWindowPresentation"
                             @interact="emit('interactBrowserFrame', $event)"
+                            @interact-ref="emit('interactBrowserRef', $event)"
+                            @scroll="emit('scrollBrowserFrame', $event)"
                             @confirm="emit('confirmBrowserFrameInteraction', $event)"
                             @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
                             @cancel-task="emit('cancelBrowserTask', $event)"
@@ -619,10 +632,15 @@ defineExpose({ scrollToBottom })
                             :interaction-locked="browserInteractionLocked"
                             :interaction-error="browserInteractionError"
                             :pending-interaction-approval="pendingBrowserInteractionApproval"
+                            :ref-frame="browserRefFrame"
+                            :ref-targets-loading="browserRefTargetsLoading"
+                            :ref-targets-error="browserRefTargetsError"
                             :mobile="mobile"
                             :mobile-window-presentation="mobileWindowPresentation"
                             loading-strategy="eager"
                             @interact="emit('interactBrowserFrame', $event)"
+                            @interact-ref="emit('interactBrowserRef', $event)"
+                            @scroll="emit('scrollBrowserFrame', $event)"
                             @confirm="emit('confirmBrowserFrameInteraction', $event)"
                         />
                         <TalosRunActivity
@@ -732,6 +750,9 @@ defineExpose({ scrollToBottom })
                                 :interaction-locked="placementOwnsActiveSession(placement) && browserInteractionLocked"
                                 :interaction-error="placementOwnsActiveSession(placement) ? browserInteractionError : null"
                                 :pending-interaction-approval="placementOwnsActiveSession(placement) ? pendingBrowserInteractionApproval : null"
+                                :ref-frame="placementOwnsActiveSession(placement) ? browserRefFrame : null"
+                                :ref-targets-loading="placementOwnsActiveSession(placement) && browserRefTargetsLoading"
+                                :ref-targets-error="placementOwnsActiveSession(placement) ? browserRefTargetsError : null"
                                 :pending-tool-approvals="pendingApprovalsForPlacement(placement)"
                                 :deciding-tool-approval-ids="decidingToolApprovalIds"
                                 :browser-task-busy="placementOwnsTaskCommand(placement) && browserTaskBusy"
@@ -741,6 +762,8 @@ defineExpose({ scrollToBottom })
                                 :mobile="mobile"
                                 :mobile-window-presentation="mobileWindowPresentation"
                                 @interact="emit('interactBrowserFrame', $event)"
+                                @interact-ref="emit('interactBrowserRef', $event)"
+                                @scroll="emit('scrollBrowserFrame', $event)"
                                 @confirm="emit('confirmBrowserFrameInteraction', $event)"
                                 @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
                                 @cancel-task="emit('cancelBrowserTask', $event)"
@@ -777,12 +800,17 @@ defineExpose({ scrollToBottom })
                             :interaction-locked="browserInteractionLocked"
                             :interaction-error="browserInteractionError"
                             :pending-interaction-approval="pendingBrowserInteractionApproval"
+                            :ref-frame="browserRefFrame"
+                            :ref-targets-loading="browserRefTargetsLoading"
+                            :ref-targets-error="browserRefTargetsError"
                             :pending-tool-approvals="unplacedCurrentBrowserApprovals"
                             :deciding-tool-approval-ids="decidingToolApprovalIds"
                             :dev-browser-evidence="devBrowserEvidence"
                             :mobile="mobile"
                             :mobile-window-presentation="mobileWindowPresentation"
                             @interact="emit('interactBrowserFrame', $event)"
+                            @interact-ref="emit('interactBrowserRef', $event)"
+                            @scroll="emit('scrollBrowserFrame', $event)"
                             @confirm="emit('confirmBrowserFrameInteraction', $event)"
                             @decide-tool-approval="(approval, decision) => emit('decideToolApproval', approval, decision)"
                         />

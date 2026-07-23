@@ -1,6 +1,13 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useTalosBrowse } from './useTalosBrowse'
-import type { TalosBrowserActivity, TalosBrowserCurrentPage, TalosBrowserPointerFrame } from '../lib/talosTypes'
+import type {
+    TalosBrowserActivity,
+    TalosBrowserCurrentPage,
+    TalosBrowserPointerFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserRecoveryAction,
+    TalosBrowserScrollFrame,
+} from '../lib/talosTypes'
 
 type TalosBrowsePersistence = {
     shouldRestore?: (talosSessionId: string) => boolean
@@ -68,6 +75,12 @@ export function useTalosWorkspaceBrowse(
             activities.set(activity.id, activity)
         }
         return [...activities.values()]
+    })
+    const browserRecoveryAction = computed<TalosBrowserRecoveryAction>(() => {
+        const status = browse.browserMode.value.status
+        if (status === 'recovery_required' && browse.recoverableBrowserTask.value) return 'recover_task'
+        if (['recovery_required', 'stopped', 'failed'].includes(status)) return 'start_fresh'
+        return 'restart'
     })
 
     watch(activeTalosSessionId, (nextSessionId) => {
@@ -152,6 +165,27 @@ export function useTalosWorkspaceBrowse(
         } catch (error) {
             if (scope && !operationScopeIsCurrent(scope)) return
             uiError.value = error instanceof Error ? error.message : 'TALOS could not restart Browse.'
+        }
+    }
+    async function recover() {
+        let scope: { talosSessionId: string; revision: number } | null = null
+        try {
+            scope = await currentOperationScope()
+            const action = browserRecoveryAction.value
+            if (action === 'recover_task') {
+                await browse.recoverActiveBrowserTask()
+            } else if (action === 'start_fresh') {
+                chatActivities.value = []
+                await browse.startFreshSession()
+            } else {
+                return
+            }
+            if (!operationScopeIsCurrent(scope)) return
+            enabled.value = true
+            await rememberEnabled(scope.talosSessionId, true)
+        } catch (error) {
+            if (scope && !operationScopeIsCurrent(scope)) return
+            uiError.value = error instanceof Error ? error.message : 'TALOS could not recover Browse.'
         }
     }
     async function stop() {
@@ -285,6 +319,14 @@ export function useTalosWorkspaceBrowse(
         return browse.interactWithScreenshot(frame)
     }
 
+    async function scrollBrowserFrame(frame: TalosBrowserScrollFrame) {
+        return browse.scrollScreenshot(frame)
+    }
+
+    async function interactWithBrowserRef(interaction: TalosBrowserRefInteraction) {
+        return browse.interactWithRef(interaction)
+    }
+
     async function confirmBrowserFrameInteraction(decision: 'approve' | 'reject') {
         return browse.confirmScreenshotInteraction(decision)
     }
@@ -339,8 +381,12 @@ export function useTalosWorkspaceBrowse(
         visibleBrowserActivities: visibleActivities,
         latestBrowserScreenshot: browse.latestScreenshot,
         latestBrowserSnapshot: browse.latestSnapshot,
+        browserRefFrame: browse.latestRefFrame,
+        browserRefTargetsLoading: browse.refTargetsLoading,
+        browserRefTargetsError: browse.refTargetsError,
         browserTasks: browse.browserTasks,
         activeBrowserTask: browse.activeBrowserTask,
+        browserRecoveryAction,
         browserTaskBusy: browse.browserTaskBusy,
         browserTaskError: browse.browserTaskError,
         browserTaskCommandTargetId: browse.browserTaskCommandTargetId,
@@ -352,6 +398,7 @@ export function useTalosWorkspaceBrowse(
         handleDisableBrowse: disable,
         handleStopBrowse: stop,
         handleRestartBrowse: restart,
+        handleRecoverBrowse: recover,
         handleCaptureScreenshot: screenshot,
         handleCaptureSnapshot: snapshot,
         openBrowse: open,
@@ -359,6 +406,8 @@ export function useTalosWorkspaceBrowse(
         restoreBrowseForActiveSession: restoreForActiveSession,
         initializeBrowse: initialize,
         interactWithBrowserFrame,
+        interactWithBrowserRef,
+        scrollBrowserFrame,
         confirmBrowserFrameInteraction,
         cancelBrowserTask,
         cancelActiveBrowserTask,

@@ -17,6 +17,8 @@ final class TalosBrowserHmiApprovalService
 
     private const POINTER_SCHEMA = 'talos_browser_hmi_pointer_v2';
 
+    private const REF_SCHEMA = 'talos_browser_hmi_ref_v2';
+
     /** @param array<string, mixed> $attributes */
     public function issue(array $attributes): TalosBrowserHmiApproval
     {
@@ -364,7 +366,11 @@ final class TalosBrowserHmiApprovalService
         $ownerId = $attributes['owner_id'] ?? $attributes['user_id'] ?? null;
         $payload = $attributes['payload'] ?? null;
         $this->assertInteger($ownerId, 'owner_id');
-        if (! is_array($payload) || $payload === [] || array_is_list($payload) || ($payload['schema_version'] ?? null) !== self::POINTER_SCHEMA) {
+        $payloadVersion = is_array($payload) ? ($payload['schema_version'] ?? null) : null;
+        if (! is_array($payload)
+            || $payload === []
+            || array_is_list($payload)
+            || ! in_array($payloadVersion, [self::POINTER_SCHEMA, self::REF_SCHEMA], true)) {
             throw new InvalidArgumentException('HMI approval payload must be a versioned object.');
         }
         $x = $attributes['normalized_x'] ?? null;
@@ -416,11 +422,31 @@ final class TalosBrowserHmiApprovalService
             throw new InvalidArgumentException('HMI worker target fingerprint must exactly match the approved target.');
         }
         if ($payloadStateVersion !== $stateVersion
-            || round($this->normalizedCoordinate($payload['normalized_x'] ?? null, 'payload.normalized_x'), 6) !== round((float) $x, 6)
-            || round($this->normalizedCoordinate($payload['normalized_y'] ?? null, 'payload.normalized_y'), 6) !== round((float) $y, 6)
             || ($payload['button'] ?? null) !== 'left'
             || ($payload['click_count'] ?? null) !== (int) $attributes['click_count']) {
+            throw new InvalidArgumentException('HMI worker payload does not match the approved executable fields.');
+        }
+        if ($payloadVersion === self::POINTER_SCHEMA
+            && (round($this->normalizedCoordinate($payload['normalized_x'] ?? null, 'payload.normalized_x'), 6) !== round((float) $x, 6)
+                || round($this->normalizedCoordinate($payload['normalized_y'] ?? null, 'payload.normalized_y'), 6) !== round((float) $y, 6))) {
             throw new InvalidArgumentException('HMI worker pointer payload does not match the approved executable fields.');
+        }
+        if ($payloadVersion === self::REF_SCHEMA) {
+            $expectedKeys = [
+                'schema_version', 'interaction_id', 'command_id', 'state_version', 'expected_frame_sha256',
+                'snapshot_id', 'ref', 'button', 'click_count', 'expected_fingerprint',
+                'effect_classification', 'sensitive_effect_authorized',
+            ];
+            $actualKeys = array_keys($payload);
+            sort($actualKeys);
+            sort($expectedKeys);
+            if ($actualKeys !== $expectedKeys
+                || ! is_string($payload['snapshot_id'] ?? null)
+                || preg_match('/^hmi_ref_[a-f0-9]{64}$/D', $payload['snapshot_id']) !== 1
+                || ! is_string($payload['ref'] ?? null)
+                || preg_match('/^e[1-9][0-9]{0,9}$/D', $payload['ref']) !== 1) {
+                throw new InvalidArgumentException('HMI worker ref payload does not match the approved semantic target.');
+            }
         }
 
         return [
@@ -437,7 +463,7 @@ final class TalosBrowserHmiApprovalService
             'click_count' => (int) $attributes['click_count'],
             'target_fingerprint' => (string) $attributes['target_fingerprint'],
             'category' => substr(trim((string) $attributes['category']), 0, 64),
-            'payload_version' => self::POINTER_SCHEMA,
+            'payload_version' => $payloadVersion,
             'payload' => $payload,
         ];
     }

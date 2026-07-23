@@ -32,10 +32,22 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
     public ?array $snapshotResponse = null;
 
     /** @var array<string, mixed>|null */
+    public ?array $scrollResponse = null;
+
+    /** @var array<string, mixed>|null */
     public ?array $preflightPointerResponse = null;
 
     /** @var array<string, mixed>|null */
     public ?array $executePointerResponse = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $refTargetsResponse = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $preflightRefResponse = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $executeRefResponse = null;
 
     /** @var array<string, mixed>|null */
     public ?array $inspectResponse = null;
@@ -300,7 +312,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
     {
         $screenshotBytes = self::pngBytes(1280, 800);
         $snapshotCanonical = ['format' => 'accessibility_refs_v1', 'nodes' => [], 'snapshot_id' => 'snap_fake-scroll-1', 'text_digest' => ''];
-        $response = [
+        $response = $this->scrollResponse ?? [
             'schema_version' => 'talos_browser_hmi_scroll_v2',
             'interaction_id' => $payload['interaction_id'] ?? null,
             'session_id' => $workerSessionId,
@@ -313,6 +325,10 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'snapshot' => ['snapshot_id' => 'snap_fake-scroll-1', 'format' => 'accessibility_refs_v1', 'text_digest' => '', 'nodes' => [], 'sha256' => 'sha256:'.hash('sha256', json_encode($snapshotCanonical, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))],
             'captured_at' => now()->toJSON(),
         ];
+
+        if (($response['interaction_id'] ?? null) === null) {
+            $response['interaction_id'] = $payload['interaction_id'] ?? null;
+        }
 
         return $this->respond('scroll', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
     }
@@ -334,6 +350,51 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         }
 
         return $this->respond('preflightPointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
+    }
+
+    public function refTargets(
+        string $ownerRef,
+        string $workerSessionId,
+        int $stateVersion,
+        string $expectedFrameSha256,
+        int $timeoutMilliseconds = 15000,
+    ): array {
+        $response = $this->refTargetsResponse ?? [
+            'schema_version' => 'talos_browser_hmi_ref_targets_v2',
+            'session_id' => $workerSessionId,
+            'state_version' => $stateVersion,
+            'frame_sha256' => $expectedFrameSha256,
+            'snapshot_id' => 'hmi_ref_'.str_repeat('c', 64),
+            'targets' => [[
+                'ref' => 'e1',
+                'role' => 'button',
+                'name' => 'Close',
+                'destination' => null,
+            ]],
+        ];
+
+        return $this->respond('refTargets', compact('ownerRef', 'workerSessionId', 'stateVersion', 'expectedFrameSha256', 'timeoutMilliseconds'), $response);
+    }
+
+    public function preflightRef(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
+    {
+        $response = $this->preflightRefResponse ?? [
+            'schema_version' => 'talos_browser_hmi_ref_preflight_v2',
+            'interaction_id' => $payload['interaction_id'] ?? null,
+            'session_id' => $workerSessionId,
+            'state_version' => $payload['state_version'] ?? 0,
+            'frame_sha256' => $payload['expected_frame_sha256'] ?? 'sha256:'.str_repeat('0', 64),
+            'snapshot_id' => $payload['snapshot_id'] ?? 'hmi_ref_'.str_repeat('c', 64),
+            'ref' => $payload['ref'] ?? 'e1',
+            'origin' => 'https://example.com',
+            'point' => ['normalized_x' => 0.5, 'normalized_y' => 0.5, 'x' => 640, 'y' => 400],
+            'target' => $this->defaultHmiTarget(null, null),
+        ];
+        if (is_array($response['target'] ?? null)) {
+            $this->latestHmiTargets[$this->hmiTargetKey($ownerRef, $workerSessionId)] = $response['target'];
+        }
+
+        return $this->respond('preflightRef', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds'), $response);
     }
 
     public function executePointer(
@@ -370,6 +431,48 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         $response['sensitive_effect_authorized'] = $payload['sensitive_effect_authorized'] ?? ($response['sensitive_effect_authorized'] ?? null);
 
         $result = $this->respond('executePointer', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds', 'authorization'), $response);
+        if (isset($this->sessionState[$workerSessionId]) && is_int($result['state_version'] ?? null)) {
+            $this->sessionState[$workerSessionId]['stateVersion'] = $result['state_version'];
+            $this->sessionState[$workerSessionId]['status'] = 'active';
+        }
+
+        return $result;
+    }
+
+    public function executeRef(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array {
+        $screenshotBytes = self::pngBytes(1280, 800);
+        $snapshot = ['snapshot_id' => 'snap_fake-hmi-ref-1', 'format' => 'accessibility_refs_v1', 'text_digest' => '', 'nodes' => []];
+        $snapshotCanonical = ['format' => 'accessibility_refs_v1', 'nodes' => [], 'snapshot_id' => 'snap_fake-hmi-ref-1', 'text_digest' => ''];
+        $response = $this->executeRefResponse ?? [
+            'schema_version' => 'talos_browser_hmi_result_v2',
+            'capture_id' => 'cap_00000000-0000-4000-8000-000000000002',
+            'session_id' => $workerSessionId,
+            'source_state_version' => $payload['state_version'] ?? 0,
+            'state_version' => ((int) ($payload['state_version'] ?? 0)) + 1,
+            'frame_sha256' => $payload['expected_frame_sha256'] ?? 'sha256:'.str_repeat('0', 64),
+            'url' => 'https://example.com/',
+            'title' => 'Example page',
+            'target' => $this->defaultHmiTarget($payload['expected_fingerprint'] ?? null, null),
+            'screenshot' => ['mime_type' => 'image/png', 'width' => 1280, 'height' => 800, 'sha256' => 'sha256:'.hash('sha256', $screenshotBytes), 'base64' => base64_encode($screenshotBytes)],
+            'snapshot' => [...$snapshot, 'sha256' => 'sha256:'.hash('sha256', json_encode($snapshotCanonical, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))],
+            'captured_at' => now()->toJSON(),
+        ];
+        $preflightTarget = $this->latestHmiTargets[$this->hmiTargetKey($ownerRef, $workerSessionId)] ?? null;
+        if (is_array($preflightTarget)) {
+            $response['target'] = $preflightTarget;
+        }
+        $response['command_id'] = $payload['command_id'] ?? ($response['command_id'] ?? null);
+        $response['interaction_id'] = $payload['interaction_id'] ?? ($response['interaction_id'] ?? null);
+        $response['effect_classification'] = $payload['effect_classification'] ?? ($response['effect_classification'] ?? null);
+        $response['sensitive_effect_authorized'] = $payload['sensitive_effect_authorized'] ?? ($response['sensitive_effect_authorized'] ?? null);
+
+        $result = $this->respond('executeRef', compact('ownerRef', 'workerSessionId', 'payload', 'timeoutMilliseconds', 'authorization'), $response);
         if (isset($this->sessionState[$workerSessionId]) && is_int($result['state_version'] ?? null)) {
             $this->sessionState[$workerSessionId]['stateVersion'] = $result['state_version'];
             $this->sessionState[$workerSessionId]['status'] = 'active';

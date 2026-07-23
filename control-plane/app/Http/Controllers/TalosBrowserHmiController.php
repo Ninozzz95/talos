@@ -42,6 +42,82 @@ final class TalosBrowserHmiController extends Controller
         private readonly TalosBrowserLegacyWriteGate $legacyWrites,
     ) {}
 
+    public function targets(Request $request, TalosBrowserSession $browserSession): JsonResponse
+    {
+        $this->legacyWrites->assertEnabled('browser.hmi.pointer');
+
+        if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+        if (($error = $this->operable($browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+        $frame = TalosBrowserArtifact::query()
+            ->whereKey($browserSession->last_screenshot_artifact_id)
+            ->where('browser_session_id', $browserSession->id)
+            ->where('user_id', $browserSession->user_id)
+            ->where('type', 'screenshot')
+            ->first();
+        if (! $frame instanceof TalosBrowserArtifact) {
+            return $this->frameStale();
+        }
+        $frameInput = [
+            'artifact_id' => (string) $frame->id,
+            'artifact_sha256' => $this->prefixedHash((string) $frame->sha256),
+            'state_version' => (int) $browserSession->worker_state_version,
+        ];
+        $verifiedFrame = $this->currentFrame(
+            $browserSession,
+            $frameInput,
+            'hmi-ref-targets-'.hash('sha256', (string) $browserSession->id.'\0'.(string) $frame->id),
+        );
+        if ($verifiedFrame instanceof JsonResponse) {
+            return $verifiedFrame;
+        }
+
+        try {
+            $result = $this->client->refTargets(
+                TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
+                (string) $browserSession->worker_session_id,
+                (int) $browserSession->worker_state_version,
+                $this->prefixedHash((string) $verifiedFrame->sha256),
+            );
+        } catch (BrowserWorkerException $exception) {
+            $status = match ($exception->errorCode) {
+                'TALOS_BROWSER_FRAME_STALE', 'TALOS_BROWSER_STALE_STATE', 'TALOS_BROWSER_TARGET_STALE', 'TALOS_BROWSER_HMI_REF_SNAPSHOT_INVALID' => 409,
+                'TALOS_BROWSER_HMI_REF_SNAPSHOT_BOUNDS', 'TALOS_BROWSER_HMI_TARGET_BOUNDS' => 413,
+                'TALOS_BROWSER_HMI_INVALID_REF' => 422,
+                'TALOS_BROWSER_HMI_CAPABILITY_DENIED' => 403,
+                'TALOS_BROWSER_WORKER_UNAVAILABLE' => 503,
+                default => 502,
+            };
+
+            return $this->error($exception->errorCode, $exception->getMessage(), $status);
+        }
+        if (! $this->validRefTargetsResult($browserSession, $verifiedFrame, $result)) {
+            return $this->error(
+                'TALOS_BROWSER_WORKER_FAILURE',
+                'Browser worker returned an invalid semantic target frame.',
+                502,
+            );
+        }
+
+        return response()->json(['data' => [
+            'schema_version' => 'talos_browser_hmi_ref_targets_v2',
+            'browser_session_id' => (string) $browserSession->id,
+            'state_version' => (int) $browserSession->worker_state_version,
+            'frame_sha256' => $this->prefixedHash((string) $verifiedFrame->sha256),
+            'snapshot_id' => (string) $result['snapshot_id'],
+            'screenshot' => $this->artifactPayload($verifiedFrame, true),
+            'targets' => array_map(static fn (array $target): array => [
+                'ref' => $target['ref'],
+                'role' => $target['role'],
+                'name' => $target['name'],
+                'destination' => $target['destination'],
+            ], $result['targets']),
+        ]]);
+    }
+
     public function pointer(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
         $this->legacyWrites->assertEnabled('browser.hmi.pointer');
@@ -173,6 +249,137 @@ final class TalosBrowserHmiController extends Controller
         );
     }
 
+    public function ref(Request $request, TalosBrowserSession $browserSession): JsonResponse
+    {
+        $this->legacyWrites->assertEnabled('browser.hmi.pointer');
+
+        if (($error = $this->owned($request, $browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+        $input = $this->refInput($request);
+        if ($input instanceof JsonResponse) {
+            return $input;
+        }
+        $commandId = $this->commandId($browserSession, $input);
+        $interactionId = $this->interactionId($input, $commandId);
+        $input['interaction_id'] = $interactionId;
+        if (($replay = $this->replayCommand($browserSession, $commandId)) instanceof JsonResponse) {
+            return $replay;
+        }
+        if (($error = $this->operable($browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+        $frame = $this->currentFrame($browserSession, $input, $commandId);
+        if ($frame instanceof JsonResponse) {
+            return $frame;
+        }
+
+        if (($audit = $this->auditedEventOnce($browserSession, 'hmi.ref.requested', 'user', $commandId, [
+            'command_id' => $commandId,
+            'interaction_id' => $interactionId,
+            'artifact_id' => $frame->id,
+            'state_version' => $input['state_version'],
+            'snapshot_id' => $input['snapshot_id'],
+            'ref' => $input['ref'],
+            'button' => $input['button'],
+            'click_count' => $input['click_count'],
+        ])) instanceof JsonResponse) {
+            return $audit;
+        }
+
+        $modes = $this->policyModes((int) $browserSession->user_id);
+        if ($modes['effective'] === TalosBrowserHmiPolicy::READ_ONLY) {
+            $decision = [
+                'decision' => 'deny',
+                'category' => 'policy_denied',
+                'consequence' => 'HMI interaction is disabled by read-only policy.',
+                'mode' => $modes['effective'],
+            ];
+            if (($audit = $this->auditedEvent($browserSession, 'hmi.ref.denied', 'policy', [
+                'command_id' => $commandId,
+                'interaction_id' => $interactionId,
+            ], $decision)) instanceof JsonResponse) {
+                return $audit;
+            }
+
+            return $this->error('TALOS_BROWSER_HMI_POLICY_DENIED', 'Browser interaction is disabled by policy.', 403, [
+                'mode' => $modes['effective'],
+            ]);
+        }
+
+        $ref = $this->workerRef($input, $commandId);
+        try {
+            $rawPreflight = $this->client->preflightRef(
+                TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
+                (string) $browserSession->worker_session_id,
+                $ref,
+            );
+        } catch (BrowserWorkerException $exception) {
+            return $this->preflightFailure($browserSession, $commandId, $exception, 'ref');
+        }
+        $preflight = $this->refPreflightResult($browserSession, $ref, $rawPreflight);
+        if ($preflight instanceof JsonResponse) {
+            if (($audit = $this->auditedEvent($browserSession, 'hmi.ref.stale', 'worker', [
+                'command_id' => $commandId,
+                'interaction_id' => $interactionId,
+            ])) instanceof JsonResponse) {
+                return $audit;
+            }
+
+            return $preflight;
+        }
+        $frame = $this->currentFrame($browserSession, $input, $commandId);
+        if ($frame instanceof JsonResponse) {
+            if (($audit = $this->auditedEvent($browserSession, 'hmi.ref.stale', 'system', [
+                'command_id' => $commandId,
+                'interaction_id' => $interactionId,
+            ])) instanceof JsonResponse) {
+                return $audit;
+            }
+
+            return $frame;
+        }
+        if (($error = $this->operable($browserSession)) instanceof JsonResponse) {
+            return $error;
+        }
+
+        $decision = $this->classify($preflight['target'], $modes);
+        if ($decision['decision'] === 'deny') {
+            if (($audit = $this->auditedEvent($browserSession, 'hmi.ref.denied', 'policy', [
+                'command_id' => $commandId,
+                'interaction_id' => $interactionId,
+                'target_fingerprint' => $preflight['target']['fingerprint'],
+            ], $decision)) instanceof JsonResponse) {
+                return $audit;
+            }
+
+            return $this->error('TALOS_BROWSER_HMI_POLICY_DENIED', 'Browser interaction was blocked by policy.', 403, [
+                'category' => $decision['category'],
+                'consequence' => $decision['consequence'],
+            ]);
+        }
+
+        $executePayload = [
+            ...$ref,
+            'command_id' => $commandId,
+            'expected_fingerprint' => $preflight['target']['fingerprint'],
+            'effect_classification' => $this->effectClassification($preflight['target'], $decision),
+            'sensitive_effect_authorized' => false,
+        ];
+        if ($decision['decision'] === 'confirm') {
+            return $this->challenge($browserSession, $frame, $preflight, $executePayload, $decision, $commandId);
+        }
+
+        return $this->executeOrdinary(
+            $browserSession,
+            $frame,
+            $preflight,
+            $executePayload,
+            $decision,
+            $commandId,
+        );
+    }
+
     public function scroll(Request $request, TalosBrowserSession $browserSession): JsonResponse
     {
         $this->legacyWrites->assertEnabled('browser.hmi.pointer');
@@ -226,10 +433,14 @@ final class TalosBrowserHmiController extends Controller
         try {
             $stored = $this->artifacts->storeHmiScroll($browserSession, $result);
         } catch (Throwable) {
+            $reason = 'TALOS_BROWSER_HMI_SCROLL_COMMIT_FAILED';
+            $this->markRecoveryRequired($browserSession, $interactionId, null, $reason);
+
             return $this->error(
-                'TALOS_BROWSER_HMI_SCROLL_COMMIT_FAILED',
+                $reason,
                 'The browser scrolled but the new frame could not be committed.',
                 409,
+                ['recovery_required' => true, 'reason' => $reason],
             );
         }
 
@@ -239,6 +450,10 @@ final class TalosBrowserHmiController extends Controller
                 'source_state_version' => $input['state_version'],
                 'state_version' => (int) $stored['session']->worker_state_version,
                 'delta_y' => (float) $validated['delta_y'],
+                'operation' => 'screenshot',
+                'screenshot_artifact_id' => (string) $stored['screenshot']->id,
+                'snapshot_artifact_id' => (string) $stored['snapshot']->id,
+                'artifact_ids' => [(string) $stored['screenshot']->id],
             ]);
         } catch (Throwable) {
             // The scroll and its evidence committed; a best-effort audit write must not fail it.
@@ -317,12 +532,13 @@ final class TalosBrowserHmiController extends Controller
         }
 
         $approvalInput = $this->approvalPointerInput($approval);
+        $isRef = ($approvalInput['schema_version'] ?? null) === 'talos_browser_hmi_ref_v2';
         $frame = $this->currentFrame($browserSession, $approvalInput, $commandId);
         if ($frame instanceof JsonResponse) {
             if (($invalidation = $this->invalidateApproval($approval, $binding, $browserSession)) instanceof JsonResponse) {
                 return $invalidation;
             }
-            if (($audit = $this->auditedEvent($browserSession, 'hmi.pointer.stale', 'system', [
+            if (($audit = $this->auditedEvent($browserSession, $isRef ? 'hmi.ref.stale' : 'hmi.pointer.stale', 'system', [
                 'command_id' => $commandId,
                 'interaction_id' => $approval->interaction_id,
                 'approval_id' => $approval->id,
@@ -332,22 +548,32 @@ final class TalosBrowserHmiController extends Controller
 
             return $frame;
         }
-        $pointer = $this->workerPointer($approvalInput, $commandId);
+        $interaction = $isRef
+            ? $this->workerRef($approvalInput, $commandId)
+            : $this->workerPointer($approvalInput, $commandId);
         try {
-            $rawPreflight = $this->client->preflightPointer(
-                TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
-                (string) $browserSession->worker_session_id,
-                $pointer,
-            );
+            $rawPreflight = $isRef
+                ? $this->client->preflightRef(
+                    TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
+                    (string) $browserSession->worker_session_id,
+                    $interaction,
+                )
+                : $this->client->preflightPointer(
+                    TalosBrowserOwnerReference::forUser((int) $browserSession->user_id),
+                    (string) $browserSession->worker_session_id,
+                    $interaction,
+                );
         } catch (BrowserWorkerException $exception) {
-            return $this->preflightFailure($browserSession, $commandId, $exception);
+            return $this->preflightFailure($browserSession, $commandId, $exception, $isRef ? 'ref' : 'pointer');
         }
-        $preflight = $this->preflightResult($browserSession, $pointer, $rawPreflight);
+        $preflight = $isRef
+            ? $this->refPreflightResult($browserSession, $interaction, $rawPreflight)
+            : $this->preflightResult($browserSession, $interaction, $rawPreflight);
         if ($preflight instanceof JsonResponse) {
             if (($invalidation = $this->invalidateApproval($approval, $binding, $browserSession)) instanceof JsonResponse) {
                 return $invalidation;
             }
-            if (($audit = $this->auditedEvent($browserSession, 'hmi.pointer.stale', 'worker', [
+            if (($audit = $this->auditedEvent($browserSession, $isRef ? 'hmi.ref.stale' : 'hmi.pointer.stale', 'worker', [
                 'command_id' => $commandId,
                 'interaction_id' => $approval->interaction_id,
                 'approval_id' => $approval->id,
@@ -361,7 +587,7 @@ final class TalosBrowserHmiController extends Controller
             if (($invalidation = $this->invalidateApproval($approval, $binding, $browserSession)) instanceof JsonResponse) {
                 return $invalidation;
             }
-            if (($audit = $this->auditedEvent($browserSession, 'hmi.pointer.stale', 'worker', [
+            if (($audit = $this->auditedEvent($browserSession, $isRef ? 'hmi.ref.stale' : 'hmi.pointer.stale', 'worker', [
                 'command_id' => $commandId,
                 'interaction_id' => $approval->interaction_id,
                 'approval_id' => $approval->id,
@@ -378,7 +604,7 @@ final class TalosBrowserHmiController extends Controller
             if (($invalidation = $this->invalidateApproval($approval, $binding, $browserSession)) instanceof JsonResponse) {
                 return $invalidation;
             }
-            if (($audit = $this->auditedEvent($browserSession, 'hmi.pointer.denied', 'policy', [
+            if (($audit = $this->auditedEvent($browserSession, $isRef ? 'hmi.ref.denied' : 'hmi.pointer.denied', 'policy', [
                 'command_id' => $commandId,
                 'interaction_id' => $approval->interaction_id,
                 'approval_id' => $approval->id,
@@ -408,7 +634,7 @@ final class TalosBrowserHmiController extends Controller
         $executionLeaseToken = null;
         try {
             $executionPayload = [
-                ...$pointer,
+                ...$interaction,
                 'command_id' => $commandId,
                 'expected_fingerprint' => (string) $approval->target_fingerprint,
                 'effect_classification' => $this->effectClassification($preflight['target'], $decision),
@@ -503,7 +729,7 @@ final class TalosBrowserHmiController extends Controller
         try {
             DB::transaction(function () use ($record, $session, $binding, $preflight, $decision, $commandId, $payload, &$executionLeaseToken): void {
                 $this->approvals->approve((string) $record->id, (int) $session->user_id, $binding);
-                $this->event($session, 'hmi.pointer.allowed', 'policy', [
+                $this->event($session, $this->interactionEventType($payload, 'allowed'), 'policy', [
                     'command_id' => $commandId,
                     'interaction_id' => $record->interaction_id,
                     'target_fingerprint' => $preflight['target']['fingerprint'],
@@ -572,17 +798,25 @@ final class TalosBrowserHmiController extends Controller
                     'A signed browser action capability is required.',
                 );
             }
-            $result = $this->client->executePointer(
-                TalosBrowserOwnerReference::forUser((int) $session->user_id),
-                (string) $session->worker_session_id,
-                $payload,
-                authorization: BrowserActionAuthorization::userApproval(
-                    $commandId,
-                    $approvalId,
-                    $approvalRequestHash,
-                    $executionLeaseToken,
-                ),
+            $authorization = BrowserActionAuthorization::userApproval(
+                $commandId,
+                $approvalId,
+                $approvalRequestHash,
+                $executionLeaseToken,
             );
+            $result = ($payload['schema_version'] ?? null) === 'talos_browser_hmi_ref_v2'
+                ? $this->client->executeRef(
+                    TalosBrowserOwnerReference::forUser((int) $session->user_id),
+                    (string) $session->worker_session_id,
+                    $payload,
+                    authorization: $authorization,
+                )
+                : $this->client->executePointer(
+                    TalosBrowserOwnerReference::forUser((int) $session->user_id),
+                    (string) $session->worker_session_id,
+                    $payload,
+                    authorization: $authorization,
+                );
         } catch (BrowserWorkerException $exception) {
             if ($approvalId !== null && $this->isProvenPreDispatchFailure($exception->errorCode)) {
                 try {
@@ -612,7 +846,7 @@ final class TalosBrowserHmiController extends Controller
                 'TALOS_BROWSER_TARGET_STALE',
                 'TALOS_BROWSER_HMI_TARGET_MISSING',
             ], true)) {
-                if (($audit = $this->auditedEvent($session, 'hmi.pointer.stale', 'worker', [
+                if (($audit = $this->auditedEvent($session, $this->interactionEventType($payload, 'stale'), 'worker', [
                     'command_id' => $commandId,
                     'interaction_id' => $payload['interaction_id'] ?? null,
                     'approval_id' => $approvalId,
@@ -623,7 +857,7 @@ final class TalosBrowserHmiController extends Controller
 
                 return $this->error($exception->errorCode, $exception->getMessage(), 409);
             }
-            if ($exception->errorCode === 'TALOS_BROWSER_HMI_TARGET_BOUNDS') {
+            if (in_array($exception->errorCode, ['TALOS_BROWSER_HMI_TARGET_BOUNDS', 'TALOS_BROWSER_HMI_REF_SNAPSHOT_BOUNDS'], true)) {
                 return $this->error($exception->errorCode, $exception->getMessage(), 413);
             }
             if ($exception->errorCode === 'TALOS_BROWSER_HMI_CONTEXT_INVALID') {
@@ -639,7 +873,7 @@ final class TalosBrowserHmiController extends Controller
             ], true)) {
                 return $this->error($exception->errorCode, $exception->getMessage(), 403);
             }
-            if ($exception->errorCode === 'TALOS_BROWSER_HMI_INVALID_POINTER') {
+            if (in_array($exception->errorCode, ['TALOS_BROWSER_HMI_INVALID_POINTER', 'TALOS_BROWSER_HMI_INVALID_REF'], true)) {
                 return $this->error($exception->errorCode, $exception->getMessage(), 422);
             }
 
@@ -698,7 +932,7 @@ final class TalosBrowserHmiController extends Controller
             // id), so a transient store race is retried rather than locking the
             // session — re-running simply no-ops the already-written event.
             retry(3, function () use ($stored, $commandId, $interactionId, $approvalId, $result, $payload): void {
-                $this->eventOnce($stored['session'], 'hmi.pointer.executed', 'worker', $commandId, [
+                $this->eventOnce($stored['session'], $this->interactionEventType($payload, 'executed'), 'worker', $commandId, [
                     'command_id' => $commandId,
                     'interaction_id' => $interactionId,
                     'approval_id' => $approvalId,
@@ -768,6 +1002,21 @@ final class TalosBrowserHmiController extends Controller
         ];
     }
 
+    /** @param array<string, mixed> $input @return array<string, mixed> */
+    private function workerRef(array $input, string $commandId): array
+    {
+        return [
+            'schema_version' => 'talos_browser_hmi_ref_v2',
+            'interaction_id' => $this->interactionId($input, $commandId),
+            'state_version' => $input['state_version'],
+            'expected_frame_sha256' => $input['artifact_sha256'],
+            'snapshot_id' => $input['snapshot_id'],
+            'ref' => $input['ref'],
+            'button' => 'left',
+            'click_count' => $input['click_count'],
+        ];
+    }
+
     /** @param array<string, mixed> $input */
     private function commandId(TalosBrowserSession $session, array $input): string
     {
@@ -778,16 +1027,29 @@ final class TalosBrowserHmiController extends Controller
             'artifact_id' => (string) $input['artifact_id'],
             'artifact_sha256' => (string) $input['artifact_sha256'],
             'state_version' => (int) $input['state_version'],
-            'normalized_x' => round((float) $input['normalized_x'], 6),
-            'normalized_y' => round((float) $input['normalized_y'], 6),
             'button' => (string) $input['button'],
             'click_count' => (int) $input['click_count'],
         ];
+        if (($input['schema_version'] ?? null) === 'talos_browser_hmi_ref_v2') {
+            $binding['snapshot_id'] = (string) $input['snapshot_id'];
+            $binding['ref'] = (string) $input['ref'];
+        } else {
+            $binding['normalized_x'] = round((float) $input['normalized_x'], 6);
+            $binding['normalized_y'] = round((float) $input['normalized_y'], 6);
+        }
         if (isset($input['interaction_id'])) {
             $binding['interaction_id'] = (string) $input['interaction_id'];
         }
 
         return 'hmi_'.hash('sha256', $this->approvals->canonicalJson($binding));
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function interactionEventType(array $payload, string $suffix): string
+    {
+        return ($payload['schema_version'] ?? null) === 'talos_browser_hmi_ref_v2'
+            ? 'hmi.ref.'.$suffix
+            : 'hmi.pointer.'.$suffix;
     }
 
     /** @param array<string, mixed> $input */
@@ -862,6 +1124,40 @@ final class TalosBrowserHmiController extends Controller
         return $input;
     }
 
+    /** @return array<string, mixed>|JsonResponse */
+    private function refInput(Request $request): array|JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'schema_version' => ['required', 'string', 'in:talos_browser_hmi_ref_v2'],
+            'interaction_id' => ['required', 'uuid'],
+            'artifact_id' => ['required', 'uuid'],
+            'artifact_sha256' => ['required', 'string', 'regex:/^sha256:[a-f0-9]{64}$/'],
+            'state_version' => ['required', 'integer', 'min:0'],
+            'snapshot_id' => ['required', 'string', 'regex:/^hmi_ref_[a-f0-9]{64}$/'],
+            'ref' => ['required', 'string', 'regex:/^e[1-9][0-9]{0,9}$/'],
+            'button' => ['required', 'string', 'in:left'],
+            'click_count' => ['required', 'integer', 'in:1,2'],
+        ]);
+        if ($validator->fails()) {
+            return $this->validationError($validator->errors()->toArray());
+        }
+        $raw = $request->all();
+        $expectedKeys = [
+            'schema_version', 'interaction_id', 'artifact_id', 'artifact_sha256',
+            'state_version', 'snapshot_id', 'ref', 'button', 'click_count',
+        ];
+        $actualKeys = array_keys($raw);
+        sort($actualKeys);
+        sort($expectedKeys);
+        if ($actualKeys !== $expectedKeys
+            || ! is_int($raw['state_version'] ?? null)
+            || ! is_int($raw['click_count'] ?? null)) {
+            return $this->validationError(['ref' => ['Semantic ref values must use the exact canonical JSON contract.']]);
+        }
+
+        return $validator->validated();
+    }
+
     /** @param array<string, mixed> $input */
     private function currentFrame(TalosBrowserSession $session, array $input, string $commandId): TalosBrowserArtifact|JsonResponse
     {
@@ -927,6 +1223,129 @@ final class TalosBrowserHmiController extends Controller
         }
 
         return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $ref
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>|JsonResponse
+     */
+    private function refPreflightResult(TalosBrowserSession $session, array $ref, array $result): array|JsonResponse
+    {
+        $target = $result['target'] ?? null;
+        $point = $result['point'] ?? null;
+        if (is_string($result['frame_sha256'] ?? null)
+            && preg_match('/^sha256:[a-f0-9]{64}$/D', $result['frame_sha256']) === 1
+            && ! hash_equals((string) $ref['expected_frame_sha256'], $result['frame_sha256'])) {
+            return $this->frameStale();
+        }
+        if (! $this->hasExactKeys($result, [
+            'schema_version', 'interaction_id', 'session_id', 'state_version', 'frame_sha256',
+            'snapshot_id', 'ref', 'origin', 'point', 'target',
+        ])
+            || ($result['schema_version'] ?? null) !== 'talos_browser_hmi_ref_preflight_v2'
+            || ! is_string($result['interaction_id'] ?? null)
+            || ! hash_equals((string) ($ref['interaction_id'] ?? ''), $result['interaction_id'])
+            || ($result['session_id'] ?? null) !== $session->worker_session_id
+            || ($result['state_version'] ?? null) !== $ref['state_version']
+            || ! is_string($result['frame_sha256'] ?? null)
+            || ! hash_equals((string) $ref['expected_frame_sha256'], $result['frame_sha256'])
+            || ! is_string($result['snapshot_id'] ?? null)
+            || ! hash_equals((string) $ref['snapshot_id'], $result['snapshot_id'])
+            || ! is_string($result['ref'] ?? null)
+            || ! hash_equals((string) $ref['ref'], $result['ref'])
+            || ! is_string($result['origin'] ?? null)
+            || strlen($result['origin']) > 2048
+            || ! is_array($point)
+            || array_is_list($point)
+            || ! $this->hasExactKeys($point, ['normalized_x', 'normalized_y', 'x', 'y'])
+            || (! is_int($point['normalized_x'] ?? null) && ! is_float($point['normalized_x'] ?? null))
+            || (! is_int($point['normalized_y'] ?? null) && ! is_float($point['normalized_y'] ?? null))
+            || ! is_finite((float) ($point['normalized_x'] ?? NAN))
+            || ! is_finite((float) ($point['normalized_y'] ?? NAN))
+            || (float) $point['normalized_x'] < 0 || (float) $point['normalized_x'] > 1
+            || (float) $point['normalized_y'] < 0 || (float) $point['normalized_y'] > 1
+            || (! is_int($point['x'] ?? null) && ! is_float($point['x'] ?? null))
+            || (! is_int($point['y'] ?? null) && ! is_float($point['y'] ?? null))
+            || ! is_finite((float) ($point['x'] ?? NAN)) || (float) $point['x'] < 0
+            || ! is_finite((float) ($point['y'] ?? NAN)) || (float) $point['y'] < 0
+            || ! $this->validTarget($target)) {
+            return $this->error('TALOS_BROWSER_TARGET_STALE', 'Browser semantic target preflight did not match the current frame.', 409);
+        }
+
+        return $result;
+    }
+
+    /** @param array<string, mixed> $result */
+    private function validRefTargetsResult(
+        TalosBrowserSession $session,
+        TalosBrowserArtifact $frame,
+        array $result,
+    ): bool {
+        if (! $this->hasExactKeys($result, ['schema_version', 'session_id', 'state_version', 'frame_sha256', 'snapshot_id', 'targets'])
+            || ($result['schema_version'] ?? null) !== 'talos_browser_hmi_ref_targets_v2'
+            || ($result['session_id'] ?? null) !== $session->worker_session_id
+            || ($result['state_version'] ?? null) !== (int) $session->worker_state_version
+            || ! is_string($result['frame_sha256'] ?? null)
+            || ! hash_equals($this->prefixedHash((string) $frame->sha256), $result['frame_sha256'])
+            || ! is_string($result['snapshot_id'] ?? null)
+            || preg_match('/^hmi_ref_[a-f0-9]{64}$/D', $result['snapshot_id']) !== 1
+            || ! is_array($result['targets'] ?? null)
+            || ! array_is_list($result['targets'])
+            || count($result['targets']) > 250) {
+            return false;
+        }
+        $refs = [];
+        foreach ($result['targets'] as $target) {
+            if (! is_array($target)
+                || array_is_list($target)
+                || ! $this->hasExactKeys($target, ['ref', 'role', 'name', 'destination'])
+                || ! is_string($target['ref'] ?? null)
+                || preg_match('/^e[1-9][0-9]{0,9}$/D', $target['ref']) !== 1
+                || isset($refs[$target['ref']])
+                || ! is_string($target['role'] ?? null)
+                || $target['role'] === ''
+                || strlen($target['role']) > 64
+                || ! is_string($target['name'] ?? null)
+                || $target['name'] === ''
+                || strlen($target['name']) > 256
+                || ! $this->validRefDestination($target['destination'] ?? null)) {
+                return false;
+            }
+            $refs[$target['ref']] = true;
+        }
+
+        return true;
+    }
+
+    /** @param array<string, mixed> $value @param list<string> $expected */
+    private function hasExactKeys(array $value, array $expected): bool
+    {
+        $actual = array_keys($value);
+        sort($actual);
+        sort($expected);
+
+        return $actual === $expected;
+    }
+
+    private function validRefDestination(mixed $destination): bool
+    {
+        if ($destination === null) {
+            return true;
+        }
+        if (! is_string($destination) || $destination === '' || strlen($destination) > 2048 || filter_var($destination, FILTER_VALIDATE_URL) === false) {
+            return false;
+        }
+        $parts = parse_url($destination);
+
+        return is_array($parts)
+            && in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)
+            && is_string($parts['host'] ?? null)
+            && $parts['host'] !== ''
+            && ! isset($parts['user'])
+            && ! isset($parts['pass'])
+            && ! isset($parts['query'])
+            && ! isset($parts['fragment']);
     }
 
     private function validTarget(mixed $target): bool
@@ -1150,14 +1569,16 @@ final class TalosBrowserHmiController extends Controller
         array $payload,
         array $decision,
     ): array {
+        $semanticRef = ($payload['schema_version'] ?? null) === 'talos_browser_hmi_ref_v2';
+
         return [
             'owner_id' => (int) $session->user_id,
             'browser_session_id' => (string) $session->id,
             'artifact_id' => (string) $frame->id,
             'artifact_sha256' => $this->prefixedHash((string) $frame->sha256),
             'state_version' => (int) $session->worker_state_version,
-            'normalized_x' => $payload['normalized_x'],
-            'normalized_y' => $payload['normalized_y'],
+            'normalized_x' => $semanticRef ? $preflight['point']['normalized_x'] : $payload['normalized_x'],
+            'normalized_y' => $semanticRef ? $preflight['point']['normalized_y'] : $payload['normalized_y'],
             'button' => $payload['button'],
             'click_count' => $payload['click_count'],
             'target_fingerprint' => $preflight['target']['fingerprint'],
@@ -1169,16 +1590,31 @@ final class TalosBrowserHmiController extends Controller
     /** @return array<string, mixed> */
     private function approvalPointerInput(TalosBrowserHmiApproval $approval): array
     {
-        return [
-            'schema_version' => 'talos_browser_hmi_pointer_v2',
+        $payload = is_array($approval->payload) && ! array_is_list($approval->payload)
+            ? $approval->payload
+            : [];
+        $input = [
+            'schema_version' => (string) $approval->payload_version,
             'interaction_id' => (string) $approval->interaction_id,
             'artifact_id' => (string) $approval->artifact_id,
             'artifact_sha256' => (string) $approval->artifact_sha256,
             'state_version' => (int) $approval->state_version,
-            'normalized_x' => (float) $approval->normalized_x,
-            'normalized_y' => (float) $approval->normalized_y,
             'button' => (string) $approval->button,
             'click_count' => (int) $approval->click_count,
+        ];
+        if ($approval->payload_version === 'talos_browser_hmi_ref_v2') {
+            return [
+                ...$input,
+                'snapshot_id' => (string) ($payload['snapshot_id'] ?? ''),
+                'ref' => (string) ($payload['ref'] ?? ''),
+            ];
+        }
+
+        return [
+            ...$input,
+            'schema_version' => 'talos_browser_hmi_pointer_v2',
+            'normalized_x' => (float) $approval->normalized_x,
+            'normalized_y' => (float) $approval->normalized_y,
         ];
     }
 
@@ -1214,17 +1650,23 @@ final class TalosBrowserHmiController extends Controller
                 : $this->notFound();
     }
 
-    private function preflightFailure(TalosBrowserSession $session, string $commandId, BrowserWorkerException $exception): JsonResponse
+    private function preflightFailure(
+        TalosBrowserSession $session,
+        string $commandId,
+        BrowserWorkerException $exception,
+        string $interactionKind = 'pointer',
+    ): JsonResponse
     {
         $status = match ($exception->errorCode) {
-            'TALOS_BROWSER_FRAME_STALE', 'TALOS_BROWSER_STALE_STATE', 'TALOS_BROWSER_TARGET_STALE' => 409,
+            'TALOS_BROWSER_FRAME_STALE', 'TALOS_BROWSER_STALE_STATE', 'TALOS_BROWSER_TARGET_STALE', 'TALOS_BROWSER_HMI_REF_SNAPSHOT_INVALID' => 409,
             'TALOS_BROWSER_HMI_CAPABILITY_DENIED', 'TALOS_BROWSER_HMI_TARGET_DENIED', 'TALOS_BROWSER_HMI_TARGET_MISSING' => 403,
-            'TALOS_BROWSER_HMI_TARGET_BOUNDS' => 413,
-            'TALOS_BROWSER_HMI_INVALID_POINTER' => 422,
+            'TALOS_BROWSER_HMI_TARGET_BOUNDS', 'TALOS_BROWSER_HMI_REF_SNAPSHOT_BOUNDS' => 413,
+            'TALOS_BROWSER_HMI_INVALID_POINTER', 'TALOS_BROWSER_HMI_INVALID_REF' => 422,
             'TALOS_BROWSER_WORKER_UNAVAILABLE' => 503,
             default => 502,
         };
-        if (($audit = $this->auditedEvent($session, $status === 409 ? 'hmi.pointer.stale' : 'hmi.preflight.failed', 'worker', [
+        $staleEvent = $interactionKind === 'ref' ? 'hmi.ref.stale' : 'hmi.pointer.stale';
+        if (($audit = $this->auditedEvent($session, $status === 409 ? $staleEvent : 'hmi.preflight.failed', 'worker', [
             'command_id' => $commandId,
             'code' => $exception->errorCode,
         ])) instanceof JsonResponse) {
@@ -1259,6 +1701,22 @@ final class TalosBrowserHmiController extends Controller
                 );
             }
         }
+        $this->markRecoveryRequired($session, $commandId, $approvalId, $reason);
+
+        return $this->error(
+            'TALOS_BROWSER_HMI_RECOVERY_REQUIRED',
+            'The browser interaction may have occurred, but TALOS could not commit current evidence.',
+            409,
+            ['reason' => $reason],
+        );
+    }
+
+    private function markRecoveryRequired(
+        TalosBrowserSession $session,
+        ?string $commandId,
+        ?string $approvalId,
+        string $reason,
+    ): void {
         try {
             TalosBrowserSession::query()->whereKey($session->id)->where('user_id', $session->user_id)->update([
                 'status' => 'recovery_required',
@@ -1277,13 +1735,6 @@ final class TalosBrowserHmiController extends Controller
         } catch (Throwable) {
             // The recovery response must survive an unavailable audit store.
         }
-
-        return $this->error(
-            'TALOS_BROWSER_HMI_RECOVERY_REQUIRED',
-            'The browser interaction may have occurred, but TALOS could not commit current evidence.',
-            409,
-            ['reason' => $reason],
-        );
     }
 
     private function executionLeaseLost(?string $approvalId): JsonResponse
@@ -1560,7 +2011,10 @@ final class TalosBrowserHmiController extends Controller
             'TALOS_BROWSER_HMI_CAPABILITY_DENIED',
             'TALOS_BROWSER_HMI_CONTEXT_INVALID',
             'TALOS_BROWSER_HMI_DOWNLOAD_DENIED',
+            'TALOS_BROWSER_HMI_INVALID_REF',
             'TALOS_BROWSER_HMI_INVALID_POINTER',
+            'TALOS_BROWSER_HMI_REF_SNAPSHOT_BOUNDS',
+            'TALOS_BROWSER_HMI_REF_SNAPSHOT_INVALID',
             'TALOS_BROWSER_HMI_NEW_CONTEXT_DENIED',
             'TALOS_BROWSER_HMI_SINGLE_PAGE_INVARIANT',
             'TALOS_BROWSER_HMI_TARGET_DENIED',

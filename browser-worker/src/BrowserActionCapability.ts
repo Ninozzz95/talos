@@ -184,7 +184,8 @@ export class BrowserActionCapabilityVerifier {
     assertBinding("operation", claim.data.operation, expected.operation);
     if (claim.data.precondition_state_version !== expected.preconditionStateVersion) mismatch("state");
     if (!constantTimeTextEqual(canonicalJson(claim.data.request), canonicalJson(expected.request))) mismatch("request");
-    if (expected.operation === "hmi_pointer_execute" && claim.data.authorization.kind !== "user_approval") mismatch("authorization");
+    if (["hmi_pointer_execute", "hmi_ref_execute"].includes(expected.operation)
+      && claim.data.authorization.kind !== "user_approval") mismatch("authorization");
     if (expected.operation === "browser_file_upload" && claim.data.authorization.kind !== "user_approval") mismatch("authorization");
     if (expected.operation === "browser_click" && claim.data.authorization.kind !== "policy") mismatch("authorization");
 

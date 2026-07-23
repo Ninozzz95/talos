@@ -340,6 +340,137 @@ describe('useTalosWorkspaceBrowse async chat isolation', () => {
         expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).toEqual(expect.arrayContaining(['activity-new']))
         expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).not.toContain('activity-old')
     })
+
+    it('STAGE2A-009 routes recoverable tasks to recovery and stopped sessions to an existing fresh replacement', async () => {
+        const recoverySession: TalosBrowserSession = {
+            id: 'browser-recovery', talos_session_id: 'chat-a', status: 'recovery_required', mode: 'read_only',
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'], state_version: 7,
+            current_url: 'https://example.com/recovery', current_title: 'Recovery page',
+            last_screenshot_artifact_id: 'screen-7', last_snapshot_artifact_id: 'snapshot-7',
+            created_at: '2026-07-22T12:00:00Z', updated_at: '2026-07-22T12:00:00Z',
+        }
+        const task: TalosBrowserTask = {
+            id: 'task-recovery', talos_session_id: 'chat-a', origin_message_id: 'message-recovery',
+            browser_session_id: recoverySession.id, runtime_id: 'runtime-recovery', active_tab_id: 'tab-recovery',
+            goal: 'Recover without redispatch.', status: 'running', autonomy_profile: 'assist', budget: {}, state_version: 3,
+            requested_at: '2026-07-22T12:00:00Z', started_at: '2026-07-22T12:00:01Z',
+            completed_at: null, failed_at: null, cancelled_at: null, reconciled_at: null,
+            created_at: '2026-07-22T12:00:00Z', updated_at: '2026-07-22T12:00:01Z',
+        }
+        const recovered = { ...task, status: 'recovering' as const, state_version: 4, reconciled_at: '2026-07-22T12:00:02Z' }
+        talosFetchMock.mockReset()
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [recoverySession] } as never
+            if (url === `/api/talos/browser/sessions/${recoverySession.id}`) return { data: recoverySession } as never
+            if (url === `/api/talos/browser/sessions/${recoverySession.id}/events`) return { data: [] } as never
+            if (url === `/api/talos/browser/tasks/${task.id}/recover` && options?.method === 'POST') return { data: {
+                decision: {
+                    strategy: 'reconcile', reason_code: 'browser_recovery_evidence_reconcile',
+                    remediation: 'Capture missing evidence.', task_id: task.id, resulting_task_id: null,
+                },
+                task: recovered,
+                resulting_task: null,
+            } } as never
+            throw new Error(`Unexpected recovery request: ${url}`)
+        })
+        const workspace = useTalosWorkspaceBrowse(false, ref<string | null>(null), ref('chat-a'), async () => 'chat-a')
+
+        await workspace.handleEnableBrowse()
+        workspace.browserTasks.value = [task]
+        expect(workspace.browserRecoveryAction.value).toBe('recover_task')
+
+        await workspace.handleRecoverBrowse()
+
+        expect(talosFetchMock).toHaveBeenCalledWith(`/api/talos/browser/tasks/${task.id}/recover`, expect.objectContaining({ method: 'POST' }))
+        expect(workspace.browserTasks.value[0]?.status).toBe('recovering')
+        expect(talosFetchMock.mock.calls.some(([url, options]) => url === '/api/talos/browser/sessions' && options?.method === 'POST')).toBe(false)
+
+        const closed = { ...recoverySession, status: 'closed', updated_at: '2026-07-22T12:00:03Z' }
+        const replacement = {
+            ...recoverySession,
+            id: 'browser-replacement',
+            status: 'ready',
+            state_version: 0,
+            last_screenshot_artifact_id: null,
+            last_snapshot_artifact_id: null,
+            updated_at: '2026-07-22T12:00:04Z',
+        }
+        workspace.activeBrowserSession.value = closed
+        workspace.browserMode.value = { enabled: true, session_id: closed.id, status: 'stopped', capabilities: closed.capabilities }
+        workspace.browserTasks.value = []
+        talosFetchMock.mockReset()
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [closed, replacement] } as never
+            if (url === `/api/talos/browser/sessions/${replacement.id}`) return { data: replacement } as never
+            if (url === `/api/talos/browser/sessions/${replacement.id}/events`) return { data: [] } as never
+            if (url === '/api/talos/browser/sessions' && options?.method === 'POST') throw new Error('Existing replacement must be selected.')
+            throw new Error(`Unexpected replacement request: ${url}`)
+        })
+
+        expect(workspace.browserRecoveryAction.value).toBe('start_fresh')
+        await workspace.handleRecoverBrowse()
+
+        expect(workspace.activeBrowserSession.value?.id).toBe(replacement.id)
+        expect(talosFetchMock.mock.calls.some(([url, options]) => url === '/api/talos/browser/sessions' && options?.method === 'POST')).toBe(false)
+    })
+
+    it('STAGE2B-015 forwards the active semantic frame and exact ref interaction once', async () => {
+        const active: TalosBrowserSession = {
+            id: 'browser-ref', talos_session_id: 'chat-a', status: 'active', mode: 'read_only',
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'], state_version: 7,
+            viewport: { width: 1280, height: 800 },
+            current_url: 'https://example.com/start', current_title: 'Start page',
+            last_screenshot_artifact_id: 'screen-7', last_snapshot_artifact_id: 'snapshot-7',
+            created_at: '2026-07-22T12:00:00Z', updated_at: '2026-07-22T12:00:00Z',
+        }
+        const updated = {
+            ...active,
+            state_version: 8,
+            last_screenshot_artifact_id: 'screen-8',
+            last_snapshot_artifact_id: 'snapshot-8',
+        }
+        let executed = false
+        talosFetchMock.mockReset()
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === '/api/talos/browser/sessions?talos_session_id=chat-a') return { data: [active] } as never
+            if (url === `/api/talos/browser/sessions/${active.id}`) return { data: active } as never
+            if (url === `/api/talos/browser/sessions/${active.id}/events`) return { data: [] } as never
+            if (url === `/api/talos/browser/sessions/${active.id}/interaction-targets`) {
+                return { data: workspaceRefFrame(executed ? updated : active, executed ? 'e2' : 'e1') } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/interactions/ref` && options?.method === 'POST') {
+                executed = true
+                return { data: workspaceRefExecution(updated) } as never
+            }
+            throw new Error(`Unexpected semantic interaction request: ${url}`)
+        })
+        const workspace = useTalosWorkspaceBrowse(false, ref<string | null>(null), ref('chat-a'), async () => 'chat-a')
+
+        await workspace.handleEnableBrowse()
+        expect(workspace.browserRefFrame.value).toEqual(workspaceRefFrame(active, 'e1'))
+
+        const frame = workspace.browserRefFrame.value!
+        await workspace.interactWithBrowserRef({
+            browserSessionId: active.id,
+            artifact: frame.screenshot,
+            snapshotId: frame.snapshot_id,
+            ref: frame.targets[0].ref,
+            clickCount: 1,
+        })
+
+        expect(workspace.browserRefFrame.value).toEqual(workspaceRefFrame(updated, 'e2'))
+        expect(workspace.browserRefTargetsLoading.value).toBe(false)
+        expect(workspace.browserRefTargetsError.value).toBeNull()
+        const calls = talosFetchMock.mock.calls.filter(([url]) => String(url).endsWith('/interactions/ref'))
+        expect(calls).toHaveLength(1)
+        expect(JSON.parse(String(calls[0]?.[1]?.body))).toMatchObject({
+            schema_version: 'talos_browser_hmi_ref_v2',
+            artifact_id: 'screen-7',
+            state_version: 7,
+            snapshot_id: `hmi_ref_${'d'.repeat(64)}`,
+            ref: 'e1',
+        })
+    })
 })
 
 describe('HJ9-042 browser session reconciliation after chat tool activity', () => {
@@ -482,3 +613,43 @@ describe('HJ9-042 browser session reconciliation after chat tool activity', () =
         expect(workspace.visibleBrowserActivities.value.map((activity) => activity.id)).toEqual(['activity-session-start'])
     })
 })
+
+function workspaceRefFrame(session: TalosBrowserSession, ref: string) {
+    return {
+        schema_version: 'talos_browser_hmi_ref_targets_v2' as const,
+        browser_session_id: session.id,
+        state_version: session.state_version ?? 0,
+        frame_sha256: `sha256:${'a'.repeat(64)}`,
+        snapshot_id: `hmi_ref_${'d'.repeat(64)}`,
+        screenshot: {
+            id: session.last_screenshot_artifact_id ?? '',
+            browser_session_id: session.id,
+            type: 'screenshot',
+            mime: 'image/png',
+            sha256: 'a'.repeat(64),
+            state_version: session.state_version,
+            metadata: { width: 1280, height: 800 },
+        },
+        targets: [{ ref, role: 'button', name: ref === 'e1' ? 'Continue' : 'Receipt', destination: null }],
+    }
+}
+
+function workspaceRefExecution(session: TalosBrowserSession) {
+    return {
+        interaction: { status: 'executed' as const, command_id: 'command-ref-1' },
+        session,
+        screenshot: {
+            ...workspaceRefFrame(session, 'e2').screenshot,
+            preview_url: `/api/talos/browser/artifacts/${session.last_screenshot_artifact_id}/preview`,
+        },
+        snapshot: {
+            id: session.last_snapshot_artifact_id ?? 'snapshot-8',
+            browser_session_id: session.id,
+            type: 'snapshot',
+            mime: 'application/json',
+            sha256: 'b'.repeat(64),
+            state_version: session.state_version,
+            metadata: {},
+        },
+    }
+}

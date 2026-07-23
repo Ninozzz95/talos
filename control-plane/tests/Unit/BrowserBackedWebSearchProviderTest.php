@@ -479,6 +479,21 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
         throw new \LogicException('Browser search must not use HMI pointer preflight.');
     }
 
+    public function refTargets(
+        string $ownerRef,
+        string $workerSessionId,
+        int $stateVersion,
+        string $expectedFrameSha256,
+        int $timeoutMilliseconds = 15000,
+    ): array {
+        throw new \LogicException('Browser search must not list HMI ref targets.');
+    }
+
+    public function preflightRef(string $ownerRef, string $workerSessionId, array $payload, int $timeoutMilliseconds = 15000): array
+    {
+        throw new \LogicException('Browser search must not use HMI ref preflight.');
+    }
+
     public function executePointer(
         string $ownerRef,
         string $workerSessionId,
@@ -487,6 +502,16 @@ final class RecordingBrowserSessionClient implements BrowserSessionClient
         ?BrowserActionAuthorization $authorization = null,
     ): array {
         throw new \LogicException('Browser search must not use HMI pointer execution.');
+    }
+
+    public function executeRef(
+        string $ownerRef,
+        string $workerSessionId,
+        array $payload,
+        int $timeoutMilliseconds = 15000,
+        ?BrowserActionAuthorization $authorization = null,
+    ): array {
+        throw new \LogicException('Browser search must not use HMI ref execution.');
     }
 
     public function close(string $ownerRef, string $workerSessionId, int $timeoutMilliseconds = 15000): void
