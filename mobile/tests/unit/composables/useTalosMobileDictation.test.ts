@@ -41,9 +41,12 @@ describe('useTalosMobileDictation (F2-T5)', () => {
         const dictation = useTalosMobileDictation({ base: () => base, onTranscript, engine })
         await flush()
         await dictation.toggle()
-        expect(dictation.status.value).toBe('listening')
+        // F5-#29: tap gives IMMEDIATE feedback; real listening is confirmed
+        // by the engine (started signal or first partial), never assumed.
+        expect(dictation.status.value).toBe('starting')
         base = 'MUTATED AFTER START' // base must be captured at start time
         events().onPartial('hello')
+        expect(dictation.status.value).toBe('listening')
         events().onPartial('hello world')
         expect(onTranscript).toHaveBeenNthCalledWith(1, 'Existing note hello')
         expect(onTranscript).toHaveBeenNthCalledWith(2, 'Existing note hello world')
@@ -89,14 +92,120 @@ describe('useTalosMobileDictation (F2-T5)', () => {
         expect(dictation.error.value).toBe('Speech service unavailable.')
     })
 
-    it('natural end (native timeout) returns to idle silently', async () => {
+    it('natural end AFTER speech returns to idle silently', async () => {
         const { engine, events } = engineStub()
         const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
         await flush()
         await dictation.toggle()
+        events().onPartial('qualcosa')
         events().onEnd()
         expect(dictation.status.value).toBe('idle')
         expect(dictation.error.value).toBeNull()
+    })
+})
+
+// F5-#29 — owner device report: tap did NOTHING (no recording, no error).
+// Plugin source truth: with partialResults the native call resolves BEFORE
+// listening, and runtime recognizer errors are rejected on an already-released
+// call (lost) while stopListening() emits no event. The composable therefore
+// owns liveness: every tap path must end in a user-visible state.
+describe('tap-path liveness (F5-#29)', () => {
+    it('confirms listening on the engine started signal', async () => {
+        const { engine, events } = engineStub()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        await dictation.toggle()
+        expect(dictation.status.value).toBe('starting')
+        events().onStart?.()
+        expect(dictation.status.value).toBe('listening')
+    })
+
+    it('a start that never hears anything times out into a visible error', async () => {
+        vi.useFakeTimers()
+        try {
+            const { engine } = engineStub()
+            const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+            await vi.runOnlyPendingTimersAsync()
+            await dictation.toggle()
+            expect(dictation.status.value).toBe('starting')
+            await vi.advanceTimersByTimeAsync(8100)
+            expect(engine.stop).toHaveBeenCalled()
+            expect(dictation.status.value).toBe('error')
+            expect(dictation.error.value).toMatch(/did not hear|non risponde|speech/i)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('an end without ANY recognized speech reports it instead of going silent', async () => {
+        const { engine, events } = engineStub()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        await dictation.toggle()
+        events().onStart?.()
+        events().onEnd()
+        expect(dictation.status.value).toBe('error')
+        expect(dictation.error.value).toMatch(/no speech|didn't hear|did not hear/i)
+    })
+
+    it('SF5-1 BLOCKER characterization: stop returns to idle even if the native stop() never settles', async () => {
+        // Real plugin behavior (SpeechRecognition.java stop()): the call is
+        // never resolved — the UI must not deadlock on it.
+        const neverSettles = new Promise<void>(() => {})
+        const { engine, events } = engineStub({ stop: vi.fn(() => neverSettles) })
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        await dictation.toggle()
+        events().onStart?.()
+        expect(dictation.status.value).toBe('listening')
+        await dictation.toggle()
+        expect(dictation.status.value).toBe('idle')
+    })
+
+    it('SF5-2: recognizer death during listening surfaces after the inactivity window', async () => {
+        vi.useFakeTimers()
+        try {
+            const { engine, events } = engineStub()
+            const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+            await vi.runOnlyPendingTimersAsync()
+            await dictation.toggle()
+            events().onStart?.()
+            events().onPartial('ciao')
+            expect(dictation.status.value).toBe('listening')
+            // No partial, no end, no error for the whole inactivity window —
+            // the silent-death plugin behavior.
+            await vi.advanceTimersByTimeAsync(15_100)
+            expect(dictation.status.value).toBe('error')
+            expect(dictation.error.value).toMatch(/stopped responding|interrotto|no longer/i)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('SF5-3: cancel() silently ends the session for send-time cleanup', async () => {
+        const { engine, events } = engineStub()
+        const onTranscript = vi.fn()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript, engine })
+        await flush()
+        await dictation.toggle()
+        events().onStart?.()
+        dictation.cancel()
+        expect(dictation.status.value).toBe('idle')
+        expect(dictation.error.value).toBeNull()
+        // Late partials from the dying session must NOT resurrect sent text.
+        events().onPartial('testo fantasma')
+        expect(onTranscript).not.toHaveBeenCalled()
+    })
+
+    it('tapping again while starting cancels cleanly to idle', async () => {
+        const { engine } = engineStub()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        await dictation.toggle()
+        expect(dictation.status.value).toBe('starting')
+        await dictation.toggle()
+        expect(engine.stop).toHaveBeenCalledOnce()
+        expect(dictation.status.value).toBe('idle')
     })
 })
 

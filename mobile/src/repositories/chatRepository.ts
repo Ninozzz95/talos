@@ -227,6 +227,45 @@ export interface CreateMemoryInput {
     created_at: string
 }
 
+export type TalosTaskStatus = 'todo' | 'doing' | 'done'
+export type TalosTaskPriority = 'low' | 'normal' | 'high'
+
+export interface TalosLocalTask {
+    id: string
+    title: string
+    description: string | null
+    run_id: string | null
+    priority: TalosTaskPriority
+    status: TalosTaskStatus
+    created_at: string
+    updated_at: string
+}
+
+export interface CreateTaskInput {
+    id: string
+    title: string
+    description: string | null
+    run_id: string | null
+    priority: TalosTaskPriority
+    created_at: string
+}
+
+export interface TalosLocalNote {
+    id: string
+    title: string
+    content: string
+    trust_level: 'untrusted'
+    created_at: string
+    updated_at: string
+}
+
+export interface CreateNoteInput {
+    id: string
+    title: string
+    content: string
+    created_at: string
+}
+
 export interface TalosChatRepository {
     initialize(): Promise<void>
     listSessions(): Promise<TalosLocalChatSession[]>
@@ -254,6 +293,13 @@ export interface TalosChatRepository {
     listMessageAttachments(messageId: string): Promise<TalosChatAttachmentBinding[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
+    createTask(input: CreateTaskInput): Promise<TalosLocalTask>
+    listTasks(): Promise<TalosLocalTask[]>
+    setTaskStatus(taskId: string, status: TalosTaskStatus): Promise<TalosLocalTask>
+    deleteTask(taskId: string): Promise<void>
+    createNote(input: CreateNoteInput): Promise<TalosLocalNote>
+    listNotes(): Promise<TalosLocalNote[]>
+    deleteNote(noteId: string): Promise<void>
     createMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
     listMemories(): Promise<TalosLocalMemory[]>
     updateMemoryStatus(memoryId: string, status: TalosMemoryStatus): Promise<TalosLocalMemory>
@@ -266,6 +312,13 @@ export const TALOS_COMPOSER_DRAFT_MAX_LENGTH = 262_144
 
 const TALOS_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
 const TALOS_SHA256_PATTERN = /^[a-f0-9]{64}$/i
+
+/** SF5-6: station titles share the sessions discipline — trimmed, 1..255. */
+export function normalizeStationTitle(value: string): string {
+    const title = value.replace(/\s+/g, ' ').trim().slice(0, 255)
+    if (!title) throw new Error('TALOS_TITLE_INVALID')
+    return title
+}
 
 export function normalizeRepositoryId(value: string): string {
     if (!TALOS_ID_PATTERN.test(value)) throw new Error('TALOS_LOCAL_ID_INVALID')

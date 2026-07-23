@@ -211,6 +211,22 @@ export interface ChatController {
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<void>
     deleteSession(sessionId: string): Promise<void>
+    tasks: {
+        list(): Promise<import('@/repositories/chatRepository').TalosLocalTask[]>
+        create(input: {
+            title: string
+            description: string | null
+            run_id: string | null
+            priority: 'low' | 'normal' | 'high'
+        }): Promise<import('@/repositories/chatRepository').TalosLocalTask>
+        setStatus(taskId: string, status: 'todo' | 'doing' | 'done'): Promise<import('@/repositories/chatRepository').TalosLocalTask>
+        remove(taskId: string): Promise<void>
+    }
+    notes: {
+        list(): Promise<import('@/repositories/chatRepository').TalosLocalNote[]>
+        create(input: { title: string; content: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
+        remove(noteId: string): Promise<void>
+    }
     memories: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalMemory[]>
         create(input: {
@@ -903,6 +919,36 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         remove: (memoryId: string) => deps.chatRepository.deleteMemory(memoryId),
     }
 
+    // F5 stations — run-linked local tasks and untrusted notes (airplane-mode
+    // functional; the stations are the only writers).
+    const tasks = {
+        list: () => deps.chatRepository.listTasks(),
+        create: (input: { title: string; description: string | null; run_id: string | null; priority: 'low' | 'normal' | 'high' }) =>
+            deps.chatRepository.createTask({
+                id: newTalosMobileId(),
+                title: input.title,
+                description: input.description,
+                run_id: input.run_id,
+                priority: input.priority,
+                created_at: new Date().toISOString(),
+            }),
+        setStatus: (taskId: string, status: 'todo' | 'doing' | 'done') =>
+            deps.chatRepository.setTaskStatus(taskId, status),
+        remove: (taskId: string) => deps.chatRepository.deleteTask(taskId),
+    }
+
+    const notes = {
+        list: () => deps.chatRepository.listNotes(),
+        create: (input: { title: string; content: string }) =>
+            deps.chatRepository.createNote({
+                id: newTalosMobileId(),
+                title: input.title,
+                content: input.content,
+                created_at: new Date().toISOString(),
+            }),
+        remove: (noteId: string) => deps.chatRepository.deleteNote(noteId),
+    }
+
     async function send(text: string): Promise<boolean> {
         clearPromptEnhancement()
         const accepted = await chat.send(
@@ -1009,6 +1055,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         renameSession,
         deleteSession,
         memories,
+        tasks,
+        notes,
         resendMessage,
         retryAssistantMessage,
         send,

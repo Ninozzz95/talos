@@ -144,6 +144,7 @@ function scopeLabel(memory: TalosLocalMemory): string {
             <input
                 v-model="form.title"
                 data-testid="talos-memory-title"
+                maxlength="255"
                 aria-label="Memory title"
                 placeholder="Title"
                 class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"

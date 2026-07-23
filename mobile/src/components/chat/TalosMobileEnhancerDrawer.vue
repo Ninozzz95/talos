@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
+import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
 
@@ -31,12 +32,15 @@ const emit = defineEmits<{
 <template>
     <TalosMobileComposerSheet title="Prompt enhancement" testid="talos-enhancer-drawer" @close="emit('close')">
         <div aria-live="polite" class="pb-2">
+            <!-- F5-#30 (owner): modern TALOS loading — the boot-logo line
+                 loader carries the wait, the text stays as the caption. -->
             <div
                 v-if="enhancing"
                 data-testid="talos-mobile-enhancer-status"
                 role="status"
-                class="rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
+                class="flex flex-col items-center gap-3 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-6 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
             >
+                <TalosLineLoader :width="140" />
                 Improving prompt with {{ modelTitle }}…
             </div>
             <div

@@ -46,6 +46,7 @@ function mountPanel(replayIntro = vi.fn()) {
     return {
         wrapper: mount(TalosMobileSettingsAccountPanel, {
             global: {
+                stubs: { teleport: true },
                 provide: {
                     [TALOS_MOBILE_INTRO_KEY as symbol]: {
                         introOpen: computed(() => false),
@@ -78,6 +79,9 @@ describe('TalosMobileSettingsAccountPanel app lock (F4-#25 OTP flow)', () => {
     it('enabling walks the OTP setup: 6-digit PIN, then confirm, arming on match', async () => {
         const { wrapper } = mountPanel()
         await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
+        await flushPromises()
+        // F5-#32: the PIN journey is a dedicated fullscreen modal.
+        expect(wrapper.get('[data-testid="talos-applock-modal"]').attributes('aria-modal')).toBe('true')
         await wrapper.get('[data-testid="talos-applock-pin"]').setValue('123456')
         await flushPromises()
         await wrapper.get('[data-testid="talos-applock-pin-confirm"]').setValue('123456')
