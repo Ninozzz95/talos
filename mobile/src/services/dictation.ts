@@ -213,16 +213,53 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
     if (!native) {
         return { native, pluginLoaded: webSpeechConstructor() !== null, available: webSpeechConstructor() !== null, error: null }
     }
-    try {
-        const plugin = await loadPlugin()
+
+    // F5.3 (owner: "debug più esplicativo") — every step probed SEPARATELY,
+    // fenced, and written to the Doctor ring, so a single report pins the
+    // exact dying step without adb.
+    const steps: string[] = []
+    const step = async <T>(name: string, run: () => Promise<T>, ms = 3000): Promise<T | null> => {
         try {
-            const result = await plugin.available()
-            return { native, pluginLoaded: true, available: result.available === true, error: null }
+            const value = await talosWithTimeout(run(), ms, `TALOS_SPEECH_STEP_${name}`)
+            steps.push(`${name}:ok`)
+            return value
         } catch (error) {
-            return { native, pluginLoaded: true, available: null, error: String(error) }
+            const detail = String(error).slice(0, 120)
+            steps.push(`${name}:FAIL ${detail}`)
+            talosLogDeviceIssue(`TALOS_SPEECH_STEP_${name}`, detail)
+            return null
         }
-    } catch (error) {
-        return { native, pluginLoaded: false, available: null, error: String(error) }
+    }
+
+    // Step 0 — is the plugin REGISTERED in the native runtime? Synchronous,
+    // cannot hang; false means the native class failed to load and every
+    // bridge call to it will die.
+    let registered = false
+    try {
+        registered = Capacitor.isPluginAvailable('SpeechRecognition')
+    } catch { registered = false }
+    steps.push(`registered:${registered}`)
+    if (!registered) {
+        talosLogDeviceIssue('TALOS_SPEECH_STEP_registered', 'plugin NOT registered in the native runtime')
+        return { native, pluginLoaded: false, available: null, error: steps.join(' · ') }
+    }
+
+    const plugin = await step('import', () => loadPlugin(), 4000)
+    if (!plugin) return { native, pluginLoaded: false, available: null, error: steps.join(' · ') }
+
+    const version = await step('version', () => plugin.getPluginVersion?.() ?? Promise.resolve({ version: 'n/a' }))
+    if (version && typeof (version as { version?: string }).version === 'string') {
+        steps.push(`v${(version as { version: string }).version}`)
+    }
+    const permissions = await step('checkPermissions', () => plugin.checkPermissions())
+    if (permissions) steps.push(`perm:${JSON.stringify(permissions).slice(0, 60)}`)
+    const availability = await step('available', () => plugin.available())
+
+    return {
+        native,
+        pluginLoaded: true,
+        available: availability ? (availability as { available?: boolean }).available === true : null,
+        error: steps.join(' · '),
     }
 }
 
@@ -230,9 +267,15 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
 export async function requestTalosDictationPermission(): Promise<boolean> {
     if (!Capacitor.isNativePlatform()) return true
     try {
-        const status = await (await loadPlugin()).requestPermissions()
-        return status.speechRecognition === 'granted'
-    } catch {
+        const plugin = await loadPlugin()
+        const status = (await talosWithTimeout(
+            plugin.requestPermissions(),
+            30000,
+            'TALOS_SPEECH_PERMISSION_INTRO',
+        )) as unknown as Record<string, string>
+        return status.speechRecognition === 'granted' || status.microphone === 'granted'
+    } catch (error) {
+        talosLogDeviceIssue('TALOS_SPEECH_PERMISSION_INTRO', String(error))
         return false
     }
 }
