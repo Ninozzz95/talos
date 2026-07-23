@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
-import { FileText, Image } from '@lucide/vue'
+import { BookMarked, FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
@@ -129,6 +129,17 @@ function formatBytes(value: number): string {
                         :content="message.content"
                         :sensitive="message.metadata.sensitive === true"
                     />
+                    <!-- F4 Memory: disclosure of injected untrusted memories -->
+                    <div
+                        v-if="Array.isArray(message.metadata.used_memories) && message.metadata.used_memories.length"
+                        data-testid="talos-used-memories"
+                        class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-[11px] leading-4"
+                        :title="(message.metadata.used_memories as Array<{ title?: string }>).map((entry) => entry?.title ?? '').join(' · ')"
+                    >
+                        <BookMarked class="size-3.5 shrink-0" aria-hidden="true" />
+                        {{ message.metadata.used_memories.length }}
+                        {{ message.metadata.used_memories.length === 1 ? 'memory' : 'memories' }} used
+                    </div>
                     <div
                         v-if="message.attachments?.length"
                         class="mt-2 flex max-w-full flex-wrap gap-1.5"
@@ -209,11 +220,15 @@ function formatBytes(value: number): string {
             role="status"
             aria-live="polite"
         >
-            <span class="flex items-center gap-1" aria-hidden="true">
-                <span class="talos-typing-dot"></span>
-                <span class="talos-typing-dot"></span>
-                <span class="talos-typing-dot"></span>
-            </span>
+            <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
+                 empty nodes; each node fills as the line passes through it. -->
+            <svg class="talos-line-loader" viewBox="0 0 96 16" width="96" height="16" aria-hidden="true">
+                <line class="talos-line-loader-track" x1="4" y1="8" x2="92" y2="8" />
+                <line class="talos-line-loader-sweep" x1="4" y1="8" x2="92" y2="8" />
+                <circle class="talos-line-loader-node" cx="16" cy="8" r="4" />
+                <circle class="talos-line-loader-node" cx="48" cy="8" r="4" />
+                <circle class="talos-line-loader-node" cx="80" cy="8" r="4" />
+            </svg>
             <span class="sr-only">Processing</span>
         </div>
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>

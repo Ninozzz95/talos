@@ -11,6 +11,7 @@ import {
 const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers: string[] }> = {
     chat: { file: 'ChatScreen.vue', component: 'ChatScreen', markers: ['TALOS', 'What claim should we benchmark?'] },
     chats: { file: 'ChatsScreen.vue', component: 'ChatsScreen', markers: ['Search chats'] },
+    memory: { file: 'MemoryScreen.vue', component: 'MemoryScreen', markers: ['untrusted disclosed context'] },
     research: { file: 'ResearchScreen.vue', component: 'ResearchScreen', markers: ['Deep Research V3'] },
     runs: { file: 'RunsScreen.vue', component: 'RunsScreen', markers: ['Runtime cockpit'] },
     context: { file: 'ContextScreen.vue', component: 'ContextScreen', markers: ['Library'] },
@@ -31,8 +32,8 @@ describe('router wiring', () => {
         }
     })
 
-    it('resolves each of the 6 tab routes to its real parity screen', async () => {
-        expect(TALOS_MOBILE_ROUTES.map((r) => r.name)).toEqual(['chat', 'chats', 'research', 'runs', 'context', 'settings'])
+    it('resolves each of the 7 tab routes to its real parity screen', async () => {
+        expect(TALOS_MOBILE_ROUTES.map((r) => r.name)).toEqual(['chat', 'chats', 'memory', 'research', 'runs', 'context', 'settings'])
         const components = await Promise.all(TALOS_MOBILE_ROUTES.map((route) => route.component()))
         for (const [index, route] of TALOS_MOBILE_ROUTES.entries()) {
             const contract = SCREEN_CONTRACT[route.name]

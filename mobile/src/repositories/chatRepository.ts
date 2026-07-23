@@ -193,6 +193,40 @@ export interface ChatRepositoryOptions {
     now?: () => string
 }
 
+export type TalosMemoryScopeType = 'global' | 'project' | 'session'
+export type TalosMemoryKind = 'preference' | 'project_fact' | 'procedure' | 'policy_note' | 'rejected'
+export type TalosMemoryStatus = 'active' | 'disabled' | 'quarantined' | 'rejected'
+
+// F4 Memory station — desktop-parity memory row: ALWAYS untrusted context,
+// never instructions. Status transitions are the only lifecycle mutation.
+export interface TalosLocalMemory {
+    id: string
+    scope_type: TalosMemoryScopeType
+    scope_id: string | null
+    kind: TalosMemoryKind
+    status: TalosMemoryStatus
+    title: string
+    content: string
+    source: string | null
+    metadata: Record<string, unknown>
+    trust_level: 'untrusted'
+    last_used_at: string | null
+    created_at: string
+    updated_at: string
+}
+
+export interface CreateMemoryInput {
+    id: string
+    scope_type: TalosMemoryScopeType
+    scope_id: string | null
+    kind: TalosMemoryKind
+    title: string
+    content: string
+    source: string | null
+    metadata: Record<string, unknown>
+    created_at: string
+}
+
 export interface TalosChatRepository {
     initialize(): Promise<void>
     listSessions(): Promise<TalosLocalChatSession[]>
@@ -201,6 +235,8 @@ export interface TalosChatRepository {
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     updateSession(sessionId: string, input: UpdateChatSessionInput): Promise<TalosLocalChatSession>
+    /** SF-5: metadata-only write — recency (updated_at) is preserved. */
+    updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<string | null>
     listMessages(sessionId: string): Promise<TalosLocalChatMessage[]>
     appendMessage(input: AppendChatMessageInput): Promise<TalosLocalChatMessage>
@@ -218,6 +254,11 @@ export interface TalosChatRepository {
     listMessageAttachments(messageId: string): Promise<TalosChatAttachmentBinding[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
+    createMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
+    listMemories(): Promise<TalosLocalMemory[]>
+    updateMemoryStatus(memoryId: string, status: TalosMemoryStatus): Promise<TalosLocalMemory>
+    touchMemories(memoryIds: string[], usedAt: string): Promise<void>
+    deleteMemory(memoryId: string): Promise<void>
     close(): Promise<void>
 }
 

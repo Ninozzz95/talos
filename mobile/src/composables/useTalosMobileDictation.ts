@@ -1,4 +1,5 @@
-import { ref, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { Capacitor } from '@capacitor/core'
 import { talosDictationEngine, type TalosDictationEngine } from '@/services/dictation'
 
 /**
@@ -14,10 +15,14 @@ export interface UseTalosMobileDictationOptions {
     /** Receives the FULL composed draft (base + live transcript). */
     onTranscript: (text: string) => void
     engine?: TalosDictationEngine
+    /** Injectable for tests; defaults to the real platform check. */
+    native?: boolean
 }
 
 export interface TalosMobileDictation {
     supported: Ref<boolean>
+    /** F4-#18: on native the mic is ALWAYS visible — failures surface at tap. */
+    visible: ComputedRef<boolean>
     status: Ref<TalosMobileDictationStatus>
     error: Ref<string | null>
     toggle(): Promise<void>
@@ -25,6 +30,7 @@ export interface TalosMobileDictation {
 
 export function useTalosMobileDictation(options: UseTalosMobileDictationOptions): TalosMobileDictation {
     const engine = options.engine ?? talosDictationEngine()
+    const native = options.native ?? Capacitor.isNativePlatform()
     const supported = ref(false)
     const status = ref<TalosMobileDictationStatus>('idle')
     const error = ref<string | null>(null)
@@ -71,15 +77,20 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         })
     }
 
+    // F4-#18 inversion: hiding the mic on a failed probe made real-device
+    // failures undiagnosable. On native the button always shows and a tap
+    // attempts the engine — errors surface in the visible banner.
+    const visible = computed(() => native || supported.value)
+
     async function toggle(): Promise<void> {
         if (status.value === 'listening') {
             await engine.stop()
             status.value = 'idle'
             return
         }
-        if (!supported.value) return
+        if (!visible.value) return
         await start()
     }
 
-    return { supported, status, error, toggle }
+    return { supported, visible, status, error, toggle }
 }

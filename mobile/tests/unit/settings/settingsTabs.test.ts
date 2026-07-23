@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { TALOS_MOBILE_SETTINGS_TABS } from '@/components/talos/settings/settingsTabs'
 
 describe('TALOS mobile settings registry', () => {
-    it('exposes the exact twelve desktop settings categories in order', () => {
+    it('exposes the exact eleven desktop settings categories in order (F4-#25: no Shortcuts on a phone)', () => {
         expect(TALOS_MOBILE_SETTINGS_TABS.map((tab) => tab.id)).toEqual([
             'models',
             'ai_defaults',
@@ -12,7 +12,6 @@ describe('TALOS mobile settings registry', () => {
             'email',
             'reminders',
             'appearance',
-            'shortcuts',
             'account',
             'agent_tools',
             'system',
@@ -26,7 +25,6 @@ describe('TALOS mobile settings registry', () => {
             'Email',
             'Reminders',
             'Appearance',
-            'Shortcuts',
             'Account',
             'Agent Tools',
             'System',
@@ -36,6 +34,6 @@ describe('TALOS mobile settings registry', () => {
     it('marks only real local panels available in this slice', () => {
         const available = TALOS_MOBILE_SETTINGS_TABS.filter((tab) => tab.availability === 'available')
         // F2-T6: Account became a REAL local panel (replay intro + app lock).
-        expect(available.map((tab) => tab.id)).toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'shortcuts', 'account'])
+        expect(available.map((tab) => tab.id)).toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'account'])
     })
 })

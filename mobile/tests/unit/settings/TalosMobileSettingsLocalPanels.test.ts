@@ -10,33 +10,13 @@ const settings = vi.hoisted(() => ({
             research_model_mode: 'same_as_chat',
             vision_enabled: true,
         },
-        keyboard_shortcuts: {
-            search_conversations: 'Ctrl+K',
-            toggle_sidebar: 'Ctrl+B',
-            focus_chat_input: 'Ctrl+/',
-            toggle_active_window: 'Ctrl+,',
-            new_session: 'Ctrl+Alt+N',
-            cancel_close: 'Esc',
-            open_calendar: 'Ctrl+Alt+C',
-            open_compare: '',
-            open_cookbook: '',
-            open_deep_research: '',
-            open_gallery: '',
-            open_library: '',
-            open_memory: '',
-            open_notes: '',
-            open_tasks: '',
-            open_theme: '',
-        },
     },
     setAiDefaults: vi.fn().mockResolvedValue(undefined),
-    setShortcut: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/stores/settings', () => ({ useSettingsStore: () => settings }))
 
 import TalosMobileSettingsAiDefaultsPanel from '@/components/talos/settings/TalosMobileSettingsAiDefaultsPanel.vue'
-import TalosMobileSettingsShortcutsPanel from '@/components/talos/settings/TalosMobileSettingsShortcutsPanel.vue'
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -56,11 +36,4 @@ describe('local-first Settings panels', () => {
         expect(settings.setAiDefaults).toHaveBeenCalledWith({ vision_enabled: false })
     })
 
-    it('persists a captured shortcut through the settings store', async () => {
-        const wrapper = mount(TalosMobileSettingsShortcutsPanel)
-        await wrapper.get('[aria-label="Set Search commands shortcut"]').trigger('click')
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'P', ctrlKey: true, shiftKey: true, bubbles: true }))
-
-        expect(settings.setShortcut).toHaveBeenCalledWith('search_conversations', 'Ctrl+Shift+P')
-    })
 })

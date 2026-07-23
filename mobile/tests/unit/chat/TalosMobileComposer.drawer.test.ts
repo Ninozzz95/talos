@@ -66,9 +66,58 @@ describe('composer drawer mode (F3-T4bis)', () => {
         expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
     })
 
-    it('the model chip opens the existing model picker', async () => {
+    it('the model chip opens the dedicated model & reasoning drawer', async () => {
         const wrapper = mountComposer({ drawerMode: true })
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
-        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true))
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
+        expect(wrapper.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+    })
+})
+
+// F4-#20 — the enhancer must never present a mute disabled control on touch
+// (title tooltips do not exist there): the control stays tappable and a tap
+// with missing prerequisites emits the REASON for the UI to surface.
+describe('enhancer visible reason (F4-#20)', () => {
+    it('drawer row stays tappable with an empty prompt and explains itself', async () => {
+        const wrapper = mountComposer({ drawerMode: true })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-drawer-enhance"]').exists()).toBe(true))
+        const row = wrapper.get('[data-testid="talos-drawer-enhance"]')
+        expect(row.attributes('disabled')).toBeUndefined()
+        expect(row.text()).toContain('Write a prompt first')
+        await row.trigger('click')
+        expect(wrapper.emitted('enhancePrompt')).toBeUndefined()
+        const blocked = wrapper.emitted('enhanceBlocked')
+        expect(blocked).toHaveLength(1)
+        expect(String(blocked![0][0])).toContain('Write a prompt')
+    })
+
+    it('drawer row forwards the enhancement when a prompt exists', async () => {
+        const wrapper = mountComposer({ drawerMode: true, prompt: 'Migliora questo testo' })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-drawer-enhance"]').exists()).toBe(true))
+        await wrapper.get('[data-testid="talos-drawer-enhance"]').trigger('click')
+        expect(wrapper.emitted('enhanceBlocked')).toBeUndefined()
+        expect(wrapper.emitted('enhancePrompt')).toHaveLength(1)
+    })
+
+    it('classic wand stays tappable with an empty prompt and reports the reason', async () => {
+        const wrapper = mountComposer({ drawerMode: false })
+        const wand = wrapper.get('[aria-label="Improve prompt"]')
+        expect(wand.attributes('disabled')).toBeUndefined()
+        await wand.trigger('click')
+        expect(wrapper.emitted('enhancePrompt')).toBeUndefined()
+        expect(wrapper.emitted('enhanceBlocked')).toHaveLength(1)
+    })
+
+    it('classic wand reports the model reason when no model is callable', async () => {
+        const wrapper = mountComposer({
+            drawerMode: false, prompt: 'Testo', modelProfiles: [], selectedModelProfileId: null,
+        })
+        await wrapper.get('[aria-label="Improve prompt"]').trigger('click')
+        const blocked = wrapper.emitted('enhanceBlocked')
+        expect(blocked).toHaveLength(1)
+        expect(String(blocked![0][0]).toLowerCase()).toContain('model')
     })
 })

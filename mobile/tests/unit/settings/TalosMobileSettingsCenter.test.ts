@@ -11,7 +11,6 @@ const panelStubs = {
     TalosMobileSettingsModelsPanel: { template: '<div data-panel="models">Models panel</div>' },
     TalosMobileSettingsAiDefaultsPanel: { template: '<div data-panel="ai_defaults">AI defaults panel</div>' },
     TalosMobileSettingsAppearancePanel: { template: '<div data-panel="appearance">Appearance panel</div>' },
-    TalosMobileSettingsShortcutsPanel: { template: '<div data-panel="shortcuts">Shortcuts panel</div>' },
     TalosMobileSettingsAccountPanel: { template: '<div data-panel="account">Account panel</div>' },
 }
 
@@ -34,11 +33,11 @@ afterEach(() => {
 })
 
 describe('TalosMobileSettingsCenter', () => {
-    it('renders one labelled tablist, twelve tabs, and the selected tabpanel', () => {
+    it('renders one labelled tablist, eleven tabs, and the selected tabpanel', () => {
         const wrapper = mountCenter()
         const tablist = wrapper.get('[role="tablist"]')
         expect(tablist.attributes('aria-label')).toBe('TALOS settings categories')
-        expect(wrapper.findAll('[role="tab"]')).toHaveLength(12)
+        expect(wrapper.findAll('[role="tab"]')).toHaveLength(11)
         expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
         expect(wrapper.get('[role="tabpanel"]').attributes('data-settings-panel')).toBe('models')
     })

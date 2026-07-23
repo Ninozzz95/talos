@@ -80,11 +80,12 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         expect(meta.text()).not.toContain('Gemini Live')
     })
 
-    it('renders the 3-dot staggered typing indicator with the accessible status', () => {
+    it('renders the boot-logo line loader (F4-#24): a sweep crossing 3 filling nodes', () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [], sending: true } })
         const typing = wrapper.get('[data-testid="talos-mobile-typing"]')
-        const dots = typing.findAll('.talos-typing-dot')
-        expect(dots).toHaveLength(3)
+        expect(typing.find('.talos-line-loader-sweep').exists()).toBe(true)
+        expect(typing.findAll('.talos-line-loader-node')).toHaveLength(3)
+        expect(typing.findAll('.talos-typing-dot')).toHaveLength(0)
         expect(typing.attributes('role')).toBe('status')
         expect(typing.text()).toContain('Processing')
     })

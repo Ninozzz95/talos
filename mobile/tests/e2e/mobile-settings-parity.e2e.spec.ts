@@ -10,12 +10,12 @@ async function openSettings(page: import('@playwright/test').Page): Promise<void
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]').getByText('Settings Center').first()).toBeVisible()
 }
 
-test('Settings exposes all twelve desktop categories, real Browser controls, and honest remaining gates', async ({ page }) => {
+test('Settings exposes all eleven desktop categories, real Browser controls, and honest remaining gates', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
     const settingsTabs = page.getByRole('tablist', { name: 'TALOS settings categories' })
-    await expect(settingsTabs.getByRole('tab')).toHaveCount(12)
+    await expect(settingsTabs.getByRole('tab')).toHaveCount(11)
 
     await settingsTabs.getByRole('tab', { name: 'Browser' }).click()
     await expect(page.getByTestId('talos-mobile-browser-settings')).toBeVisible()

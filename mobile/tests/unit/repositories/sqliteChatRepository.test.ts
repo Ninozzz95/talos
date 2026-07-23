@@ -2,6 +2,21 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSqliteChatRepository } from '@/repositories/sqliteChatRepository'
 import type { TalosSqlConnection, TalosSqlRow, TalosSqliteRuntime } from '@/persistence/sqliteTypes'
 
+function sessionRow(overrides: Partial<Record<string, unknown>> = {}): TalosSqlRow {
+    return {
+        id: 'session-1',
+        title: 'First chat',
+        surface: 'chat',
+        mode: 'answer_only',
+        persistence_mode: 'persistent',
+        active_model_profile_id: null,
+        metadata_json: '{}',
+        created_at: '2026-07-22T09:59:00.000Z',
+        updated_at: '2026-07-22T10:00:00.000Z',
+        ...overrides,
+    }
+}
+
 function harness(rows: TalosSqlRow[][] = []) {
     const queryRows = [...rows]
     const connection: TalosSqlConnection = {
@@ -37,7 +52,7 @@ describe('createSqliteChatRepository', () => {
             created_at: '2026-07-22T10:00:00.000Z',
             updated_at: '2026-07-22T10:00:00.000Z',
         }
-        const { connection, runtime } = harness([[row], [row]])
+        const { connection, runtime } = harness([[row], [row], [{ id: 'activity-2' }]])
         const repository = createSqliteChatRepository(runtime, {
             now: () => '2026-07-22T10:01:00.000Z',
         })
@@ -154,12 +169,52 @@ describe('createSqliteChatRepository', () => {
             .rejects.toThrow('TALOS_CHAT_ROW_INVALID')
     })
 
-    it('accepts an upstream total_changes count that includes cascaded child deletions', async () => {
+    // F4-#22 — the owner cannot rename/delete on device while web is fine. The
+    // only device-only seam is the native driver, and rename/delete were the
+    // only writes trusting its `changes` counter. The contract is now
+    // driver-independent: existence guarded by SELECT, writes verified by
+    // reading back inside the transaction — `changes` is never consulted.
+    it('F4-#22 renames even when the driver reports zero changes for a landed write', async () => {
         const { connection, runtime } = harness([
+            [sessionRow()],
+            [{ title: 'New name' }],
+            [sessionRow({ title: 'New name' })],
+        ])
+        vi.mocked(connection.run).mockResolvedValue({ changes: 0 })
+        const repository = createSqliteChatRepository(runtime, {
+            now: () => '2026-07-22T10:00:00.000Z',
+        })
+
+        await expect(repository.renameSession('session-1', 'New name'))
+            .resolves.toMatchObject({ id: 'session-1', title: 'New name' })
+        expect(connection.commitTransaction).toHaveBeenCalledOnce()
+        expect(connection.rollbackTransaction).not.toHaveBeenCalled()
+    })
+
+    it('F4-#22 rejects a rename whose write did not land, regardless of the reported changes', async () => {
+        const { connection, runtime } = harness([
+            [sessionRow()],
+            [{ title: 'First chat' }],
+        ])
+        vi.mocked(connection.run).mockResolvedValue({ changes: 1 })
+        const repository = createSqliteChatRepository(runtime, {
+            now: () => '2026-07-22T10:00:00.000Z',
+        })
+
+        await expect(repository.renameSession('session-1', 'New name'))
+            .rejects.toThrow('TALOS_CHAT_RENAME_UNVERIFIED')
+        expect(connection.rollbackTransaction).toHaveBeenCalledOnce()
+        expect(connection.commitTransaction).not.toHaveBeenCalled()
+    })
+
+    it('F4-#22 deletes even when the driver reports zero changes for a landed delete', async () => {
+        const { connection, runtime } = harness([
+            [sessionRow()],
             [{ value_json: '"session-1"' }],
+            [],
             [{ id: 'session-2' }],
         ])
-        vi.mocked(connection.run).mockResolvedValueOnce({ changes: 4 })
+        vi.mocked(connection.run).mockResolvedValue({ changes: 0 })
         const repository = createSqliteChatRepository(runtime, {
             now: () => '2026-07-22T10:00:00.000Z',
         })
@@ -171,13 +226,58 @@ describe('createSqliteChatRepository', () => {
         expect(vi.mocked(connection.run).mock.calls.some(([sql]) => sql.includes('talos_chat_state'))).toBe(true)
     })
 
-    it('rejects a missing session when delete changes no rows', async () => {
-        const { connection, runtime } = harness([[{ value_json: '"session-1"' }]])
-        vi.mocked(connection.run).mockResolvedValueOnce({ changes: 0 })
+    it('F4-#22 updates a session even when the driver reports zero changes', async () => {
+        const { connection, runtime } = harness([
+            [sessionRow()],
+            [sessionRow()],
+            [sessionRow({ surface: 'browse' })],
+        ])
+        vi.mocked(connection.run).mockResolvedValue({ changes: 0 })
+        const repository = createSqliteChatRepository(runtime, {
+            now: () => '2026-07-22T10:00:00.000Z',
+        })
+
+        await expect(repository.updateSession('session-1', { surface: 'browse' }))
+            .resolves.toMatchObject({ id: 'session-1', surface: 'browse' })
+        expect(connection.commitTransaction).toHaveBeenCalledOnce()
+        expect(connection.rollbackTransaction).not.toHaveBeenCalled()
+    })
+
+    it('F4-#22 updates a tool activity even when the driver reports zero changes', async () => {
+        const { connection, runtime } = harness([[{ id: 'activity-1' }]])
+        vi.mocked(connection.run).mockResolvedValue({ changes: 0 })
+        const repository = createSqliteChatRepository(runtime, {
+            now: () => '2026-07-22T10:00:00.000Z',
+        })
+
+        await expect(repository.updateToolActivity('activity-1', { status: 'succeeded' }))
+            .resolves.toBeUndefined()
+        expect(connection.commitTransaction).toHaveBeenCalledOnce()
+        expect(connection.rollbackTransaction).not.toHaveBeenCalled()
+    })
+
+    it('SF-3: grant revocation never trusts the changes counter — read-back decides', async () => {
+        const { connection, runtime } = harness([[{ status: 'revoked' }]])
+        vi.mocked(connection.run).mockResolvedValue({ changes: 1 })
+        const repository = createSqliteChatRepository(runtime, {
+            now: () => '2026-07-22T10:00:00.000Z',
+        })
+        await expect(repository.revokeFileAuthorityGrant('grant-1')).resolves.toBeUndefined()
+        expect(vi.mocked(connection.query).mock.calls.some(([sql]) => sql.includes('SELECT status'))).toBe(true)
+
+        const lying = harness([[{ status: 'active' }]])
+        vi.mocked(lying.connection.run).mockResolvedValue({ changes: 1 })
+        await expect(createSqliteChatRepository(lying.runtime, { now: () => '2026-07-22T10:00:00.000Z' })
+            .revokeFileAuthorityGrant('grant-1')).rejects.toThrow('TALOS_CHAT_ROW_INVALID')
+    })
+
+    it('rejects a missing session before attempting the delete', async () => {
+        const { connection, runtime } = harness([[]])
         const repository = createSqliteChatRepository(runtime)
 
         await expect(repository.deleteSession('session-1'))
             .rejects.toThrow('TALOS_CHAT_SESSION_NOT_FOUND')
+        expect(vi.mocked(connection.run).mock.calls.some(([sql]) => sql.includes('DELETE FROM talos_chat_sessions'))).toBe(false)
         expect(connection.rollbackTransaction).toHaveBeenCalledOnce()
         expect(connection.commitTransaction).not.toHaveBeenCalled()
     })

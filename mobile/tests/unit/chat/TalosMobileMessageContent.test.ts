@@ -29,19 +29,21 @@ describe('TalosMobileMessageContent', () => {
         expect(wrapper.get('[role="status"]').text()).toBe('Code copied.')
     })
 
-    it('censors independent sensitive values without changing the copyable text', async () => {
+    it('never censors message text — owner F4 directive: censor obliterated', async () => {
         const wrapper = mount(TalosMobileMessageContent, {
             attachTo: document.body,
-            props: { content: 'Contact first@example.com or second@example.com.' },
+            props: {
+                content: 'Contact first@example.com, password: hunter2secret1, link https://example.com/articolo?id=42',
+            },
         })
-        await vi.waitFor(() => {
-            expect(wrapper.findAll('button.talos-censored')).toHaveLength(2)
-        })
-        const textBefore = wrapper.get('[data-testid="talos-mobile-message-content"]').element.textContent
-        await wrapper.findAll('button.talos-censored')[0]!.trigger('click')
-        expect(wrapper.findAll('button.talos-censored')[0]!.attributes('aria-pressed')).toBe('true')
-        expect(wrapper.findAll('button.talos-censored')[1]!.attributes('aria-pressed')).toBe('false')
-        expect(wrapper.get('[data-testid="talos-mobile-message-content"]').element.textContent).toBe(textBefore)
+        await flushPromises()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        await flushPromises()
+        expect(wrapper.findAll('.talos-censored')).toHaveLength(0)
+        const text = wrapper.get('[data-testid="talos-mobile-message-content"]').element.textContent ?? ''
+        expect(text).toContain('first@example.com')
+        expect(text).toContain('https://example.com/articolo?id=42')
+        expect(text).toContain('password: hunter2secret1')
     })
 
     it('reports a clipboard failure without mutating the code block', async () => {

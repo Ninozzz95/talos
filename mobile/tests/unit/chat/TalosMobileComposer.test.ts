@@ -53,6 +53,7 @@ const authorizedAttachment: TalosMobileAttachmentDraft = {
 function mountComposer(overrides: Record<string, unknown> = {}): VueWrapper {
     wrapper = mount(TalosMobileComposer, {
         attachTo: document.body,
+        global: { stubs: { teleport: true } },
         props: {
             prompt: 'Keep this draft',
             modelProfiles,
@@ -180,7 +181,10 @@ describe('TalosMobileComposer', () => {
         const effortTrigger = view.get<HTMLButtonElement>('[aria-label="Choose reasoning effort"]')
 
         await modelTrigger.trigger('click')
+        // F4-#26: model + effort live in one dedicated bottom drawer.
+        expect(view.get('[data-testid="talos-model-drawer"]').exists()).toBe(true)
         expect(view.get('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
+        expect(view.get('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
         await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
         expect(view.emitted('selectModelProfile')).toEqual([['profile-deepseek']])
         expect(view.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(false)
@@ -313,6 +317,8 @@ describe('TalosMobileComposer', () => {
         expect(improve.classes()).toContain('min-w-11')
         await improve.trigger('click')
         expect(view.emitted('enhancePrompt')).toHaveLength(1)
+        // F4-#26: the enhancement flow lives in its own dedicated drawer.
+        expect(view.get('[data-testid="talos-enhancer-drawer"]').exists()).toBe(true)
 
         await view.setProps({ enhancingPrompt: true })
         expect(view.get('[data-testid="talos-mobile-enhancer-status"]').text()).toMatch(/improving prompt/i)

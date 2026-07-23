@@ -15,8 +15,8 @@ import {
     Square,
 } from '@lucide/vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
-import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
-import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
+import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffortDrawer.vue'
+import TalosMobileEnhancerDrawer from '@/components/chat/TalosMobileEnhancerDrawer.vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { Button } from '@/components/ui/button'
 import type {
@@ -28,9 +28,7 @@ import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhanc
 import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
 
-const TalosMobilePromptEnhancerPopover = defineAsyncComponent(
-    () => import('@/components/chat/TalosMobilePromptEnhancerPopover.vue'),
-)
+
 const TalosMobileSlashCommandMenu = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSlashCommandMenu.vue'),
 )
@@ -113,6 +111,7 @@ const emit = defineEmits<{
     openModelLab: []
     refreshModels: []
     enhancePrompt: []
+    enhanceBlocked: [reason: string]
     cancelPromptEnhancement: []
     insertPromptEnhancement: []
     replacePromptEnhancement: []
@@ -121,13 +120,14 @@ const emit = defineEmits<{
     openBrowserUrl: [url: string]
 }>()
 
-const composerRoot = ref<HTMLElement | null>(null)
 const promptField = ref<HTMLTextAreaElement | null>(null)
 const modelTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
 const effortTrigger = ref<ComponentPublicInstance | null>(null)
-const modelPopover = ref<HTMLElement | null>(null)
+// F4-#26: model+effort and the enhancer live in dedicated bottom drawers —
+// the same organized-sheet pattern as the "+" Add-to-chat drawer.
 const modelPickerOpen = ref(false)
-const effortPickerOpen = ref(false)
+const enhancerDrawerOpen = ref(false)
+let modelDrawerTrigger: 'model' | 'effort' = 'model'
 const slashActiveIndex = ref(0)
 const slashCommandCount = ref(0)
 const slashMenu = ref<{ activateSelected(): void } | null>(null)
@@ -167,6 +167,13 @@ const canRequestEnhancement = computed(() => (
     && !props.sending
     && props.prompt.trim().length > 0
 ))
+// F4-#20: a mute disabled control explains nothing on touch — when the
+// enhancer cannot run, the tap surfaces WHY instead of dying silently.
+const enhanceUnavailableReason = computed<string | null>(() => {
+    if (selectedProfile.value === null) return 'Select a callable model before improving the prompt.'
+    if (props.prompt.trim().length === 0) return 'Write a prompt first — Improve prompt rewrites your draft.'
+    return null
+})
 const slashMenuOpen = computed(() => /^\/[^\s\n]*$/.test(props.prompt))
 const statusText = computed(() => {
     if (props.sending) return 'Processing'
@@ -224,10 +231,25 @@ function onPromptKeydown(event: KeyboardEvent): void {
 }
 
 function requestPromptEnhancement(): void {
-    if (!canRequestEnhancement.value) return
+    if (props.enhancingPrompt || props.sending) return
+    const reason = enhanceUnavailableReason.value
+    if (reason) {
+        emit('enhanceBlocked', reason)
+        return
+    }
     modelPickerOpen.value = false
-    effortPickerOpen.value = false
+    enhancerDrawerOpen.value = true
     emit('enhancePrompt')
+}
+
+// Manual dismissal of the enhancer drawer abandons the enhancement; the
+// parent clears its state, which is also what closes the drawer after a
+// decision (insert/replace/cancel) — popover-parity semantics.
+function dismissEnhancerDrawer(): void {
+    enhancerDrawerOpen.value = false
+    if (props.enhancingPrompt || props.promptEnhancementError || props.promptEnhancement) {
+        emit('cancelPromptEnhancement')
+    }
 }
 
 function selectSlashCommand(commandId: TalosMobileCommandId): void {
@@ -240,32 +262,14 @@ function updateSlashCommandCount(count: number): void {
     else slashActiveIndex.value = Math.min(slashActiveIndex.value, count - 1)
 }
 
-async function focusInitialModelOption(): Promise<void> {
-    await nextTick()
-    const selected = modelPopover.value?.querySelector<HTMLButtonElement>(
-        '[role="option"][aria-selected="true"]:not(:disabled)',
-    )
-    const first = modelPopover.value?.querySelector<HTMLButtonElement>(
-        '[role="option"]:not(:disabled)',
-    )
-    ;(selected ?? first)?.focus()
-}
-
 async function toggleModelPicker(): Promise<void> {
+    modelDrawerTrigger = 'model'
     modelPickerOpen.value = !modelPickerOpen.value
-    effortPickerOpen.value = false
-    if (modelPickerOpen.value) await focusInitialModelOption()
 }
 
 async function toggleEffortPicker(): Promise<void> {
-    effortPickerOpen.value = !effortPickerOpen.value
-    modelPickerOpen.value = false
-    if (effortPickerOpen.value) {
-        await nextTick()
-        composerRoot.value?.querySelector<HTMLButtonElement>(
-            '[data-testid="talos-mobile-effort-level"][aria-pressed="true"]',
-        )?.focus()
-    }
+    modelDrawerTrigger = 'effort'
+    modelPickerOpen.value = !modelPickerOpen.value
 }
 
 function focusTrigger(trigger: ComponentPublicInstance | HTMLElement | null): void {
@@ -276,13 +280,7 @@ function focusTrigger(trigger: ComponentPublicInstance | HTMLElement | null): vo
 async function closeModelPicker(): Promise<void> {
     modelPickerOpen.value = false
     await nextTick()
-    focusTrigger(modelTrigger.value)
-}
-
-async function closeEffortPicker(): Promise<void> {
-    effortPickerOpen.value = false
-    await nextTick()
-    focusTrigger(effortTrigger.value)
+    focusTrigger(modelDrawerTrigger === 'effort' ? effortTrigger.value : modelTrigger.value)
 }
 
 async function selectModelProfile(profileId: string): Promise<void> {
@@ -297,8 +295,13 @@ async function selectRoutingProfile(profileId: string): Promise<void> {
 
 async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
     emit('selectEffort', level)
-    await closeEffortPicker()
+    await closeModelPicker()
 }
+
+watch(
+    () => Boolean(props.enhancingPrompt || props.promptEnhancementError || props.promptEnhancement),
+    (active) => { if (!active) enhancerDrawerOpen.value = false },
+)
 
 function focusPrompt(): boolean {
     const field = promptField.value
@@ -311,17 +314,13 @@ defineExpose({ focusPrompt })
 
 watch(() => props.prompt, () => {
     slashActiveIndex.value = 0
-    if (slashMenuOpen.value) {
-        modelPickerOpen.value = false
-        effortPickerOpen.value = false
-    }
+    if (slashMenuOpen.value) modelPickerOpen.value = false
     nextTick(resizePrompt)
 }, { immediate: true })
 </script>
 
 <template>
     <section
-        ref="composerRoot"
         data-testid="talos-mobile-composer"
         class="relative mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))]/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur"
         aria-label="Chat composer"
@@ -337,76 +336,6 @@ watch(() => props.prompt, () => {
                 :active-index="slashActiveIndex"
                 @selected="selectSlashCommand"
                 @filtered-count="updateSlashCommandCount"
-            />
-        </div>
-
-        <div
-            v-if="enhancingPrompt || promptEnhancementError || promptEnhancement"
-            id="talos-mobile-prompt-enhancer-popover"
-            class="absolute bottom-full left-0 right-0 z-50 mb-2"
-            aria-live="polite"
-        >
-            <div
-                v-if="enhancingPrompt"
-                data-testid="talos-mobile-enhancer-status"
-                role="status"
-                class="rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-muted,var(--muted-foreground))] shadow-xl"
-            >
-                Improving prompt with {{ modelTitle }}…
-            </div>
-            <div
-                v-else-if="promptEnhancementError"
-                data-testid="talos-mobile-enhancer-error"
-                role="alert"
-                class="rounded-md border border-[var(--talos-danger,#dc5b5b)] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-danger,#dc5b5b)] shadow-xl"
-            >
-                {{ promptEnhancementError }}
-            </div>
-            <TalosMobilePromptEnhancerPopover
-                v-else-if="promptEnhancement"
-                :result="promptEnhancement"
-                @cancel="emit('cancelPromptEnhancement')"
-                @insert="emit('insertPromptEnhancement')"
-                @replace="emit('replacePromptEnhancement')"
-            />
-        </div>
-
-        <div ref="modelPopover" class="relative">
-            <div
-                v-if="modelPickerOpen"
-                id="talos-mobile-model-picker-popover"
-                class="absolute bottom-full left-0 right-0 z-40 mb-2 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] p-2 shadow-xl"
-            >
-                <TalosMobileComposerModelPicker
-                    :model-profiles="modelProfiles"
-                    :routing-profiles="routingProfiles"
-                    :selected-model-profile-id="selectedModelProfileId"
-                    :selected-routing-profile-id="selectedRoutingProfileId"
-                    :loading-models="loadingModels"
-                    :loading-routes="loadingRoutes"
-                    :refreshing-models="refreshingModels"
-                    @select-model-profile="selectModelProfile"
-                    @select-model-routing-profile="selectRoutingProfile"
-                    @request-close="closeModelPicker"
-                    @refresh-models="emit('refreshModels')"
-                    @open-model-lab="emit('openModelLab')"
-                />
-            </div>
-        </div>
-
-        <div
-            v-if="effortPickerOpen"
-            id="talos-mobile-effort-picker-popover"
-            class="absolute bottom-full left-2 right-2 z-40 mb-2 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] p-3 shadow-xl"
-        >
-            <TalosMobileEffortPicker
-                :effort-levels="selectedProfile?.effort_levels ?? []"
-                :selected-effort="selectedEffort"
-                :supports-thinking="selectedProfile?.supports_thinking ?? false"
-                :thinking="thinking"
-                @select-effort="selectEffort"
-                @select-thinking="emit('selectThinking', $event)"
-                @request-close="closeEffortPicker"
             />
         </div>
 
@@ -496,9 +425,8 @@ watch(() => props.prompt, () => {
                 data-testid="talos-composer-model-chip"
                 aria-label="Choose model profile"
                 :title="modelTitle"
-                aria-haspopup="listbox"
+                aria-haspopup="dialog"
                 :aria-expanded="modelPickerOpen"
-                aria-controls="talos-mobile-model-picker-popover"
                 class="talos-pressable flex min-h-11 min-w-0 items-center gap-2 rounded-full border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
                 @click="toggleModelPicker"
             >
@@ -545,9 +473,8 @@ watch(() => props.prompt, () => {
                     data-mobile-icon-only="true"
                     aria-label="Choose model profile"
                     :title="modelTitle"
-                    aria-haspopup="listbox"
+                    aria-haspopup="dialog"
                     :aria-expanded="modelPickerOpen"
-                    aria-controls="talos-mobile-model-picker-popover"
                     class="min-h-11 min-w-11"
                     @click="toggleModelPicker"
                 >
@@ -568,8 +495,7 @@ watch(() => props.prompt, () => {
                     aria-label="Choose reasoning effort"
                     :title="`Effort: ${selectedEffort}`"
                     aria-haspopup="true"
-                    :aria-expanded="effortPickerOpen"
-                    aria-controls="talos-mobile-effort-picker-popover"
+                    :aria-expanded="modelPickerOpen"
                     class="min-h-11 min-w-11"
                     @click="toggleEffortPicker"
                 >
@@ -581,8 +507,8 @@ watch(() => props.prompt, () => {
                     variant="outline"
                     data-mobile-icon-only="true"
                     aria-label="Improve prompt"
-                    :title="selectedProfile ? 'Improve prompt' : (sendDisabledReason || 'Select a callable model before improving the prompt.')"
-                    :disabled="!canRequestEnhancement"
+                    :title="enhanceUnavailableReason ?? 'Improve prompt'"
+                    :disabled="sending || enhancingPrompt"
                     class="min-h-11 min-w-11"
                     @click="requestPromptEnhancement"
                 >
@@ -672,6 +598,7 @@ watch(() => props.prompt, () => {
         <TalosMobileComposerDrawer
             v-if="drawerMode && toolDrawerOpen"
             :can-enhance="canRequestEnhancement"
+            :enhance-reason="enhanceUnavailableReason"
             :browse-mode="browseMode"
             :thinking="thinking"
             :supports-thinking="selectedProfile?.supports_thinking ?? false"
@@ -686,8 +613,42 @@ watch(() => props.prompt, () => {
             @toggle-browse="emit('toggleBrowse', $event)"
             @select-thinking="emit('selectThinking', $event)"
             @select-effort="emit('selectEffort', $event)"
-            @enhance-prompt="emit('enhancePrompt')"
+            @enhance-prompt="requestPromptEnhancement"
         />
         </Transition>
+
+        <TalosMobileModelEffortDrawer
+            v-if="modelPickerOpen"
+            :model-profiles="modelProfiles"
+            :routing-profiles="routingProfiles"
+            :selected-model-profile-id="selectedModelProfileId"
+            :selected-routing-profile-id="selectedRoutingProfileId"
+            :selected-effort="selectedEffort"
+            :thinking="thinking"
+            :supports-thinking="selectedProfile?.supports_thinking ?? false"
+            :effort-levels="selectedProfile?.effort_levels ?? []"
+            :loading-models="loadingModels"
+            :loading-routes="loadingRoutes"
+            :refreshing-models="refreshingModels"
+            @close="closeModelPicker"
+            @select-model-profile="selectModelProfile"
+            @select-model-routing-profile="selectRoutingProfile"
+            @select-effort="selectEffort"
+            @select-thinking="emit('selectThinking', $event)"
+            @refresh-models="emit('refreshModels')"
+            @open-model-lab="emit('openModelLab')"
+        />
+
+        <TalosMobileEnhancerDrawer
+            v-if="enhancerDrawerOpen"
+            :enhancing="enhancingPrompt ?? false"
+            :error="promptEnhancementError ?? ''"
+            :result="promptEnhancement ?? null"
+            :model-title="modelTitle"
+            @close="dismissEnhancerDrawer"
+            @cancel="emit('cancelPromptEnhancement')"
+            @insert="emit('insertPromptEnhancement')"
+            @replace="emit('replacePromptEnhancement')"
+        />
     </section>
 </template>

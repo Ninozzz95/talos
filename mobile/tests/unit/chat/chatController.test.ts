@@ -493,6 +493,65 @@ describe('chatController', () => {
         expect(controller.chat.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'pong' })
     })
 
+    // F4 Memory station — active memories inject the desktop-identical
+    // untrusted block into the PROVIDER payload only; the persisted message
+    // stays verbatim, the disclosure lands in its metadata, and used
+    // memories get their last_used_at touched.
+    it('injects active memories as untrusted provider context with disclosure and touch', async () => {
+        const { deps, store, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        await chatRepository.initialize()
+        await chatRepository.createMemory({
+            id: 'memory-tone',
+            scope_type: 'global',
+            scope_id: null,
+            kind: 'preference',
+            title: 'Tone',
+            content: 'Prefer concise italian answers.',
+            source: null,
+            metadata: {},
+            created_at: '2026-07-23T10:00:00.000Z',
+        })
+        await chatRepository.createMemory({
+            id: 'memory-off',
+            scope_type: 'global',
+            scope_id: null,
+            kind: 'project_fact',
+            title: 'Disabled',
+            content: 'Must never appear.',
+            source: null,
+            metadata: {},
+            created_at: '2026-07-23T10:00:01.000Z',
+        })
+        await chatRepository.updateMemoryStatus('memory-off', 'disabled')
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('Qual e il piano?')
+
+        const providerCall = request.mock.calls.find(([call]) => call.url.includes('/v1/messages'))
+        expect(providerCall).toBeDefined()
+        const rawBody = providerCall![0].data
+        const body = (typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody) as {
+            messages: Array<{ role: string; content: unknown }>
+        }
+        const lastUser = [...body.messages].reverse().find((entry) => entry.role === 'user')
+        const payloadText = JSON.stringify(lastUser?.content)
+        expect(payloadText).toContain('TALOS_MEMORY_CONTEXT')
+        expect(payloadText).toContain('Prefer concise italian answers.')
+        expect(payloadText).toContain('USER_TASK')
+        expect(payloadText).not.toContain('Must never appear.')
+
+        const persistedUser = controller.chat.messages.find((message) => message.role === 'user')
+        expect(persistedUser?.content).toBe('Qual e il piano?')
+        expect(persistedUser?.metadata?.used_memories).toEqual([
+            expect.objectContaining({ id: 'memory-tone', trust_level: 'untrusted' }),
+        ])
+
+        const touched = (await chatRepository.listMemories()).find((entry) => entry.id === 'memory-tone')
+        expect(touched?.last_used_at).not.toBeNull()
+    })
+
     it('reconciles the Vault and sends a granted attachment through the durable provider pipeline', async () => {
         const { deps, store, request, chatRepository } = makeDeps()
         const runtime = attachmentRuntime(chatRepository)

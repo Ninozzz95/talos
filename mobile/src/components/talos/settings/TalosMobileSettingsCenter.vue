@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Component } from 'vue'
-import { ArrowLeft, Bell, Bot, BrainCircuit, Globe2, Keyboard, Mail, Palette, Search, Settings, Shield, User, Wrench } from '@lucide/vue'
+import { ArrowLeft, Bell, Bot, BrainCircuit, Globe2, Mail, Palette, Search, Settings, Shield, User, Wrench } from '@lucide/vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosMobileSettingsModelsPanel from './TalosMobileSettingsModelsPanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
 import TalosMobileSettingsAppearancePanel from './TalosMobileSettingsAppearancePanel.vue'
-import TalosMobileSettingsShortcutsPanel from './TalosMobileSettingsShortcutsPanel.vue'
 import TalosMobileSettingsBrowserPanel from './TalosMobileSettingsBrowserPanel.vue'
 import TalosMobileSettingsAccountPanel from './TalosMobileSettingsAccountPanel.vue'
 import TalosMobileSettingsCapabilityPanel from './TalosMobileSettingsCapabilityPanel.vue'
@@ -39,7 +38,6 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
     email: Mail,
     reminders: Bell,
     appearance: Palette,
-    shortcuts: Keyboard,
     account: User,
     agent_tools: Shield,
     system: Settings,
@@ -49,7 +47,6 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     models: TalosMobileSettingsModelsPanel,
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
     appearance: TalosMobileSettingsAppearancePanel,
-    shortcuts: TalosMobileSettingsShortcutsPanel,
     account: TalosMobileSettingsAccountPanel,
 }
 

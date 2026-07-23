@@ -1,0 +1,66 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { X } from '@lucide/vue'
+
+/**
+ * F4-#26 — shared bottom-sheet shell for the composer drawers (Add to chat /
+ * Model & reasoning / Improve prompt). Teleported to body: the composer
+ * card's backdrop-blur creates a containing block that would trap a fixed
+ * overlay inside the card. Modal semantics: initial focus, Escape, backdrop
+ * tap to close.
+ */
+defineProps<{
+    title: string
+    testid: string
+}>()
+
+const emit = defineEmits<{ close: [] }>()
+
+const entered = ref(false)
+const root = ref<HTMLElement | null>(null)
+onMounted(() => {
+    requestAnimationFrame(() => { entered.value = true })
+    root.value?.focus()
+})
+</script>
+
+<template>
+    <Teleport to="body">
+    <div class="fixed inset-0 z-[75] flex flex-col justify-end">
+        <div
+            class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"
+            :class="entered ? 'opacity-100' : 'opacity-0'"
+            aria-hidden="true"
+            @click="emit('close')"
+        />
+        <section
+            ref="root"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="title"
+            tabindex="-1"
+            :data-testid="testid"
+            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out"
+            :class="entered ? 'translate-y-0' : 'translate-y-6'"
+            @keydown.escape="emit('close')"
+        >
+            <header class="flex shrink-0 items-center gap-2 px-3 py-2">
+                <button
+                    type="button"
+                    aria-label="Close"
+                    class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                    @click="emit('close')"
+                >
+                    <X class="size-5" aria-hidden="true" />
+                </button>
+                <h2 class="flex-1 text-center text-base font-semibold">{{ title }}</h2>
+                <span class="min-w-11" aria-hidden="true" />
+            </header>
+
+            <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1">
+                <slot />
+            </div>
+        </section>
+    </div>
+    </Teleport>
+</template>

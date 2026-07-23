@@ -156,6 +156,43 @@ const unsupportedEngine: TalosDictationEngine = {
     async stop() {},
 }
 
+/** F4-#18 — raw diagnostics for the in-app Settings row (no adb needed). */
+export interface TalosDictationDiagnostics {
+    native: boolean
+    pluginLoaded: boolean
+    available: boolean | null
+    error: string | null
+}
+
+export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnostics> {
+    const native = Capacitor.isNativePlatform()
+    if (!native) {
+        return { native, pluginLoaded: webSpeechConstructor() !== null, available: webSpeechConstructor() !== null, error: null }
+    }
+    try {
+        const plugin = await loadPlugin()
+        try {
+            const result = await plugin.available()
+            return { native, pluginLoaded: true, available: result.available === true, error: null }
+        } catch (error) {
+            return { native, pluginLoaded: true, available: null, error: String(error) }
+        }
+    } catch (error) {
+        return { native, pluginLoaded: false, available: null, error: String(error) }
+    }
+}
+
+/** F4-#18 — request the mic permission at a meaningful moment (intro CTA / first tap). */
+export async function requestTalosDictationPermission(): Promise<boolean> {
+    if (!Capacitor.isNativePlatform()) return true
+    try {
+        const status = await (await loadPlugin()).requestPermissions()
+        return status.speechRecognition === 'granted'
+    } catch {
+        return false
+    }
+}
+
 export function talosDictationEngine(): TalosDictationEngine {
     if (Capacitor.isNativePlatform()) return nativeEngine()
     if (webSpeechConstructor()) return webEngine()

@@ -51,9 +51,8 @@ describe('parseTalosMobileSettings', () => {
         })
         expect(parsed.motion_v6.mode).toBe('complex')
         expect(parsed.motion_v6.speed).toBe(150)
-        // visibility + shortcuts fall back to complete valid maps
+        // visibility falls back to a complete valid map (F4-#25: shortcuts removed)
         expect(typeof parsed.appearance_visibility.chat_area.session_header).toBe('boolean')
-        expect(Object.keys(parsed.keyboard_shortcuts).length).toBeGreaterThan(0)
     })
 
     it('fails malformed composer defaults closed', () => {
@@ -214,17 +213,14 @@ describe('useSettingsStore', () => {
         expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).motion_v6.mode).toBe('complex')
     })
 
-    it('resets one visibility group and all shortcuts without corrupting sibling groups', async () => {
+    it('resets one visibility group without corrupting sibling groups', async () => {
         const store = useSettingsStore()
         await store.setVisibility('chat_area', 'session_header', false)
         await store.setVisibility('sidebar', 'brand_name', false)
-        await store.setShortcut('search_conversations', 'Ctrl+Shift+P')
 
         await store.resetVisibility('chat_area')
-        await store.resetShortcuts()
 
         expect(store.state.appearance_visibility.chat_area.session_header).toBe(true)
         expect(store.state.appearance_visibility.sidebar.brand_name).toBe(false)
-        expect(store.state.keyboard_shortcuts.search_conversations).toBe('Ctrl+K')
     })
 })

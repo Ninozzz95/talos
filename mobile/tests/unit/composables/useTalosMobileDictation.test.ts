@@ -99,3 +99,33 @@ describe('useTalosMobileDictation (F2-T5)', () => {
         expect(dictation.error.value).toBeNull()
     })
 })
+
+// F4-#18 — inverted pattern: on NATIVE the mic is always visible; failures are
+// reported honestly at tap instead of hiding the button (undiagnosable).
+describe('native visibility inversion (F4-#18)', () => {
+    it('is visible on native even when the availability probe says no', async () => {
+        const { engine } = engineStub({ supported: vi.fn(async () => false) })
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine, native: true })
+        await flush()
+        expect(dictation.visible.value).toBe(true)
+    })
+
+    it('stays hidden on web when the API is genuinely absent', async () => {
+        const { engine } = engineStub({ supported: vi.fn(async () => false) })
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine, native: false })
+        await flush()
+        expect(dictation.visible.value).toBe(false)
+    })
+
+    it('on native, tap ATTEMPTS the engine even if the probe failed — errors surface honestly', async () => {
+        const { engine } = engineStub({
+            supported: vi.fn(async () => false),
+            start: vi.fn(async (events) => { events.onError('Plugin not registered.') }),
+        })
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine, native: true })
+        await flush()
+        await dictation.toggle()
+        expect(engine.start).toHaveBeenCalled()
+        expect(dictation.error.value).toBe('Plugin not registered.')
+    })
+})

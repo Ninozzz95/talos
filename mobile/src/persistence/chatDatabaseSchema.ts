@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 2
+export const TALOS_CHAT_DATABASE_VERSION = 3
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -152,6 +152,29 @@ const VERSION_2_STATEMENTS = [
     `DROP TABLE talos_chat_attachments_v1;`,
 ] as const
 
+// F4 Memory station — desktop-parity memory registry. Every row is untrusted
+// by construction (trust_level fixed at 'untrusted'); status transitions are
+// how memories are disabled/quarantined, never silent deletion by the model.
+const VERSION_3_STATEMENTS = [
+    `CREATE TABLE IF NOT EXISTS talos_memories (
+        id TEXT PRIMARY KEY NOT NULL,
+        scope_type TEXT NOT NULL DEFAULT 'global' CHECK (scope_type IN ('global', 'project', 'session')),
+        scope_id TEXT NULL,
+        kind TEXT NOT NULL DEFAULT 'project_fact' CHECK (kind IN ('preference', 'project_fact', 'procedure', 'policy_note', 'rejected')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled', 'quarantined', 'rejected')),
+        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 255),
+        content TEXT NOT NULL,
+        source TEXT NULL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        trust_level TEXT NOT NULL DEFAULT 'untrusted',
+        last_used_at TEXT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );`,
+    `CREATE INDEX IF NOT EXISTS talos_memories_status_scope_idx
+        ON talos_memories(status, scope_type, scope_id, updated_at DESC, id);`,
+] as const
+
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -160,5 +183,9 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 2,
         statements: [...VERSION_2_STATEMENTS],
+    }),
+    Object.freeze({
+        toVersion: 3,
+        statements: [...VERSION_3_STATEMENTS],
     }),
 ])

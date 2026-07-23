@@ -137,9 +137,9 @@ test('app lock arms with a PIN, gates the cold start, and only a real PIN unlock
     await page.locator('[data-testid="talos-mobile-sidebar"] [aria-label="Open Settings"]').click()
     await page.locator('[data-settings-tab="account"]').click()
     await page.locator('[data-testid="talos-applock-toggle"]').click()
-    await page.locator('[data-testid="talos-applock-pin"]').fill('4321')
-    await page.locator('[data-testid="talos-applock-pin-confirm"]').fill('4321')
-    await page.locator('[data-testid="talos-applock-save"]').click()
+    // F4-#25: OTP-style setup — 6 digits, then the confirm step auto-arms.
+    await page.locator('[data-testid="talos-applock-pin"]').fill('432187')
+    await page.locator('[data-testid="talos-applock-pin-confirm"]').fill('432187')
     await expect(page.locator('[data-testid="talos-applock-toggle"]')).toHaveAttribute('aria-checked', 'true')
 
     await page.reload()
@@ -148,7 +148,7 @@ test('app lock arms with a PIN, gates the cold start, and only a real PIN unlock
     await lock.locator('[data-testid="talos-lock-pin"]').fill('0000')
     await lock.locator('[data-testid="talos-lock-submit"]').click()
     await expect(lock).toContainText(/wrong pin/i)
-    await lock.locator('[data-testid="talos-lock-pin"]').fill('4321')
+    await lock.locator('[data-testid="talos-lock-pin"]').fill('432187')
     await lock.locator('[data-testid="talos-lock-submit"]').click()
     await expect(page.locator(LOCK)).toHaveCount(0)
     await expect(page.locator(HEADER)).toBeVisible()
