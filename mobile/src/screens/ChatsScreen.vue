@@ -10,9 +10,7 @@ import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Archive, ArchiveRestore, Check, ChevronDown, MessageSquarePlus, MessageSquareText, Pencil, Search, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import {
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { useChatController } from '@/stores/chatController'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
@@ -343,45 +341,43 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             </div>
         </Teleport>
 
-        <Dialog :open="renameTarget !== null" @update:open="(open) => { if (!open) renameTarget = null }">
-            <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                <DialogHeader>
-                    <DialogTitle>Rename chat</DialogTitle>
-                    <DialogDescription class="text-[var(--talos-muted)]">Choose a concise name for this conversation.</DialogDescription>
-                </DialogHeader>
-                <input
-                    ref="renameInput"
-                    v-model="renameValue"
-                    aria-label="Chat name"
-                    class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                    @keydown.enter.prevent="submitRename"
-                >
-                <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
-                <DialogFooter>
-                    <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                    <Button type="button" :disabled="!renameValue.trim() || actionBusy" @click="submitRename">
-                        <Check class="size-4" aria-hidden="true" /> Save
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <!-- F5.2: device-proven manual dialogs (reka-ui never rendered on
+             the owner's WebView). -->
+        <TalosMobileConfirmDialog
+            v-if="renameTarget !== null"
+            title="Rename chat"
+            description="Choose a concise name for this conversation."
+            @close="renameTarget = null"
+        >
+            <input
+                ref="renameInput"
+                v-model="renameValue"
+                aria-label="Chat name"
+                class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                @keydown.enter.prevent="submitRename"
+            >
+            <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
+            <template #footer>
+                <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" :disabled="!renameValue.trim() || actionBusy" @click="submitRename">
+                    <Check class="size-4" aria-hidden="true" /> Save
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
 
-        <Dialog :open="deleteTarget !== null" @update:open="(open) => { if (!open) deleteTarget = null }">
-            <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                <DialogHeader>
-                    <DialogTitle>Delete chat?</DialogTitle>
-                    <DialogDescription class="text-[var(--talos-muted)]">
-                        This permanently removes "{{ deleteTarget?.title || 'New chat' }}" and its messages.
-                    </DialogDescription>
-                </DialogHeader>
-                <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
-                <DialogFooter>
-                    <Button type="button" variant="ghost" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                    <Button type="button" variant="destructive" :disabled="actionBusy" @click="confirmDelete">
-                        <Trash2 class="size-4" aria-hidden="true" /> Delete
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <TalosMobileConfirmDialog
+            v-if="deleteTarget !== null"
+            title="Delete chat?"
+            :description="`This permanently removes &quot;${deleteTarget?.title || 'New chat'}&quot; and its messages.`"
+            @close="deleteTarget = null"
+        >
+            <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
+            <template #footer>
+                <Button type="button" variant="ghost" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" variant="destructive" :disabled="actionBusy" @click="confirmDelete">
+                    <Trash2 class="size-4" aria-hidden="true" /> Delete
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
     </div>
 </template>

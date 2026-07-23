@@ -8,9 +8,6 @@ project(':aparajita-capacitor-biometric-auth').projectDir = new File('../node_mo
 include ':aparajita-capacitor-secure-storage'
 project(':aparajita-capacitor-secure-storage').projectDir = new File('../node_modules/@aparajita/capacitor-secure-storage/android')
 
-include ':capacitor-community-speech-recognition'
-project(':capacitor-community-speech-recognition').projectDir = new File('../node_modules/@capacitor-community/speech-recognition/android')
-
 include ':capacitor-community-sqlite'
 project(':capacitor-community-sqlite').projectDir = new File('../node_modules/@capacitor-community/sqlite/android')
 
@@ -43,3 +40,6 @@ project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacit
 
 include ':capawesome-capacitor-file-picker'
 project(':capawesome-capacitor-file-picker').projectDir = new File('../node_modules/@capawesome/capacitor-file-picker/android')
+
+include ':capgo-capacitor-speech-recognition'
+project(':capgo-capacitor-speech-recognition').projectDir = new File('../node_modules/@capgo/capacitor-speech-recognition/android')
