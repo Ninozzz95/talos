@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { X } from '@lucide/vue'
+import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 
 /**
  * F4-#26 — shared bottom-sheet shell for the composer drawers (Add to chat /
@@ -18,9 +19,13 @@ const emit = defineEmits<{ close: [] }>()
 
 const entered = ref(false)
 const root = ref<HTMLElement | null>(null)
+
+// SF-7 / SF5-4: shared real modality — inert app root (ref-counted), Tab
+// trap, opener focus restore.
+const { trapTab } = useTalosModalSurface(root)
+
 onMounted(() => {
     requestAnimationFrame(() => { entered.value = true })
-    root.value?.focus()
 })
 </script>
 
@@ -43,6 +48,7 @@ onMounted(() => {
             class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out"
             :class="entered ? 'translate-y-0' : 'translate-y-6'"
             @keydown.escape="emit('close')"
+            @keydown="trapTab"
         >
             <header class="flex shrink-0 items-center gap-2 px-3 py-2">
                 <button

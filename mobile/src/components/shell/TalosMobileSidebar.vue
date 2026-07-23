@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import {
-    Activity, BookMarked, BookOpen, Check, FileArchive, FlaskConical, MessageSquarePlus, MessageSquareText,
+    Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquarePlus, MessageSquareText,
     Pencil, Settings, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,9 @@ const emit = defineEmits<{
 
 const TOOLS: Array<{ label: string; route: TalosMobileRouteName; icon: unknown }> = [
     { label: 'Memory', route: 'memory', icon: BookMarked },
+    { label: 'Tasks', route: 'tasks', icon: CheckSquare },
+    { label: 'Notes', route: 'notes', icon: StickyNote },
+    { label: 'Doctor', route: 'doctor', icon: Stethoscope },
     { label: 'Research', route: 'research', icon: BookOpen },
     { label: 'Cockpit', route: 'runs', icon: Activity },
     { label: 'Library', route: 'context', icon: FileArchive },

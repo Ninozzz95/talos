@@ -269,11 +269,18 @@ onBeforeUnmount(() => {
                     :key="session.id"
                     data-testid="talos-chats-row"
                     :data-active="controller.chat.activeSession.value?.id === session.id ? 'true' : 'false'"
-                    class="relative overflow-hidden rounded-xl"
+                    class="relative overflow-hidden rounded-lg"
                     @click.capture="onRowClickCapture(session.id, $event)"
                 >
-                    <!-- swipe tray revealed behind the row content -->
-                    <div class="absolute inset-y-0 right-0 flex items-stretch" :style="{ width: `${SWIPE_ACTIONS_WIDTH}px` }" aria-hidden="false">
+                    <!-- F5-#31: the tray exists only while the reveal is in
+                         motion/open — at rest nothing can bleed through the
+                         content's corners on the right edge. -->
+                    <div
+                        v-show="swipeFor(session.id).offset.value !== 0 || swipeFor(session.id).open.value"
+                        class="absolute inset-y-0 right-0 flex items-stretch"
+                        :style="{ width: `${SWIPE_ACTIONS_WIDTH}px` }"
+                        aria-hidden="false"
+                    >
                         <button
                             type="button"
                             :aria-label="`Archive chat ${session.title || 'New chat'}`"
@@ -298,7 +305,7 @@ onBeforeUnmount(() => {
                         </button>
                     </div>
                     <div
-                        class="relative flex items-center gap-1 rounded-xl px-1 bg-[var(--talos-window-bg,var(--talos-background))]"
+                        class="relative flex items-center gap-1 rounded-lg px-1 bg-[var(--talos-window-bg,var(--talos-background))]"
                         :class="controller.chat.activeSession.value?.id === session.id ? 'bg-[var(--talos-active)]' : ''"
                         :style="{
                             transform: `translateX(${swipeFor(session.id).offset.value}px)`,

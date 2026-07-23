@@ -276,4 +276,47 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     })
     await repository.deleteSession(gamma.id)
     expect((await repository.listMemories()).map((entry) => entry.id)).toEqual(['memory-2'])
+
+    // F5 stations — run-linked tasks and untrusted notes, local CRUD.
+    const task = await repository.createTask({
+        id: 'task-1',
+        title: 'Verify the EV claim',
+        description: 'Benchmark against AVM ON/OFF evidence.',
+        run_id: 'run-42',
+        priority: 'normal',
+        created_at: '2026-07-23T09:00:00.000Z',
+    })
+    expect(task).toMatchObject({ id: 'task-1', status: 'todo', run_id: 'run-42' })
+    await repository.createTask({
+        id: 'task-2',
+        title: 'Second task',
+        description: null,
+        run_id: null,
+        priority: 'high',
+        created_at: '2026-07-23T09:00:01.000Z',
+    })
+    expect((await repository.listTasks()).map((entry) => entry.id)).toEqual(['task-2', 'task-1'])
+    const doing = await repository.setTaskStatus('task-1', 'doing')
+    expect(doing.status).toBe('doing')
+    await repository.deleteTask('task-2')
+    expect((await repository.listTasks()).map((entry) => entry.id)).toEqual(['task-1'])
+    await expect(repository.setTaskStatus('task-2', 'done')).rejects.toThrow('TALOS_TASK_NOT_FOUND')
+
+    const note = await repository.createNote({
+        id: 'note-1',
+        title: 'Field observation',
+        content: 'The recognizer needs Google speech services.',
+        created_at: '2026-07-23T09:10:00.000Z',
+    })
+    expect(note).toMatchObject({ id: 'note-1', trust_level: 'untrusted' })
+    await repository.createNote({
+        id: 'note-2',
+        title: 'Second note',
+        content: 'Content two.',
+        created_at: '2026-07-23T09:10:01.000Z',
+    })
+    expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-2', 'note-1'])
+    await repository.deleteNote('note-2')
+    expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-1'])
+    await expect(repository.deleteNote('note-2')).rejects.toThrow('TALOS_NOTE_NOT_FOUND')
 }

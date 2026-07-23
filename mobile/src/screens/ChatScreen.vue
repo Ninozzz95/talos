@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
+import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
@@ -19,6 +19,7 @@ import {
     type TalosInAppBrowserEvent,
 } from '@/services/inAppBrowserService'
 import { createSessionActionRunner } from '@/lib/sessionActionRunner'
+import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -167,26 +168,34 @@ const motionSceneActive = computed(() =>
     settings.state.motion_v6.background_enabled && settings.state.motion_v6.mode !== 'off',
 )
 
-// SF-critic #1 — scroll anchoring: restored threads open at the newest message
-// and the view follows the live stream, unless the reader scrolled up.
+// F5-#28 — gesture-sovereign live-edge follow: an active touch blocks
+// auto-scroll outright, ANY upward scroll detaches (no threshold race with
+// the stream), rejoining is explicit via the back-to-bottom pill.
 const chatScroll = ref<HTMLElement | null>(null)
-const userScrolledUp = ref(false)
+const liveEdge = createTalosChatLiveEdge()
 
 function onChatScroll(): void {
     const el = chatScroll.value
     if (!el) return
-    userScrolledUp.value = el.scrollHeight - el.scrollTop - el.clientHeight > 120
+    liveEdge.onScroll({ scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight })
 }
 
 function scrollChatToBottom(behavior: ScrollBehavior = 'auto'): void {
     const el = chatScroll.value
     if (!el) return
+    const target = el.scrollHeight - el.clientHeight
+    liveEdge.markAutoScroll(Math.max(0, target))
     if (typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior })
     else el.scrollTop = el.scrollHeight
 }
 
+function rejoinLiveEdge(): void {
+    liveEdge.rejoin()
+    scrollChatToBottom('smooth')
+}
+
 watch(() => chat.messages.length, async (length) => {
-    if (!length || userScrolledUp.value) return
+    if (!length || !liveEdge.canAutoScroll()) return
     await nextTick()
     scrollChatToBottom('auto')
 })
@@ -200,13 +209,15 @@ watch(() => chat.state.streamingText, async (text) => {
         markdownPreloaded = true
         void import('@/components/chat/TalosMobileMessageContent.vue')
     }
-    if (userScrolledUp.value) return
+    if (!liveEdge.canAutoScroll()) return
     await nextTick()
-    scrollChatToBottom('smooth')
+    // Instant follow during the stream: smooth scrolling fights the touch
+    // scroller on device and lags dense token bursts.
+    scrollChatToBottom('auto')
 })
 
 watch(() => chat.activeSession.value?.id, async () => {
-    userScrolledUp.value = false
+    liveEdge.rejoin()
     await nextTick()
     scrollChatToBottom('auto')
 })
@@ -221,6 +232,9 @@ function publishComposerHeight(): void {
 async function onSend(): Promise<void> {
     const text = prompt.value
     void talosLightImpact()
+    // SF5-3: a live mic must not survive the send — late partials would
+    // resurrect the sent text into the composer.
+    dictation.cancel()
     controller.clearPromptEnhancement()
     draft.updatePrompt('')
     await draft.flush()
@@ -473,10 +487,6 @@ onBeforeUnmount(() => {
             {{ browserError }}
         </div>
 
-        <div v-if="dictation.error.value" role="alert" class="mx-3 mt-3 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
-            {{ dictation.error.value }}
-        </div>
-
         <div v-if="draftError || preferenceError" role="alert" class="mx-3 mt-3 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
             {{ draftError || preferenceError }}
         </div>
@@ -487,6 +497,9 @@ onBeforeUnmount(() => {
             :class="settings.state.shell.immersive_header ? 'pt-[calc(3.5rem+env(safe-area-inset-top))]' : ''"
             data-testid="talos-chat-scroll"
             @scroll.passive="onChatScroll"
+            @touchstart.passive="liveEdge.touchStart()"
+            @touchend.passive="liveEdge.touchEnd()"
+            @touchcancel.passive="liveEdge.touchEnd()"
         >
             <div class="flex min-h-full flex-col pb-[calc(var(--talos-composer-height,180px)+env(safe-area-inset-bottom)+1.5rem)]">
                 <div
@@ -598,6 +611,36 @@ onBeforeUnmount(() => {
         </div>
 
         <div ref="composerWrap" class="fixed inset-x-0 bottom-0 z-40">
+            <!-- F5-#28: back-to-bottom pill — rejoin the live edge explicitly. -->
+            <Transition
+                enter-active-class="transition duration-150 ease-out"
+                enter-from-class="opacity-0 translate-y-2"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition duration-100 ease-in"
+                leave-to-class="opacity-0 translate-y-2"
+            >
+                <button
+                    v-if="liveEdge.showPill.value"
+                    type="button"
+                    data-testid="talos-back-to-bottom"
+                    aria-label="Back to latest message"
+                    class="talos-pressable absolute -top-14 left-1/2 z-10 flex min-h-11 min-w-11 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-card)]/95 px-3 text-sm text-[var(--talos-text)] shadow-[0_4px_16px_rgba(0,0,0,0.14)] backdrop-blur"
+                    @click="rejoinLiveEdge"
+                >
+                    <ArrowDown class="size-4" aria-hidden="true" />
+                </button>
+            </Transition>
+
+            <!-- F5-#29: dictation problems speak where the thumb is — right
+                 above the composer, never buried at the top of the thread. -->
+            <div
+                v-if="dictation.error.value"
+                role="alert"
+                data-testid="talos-dictation-error"
+                class="mx-3 mb-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]"
+            >
+                {{ dictation.error.value }}
+            </div>
             <TalosMobileComposer
                 ref="composer"
                 :prompt="prompt"
@@ -621,6 +664,7 @@ onBeforeUnmount(() => {
                 :browser-busy="browserBusy"
                 :dictation-supported="dictation.visible.value"
                 :dictation-listening="dictation.status.value === 'listening'"
+                :dictation-starting="dictation.status.value === 'starting'"
                 :drawer-mode="settings.state.shell.composer_drawer"
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"

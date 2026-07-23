@@ -7,6 +7,7 @@ import {
     normalizeChatTitle,
     normalizeChatSurface,
     normalizeRepositoryId,
+    normalizeStationTitle,
     normalizeToolOperation,
     normalizeVaultDisplayName,
     normalizeVaultMediaType,
@@ -17,6 +18,8 @@ import {
     type CreateChatSessionInput,
     type CreateFileAuthorityGrantInput,
     type CreateMemoryInput,
+    type CreateNoteInput,
+    type CreateTaskInput,
     type CreateVaultFileInput,
     type CreateToolActivityInput,
     type TalosChatAttachmentBinding,
@@ -26,6 +29,10 @@ import {
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
     type TalosLocalMemory,
+    type TalosLocalNote,
+    type TalosLocalTask,
+    type TalosTaskPriority,
+    type TalosTaskStatus,
     type TalosMemoryKind,
     type TalosMemoryScopeType,
     type TalosMemoryStatus,
@@ -86,6 +93,30 @@ function parseSession(row: TalosSqlRow): TalosLocalChatSession {
         persistence_mode: oneOf(requiredString(row, 'persistence_mode'), ['persistent', 'temporary'] as const),
         active_model_profile_id: nullableString(row, 'active_model_profile_id'),
         metadata: jsonObject(row.metadata_json),
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function parseTask(row: TalosSqlRow): TalosLocalTask {
+    return {
+        id: requiredString(row, 'id'),
+        title: requiredString(row, 'title'),
+        description: nullableString(row, 'description'),
+        run_id: nullableString(row, 'run_id'),
+        priority: oneOf(requiredString(row, 'priority'), ['low', 'normal', 'high'] as const) as TalosTaskPriority,
+        status: oneOf(requiredString(row, 'status'), ['todo', 'doing', 'done'] as const) as TalosTaskStatus,
+        created_at: requiredString(row, 'created_at'),
+        updated_at: requiredString(row, 'updated_at'),
+    }
+}
+
+function parseNote(row: TalosSqlRow): TalosLocalNote {
+    return {
+        id: requiredString(row, 'id'),
+        title: requiredString(row, 'title'),
+        content: requiredString(row, 'content'),
+        trust_level: 'untrusted',
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
@@ -835,6 +866,90 @@ export function createSqliteChatRepository(
                 [messageId],
             )
             return rows.map(parseBinding)
+        },
+        async createTask(input: CreateTaskInput) {
+            const task: TalosLocalTask = {
+                id: normalizeRepositoryId(input.id),
+                title: normalizeStationTitle(input.title),
+                description: input.description,
+                run_id: input.run_id,
+                priority: input.priority,
+                status: 'todo',
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_tasks
+                        (id, title, description, run_id, priority, status, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [task.id, task.title, task.description, task.run_id, task.priority, task.status, task.created_at, task.updated_at],
+                )
+            })
+            return task
+        },
+        async listTasks() {
+            const rows = await (await db()).query(
+                `SELECT id, title, description, run_id, priority, status, created_at, updated_at
+                 FROM talos_tasks ORDER BY updated_at DESC, id DESC`,
+            )
+            return rows.map((row) => parseTask(row as TalosSqlRow))
+        },
+        async setTaskStatus(taskId: string, status: TalosTaskStatus) {
+            await transaction(async (database) => {
+                const exists = await database.query('SELECT id FROM talos_tasks WHERE id = ? LIMIT 1', [taskId])
+                if (exists.length !== 1) throw new Error('TALOS_TASK_NOT_FOUND')
+                await database.run(
+                    'UPDATE talos_tasks SET status = ?, updated_at = ? WHERE id = ?',
+                    [status, now(), taskId],
+                )
+            })
+            const rows = await (await db()).query(
+                `SELECT id, title, description, run_id, priority, status, created_at, updated_at
+                 FROM talos_tasks WHERE id = ? LIMIT 1`,
+                [taskId],
+            )
+            if (rows.length !== 1) throw new Error('TALOS_TASK_NOT_FOUND')
+            return parseTask(rows[0] as TalosSqlRow)
+        },
+        async deleteTask(taskId: string) {
+            await transaction(async (database) => {
+                const exists = await database.query('SELECT id FROM talos_tasks WHERE id = ? LIMIT 1', [taskId])
+                if (exists.length !== 1) throw new Error('TALOS_TASK_NOT_FOUND')
+                await database.run('DELETE FROM talos_tasks WHERE id = ?', [taskId])
+            })
+        },
+        async createNote(input: CreateNoteInput) {
+            const note: TalosLocalNote = {
+                id: normalizeRepositoryId(input.id),
+                title: normalizeStationTitle(input.title),
+                content: input.content,
+                trust_level: 'untrusted',
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_notes (id, title, content, trust_level, created_at, updated_at)
+                     VALUES (?, ?, ?, 'untrusted', ?, ?)`,
+                    [note.id, note.title, note.content, note.created_at, note.updated_at],
+                )
+            })
+            return note
+        },
+        async listNotes() {
+            const rows = await (await db()).query(
+                `SELECT id, title, content, trust_level, created_at, updated_at
+                 FROM talos_notes ORDER BY updated_at DESC, id DESC`,
+            )
+            return rows.map((row) => parseNote(row as TalosSqlRow))
+        },
+        async deleteNote(noteId: string) {
+            await transaction(async (database) => {
+                const exists = await database.query('SELECT id FROM talos_notes WHERE id = ? LIMIT 1', [noteId])
+                if (exists.length !== 1) throw new Error('TALOS_NOTE_NOT_FOUND')
+                await database.run('DELETE FROM talos_notes WHERE id = ?', [noteId])
+            })
         },
         async createMemory(input: CreateMemoryInput) {
             const memory: TalosLocalMemory = {

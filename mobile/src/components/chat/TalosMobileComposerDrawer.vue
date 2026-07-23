@@ -5,10 +5,10 @@
  * toggle rows for modes (they act and stay), an inline effort segment and
  * quiet action rows. Loaded lazily by the composer only in drawer mode.
  */
-import { onMounted, ref } from 'vue'
 import {
-    BrainCircuit, Database, FlaskConical, Globe2, Paperclip, Sparkles, X,
+    BrainCircuit, Database, FlaskConical, Globe2, Paperclip, Sparkles,
 } from '@lucide/vue'
+import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 
 const props = defineProps<{
@@ -34,14 +34,6 @@ const emit = defineEmits<{
     enhancePrompt: []
 }>()
 
-const entered = ref(false)
-const root = ref<HTMLElement | null>(null)
-onMounted(() => {
-    requestAnimationFrame(() => { entered.value = true })
-    // SF-critic F3 #3: modal semantics need at least initial focus + Escape.
-    root.value?.focus()
-})
-
 function single(action: 'attach' | 'openContext' | 'openModelLab' | 'enhancePrompt'): void {
     emit(action as never)
     emit('close')
@@ -51,41 +43,9 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
 </script>
 
 <template>
-    <!-- Teleported: the composer card's backdrop-blur creates a containing
-         block that would trap this fixed overlay inside the card. -->
-    <Teleport to="body">
-    <div class="fixed inset-0 z-[75] flex flex-col justify-end">
-        <div
-            class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"
-            :class="entered ? 'opacity-100' : 'opacity-0'"
-            aria-hidden="true"
-            @click="emit('close')"
-        />
-        <section
-            ref="root"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add to chat"
-            tabindex="-1"
-            data-testid="talos-composer-drawer"
-            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out"
-            @keydown.escape="emit('close')"
-            :class="entered ? 'translate-y-0' : 'translate-y-6'"
-        >
-            <header class="flex shrink-0 items-center gap-2 px-3 py-2">
-                <button
-                    type="button"
-                    aria-label="Close"
-                    class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="emit('close')"
-                >
-                    <X class="size-5" aria-hidden="true" />
-                </button>
-                <h2 class="flex-1 text-center text-base font-semibold">Add to chat</h2>
-                <span class="min-w-11" aria-hidden="true" />
-            </header>
-
-            <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1">
+    <!-- SF-7: shared sheet shell = teleport + real modality (inert app root,
+         focus trap, focus restore) for the Add-to-chat drawer too. -->
+    <TalosMobileComposerSheet title="Add to chat" testid="talos-composer-drawer" @close="emit('close')">
                 <div class="grid grid-cols-3 gap-3">
                     <button
                         type="button"
@@ -207,8 +167,5 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                     </span>
                 </button>
 
-            </div>
-        </section>
-    </div>
-    </Teleport>
+    </TalosMobileComposerSheet>
 </template>

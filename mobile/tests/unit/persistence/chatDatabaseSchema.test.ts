@@ -12,11 +12,12 @@ import {
 describe('TALOS chat database schema', () => {
     it('AV-02 preserves version one and adds the independent Vault and authority schema in version two', () => {
         expect(TALOS_CHAT_DATABASE_NAME).toBe('talos_mobile')
-        expect(TALOS_CHAT_DATABASE_VERSION).toBe(3)
-        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(3)
+        expect(TALOS_CHAT_DATABASE_VERSION).toBe(4)
+        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(4)
         expect(TALOS_CHAT_DATABASE_UPGRADES[0]?.toVersion).toBe(1)
         expect(TALOS_CHAT_DATABASE_UPGRADES[1]?.toVersion).toBe(2)
         expect(TALOS_CHAT_DATABASE_UPGRADES[2]?.toVersion).toBe(3)
+        expect(TALOS_CHAT_DATABASE_UPGRADES[3]?.toVersion).toBe(4)
 
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         for (const table of [
@@ -28,6 +29,8 @@ describe('TALOS chat database schema', () => {
             'talos_vault_files',
             'talos_file_authority_grants',
             'talos_memories',
+            'talos_tasks',
+            'talos_notes',
         ]) {
             expect(sql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`)
         }
@@ -56,11 +59,19 @@ describe('TALOS chat database schema', () => {
         expect(v3).toContain("CHECK (scope_type IN ('global', 'project', 'session'))")
         expect(v3).toContain("trust_level TEXT NOT NULL DEFAULT 'untrusted'")
         expect(v3).toContain('talos_memories_status_scope_idx')
+
+        // F5 stations: v4 adds run-linked local tasks and untrusted notes.
+        const v4 = TALOS_CHAT_DATABASE_UPGRADES[3]?.statements.join('\n') ?? ''
+        expect(v4).toContain('CREATE TABLE IF NOT EXISTS talos_tasks')
+        expect(v4).toContain("CHECK (status IN ('todo', 'doing', 'done'))")
+        expect(v4).toContain("CHECK (priority IN ('low', 'normal', 'high'))")
+        expect(v4).toContain('CREATE TABLE IF NOT EXISTS talos_notes')
+        expect(v4).toContain("trust_level TEXT NOT NULL DEFAULT 'untrusted'")
     })
 
     it('keeps upgrades incremental and free of destructive database deletion', () => {
         const versions = TALOS_CHAT_DATABASE_UPGRADES.map((upgrade) => upgrade.toVersion)
-        expect(versions).toEqual([1, 2, 3])
+        expect(versions).toEqual([1, 2, 3, 4])
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         expect(sql).not.toMatch(/DROP\s+DATABASE/i)
         expect(sql).not.toMatch(/DELETE\s+FROM\s+talos_chat_sessions/i)

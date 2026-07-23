@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 
-export type TalosMobileRouteName = 'chat' | 'chats' | 'memory' | 'research' | 'runs' | 'context' | 'settings'
+export type TalosMobileRouteName = 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor' | 'research' | 'runs' | 'context' | 'settings'
 
 export interface TalosMobileRoute {
     name: TalosMobileRouteName
@@ -12,6 +12,9 @@ export interface TalosMobileRoute {
 const loadChatScreen = () => import('@/screens/ChatScreen.vue').then((module) => module.default)
 const loadChatsScreen = () => import('@/screens/ChatsScreen.vue').then((module) => module.default)
 const loadMemoryScreen = () => import('@/screens/MemoryScreen.vue').then((module) => module.default)
+const loadTasksScreen = () => import('@/screens/TasksScreen.vue').then((module) => module.default)
+const loadNotesScreen = () => import('@/screens/NotesScreen.vue').then((module) => module.default)
+const loadDoctorScreen = () => import('@/screens/DoctorScreen.vue').then((module) => module.default)
 const loadResearchScreen = () => import('@/screens/ResearchScreen.vue').then((module) => module.default)
 const loadRunsScreen = () => import('@/screens/RunsScreen.vue').then((module) => module.default)
 const loadContextScreen = () => import('@/screens/ContextScreen.vue').then((module) => module.default)
@@ -26,6 +29,10 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     { name: 'chats', path: '/chats', desktop_station_id: 'chat', component: loadChatsScreen },
     // F4 Memory station — desktop `memory` feature, local registry.
     { name: 'memory', path: '/memory', desktop_station_id: 'memory', component: loadMemoryScreen },
+    // F5 stations — local-first Tasks / Notes / Doctor.
+    { name: 'tasks', path: '/tasks', desktop_station_id: 'tasks', component: loadTasksScreen },
+    { name: 'notes', path: '/notes', desktop_station_id: 'notes', component: loadNotesScreen },
+    { name: 'doctor', path: '/doctor', desktop_station_id: 'doctor', component: loadDoctorScreen },
     { name: 'research', path: '/research', desktop_station_id: 'research', component: loadResearchScreen },
     { name: 'runs', path: '/runs', desktop_station_id: 'tasks', component: loadRunsScreen },
     { name: 'context', path: '/context', desktop_station_id: 'context_vault', component: loadContextScreen },

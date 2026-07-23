@@ -8,6 +8,8 @@ import { Capacitor } from '@capacitor/core'
  * honestly — no fake mic.
  */
 export interface TalosDictationEvents {
+    /** F5-#29: fired when the recognizer REALLY starts hearing speech. */
+    onStart?: () => void
     onPartial: (text: string) => void
     onEnd: () => void
     onError: (message: string) => void
@@ -53,6 +55,7 @@ function nativeEngine(): TalosDictationEngine {
                 if (typeof match === 'string' && match) events.onPartial(match)
             })
             await plugin.addListener('listeningState', (data: { status?: string }) => {
+                if (data.status === 'started') events.onStart?.()
                 if (data.status === 'stopped' && active) {
                     active = false
                     events.onEnd()
@@ -69,11 +72,10 @@ function nativeEngine(): TalosDictationEngine {
         async stop() {
             const plugin = await loadPlugin()
             active = false
-            try {
-                await plugin.stop()
-            } finally {
-                await plugin.removeAllListeners()
-            }
+            // SF5-1: the Android plugin's stop() never resolves its call —
+            // fire it best-effort and reclaim the listeners regardless.
+            void plugin.stop().catch(() => undefined)
+            await plugin.removeAllListeners()
         },
     }
 }
@@ -129,13 +131,16 @@ function webEngine(): TalosDictationEngine {
                 const combined = `${finalText}${interim}`.trim()
                 if (combined) events.onPartial(combined)
             }
+            const instance = recognition
             recognition.onerror = (event) => {
-                if (stopping) return
+                if (stopping || instance !== recognition) return
                 events.onError(event.error === 'not-allowed'
                     ? 'TALOS needs microphone permission to dictate.'
                     : 'Speech recognition failed. Try again.')
             }
             recognition.onend = () => {
+                // A superseded instance must not clobber the live session.
+                if (instance !== recognition) return
                 recognition = null
                 if (!stopping) events.onEnd()
             }

@@ -4,6 +4,7 @@ import { BookMarked, FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
+import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
 
@@ -222,13 +223,7 @@ function formatBytes(value: number): string {
         >
             <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
                  empty nodes; each node fills as the line passes through it. -->
-            <svg class="talos-line-loader" viewBox="0 0 96 16" width="96" height="16" aria-hidden="true">
-                <line class="talos-line-loader-track" x1="4" y1="8" x2="92" y2="8" />
-                <line class="talos-line-loader-sweep" x1="4" y1="8" x2="92" y2="8" />
-                <circle class="talos-line-loader-node" cx="16" cy="8" r="4" />
-                <circle class="talos-line-loader-node" cx="48" cy="8" r="4" />
-                <circle class="talos-line-loader-node" cx="80" cy="8" r="4" />
-            </svg>
+            <TalosLineLoader />
             <span class="sr-only">Processing</span>
         </div>
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>

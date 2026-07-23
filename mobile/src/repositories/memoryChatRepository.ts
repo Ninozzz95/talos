@@ -6,6 +6,7 @@ import {
     normalizeComposerDraftScope,
     normalizeFileAuthorityPermissions,
     normalizeRepositoryId,
+    normalizeStationTitle,
     normalizeToolOperation,
     normalizeVaultDisplayName,
     normalizeVaultMediaType,
@@ -16,6 +17,8 @@ import {
     type CreateChatSessionInput,
     type CreateFileAuthorityGrantInput,
     type CreateMemoryInput,
+    type CreateNoteInput,
+    type CreateTaskInput,
     type CreateVaultFileInput,
     type CreateToolActivityInput,
     type TalosChatAttachmentBinding,
@@ -25,7 +28,10 @@ import {
     type TalosLocalToolActivity,
     type TalosLocalFileAuthorityGrant,
     type TalosLocalMemory,
+    type TalosLocalNote,
+    type TalosLocalTask,
     type TalosMemoryStatus,
+    type TalosTaskStatus,
     type TalosLocalVaultFile,
     type UpdateChatSessionInput,
     type UpdateVaultFileInput,
@@ -81,6 +87,8 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     const attachmentBindings = new Map<string, TalosChatAttachmentBinding[]>()
     const toolActivities = new Map<string, TalosLocalToolActivity>()
     const memories = new Map<string, TalosLocalMemory>()
+    const tasks = new Map<string, TalosLocalTask>()
+    const notes = new Map<string, TalosLocalNote>()
     let activeSessionId: string | null = null
     const now = options.now ?? (() => new Date().toISOString())
 
@@ -380,6 +388,55 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             const updated = { ...session, metadata: cloneJsonObject(metadata) }
             sessions.set(sessionId, updated)
             return { ...updated }
+        },
+        async createTask(input: CreateTaskInput) {
+            const task: TalosLocalTask = {
+                id: normalizeRepositoryId(input.id),
+                title: normalizeStationTitle(input.title),
+                description: input.description,
+                run_id: input.run_id,
+                priority: input.priority,
+                status: 'todo',
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            tasks.set(task.id, task)
+            return { ...task }
+        },
+        async listTasks() {
+            return [...tasks.values()]
+                .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+                .map((task) => ({ ...task }))
+        },
+        async setTaskStatus(taskId: string, status: TalosTaskStatus) {
+            const task = tasks.get(taskId)
+            if (!task) throw new Error('TALOS_TASK_NOT_FOUND')
+            const updated: TalosLocalTask = { ...task, status, updated_at: now() }
+            tasks.set(taskId, updated)
+            return { ...updated }
+        },
+        async deleteTask(taskId: string) {
+            if (!tasks.delete(taskId)) throw new Error('TALOS_TASK_NOT_FOUND')
+        },
+        async createNote(input: CreateNoteInput) {
+            const note: TalosLocalNote = {
+                id: normalizeRepositoryId(input.id),
+                title: normalizeStationTitle(input.title),
+                content: input.content,
+                trust_level: 'untrusted',
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            notes.set(note.id, note)
+            return { ...note }
+        },
+        async listNotes() {
+            return [...notes.values()]
+                .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+                .map((note) => ({ ...note }))
+        },
+        async deleteNote(noteId: string) {
+            if (!notes.delete(noteId)) throw new Error('TALOS_NOTE_NOT_FOUND')
         },
         async createMemory(input: CreateMemoryInput) {
             const memory: TalosLocalMemory = {

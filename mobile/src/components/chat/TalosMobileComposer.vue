@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
-import {
-    ArrowUp,
+import { Loader2, ArrowUp,
     BrainCircuit,
     Database,
     Gauge,
@@ -12,8 +11,7 @@ import {
     SlidersHorizontal,
     Plus,
     Sparkles,
-    Square,
-} from '@lucide/vue'
+    Square, } from '@lucide/vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffortDrawer.vue'
 import TalosMobileEnhancerDrawer from '@/components/chat/TalosMobileEnhancerDrawer.vue'
@@ -67,6 +65,7 @@ const props = withDefaults(defineProps<{
     // F2-T5: mic renders only when dictation is genuinely available (honest).
     dictationSupported?: boolean
     dictationListening?: boolean
+    dictationStarting?: boolean
     // F3-T4bis (owner #13): Claude-style minimal bar + organized tool drawer.
     drawerMode?: boolean
 }>(), {
@@ -92,6 +91,7 @@ const props = withDefaults(defineProps<{
     browserBusy: false,
     dictationSupported: false,
     dictationListening: false,
+    dictationStarting: false,
     drawerMode: false,
 })
 
@@ -449,17 +449,20 @@ watch(() => props.prompt, () => {
                 size="icon"
                 variant="outline"
                 data-mobile-icon-only="true"
-                :aria-label="dictationListening ? 'Stop dictation' : 'Dictate'"
-                :title="dictationListening ? 'Stop dictation' : 'Dictate'"
-                :aria-pressed="dictationListening"
-                :disabled="sending"
+                :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
+                :title="dictationStarting ? 'Starting dictation…' : (dictationListening ? 'Stop dictation' : 'Dictate')"
+                :aria-pressed="dictationListening || dictationStarting"
+                :disabled="sending && !dictationListening && !dictationStarting"
                 class="talos-pressable min-h-11 min-w-11 rounded-full"
-                :class="dictationListening
+                :class="dictationListening || dictationStarting
                     ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
                     : ''"
                 @click="emit('toggleDictation')"
             >
-                <Mic class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
+                <!-- F5-#29: the tap ALWAYS answers visually — spinner while the
+                     recognizer arms, pulse while it truly listens. -->
+                <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
+                <Mic v-else class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
             </Button>
         </div>
 
@@ -533,17 +536,18 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    :aria-label="dictationListening ? 'Stop dictation' : 'Dictate'"
-                    :title="dictationListening ? 'Stop dictation' : 'Dictate'"
-                    :aria-pressed="dictationListening"
-                    :disabled="sending"
+                    :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
+                    :title="dictationStarting ? 'Starting dictation…' : (dictationListening ? 'Stop dictation' : 'Dictate')"
+                    :aria-pressed="dictationListening || dictationStarting"
+                    :disabled="sending && !dictationListening && !dictationStarting"
                     class="talos-pressable min-h-11 min-w-11"
-                    :class="dictationListening
+                    :class="dictationListening || dictationStarting
                         ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
                         : ''"
                     @click="emit('toggleDictation')"
                 >
-                    <Mic class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
+                    <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
+                    <Mic v-else class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"
@@ -591,10 +595,6 @@ watch(() => props.prompt, () => {
         <span class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
 
         <!-- F3-T4bis: organized tool drawer (drawer mode only). -->
-        <Transition
-            leave-active-class="transition duration-200 ease-in"
-            leave-to-class="opacity-0 translate-y-4"
-        >
         <TalosMobileComposerDrawer
             v-if="drawerMode && toolDrawerOpen"
             :can-enhance="canRequestEnhancement"
@@ -615,7 +615,6 @@ watch(() => props.prompt, () => {
             @select-effort="emit('selectEffort', $event)"
             @enhance-prompt="requestPromptEnhancement"
         />
-        </Transition>
 
         <TalosMobileModelEffortDrawer
             v-if="modelPickerOpen"

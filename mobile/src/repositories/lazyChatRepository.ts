@@ -3,10 +3,13 @@ import type {
     CreateChatSessionInput,
     CreateFileAuthorityGrantInput,
     CreateMemoryInput,
+    CreateNoteInput,
+    CreateTaskInput,
     CreateVaultFileInput,
     CreateToolActivityInput,
     TalosChatRepository,
     TalosMemoryStatus,
+    TalosTaskStatus,
     UpdateChatSessionInput,
     UpdateVaultFileInput,
     UpdateToolActivityInput,
@@ -121,6 +124,27 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
             return (await ready()).updateSessionMetadata(sessionId, metadata)
+        },
+        async createTask(input: CreateTaskInput) {
+            return (await ready()).createTask(input)
+        },
+        async listTasks() {
+            return (await ready()).listTasks()
+        },
+        async setTaskStatus(taskId: string, status: TalosTaskStatus) {
+            return (await ready()).setTaskStatus(taskId, status)
+        },
+        async deleteTask(taskId: string) {
+            return (await ready()).deleteTask(taskId)
+        },
+        async createNote(input: CreateNoteInput) {
+            return (await ready()).createNote(input)
+        },
+        async listNotes() {
+            return (await ready()).listNotes()
+        },
+        async deleteNote(noteId: string) {
+            return (await ready()).deleteNote(noteId)
         },
         async createMemory(input: CreateMemoryInput) {
             return (await ready()).createMemory(input)
