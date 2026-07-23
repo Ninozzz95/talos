@@ -66,6 +66,9 @@ describe('TalosMobileMessageList', () => {
         })
         await vi.waitFor(() => {
             expect(wrapper.find('[data-message-id="assistant-1"] h2').exists()).toBe(true)
+            // Both async chunks (content + browser activity) must land before
+            // the assertions - their resolution order is not guaranteed.
+            expect(wrapper.find('[data-testid="talos-mobile-browser-activity"]').exists()).toBe(true)
         })
 
         expect(wrapper.get('[data-message-id="user-1"]').attributes('data-message-kind')).toBe('user')

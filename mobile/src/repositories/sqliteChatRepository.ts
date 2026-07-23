@@ -1,4 +1,5 @@
 import type { TalosSqlConnection, TalosSqlRow, TalosSqliteRuntime } from '@/persistence/sqliteTypes'
+import { talosWithTimeout } from '@/lib/talosDeviceLog'
 import {
     cloneJsonObject,
     normalizeFileAuthorityPermissions,
@@ -283,7 +284,13 @@ export function createSqliteChatRepository(
                 throw error
             }
         }
-        const chained = writeQueue.then(run, run)
+        // F5.1: a native call that never settles must not jam the queue
+        // forever — fence the whole transaction; the queue then moves on and
+        // the caller surfaces a REAL error instead of a silent hang.
+        const chained = writeQueue.then(
+            () => talosWithTimeout(run(), 20000, 'TALOS_DB_TRANSACTION'),
+            () => talosWithTimeout(run(), 20000, 'TALOS_DB_TRANSACTION'),
+        )
         writeQueue = chained.catch(() => undefined)
         return chained
     }

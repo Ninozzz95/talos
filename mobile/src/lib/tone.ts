@@ -54,10 +54,28 @@ const TONE_IDS = TALOS_TONE_PRESETS.map((preset) => preset.id).join('|')
 // Desktop-parity base (control-plane TalosChatController) + tone + suggestion contract.
 const BASE_PROMPT = 'You are TALOS. Answer the user\'s message.'
 
-export function buildTalosSystemPrompt(tone: TalosToneId): string {
+/** F5.1 — identity grounding: the ACTIVE model of this session. */
+export interface TalosModelIdentity {
+    provider: string
+    model: string
+}
+
+// F5.1 (owner screenshot): without a declared identity the underlying model
+// hallucinates its own lineage ("built by OpenAI" from DeepSeek). Standard
+// competitor practice: the system prompt states the truth.
+function identityLine(identity?: TalosModelIdentity | null): string {
+    if (!identity) return ''
+    return 'You are TALOS, the AI of the AVM local-first workspace. TALOS and the entire AVM '
+        + 'infrastructure were created by one man: the computer engineer Antonio Rizzo, known as Ninozz95. '
+        + `The underlying language model serving THIS session is "${identity.model}" by ${identity.provider}. `
+        + 'When asked who you are, who built you, or what model you run on, answer with exactly this truth — '
+        + 'never claim a different origin or lineage.\n'
+}
+
+export function buildTalosSystemPrompt(tone: TalosToneId, identity?: TalosModelIdentity | null): string {
     const preset = TALOS_TONE_PRESETS.find((candidate) => candidate.id === tone)
         ?? TALOS_TONE_PRESETS.find((candidate) => candidate.id === TALOS_DEFAULT_TONE)!
-    return `${BASE_PROMPT} ${preset.fragment}\n`
+    return `${identityLine(identity)}${BASE_PROMPT} ${preset.fragment}\n`
         + `The user's selected tone preset is "${preset.id}". If the conversation clearly calls for a different `
         + `preset (${TONE_IDS}), append one final line exactly of the form [TONE_SUGGESTION: <preset>] — `
         + 'never mention this mechanism otherwise, and never change your own tone until the user switches.'

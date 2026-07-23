@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import { talosLogDeviceIssue, talosWithTimeout } from '@/lib/talosDeviceLog'
 
 /**
  * F2-T5 — guarded dictation engine. Native path uses the pinned
@@ -25,7 +26,14 @@ export interface TalosDictationEngine {
 type SpeechRecognitionPlugin = typeof import('@capacitor-community/speech-recognition').SpeechRecognition
 
 async function loadPlugin(): Promise<SpeechRecognitionPlugin> {
-    return (await import('@capacitor-community/speech-recognition')).SpeechRecognition
+    // F5.1: on device this dynamic import was observed to NEVER settle —
+    // fence it so the mic tap and the Doctor always answer within 4s.
+    const loaded = await talosWithTimeout(
+        import('@capacitor-community/speech-recognition'),
+        4000,
+        'TALOS_SPEECH_PLUGIN_LOAD',
+    )
+    return loaded.SpeechRecognition
 }
 
 function nativeEngine(): TalosDictationEngine {
@@ -42,7 +50,8 @@ function nativeEngine(): TalosDictationEngine {
             try {
                 const status = await (await loadPlugin()).requestPermissions()
                 return status.speechRecognition === 'granted'
-            } catch {
+            } catch (error) {
+                talosLogDeviceIssue('TALOS_SPEECH_PERMISSION', String(error))
                 return false
             }
         },

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { BookMarked, FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
+import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { talosRelativeTime } from '@/lib/relativeTime'
 
 const props = defineProps<{
@@ -40,6 +41,30 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileBrowserActivity.vue'),
 )
 const copyStatus = ref('')
+
+// F5.1 — progressive streaming markdown: re-parsing on EVERY token would burn
+// the phone; a trailing ~120ms throttle keeps the render fluid and cheap
+// (Streamdown/markstream competitor pattern), with unterminated fences
+// auto-closed so partial code never flashes as raw text.
+const throttledStreamingMarkdown = ref('')
+let streamThrottle: ReturnType<typeof setTimeout> | null = null
+watch(() => props.streamingText, (text) => {
+    if (!text) {
+        if (streamThrottle !== null) clearTimeout(streamThrottle)
+        streamThrottle = null
+        throttledStreamingMarkdown.value = ''
+        return
+    }
+    if (streamThrottle !== null) return
+    streamThrottle = setTimeout(() => {
+        streamThrottle = null
+        throttledStreamingMarkdown.value = stabilizeStreamingTalosMarkdown(props.streamingText ?? '')
+    }, 120)
+    if (!throttledStreamingMarkdown.value) {
+        throttledStreamingMarkdown.value = stabilizeStreamingTalosMarkdown(text)
+    }
+}, { immediate: true })
+onBeforeUnmount(() => { if (streamThrottle !== null) clearTimeout(streamThrottle) })
 
 // Meta timestamps age honestly: a shared `now` ticks every 30s so "just now"
 // does not persist forever on an idle thread.
@@ -205,8 +230,11 @@ function formatBytes(value: number): string {
             class="w-full max-w-full px-1 py-1 text-sm leading-6 text-[var(--talos-text,var(--foreground))]"
         >
             <!-- The growing text stays OUTSIDE any live region: re-announcing
-                 the whole reply on every token is screen-reader noise. -->
-            <p class="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{{ streamingText }}</p>
+                 the whole reply on every token is screen-reader noise.
+                 F5.1 (owner): markdown renders PROGRESSIVELY during the
+                 stream — same renderer as final messages, throttled, with
+                 unterminated fences auto-closed (competitor pattern). -->
+            <TalosMobileMessageContent :content="throttledStreamingMarkdown" />
             <span class="mt-1 flex items-center gap-1" aria-hidden="true">
                 <span class="talos-typing-dot"></span>
                 <span class="talos-typing-dot"></span>
@@ -223,7 +251,7 @@ function formatBytes(value: number): string {
         >
             <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
                  empty nodes; each node fills as the line passes through it. -->
-            <TalosLineLoader />
+            <TalosLineLoader :width="44" />
             <span class="sr-only">Processing</span>
         </div>
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>

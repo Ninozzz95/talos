@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
@@ -25,6 +25,24 @@ const profiles: TalosMobileModelProfileView[] = [{
 }]
 
 describe('TalosMobileMessageList streaming (F2-T4)', () => {
+    it('F5.1 (owner): streaming text renders as PROGRESSIVE MARKDOWN, not plain text', async () => {
+        const wrapper = mount(TalosMobileMessageList, {
+            props: {
+                messages: [],
+                sending: true,
+                streamingText: '## Piano\n\n- primo punto\n\n```ts\nconst x =',
+            },
+        })
+        const live = wrapper.get('[data-testid="talos-mobile-streaming"]')
+        await vi.waitFor(() => {
+            expect(live.find('h2').exists()).toBe(true)
+        })
+        expect(live.get('h2').text()).toBe('Piano')
+        expect(live.find('li').exists()).toBe(true)
+        // The unterminated fence is auto-closed so the code renders instead of flickering raw.
+        expect(live.find('pre').exists()).toBe(true)
+    })
+
     it('renders the live streaming text as an in-progress assistant section instead of typing dots', () => {
         const wrapper = mount(TalosMobileMessageList, {
             props: {

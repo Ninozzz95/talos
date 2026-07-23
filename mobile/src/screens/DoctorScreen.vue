@@ -9,6 +9,7 @@ import { Activity, CircleCheck, CircleX, Stethoscope } from '@lucide/vue'
 import { Capacitor } from '@capacitor/core'
 import { useChatController } from '@/stores/chatController'
 import { talosDictationDiagnostics } from '@/services/dictation'
+import { talosDeviceIssues, talosWithTimeout, type TalosDeviceIssue } from '@/lib/talosDeviceLog'
 import { biometricUnlockAvailable } from '@/services/appLock'
 
 interface DoctorRow {
@@ -21,6 +22,7 @@ interface DoctorRow {
 const controller = useChatController()
 const rows = ref<DoctorRow[]>([])
 const scanning = ref(true)
+const issues = ref<readonly TalosDeviceIssue[]>([])
 
 async function scan(): Promise<void> {
     scanning.value = true
@@ -41,7 +43,7 @@ async function scan(): Promise<void> {
         ok: persistence === 'ready',
     })
 
-    const dictation = await talosDictationDiagnostics().catch(() => null)
+    const dictation = await talosWithTimeout(talosDictationDiagnostics(), 6000, 'TALOS_DOCTOR_SPEECH').catch(() => null)
     collected.push({
         id: 'speech',
         label: 'Speech recognizer',
@@ -51,7 +53,7 @@ async function scan(): Promise<void> {
         ok: Boolean(dictation?.pluginLoaded && dictation.available !== false),
     })
 
-    const biometric = await biometricUnlockAvailable().catch(() => false)
+    const biometric = await talosWithTimeout(biometricUnlockAvailable(), 5000, 'TALOS_DOCTOR_BIOMETRIC').catch(() => false)
     collected.push({
         id: 'biometrics',
         label: 'Biometric unlock',
@@ -61,8 +63,8 @@ async function scan(): Promise<void> {
 
     let shareOk = false
     try {
-        const { Share } = await import('@capacitor/share')
-        shareOk = (await Share.canShare()).value
+        const { Share } = await talosWithTimeout(import('@capacitor/share'), 5000, 'TALOS_DOCTOR_SHARE')
+        shareOk = (await talosWithTimeout(Share.canShare(), 5000, 'TALOS_DOCTOR_SHARE')).value
     } catch { shareOk = false }
     collected.push({
         id: 'share',
@@ -79,6 +81,7 @@ async function scan(): Promise<void> {
     })
 
     rows.value = collected
+    issues.value = talosDeviceIssues()
     scanning.value = false
 }
 
@@ -113,5 +116,21 @@ onMounted(scan)
                 </div>
             </li>
         </ul>
+
+        <!-- F5.1: recent device issues (fenced timeouts, swallowed native
+             errors) — the evidence channel for device-only failures. -->
+        <section v-if="issues.length" class="mt-2">
+            <h3 class="px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Recent issues</h3>
+            <ul class="flex flex-col gap-1">
+                <li
+                    v-for="(issue, index) in issues"
+                    :key="index"
+                    data-testid="talos-doctor-issue"
+                    class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-2 font-mono text-[11px] leading-4 text-[var(--talos-muted)]"
+                >
+                    {{ issue.at.slice(11, 19) }} · {{ issue.tag }} · {{ issue.detail }}
+                </li>
+            </ul>
+        </section>
     </div>
 </template>

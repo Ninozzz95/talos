@@ -227,7 +227,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(preview).toContainText('talos_session_benchmark_scenario')
     })
 
-    test('#23 archives a chat with a left swipe and restores it from Archived', async ({ page }) => {
+    test('#23/F5.1 hold-dropdown archives a chat and restores it from Archived', async ({ page }) => {
         await mockProvider(page)
         await configureGemini(page)
 
@@ -247,28 +247,30 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         // naturally does before gesturing.
         await page.waitForFunction(() => getComputedStyle(document.body).pointerEvents !== 'none')
 
-        // Left swipe on the row content reveals the action tray.
+        // F5.1 (owner): TAP-AND-HOLD opens the row dropdown.
         const box = (await row.first().boundingBox())!
-        const startX = box.x + box.width - 24
-        const y = box.y + box.height / 2
-        await page.mouse.move(startX, y)
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
         await page.mouse.down()
-        for (let step = 1; step <= 8; step += 1) {
-            await page.mouse.move(startX - step * 20, y)
-        }
+        await page.waitForTimeout(650)
         await page.mouse.up()
-
-        const archiveButton = page.getByLabel('Archive chat Chat da archiviare')
-        await expect(archiveButton).toBeVisible()
-        await archiveButton.click()
+        const menu = page.locator('[data-testid="talos-chats-row-menu"]')
+        await expect(menu).toBeVisible()
+        await menu.getByRole('menuitem', { name: 'Archive' }).click()
 
         await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(0)
         const toggle = page.locator('[data-testid="talos-chats-archived-toggle"]')
         await expect(toggle).toContainText('Archived (1)')
         await toggle.click()
-        await expect(page.locator('[data-testid="talos-chats-archived-row"]')).toContainText('Chat da archiviare')
 
-        await page.getByLabel('Unarchive chat Chat da archiviare').click()
+        const archivedRow = page.locator('[data-testid="talos-chats-archived-row"]')
+        await expect(archivedRow).toContainText('Chat da archiviare')
+        const archivedBox = (await archivedRow.first().boundingBox())!
+        await page.mouse.move(archivedBox.x + archivedBox.width / 2, archivedBox.y + archivedBox.height / 2)
+        await page.mouse.down()
+        await page.waitForTimeout(650)
+        await page.mouse.up()
+        await expect(menu).toBeVisible()
+        await menu.getByRole('menuitem', { name: 'Unarchive' }).click()
         await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(1)
         await expect(page.locator('[data-testid="talos-chats-archived-toggle"]')).toHaveCount(0)
     })
@@ -288,14 +290,27 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         const row = page.locator('[data-testid="talos-chats-row"]')
         await expect(row).toHaveCount(1)
 
-        await row.first().getByLabel(/^Rename /).click()
+        // F5.1: actions live in the hold dropdown.
+        async function holdFirstRow(): Promise<void> {
+            await page.waitForFunction(() => getComputedStyle(document.body).pointerEvents !== 'none')
+            const box = (await row.first().boundingBox())!
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+            await page.mouse.down()
+            await page.waitForTimeout(650)
+            await page.mouse.up()
+            await expect(page.locator('[data-testid="talos-chats-row-menu"]')).toBeVisible()
+        }
+
+        await holdFirstRow()
+        await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Rename' }).click()
         const nameInput = page.getByLabel('Chat name')
         await nameInput.fill('Lista rinominata')
         await page.getByRole('button', { name: 'Save' }).click()
         await expect(nameInput).toHaveCount(0)
         await expect(row.first()).toContainText('Lista rinominata')
 
-        await row.first().getByRole('button', { name: 'Delete Lista rinominata', exact: true }).click()
+        await holdFirstRow()
+        await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Delete' }).click()
         await expect(page.getByText('Delete chat?', { exact: true })).toBeVisible()
         await page.getByRole('button', { name: 'Delete', exact: true }).click()
         await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(0)
