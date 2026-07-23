@@ -49,12 +49,12 @@ final class TalosModelCenterTest extends TestCase
         $this->assertStringContainsString('deleteModelProfile', $composable);
         $this->assertStringContainsString('probeModelProfile', $composable);
         $this->assertStringContainsString('createAndProbeModelProfile', $quickAdd);
-        $this->assertStringContainsString('probeDraftModelProfile', $quickAdd);
+        $this->assertStringContainsString('discoverDraftModelCatalog', $quickAdd);
         $this->assertStringContainsString('probeModelProfile', $component);
         $this->assertStringContainsString('deleteModelProfile', $component);
         $this->assertStringContainsString('TalosModelQuickAdd', $component);
         $this->assertStringContainsString('TalosProviderIcon', $component);
-        $this->assertStringContainsString('@click="runDraftProbe"', $quickAdd);
+        $this->assertStringContainsString('@click="discoverModels"', $quickAdd);
         $this->assertStringContainsString('@click="testAndAdd"', $quickAdd);
         $this->assertStringContainsString('Add profile', $quickAdd);
         $this->assertStringContainsString('Advanced options', $quickAdd);
