@@ -11,6 +11,8 @@ import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialo
 const props = defineProps<{
     activeTitle: string
     busy: boolean
+    /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
+    hideMenu?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -67,6 +69,7 @@ function confirmDelete(): void {
         />
         <div class="relative flex items-start justify-between px-3 pt-[max(0.5rem,env(safe-area-inset-top))]">
             <Button
+                v-if="!props.hideMenu"
                 type="button"
                 size="icon-lg"
                 variant="ghost"
@@ -76,6 +79,7 @@ function confirmDelete(): void {
             >
                 <Menu aria-hidden="true" />
             </Button>
+            <span v-else aria-hidden="true" />
 
             <div class="relative pointer-events-auto" @keydown.escape="optionsOpen = false">
                 <Button

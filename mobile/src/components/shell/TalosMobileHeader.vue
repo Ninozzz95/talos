@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 const props = defineProps<{
     title: string
     creatingSession: boolean
+    /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
+    hideMenu?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +25,7 @@ const emit = defineEmits<{
         class="relative z-10 flex h-[calc(3.75rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)] backdrop-blur"
     >
         <Button
+            v-if="!props.hideMenu"
             type="button"
             size="icon-lg"
             class="min-h-11 min-w-11"
@@ -32,6 +35,7 @@ const emit = defineEmits<{
         >
             <Menu aria-hidden="true" />
         </Button>
+        <span v-else class="min-w-11" aria-hidden="true" />
 
         <div class="min-w-0 flex-1 text-center">
             <p
@@ -42,7 +46,9 @@ const emit = defineEmits<{
             </p>
         </div>
 
+        <!-- SF6-F3: on tablet the panel owns New Chat too — no duplicates. -->
         <Button
+            v-if="!props.hideMenu"
             type="button"
             size="icon-lg"
             class="min-h-11 min-w-11"
@@ -53,5 +59,6 @@ const emit = defineEmits<{
         >
             <MessageSquarePlus aria-hidden="true" />
         </Button>
+        <span v-else class="min-w-11" aria-hidden="true" />
     </header>
 </template>

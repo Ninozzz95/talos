@@ -27,6 +27,7 @@ import {
     TALOS_MOBILE_EFFORT_ORDER,
     type TalosMobileEffortLevel,
 } from '@/lib/mobileEffort'
+import { TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 import {
     TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
     parseTalosMobileModelLabPreferences,
@@ -71,6 +72,8 @@ export const TALOS_DEFAULT_COMPOSER_DEFAULTS: TalosComposerDefaults = Object.fre
 export interface TalosMobileShellPreferences {
     immersive_header: boolean
     composer_drawer: boolean
+    /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
+    tablet_sidebar_width: number
 }
 
 // Owner #15 (2026-07-23): immersive chrome and the Claude-style composer
@@ -78,6 +81,7 @@ export interface TalosMobileShellPreferences {
 const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_header: true,
     composer_drawer: true,
+    tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
 function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
@@ -89,6 +93,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         composer_drawer: typeof record.composer_drawer === 'boolean'
             ? record.composer_drawer
             : DEFAULT_SHELL_PREFERENCES.composer_drawer,
+        tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }
 

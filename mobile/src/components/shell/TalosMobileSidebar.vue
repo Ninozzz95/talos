@@ -90,7 +90,7 @@ function confirmDelete(): void {
              override with the SAME variants so full-width really applies. -->
         <DrawerContent
             data-testid="talos-mobile-sidebar"
-            class="h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)] data-[vaul-drawer-direction=left]:w-full data-[vaul-drawer-direction=left]:max-w-none data-[vaul-drawer-direction=left]:rounded-none data-[vaul-drawer-direction=left]:border-0 data-[vaul-drawer-direction=left]:sm:max-w-none"
+            class="h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)] data-[vaul-drawer-direction=left]:w-full data-[vaul-drawer-direction=left]:max-w-none data-[vaul-drawer-direction=left]:rounded-none data-[vaul-drawer-direction=left]:border-0 data-[vaul-drawer-direction=left]:sm:max-w-none md:!w-[380px] md:!max-w-[380px] md:!border-r md:border-[var(--talos-border)]"
         >
             <DrawerHeader class="flex-row items-center gap-3 border-b border-[var(--talos-border)] px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] text-left">
                 <div class="min-w-0 flex-1">

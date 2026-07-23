@@ -112,6 +112,54 @@ describe('ChatsScreen (F3-T3)', () => {
     })
 })
 
+// F6 — tablet split view embeds this screen as the persistent left panel:
+// selection must NOT navigate (the chat is already on the right) but must
+// announce itself so the shell can dismiss an open station sheet.
+describe('ChatsScreen embedded panel mode (F6)', () => {
+    it('opens a chat without routing and emits activated', async () => {
+        const wrapper = mount(ChatsScreen, { props: { embedded: true }, attachTo: document.body })
+        await wrapper.findAll('[data-testid="talos-chats-open"]')[1].trigger('click')
+        await flushPromises()
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        expect(controller.selectSession).toHaveBeenCalledWith('s1')
+        expect(mockState.routerPush).not.toHaveBeenCalled()
+        expect(wrapper.emitted('activated')).toHaveLength(1)
+        wrapper.unmount()
+    })
+
+    it('starts a new chat without routing and emits activated', async () => {
+        const wrapper = mount(ChatsScreen, { props: { embedded: true }, attachTo: document.body })
+        await wrapper.get('[data-testid="talos-chats-new"]').trigger('click')
+        await flushPromises()
+        const controller = mockState.controller as ReturnType<typeof makeController>
+        expect(controller.newSession).toHaveBeenCalledOnce()
+        expect(mockState.routerPush).not.toHaveBeenCalled()
+        expect(wrapper.emitted('activated')).toHaveLength(1)
+        wrapper.unmount()
+    })
+
+    it('SF6-F1: the embedded root must not carry min-h-full (it clips the panel list)', () => {
+        const embedded = mount(ChatsScreen, { props: { embedded: true }, attachTo: document.body })
+        expect(embedded.get('[data-testid="talos-chats-screen"]').classes()).not.toContain('min-h-full')
+        embedded.unmount()
+        const page = mount(ChatsScreen, { attachTo: document.body })
+        expect(page.get('[data-testid="talos-chats-screen"]').classes()).toContain('min-h-full')
+        page.unmount()
+    })
+
+    it('SF6-F2: the embedded hold menu anchors to the held row, not the viewport', async () => {
+        const wrapper = mount(ChatsScreen, { props: { embedded: true }, attachTo: document.body })
+        await holdRow(wrapper, '[data-testid="talos-chats-row"]')
+        const element = menu()
+        // Anchored: inline left/width derived from the row rect (viewport-wide
+        // inset-x-6 smears the menu across the whole tablet split view).
+        expect(element.style.left).not.toBe('')
+        expect(element.style.width).not.toBe('')
+        expect(element.className).not.toContain('inset-x-6')
+        wrapper.unmount()
+    })
+})
+
 describe('ChatsScreen hold dropdown (F5.1)', () => {
     it('long-press opens the row menu; a moved finger cancels it', async () => {
         const wrapper = mountScreen()

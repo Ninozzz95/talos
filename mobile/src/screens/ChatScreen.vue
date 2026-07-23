@@ -610,7 +610,8 @@ onBeforeUnmount(() => {
             </div>
         </div>
 
-        <div ref="composerWrap" class="fixed inset-x-0 bottom-0 z-40">
+        <!-- F6: the dock spares the tablet chat panel (--talos-tablet-rail=0 on phones). -->
+        <div ref="composerWrap" class="fixed bottom-0 right-0 z-40" :style="{ left: 'var(--talos-tablet-rail, 0px)' }">
             <!-- F5-#28: back-to-bottom pill — rejoin the live edge explicitly. -->
             <Transition
                 enter-active-class="transition duration-150 ease-out"
