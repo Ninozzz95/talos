@@ -50,4 +50,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 </manifest>
