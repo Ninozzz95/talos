@@ -19,7 +19,7 @@ const emit = defineEmits<{
 <template>
     <header
         data-testid="talos-mobile-header"
-        class="relative z-10 flex h-12 shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/92 px-2 pt-[env(safe-area-inset-top)]"
+        class="relative z-10 flex h-14 shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)]"
     >
         <Button
             type="button"

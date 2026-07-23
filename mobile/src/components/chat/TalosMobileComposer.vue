@@ -7,9 +7,11 @@ import {
     Gauge,
     Globe2,
     ExternalLink,
+    Mic,
     Paperclip,
     SlidersHorizontal,
     Sparkles,
+    Square,
 } from '@lucide/vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
@@ -59,6 +61,9 @@ const props = withDefaults(defineProps<{
     browseMode?: boolean
     browserSuggestionUrl?: string | null
     browserBusy?: boolean
+    // F2-T5: mic renders only when dictation is genuinely available (honest).
+    dictationSupported?: boolean
+    dictationListening?: boolean
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -80,11 +85,15 @@ const props = withDefaults(defineProps<{
     browseMode: false,
     browserSuggestionUrl: null,
     browserBusy: false,
+    dictationSupported: false,
+    dictationListening: false,
 })
 
 const emit = defineEmits<{
     'update:prompt': [prompt: string]
     send: []
+    stop: []
+    toggleDictation: []
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
     selectEffort: [level: TalosMobileEffortLevel]
@@ -300,7 +309,7 @@ watch(() => props.prompt, () => {
     <section
         ref="composerRoot"
         data-testid="talos-mobile-composer"
-        class="relative mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-lg border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))] p-2 shadow-lg"
+        class="relative mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))]/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur"
         aria-label="Chat composer"
     >
         <div
@@ -327,7 +336,7 @@ watch(() => props.prompt, () => {
                 v-if="enhancingPrompt"
                 data-testid="talos-mobile-enhancer-status"
                 role="status"
-                class="rounded-md border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-muted,var(--muted-foreground))] shadow-xl"
+                class="rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-3 text-sm text-[var(--talos-muted,var(--muted-foreground))] shadow-xl"
             >
                 Improving prompt with {{ modelTitle }}…
             </div>
@@ -352,7 +361,7 @@ watch(() => props.prompt, () => {
             <div
                 v-if="modelPickerOpen"
                 id="talos-mobile-model-picker-popover"
-                class="absolute bottom-full left-0 right-0 z-40 mb-2 rounded-md border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] p-2 shadow-xl"
+                class="absolute bottom-full left-0 right-0 z-40 mb-2 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] p-2 shadow-xl"
             >
                 <TalosMobileComposerModelPicker
                     :model-profiles="modelProfiles"
@@ -374,7 +383,7 @@ watch(() => props.prompt, () => {
         <div
             v-if="effortPickerOpen"
             id="talos-mobile-effort-picker-popover"
-            class="absolute bottom-full left-2 right-2 z-40 mb-2 rounded-md border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] p-3 shadow-xl"
+            class="absolute bottom-full left-2 right-2 z-40 mb-2 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] p-3 shadow-xl"
         >
             <TalosMobileEffortPicker
                 :effort-levels="selectedProfile?.effort_levels ?? []"
@@ -423,22 +432,34 @@ watch(() => props.prompt, () => {
                 rows="2"
                 aria-label="Message TALOS"
                 placeholder="Message TALOS..."
-                :disabled="sending"
                 class="max-h-48 min-h-14 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 pr-14 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
             />
+            <!-- One persistent shell that genuinely morphs Send↔Stop: only the
+                 glyph transitions (~150ms), the button never unmounts. -->
             <Button
                 type="button"
                 size="icon"
                 data-mobile-icon-only="true"
-                aria-label="Send message"
-                :title="statusText || 'Send message'"
-                :disabled="!canSubmit"
-                class="absolute bottom-1.5 right-1.5 min-h-11 min-w-11 rounded-md bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
-                @click="requestSend()"
+                :aria-label="sending ? 'Stop response' : 'Send message'"
+                :title="sending ? 'Stop response' : (statusText || 'Send message')"
+                :disabled="!sending && !canSubmit"
+                class="talos-pressable absolute bottom-1.5 right-1.5 min-h-11 min-w-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                @click="sending ? emit('stop') : requestSend()"
             >
-                <ArrowUp class="size-5" aria-hidden="true" />
+                <Transition
+                    mode="out-in"
+                    enter-active-class="transition duration-150 ease-out"
+                    enter-from-class="opacity-0 scale-75"
+                    enter-to-class="opacity-100 scale-100"
+                    leave-active-class="transition duration-100 ease-in"
+                    leave-from-class="opacity-100 scale-100"
+                    leave-to-class="opacity-0 scale-75"
+                >
+                    <Square v-if="sending" class="size-4" aria-hidden="true" />
+                    <ArrowUp v-else class="size-5" aria-hidden="true" />
+                </Transition>
             </Button>
         </div>
 
@@ -506,6 +527,24 @@ watch(() => props.prompt, () => {
                     @click="emit('attach')"
                 >
                     <Paperclip class="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                    v-if="dictationSupported"
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    data-mobile-icon-only="true"
+                    :aria-label="dictationListening ? 'Stop dictation' : 'Dictate'"
+                    :title="dictationListening ? 'Stop dictation' : 'Dictate'"
+                    :aria-pressed="dictationListening"
+                    :disabled="sending"
+                    class="talos-pressable min-h-11 min-w-11"
+                    :class="dictationListening
+                        ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
+                        : ''"
+                    @click="emit('toggleDictation')"
+                >
+                    <Mic class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
                 </Button>
                 <Button
                     type="button"

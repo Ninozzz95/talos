@@ -23,10 +23,12 @@ export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosSessionSurface = 'chat' | 'browse'
 export type TalosChatBubbleScale = 'compact' | 'balanced' | 'expanded'
 export type TalosComposerMode = 'full' | 'minimal'
+export type TalosMessageStyle = 'sections' | 'bubbles'
 export type TalosMobileWindowPresentation = 'drawer' | 'fullscreen'
 export type TalosChatLayoutPreferences = {
     bubble_scale: TalosChatBubbleScale
     composer_mode: TalosComposerMode
+    message_style: TalosMessageStyle
     advanced_rail_expanded: boolean
     mobile_window_presentation: TalosMobileWindowPresentation
 }
@@ -208,6 +210,21 @@ export type TalosSessionExportPayload = {
 
 export type TalosModelProfileStatus = 'untested' | 'healthy' | 'degraded' | 'failed' | 'disabled'
 
+// Canonical reasoning-effort ladder (locked, FV2-06.0 spec §3):
+// off < minimal < low < medium < high < xhigh < max.
+// `off` is a request-layer concept (send no reasoning param), not a catalog level.
+export type TalosEffortLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+export const TALOS_EFFORT_ORDER: readonly TalosEffortLevel[] = [
+    'off',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+] as const
+
 export type TalosModelProfile = {
     id: string
     user_id?: number | null
@@ -220,8 +237,70 @@ export type TalosModelProfile = {
     capabilities?: Record<string, unknown> | null
     probe_result?: Record<string, unknown> | null
     has_secret: boolean
+    effort_levels: string[]
+    supports_thinking: boolean
+    show_in_composer: boolean
     created_at: string
     updated_at: string
+}
+
+export type TalosModelCatalogChatCompatibility = 'supported' | 'unsupported' | 'unknown'
+export type TalosModelCatalogLifecycle = 'stable' | 'preview' | 'experimental' | 'deprecated' | 'unknown'
+
+export type TalosProviderModelCatalogCapabilities = {
+    text: boolean | null
+    vision: boolean | null
+    tools: boolean | null
+    reasoning: boolean | null
+    embeddings: boolean | null
+    image_output: boolean | null
+    audio_output: boolean | null
+}
+
+export type TalosProviderModelCatalogItem = {
+    id: string
+    display_name: string
+    provider: TalosModelProfile['provider']
+    owned_by: string | null
+    chat_compatibility: TalosModelCatalogChatCompatibility
+    capabilities: TalosProviderModelCatalogCapabilities
+    context_window: number | null
+    max_output_tokens: number | null
+    lifecycle: TalosModelCatalogLifecycle
+    canonical_slug: string | null
+    local_digest: string | null
+    metadata: Record<string, unknown>
+}
+
+export type TalosProviderModelCatalog = {
+    profile_id: string | null
+    provider: TalosModelProfile['provider']
+    models: TalosProviderModelCatalogItem[]
+    complete: boolean
+    page_count: number
+    fetched_at: string
+    warnings: string[]
+}
+
+export type TalosModelCatalogFaultCode =
+    | 'MODEL_CATALOG_SECRET_MISSING'
+    | 'MODEL_CATALOG_AUTH_FAILED'
+    | 'MODEL_CATALOG_RATE_LIMITED'
+    | 'MODEL_CATALOG_POLICY_BLOCKED'
+    | 'MODEL_CATALOG_CONNECTION_FAILED'
+    | 'MODEL_CATALOG_CONNECTED_IP_MISMATCH'
+    | 'MODEL_CATALOG_REDIRECT_BLOCKED'
+    | 'MODEL_CATALOG_RESPONSE_TOO_LARGE'
+    | 'MODEL_CATALOG_RESPONSE_INVALID'
+    | 'MODEL_CATALOG_PAGINATION_INVALID'
+    | 'MODEL_CATALOG_LIMIT_EXCEEDED'
+
+export type TalosModelCatalogFault = {
+    code: TalosModelCatalogFaultCode | string
+    message: string
+    retryable: boolean
+    retry_after_seconds: number | null
+    provider: TalosModelProfile['provider'] | string
 }
 
 export type TalosModelRoutingLane = {

@@ -198,7 +198,7 @@ describe('createChatStore durable sessions', () => {
             role: 'user',
             content: 'Use this report.',
             parts: [expect.objectContaining({ type: 'document_text', text: 'Report' })],
-        })])
+        })], expect.anything())
         const user = first.messages.find((message) => message.role === 'user')!
         expect(user.attachments).toEqual([expect.objectContaining({
             id: 'binding-report',
@@ -268,7 +268,7 @@ describe('createChatStore durable sessions', () => {
             { role: 'user', content: 'Q1' },
             { role: 'assistant', content: 'A1' },
             { role: 'user', content: 'Q2' },
-        ])
+        ], expect.anything())
     })
 
     it('persists action provenance metadata across process restart', async () => {

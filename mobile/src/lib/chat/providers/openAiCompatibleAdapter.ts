@@ -9,6 +9,7 @@ import type {
     TalosMobileProviderModel,
 } from '@/lib/chat/providerContracts'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
+import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import {
     malformedProviderResponse,
     normalizeHttpEndpoint,
@@ -127,6 +128,24 @@ function normalizeModel(config: OpenAiCompatibleConfig, model: z.infer<typeof mo
     }
 }
 
+function compatibleCompletionData(
+    config: OpenAiCompatibleConfig,
+    input: TalosMobileCompletionInput,
+    stream: boolean,
+): Record<string, unknown> {
+    const messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = []
+    if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
+    messages.push(...input.turns.map((turn) => ({ role: turn.role, content: openAiTurnContent(turn) })))
+    const data: Record<string, unknown> = { model: input.model.id, messages, stream }
+    if (config.provider === 'openrouter' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning')) {
+        data.reasoning = { effort: input.effort }
+    }
+    if (config.provider === 'openai' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning_effort')) {
+        data.reasoning_effort = input.effort
+    }
+    return data
+}
+
 function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMobileProviderAdapter {
     return {
         provider: config.provider,
@@ -151,16 +170,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
         async complete(input: TalosMobileCompletionInput, credential: TalosMobileProviderCredential, transport: TalosMobileHttpTransport): Promise<TalosMobileCompletionResult> {
             const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'complete')
-            const messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = []
-            if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
-            messages.push(...input.turns.map((turn) => ({ role: turn.role, content: openAiTurnContent(turn) })))
-            const data: Record<string, unknown> = { model: input.model.id, messages, stream: false }
-            if (config.provider === 'openrouter' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning')) {
-                data.reasoning = { effort: input.effort }
-            }
-            if (config.provider === 'openai' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning_effort')) {
-                data.reasoning_effort = input.effort
-            }
+            const data = compatibleCompletionData(config, input, false)
             const response = await transport.request({
                 method: 'POST',
                 url: `${baseUrl}/chat/completions`,
@@ -180,6 +190,27 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 finishReason: choice.finish_reason ?? null,
                 usage: numericUsage(parsed.data.usage),
             }
+        },
+        // F2-T4: native fetch SSE (`choices[0].delta.content`). OpenAI blocks
+        // browser-origin calls — that surfaces as a pre-first-byte failure and
+        // the router transparently retries via the buffered transport.
+        async streamComplete(input, credential, handlers) {
+            const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
+            const baseUrl = compatibleBaseUrl(config, credential, 'complete')
+            const text = await talosStreamText({
+                url: `${baseUrl}/chat/completions`,
+                headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+                body: compatibleCompletionData(config, input, true),
+                signal: handlers.signal,
+                accumulator: createTalosSseAccumulator(),
+                extract: (payload) => {
+                    const event = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> }
+                    return event.choices?.[0]?.delta?.content ?? ''
+                },
+                onChunk: handlers.onChunk,
+            })
+            if (!text) throw malformedProviderResponse(config.provider, 'complete')
+            return { text, model: input.model.id }
         },
     }
 }

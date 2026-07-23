@@ -36,8 +36,10 @@ describe('TalosMobileBackground', () => {
         const wrapper = shallowMount(TalosMobileBackground)
         await nextTick()
         expect(wrapper.exists()).toBe(true)
+        // T6.5 regression: the migration contract reads `theme_motion_v6` —
+        // the old `motion_v6` key was silently ignored (background never ran).
         expect(mocks.resolve).toHaveBeenCalledWith(expect.objectContaining({
-            settingsPreferences: { motion_v6: mocks.motion },
+            settingsPreferences: { theme_motion_v6: mocks.motion },
         }))
         wrapper.unmount()
     })

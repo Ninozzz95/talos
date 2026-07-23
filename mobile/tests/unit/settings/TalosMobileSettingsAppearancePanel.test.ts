@@ -10,7 +10,9 @@ const stores = vi.hoisted(() => ({
     },
     settings: {
         state: {
+            shell: { immersive_header: false },
             chat_layout: {
+                message_style: 'sections',
                 bubble_scale: 'balanced',
                 composer_mode: 'full',
                 advanced_rail_expanded: false,
@@ -34,6 +36,7 @@ const stores = vi.hoisted(() => ({
             },
         },
         setChatLayout: vi.fn().mockResolvedValue(undefined),
+        setShell: vi.fn().mockResolvedValue(undefined),
         setVisibility: vi.fn().mockResolvedValue(undefined),
         resetVisibility: vi.fn().mockResolvedValue(undefined),
         setMotionPreferences: vi.fn().mockResolvedValue(undefined),
@@ -48,6 +51,8 @@ import TalosMobileSettingsAppearancePanel from '@/components/talos/settings/Talo
 
 beforeEach(() => {
     vi.clearAllMocks()
+    stores.settings.state.motion_v6.mode = 'off'
+    stores.settings.state.motion_v6.background_enabled = true
 })
 
 async function activateTab(wrapper: VueWrapper, label: string): Promise<void> {
@@ -98,6 +103,10 @@ describe('TalosMobileSettingsAppearancePanel', () => {
     })
 
     it('persists renderer, interface, performance, and visibility Motion V6 controls', async () => {
+        // T6.5 contract: the Background switch reflects the EFFECTIVE state
+        // (enabled && mode !== off) — start from a running renderer so the
+        // uncheck below actually transitions.
+        stores.settings.state.motion_v6.mode = 'complex'
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
             global: { stubs: { TalosThemedSelect: true } },
@@ -116,5 +125,43 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ interface_enabled: false })
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ speed: 150 })
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ pause_when_hidden: false })
+    })
+})
+
+describe('background motion toggle promotion (T6.5)', () => {
+    it('shows OFF for the device-defect state (enabled flag but mode off) and promotes on tap', async () => {
+        // The REAL device defect: background_enabled defaults to true while
+        // mode defaults to 'off' — the switch looked ON with nothing moving.
+        stores.settings.state.motion_v6.mode = 'off'
+        stores.settings.state.motion_v6.background_enabled = true
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        await activateTab(wrapper, 'Motion')
+        const toggle = wrapper.get('[role="switch"][aria-label="Background motion"]')
+        expect((toggle.element as HTMLInputElement).checked).toBe(false)
+        ;(toggle.element as HTMLInputElement).checked = true
+        await toggle.trigger('change')
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({
+            background_enabled: true,
+            mode: 'simple',
+        })
+        wrapper.unmount()
+    })
+
+    it('turning the background OFF never touches the renderer mode', async () => {
+        stores.settings.state.motion_v6.mode = 'complex'
+        stores.settings.state.motion_v6.background_enabled = true
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        await activateTab(wrapper, 'Motion')
+        const toggle = wrapper.get('[role="switch"][aria-label="Background motion"]')
+        ;(toggle.element as HTMLInputElement).checked = false
+        await toggle.trigger('change')
+        expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ background_enabled: false })
+        wrapper.unmount()
     })
 })

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { geminiCompletionFulfill } from './completionMock'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -94,7 +95,10 @@ test('renders and operates a durable safe thread through the final mobile UI', a
         }
 
         completions.push(request.postDataJSON() as Record<string, unknown>)
-        if (completions.length === 4) {
+        // F2-T4: a pre-first-byte 429 on the streaming attempt transparently
+        // retries buffered, so the failing turn produces TWO wire requests —
+        // both must fail for the journey's honest-error expectation.
+        if (completions.length >= 4) {
             await route.fulfill({
                 status: 429,
                 contentType: 'application/json',
@@ -107,11 +111,12 @@ test('renders and operates a durable safe thread through the final mobile UI', a
             '### Resent response\n\nContext remained available.',
             '### Retried response\n\nHistory remained append-only.',
         ]
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(geminiResponse(replies[completions.length - 1]!)),
-        })
+        const reply = replies[completions.length - 1]!
+        await route.fulfill(geminiCompletionFulfill(
+            request.url(),
+            JSON.stringify(geminiResponse(reply)),
+            reply,
+        ))
     })
 
     await configureGemini(page)
@@ -169,6 +174,8 @@ test('renders and operates a durable safe thread through the final mobile UI', a
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     expect(overflow).toBeLessThanOrEqual(0)
-    expect(completions).toHaveLength(4)
+    // 3 successful turns (streamed, one POST each) + the failing turn's
+    // stream attempt AND its transparent buffered retry (F2-T4 contract).
+    expect(completions).toHaveLength(5)
     expect(pageErrors).toEqual([])
 })

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { createTalosLineAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileCompletionInput, TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
     malformedProviderResponse,
@@ -54,6 +55,18 @@ function ollamaTurn(turn: TalosMobileCompletionInput['turns'][number]): {
     return message
 }
 
+function ollamaCompletionData(input: TalosMobileCompletionInput, stream: boolean): Record<string, unknown> {
+    const messages: Array<{ role: string; content: string }> = []
+    if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
+    messages.push(...input.turns.map(ollamaTurn))
+    return {
+        model: input.model.id,
+        messages,
+        stream,
+        ...(input.thinking ? { think: input.effort === 'off' ? true : input.effort } : {}),
+    }
+}
+
 export const ollamaAdapter: TalosMobileProviderAdapter = {
     provider: 'ollama',
     requiresSecret: false,
@@ -83,19 +96,11 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
     },
     async complete(input, credential, transport) {
         const endpoint = normalizeHttpEndpoint('ollama', 'complete', credential.endpoint)
-        const messages: Array<{ role: string; content: string }> = []
-        if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
-        messages.push(...input.turns.map(ollamaTurn))
         const response = await transport.request({
             method: 'POST',
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
-            data: {
-                model: input.model.id,
-                messages,
-                stream: false,
-                ...(input.thinking ? { think: input.effort === 'off' ? true : input.effort } : {}),
-            },
+            data: ollamaCompletionData(input, false),
             ...requestTimeouts(credential.timeoutMs),
         })
         requireHttpSuccess({ provider: 'ollama', operation: 'complete', status: response.status, data: response.data })
@@ -106,5 +111,25 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
             model: parsed.data.model ?? input.model.id,
             finishReason: parsed.data.done_reason ?? null,
         }
+    },
+    // F2-T4: Ollama streams NDJSON lines (`message.content`), not SSE. The
+    // local endpoint is same-network so fetch works when OLLAMA_ORIGINS allows
+    // the WebView origin; otherwise the pre-first-byte failure falls back.
+    async streamComplete(input, credential, handlers) {
+        const endpoint = normalizeHttpEndpoint('ollama', 'complete', credential.endpoint)
+        const text = await talosStreamText({
+            url: `${endpoint}/api/chat`,
+            headers: { 'content-type': 'application/json' },
+            body: ollamaCompletionData(input, true),
+            signal: handlers.signal,
+            accumulator: createTalosLineAccumulator(),
+            extract: (payload) => {
+                const event = JSON.parse(payload) as { message?: { content?: string } }
+                return event.message?.content ?? ''
+            },
+            onChunk: handlers.onChunk,
+        })
+        if (!text) throw malformedProviderResponse('ollama', 'complete')
+        return { text, model: input.model.id }
     },
 }

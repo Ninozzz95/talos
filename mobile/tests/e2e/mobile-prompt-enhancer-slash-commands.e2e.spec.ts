@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { geminiCompletionFulfill } from './completionMock'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -77,11 +78,11 @@ test('uses the selected model to preview cancel insert replace and finally send'
         }
 
         chatBodies.push(body)
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(geminiResponse('Provider accepted the final enhanced prompt.')),
-        })
+        await route.fulfill(geminiCompletionFulfill(
+            request.url(),
+            JSON.stringify(geminiResponse('Provider accepted the final enhanced prompt.')),
+            'Provider accepted the final enhanced prompt.',
+        ))
     })
 
     await configureGemini(page)

@@ -12,6 +12,7 @@ const panelStubs = {
     TalosMobileSettingsAiDefaultsPanel: { template: '<div data-panel="ai_defaults">AI defaults panel</div>' },
     TalosMobileSettingsAppearancePanel: { template: '<div data-panel="appearance">Appearance panel</div>' },
     TalosMobileSettingsShortcutsPanel: { template: '<div data-panel="shortcuts">Shortcuts panel</div>' },
+    TalosMobileSettingsAccountPanel: { template: '<div data-panel="account">Account panel</div>' },
 }
 
 function mountCenter() {
@@ -70,7 +71,8 @@ describe('TalosMobileSettingsCenter', () => {
 
     it('keeps every remaining runtime-dependent category visible and explicitly gated', async () => {
         const wrapper = mountCenter()
-        const gated = ['search', 'integrations', 'email', 'reminders', 'account', 'agent_tools', 'system']
+        // F2-T6: 'account' left this list — it is now a real local panel.
+        const gated = ['search', 'integrations', 'email', 'reminders', 'agent_tools', 'system']
 
         for (const id of gated) {
             await activateTab(wrapper, id)

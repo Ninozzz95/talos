@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { geminiCompletionFulfill } from './completionMock'
 
 const MENU = '[aria-label="Open menu"]'
 const SIDEBAR = '[data-testid="talos-mobile-sidebar"]'
@@ -74,11 +75,12 @@ test('persists contextual chat sessions through reload, rename, switch and activ
             'The earlier value was alpha.',
             'Secondary thread is isolated.',
         ]
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify(geminiResponse(replies[completions.length - 1] ?? 'Unexpected completion.')),
-        })
+        const reply = replies[completions.length - 1] ?? 'Unexpected completion.'
+        await route.fulfill(geminiCompletionFulfill(
+            request.url(),
+            JSON.stringify(geminiResponse(reply)),
+            reply,
+        ))
     })
 
     await configureGemini(page)

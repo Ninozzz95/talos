@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { AlertTriangle, Globe2 } from '@lucide/vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
+import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
+import { talosLightImpact } from '@/services/haptics'
 import {
     createTalosManualBrowserActivity,
     extractTalosBrowserUrls,
@@ -56,6 +58,11 @@ const draft = createTalosMobileComposerDraftController({
     save: (scopeId, value) => chat.saveComposerDraft(value, scopeId),
 })
 const prompt = draft.prompt
+// F2-T5: live dictation — partials compose onto the draft captured at start.
+const dictation = useTalosMobileDictation({
+    base: () => prompt.value,
+    onTranscript: (text) => draft.updatePrompt(text),
+})
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const composerWrap = ref<HTMLElement | null>(null)
 const sessionActionBusy = ref(false)
@@ -64,6 +71,10 @@ const browserError = ref<string | null>(null)
 const browserBusy = ref(false)
 const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
+// F2-T2: friendly per-message model attribution (id -> display name) for the meta row.
+const modelLabels = computed(() => Object.fromEntries(
+    profiles.value.map((profile) => [profile.id, profile.display_name]),
+))
 const refreshingModels = computed(() => Object.values(catalogs).some((catalog) => catalog.status === 'loading'))
 const attachmentBusy = computed(() => attachments.selecting.value)
 const attachmentError = computed(() => attachments.error.value)
@@ -131,6 +142,69 @@ const welcome = {
     body: 'Turn a prompt into comparable AVM ON/OFF evidence with matching model, context, evaluator, and logs.',
 }
 
+// F2-T6 first-run setup checklist — REAL state only (no fake progress):
+// a key exists when any profile carries a stored secret; the model step is
+// done when a composer model is actually selected.
+const setupHasKey = computed(() => profiles.value.some((profile) => profile.has_secret))
+const setupHasModel = computed(() => selectedModelId.value !== null)
+const setupChecklistVisible = computed(() =>
+    !settings.state.onboarding.setup_dismissed && !(setupHasKey.value && setupHasModel.value),
+)
+
+function dismissSetupChecklist(): void {
+    void settings.setOnboarding({ setup_dismissed: true })
+}
+
+// SF-critic #13: when the procedural background runs, a soft radial scrim keeps
+// the hero copy legible over high-contrast scene geometry.
+const motionSceneActive = computed(() =>
+    settings.state.motion_v6.background_enabled && settings.state.motion_v6.mode !== 'off',
+)
+
+// SF-critic #1 — scroll anchoring: restored threads open at the newest message
+// and the view follows the live stream, unless the reader scrolled up.
+const chatScroll = ref<HTMLElement | null>(null)
+const userScrolledUp = ref(false)
+
+function onChatScroll(): void {
+    const el = chatScroll.value
+    if (!el) return
+    userScrolledUp.value = el.scrollHeight - el.scrollTop - el.clientHeight > 120
+}
+
+function scrollChatToBottom(behavior: ScrollBehavior = 'auto'): void {
+    const el = chatScroll.value
+    if (!el) return
+    if (typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior })
+    else el.scrollTop = el.scrollHeight
+}
+
+watch(() => chat.messages.length, async (length) => {
+    if (!length || userScrolledUp.value) return
+    await nextTick()
+    scrollChatToBottom('auto')
+})
+
+let markdownPreloaded = false
+watch(() => chat.state.streamingText, async (text) => {
+    if (!text) return
+    // SF-critic #15: warm the markdown renderer chunk during the stream so the
+    // completed message never flashes through the plain-text fallback.
+    if (!markdownPreloaded) {
+        markdownPreloaded = true
+        void import('@/components/chat/TalosMobileMessageContent.vue')
+    }
+    if (userScrolledUp.value) return
+    await nextTick()
+    scrollChatToBottom('smooth')
+})
+
+watch(() => chat.activeSession.value?.id, async () => {
+    userScrolledUp.value = false
+    await nextTick()
+    scrollChatToBottom('auto')
+})
+
 function publishComposerHeight(): void {
     const el = composerWrap.value
     if (!el) return
@@ -140,6 +214,7 @@ function publishComposerHeight(): void {
 
 async function onSend(): Promise<void> {
     const text = prompt.value
+    void talosLightImpact()
     controller.clearPromptEnhancement()
     draft.updatePrompt('')
     await draft.flush()
@@ -366,7 +441,7 @@ onBeforeUnmount(() => {
     <section
         data-testid="mobile-screen"
         aria-label="Chat"
-        class="relative flex h-full min-h-0 flex-1 flex-col bg-[var(--talos-background)]"
+        class="relative flex h-full min-h-0 flex-1 flex-col bg-transparent"
     >
         <div
             v-if="chat.state.persistenceStatus === 'error'"
@@ -395,11 +470,21 @@ onBeforeUnmount(() => {
             {{ browserError }}
         </div>
 
+        <div v-if="dictation.error.value" role="alert" class="mx-3 mt-3 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
+            {{ dictation.error.value }}
+        </div>
+
         <div v-if="draftError || preferenceError" role="alert" class="mx-3 mt-3 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
             {{ draftError || preferenceError }}
         </div>
 
-        <div class="flex-1 overflow-y-auto overscroll-contain" data-testid="talos-chat-scroll">
+        <div
+            ref="chatScroll"
+            class="flex-1 overflow-y-auto overscroll-contain"
+            :class="settings.state.shell.immersive_header ? 'pt-[calc(3.5rem+env(safe-area-inset-top))]' : ''"
+            data-testid="talos-chat-scroll"
+            @scroll.passive="onChatScroll"
+        >
             <div class="flex min-h-full flex-col pb-[calc(var(--talos-composer-height,180px)+env(safe-area-inset-bottom)+1.5rem)]">
                 <div
                     v-if="browseMode"
@@ -425,7 +510,10 @@ onBeforeUnmount(() => {
                 <div
                     v-if="chat.messages.length === 0"
                     class="flex flex-1 flex-col items-center px-4 text-center"
-                    :class="composerExpanded ? 'justify-start py-3' : 'justify-center py-10'"
+                    :class="[
+                        composerExpanded ? 'justify-start py-3' : 'justify-center py-10',
+                        motionSceneActive ? 'bg-[radial-gradient(ellipse_at_center,var(--talos-background)_35%,transparent_78%)]' : '',
+                    ]"
                     :data-composer-expanded="String(composerExpanded)"
                     data-testid="talos-empty-brand"
                 >
@@ -448,6 +536,47 @@ onBeforeUnmount(() => {
                         v-if="!composerExpanded"
                         class="mt-3 max-w-[560px] text-sm leading-6 text-[var(--talos-muted)]"
                     >{{ welcome.body }}</p>
+
+                    <!-- F2-T6 first-run setup: REAL progress only, dismissible. -->
+                    <section
+                        v-if="setupChecklistVisible && !composerExpanded"
+                        data-testid="talos-setup-checklist"
+                        aria-label="Getting started"
+                        class="mt-6 w-full max-w-[420px] rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-card,var(--card))]/80 p-3 text-left backdrop-blur"
+                    >
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-sm font-semibold text-[var(--talos-text)]">Get set up</h2>
+                            <button
+                                type="button"
+                                data-testid="talos-setup-dismiss"
+                                aria-label="Dismiss setup checklist"
+                                class="talos-pressable -mr-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
+                                @click="dismissSetupChecklist"
+                            >
+                                <X class="size-4" aria-hidden="true" />
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            data-testid="talos-setup-step-key"
+                            class="talos-pressable mt-2 flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left"
+                            @click="router.push({ name: 'settings', query: { tab: 'models' } })"
+                        >
+                            <CheckCircle2 v-if="setupHasKey" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                            <Circle v-else class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                            <span class="text-sm" :class="setupHasKey ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">Add a provider key</span>
+                        </button>
+                        <button
+                            type="button"
+                            data-testid="talos-setup-step-model"
+                            class="talos-pressable flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left"
+                            @click="router.push({ name: 'settings', query: { tab: 'models' } })"
+                        >
+                            <CheckCircle2 v-if="setupHasModel" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                            <Circle v-else class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                            <span class="text-sm" :class="setupHasModel ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">Choose your model</span>
+                        </button>
+                    </section>
                 </div>
 
                 <!-- Conversation -->
@@ -455,6 +584,9 @@ onBeforeUnmount(() => {
                     v-else
                     :messages="chat.messages"
                     :sending="chat.state.sending"
+                    :streaming-text="chat.state.streamingText"
+                    :model-labels="modelLabels"
+                    :message-style="settings.state.chat_layout.message_style"
                     @reuse="reuseMessage"
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"
@@ -484,8 +616,12 @@ onBeforeUnmount(() => {
                 :browse-mode="browseMode"
                 :browser-suggestion-url="browserSuggestionUrl"
                 :browser-busy="browserBusy"
+                :dictation-supported="dictation.supported.value"
+                :dictation-listening="dictation.status.value === 'listening'"
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"
+                @stop="chat.stopStreaming()"
+                @toggle-dictation="dictation.toggle()"
                 @attach="selectAttachments"
                 @remove-attachment="removeAttachment"
                 @dismiss-attachment-error="attachments.clearError()"

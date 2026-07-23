@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { defineAsyncComponent, defineComponent, h, ref } from 'vue'
+import { defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
+import { talosRelativeTime } from '@/lib/relativeTime'
 
 const props = defineProps<{
     messages: readonly TalosMobileMessageView[]
     sending: boolean
+    modelLabels?: Record<string, string>
+    // Desktop-parity message style (owner: assistant replies are full-width
+    // sections by default; bubbles remain a Settings toggle).
+    messageStyle?: 'sections' | 'bubbles'
+    // F2-T4: live text of the in-flight assistant reply (null when buffered).
+    streamingText?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -33,6 +40,39 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
 )
 const copyStatus = ref('')
 
+// Meta timestamps age honestly: a shared `now` ticks every 30s so "just now"
+// does not persist forever on an idle thread.
+const now = ref(new Date())
+let nowTicker: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+    nowTicker = setInterval(() => { now.value = new Date() }, 30_000)
+})
+onBeforeUnmount(() => {
+    if (nowTicker) clearInterval(nowTicker)
+})
+
+// F2-T2 calm thread: consecutive same-sender messages group together —
+// tighter gap, tail radius and meta row only on the last of the group.
+function isGrouped(index: number): boolean {
+    const current = props.messages[index]
+    const previous = props.messages[index - 1]
+    return Boolean(previous && current.role !== 'system' && previous.role === current.role)
+}
+
+function isGroupEnd(index: number): boolean {
+    const current = props.messages[index]
+    const next = props.messages[index + 1]
+    return !next || next.role !== current.role
+}
+
+function modelLabel(message: TalosMobileMessageView): string {
+    // Attribution is assistant-only: a human never answers "with" a model.
+    if (message.role !== 'assistant') return ''
+    const id = message.model_profile_id
+    if (!id) return ''
+    return props.modelLabels?.[id] ?? id
+}
+
 function hasPreviousUser(messageId: string): boolean {
     const index = props.messages.findIndex((message) => message.id === messageId)
     return index > 0 && props.messages.slice(0, index).some((message) => message.role === 'user')
@@ -56,23 +96,33 @@ function formatBytes(value: number): string {
 </script>
 
 <template>
-    <div class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col gap-3 overflow-x-hidden px-3 py-4" data-testid="talos-mobile-message-list">
+    <div class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4" data-testid="talos-mobile-message-list">
         <article
-            v-for="message in messages"
+            v-for="(message, index) in messages"
             :key="message.id"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
+            :data-grouped="isGrouped(index) ? 'true' : undefined"
             class="talos-chat-message flex min-w-0 max-w-full flex-col"
-            :class="message.role === 'user' ? 'items-end' : 'items-start'"
+            :class="[message.role === 'user' ? 'items-end' : 'items-start', isGrouped(index) ? 'mt-1' : 'mt-3 first:mt-0']"
         >
             <TalosMobileStatusMessage v-if="message.role === 'system'" :message="message" />
             <template v-else>
                 <div
-                    class="talos-message-bubble min-w-0 max-w-[92%] overflow-hidden px-3.5 py-2 text-sm leading-6"
-                    :class="message.role === 'user'
-                        ? 'rounded-2xl rounded-br-sm bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
-                        : 'rounded-2xl rounded-bl-sm border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] text-[var(--talos-text,var(--foreground))]'"
+                    class="talos-message-bubble min-w-0 overflow-hidden text-sm leading-6"
+                    :class="[message.role === 'assistant' && (props.messageStyle ?? 'sections') === 'sections'
+                        ? 'w-full max-w-full px-1 py-1 text-[var(--talos-text,var(--foreground))]'
+                        : 'max-w-[92%] px-3.5 py-2', message.role === 'user'
+                        ? 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
+                        : ((props.messageStyle ?? 'sections') === 'sections'
+                            ? ''
+                            : 'border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] text-[var(--talos-text,var(--foreground))]'),
+                    message.role === 'assistant' && (props.messageStyle ?? 'sections') === 'sections'
+                        ? ''
+                        : (isGroupEnd(index)
+                            ? (message.role === 'user' ? 'rounded-2xl rounded-br-sm' : 'rounded-2xl rounded-bl-sm')
+                            : 'rounded-2xl')]"
                     :data-message-kind="message.role"
                 >
                     <TalosMobileMessageContent
@@ -109,10 +159,18 @@ function formatBytes(value: number): string {
                         :activities="message.browserActivities"
                     />
                 </div>
-                <div class="talos-message-meta flex max-w-[92%] items-center gap-2 px-1 font-mono text-[10px] text-[var(--talos-muted)]">
+                <div v-if="isGroupEnd(index)" class="talos-message-meta mt-1 flex max-w-[92%] items-center gap-1.5 px-1 font-mono text-[11px] text-[var(--talos-muted)]">
                     <span>{{ message.role === 'user' ? 'You' : 'TALOS' }}</span>
-                    <span v-if="message.model_profile_id">{{ message.model_profile_id }}</span>
-                    <span v-if="message.state !== 'persisted'">{{ message.state }}</span>
+                    <template v-if="modelLabel(message)">
+                        <span aria-hidden="true">·</span>
+                        <span>{{ modelLabel(message) }}</span>
+                    </template>
+                    <span aria-hidden="true">·</span>
+                    <span>{{ talosRelativeTime(message.created_at, now) }}</span>
+                    <template v-if="message.state !== 'persisted'">
+                        <span aria-hidden="true">·</span>
+                        <span>{{ message.state }}</span>
+                    </template>
                 </div>
                 <TalosMobileMessageActions
                     :message="message"
@@ -126,14 +184,34 @@ function formatBytes(value: number): string {
             </template>
         </article>
 
+        <article
+            v-if="sending && streamingText"
+            data-testid="talos-mobile-streaming"
+            class="w-full max-w-full px-1 py-1 text-sm leading-6 text-[var(--talos-text,var(--foreground))]"
+        >
+            <!-- The growing text stays OUTSIDE any live region: re-announcing
+                 the whole reply on every token is screen-reader noise. -->
+            <p class="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{{ streamingText }}</p>
+            <span class="mt-1 flex items-center gap-1" aria-hidden="true">
+                <span class="talos-typing-dot"></span>
+                <span class="talos-typing-dot"></span>
+                <span class="talos-typing-dot"></span>
+            </span>
+            <span class="sr-only" role="status" aria-live="polite">Receiving response</span>
+        </article>
         <div
-            v-if="sending"
+            v-else-if="sending"
             data-testid="talos-mobile-typing"
             class="max-w-[92%] self-start rounded-2xl rounded-bl-sm border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] px-3.5 py-2 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
             role="status"
             aria-live="polite"
         >
-            <span class="talos-typing-dots">Processing</span>
+            <span class="flex items-center gap-1" aria-hidden="true">
+                <span class="talos-typing-dot"></span>
+                <span class="talos-typing-dot"></span>
+                <span class="talos-typing-dot"></span>
+            </span>
+            <span class="sr-only">Processing</span>
         </div>
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>
     </div>

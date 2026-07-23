@@ -41,7 +41,10 @@ const runtimeEnvironment = computed<TalosMotionRuntimeEnvironment>(() => ({
 }))
 
 const motion = computed(() => resolveTalosWorkspaceMotionV6({
-    settingsPreferences: { motion_v6: settings.state.motion_v6 },
+    // T6.5 device defect: the migration contract reads `theme_motion_v6`
+    // (desktop settings key) — the previous `motion_v6` key was silently
+    // ignored and the background never left the default OFF mode.
+    settingsPreferences: { theme_motion_v6: settings.state.motion_v6 },
     themeId: theme.state.theme,
     colorMode: resolvedMode.value,
     environment: runtimeEnvironment.value,

@@ -71,7 +71,7 @@ function mountComposer(overrides: Record<string, unknown> = {}): VueWrapper {
 }
 
 describe('TalosMobileComposer', () => {
-    it('focusPrompt focuses the enabled prompt field only', async () => {
+    it('focusPrompt focuses the prompt field, which stays enabled while sending (F2 SF-critic #3)', async () => {
         const view = mountComposer()
         const api = view.vm as unknown as { focusPrompt(): boolean }
         const field = view.get<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
@@ -79,13 +79,12 @@ describe('TalosMobileComposer', () => {
         expect(api.focusPrompt()).toBe(true)
         expect(document.activeElement).toBe(field.element)
 
+        // The textarea is never disabled during streaming: the user keeps
+        // their keyboard and can compose the next message mid-response.
         await view.setProps({ sending: true })
-        const focusSink = document.createElement('button')
-        document.body.appendChild(focusSink)
-        focusSink.focus()
-        expect(api.focusPrompt()).toBe(false)
-        expect(document.activeElement).toBe(focusSink)
-        focusSink.remove()
+        expect(field.element.disabled).toBe(false)
+        expect(api.focusPrompt()).toBe(true)
+        expect(document.activeElement).toBe(field.element)
     })
 
     it('exposes icon-only 44px controls and no compact composer control', () => {
@@ -170,7 +169,9 @@ describe('TalosMobileComposer', () => {
 
         await disabled.setProps({ canSend: true, sendDisabledReason: '', sending: true })
         expect(disabled.get('[role="status"]').text()).toBe('Processing')
-        expect(disabled.get<HTMLButtonElement>('[aria-label="Send message"]').element.disabled).toBe(true)
+        // F2-T4: while sending, Send is replaced by an enabled Stop control.
+        expect(disabled.find('[aria-label="Send message"]').exists()).toBe(false)
+        expect(disabled.get<HTMLButtonElement>('[aria-label="Stop response"]').element.disabled).toBe(false)
     })
 
     it('opens both selectors, forwards selection, closes and restores trigger focus', async () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileCompletionInput, TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
     malformedProviderResponse,
@@ -56,6 +57,17 @@ function geminiTurnParts(turn: TalosMobileCompletionInput['turns'][number]): Arr
     return parts
 }
 
+function geminiCompletionData(input: TalosMobileCompletionInput): Record<string, unknown> {
+    const data: Record<string, unknown> = {
+        contents: input.turns.map((turn) => ({
+            role: turn.role === 'assistant' ? 'model' : 'user',
+            parts: geminiTurnParts(turn),
+        })),
+    }
+    if (input.system?.trim()) data.systemInstruction = { parts: [{ text: input.system }] }
+    return data
+}
+
 export const geminiAdapter: TalosMobileProviderAdapter = {
     provider: 'gemini',
     requiresSecret: true,
@@ -97,13 +109,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
     },
     async complete(input, credential, transport) {
         const apiKey = requireProviderApiKey('gemini', 'complete', credential)
-        const data: Record<string, unknown> = {
-            contents: input.turns.map((turn) => ({
-                role: turn.role === 'assistant' ? 'model' : 'user',
-                parts: geminiTurnParts(turn),
-            })),
-        }
-        if (input.system?.trim()) data.systemInstruction = { parts: [{ text: input.system }] }
+        const data = geminiCompletionData(input)
         const response = await transport.request({
             method: 'POST',
             url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:generateContent`,
@@ -123,5 +129,24 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             finishReason: candidate.finishReason ?? null,
             usage: parsed.data.usageMetadata ?? null,
         }
+    },
+    // F2-T4: native fetch SSE via `:streamGenerateContent?alt=sse` — Gemini
+    // allows browser-origin calls with the x-goog-api-key header.
+    async streamComplete(input, credential, handlers) {
+        const apiKey = requireProviderApiKey('gemini', 'complete', credential)
+        const text = await talosStreamText({
+            url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:streamGenerateContent?alt=sse`,
+            headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
+            body: geminiCompletionData(input),
+            signal: handlers.signal,
+            accumulator: createTalosSseAccumulator(),
+            extract: (payload) => {
+                const event = JSON.parse(payload) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
+                return (event.candidates?.[0]?.content?.parts ?? []).map((part) => part.text ?? '').join('')
+            },
+            onChunk: handlers.onChunk,
+        })
+        if (!text) throw malformedProviderResponse('gemini', 'complete')
+        return { text, model: input.model.id }
     },
 }
