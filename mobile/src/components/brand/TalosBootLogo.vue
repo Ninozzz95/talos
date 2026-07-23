@@ -63,13 +63,8 @@ onBeforeUnmount(() => {
     position: fixed;
     inset: 0;
     z-index: 2147483000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1.25rem;
     background:
-        radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--talos-accent, #f5a623) 12%, transparent), transparent 60%),
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #f5a623) 12%, transparent), transparent 60%),
         var(--talos-background, #080b11);
     transition: opacity 0.4s ease;
 }
@@ -77,9 +72,17 @@ onBeforeUnmount(() => {
     opacity: 0;
     pointer-events: none;
 }
+/* #14 seamless handoff: the Android 12 splash renders this same mark at
+   ~125dp DEAD CENTER — the boot mark is pinned to the exact same spot and
+   scale so the glyph does not move when the app takes over; the wordmark
+   fades in below without displacing it. */
 .talos-boot-svg {
-    width: 128px;
-    height: 128px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 125px;
+    height: 125px;
+    transform: translate(-50%, -50%);
 }
 .hex {
     stroke: var(--talos-accent, #f5a623);
@@ -101,11 +104,20 @@ onBeforeUnmount(() => {
 .edge-branch { animation: talosBootFlow 2.5s ease-in-out infinite; animation-delay: 0.7s; }
 .node-out { animation: talosBootIgnite 2.5s ease-in-out infinite; animation-delay: 1s; }
 .talos-boot-word {
+    position: absolute;
+    top: calc(50% + 78px);
+    left: 50%;
+    transform: translateX(-50%);
     font-size: 1.5rem;
     font-weight: 600;
     letter-spacing: 0.35em;
     padding-left: 0.35em;
     color: var(--talos-text, #edf2f7);
+    animation: talosBootWordIn 0.6s ease-out 0.3s both;
+}
+@keyframes talosBootWordIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 @keyframes talosBootFlow {
     0%, 15% { stroke-dashoffset: 90; opacity: 0; }
