@@ -665,6 +665,7 @@ onBeforeUnmount(() => {
                 :dictation-supported="dictation.visible.value"
                 :dictation-listening="dictation.status.value === 'listening'"
                 :dictation-starting="dictation.status.value === 'starting'"
+                :dictation-level="dictation.level.value"
                 :drawer-mode="settings.state.shell.composer_drawer"
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"

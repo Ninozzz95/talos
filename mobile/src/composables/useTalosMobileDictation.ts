@@ -25,6 +25,8 @@ export interface TalosMobileDictation {
     visible: ComputedRef<boolean>
     status: Ref<TalosMobileDictationStatus>
     error: Ref<string | null>
+    /** F5.2 waveform: 0..1, spikes on incoming speech, decays to a listening floor. */
+    level: Ref<number>
     toggle(): Promise<void>
     /** SF5-3: silent teardown (send-time cleanup) — no messages, no resurrection. */
     cancel(): void
@@ -36,6 +38,36 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     const supported = ref(false)
     const status = ref<TalosMobileDictationStatus>('idle')
     const error = ref<string | null>(null)
+
+    // F5.2 waveform — the maintained fork exposes no RMS (upstream ticket
+    // filed): the level is driven by the REAL signal we do have, incoming
+    // speech. Spike on partials (scaled by new characters), exponential decay
+    // to a quiet listening floor, hard zero when the session ends.
+    const level = ref(0)
+    const LEVEL_FLOOR = 0.12
+    let decayTimer: ReturnType<typeof setInterval> | null = null
+    let lastPartialLength = 0
+
+    function startLevel(): void {
+        lastPartialLength = 0
+        level.value = LEVEL_FLOOR
+        if (decayTimer !== null) clearInterval(decayTimer)
+        decayTimer = setInterval(() => {
+            level.value = Math.max(LEVEL_FLOOR, level.value * 0.82)
+        }, 120)
+    }
+
+    function speechLevelSpike(text: string): void {
+        const grown = Math.max(0, text.length - lastPartialLength)
+        lastPartialLength = text.length
+        level.value = Math.min(1, Math.max(level.value, 0.4 + Math.min(0.5, grown * 0.06)))
+    }
+
+    function stopLevel(): void {
+        if (decayTimer !== null) clearInterval(decayTimer)
+        decayTimer = null
+        level.value = 0
+    }
 
     // Owner report (2026-07-23): the availability probe runs at app start,
     // when Android's RecognitionService binding may not be ready yet — a
@@ -116,11 +148,16 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             onStart: () => {
                 if (epoch !== sessionEpoch) return
                 if (status.value === 'starting') status.value = 'listening'
+                startLevel()
                 armListeningWatchdog(epoch)
             },
             onPartial: (text) => {
                 if (epoch !== sessionEpoch) return
-                if (status.value === 'starting') status.value = 'listening'
+                if (status.value === 'starting') {
+                    status.value = 'listening'
+                    startLevel()
+                }
+                speechLevelSpike(text)
                 armListeningWatchdog(epoch)
                 heardAnything = true
                 const transcript = text.trim()
@@ -130,6 +167,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             onEnd: () => {
                 if (epoch !== sessionEpoch) return
                 clearWatchdog()
+                stopLevel()
                 if (status.value !== 'starting' && status.value !== 'listening') return
                 if (heardAnything) {
                     status.value = 'idle'
@@ -141,6 +179,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             onError: (message) => {
                 if (epoch !== sessionEpoch) return
                 clearWatchdog()
+                stopLevel()
                 status.value = 'error'
                 error.value = message
             },
@@ -159,6 +198,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             clearWatchdog()
             sessionEpoch += 1
             status.value = 'idle'
+            stopLevel()
             stopEngineBestEffort()
             return
         }
@@ -172,8 +212,9 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         sessionEpoch += 1
         status.value = 'idle'
         error.value = null
+        stopLevel()
         stopEngineBestEffort()
     }
 
-    return { supported, visible, status, error, toggle, cancel }
+    return { supported, visible, status, error, level, toggle, cancel }
 }

@@ -12,6 +12,7 @@ import { Loader2, ArrowUp,
     Plus,
     Sparkles,
     Square, } from '@lucide/vue'
+import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffortDrawer.vue'
 import TalosMobileEnhancerDrawer from '@/components/chat/TalosMobileEnhancerDrawer.vue'
@@ -66,6 +67,7 @@ const props = withDefaults(defineProps<{
     dictationSupported?: boolean
     dictationListening?: boolean
     dictationStarting?: boolean
+    dictationLevel?: number
     // F3-T4bis (owner #13): Claude-style minimal bar + organized tool drawer.
     drawerMode?: boolean
 }>(), {
@@ -92,6 +94,7 @@ const props = withDefaults(defineProps<{
     dictationSupported: false,
     dictationListening: false,
     dictationStarting: false,
+    dictationLevel: 0,
     drawerMode: false,
 })
 
@@ -366,6 +369,19 @@ watch(() => props.prompt, () => {
                 <ExternalLink class="size-4" aria-hidden="true" />
                 <span class="sr-only">Open detected link</span>
             </Button>
+        </div>
+
+        <!-- F5.2 (owner): live dictation feedback — waveform reacting to the
+             incoming speech while the recognizer is hot. -->
+        <div
+            v-if="dictationListening || dictationStarting"
+            data-testid="talos-dictation-live"
+            class="mb-1 flex min-h-9 items-center gap-2 rounded-xl border border-[var(--talos-accent,var(--primary))]/40 bg-[var(--talos-panel,var(--card))]/80 px-3"
+        >
+            <TalosMicWaveform :level="dictationStarting ? 0.1 : dictationLevel" />
+            <span class="text-xs text-[var(--talos-muted,var(--muted-foreground))]">
+                {{ dictationStarting ? 'Starting dictation…' : 'Listening — tap the mic to stop' }}
+            </span>
         </div>
 
         <div class="relative min-w-0">

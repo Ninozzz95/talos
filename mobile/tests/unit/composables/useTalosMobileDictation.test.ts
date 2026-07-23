@@ -197,6 +197,30 @@ describe('tap-path liveness (F5-#29)', () => {
         expect(onTranscript).not.toHaveBeenCalled()
     })
 
+    it('F5.2 waveform level: spikes on incoming speech, decays, zero when idle', async () => {
+        vi.useFakeTimers()
+        try {
+            const { engine, events } = engineStub()
+            const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+            await vi.runOnlyPendingTimersAsync()
+            expect(dictation.level.value).toBe(0)
+            await dictation.toggle()
+            events().onStart?.()
+            events().onPartial('ciao')
+            const afterSpeech = dictation.level.value
+            expect(afterSpeech).toBeGreaterThan(0.3)
+            // Silence: the level decays but keeps a listening floor above zero.
+            await vi.advanceTimersByTimeAsync(2000)
+            expect(dictation.level.value).toBeLessThan(afterSpeech)
+            expect(dictation.level.value).toBeGreaterThan(0)
+            // Stop: the level returns to zero.
+            await dictation.toggle()
+            expect(dictation.level.value).toBe(0)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it('tapping again while starting cancels cleanly to idle', async () => {
         const { engine } = engineStub()
         const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })

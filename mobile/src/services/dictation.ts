@@ -23,13 +23,16 @@ export interface TalosDictationEngine {
     stop(): Promise<void>
 }
 
-type SpeechRecognitionPlugin = typeof import('@capacitor-community/speech-recognition').SpeechRecognition
+// F5.2 — migrated to the MAINTAINED fork (@capgo/capacitor-speech-recognition):
+// the community plugin's native available() never settles on modern Android
+// (Doctor ring evidence). The fork ships real `error` events (code+message),
+// a finite `listeningState`, and crash fixes.
+type SpeechRecognitionPlugin = typeof import('@capgo/capacitor-speech-recognition').SpeechRecognition
 
 async function loadPlugin(): Promise<SpeechRecognitionPlugin> {
-    // F5.1: on device this dynamic import was observed to NEVER settle —
-    // fence it so the mic tap and the Doctor always answer within 4s.
+    // F5.1: fence the import so the mic tap and the Doctor always answer.
     const loaded = await talosWithTimeout(
-        import('@capacitor-community/speech-recognition'),
+        import('@capgo/capacitor-speech-recognition'),
         4000,
         'TALOS_SPEECH_PLUGIN_LOAD',
     )
@@ -41,15 +44,25 @@ function nativeEngine(): TalosDictationEngine {
     return {
         async supported() {
             try {
-                return (await (await loadPlugin()).available()).available
-            } catch {
-                return false
+                const plugin = await loadPlugin()
+                const probe = await talosWithTimeout(plugin.available(), 3000, 'TALOS_SPEECH_AVAILABLE')
+                return probe.available !== false
+            } catch (error) {
+                talosLogDeviceIssue('TALOS_SPEECH_AVAILABLE', String(error))
+                // The fork may drop the legacy probe — the tap path stays the
+                // honest arbiter on native.
+                return true
             }
         },
         async requestPermission() {
             try {
-                const status = await (await loadPlugin()).requestPermissions()
-                return status.speechRecognition === 'granted'
+                const plugin = await loadPlugin()
+                const status = (await talosWithTimeout(
+                    plugin.requestPermissions(),
+                    30000,
+                    'TALOS_SPEECH_PERMISSION',
+                )) as unknown as Record<string, string>
+                return status.speechRecognition === 'granted' || status.microphone === 'granted'
             } catch (error) {
                 talosLogDeviceIssue('TALOS_SPEECH_PERMISSION', String(error))
                 return false
@@ -59,30 +72,47 @@ function nativeEngine(): TalosDictationEngine {
             const plugin = await loadPlugin()
             active = true
             await plugin.removeAllListeners()
-            await plugin.addListener('partialResults', (data: { matches?: string[] }) => {
-                const match = data.matches?.[0]
+            await plugin.addListener('partialResults', (data: { matches?: string[]; accumulatedText?: string }) => {
+                const match = (typeof data.accumulatedText === 'string' && data.accumulatedText)
+                    || data.matches?.[0]
                 if (typeof match === 'string' && match) events.onPartial(match)
             })
-            await plugin.addListener('listeningState', (data: { status?: string }) => {
-                if (data.status === 'started') events.onStart?.()
-                if (data.status === 'stopped' && active) {
+            await plugin.addListener('listeningState', (data: { state?: string; status?: string }) => {
+                const state = data.state ?? data.status
+                if (state === 'started' || state === 'listening') events.onStart?.()
+                if ((state === 'stopped' || state === 'idle') && active) {
                     active = false
                     events.onEnd()
                 }
             })
-            try {
-                await plugin.start({ partialResults: true, popup: false })
-            } catch (error) {
+            // F5.2: runtime recognizer errors finally reach JS as an event.
+            await plugin.addListener('error', (data: { code?: string | number; message?: string }) => {
+                if (!active) return
                 active = false
-                await plugin.removeAllListeners()
+                talosLogDeviceIssue('TALOS_SPEECH_ERROR', `${data.code ?? ''} ${data.message ?? ''}`)
+                events.onError(data.message
+                    ? `Speech recognition error: ${data.message}`
+                    : 'Speech recognition failed. Try again.')
+            })
+            try {
+                await talosWithTimeout(
+                    plugin.start({ partialResults: true, popup: false }),
+                    10000,
+                    'TALOS_SPEECH_START',
+                )
+            } catch (error) {
+                // With partialResults the fork resolves start() when listening
+                // ARMS — a rejection here is a genuine failure to start.
+                if (!active) return
+                active = false
+                await plugin.removeAllListeners().catch(() => undefined)
                 events.onError(error instanceof Error ? error.message : 'Speech recognition could not start.')
             }
         },
         async stop() {
             const plugin = await loadPlugin()
             active = false
-            // SF5-1: the Android plugin's stop() never resolves its call —
-            // fire it best-effort and reclaim the listeners regardless.
+            // SF5-1 discipline kept: never trust a native stop to settle.
             void plugin.stop().catch(() => undefined)
             await plugin.removeAllListeners()
         },

@@ -2,9 +2,7 @@
 import { nextTick, ref } from 'vue'
 import { Check, Download, EllipsisVertical, Menu, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import {
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 
 // F2-T3.6 (owner, ChatGPT-style): immersive shell chrome — no solid header bar;
 // floating circular pills over a light top fade for scroll continuity. LEFT =
@@ -132,43 +130,41 @@ function confirmDelete(): void {
             </div>
         </div>
 
-        <Dialog :open="renameOpen" @update:open="(open) => { if (!open) renameOpen = false }">
-            <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                <DialogHeader>
-                    <DialogTitle>Rename chat</DialogTitle>
-                    <DialogDescription class="text-[var(--talos-muted)]">Choose a concise name for this conversation.</DialogDescription>
-                </DialogHeader>
-                <input
-                    ref="renameInput"
-                    v-model="renameValue"
-                    aria-label="Chat name"
-                    class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                    @keydown.enter.prevent="submitRename"
-                >
-                <DialogFooter>
-                    <Button type="button" variant="ghost" @click="renameOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                    <Button type="button" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
-                        <Check class="size-4" aria-hidden="true" /> Save
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <!-- F5.2: device-proven manual dialogs (reka-ui never rendered on
+             the owner's WebView). -->
+        <TalosMobileConfirmDialog
+            v-if="renameOpen"
+            title="Rename chat"
+            description="Choose a concise name for this conversation."
+            @close="renameOpen = false"
+        >
+            <input
+                ref="renameInput"
+                v-model="renameValue"
+                aria-label="Chat name"
+                class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                @keydown.enter.prevent="submitRename"
+            >
+            <template #footer>
+                <Button type="button" variant="ghost" @click="renameOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
+                    <Check class="size-4" aria-hidden="true" /> Save
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
 
-        <Dialog :open="deleteOpen" @update:open="(open) => { if (!open) deleteOpen = false }">
-            <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                <DialogHeader>
-                    <DialogTitle>Delete chat?</DialogTitle>
-                    <DialogDescription class="text-[var(--talos-muted)]">
-                        This permanently removes "{{ props.activeTitle || 'New chat' }}" and its messages.
-                    </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                    <Button type="button" variant="ghost" @click="deleteOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                    <Button type="button" variant="destructive" :disabled="props.busy" @click="confirmDelete">
-                        <Trash2 class="size-4" aria-hidden="true" /> Delete
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <TalosMobileConfirmDialog
+            v-if="deleteOpen"
+            title="Delete chat?"
+            :description="`This permanently removes &quot;${props.activeTitle || 'New chat'}&quot; and its messages.`"
+            @close="deleteOpen = false"
+        >
+            <template #footer>
+                <Button type="button" variant="ghost" @click="deleteOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" variant="destructive" :disabled="props.busy" @click="confirmDelete">
+                    <Trash2 class="size-4" aria-hidden="true" /> Delete
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
     </div>
 </template>
