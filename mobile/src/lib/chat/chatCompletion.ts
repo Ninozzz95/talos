@@ -85,7 +85,12 @@ export function buildChatCompletion(
                 return streamed.text
             } catch (error) {
                 const aborted = error instanceof Error && error.name === 'AbortError'
-                if (sawChunk || aborted) throw error
+                // R1-SF-M3: a STALL means the server DID answer (or accepted
+                // the request) and then went silent — a transparent buffered
+                // re-request would double the inference and the bill. Surface
+                // it honestly instead of silently re-asking.
+                const stalled = error instanceof Error && /stream stalled|first byte/.test(error.message)
+                if (sawChunk || aborted || stalled) throw error
             }
         }
         const result = await adapter.complete(input, credential, transport)

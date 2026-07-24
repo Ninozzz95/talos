@@ -469,13 +469,15 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         defaultEffect: 'signal-mesh',
     },
     {
-        // Ribrand-soft default (F1-T2): warm quiet surfaces, refined TALOS gold
-        // as a sparing signature accent, no procedural decoration by default.
+        // Ribrand-soft default (F1-T2): quiet surfaces, refined TALOS gold as
+        // a sparing signature accent, no procedural decoration by default.
+        // R1 (owner): backgrounds shifted from warm charcoal to NEUTRAL GREY —
+        // gold stays accent-only; the launcher icon bg mirrors this seed.
         id: 'calm',
         label: 'Calm',
         shortLabel: 'Calm',
-        description: 'Quiet warm surfaces, typography-led hierarchy, gold kept as a sparing signature.',
-        mood: 'Warm paper, soft charcoal, refined bronze',
+        description: 'Quiet grey surfaces, typography-led hierarchy, gold kept as a sparing signature.',
+        mood: 'Grey paper, graphite, refined bronze',
         motion: 'Subtle micro-motion',
         defaultDensity: 'comfortable',
         defaultRadius: 'soft',
@@ -483,7 +485,7 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         isLight: false,
         fontUi: 'Instrument Sans',
         fontMono: 'JetBrains Mono',
-        preview: { background: '#211f1a', accent: '#c08b3c', secondary: '#8a8578', line: '#3a382f' },
+        preview: { background: '#1e1f22', accent: '#c08b3c', secondary: '#8e9095', line: '#36373b' },
         poster: themePoster('calm'),
         defaultEffect: 'none',
     },
@@ -650,7 +652,11 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
     const line = preset.preview.line
 
     if (mode === 'light') {
-        const background = preset.isLight ? preset.preview.background : mixColor(accent, 5, '#f8fafc')
+        // R1 (owner): calm light surfaces are NEUTRAL grey-white — the generic
+        // accent tint would warm them back toward cream.
+        const background = preset.isLight
+            ? preset.preview.background
+            : preset.id === 'calm' ? '#f1f2f4' : mixColor(accent, 5, '#f8fafc')
         const panel = mixColor(background, 92, '#ffffff')
         const text = '#111827'
         const muted = mixColor(text, 68, background)

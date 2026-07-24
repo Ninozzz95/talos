@@ -8,9 +8,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { BookMarked, Plus, RotateCcw, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import {
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import { useChatController } from '@/stores/chatController'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalMemory } from '@/repositories/chatRepository'
@@ -243,21 +241,21 @@ function scopeLabel(memory: TalosLocalMemory): string {
             </li>
         </ul>
 
-        <Dialog :open="deleteTarget !== null" @update:open="(open) => { if (!open) deleteTarget = null }">
-            <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                <DialogHeader>
-                    <DialogTitle>Delete memory?</DialogTitle>
-                    <DialogDescription class="text-[var(--talos-muted)]">
-                        This permanently removes "{{ deleteTarget?.title }}" from this device.
-                    </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                    <Button type="button" variant="ghost" @click="deleteTarget = null">Cancel</Button>
-                    <Button type="button" variant="destructive" @click="confirmDelete">
-                        <Trash2 class="size-4" aria-hidden="true" /> Delete
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <!-- R1-1: reka Dialog never renders on the owner's WebView (F5.2
+             evidence) — Delete looked like a silent no-op. Device-proven
+             surface now. -->
+        <TalosMobileConfirmDialog
+            v-if="deleteTarget !== null"
+            title="Delete memory?"
+            :description="`This permanently removes &quot;${deleteTarget?.title}&quot; from this device.`"
+            @close="deleteTarget = null"
+        >
+            <template #footer>
+                <Button type="button" variant="ghost" @click="deleteTarget = null">Cancel</Button>
+                <Button type="button" variant="destructive" @click="confirmDelete">
+                    <Trash2 class="size-4" aria-hidden="true" /> Delete
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
     </div>
 </template>

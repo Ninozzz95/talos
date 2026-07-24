@@ -600,7 +600,6 @@ onBeforeUnmount(() => {
                     v-else
                     :messages="chat.messages"
                     :sending="chat.state.sending"
-                    :streaming-text="chat.state.streamingText"
                     :model-labels="modelLabels"
                     :message-style="settings.state.chat_layout.message_style"
                     @reuse="reuseMessage"

@@ -5,9 +5,7 @@ import {
     Pencil, Settings, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import {
-    Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import {
     Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer'
@@ -56,6 +54,11 @@ function sessionTitle(session: TalosLocalChatSession): string {
 }
 
 async function openRename(session: TalosLocalChatSession): Promise<void> {
+    // R1-SF-B2: the vaul drawer is modal (body pointer-events none + focus
+    // trap) — a teleported dialog over it gets its taps stolen and its input
+    // can never hold focus. Close the drawer FIRST; the dialog lives outside
+    // the Drawer subtree so it survives the close.
+    emit('update:open', false)
     renameTarget.value = session
     renameValue.value = session.title
     await nextTick()
@@ -69,6 +72,12 @@ function submitRename(): void {
     emit('rename', target.id, title)
     renameTarget.value = null
     renameValue.value = ''
+}
+
+function openDelete(session: TalosLocalChatSession): void {
+    // R1-SF-B2: same drawer-modality rule as openRename.
+    emit('update:open', false)
+    deleteTarget.value = session
 }
 
 function confirmDelete(): void {
@@ -161,7 +170,7 @@ function confirmDelete(): void {
                             <Button type="button" size="icon" variant="ghost" :aria-label="`Rename ${sessionTitle(session)}`" @click="openRename(session)">
                                 <Pencil class="size-3.5" aria-hidden="true" />
                             </Button>
-                            <Button type="button" size="icon" variant="ghost" :aria-label="`Delete ${sessionTitle(session)}`" @click="deleteTarget = session">
+                            <Button type="button" size="icon" variant="ghost" :aria-label="`Delete ${sessionTitle(session)}`" @click="openDelete(session)">
                                 <Trash2 class="size-3.5" aria-hidden="true" />
                             </Button>
                         </li>
@@ -215,45 +224,44 @@ function confirmDelete(): void {
                     </button>
                 </div>
             </div>
-
-            <Dialog :open="renameTarget !== null" @update:open="(open) => { if (!open) renameTarget = null }">
-                <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                    <DialogHeader>
-                        <DialogTitle>Rename chat</DialogTitle>
-                        <DialogDescription class="text-[var(--talos-muted)]">Choose a concise name for this conversation.</DialogDescription>
-                    </DialogHeader>
-                    <input
-                        ref="renameInput"
-                        v-model="renameValue"
-                        aria-label="Chat name"
-                        class="h-10 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-                        @keydown.enter.prevent="submitRename"
-                    >
-                    <DialogFooter>
-                        <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                        <Button type="button" data-testid="talos-session-rename-submit" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
-                            <Check class="size-4" aria-hidden="true" /> Save
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog :open="deleteTarget !== null" @update:open="(open) => { if (!open) deleteTarget = null }">
-                <DialogContent class="border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-                    <DialogHeader>
-                        <DialogTitle>Delete chat?</DialogTitle>
-                        <DialogDescription class="text-[var(--talos-muted)]">
-                            This permanently removes "{{ deleteTarget ? sessionTitle(deleteTarget) : '' }}" and its messages.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button type="button" variant="ghost" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                        <Button type="button" variant="destructive" data-testid="talos-session-delete-confirm" :disabled="props.busy" @click="confirmDelete">
-                            <Trash2 class="size-4" aria-hidden="true" /> Delete
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </DrawerContent>
     </Drawer>
+
+    <!-- R1-1 + R1-SF-B2: device-proven confirm surfaces, OUTSIDE the Drawer
+         subtree — the drawer closes when they open (its modality would steal
+         their taps and focus), and they must survive that unmount. -->
+    <TalosMobileConfirmDialog
+        v-if="renameTarget !== null"
+        title="Rename chat"
+        description="Choose a concise name for this conversation."
+        @close="renameTarget = null"
+    >
+        <input
+            ref="renameInput"
+            v-model="renameValue"
+            aria-label="Chat name"
+            class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+            @keydown.enter.prevent="submitRename"
+        >
+        <template #footer>
+            <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+            <Button type="button" data-testid="talos-session-rename-submit" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
+                <Check class="size-4" aria-hidden="true" /> Save
+            </Button>
+        </template>
+    </TalosMobileConfirmDialog>
+
+    <TalosMobileConfirmDialog
+        v-if="deleteTarget !== null"
+        title="Delete chat?"
+        :description="`This permanently removes &quot;${deleteTarget ? sessionTitle(deleteTarget) : ''}&quot; and its messages.`"
+        @close="deleteTarget = null"
+    >
+        <template #footer>
+            <Button type="button" variant="ghost" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+            <Button type="button" variant="destructive" data-testid="talos-session-delete-confirm" :disabled="props.busy" @click="confirmDelete">
+                <Trash2 class="size-4" aria-hidden="true" /> Delete
+            </Button>
+        </template>
+    </TalosMobileConfirmDialog>
 </template>

@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core'
+import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     CapacitorSQLite,
     SQLiteConnection,
@@ -151,7 +152,12 @@ export function createCapacitorSqliteRuntime(
             if (!connecting) {
                 connecting = establish().finally(() => { connecting = null })
             }
-            return connecting
+            // R1-6: fenced — a hung native connect froze "Preparing local
+            // chat storage" forever with no Doctor evidence. The fence wraps
+            // the CALLER's wait, never the in-flight establish (m6): a retry
+            // after a timeout re-awaits the SAME connection attempt instead
+            // of racing a second createConnection against it.
+            return talosBridgeCall('TALOS_DB_CONNECT', () => connecting as Promise<TalosSqlConnection>, 20_000)
         },
         async persist() {
             if (options.platform === 'web') {

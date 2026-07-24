@@ -6,6 +6,11 @@ import { flushPromises, mount } from '@vue/test-utils'
 const writeText = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('@/services/clipboard', () => ({ writeTalosClipboardText: writeText }))
 
+// R1-5: the streaming/typing tail reads the chat store directly.
+vi.mock('@/stores/chatController', () => ({
+    useChatController: () => ({ chat: { state: { sending: true, streamingText: null } } }),
+}))
+
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 

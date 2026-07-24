@@ -35,7 +35,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
 <template>
     <!-- F6: on tablet the sheet covers only the CONTENT area — the persistent
          chat panel stays usable (--talos-tablet-rail is 0 on phones). -->
-    <div class="fixed inset-y-0 right-0 z-[70] flex flex-col justify-end" :style="{ left: 'var(--talos-tablet-rail, 0px)' }">
+    <div class="pointer-events-auto fixed inset-y-0 right-0 z-[70] flex flex-col justify-end" :style="{ left: 'var(--talos-tablet-rail, 0px)' }">
         <div
             data-testid="talos-mobile-sheet-backdrop"
             class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"

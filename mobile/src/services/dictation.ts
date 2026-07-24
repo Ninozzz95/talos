@@ -1,10 +1,11 @@
 import { Capacitor } from '@capacitor/core'
+import { SpeechRecognition } from '@capgo/capacitor-speech-recognition'
 import { talosLogDeviceIssue, talosWithTimeout } from '@/lib/talosDeviceLog'
 
 /**
- * F2-T5 — guarded dictation engine. Native path uses the pinned
- * `@capacitor-community/speech-recognition` plugin (lazy import — keeps it out
- * of the entry chunk) with LIVE partial results; web falls back to the Web
+ * F2-T5 — guarded dictation engine. Native path uses the capgo speech plugin
+ * (R1: STATIC import — the dynamic micro-chunk never settled on the owner's
+ * WebView) with LIVE partial results; web falls back to the Web
  * Speech API when the browser exposes it. Anything else reports unsupported
  * honestly — no fake mic.
  */
@@ -27,16 +28,15 @@ export interface TalosDictationEngine {
 // the community plugin's native available() never settles on modern Android
 // (Doctor ring evidence). The fork ships real `error` events (code+message),
 // a finite `listeningState`, and crash fixes.
-type SpeechRecognitionPlugin = typeof import('@capgo/capacitor-speech-recognition').SpeechRecognition
+// R1-mic — OWNER DEVICE EVIDENCE (Doctor F5.3): `registered:true` but
+// `import:FAIL TALOS_SPEECH_STEP_import_TIMEOUT` — the native plugin is fine;
+// the DYNAMIC import of this micro-chunk never settles on the owner's WebView.
+// The wrapper is a few KB: import it STATICALLY and the failing hop no longer
+// exists. loadPlugin stays as the single access point (and diagnostics step).
+type SpeechRecognitionPlugin = typeof SpeechRecognition
 
 async function loadPlugin(): Promise<SpeechRecognitionPlugin> {
-    // F5.1: fence the import so the mic tap and the Doctor always answer.
-    const loaded = await talosWithTimeout(
-        import('@capgo/capacitor-speech-recognition'),
-        4000,
-        'TALOS_SPEECH_PLUGIN_LOAD',
-    )
-    return loaded.SpeechRecognition
+    return SpeechRecognition
 }
 
 function nativeEngine(): TalosDictationEngine {

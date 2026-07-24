@@ -1,5 +1,6 @@
 import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
+import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     DEFAULT_MOBILE_PRESENTATION,
     isTalosMobilePresentation,
@@ -71,16 +72,17 @@ export function usePreferencesStore(): PreferencesStore {
     const state = reactive<TalosMobilePreferencesV1>({ ...DEFAULT_MOBILE_PREFERENCES })
 
     async function persist(): Promise<void> {
-        await Preferences.set({
+        await talosBridgeCall('TALOS_PREFS_PERSIST', () => Preferences.set({
             key: TALOS_MOBILE_PREFERENCES_KEY,
             value: serialize({ schema_version: 1, presentation: state.presentation, last_route: state.last_route }),
-        })
+        }))
     }
 
     singleton = {
         state: readonly(state),
         async hydrate() {
-            const { value } = await Preferences.get({ key: TALOS_MOBILE_PREFERENCES_KEY })
+            const { value } = await talosBridgeCall('TALOS_PREFS_HYDRATE',
+                () => Preferences.get({ key: TALOS_MOBILE_PREFERENCES_KEY }))
             const parsed = parseMobilePreferences(value ?? null)
             state.presentation = parsed.presentation
             state.last_route = parsed.last_route

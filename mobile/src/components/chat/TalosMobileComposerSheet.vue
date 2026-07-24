@@ -31,7 +31,7 @@ onMounted(() => {
 
 <template>
     <Teleport to="body">
-    <div class="fixed inset-0 z-[75] flex flex-col justify-end">
+    <div class="pointer-events-auto fixed inset-0 z-[75] flex flex-col justify-end">
         <div
             class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"
             :class="entered ? 'opacity-100' : 'opacity-0'"
@@ -45,7 +45,7 @@ onMounted(() => {
             :aria-label="title"
             tabindex="-1"
             :data-testid="testid"
-            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out"
+            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out md:mx-auto md:w-[clamp(480px,50vw,600px)] md:border-x"
             :class="entered ? 'translate-y-0' : 'translate-y-6'"
             @keydown.escape="emit('close')"
             @keydown="trapTab"

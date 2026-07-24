@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { BookMarked, FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
-import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
+import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
-import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { talosRelativeTime } from '@/lib/relativeTime'
 
 const props = defineProps<{
@@ -16,8 +15,6 @@ const props = defineProps<{
     // Desktop-parity message style (owner: assistant replies are full-width
     // sections by default; bubbles remain a Settings toggle).
     messageStyle?: 'sections' | 'bubbles'
-    // F2-T4: live text of the in-flight assistant reply (null when buffered).
-    streamingText?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -42,29 +39,8 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
 )
 const copyStatus = ref('')
 
-// F5.1 — progressive streaming markdown: re-parsing on EVERY token would burn
-// the phone; a trailing ~120ms throttle keeps the render fluid and cheap
-// (Streamdown/markstream competitor pattern), with unterminated fences
-// auto-closed so partial code never flashes as raw text.
-const throttledStreamingMarkdown = ref('')
-let streamThrottle: ReturnType<typeof setTimeout> | null = null
-watch(() => props.streamingText, (text) => {
-    if (!text) {
-        if (streamThrottle !== null) clearTimeout(streamThrottle)
-        streamThrottle = null
-        throttledStreamingMarkdown.value = ''
-        return
-    }
-    if (streamThrottle !== null) return
-    streamThrottle = setTimeout(() => {
-        streamThrottle = null
-        throttledStreamingMarkdown.value = stabilizeStreamingTalosMarkdown(props.streamingText ?? '')
-    }, 120)
-    if (!throttledStreamingMarkdown.value) {
-        throttledStreamingMarkdown.value = stabilizeStreamingTalosMarkdown(text)
-    }
-}, { immediate: true })
-onBeforeUnmount(() => { if (streamThrottle !== null) clearTimeout(streamThrottle) })
+// R1-5 — the in-flight reply lives in TalosMobileStreamingReply, which alone
+// subscribes to streamingText: a token burst no longer re-diffs this list.
 
 // Meta timestamps age honestly: a shared `now` ticks every 30s so "just now"
 // does not persist forever on an idle thread.
@@ -99,9 +75,20 @@ function modelLabel(message: TalosMobileMessageView): string {
     return props.modelLabels?.[id] ?? id
 }
 
+// R1-5 — precomputed once per messages change (was findIndex+slice+some PER
+// assistant row inside the render: O(n²) each pass).
+const hasPreviousUserById = computed(() => {
+    const map = new Map<string, boolean>()
+    let seenUser = false
+    for (const message of props.messages) {
+        map.set(message.id, seenUser)
+        if (message.role === 'user') seenUser = true
+    }
+    return map
+})
+
 function hasPreviousUser(messageId: string): boolean {
-    const index = props.messages.findIndex((message) => message.id === messageId)
-    return index > 0 && props.messages.slice(0, index).some((message) => message.role === 'user')
+    return hasPreviousUserById.value.get(messageId) ?? false
 }
 
 async function copyMessage(message: TalosMobileMessageView): Promise<void> {
@@ -224,36 +211,9 @@ function formatBytes(value: number): string {
             </template>
         </article>
 
-        <article
-            v-if="sending && streamingText"
-            data-testid="talos-mobile-streaming"
-            class="w-full max-w-full px-1 py-1 text-sm leading-6 text-[var(--talos-text,var(--foreground))]"
-        >
-            <!-- The growing text stays OUTSIDE any live region: re-announcing
-                 the whole reply on every token is screen-reader noise.
-                 F5.1 (owner): markdown renders PROGRESSIVELY during the
-                 stream — same renderer as final messages, throttled, with
-                 unterminated fences auto-closed (competitor pattern). -->
-            <TalosMobileMessageContent :content="throttledStreamingMarkdown" />
-            <span class="mt-1 flex items-center gap-1" aria-hidden="true">
-                <span class="talos-typing-dot"></span>
-                <span class="talos-typing-dot"></span>
-                <span class="talos-typing-dot"></span>
-            </span>
-            <span class="sr-only" role="status" aria-live="polite">Receiving response</span>
-        </article>
-        <div
-            v-else-if="sending"
-            data-testid="talos-mobile-typing"
-            class="max-w-[92%] self-start rounded-2xl rounded-bl-sm border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] px-3.5 py-2 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
-            role="status"
-            aria-live="polite"
-        >
-            <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
-                 empty nodes; each node fills as the line passes through it. -->
-            <TalosLineLoader :width="44" />
-            <span class="sr-only">Processing</span>
-        </div>
+        <!-- R1-5: the streaming tail subscribes to the store on its own — a
+             token burst re-renders only that subtree, never this list. -->
+        <TalosMobileStreamingReply />
         <span data-testid="talos-mobile-message-action-status" class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>
     </div>
 </template>
