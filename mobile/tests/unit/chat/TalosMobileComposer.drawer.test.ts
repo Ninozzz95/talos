@@ -114,12 +114,22 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
     })
 
-    // SF-critic fix: in immersive mode a control tap must NOT blur the textarea
-    // (which would unmount the row before the click resolves → dead controls).
-    it('immersive: pressing a control cancels the mousedown so the field keeps focus', async () => {
+    // Owner device feedback: the compact immersive pill must be [+] input [mic]
+    // [send] on one line — + and mic must NOT disappear in the compact state.
+    it('immersive compact shows the inline + and mic (single-line pill), not the model chip', () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
-        await wrapper.get('textarea').trigger('focus') // reveal the controls row
-        const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+        expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
+        expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
+        // the model chip only appears once expanded (on focus/content)
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+    })
+
+    // Owner device bug: tapping "+" blurred the field and dismissed the keyboard.
+    // The tap must cancel the pointerdown (Android WebView blurs on pointerdown,
+    // before any mousedown handler could run).
+    it('immersive compact: tapping "+" cancels the pointerdown so the field keeps focus', () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        const ev = new Event('pointerdown', { bubbles: true, cancelable: true })
         wrapper.get('[aria-label="Add to chat"]').element.dispatchEvent(ev)
         expect(ev.defaultPrevented).toBe(true)
     })

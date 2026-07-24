@@ -37,6 +37,15 @@ describe('launcher icon controller', () => {
         expect(c.state.pending).toEqual({ target: 'noir' })
     })
 
+    it('evaluate is a no-op before hydrate (the theme-hydration settle must not prompt)', () => {
+        fakeDeps()
+        const c = useLauncherIconController()
+        // On cold start the theme store hydrates default→user-theme and fires the
+        // watcher BEFORE the applied mirror is loaded — that must not raise a prompt.
+        c.evaluate('noir', true)
+        expect(c.state.pending).toBeNull()
+    })
+
     it('evaluate stays quiet when the feature is off', async () => {
         fakeDeps()
         const c = useLauncherIconController()

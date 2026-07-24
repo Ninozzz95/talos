@@ -431,13 +431,31 @@ watch(() => props.prompt, () => {
         </div>
 
         <div class="relative min-w-0">
+            <!-- Owner 2026-07-24 immersive compact pill: [+] input [mic] [send] on ONE
+                 line; model+effort appear on focus (expanded). @pointerdown.prevent keeps
+                 the field focused / keyboard up when a control is tapped (Android WebView
+                 blurs on pointerdown, before any mousedown handler could run). -->
+            <button
+                v-if="composerCompact"
+                ref="plusTrigger"
+                type="button"
+                aria-label="Add to chat"
+                :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
+                :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
+                class="talos-pressable absolute bottom-1.5 left-1 z-10 flex size-10 items-center justify-center rounded-full text-[var(--talos-muted,var(--muted-foreground))]"
+                @pointerdown.prevent
+                @click="openPlus"
+            >
+                <Plus class="size-5" aria-hidden="true" />
+            </button>
             <textarea
                 ref="promptField"
                 :value="prompt"
                 rows="2"
                 aria-label="Message TALOS"
                 placeholder="Message TALOS..."
-                class="max-h-48 min-h-14 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 pr-14 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
+                class="max-h-48 min-h-14 w-full resize-none overflow-y-auto bg-transparent py-2 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
+                :class="composerCompact ? 'pl-12 pr-24' : 'px-2 pr-14'"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
                 @focus="composerFocused = true"
@@ -468,15 +486,52 @@ watch(() => props.prompt, () => {
                     <ArrowUp v-else class="size-5" aria-hidden="true" />
                 </Transition>
             </Button>
+
+            <!-- compact immersive: mic sits inline, just left of Send. -->
+            <button
+                v-if="composerCompact && dictationSupported"
+                type="button"
+                :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
+                :aria-pressed="dictationListening || dictationStarting"
+                :disabled="sending && !dictationListening && !dictationStarting"
+                class="talos-pressable absolute bottom-1.5 right-[3.25rem] z-10 flex size-10 items-center justify-center rounded-full text-[var(--talos-muted,var(--muted-foreground))] disabled:opacity-40"
+                :class="dictationListening || dictationStarting ? '!text-[var(--talos-accent,var(--primary))]' : ''"
+                @pointerdown.prevent
+                @click="emit('toggleDictation')"
+            >
+                <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
+                <Mic v-else class="size-5" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
+            </button>
+
+            <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown, anchored above the
+                 composer so it opens whether the pill is compact or expanded. -->
+            <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="closePlusMenu" />
+            <div
+                v-if="plusMenuOpen"
+                ref="plusMenu"
+                role="menu"
+                tabindex="-1"
+                data-testid="talos-composer-plus-menu"
+                class="absolute bottom-full left-1 z-[60] mb-2 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
+                @keydown.escape="closePlusMenu"
+            >
+                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Attach a file</button>
+                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Library</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Model Lab</button>
+                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? 'Browsing on' : 'Browse the web' }}</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('enhancePrompt'); closePlusMenu()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Improve prompt</button>
+            </div>
         </div>
 
         <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic.
              Owner 2026-07-24 immersive: this controls row hides when the field
              is unfocused+empty (compact pill), and returns on focus/content. -->
-        <!-- @mousedown.prevent: in immersive mode the row is gated on textarea
-             focus; a control tap must NOT blur the field (which would unmount the
-             row before the click resolves), so we keep focus through the press. -->
-        <div v-if="drawerMode && !composerCompact" class="relative mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
+        <!-- @pointerdown.prevent: a control tap must NOT blur the field / dismiss the
+             keyboard in immersive mode (Android WebView blurs on pointerdown, before a
+             mousedown handler could run). This row is not scrollable so cancelling its
+             pointerdown default is safe. The "+" dropdown lives in the field wrapper
+             above so it opens whether the pill is compact or expanded. -->
+        <div v-if="drawerMode && !composerCompact" class="relative mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @pointerdown.prevent>
             <Button
                 ref="plusTrigger"
                 type="button"
@@ -491,24 +546,6 @@ watch(() => props.prompt, () => {
             >
                 <Plus class="size-5" aria-hidden="true" />
             </Button>
-            <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown — SAME actions as the
-                 bottom drawer, anchored above the "+". -->
-            <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="closePlusMenu" />
-            <div
-                v-if="plusMenuOpen"
-                ref="plusMenu"
-                role="menu"
-                tabindex="-1"
-                data-testid="talos-composer-plus-menu"
-                class="absolute bottom-full left-0 z-[60] mb-2 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
-                @keydown.escape="closePlusMenu"
-            >
-                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); plusMenuOpen = false"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Attach a file</button>
-                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); plusMenuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Library</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); plusMenuOpen = false"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Model Lab</button>
-                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); plusMenuOpen = false"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? 'Browsing on' : 'Browse the web' }}</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('enhancePrompt'); plusMenuOpen = false"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Improve prompt</button>
-            </div>
             <button
                 ref="modelTrigger"
                 type="button"
