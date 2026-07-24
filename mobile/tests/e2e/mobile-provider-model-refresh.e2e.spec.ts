@@ -74,7 +74,8 @@ test('saving a key refreshes models immediately and preserves context across two
     await expect(embedModel).toContainText('Gemini Embed')
     await expect(embedModel).toHaveAttribute('data-disabled', '')
     await liveModel.click()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
 
     const composer = page.getByLabel('Message TALOS')
@@ -109,7 +110,8 @@ test('failed discovery keeps chat reachable and does not reopen Settings', async
     await expect(page.locator('[data-settings-panel="models"]').getByRole('alert'))
         .toContainText('The test credential was rejected.')
 
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.getByLabel('Message TALOS')).toBeEnabled()
     await page.getByLabel('Message TALOS').fill('Composer remains usable')

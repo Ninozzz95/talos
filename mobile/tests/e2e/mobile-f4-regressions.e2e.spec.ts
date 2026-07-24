@@ -26,7 +26,8 @@ async function configureGemini(page: Page): Promise<void> {
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
 
@@ -166,7 +167,8 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         // Back to chat: the send must inject the untrusted block into the
         // PROVIDER payload and disclose the usage on the message.
-        await page.getByLabel('Back to chat').click()
+        if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+        if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
         const composer = page.getByLabel('Message TALOS')
         await composer.fill('Che piano abbiamo?')
         await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
@@ -190,7 +192,8 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await page.locator(SIDEBAR).getByRole('button', { name: 'Open Memory' }).click()
         await page.getByLabel('Disable memory Preferenza tono').click()
         await expect(page.locator('[data-memory-status="disabled"]')).toHaveCount(1)
-        await page.getByLabel('Back to chat').click()
+        if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+        if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
         await composer.fill('Seconda domanda')
         await composer.press('Enter')
         await expect(page.locator('article[data-message-kind="assistant"]')).toHaveCount(2)

@@ -91,7 +91,9 @@ describe('TalosMobileSettingsCenter', () => {
         expect(wrapper.get('[aria-label="Browser interaction policy"]').exists()).toBe(true)
     })
 
-    it('uses a phone list-detail flow and returns to categories without losing selection', async () => {
+    it('uses a phone list-detail flow; the sheet header drives a single contextual Back', async () => {
+        const { useTalosSheetNav } = await import('@/composables/useTalosSheetNav')
+        const nav = useTalosSheetNav()
         const wrapper = mountCenter()
         await activateTab(wrapper, 'appearance')
 
@@ -99,9 +101,16 @@ describe('TalosMobileSettingsCenter', () => {
         expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).not.toContain('hidden')
         expect(wrapper.get('[data-settings-panel="appearance"]').attributes('data-state')).toBe('active')
 
-        await wrapper.get('[aria-label="Back to settings categories"]').trigger('click')
+        // Owner 2026-07-24: no in-body "Categories" back — the sheet header
+        // shows the subsection title and owns the single Back.
+        expect(wrapper.find('[aria-label="Back to settings categories"]').exists()).toBe(false)
+        expect(nav.subView.value?.title).toBe('Appearance')
+
+        nav.subView.value!.back()
+        await wrapper.vm.$nextTick()
         expect(wrapper.get('[data-testid="settings-category-pane"]').classes()).not.toContain('hidden')
         expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).toContain('hidden')
         expect(wrapper.get('[data-settings-tab="appearance"]').attributes('aria-selected')).toBe('true')
+        expect(nav.subView.value).toBeNull()
     })
 })

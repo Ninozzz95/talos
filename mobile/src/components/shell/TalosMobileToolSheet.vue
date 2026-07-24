@@ -2,6 +2,7 @@
 import { onMounted, provide, ref } from 'vue'
 import { ArrowLeft, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
+import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 
 // Station sheet presented over the persistent chat base — mirror of the desktop
 // TalosMobileToolSheet (window/TalosMobileToolSheet.vue): Back-to-chat header,
@@ -18,6 +19,8 @@ withDefaults(defineProps<{
     presentation: 'fullscreen',
 })
 const emit = defineEmits<{ close: [] }>()
+
+const { subView } = useTalosSheetNav()
 
 const entered = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -60,18 +63,22 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                 entered ? 'translate-y-0' : 'translate-y-6',
             ]"
         >
+            <!-- Owner 2026-07-24: ONE contextual back. When a station pushes a
+                 sub-view, the header shows the subsection title and Back returns
+                 to the station (not a second in-body arrow). -->
             <header class="flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
                 <button
                     type="button"
-                    aria-label="Back to chat"
+                    data-testid="talos-sheet-back"
+                    :aria-label="subView ? 'Back' : 'Back to chat'"
                     class="talos-pressable inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--talos-muted)]"
-                    @click="emit('close')"
+                    @click="subView ? subView.back() : emit('close')"
                 >
                     <ArrowLeft class="h-4 w-4" aria-hidden="true" />
                 </button>
                 <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ title }}</p>
-                    <p v-if="description" class="truncate text-[11px] text-[var(--talos-muted)]">{{ description }}</p>
+                    <p class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
+                    <p v-if="!subView && description" class="truncate text-[11px] text-[var(--talos-muted)]">{{ description }}</p>
                 </div>
                 <button
                     v-if="presentation === 'drawer'"
