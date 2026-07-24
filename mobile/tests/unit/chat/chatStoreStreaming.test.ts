@@ -59,6 +59,27 @@ describe('chat store streaming (F2-T4)', () => {
         expect(store.state.sending).toBe(false)
     })
 
+    it('fires onPersisted once the user message is committed, BEFORE the stream completes (composer clears immediately)', async () => {
+        // Owner 2026-07-24: an attachment used to linger in the composer for the
+        // whole generation because clearing waited on `accepted` (returned only
+        // after streaming). onPersisted fires the instant the user turn is saved.
+        let releaseStream: (value: string) => void = () => {}
+        const complete: ChatCompletion = () => new Promise((resolve) => { releaseStream = resolve })
+        const store = await readyStore(complete)
+        const onPersisted = vi.fn()
+        const pending = store.send('hi', null, {}, [], onPersisted)
+
+        await vi.waitFor(() => expect(onPersisted).toHaveBeenCalledOnce())
+        // The user turn is saved but the assistant stream has NOT completed yet.
+        expect(store.messages.filter((message) => message.role === 'user')).toHaveLength(1)
+        expect(store.messages.filter((message) => message.role === 'assistant')).toHaveLength(0)
+        expect(store.state.sending).toBe(true)
+
+        releaseStream('done')
+        await pending
+        expect(onPersisted).toHaveBeenCalledOnce()
+    })
+
     it('provider failure AFTER partial chunks keeps the partial (interrupted) and reports the error', async () => {
         const complete: ChatCompletion = async (_turns, stream) => {
             stream?.onChunk('Half ')

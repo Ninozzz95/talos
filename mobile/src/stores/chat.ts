@@ -86,6 +86,10 @@ export interface ChatStore {
         modelProfileId?: string | null,
         metadata?: Record<string, unknown>,
         attachments?: readonly AppendChatAttachmentInput[],
+        // Fired the moment the user message is COMMITTED (persisted), before the
+        // assistant stream — so the composer (text + attachments) can clear
+        // immediately instead of lingering for the whole generation.
+        onPersisted?: () => void,
     ): Promise<boolean>
 }
 
@@ -580,6 +584,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         modelProfileId: string | null = null,
         metadata: Record<string, unknown> = {},
         attachments: readonly AppendChatAttachmentInput[] = [],
+        onPersisted?: () => void,
     ): Promise<boolean> {
         const trimmed = text.trim()
         if ((!trimmed && attachments.length === 0) || state.sending) return false
@@ -607,6 +612,10 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             state.sending = false
             return false
         }
+
+        // The user turn is committed — let the composer clear NOW (text +
+        // attachments) instead of lingering for the whole assistant stream.
+        onPersisted?.()
 
         let turns: ChatTurn[]
         try {
