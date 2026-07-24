@@ -94,17 +94,17 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     <!-- Owner 2026-07-24: the framed card was redundant nesting inside the
          sheet — on mobile the categories/detail go FULL-WIDTH with the coherent
          parent padding; the framed side-by-side stays on tablet (md). -->
-    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex min-h-0 flex-col overflow-hidden md:min-h-[540px] md:flex-row md:rounded-md md:border md:border-[var(--talos-border)] md:bg-[var(--talos-card)]">
+    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex flex-col md:min-h-0 md:min-h-[540px] md:flex-row md:overflow-hidden md:rounded-md md:border md:border-[var(--talos-border)] md:bg-[var(--talos-card)]">
         <aside
             data-testid="settings-category-pane"
-            class="min-h-0 flex-1 md:block md:w-56 md:flex-none md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
+            class="md:block md:min-h-0 md:w-56 md:flex-none md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
             :class="mobilePane === 'detail' ? 'hidden' : 'block'"
             aria-label="Settings categories"
         >
             <!-- Owner 2026-07-24 (Claude-style): account summary card on top +
                  grouped rounded cards (icon · label · gated hint · chevron).
                  Uniform radius (rounded-xl ≈ 12px). -->
-            <TabsList aria-label="TALOS settings categories" class="flex max-h-none w-full flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-4 py-4 md:px-0 md:py-0">
+            <TabsList aria-label="TALOS settings categories" class="flex max-h-none w-full flex-col gap-5 px-4 py-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0">
                 <TabsTrigger
                     :value="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
                     :data-settings-tab="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
@@ -144,7 +144,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
 
         <section
             data-testid="settings-detail-pane"
-            class="min-w-0 flex-1 overflow-y-auto md:block md:p-4"
+            class="min-w-0 px-4 py-2 md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
             :class="mobilePane === 'categories' ? 'hidden' : 'block'"
             :aria-label="`${selectedTab.label} settings`"
         >
