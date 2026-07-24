@@ -17,6 +17,9 @@ export interface TalosVaultTrayItem {
 
 export interface TalosVaultService {
     ingest(file: TalosPickedFile): Promise<TalosVaultTrayItem>
+    /** Owner 2026-07-24: persist a chat-generated artifact into the Library as a
+     *  reusable document (origin='generated', searchable via extracted text). */
+    createGenerated(input: { name: string; mediaType: string; text: string }): Promise<TalosVaultTrayItem>
     createGrant(fileId: string): Promise<TalosLocalFileAuthorityGrant>
     revokeGrant(grantId: string): Promise<void>
     resolveMessageParts(messageId: string): Promise<TalosMobileInputPart[]>
@@ -93,44 +96,61 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
         throw new Error(code)
     }
 
-    return {
-        async ingest(pickedFile) {
-            const fileId = idFactory()
-            await options.repository.createVaultFile({
-                id: fileId,
-                display_name: pickedFile.name,
-                media_type: pickedFile.declaredMediaType || 'application/octet-stream',
-                size_bytes: pickedFile.sizeBytes,
-                private_uri: '',
-                status: 'pending',
-                trust: 'untrusted',
-                sha256: null,
-                extracted_text: null,
-                failure_code: null,
-                created_at: now(),
+    async function ingestFile(
+        pickedFile: TalosPickedFile,
+        origin: 'uploaded' | 'generated',
+    ): Promise<TalosVaultTrayItem> {
+        const fileId = idFactory()
+        await options.repository.createVaultFile({
+            id: fileId,
+            display_name: pickedFile.name,
+            media_type: pickedFile.declaredMediaType || 'application/octet-stream',
+            size_bytes: pickedFile.sizeBytes,
+            private_uri: '',
+            status: 'pending',
+            trust: 'untrusted',
+            sha256: null,
+            extracted_text: null,
+            failure_code: null,
+            created_at: now(),
+        })
+        let privateUri = ''
+        try {
+            const copy = await options.fileStore.copyToPrivate(pickedFile, fileId)
+            privateUri = copy.privateUri
+            const analysis = await options.analysisClient.analyze({
+                bytes: copy.bytes,
+                name: pickedFile.name,
+                declaredMediaType: pickedFile.declaredMediaType,
             })
-            let privateUri = ''
-            try {
-                const copy = await options.fileStore.copyToPrivate(pickedFile, fileId)
-                privateUri = copy.privateUri
-                const analysis = await options.analysisClient.analyze({
-                    bytes: copy.bytes,
-                    name: pickedFile.name,
-                    declaredMediaType: pickedFile.declaredMediaType,
-                })
-                const file = await options.repository.updateVaultFile(fileId, {
-                    private_uri: privateUri,
-                    status: 'available',
-                    sha256: analysis.sha256,
-                    extracted_text: analysis.extractedText,
-                    failure_code: null,
-                    metadata: { extension: analysis.extension, page_count: analysis.pageCount },
-                })
-                const grant = await createGrant(file.id)
-                return { file, grant }
-            } catch (error) {
-                return failPendingFile(fileId, privateUri, error)
-            }
+            const file = await options.repository.updateVaultFile(fileId, {
+                private_uri: privateUri,
+                status: 'available',
+                sha256: analysis.sha256,
+                extracted_text: analysis.extractedText,
+                failure_code: null,
+                metadata: { extension: analysis.extension, page_count: analysis.pageCount, origin },
+            })
+            const grant = await createGrant(file.id)
+            return { file, grant }
+        } catch (error) {
+            return failPendingFile(fileId, privateUri, error)
+        }
+    }
+
+    return {
+        ingest: (pickedFile) => ingestFile(pickedFile, 'uploaded'),
+        async createGenerated({ name, mediaType, text }) {
+            // A chat-generated document flows through the SAME ingestion pipeline
+            // (private copy + analysis → searchable extracted text + sha256), only
+            // marked origin='generated'. Built from a web-blob so it needs no picker.
+            const bytes = new TextEncoder().encode(text)
+            return ingestFile({
+                name,
+                declaredMediaType: mediaType,
+                sizeBytes: bytes.byteLength,
+                source: { kind: 'web-blob', blob: new Blob([bytes], { type: mediaType }) },
+            }, 'generated')
         },
         createGrant,
         revokeGrant: (grantId) => options.repository.revokeFileAuthorityGrant(grantId),
@@ -196,7 +216,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                         sha256: analysis.sha256,
                         extracted_text: analysis.extractedText,
                         failure_code: null,
-                        metadata: { extension: analysis.extension, page_count: analysis.pageCount },
+                        metadata: { extension: analysis.extension, page_count: analysis.pageCount, origin: 'uploaded' },
                     })
                 } catch (error) {
                     try {

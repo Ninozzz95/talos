@@ -67,6 +67,40 @@ describe('createTalosVaultService', () => {
         })
     })
 
+    it('createGenerated stores a chat artifact as a generated, searchable Library document', async () => {
+        const repository = createMemoryChatRepository({ now: () => '2026-07-24T10:00:00.000Z' })
+        let capturedSourceKind = ''
+        const fileStore: TalosAttachmentFileStore = {
+            copyToPrivate: vi.fn().mockImplementation(async (file: TalosPickedFile) => {
+                capturedSourceKind = file.source.kind
+                return { privateUri: 'talos-vault/files/gen-1.md', bytes: new TextEncoder().encode('body') }
+            }),
+            readPrivate: vi.fn(),
+            deletePrivate: vi.fn(),
+        }
+        const analysisClient: TalosAttachmentAnalysisClient = {
+            analyze: vi.fn().mockResolvedValue({
+                mediaType: 'text/markdown', extension: 'md', sha256: 'b'.repeat(64),
+                extractedText: 'quarterly summary body', pageCount: null,
+            }),
+        }
+        const service = createTalosVaultService({
+            repository, fileStore, analysisClient,
+            idFactory: vi.fn().mockReturnValueOnce('gen-1').mockReturnValueOnce('grant-g1'),
+            now: () => '2026-07-24T10:00:00.000Z',
+        })
+
+        const item = await service.createGenerated({
+            name: 'talos-markdown.md', mediaType: 'text/markdown', text: '# Report\nbody',
+        })
+
+        expect(capturedSourceKind).toBe('web-blob') // built from text, no file picker
+        expect(item.file).toMatchObject({
+            id: 'gen-1', status: 'available', extracted_text: 'quarterly summary body',
+        })
+        expect((item.file.metadata as { origin?: string }).origin).toBe('generated')
+    })
+
     it('AV-06 removes partial bytes and records a bounded failed state', async () => {
         const repository = createMemoryChatRepository()
         const fileStore: TalosAttachmentFileStore = {

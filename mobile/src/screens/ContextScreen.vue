@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
     AlertTriangle,
     Database,
@@ -9,6 +9,8 @@ import {
     Paperclip,
     Plus,
     RefreshCw,
+    Search,
+    Sparkles,
     Trash2,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
@@ -16,6 +18,7 @@ import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialo
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { useChatController } from '@/stores/chatController'
+import { filterLibraryFiles, parseVaultOrigin, type LibraryFilter } from '@/lib/vaultLibrary'
 
 const controller = useChatController()
 const attachments = controller.attachments
@@ -23,6 +26,19 @@ const actionBusy = ref(false)
 const feedback = ref('')
 const deleteOpen = ref(false)
 const deleteTarget = ref<TalosLocalVaultFile | null>(null)
+
+// ChatGPT-"Library" parity: search across ALL chats + an uploaded/generated
+// filter. Search matches names AND extracted document text (TALOS one-up).
+const query = ref('')
+const origin = ref<LibraryFilter['origin']>('all')
+const ORIGIN_TABS: Array<{ value: LibraryFilter['origin']; label: string }> = [
+    { value: 'all', label: 'All' },
+    { value: 'uploaded', label: 'Uploaded' },
+    { value: 'generated', label: 'Generated' },
+]
+
+const filtered = computed(() =>
+    filterLibraryFiles(attachments.vaultFiles, { query: query.value, origin: origin.value }))
 
 function formatBytes(value: number): string {
     if (value < 1024) return value + ' B'
@@ -93,52 +109,15 @@ onMounted(async () => {
             <Database class="h-4 w-4 text-[var(--talos-accent)]" aria-hidden="true" />
         </template>
 
-        <div
-            class="flex gap-1 border-b border-[var(--talos-border)]"
-            role="tablist"
-            aria-label="Library sections"
-        >
-            <button
-                id="talos-mobile-library-tab-context"
-                type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="talos-mobile-library-panel-context"
-                class="min-h-11 border-b-2 border-[var(--talos-accent)] px-3 text-sm font-semibold text-[var(--talos-text)]"
-            >
-                Context Vault
-            </button>
-            <button
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-disabled="true"
-                disabled
-                class="min-h-11 border-b-2 border-transparent px-3 text-sm text-[var(--talos-muted)] opacity-60"
-            >
-                Documents
-            </button>
-        </div>
-
-        <section
-            id="talos-mobile-library-panel-context"
-            role="tabpanel"
-            aria-labelledby="talos-mobile-library-tab-context"
-            class="mt-4"
-        >
-
-        <div class="mb-4 flex items-center justify-between gap-3 border-b border-[var(--talos-border)] pb-3">
-            <div>
-                <h2 class="text-sm font-semibold text-[var(--talos-text)]">Files</h2>
-                <p class="mt-0.5 font-mono text-[10px] text-[var(--talos-muted)]">
-                    {{ attachments.vaultFiles.length }} stored
-                </p>
-            </div>
+        <div class="mb-3 flex items-center justify-between gap-3">
+            <p class="font-mono text-[10px] text-[var(--talos-muted)]">
+                {{ attachments.vaultFiles.length }} across every chat
+            </p>
             <Button
                 type="button"
                 size="sm"
                 :disabled="actionBusy || attachments.selecting.value"
-                aria-label="Add files to Vault"
+                aria-label="Add files to Library"
                 @click="addFiles"
             >
                 <LoaderCircle
@@ -149,6 +128,39 @@ onMounted(async () => {
                 <Plus v-else class="size-4" aria-hidden="true" />
                 Add files
             </Button>
+        </div>
+
+        <!-- Search across names AND document contents. -->
+        <label class="relative mb-3 block">
+            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
+            <input
+                v-model="query"
+                type="search"
+                inputmode="search"
+                data-testid="talos-library-search"
+                placeholder="Search files and contents"
+                aria-label="Search the Library"
+                class="min-h-11 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+            />
+        </label>
+
+        <!-- Uploaded / Generated filter. -->
+        <div class="mb-4 flex gap-1" role="tablist" aria-label="Filter by origin">
+            <button
+                v-for="tab in ORIGIN_TABS"
+                :key="tab.value"
+                type="button"
+                role="tab"
+                :aria-selected="origin === tab.value"
+                :data-testid="`talos-library-origin-${tab.value}`"
+                class="talos-pressable min-h-9 rounded-full px-3 text-sm transition-colors"
+                :class="origin === tab.value
+                    ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
+                    : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'"
+                @click="origin = tab.value"
+            >
+                {{ tab.label }}
+            </button>
         </div>
 
         <div
@@ -163,7 +175,7 @@ onMounted(async () => {
                 size="icon"
                 variant="ghost"
                 class="min-h-11 min-w-11"
-                aria-label="Retry Vault"
+                aria-label="Retry Library"
                 @click="attachments.refreshVault()"
             >
                 <RefreshCw class="size-4" aria-hidden="true" />
@@ -176,19 +188,26 @@ onMounted(async () => {
             class="flex items-center gap-2 py-8 text-sm text-[var(--talos-muted)]"
         >
             <LoaderCircle class="size-4 motion-safe:animate-spin" aria-hidden="true" />
-            Loading Vault
+            Loading Library
         </div>
 
         <div
             v-else-if="attachments.vaultFiles.length === 0"
             class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]"
         >
-            No files in your Vault
+            No files yet. Anything you upload or save from a chat lives here, ready to reuse in any conversation.
         </div>
 
-        <div v-else class="space-y-2" role="list" aria-label="Vault files">
+        <div
+            v-else-if="filtered.length === 0"
+            class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]"
+        >
+            No files match “{{ query }}”.
+        </div>
+
+        <div v-else class="space-y-2" role="list" aria-label="Library files">
             <article
-                v-for="file in attachments.vaultFiles"
+                v-for="file in filtered"
                 :key="file.id"
                 :data-vault-file-id="file.id"
                 role="listitem"
@@ -204,8 +223,13 @@ onMounted(async () => {
                 <div class="min-w-0 flex-1">
                     <h3 class="truncate text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</h3>
                     <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--talos-muted)]">
+                        <span
+                            v-if="parseVaultOrigin(file.metadata) === 'generated'"
+                            class="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--talos-accent,#c08b3c)_16%,transparent)] px-1.5 text-[10px] font-medium text-[var(--talos-accent)]"
+                        >
+                            <Sparkles class="size-3" aria-hidden="true" /> Generated
+                        </span>
                         <span>{{ formatBytes(file.size_bytes) }}</span>
-                        <span>{{ file.media_type }}</span>
                         <span v-if="file.status === 'available'" class="text-[var(--talos-success)]">Ready</span>
                         <span v-else-if="file.status === 'pending'">Inspecting</span>
                         <span v-else class="text-[var(--talos-danger)]">Could not inspect</span>
@@ -247,7 +271,6 @@ onMounted(async () => {
                 </div>
             </article>
         </div>
-        </section>
 
         <p class="sr-only" role="status" aria-live="polite">{{ feedback }}</p>
     </TalosMobileScreen>

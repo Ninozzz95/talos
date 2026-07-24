@@ -44,6 +44,8 @@ export interface TalosMobileAttachmentsController {
     initialize(): Promise<void>
     refreshVault(): Promise<void>
     selectFiles(): Promise<void>
+    /** Save a chat-generated artifact into the Library (origin='generated'). */
+    saveGenerated(input: { name: string; mediaType: string; text: string }): Promise<TalosLocalVaultFile>
     attachExisting(file: TalosLocalVaultFile): Promise<boolean>
     remove(itemId: string): Promise<void>
     deleteVaultFile(fileId: string): Promise<void>
@@ -202,6 +204,18 @@ export function useTalosMobileAttachments(
         }
     }
 
+    async function saveGenerated(
+        input: { name: string; mediaType: string; text: string },
+    ): Promise<TalosLocalVaultFile> {
+        vaultError.value = null
+        const result = await options.vault.createGenerated(input)
+        // Saved to the Library, not attached to a message → drop the pre-minted
+        // grant; attaching it later from the Library mints its own.
+        await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
+        await refreshVault()
+        return result.file
+    }
+
     async function attachExisting(file: TalosLocalVaultFile): Promise<boolean> {
         error.value = null
         if (items.some((item) => item.vaultFileId === file.id)) {
@@ -314,6 +328,7 @@ export function useTalosMobileAttachments(
         initialize,
         refreshVault,
         selectFiles,
+        saveGenerated,
         attachExisting,
         remove,
         deleteVaultFile,
