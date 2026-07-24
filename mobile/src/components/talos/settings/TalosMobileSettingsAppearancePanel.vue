@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { RotateCcw } from '@lucide/vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import TalosMobileVoiceSettings from '@/components/talos/settings/TalosMobileVoiceSettings.vue'
 import {
     TALOS_THEME_MODE_OPTIONS,
     TALOS_THEME_PRESETS,
@@ -114,6 +115,7 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
         <TabsList aria-label="Appearance sections" class="flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] pb-2">
             <TabsTrigger value="design" :class="sectionTabClass">Design</TabsTrigger>
             <TabsTrigger value="motion" :class="sectionTabClass">Motion</TabsTrigger>
+            <TabsTrigger value="voice" :class="sectionTabClass">Voice</TabsTrigger>
             <TabsTrigger value="visibility" :class="sectionTabClass">Visibility</TabsTrigger>
         </TabsList>
 
@@ -302,6 +304,10 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
 
             <label :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">Pause when hidden</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">Suspend background work while the app is not visible.</span></span><input type="checkbox" role="switch" aria-label="Pause motion when hidden" :checked="settings.state.motion_v6.pause_when_hidden" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('pause_when_hidden', $event)"></label>
             <label :class="switchRowClass"><span><span class="block text-sm font-semibold text-[var(--talos-text)]">Respect data saver</span><span class="mt-1 block text-xs text-[var(--talos-muted)]">Degrade expensive scenes when the OS requests it.</span></span><input type="checkbox" role="switch" aria-label="Respect data saver" :checked="settings.state.motion_v6.respect_data_saver" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setMotionBoolean('respect_data_saver', $event)"></label>
+        </TabsContent>
+
+        <TabsContent value="voice" class="pt-2 outline-none">
+            <TalosMobileVoiceSettings />
         </TabsContent>
 
         <TabsContent value="visibility" class="space-y-4 pt-4 outline-none">
