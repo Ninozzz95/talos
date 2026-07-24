@@ -96,7 +96,12 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
                     chatCompatibility: methods.includes('generateContent') ? 'supported' as const : 'unsupported' as const,
                     contextLength: model.inputTokenLimit ?? null,
                     maxOutputTokens: model.outputTokenLimit ?? null,
-                    inputModalities: [],
+                    // N1.5: generateContent Gemini models are multimodal from the
+                    // ground up (image input); the list API carries no modality
+                    // field, so declare it. Embed-only models stay text (and are
+                    // chat-unsupported anyway) — without this the vision gate
+                    // wrongly blocks images on capable Gemini models.
+                    inputModalities: methods.includes('generateContent') ? ['text', 'image'] : ['text'],
                     outputModalities: ['text'],
                     supportedParameters: [...methods],
                 }

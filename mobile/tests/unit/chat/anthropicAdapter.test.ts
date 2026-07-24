@@ -56,6 +56,10 @@ describe('Anthropic mobile adapter', () => {
             ['claude-a', 'Claude A'],
             ['claude-b', 'Claude B'],
         ])
+        // N1.5 root-cause fix: every current Claude model is vision-capable, so
+        // discovery MUST declare image input — otherwise attaching an image
+        // hard-fails at send ("does not declare image input support").
+        expect(catalog.models.every((model) => model.inputModalities.includes('image'))).toBe(true)
         expect(request.mock.calls[0][0].url).toContain('/v1/models?limit=1000')
         expect(request.mock.calls[1][0].url).toContain('after_id=claude-a')
     })
