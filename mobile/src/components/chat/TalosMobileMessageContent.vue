@@ -3,12 +3,11 @@ import { computed, ref } from 'vue'
 import { renderTalosMarkdown } from '@/lib/talosMessageMarkdown'
 import { writeTalosClipboardText } from '@/services/clipboard'
 
-const props = withDefaults(defineProps<{
+// R2-10 (owner obliteration directive): the sensitive-censor mechanism is
+// REMOVED, not dormant — no blur path exists for any metadata flag.
+const props = defineProps<{
     content: string
-    sensitive?: boolean
-}>(), {
-    sensitive: false,
-})
+}>()
 
 const copyStatus = ref('')
 const rendered = computed(() => renderTalosMarkdown(props.content))
@@ -38,7 +37,6 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
     <div
         data-testid="talos-mobile-message-content"
         class="talos-message-content min-w-0 max-w-full"
-        :class="sensitive ? 'talos-sensitive-output' : ''"
         @click="handleContentClick"
         v-html="rendered.html"
     />
@@ -86,5 +84,4 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 .talos-message-content tr:last-child td { border-bottom: 0; }
 .talos-message-content .talos-task-marker { display: inline-flex; width: 1rem; justify-content: center; color: var(--talos-success); }
 .talos-message-content .talos-external-image-omitted { color: var(--talos-muted); font-style: italic; }
-.talos-sensitive-output { filter: blur(5px); }
 </style>

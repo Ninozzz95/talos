@@ -30,6 +30,19 @@ function makeController() {
             setSessionOrder: vi.fn().mockResolvedValue(undefined),
         },
         newSession: vi.fn().mockResolvedValue(undefined),
+        // R2-7: the shell/screens now flow through the lifecycle facade; the
+        // mock delegates to the same spies so existing assertions still hold.
+        get sessionLifecycle() {
+            const self = this as unknown as Record<string, (...args: unknown[]) => Promise<void>>
+            return {
+                register: () => undefined,
+                unregister: () => undefined,
+                newSession: () => self.newSession(),
+                selectSession: (id: unknown) => self.selectSession(id),
+                renameSession: (id: unknown, title: unknown) => self.renameSession(id, title),
+                deleteSession: (id: unknown) => self.deleteSession(id),
+            }
+        },
         selectSession: vi.fn().mockResolvedValue(undefined),
         renameSession: vi.fn().mockResolvedValue(undefined),
         deleteSession: vi.fn().mockResolvedValue(undefined),

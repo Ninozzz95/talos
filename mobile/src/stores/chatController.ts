@@ -29,7 +29,6 @@ import { clampMobileEffort, mobileEffortLadderFromLevels, type TalosMobileEffort
 import { talosMobileModelProfileIsCallable, TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import type { TalosChatRepository } from '@/repositories/chatRepository'
 import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
-import { newTalosMobileId } from '@/lib/mobileIds'
 import {
     clearProviderEndpoint as realClearEndpoint,
     getProviderEndpoint as realGetEndpoint,
@@ -45,6 +44,7 @@ import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
+import { createStationFacades } from '@/stores/stationFacades'
 import {
     buildTalosMemoryContextMessage,
     selectTalosMemoriesForSession,
@@ -167,6 +167,20 @@ const realDeps: ChatControllerDeps = {
     settings: useSettingsStore(),
 }
 
+// R2-7 — orchestrated session actions (draft flush + attachment revocation +
+// scope re-activation), registered by the persistent ChatScreen.
+export interface TalosSessionOrchestrator {
+    newSession(): Promise<void>
+    selectSession(sessionId: string): Promise<void>
+    renameSession(sessionId: string, title: string): Promise<void>
+    deleteSession(sessionId: string): Promise<void>
+}
+
+export interface TalosSessionLifecycle extends TalosSessionOrchestrator {
+    register(orchestrator: TalosSessionOrchestrator): void
+    unregister(orchestrator: TalosSessionOrchestrator): void
+}
+
 export interface ChatController {
     readonly catalogs: Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>
     readonly endpoints: Readonly<Record<TalosMobileProviderId, string | null>>
@@ -211,6 +225,8 @@ export interface ChatController {
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<void>
     deleteSession(sessionId: string): Promise<void>
+    /** R2-7 — single orchestration point for session actions (see impl). */
+    sessionLifecycle: TalosSessionLifecycle
     tasks: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalTask[]>
         create(input: {
@@ -894,63 +910,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     }
 
-    // F4 Memory station — thin CRUD facade for the station screen. Rows are
-    // untrusted by construction; the station is the only writer.
-    const memories = {
-        list: () => deps.chatRepository.listMemories(),
-        create: (input: {
-            title: string
-            content: string
-            kind: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
-            scope_type: 'global' | 'project' | 'session'
-            scope_id: string | null
-        }) => deps.chatRepository.createMemory({
-            id: newTalosMobileId(),
-            scope_type: input.scope_type,
-            scope_id: input.scope_type === 'session'
-                ? (chat.activeSession.value?.id ?? null)
-                : input.scope_id,
-            kind: input.kind,
-            title: input.title,
-            content: input.content,
-            source: 'talos_mobile_station',
-            metadata: { created_from: 'talos_mobile_station' },
-            created_at: new Date().toISOString(),
-        }),
-        setStatus: (memoryId: string, status: 'active' | 'disabled' | 'quarantined' | 'rejected') =>
-            deps.chatRepository.updateMemoryStatus(memoryId, status),
-        remove: (memoryId: string) => deps.chatRepository.deleteMemory(memoryId),
-    }
-
-    // F5 stations — run-linked local tasks and untrusted notes (airplane-mode
-    // functional; the stations are the only writers).
-    const tasks = {
-        list: () => deps.chatRepository.listTasks(),
-        create: (input: { title: string; description: string | null; run_id: string | null; priority: 'low' | 'normal' | 'high' }) =>
-            deps.chatRepository.createTask({
-                id: newTalosMobileId(),
-                title: input.title,
-                description: input.description,
-                run_id: input.run_id,
-                priority: input.priority,
-                created_at: new Date().toISOString(),
-            }),
-        setStatus: (taskId: string, status: 'todo' | 'doing' | 'done') =>
-            deps.chatRepository.setTaskStatus(taskId, status),
-        remove: (taskId: string) => deps.chatRepository.deleteTask(taskId),
-    }
-
-    const notes = {
-        list: () => deps.chatRepository.listNotes(),
-        create: (input: { title: string; content: string }) =>
-            deps.chatRepository.createNote({
-                id: newTalosMobileId(),
-                title: input.title,
-                content: input.content,
-                created_at: new Date().toISOString(),
-            }),
-        remove: (noteId: string) => deps.chatRepository.deleteNote(noteId),
-    }
+    // R2-8 — station facades live in stores/stationFacades.ts (the controller
+    // was a 1000+ line god-facade); same public surface, same guarantees.
+    const { memories, tasks, notes } = createStationFacades({
+        repository: deps.chatRepository,
+        activeSessionId: () => chat.activeSession.value?.id ?? null,
+    })
 
     async function send(text: string): Promise<boolean> {
         clearPromptEnhancement()
@@ -1013,7 +978,32 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (restoredModel) applyModelSelection(restoredModel)
     }
 
+    // R2-7 — ONE orchestration point for session actions. The composer draft
+    // controller lives in ChatScreen (the persistent base), which registers
+    // its orchestrated actions (draft flush + attachment revocation + scope
+    // re-activation) here. Every other surface (Chats page, tablet panel,
+    // sidebar) calls THROUGH this facade — before R2, delete-from-Chats
+    // skipped attachment revocation entirely. Errors PROPAGATE so each
+    // surface keeps its own error UX (dialog vs toast). Bare methods are the
+    // fallback when no orchestrator is registered (tests, early boot).
+    let sessionOrchestrator: TalosSessionOrchestrator | null = null
+    const sessionLifecycle: TalosSessionLifecycle = {
+        register(value) { sessionOrchestrator = value },
+        unregister(value) { if (sessionOrchestrator === value) sessionOrchestrator = null },
+        newSession: () => (sessionOrchestrator ?? { newSession }).newSession(),
+        selectSession: (sessionId) => sessionOrchestrator
+            ? sessionOrchestrator.selectSession(sessionId)
+            : selectSession(sessionId),
+        renameSession: (sessionId, title) => sessionOrchestrator
+            ? sessionOrchestrator.renameSession(sessionId, title)
+            : renameSession(sessionId, title),
+        deleteSession: (sessionId) => sessionOrchestrator
+            ? sessionOrchestrator.deleteSession(sessionId)
+            : deleteSession(sessionId),
+    }
+
     return {
+        sessionLifecycle,
         catalogs: readonly(catalogs) as Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>,
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
         modelLabPreferences,

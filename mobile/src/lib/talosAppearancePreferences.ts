@@ -117,7 +117,10 @@ export const TALOS_APPEARANCE_GROUPS: Array<{
             { key: 'incognito', label: 'Incognito' },
             { key: 'text_only_emoji_output', label: 'Text-only emoji output' },
             { key: 'thinking_process', label: 'Thinking process' },
-            { key: 'sensitive_blur', label: 'Sensitive blur' },
+            // R2-SF-m6 (owner obliteration directive): the "Sensitive blur"
+            // toggle is removed — it drove a censor that no longer exists and
+            // consumed nothing. The resolver field stays (desktop-parity shape,
+            // inert) but no visible control remains.
         ],
     },
     {

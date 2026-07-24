@@ -116,3 +116,50 @@ describe('TalosMobileMessageList', () => {
         expect(wrapper.text()).not.toContain('â')
     })
 })
+
+// R2-11 — ONE row-action grammar (competitor pattern: long-press a message
+// opens its actions, same gesture as the chat rows). The hold clicks the SAME
+// overflow trigger — no second menu implementation.
+describe('message long-press opens the overflow menu (R2-11)', () => {
+    it('a 500ms stationary hold opens the message overflow', async () => {
+        const wrapper = mount(TalosMobileMessageList, {
+            props: { messages, sending: false },
+            attachTo: document.body,
+        })
+        // The overflow menu is an async chunk — let it land before holding.
+        await vi.waitFor(() => {
+            if (!document.body.querySelector('[aria-label="More message actions"]')) throw new Error('overflow trigger not mounted yet')
+        })
+        vi.useFakeTimers()
+        try {
+            const article = wrapper.findAll('article')[0].element
+            article.dispatchEvent(new MouseEvent('pointerdown', { clientX: 50, clientY: 50, bubbles: true }))
+            await vi.advanceTimersByTimeAsync(600)
+            article.dispatchEvent(new MouseEvent('pointerup', { clientX: 50, clientY: 50, bubbles: true }))
+        } finally {
+            vi.useRealTimers()
+        }
+        await flushPromises()
+        expect(document.body.querySelector('[aria-label="Reuse prompt"]')).not.toBeNull()
+        wrapper.unmount()
+    })
+
+    it('a moved finger never opens the overflow (scroll stays scroll)', async () => {
+        const wrapper = mount(TalosMobileMessageList, {
+            props: { messages, sending: false },
+            attachTo: document.body,
+        })
+        await flushPromises()
+        vi.useFakeTimers()
+        try {
+            const article = wrapper.findAll('article')[0].element
+            article.dispatchEvent(new MouseEvent('pointerdown', { clientX: 50, clientY: 50, bubbles: true }))
+            article.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, clientY: 90, bubbles: true }))
+            await vi.advanceTimersByTimeAsync(700)
+        } finally {
+            vi.useRealTimers()
+        }
+        expect(document.body.querySelector('[aria-label="Reuse prompt"]')).toBeNull()
+        wrapper.unmount()
+    })
+})

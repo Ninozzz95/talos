@@ -63,6 +63,19 @@ function makeController() {
         refreshConfiguredProviders: vi.fn().mockResolvedValue(undefined),
         init: vi.fn().mockResolvedValue(undefined),
         newSession: vi.fn().mockResolvedValue(undefined),
+        // R2-7: the shell/screens now flow through the lifecycle facade; the
+        // mock delegates to the same spies so existing assertions still hold.
+        get sessionLifecycle() {
+            const self = this as unknown as Record<string, (...args: unknown[]) => Promise<void>>
+            return {
+                register: () => undefined,
+                unregister: () => undefined,
+                newSession: () => self.newSession(),
+                selectSession: (id: unknown) => self.selectSession(id),
+                renameSession: (id: unknown, title: unknown) => self.renameSession(id, title),
+                deleteSession: (id: unknown) => self.deleteSession(id),
+            }
+        },
         selectSession: vi.fn().mockResolvedValue(undefined),
         renameSession: vi.fn().mockResolvedValue(undefined),
         deleteSession: vi.fn().mockResolvedValue(undefined),
@@ -146,5 +159,28 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
 
         expect((mockState.controller as ReturnType<typeof makeController>).newSession).toHaveBeenCalledTimes(1)
         await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('chat'))
+    })
+
+    // R2-SF-M2: the shell lost its busy guard when actions moved to the
+    // lifecycle facade — a rapid double-tap created TWO empty sessions.
+    it('a rapid double-tap on New Chat creates only ONE session (busy guard)', async () => {
+        const controller = makeController()
+        let release: () => void = () => {}
+        controller.newSession = vi.fn(() => new Promise<void>((resolve) => { release = resolve }))
+        mockState.controller = controller
+        const wrapper = mount(App, { global: { plugins: [makeRouter()] } })
+        await flushPromises()
+
+        const button = wrapper.get('[aria-label="New Chat"]')
+        await button.trigger('click')
+        await button.trigger('click')
+        await flushPromises()
+        expect(controller.newSession).toHaveBeenCalledTimes(1)
+        // The button reflects the busy state while the action is in flight.
+        expect(wrapper.get('[aria-label="New Chat"]').attributes('disabled')).toBeDefined()
+
+        release()
+        await flushPromises()
+        expect(wrapper.get('[aria-label="New Chat"]').attributes('disabled')).toBeUndefined()
     })
 })

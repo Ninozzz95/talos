@@ -310,6 +310,19 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         activeSession.value = available.find((session) => session.id === activeId) ?? null
     }
 
+    // R2-9: appendMessage bumps ONLY the session's updated_at in the DB —
+    // mirror that locally instead of a full-table round-trip on EVERY user
+    // and assistant append (it was two listSessions per exchange).
+    function bumpSessionRecency(sessionId: string, updatedAt: string): void {
+        const index = sessions.findIndex((session) => session.id === sessionId)
+        if (index < 0) return
+        const updated = { ...sessions[index], updated_at: updatedAt }
+        sessions.splice(index, 1)
+        // listSessions orders by updated_at DESC — the freshest bump leads.
+        sessions.unshift(updated)
+        if (activeSession.value?.id === sessionId) activeSession.value = updated
+    }
+
     async function createSession(
         title = 'New chat',
         modelProfileId: string | null = null,
@@ -559,7 +572,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             created_at: now(),
         })
         messages.push(await loadMessageView(persisted))
-        await refreshSessionList()
+        bumpSessionRecency(sessionId, persisted.created_at)
     }
 
     async function send(
