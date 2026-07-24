@@ -28,6 +28,7 @@ import {
     type TalosMobileEffortLevel,
 } from '@/lib/mobileEffort'
 import { TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
+import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
     parseTalosMobileModelLabPreferences,
@@ -311,7 +312,8 @@ export function useSettingsStore(): SettingsStore {
     const state = reactive<TalosMobileSettingsState>(parseTalosMobileSettings(null))
 
     async function persist(): Promise<void> {
-        await Preferences.set({
+        // R1-6: fenced — a hung Preferences bridge must reject, not freeze.
+        await talosBridgeCall('TALOS_SETTINGS_PERSIST', () => Preferences.set({
             key: TALOS_MOBILE_SETTINGS_KEY,
             value: JSON.stringify({
                 presentation_v2: true,
@@ -328,13 +330,14 @@ export function useSettingsStore(): SettingsStore {
                 model_lab: state.model_lab,
                 browser: state.browser,
             }),
-        })
+        }))
     }
 
     singleton = {
         state: readonly(state) as Readonly<TalosMobileSettingsState>,
         async hydrate() {
-            const { value } = await Preferences.get({ key: TALOS_MOBILE_SETTINGS_KEY })
+            const { value } = await talosBridgeCall('TALOS_SETTINGS_HYDRATE',
+                () => Preferences.get({ key: TALOS_MOBILE_SETTINGS_KEY }))
             const parsed = parseTalosMobileSettings(value ?? null)
             state.chat_layout = parsed.chat_layout
             state.ai_defaults = parsed.ai_defaults

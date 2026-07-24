@@ -9,6 +9,7 @@ import { Fingerprint, Loader2, LockKeyhole } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { requestBiometricUnlock, verifyAppLockPin } from '@/services/appLock'
 import { talosLightImpact } from '@/services/haptics'
+import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 
 const props = defineProps<{
     biometricEnabled: boolean
@@ -22,6 +23,11 @@ const pin = ref('')
 const error = ref<string | null>(null)
 const verifying = ref(false)
 const pinField = ref<HTMLInputElement | null>(null)
+
+// R1-3 — the lock was an overlay over a LIVE workspace (focusable behind it).
+// Teleported to body + shared modality: #app goes inert, Tab is trapped.
+const root = ref<HTMLElement | null>(null)
+const { trapTab } = useTalosModalSurface(root)
 
 function unlock(): void {
     void talosLightImpact()
@@ -59,12 +65,16 @@ onMounted(() => {
 </script>
 
 <template>
+    <Teleport to="body">
     <div
+        ref="root"
         data-testid="talos-lock-screen"
         role="dialog"
         aria-modal="true"
         aria-label="TALOS is locked"
-        class="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-6 bg-[var(--talos-background)] px-8 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+        tabindex="-1"
+        class="pointer-events-auto fixed inset-0 z-[90] flex flex-col items-center justify-center gap-6 bg-[var(--talos-background)] px-8 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+        @keydown="trapTab"
     >
         <LockKeyhole class="size-10 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
         <div class="text-center">
@@ -113,4 +123,5 @@ onMounted(() => {
             Use biometrics
         </Button>
     </div>
+    </Teleport>
 </template>

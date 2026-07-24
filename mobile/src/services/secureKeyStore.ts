@@ -6,6 +6,7 @@
  * boolean `has_secret` from `hasProviderKey`.
  */
 import { SecureStorage } from '@aparajita/capacitor-secure-storage'
+import { talosBridgeCall } from '@/lib/talosBridge'
 
 const KEY_PREFIX = 'talos.provider.key.'
 
@@ -16,10 +17,12 @@ export interface SecureKeyBackend {
     remove(key: string): Promise<boolean>
 }
 
+// R1-6: fenced — a hung Keystore bridge at boot (refreshSecrets) must reject
+// into the Doctor ring, never deadlock composer initialization.
 const defaultBackend: SecureKeyBackend = {
-    get: (key) => SecureStorage.get(key) as Promise<unknown>,
-    set: (key, value) => SecureStorage.set(key, value),
-    remove: (key) => SecureStorage.remove(key),
+    get: (key) => talosBridgeCall('TALOS_KEYSTORE_GET', () => SecureStorage.get(key) as Promise<unknown>),
+    set: (key, value) => talosBridgeCall('TALOS_KEYSTORE_SET', () => SecureStorage.set(key, value)),
+    remove: (key) => talosBridgeCall('TALOS_KEYSTORE_REMOVE', () => SecureStorage.remove(key)),
 }
 
 function storageKey(provider: string): string {

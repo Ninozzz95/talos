@@ -83,7 +83,21 @@ export interface TalosStreamRequest {
     signal?: AbortSignal
     /** Called for each raw text chunk read from the response body. */
     onText: (chunk: string) => void
+    /**
+     * R1-2 — inactivity fence: abort when NO chunk arrives for this long.
+     * Resets on every chunk, so slow-but-alive streams are never killed.
+     */
+    stallMs?: number
+    /**
+     * R1-SF-M3 — separate FIRST-byte budget: cold model loads (local Ollama)
+     * legitimately stream nothing for minutes before the first byte. Distinct
+     * error message so callers never silently re-request a stalled stream.
+     */
+    firstByteMs?: number
 }
+
+const DEFAULT_STREAM_STALL_MS = 45_000
+const DEFAULT_STREAM_FIRST_BYTE_MS = 180_000
 
 /**
  * POST and stream the response body as decoded text. Throws BEFORE any chunk
@@ -105,10 +119,44 @@ export async function talosFetchStream(request: TalosStreamRequest): Promise<voi
     if (!response.body) throw new Error('stream unsupported: response has no body')
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        request.onText(decoder.decode(value, { stream: true }))
+    // R1-2 — the unfenced reader.read() was the last never-settles await in the
+    // product (review finding #2): a mid-stream network stall left `sending`
+    // stuck until an app kill. reader.cancel() resolves the pending read with
+    // done:true, where the stalled flag turns completion into a visible error.
+    const stallMs = request.stallMs ?? DEFAULT_STREAM_STALL_MS
+    const firstByteMs = request.firstByteMs ?? DEFAULT_STREAM_FIRST_BYTE_MS
+    let stalledAfter: number | null = null
+    let sawFirstByte = false
+    let fence: ReturnType<typeof setTimeout> | null = null
+    const armFence = (ms: number): void => {
+        if (fence !== null) clearTimeout(fence)
+        fence = setTimeout(() => {
+            stalledAfter = ms
+            void reader.cancel().catch(() => undefined)
+        }, ms)
+    }
+    try {
+        armFence(firstByteMs)
+        for (;;) {
+            const { done, value } = await reader.read()
+            if (done) {
+                if (stalledAfter !== null) {
+                    throw new Error(sawFirstByte
+                        ? `stream stalled: no data received for ${stalledAfter}ms`
+                        : `stream first byte timeout after ${stalledAfter}ms`)
+                }
+                break
+            }
+            // m5 note: once the fence FIRED the reader is already cancelled —
+            // a value that raced in must NOT clear the verdict, or the killed
+            // stream would end as a silent truncation instead of an honest
+            // error. The verdict is sticky; armFence only replaces the timer.
+            sawFirstByte = true
+            if (stalledAfter === null) armFence(stallMs)
+            request.onText(decoder.decode(value, { stream: true }))
+        }
+    } finally {
+        if (fence !== null) clearTimeout(fence)
     }
     const tail = decoder.decode()
     if (tail) request.onText(tail)

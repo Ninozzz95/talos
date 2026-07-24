@@ -14,6 +14,10 @@ import {
     registerNativeAppLifecycle,
     type NativeLifecycleController,
 } from '@/services/nativeAppLifecycle'
+import {
+    registerTalosResumeRelock,
+    type TalosResumeRelockController,
+} from '@/services/resumeRelock'
 import { talosDisabledSubsystems } from '@/main'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
@@ -198,6 +202,7 @@ function immersiveDelete(): void {
 }
 
 let lifecycle: NativeLifecycleController | null = null
+let resumeRelock: TalosResumeRelockController | null = null
 
 const activeRoute = computed<TalosMobileRouteName>(() => {
     const match = TALOS_MOBILE_ROUTES.find((entry) => entry.name === route.name)
@@ -273,6 +278,21 @@ onMounted(async () => {
         await router.replace(pathFor(lastRoute))
     }
     if (!disabled.has('lifecycle')) {
+        // R1-3 — the PIN protected only cold boots; the everyday path is a
+        // resumed resident app. Re-arm the lock after a real background stay.
+        resumeRelock = registerTalosResumeRelock({
+            isEnabled: async () => {
+                if (!settingsStore.state.security.app_lock_enabled) return false
+                const { hasAppLockPin } = await import('@/services/appLock')
+                return hasAppLockPin().catch(() => false)
+            },
+            onRelock: () => {
+                // R1-SF-B2: an open vaul drawer sets body pointer-events:none
+                // — the lock screen would be dead to taps over it.
+                sidebarOpen.value = false
+                locked.value = true
+            },
+        })
         lifecycle = registerNativeAppLifecycle({
             onBack: (event) => {
                 // Android Back: sidebar first, then an open station sheet.
@@ -295,6 +315,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(async () => {
+    await resumeRelock?.dispose()
     await lifecycle?.dispose()
 })
 </script>

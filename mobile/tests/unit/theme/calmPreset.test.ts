@@ -22,16 +22,17 @@ describe('calm preset (F1-T2)', () => {
         expect(TALOS_DEFAULT_THEME).toBe('calm')
     })
 
-    it('has a calm seed: background off-navy warm, no procedural effect, soft radius', () => {
+    it('has a calm seed: NEUTRAL GREY background (R1 owner directive), no procedural effect, soft radius', () => {
         const calm = TALOS_THEME_PRESETS.find((preset) => preset.id === 'calm')!
         expect(calm).toBeTruthy()
         expect(calm.defaultEffect).toBe('none')
         expect(calm.defaultRadius).toBe('soft')
         expect(calm.defaultMotion).toBe('subtle')
-        // warm charcoal, not the telemetry navy family: red channel >= blue channel
+        // R1 (owner 2026-07-24): "BG di tema calm piu grigio" — near-neutral
+        // channels (no warm brown, no telemetry navy: tight channel spread).
         const bg = calm.preview.background
-        const [r, , b] = [bg.slice(1, 3), bg.slice(3, 5), bg.slice(5, 7)].map((h) => parseInt(h, 16))
-        expect(r).toBeGreaterThanOrEqual(b)
+        const [r, g, b] = [bg.slice(1, 3), bg.slice(3, 5), bg.slice(5, 7)].map((h) => parseInt(h, 16))
+        expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(8)
     })
 
     it('derives full variant sets for both modes with AA text contrast', () => {

@@ -79,3 +79,24 @@ describe('shell.tablet_sidebar_width persistence (F6)', () => {
         expect(fresh.state.shell.composer_drawer).toBe(true)
     })
 })
+
+// R1-6 — fenced bridge gateway characterization: a HUNG native bridge call
+// (Preferences.get that never settles) must reject with a ring-logged timeout
+// instead of freezing settings hydration (and with it composer boot) forever.
+describe('settings hydrate bridge fence (R1-6)', () => {
+    it('a never-settling Preferences.get rejects hydrate within the fence', async () => {
+        vi.useFakeTimers()
+        try {
+            const preferences = Preferences as unknown as {
+                get: ReturnType<typeof vi.fn>
+            }
+            preferences.get.mockImplementationOnce(() => new Promise(() => {}))
+            const store = useSettingsStore()
+            const outcome = store.hydrate().then(() => 'resolved', (error: Error) => error.message)
+            await vi.advanceTimersByTimeAsync(11_000)
+            expect(await outcome).toMatch(/TIMEOUT/i)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+})

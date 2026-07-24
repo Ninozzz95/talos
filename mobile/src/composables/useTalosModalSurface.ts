@@ -1,10 +1,15 @@
-import { onBeforeUnmount, onMounted, type Ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
 
 /**
  * SF-7 / SF5-4 — real modality behind every aria-modal surface: the app root
  * goes inert while at least one modal is open (ref-counted so overlapping
  * surfaces never strip it early), Tab wraps inside the surface, and focus
  * returns to the opener on close.
+ *
+ * R1-SF-B1 — `active` option for surfaces whose HOST component is always
+ * mounted (v-if only on the surface markup): modality then follows the open
+ * STATE, not the component lifecycle. Without it, an always-mounted host
+ * inerted #app with no modal visible — the whole app went dead to taps.
  */
 let inertHolders = 0
 
@@ -20,21 +25,42 @@ function releaseInert(): void {
 
 const FOCUSABLE = 'button:not([disabled]):not([tabindex="-1"]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function useTalosModalSurface(root: Ref<HTMLElement | null>): {
+export function useTalosModalSurface(
+    root: Ref<HTMLElement | null>,
+    options?: { active?: Ref<boolean> },
+): {
     trapTab: (event: KeyboardEvent) => void
 } {
     let opener: HTMLElement | null = null
+    let holding = false
 
-    onMounted(() => {
+    function engage(): void {
+        if (holding) return
+        holding = true
         opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
         acquireInert()
-        root.value?.focus()
-    })
+        // Focus now when the surface is already in the DOM (mount-mode);
+        // state-driven surfaces may render their markup on this very tick.
+        if (root.value) root.value.focus()
+        else void nextTick(() => root.value?.focus())
+    }
 
-    onBeforeUnmount(() => {
+    function disengage(): void {
+        if (!holding) return
+        holding = false
         releaseInert()
         opener?.focus?.()
-    })
+    }
+
+    if (options?.active) {
+        const active = options.active
+        watch(active, (value) => { if (value) engage(); else disengage() })
+        onMounted(() => { if (active.value) engage() })
+    } else {
+        onMounted(engage)
+    }
+
+    onBeforeUnmount(disengage)
 
     function trapTab(event: KeyboardEvent): void {
         if (event.key !== 'Tab' || !root.value) return

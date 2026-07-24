@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ArrowLeft, ArrowRight, ExternalLink, Minus, Plus, RefreshCw } from '@lucide/vue'
+import { ArrowLeft, ArrowRight, ExternalLink, Minus, Plus, RefreshCw, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog'
+import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import type { TalosMobileBrowserEvidenceArtifact } from '@/lib/browser/browserContracts'
 import { mapBrowserImagePointer } from '@/lib/browser/browserImageGeometry'
 
@@ -28,6 +22,16 @@ const open = ref(false)
 const activeIndex = ref(0)
 const zoom = ref(1)
 const activeArtifact = computed(() => props.artifacts[activeIndex.value] ?? null)
+
+// R1-1 — reka Dialog never renders on the owner's WebView (F5.2 evidence):
+// the capture lightbox was unreachable on device. Manual Teleport surface
+// with the shared modality (inert #app, Tab trap, Escape/backdrop close).
+// R1-SF-B1: this host is ALWAYS mounted under browser evidence — modality
+// must follow the open STATE or the whole app goes inert with no modal.
+const surfaceRoot = ref<HTMLElement | null>(null)
+const { trapTab } = useTalosModalSurface(surfaceRoot, {
+    active: computed(() => open.value && activeArtifact.value !== null),
+})
 
 function openArtifact(artifactId: string): boolean {
     const index = props.artifacts.findIndex((artifact) => artifact.id === artifactId)
@@ -73,19 +77,38 @@ defineExpose({ openArtifact })
 </script>
 
 <template>
-    <Dialog v-model:open="open">
-        <DialogContent
-            v-if="activeArtifact"
+    <Teleport to="body">
+    <!-- R1-SF-B2: explicit pointer-events-auto — a vaul drawer sets
+         body{pointer-events:none}, which would make this surface
+         hit-test-transparent. -->
+    <div
+        v-if="open && activeArtifact"
+        class="pointer-events-auto fixed inset-0 z-[85] flex items-center justify-center p-2"
+    >
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-[2px]" aria-hidden="true" @click="open = false" />
+        <div
+            ref="surfaceRoot"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Browser capture"
+            tabindex="-1"
             data-testid="talos-mobile-browser-frame"
             :data-zoom="String(zoom)"
-            class="flex h-[min(92dvh,860px)] max-w-[calc(100%-1rem)] flex-col gap-3 overflow-hidden border border-[var(--talos-border)] bg-[var(--talos-window-bg)] p-3 text-[var(--talos-text)] sm:max-w-5xl"
+            class="relative z-10 flex h-[min(92dvh,860px)] w-full max-w-5xl flex-col gap-3 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg)] p-3 text-[var(--talos-text)] outline-none"
+            @keydown.escape="open = false"
+            @keydown="trapTab"
         >
-            <DialogHeader class="pr-10 text-left">
-                <DialogTitle>Browser capture</DialogTitle>
-                <DialogDescription class="text-[var(--talos-muted)]">
-                    Capture {{ activeIndex + 1 }} of {{ artifacts.length }}. Page content is untrusted evidence.
-                </DialogDescription>
-            </DialogHeader>
+            <div class="flex items-start justify-between gap-2 text-left">
+                <div>
+                    <h2 class="text-base font-semibold">Browser capture</h2>
+                    <p class="text-sm text-[var(--talos-muted)]">
+                        Capture {{ activeIndex + 1 }} of {{ artifacts.length }}. Page content is untrusted evidence.
+                    </p>
+                </div>
+                <Button type="button" size="icon" variant="ghost" aria-label="Close browser capture" @click="open = false">
+                    <X class="size-4" aria-hidden="true" />
+                </Button>
+            </div>
 
             <div class="flex min-w-0 flex-wrap items-center gap-1" aria-label="Browser capture controls">
                 <Button type="button" size="icon" variant="outline" aria-label="Previous browser capture" :disabled="artifacts.length < 2" @click="step(-1)">
@@ -137,6 +160,7 @@ defineExpose({ openArtifact })
             <p v-if="!interactionAvailable" class="text-xs leading-5 text-[var(--talos-muted)]">
                 Trusted interaction unavailable. Pair an authenticated TALOS node before clicks or scroll commands can be sent.
             </p>
-        </DialogContent>
-    </Dialog>
+        </div>
+    </div>
+    </Teleport>
 </template>

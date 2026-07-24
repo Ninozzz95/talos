@@ -21,7 +21,10 @@ const { trapTab } = useTalosModalSurface(root)
 
 <template>
     <Teleport to="body">
-    <div class="fixed inset-0 z-[85] flex items-center justify-center px-6" data-testid="talos-confirm-dialog">
+    <!-- R1-SF-B2: pointer-events-auto — an open vaul drawer sets
+         body{pointer-events:none}; without this the dialog was hit-test
+         transparent and taps landed BLIND on drawer rows underneath. -->
+    <div class="pointer-events-auto fixed inset-0 z-[85] flex items-center justify-center px-6" data-testid="talos-confirm-dialog">
         <div class="absolute inset-0 bg-black/40 backdrop-blur-[2px]" aria-hidden="true" @click="emit('close')" />
         <div
             ref="root"

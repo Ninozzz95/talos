@@ -8,6 +8,7 @@
  */
 import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
+import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     TALOS_DEFAULT_THEME,
     effectiveTalosThemeMode,
@@ -99,10 +100,10 @@ export function useThemeStore(): ThemeStore {
         applyTalosTheme(state.theme, state.mode)
     }
     async function persist(): Promise<void> {
-        await Preferences.set({
+        await talosBridgeCall('TALOS_THEME_PERSIST', () => Preferences.set({
             key: TALOS_MOBILE_THEME_KEY,
             value: JSON.stringify({ theme: state.theme, mode: state.mode, calm_migrated: true }),
-        })
+        }))
     }
 
     // Track the system scheme so `system` mode follows the OS live.
@@ -115,7 +116,8 @@ export function useThemeStore(): ThemeStore {
     singleton = {
         state: readonly(state),
         async hydrate() {
-            const { value } = await Preferences.get({ key: TALOS_MOBILE_THEME_KEY })
+            const { value } = await talosBridgeCall('TALOS_THEME_HYDRATE',
+                () => Preferences.get({ key: TALOS_MOBILE_THEME_KEY }))
             const parsed = parseTalosThemeState(value ?? null)
             state.theme = parsed.theme
             state.mode = parsed.mode

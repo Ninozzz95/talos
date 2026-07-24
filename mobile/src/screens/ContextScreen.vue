@@ -12,14 +12,7 @@ import {
     Trash2,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog'
+import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { useChatController } from '@/stores/chatController'
@@ -259,27 +252,26 @@ onMounted(async () => {
         <p class="sr-only" role="status" aria-live="polite">{{ feedback }}</p>
     </TalosMobileScreen>
 
-    <Dialog v-model:open="deleteOpen">
-        <DialogContent class="border border-[var(--talos-border)] bg-[var(--talos-window-bg)] text-[var(--talos-text)]">
-            <DialogHeader>
-                <DialogTitle>Delete file?</DialogTitle>
-                <DialogDescription class="text-[var(--talos-muted)]">
-                    {{ deleteTarget?.display_name }} will be removed from this device. Existing chat history keeps only its safe file label.
-                </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-                <Button type="button" variant="outline" :disabled="actionBusy" @click="deleteOpen = false">
-                    Cancel
-                </Button>
-                <Button
-                    type="button"
-                    :disabled="actionBusy"
-                    class="bg-[var(--talos-danger)] text-white"
-                    @click="confirmDelete"
-                >
-                    Delete file
-                </Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>
+    <!-- R1-1: reka Dialog never renders on the owner's WebView — migrated to
+         the device-proven surface. -->
+    <TalosMobileConfirmDialog
+        v-if="deleteOpen"
+        title="Delete file?"
+        :description="`${deleteTarget?.display_name} will be removed from this device. Existing chat history keeps only its safe file label.`"
+        @close="actionBusy ? undefined : deleteOpen = false"
+    >
+        <template #footer>
+            <Button type="button" variant="outline" :disabled="actionBusy" @click="deleteOpen = false">
+                Cancel
+            </Button>
+            <Button
+                type="button"
+                :disabled="actionBusy"
+                class="bg-[var(--talos-danger)] text-white"
+                @click="confirmDelete"
+            >
+                Delete file
+            </Button>
+        </template>
+    </TalosMobileConfirmDialog>
 </template>
