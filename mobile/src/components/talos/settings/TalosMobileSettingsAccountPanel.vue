@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router'
 import { Check, RotateCcw } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileAppLockModal from '@/components/talos/settings/TalosMobileAppLockModal.vue'
+import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosAccountStore } from '@/stores/account'
@@ -87,7 +88,7 @@ async function toggleBiometric(): Promise<void> {
         <!-- Owner 2026-07-24: local identity — name + avatar initial. -->
         <section data-testid="talos-account-identity">
             <div class="flex items-center gap-3">
-                <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent)] text-lg font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">{{ account.initial.value }}</span>
+                <TalosAccountAvatar size="lg" />
                 <div class="min-w-0 flex-1">
                     <label for="talos-account-name" class="block text-xs font-medium text-[var(--talos-muted)]">Display name</label>
                     <div class="mt-1 flex gap-2">

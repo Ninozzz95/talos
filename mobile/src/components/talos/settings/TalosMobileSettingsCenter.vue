@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Mail, Palette, Search, Settings, Shield, User, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
+import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
+import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosMobileSettingsModelsPanel from './TalosMobileSettingsModelsPanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
@@ -27,8 +29,13 @@ const props = withDefaults(defineProps<{
 const activeTab = ref<TalosMobileSettingsTabId>('models')
 const mobilePane = ref<'categories' | 'detail'>('categories')
 const selectedTab = computed(() => talosMobileSettingsTab(activeTab.value))
-const accountTab = computed(() => talosMobileSettingsTab(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB))
-const settingsTab = talosMobileSettingsTab
+const accountTab = talosMobileSettingsTab(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)
+// Resolve each grouped tab once (label + availability) rather than running the
+// linear settingsTab() lookup twice per row on every render.
+const resolvedGroups = computed(() => TALOS_MOBILE_SETTINGS_GROUPS.map((group) => ({
+    label: group.label,
+    tabs: group.tabIds.map((id) => talosMobileSettingsTab(id)),
+})))
 const account = useTalosAccountStore()
 const developmentMode = import.meta.env.DEV
 
@@ -40,24 +47,14 @@ const developmentMode = import.meta.env.DEV
 // Gate on the SAME 768px md media query that drives the layout (not the
 // tablet-split threshold, which adds a min-height and would leave a broken band).
 const sheetNav = useTalosSheetNav()
-const isMdLayout = ref(false)
-let mdMedia: MediaQueryList | null = null
-const onMdChange = (e: { matches: boolean }): void => { isMdLayout.value = e.matches }
-if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    mdMedia = window.matchMedia('(min-width: 768px)')
-    isMdLayout.value = mdMedia.matches
-    mdMedia.addEventListener?.('change', onMdChange)
-}
+const isMdLayout = useTalosMediaQuery('(min-width: 768px)')
 function openDetail(): void { mobilePane.value = 'detail' }
 function backToCategories(): void { mobilePane.value = 'categories' }
 watch([mobilePane, selectedTab, isMdLayout], ([pane, tab, md]) => {
     if (pane === 'detail' && !md) sheetNav.setSubView({ title: tab.label, back: backToCategories })
     else sheetNav.clear()
 }, { immediate: true })
-onBeforeUnmount(() => {
-    sheetNav.clear()
-    mdMedia?.removeEventListener?.('change', onMdChange)
-})
+onBeforeUnmount(() => { sheetNav.clear() })
 
 watch(() => props.requestedTab, (requested) => {
     if (!requested) return
@@ -94,7 +91,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     <!-- Owner 2026-07-24: the framed card was redundant nesting inside the
          sheet — on mobile the categories/detail go FULL-WIDTH with the coherent
          parent padding; the framed side-by-side stays on tablet (md). -->
-    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex flex-col md:min-h-0 md:min-h-[540px] md:flex-row md:overflow-hidden md:rounded-md md:border md:border-[var(--talos-border)] md:bg-[var(--talos-card)]">
+    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex flex-col md:min-h-[540px] md:flex-row md:overflow-hidden md:rounded-md md:border md:border-[var(--talos-border)] md:bg-[var(--talos-card)]">
         <aside
             data-testid="settings-category-pane"
             class="md:block md:min-h-0 md:w-56 md:flex-none md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
@@ -111,7 +108,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                     class="talos-pressable flex w-full items-center gap-3 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] data-[state=active]:border-[var(--talos-accent-border)] data-[state=active]:bg-[var(--talos-active)]"
                     @click="openDetail"
                 >
-                    <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">{{ account.initial.value }}</span>
+                    <TalosAccountAvatar size="md" />
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ account.state.display_name || accountTab.label }}</span>
                         <span class="block truncate text-xs text-[var(--talos-muted)]">Local workspace identity</span>
@@ -119,21 +116,21 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                     <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                 </TabsTrigger>
 
-                <div v-for="group in TALOS_MOBILE_SETTINGS_GROUPS" :key="group.label" class="w-full">
+                <div v-for="group in resolvedGroups" :key="group.label" class="w-full">
                     <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>
                     <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
                         <TabsTrigger
-                            v-for="id in group.tabIds"
-                            :key="id"
-                            :value="id"
-                            :data-settings-tab="id"
+                            v-for="tab in group.tabs"
+                            :key="tab.id"
+                            :value="tab.id"
+                            :data-settings-tab="tab.id"
                             class="talos-pressable flex min-h-14 w-full items-center gap-3 px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)]"
                             @click="openDetail"
                         >
-                            <component :is="ICONS[id]" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                            <component :is="ICONS[tab.id]" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <span class="min-w-0 flex-1">
-                                <span class="block truncate text-sm text-[var(--talos-text)]">{{ settingsTab(id).label }}</span>
-                                <span v-if="settingsTab(id).availability === 'gated'" class="block truncate text-xs text-[var(--talos-muted)]">Not installed in this build</span>
+                                <span class="block truncate text-sm text-[var(--talos-text)]">{{ tab.label }}</span>
+                                <span v-if="tab.availability === 'gated'" class="block truncate text-xs text-[var(--talos-muted)]">Not installed in this build</span>
                             </span>
                             <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                         </TabsTrigger>
@@ -163,7 +160,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                      header (its sheet title stays "Settings Center"). -->
                 <header class="mb-4 border-b border-[var(--talos-border)] pb-3">
                     <div class="hidden text-[10px] font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
-                    <h3 class="hidden text-base font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
+                    <h3 class="talos-serif hidden text-base font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
                     <p class="text-xs leading-5 text-[var(--talos-muted)] md:mt-1">{{ tab.description }}</p>
                 </header>
 

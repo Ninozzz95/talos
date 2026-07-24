@@ -15,14 +15,14 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 </script>
 
 <template>
-    <!-- Owner 2026-07-24: h-full (not min-h-full) so the inner content div is a
+    <!-- Owner 2026-07-24: h-full (NOT min-h-full) so the inner content div is a
          BOUNDED single scroller — min-h-full grew to content, leaving the inner
          overflow-y-auto with no room and overscroll-contain swallowing the
          touch scroll (Settings Center wouldn't scroll on device). -->
     <section
         data-testid="mobile-screen"
         :aria-label="title"
-        class="flex h-full min-h-full flex-col bg-[var(--talos-background)] text-[var(--talos-text)]"
+        class="flex h-full flex-col bg-[var(--talos-background)] text-[var(--talos-text)]"
     >
         <header v-if="!insideSheet" class="border-b border-[var(--talos-border)] p-4">
             <p
@@ -35,7 +35,7 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
             </p>
             <h1
                 data-testid="mobile-screen-title"
-                class="text-base font-semibold text-[var(--talos-text)]"
+                class="talos-serif text-base font-semibold text-[var(--talos-text)]"
                 :class="{ 'mt-2': eyebrow }"
             >{{ title }}</h1>
         </header>

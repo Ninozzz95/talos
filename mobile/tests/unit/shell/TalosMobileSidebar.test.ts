@@ -38,19 +38,22 @@ function mountSidebar(props: Record<string, unknown> = {}) {
 
 describe('TalosMobileSidebar (F1-T3)', () => {
     it('opens as a full-width dialog with the chat-first section order', async () => {
+        // Owner 2026-07-24: the single New-chat affordance is the bottom FAB
+        // (inside the settings bar) — no duplicate outline button up top.
         mountSidebar()
         await flushPromises()
         const sidebar = document.querySelector('[data-testid="talos-mobile-sidebar"]') as HTMLElement
         expect(sidebar).toBeTruthy()
         const html = sidebar.innerHTML
-        const newChat = html.indexOf('data-testid="talos-sidebar-new-chat"')
         const recents = html.indexOf('data-testid="talos-sidebar-recents"')
         const tools = html.indexOf('data-testid="talos-sidebar-tools"')
         const settings = html.indexOf('data-testid="talos-sidebar-settings"')
-        expect(newChat).toBeGreaterThanOrEqual(0)
-        expect(recents).toBeGreaterThan(newChat)
+        const fab = html.indexOf('data-testid="talos-new-chat-fab"')
+        expect(html.indexOf('data-testid="talos-sidebar-new-chat"')).toBe(-1)
+        expect(recents).toBeGreaterThanOrEqual(0)
         expect(tools).toBeGreaterThan(recents)
         expect(settings).toBeGreaterThan(tools)
+        expect(fab).toBeGreaterThan(settings) // the FAB lives in the bottom settings bar
     })
 
     it('lists the sessions in Recents and forwards select', async () => {
@@ -76,10 +79,10 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         expect(wrapper.emitted('openSettings')).toHaveLength(1)
     })
 
-    it('emits newChat from the top action and closes via update:open', async () => {
+    it('emits newChat from the New chat FAB and closes via update:open', async () => {
         const wrapper = mountSidebar()
         await flushPromises()
-        ;(document.querySelector('[data-testid="talos-sidebar-new-chat"]') as HTMLElement).click()
+        ;(document.querySelector('[data-testid="talos-new-chat-fab"]') as HTMLElement).click()
         await flushPromises()
         expect(wrapper.emitted('newChat')).toHaveLength(1)
         const close = document.querySelector('[aria-label="Close menu"]') as HTMLElement

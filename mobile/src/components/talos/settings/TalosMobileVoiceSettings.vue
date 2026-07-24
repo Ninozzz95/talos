@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosSpeechService, type TalosSpeechVoice } from '@/services/speech'
 
@@ -25,6 +26,10 @@ const selectedVoice = computed({
     get: () => settings.state.voice.voice_uri ?? '',
     set: (value: string) => { void settings.setVoicePreferences({ voice_uri: value || null }) },
 })
+const voiceItems = computed(() => voices.value.map((voice) => ({
+    value: voice.voiceURI,
+    label: `${voice.name} (${voice.lang})`,
+})))
 function setRate(event: Event): void {
     void settings.setVoicePreferences({ rate: Number((event.target as HTMLInputElement).value) })
 }
@@ -51,15 +56,15 @@ function preview(): void {
 
         <label class="mt-3 block">
             <span class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">Voice</span>
-            <select
+            <!-- Cleanup 2026-07-24: the shared themed select (not a raw native
+                 <select>) so the voice picker matches every other Settings
+                 dropdown — same portal, keyboard nav and dark/accent surface. -->
+            <TalosThemedSelect
                 v-model="selectedVoice"
-                data-testid="talos-voice-select"
+                :items="voiceItems"
                 aria-label="Voice"
-                class="min-h-11 w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
-            >
-                <option value="">Device default</option>
-                <option v-for="voice in voices" :key="voice.voiceURI" :value="voice.voiceURI">{{ voice.name }} ({{ voice.lang }})</option>
-            </select>
+                none-label="Device default"
+            />
         </label>
 
         <label class="mt-3 block">

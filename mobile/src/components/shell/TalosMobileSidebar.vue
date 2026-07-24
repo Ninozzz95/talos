@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
 import {
-    Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquarePlus, MessageSquareText,
+    Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquareText,
     Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
+import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { useTalosAccountStore } from '@/stores/account'
 import {
     Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle,
@@ -116,23 +117,12 @@ function confirmDelete(): void {
             </DrawerHeader>
 
             <div class="flex min-h-0 flex-1 flex-col">
-                <div class="px-3 pt-3">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        data-testid="talos-sidebar-new-chat"
-                        class="w-full justify-start gap-2 border-[var(--talos-border)] text-[var(--talos-text)]"
-                        :disabled="props.creatingSession"
-                        @click="emit('newChat')"
-                    >
-                        <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        New chat
-                    </Button>
-                </div>
-
                 <!-- F3-T3 (owner #12, Claude pattern): on phones the Chats entry
-                     opens the dedicated list page; tablets keep the inline list. -->
-                <div class="px-3 pt-2 md:hidden">
+                     opens the dedicated list page; tablets keep the inline list.
+                     Owner 2026-07-24: the single "New chat" affordance is the
+                     bottom FAB (matching the reference screenshot) — no
+                     duplicate outline button up here. -->
+                <div class="px-3 pt-3 md:hidden">
                     <button
                         type="button"
                         data-testid="talos-sidebar-chats-entry"
@@ -225,7 +215,7 @@ function confirmDelete(): void {
                         class="talos-pressable flex min-h-11 items-center gap-2 rounded-full pr-3 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="emit('openSettings')"
                     >
-                        <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-accent)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">{{ account.initial.value }}</span>
+                        <TalosAccountAvatar size="sm" />
                         <span class="max-w-[120px] truncate text-[var(--talos-muted)]">{{ account.state.display_name || 'Account' }}</span>
                     </button>
                     <TalosMobileNewChatFab :disabled="props.creatingSession" @click="emit('newChat')" />
