@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import TalosMobileSettingsCenter from '@/components/talos/settings/TalosMobileSettingsCenter.vue'
@@ -47,13 +47,16 @@ describe('TalosMobileSettingsCenter', () => {
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        const models = wrapper.get('[role="tab"]')
-        ;(models.element as HTMLElement).focus()
-        models.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+        // Claude-style order: the Account card is the FIRST tab, then the
+        // grouped categories (Intelligence: Models, AI Defaults, Agent Tools…).
+        const first = wrapper.get('[role="tab"]')
+        expect(first.text()).toContain('Account')
+        ;(first.element as HTMLElement).focus()
+        first.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('AI Defaults')
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
 
         wrapper.get('[role="tab"][aria-selected="true"]').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
         await nextTick()
@@ -65,7 +68,7 @@ describe('TalosMobileSettingsCenter', () => {
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Account')
     })
 
     it('keeps every remaining runtime-dependent category visible and explicitly gated', async () => {
@@ -112,5 +115,26 @@ describe('TalosMobileSettingsCenter', () => {
         expect(wrapper.get('[data-testid="settings-detail-pane"]').classes()).toContain('hidden')
         expect(wrapper.get('[data-settings-tab="appearance"]').attributes('aria-selected')).toBe('true')
         expect(nav.subView.value).toBeNull()
+    })
+})
+
+// SF-critic M1: at the md breakpoint (side-by-side) opening a category must NOT
+// push a sheet sub-view (no spurious contextual Back / wrong header on tablet).
+describe('TalosMobileSettingsCenter md breakpoint', () => {
+    it('does not set a sheet sub-view when the md layout is side-by-side', async () => {
+        const listeners: Array<(e: { matches: boolean }) => void> = []
+        vi.stubGlobal('matchMedia', vi.fn((q: string) => ({
+            matches: q.includes('768'),
+            addEventListener: (_: string, l: (e: { matches: boolean }) => void) => listeners.push(l),
+            removeEventListener: () => {},
+        })))
+        const { useTalosSheetNav } = await import('@/composables/useTalosSheetNav')
+        const nav = useTalosSheetNav()
+        nav.clear()
+        const wrapper = mount(TalosMobileSettingsCenter, { attachTo: document.body, global: { stubs: panelStubs } })
+        await activateTab(wrapper, 'account')
+        expect(nav.subView.value).toBeNull()
+        wrapper.unmount()
+        vi.unstubAllGlobals()
     })
 })

@@ -37,3 +37,18 @@ export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Obj
 export function talosMobileSettingsTab(id: TalosMobileSettingsTabId): TalosMobileSettingsTab {
     return TALOS_MOBILE_SETTINGS_TABS.find((tab) => tab.id === id) ?? TALOS_MOBILE_SETTINGS_TABS[0]
 }
+
+// Owner 2026-07-24 (Claude-style Settings): the Account tab becomes the summary
+// card at the top; the rest are organized into grouped rounded cards.
+export const TALOS_MOBILE_SETTINGS_ACCOUNT_TAB: TalosMobileSettingsTabId = 'account'
+
+export interface TalosMobileSettingsGroup {
+    label: string
+    tabIds: readonly TalosMobileSettingsTabId[]
+}
+
+export const TALOS_MOBILE_SETTINGS_GROUPS: readonly TalosMobileSettingsGroup[] = Object.freeze([
+    { label: 'Intelligence', tabIds: ['models', 'ai_defaults', 'agent_tools'] },
+    { label: 'Connections', tabIds: ['search', 'browser', 'integrations', 'email', 'reminders'] },
+    { label: 'Interface', tabIds: ['appearance', 'system'] },
+])

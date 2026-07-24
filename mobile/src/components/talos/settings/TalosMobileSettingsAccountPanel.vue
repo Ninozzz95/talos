@@ -7,17 +7,36 @@
  */
 import { inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { RotateCcw } from '@lucide/vue'
+import { Check, RotateCcw } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileAppLockModal from '@/components/talos/settings/TalosMobileAppLockModal.vue'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosAccountStore } from '@/stores/account'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import { biometricUnlockAvailable, clearAppLock } from '@/services/appLock'
 import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/services/dictation'
 
 const router = useRouter()
 const intro = inject(TALOS_MOBILE_INTRO_KEY, null)
 const settings = useSettingsStore()
+const account = useTalosAccountStore()
+const toasts = useTalosMobileToasts()
+
+// Owner 2026-07-24: local account identity + PREDISPOSED OAuth (honestly gated,
+// no fake sign-in). The name drives the avatar initial across the shell.
+const nameDraft = ref(account.state.display_name)
+const nameSaved = ref(false)
+async function saveName(): Promise<void> {
+    await account.setDisplayName(nameDraft.value)
+    nameDraft.value = account.state.display_name
+    nameSaved.value = true
+    window.setTimeout(() => { nameSaved.value = false }, 1600)
+}
+function tryOAuth(provider: { label: string; gateReason: string }): void {
+    // No fake session: surface the honest gate.
+    toasts.push({ message: provider.gateReason, durationMs: 6000 })
+}
 
 // F5-#32 (owner) — the whole PIN journey lives in a dedicated FULLSCREEN
 // modal (setup: 6 digits + confirm; verify: current PIN or biometrics before
@@ -65,6 +84,56 @@ async function toggleBiometric(): Promise<void> {
 
 <template>
     <div class="flex flex-col gap-5">
+        <!-- Owner 2026-07-24: local identity — name + avatar initial. -->
+        <section data-testid="talos-account-identity">
+            <div class="flex items-center gap-3">
+                <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent)] text-lg font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">{{ account.initial.value }}</span>
+                <div class="min-w-0 flex-1">
+                    <label for="talos-account-name" class="block text-xs font-medium text-[var(--talos-muted)]">Display name</label>
+                    <div class="mt-1 flex gap-2">
+                        <input
+                            id="talos-account-name"
+                            v-model="nameDraft"
+                            data-testid="talos-account-name"
+                            type="text"
+                            maxlength="60"
+                            autocomplete="name"
+                            placeholder="Your name"
+                            aria-label="Display name"
+                            class="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                            @keydown.enter.prevent="saveName"
+                        >
+                        <Button type="button" data-testid="talos-account-name-save" class="min-h-11 gap-1.5 rounded-xl" :disabled="nameDraft.trim() === account.state.display_name" @click="saveName">
+                            <Check class="size-4" aria-hidden="true" /> {{ nameSaved ? 'Saved' : 'Save' }}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Predisposed OAuth — present but honestly gated (local-first). -->
+        <section>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Sign in</h4>
+            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                TALOS runs fully local — no account is required. Sign-in is predisposed for the
+                optional encrypted sync arriving with the sovereign core.
+            </p>
+            <div class="mt-2 flex flex-col gap-2">
+                <Button
+                    v-for="provider in account.oauthProviders"
+                    :key="provider.id"
+                    type="button"
+                    variant="outline"
+                    :data-testid="`talos-oauth-${provider.id}`"
+                    class="talos-pressable min-h-12 w-full justify-center gap-2 rounded-xl border-[var(--talos-border)] text-[var(--talos-text)]"
+                    @click="tryOAuth(provider)"
+                >
+                    {{ provider.label }}
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Soon</span>
+                </Button>
+            </div>
+        </section>
+
         <section>
             <h4 class="text-sm font-semibold text-[var(--talos-text)]">Local workspace</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
