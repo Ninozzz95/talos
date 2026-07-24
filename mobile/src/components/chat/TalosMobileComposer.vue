@@ -223,8 +223,14 @@ function resizePrompt(): void {
     const field = promptField.value
     if (!field) return
     field.style.height = 'auto'
-    field.style.height = `${Math.max(56, Math.min(field.scrollHeight, 192))}px`
+    // Compact immersive pill is a single centred line (~48px); the standard
+    // composer floors at 56px (two visible rows).
+    const floor = composerCompact.value ? 48 : 56
+    field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, 192))}px`
 }
+// Recompute the field height when the pill flips compact↔expanded so the floor
+// (48↔56) and centring track the layout, not just typing.
+watch(composerCompact, () => { void nextTick(resizePrompt) })
 
 function updatePrompt(event: Event): void {
     const field = event.currentTarget as HTMLTextAreaElement
@@ -435,27 +441,30 @@ watch(() => props.prompt, () => {
                  line; model+effort appear on focus (expanded). @pointerdown.prevent keeps
                  the field focused / keyboard up when a control is tapped (Android WebView
                  blurs on pointerdown, before any mousedown handler could run). -->
-            <button
+            <Button
                 v-if="composerCompact"
                 ref="plusTrigger"
                 type="button"
+                size="icon"
+                variant="outline"
+                data-mobile-icon-only="true"
                 aria-label="Add to chat"
                 :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
                 :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable absolute bottom-1.5 left-1 z-10 flex size-10 items-center justify-center rounded-full text-[var(--talos-muted,var(--muted-foreground))]"
+                class="talos-pressable absolute left-1.5 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-full"
                 @pointerdown.prevent
                 @click="openPlus"
             >
                 <Plus class="size-5" aria-hidden="true" />
-            </button>
+            </Button>
             <textarea
                 ref="promptField"
                 :value="prompt"
-                rows="2"
+                :rows="composerCompact ? 1 : 2"
                 aria-label="Message TALOS"
                 placeholder="Message TALOS..."
-                class="max-h-48 min-h-14 w-full resize-none overflow-y-auto bg-transparent py-2 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
-                :class="composerCompact ? 'pl-12 pr-24' : 'px-2 pr-14'"
+                class="max-h-48 w-full resize-none overflow-y-auto bg-transparent py-2 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
+                :class="composerCompact ? 'min-h-12 pl-14 pr-28' : 'min-h-14 px-2 pr-14'"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
                 @focus="composerFocused = true"
@@ -470,7 +479,8 @@ watch(() => props.prompt, () => {
                 :aria-label="sending ? 'Stop response' : 'Send message'"
                 :title="sending ? 'Stop response' : (statusText || 'Send message')"
                 :disabled="!sending && !canSubmit"
-                class="talos-pressable absolute bottom-1.5 right-1.5 min-h-11 min-w-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                :class="composerCompact ? 'top-1/2 -translate-y-1/2' : 'bottom-1.5'"
                 @click="sending ? emit('stop') : requestSend()"
             >
                 <Transition
@@ -487,21 +497,25 @@ watch(() => props.prompt, () => {
                 </Transition>
             </Button>
 
-            <!-- compact immersive: mic sits inline, just left of Send. -->
-            <button
+            <!-- compact immersive: mic sits inline, just left of Send — same outline
+                 style as the expanded controls row (owner 2026-07-24). -->
+            <Button
                 v-if="composerCompact && dictationSupported"
                 type="button"
+                size="icon"
+                variant="outline"
+                data-mobile-icon-only="true"
                 :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
                 :aria-pressed="dictationListening || dictationStarting"
                 :disabled="sending && !dictationListening && !dictationStarting"
-                class="talos-pressable absolute bottom-1.5 right-[3.25rem] z-10 flex size-10 items-center justify-center rounded-full text-[var(--talos-muted,var(--muted-foreground))] disabled:opacity-40"
-                :class="dictationListening || dictationStarting ? '!text-[var(--talos-accent,var(--primary))]' : ''"
+                class="talos-pressable absolute right-14 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-full"
+                :class="dictationListening || dictationStarting ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]' : ''"
                 @pointerdown.prevent
                 @click="emit('toggleDictation')"
             >
                 <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
-                <Mic v-else class="size-5" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
-            </button>
+                <Mic v-else class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
+            </Button>
 
             <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown, anchored above the
                  composer so it opens whether the pill is compact or expanded. -->
