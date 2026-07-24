@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Braces, Download, FileJson, FileText, Share2 } from '@lucide/vue'
+import { Braces, Database, Download, FileJson, FileText, Share2 } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import {
     buildTalosMobileBenchmarkScenarioExport,
@@ -89,6 +89,7 @@ async function generate(format: TalosMobileSessionExportFormat): Promise<void> {
     if (exporting.value) return
     exporting.value = true
     error.value = null
+    savedToLibrary.value = false
     try {
         const snapshot = await controller.chat.exportSnapshot()
         const input: TalosMobileSessionExportInput = { ...snapshot, exported_at: new Date().toISOString() }
@@ -119,6 +120,26 @@ async function share(): Promise<void> {
         await deliverTalosSessionExport(lastArtifact)
     } catch (cause) {
         error.value = cause instanceof Error && cause.message ? cause.message : String(cause)
+    }
+}
+
+const savingToLibrary = ref(false)
+const savedToLibrary = ref(false)
+async function saveToLibrary(): Promise<void> {
+    if (!lastArtifact || savingToLibrary.value) return
+    error.value = null
+    savingToLibrary.value = true
+    try {
+        await controller.attachments.saveGenerated({
+            name: lastArtifact.fileName,
+            mediaType: lastArtifact.contentType,
+            text: lastArtifact.content,
+        })
+        savedToLibrary.value = true
+    } catch (cause) {
+        error.value = cause instanceof Error && cause.message ? cause.message : String(cause)
+    } finally {
+        savingToLibrary.value = false
     }
 }
 </script>
@@ -184,6 +205,16 @@ async function share(): Promise<void> {
             >
                 <Share2 class="size-4" aria-hidden="true" />
                 Share / Save
+            </button>
+            <button
+                type="button"
+                data-testid="talos-export-save-library"
+                :disabled="savingToLibrary || savedToLibrary"
+                class="talos-pressable mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)] disabled:opacity-60"
+                @click="saveToLibrary"
+            >
+                <Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                {{ savedToLibrary ? 'Saved to Library' : 'Save to Library' }}
             </button>
         </section>
     </TalosMobileComposerSheet>

@@ -118,7 +118,7 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
 
     await page.getByLabel('Choose grounding context').click()
     await expect(page).toHaveURL(/\/context$/)
-    const vault = page.getByRole('list', { name: 'Vault files' })
+    const vault = page.getByRole('list', { name: 'Library files' })
     await expect(vault).toContainText('release-brief.txt')
     await expect(vault).toContainText('reference.png')
 

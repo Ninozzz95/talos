@@ -61,6 +61,10 @@ function makeVault(overrides: Partial<TalosVaultService> = {}): TalosVaultServic
             const stored = vaultFile(`file-${file.name}`, file.name, file.sizeBytes)
             return { file: stored, grant: grant(`grant-${file.name}`, stored.id) }
         }),
+        createGenerated: vi.fn(async (input): Promise<TalosVaultTrayItem> => {
+            const stored = vaultFile(`gen-${input.name}`, input.name, input.text.length)
+            return { file: stored, grant: grant(`grant-gen-${input.name}`, stored.id) }
+        }),
         createGrant: vi.fn(async (fileId) => grant(`grant-${fileId}`, fileId)),
         revokeGrant: vi.fn().mockResolvedValue(undefined),
         resolveMessageParts: vi.fn().mockResolvedValue([]),
@@ -223,6 +227,25 @@ describe('useTalosMobileAttachments', () => {
             status: 'authorized',
         })])
         expect(attachments.error.value).toContain('already attached')
+    })
+
+    it('saveGenerated stores a chat artifact, drops its pre-minted grant, and refreshes the Library', async () => {
+        const stored = vaultFile('gen-1', 'summary.md', 10)
+        const service = makeVault({
+            createGenerated: vi.fn().mockResolvedValue({ file: stored, grant: grant('grant-gen', 'gen-1') }),
+            listFiles: vi.fn().mockResolvedValue([stored]),
+        })
+        const attachments = useTalosMobileAttachments({
+            picker: { pickFiles: vi.fn().mockResolvedValue([]) },
+            vault: service,
+        })
+
+        const file = await attachments.saveGenerated({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' })
+
+        expect(service.createGenerated).toHaveBeenCalledWith({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' })
+        expect(service.revokeGrant).toHaveBeenCalledWith('grant-gen') // not attached → no lingering grant
+        expect(file.id).toBe('gen-1')
+        expect(attachments.vaultFiles.map((candidate) => candidate.id)).toContain('gen-1')
     })
 
     it('reconciles pending files and exposes the durable Vault catalog at startup', async () => {

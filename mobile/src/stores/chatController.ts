@@ -88,6 +88,7 @@ function loadProductionVaultService(): Promise<TalosVaultService> {
 
 const productionVaultService: TalosVaultService = {
     ingest: async (file) => (await loadProductionVaultService()).ingest(file),
+    createGenerated: async (input) => (await loadProductionVaultService()).createGenerated(input),
     createGrant: async (fileId) => (await loadProductionVaultService()).createGrant(fileId),
     revokeGrant: async (grantId) => (await loadProductionVaultService()).revokeGrant(grantId),
     resolveMessageParts: async (messageId) => (await loadProductionVaultService()).resolveMessageParts(messageId),
@@ -105,6 +106,7 @@ const productionFilePicker: TalosNativeFilePicker = {
 
 const unavailableVaultService: TalosVaultService = {
     ingest: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    createGenerated: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     revokeGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },

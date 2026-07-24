@@ -87,7 +87,7 @@ describe('ContextScreen local Vault', () => {
         const wrapper = mount(ContextScreen)
         await flushPromises()
 
-        await wrapper.get('[aria-label="Add files to Vault"]').trigger('click')
+        await wrapper.get('[aria-label="Add files to Library"]').trigger('click')
         await wrapper.get('[aria-label="Attach architecture.pdf to message"]').trigger('click')
 
         expect(mockState.controller.attachments.selectFiles).toHaveBeenCalledOnce()
@@ -127,8 +127,32 @@ describe('ContextScreen local Vault', () => {
         await flushPromises()
 
         expect(wrapper.get('[role="alert"]').text()).toContain('Local Vault is unavailable.')
-        expect(wrapper.text()).toContain('No files in your Vault')
-        await wrapper.get('[aria-label="Retry Vault"]').trigger('click')
+        expect(wrapper.text()).toContain('No files yet')
+        await wrapper.get('[aria-label="Retry Library"]').trigger('click')
         expect(controller.attachments.refreshVault).toHaveBeenCalledTimes(2)
+    })
+
+    it('searches across the whole Library and reports no matches', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        // extracted_text of vault-ready is 'architecture' → content search hits it.
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('architecture')
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
+
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('nonexistent-term')
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(false)
+        expect(wrapper.text()).toContain('No files match')
+    })
+
+    it('filters by origin — Generated hides upload-only vaults', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-origin-generated"]').trigger('click')
+        // both seeded files are uploads (no metadata.origin) → none shown
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-library-origin-all"]').trigger('click')
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
     })
 })
