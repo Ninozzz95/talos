@@ -70,6 +70,10 @@ const props = withDefaults(defineProps<{
     dictationLevel?: number
     // F3-T4bis (owner #13): Claude-style minimal bar + organized tool drawer.
     drawerMode?: boolean
+    // Owner 2026-07-24 (ChatGPT-style): compact bar that expands on focus.
+    immersiveComposer?: boolean
+    // Owner 2026-07-24: the "+" opens an anchored dropdown, not the drawer.
+    plusDropdown?: boolean
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -96,6 +100,8 @@ const props = withDefaults(defineProps<{
     dictationStarting: false,
     dictationLevel: 0,
     drawerMode: false,
+    immersiveComposer: false,
+    plusDropdown: false,
 })
 
 const emit = defineEmits<{
@@ -135,6 +141,21 @@ const slashActiveIndex = ref(0)
 const slashCommandCount = ref(0)
 const slashMenu = ref<{ activateSelected(): void } | null>(null)
 const toolDrawerOpen = ref(false)
+// Owner 2026-07-24 — immersive composer: collapse the bottom controls row when
+// the field is unfocused AND empty (single-line pill), expand on focus/content.
+const composerFocused = ref(false)
+const composerCompact = computed(() =>
+    props.immersiveComposer
+    && !composerFocused.value
+    && !props.prompt.trim()
+    && (props.attachments?.length ?? 0) === 0,
+)
+// Owner 2026-07-24 — the "+" opens an anchored dropdown instead of the drawer.
+const plusMenuOpen = ref(false)
+function openPlus(): void {
+    if (props.plusDropdown) plusMenuOpen.value = !plusMenuOpen.value
+    else toolDrawerOpen.value = true
+}
 
 const selectedProfile = computed(() => (
     props.modelProfiles.find((profile) => profile.id === props.selectedModelProfileId) ?? null
@@ -408,6 +429,8 @@ watch(() => props.prompt, () => {
                 class="max-h-48 min-h-14 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 pr-14 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
+                @focus="composerFocused = true"
+                @blur="composerFocused = false"
             />
             <!-- One persistent shell that genuinely morphs Send↔Stop: only the
                  glyph transitions (~150ms), the button never unmounts. -->
@@ -436,19 +459,38 @@ watch(() => props.prompt, () => {
             </Button>
         </div>
 
-        <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic. -->
-        <div v-if="drawerMode" class="mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+        <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic.
+             Owner 2026-07-24 immersive: this controls row hides when the field
+             is unfocused+empty (compact pill), and returns on focus/content. -->
+        <div v-if="drawerMode && !composerCompact" class="relative mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
             <Button
                 type="button"
                 size="icon"
                 variant="outline"
                 data-mobile-icon-only="true"
                 aria-label="Add to chat"
+                aria-haspopup="menu"
+                :aria-expanded="plusMenuOpen"
                 class="talos-pressable min-h-11 min-w-11 rounded-full"
-                @click="toolDrawerOpen = true"
+                @click="openPlus"
             >
                 <Plus class="size-5" aria-hidden="true" />
             </Button>
+            <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown — SAME actions as the
+                 bottom drawer, anchored above the "+". -->
+            <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="plusMenuOpen = false" />
+            <div
+                v-if="plusMenuOpen"
+                role="menu"
+                data-testid="talos-composer-plus-menu"
+                class="absolute bottom-full left-0 z-[60] mb-2 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl"
+            >
+                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); plusMenuOpen = false"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Attach a file</button>
+                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); plusMenuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Library</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); plusMenuOpen = false"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Model Lab</button>
+                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); plusMenuOpen = false"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? 'Browsing on' : 'Browse the web' }}</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('enhancePrompt'); plusMenuOpen = false"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Improve prompt</button>
+            </div>
             <button
                 ref="modelTrigger"
                 type="button"
@@ -496,7 +538,7 @@ watch(() => props.prompt, () => {
             </Button>
         </div>
 
-        <div v-else class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+        <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
             <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                 <Button
                     ref="modelTrigger"

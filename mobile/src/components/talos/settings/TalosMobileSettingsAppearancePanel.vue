@@ -202,6 +202,36 @@ function onSwipeEnd(event: PointerEvent): void {
                         @click="settings.setShell({ composer_drawer: !settings.state.shell.composer_drawer })"
                     ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.composer_drawer ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
                 </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">Immersive composer</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">Compact single-line bar that expands (shows the model) on focus.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.immersive_composer"
+                        aria-label="Immersive composer"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.immersive_composer ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ immersive_composer: !settings.state.shell.immersive_composer })"
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.immersive_composer ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">“+” dropdown menu</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">The + opens an anchored dropdown (ChatGPT-style) instead of the bottom drawer.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.plus_dropdown"
+                        aria-label="Plus dropdown menu"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.plus_dropdown ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ plus_dropdown: !settings.state.shell.plus_dropdown })"
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.plus_dropdown ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
                 <label class="block">
                     <span :class="selectLabelClass">Chat message size</span>
                     <TalosThemedSelect

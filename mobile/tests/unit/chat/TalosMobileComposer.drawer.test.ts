@@ -75,6 +75,46 @@ describe('composer drawer mode (F3-T4bis)', () => {
     })
 })
 
+// Owner 2026-07-24 — immersive composer (compact→expand) and the "+" dropdown.
+describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
+    it('immersive: the controls row is hidden when unfocused+empty, and returns on focus', async () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        // compact: no model chip row
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+        await wrapper.get('textarea').trigger('focus')
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+        await wrapper.get('textarea').trigger('blur')
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+    })
+
+    it('immersive: stays expanded when there is content (never collapses over a draft)', () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: 'hello' })
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+    })
+
+    it('immersive OFF keeps the bar always visible', () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: false, prompt: '' })
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+    })
+
+    it('plus-dropdown: "+" opens the anchored menu (not the drawer) and an item forwards its action', async () => {
+        const wrapper = mountComposer({ drawerMode: true, plusDropdown: true })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-composer-plus-menu"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-plus-menu-attach"]').trigger('click')
+        expect(wrapper.emitted('attach')).toHaveLength(1)
+        expect(wrapper.find('[data-testid="talos-composer-plus-menu"]').exists()).toBe(false)
+    })
+
+    it('plus-dropdown OFF: "+" opens the bottom drawer as before', async () => {
+        const wrapper = mountComposer({ drawerMode: true, plusDropdown: false })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-composer-plus-menu"]').exists()).toBe(false)
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
+    })
+})
+
 // F4-#20 — the enhancer must never present a mute disabled control on touch
 // (title tooltips do not exist there): the control stays tappable and a tap
 // with missing prerequisites emits the REASON for the UI to surface.
