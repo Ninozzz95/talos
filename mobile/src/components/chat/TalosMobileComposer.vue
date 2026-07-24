@@ -152,9 +152,20 @@ const composerCompact = computed(() =>
 )
 // Owner 2026-07-24 — the "+" opens an anchored dropdown instead of the drawer.
 const plusMenuOpen = ref(false)
-function openPlus(): void {
-    if (props.plusDropdown) plusMenuOpen.value = !plusMenuOpen.value
-    else toolDrawerOpen.value = true
+const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
+const plusMenu = ref<HTMLElement | null>(null)
+async function openPlus(): Promise<void> {
+    if (!props.plusDropdown) { toolDrawerOpen.value = true; return }
+    if (plusMenuOpen.value) { await closePlusMenu(); return }
+    plusMenuOpen.value = true
+    await nextTick()
+    // Land AT focus inside the menu so Escape/Tab operate on it.
+    plusMenu.value?.focus()
+}
+async function closePlusMenu(): Promise<void> {
+    plusMenuOpen.value = false
+    await nextTick()
+    focusTrigger(plusTrigger.value)
 }
 
 const selectedProfile = computed(() => (
@@ -462,15 +473,19 @@ watch(() => props.prompt, () => {
         <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic.
              Owner 2026-07-24 immersive: this controls row hides when the field
              is unfocused+empty (compact pill), and returns on focus/content. -->
-        <div v-if="drawerMode && !composerCompact" class="relative mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+        <!-- @mousedown.prevent: in immersive mode the row is gated on textarea
+             focus; a control tap must NOT blur the field (which would unmount the
+             row before the click resolves), so we keep focus through the press. -->
+        <div v-if="drawerMode && !composerCompact" class="relative mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
             <Button
+                ref="plusTrigger"
                 type="button"
                 size="icon"
                 variant="outline"
                 data-mobile-icon-only="true"
                 aria-label="Add to chat"
-                aria-haspopup="menu"
-                :aria-expanded="plusMenuOpen"
+                :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
+                :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
                 class="talos-pressable min-h-11 min-w-11 rounded-full"
                 @click="openPlus"
             >
@@ -478,12 +493,15 @@ watch(() => props.prompt, () => {
             </Button>
             <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown — SAME actions as the
                  bottom drawer, anchored above the "+". -->
-            <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="plusMenuOpen = false" />
+            <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="closePlusMenu" />
             <div
                 v-if="plusMenuOpen"
+                ref="plusMenu"
                 role="menu"
+                tabindex="-1"
                 data-testid="talos-composer-plus-menu"
-                class="absolute bottom-full left-0 z-[60] mb-2 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl"
+                class="absolute bottom-full left-0 z-[60] mb-2 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
+                @keydown.escape="closePlusMenu"
             >
                 <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); plusMenuOpen = false"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Attach a file</button>
                 <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); plusMenuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Library</button>
@@ -538,7 +556,7 @@ watch(() => props.prompt, () => {
             </Button>
         </div>
 
-        <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
+        <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
             <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
                 <Button
                     ref="modelTrigger"

@@ -72,6 +72,40 @@ describe('launcher icon controller', () => {
         expect(calls.restart).not.toHaveBeenCalled()
     })
 
+    it('confirmNow keeps the prompt and does not restart when the native toggle fails', async () => {
+        const { calls } = fakeDeps({
+            applyNative: vi.fn(async () => { throw new Error('setComponentEnabledSetting failed') }),
+        })
+        const c = useLauncherIconController()
+        await c.hydrate()
+        c.evaluate('noir', true)
+        await c.confirmNow()
+        expect(c.state.pending).toEqual({ target: 'noir' }) // still prompted → retryable
+        expect(c.state.applied).toBe('calm')                // unchanged
+        expect(calls.setApplied).not.toHaveBeenCalled()     // mirror not written on failure
+        expect(calls.restart).not.toHaveBeenCalled()
+    })
+
+    it('later dedups: two choices register one listener and apply once with the latest', async () => {
+        let pauseCount = 0
+        const onNextPause = vi.fn((cb: () => void) => { pauseCount++; savedCb = cb })
+        let savedCb: (() => void) | null = null
+        const applyNative = vi.fn(async (_p: string) => {})
+        __setLauncherIconDepsForTests({
+            isNative: () => true, getApplied: async () => 'calm', setApplied: async () => {},
+            applyNative, restart: async () => {}, onNextPause,
+        })
+        const c = useLauncherIconController()
+        await c.hydrate()
+        c.evaluate('forge', true); c.later()
+        c.evaluate('violet', true); c.later()
+        expect(onNextPause).toHaveBeenCalledOnce() // only ONE pause listener armed
+        savedCb?.()
+        await Promise.resolve()
+        expect(applyNative).toHaveBeenCalledOnce()
+        expect(applyNative).toHaveBeenCalledWith('violet') // latest wins
+    })
+
     it('dismiss clears the prompt without applying anything', async () => {
         const { calls } = fakeDeps()
         const c = useLauncherIconController()
