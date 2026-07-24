@@ -79,7 +79,11 @@ def foreground_vector(accent: str) -> str:
         '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
         '    android:width="108dp" android:height="108dp"\n'
         '    android:viewportWidth="500" android:viewportHeight="500">\n'
-        '  <group android:scaleX="0.86" android:scaleY="0.86" android:pivotX="250" android:pivotY="251">\n'
+        # Optical centring (owner device feedback 2026-07-24): the mark's visual mass
+        # sits low (hexagon body + 3 lower nodes vs a single top node), so it read as
+        # not-quite-centred. Scale 0.90 for presence + translateY -9 lifts it to a
+        # balanced top/bottom gap inside the adaptive safe zone (verified by render).
+        '  <group android:scaleX="0.9" android:scaleY="0.9" android:pivotX="250" android:pivotY="250" android:translateY="-9">\n'
         f'{body}\n'
         f'{branch.format(deg=45)}\n'
         f'{branch.format(deg=-45)}\n'

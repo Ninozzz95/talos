@@ -110,6 +110,11 @@ export function useLauncherIconController(): LauncherIconController {
     // A single deferred target (latest "later" wins), applied on the next pause.
     let deferred: TalosThemeId | null = null
     let pauseArmed = false
+    // Gate evaluate() until the applied alias is known. On cold start the theme
+    // store hydrates (default → the user's theme), firing the theme watcher BEFORE
+    // this controller's applied mirror is loaded; without this gate that stale
+    // compare would raise a bogus prompt that survives every restart.
+    let hydrated = false
 
     async function apply(target: TalosThemeId): Promise<void> {
         // Toggle the native alias FIRST; only then persist the mirror + in-memory
@@ -125,8 +130,11 @@ export function useLauncherIconController(): LauncherIconController {
         async hydrate() {
             const applied = await deps.getApplied()
             state.applied = isTalosThemeId(applied) ? applied : TALOS_DEFAULT_THEME
+            hydrated = true
         },
         evaluate(themePreset, featureEnabled) {
+            // Ignore the hydration-time theme settle; only real post-boot switches prompt.
+            if (!hydrated) return
             const plan = resolveLauncherIconPlan({
                 featureEnabled,
                 native: deps.isNative(),
