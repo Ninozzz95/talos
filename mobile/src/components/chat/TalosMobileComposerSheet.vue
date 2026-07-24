@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { X } from '@lucide/vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
+import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 
 /**
  * F4-#26 — shared bottom-sheet shell for the composer drawers (Add to chat /
@@ -24,6 +25,21 @@ const root = ref<HTMLElement | null>(null)
 // trap, opener focus restore.
 const { trapTab } = useTalosModalSurface(root)
 
+// Owner 2026-07-24: (1) close ANIMATES out — reuse the enter transform, then
+// emit close so the parent unmounts; (2) the system Back gesture closes THIS
+// drawer instead of exiting the app (overlay-back registry). Reduced-motion
+// zeroes the delay honestly.
+let closing = false
+function requestClose(): void {
+    if (closing) return
+    closing = true
+    entered.value = false
+    const reduce = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.setTimeout(() => emit('close'), reduce ? 0 : 250)
+}
+useTalosOverlayBack(requestClose)
+
 onMounted(() => {
     requestAnimationFrame(() => { entered.value = true })
 })
@@ -36,7 +52,7 @@ onMounted(() => {
             class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"
             :class="entered ? 'opacity-100' : 'opacity-0'"
             aria-hidden="true"
-            @click="emit('close')"
+            @click="requestClose"
         />
         <section
             ref="root"
@@ -47,7 +63,7 @@ onMounted(() => {
             :data-testid="testid"
             class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out md:mx-auto md:w-[clamp(480px,50vw,600px)] md:border-x"
             :class="entered ? 'translate-y-0' : 'translate-y-6'"
-            @keydown.escape="emit('close')"
+            @keydown.escape="requestClose"
             @keydown="trapTab"
         >
             <header class="flex shrink-0 items-center gap-2 px-3 py-2">
@@ -55,7 +71,7 @@ onMounted(() => {
                     type="button"
                     aria-label="Close"
                     class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
-                    @click="emit('close')"
+                    @click="requestClose"
                 >
                     <X class="size-5" aria-hidden="true" />
                 </button>

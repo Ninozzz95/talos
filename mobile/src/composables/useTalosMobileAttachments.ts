@@ -64,7 +64,9 @@ function attachmentErrorMessage(error: unknown): string {
         TALOS_ATTACHMENT_ANALYSIS_FAILED: 'TALOS could not inspect this file.',
         TALOS_VAULT_FILE_UNAVAILABLE: 'This Vault file is not ready to attach.',
     }
-    return messages[code] ?? (code.startsWith('TALOS_') ? code : 'TALOS could not add this file.')
+    // Never surface a raw TALOS_* code to the UI — an unmapped code falls back
+    // to the friendly generic, same as any other unexpected error.
+    return messages[code] ?? 'TALOS could not add this file.'
 }
 
 export function useTalosMobileAttachments(
@@ -160,9 +162,7 @@ export function useTalosMobileAttachments(
             const current = items.find((item) => item.id === draft.id)
             if (!current) return
             current.status = 'failed'
-            current.error = cause instanceof Error && cause.message.startsWith('TALOS_')
-                ? cause.message
-                : attachmentErrorMessage(cause)
+            current.error = attachmentErrorMessage(cause)
             error.value = 'One or more files need attention before this message can be sent.'
         }
     }
@@ -242,9 +242,7 @@ export function useTalosMobileAttachments(
             return true
         } catch (cause) {
             draft.status = 'failed'
-            draft.error = cause instanceof Error && cause.message.startsWith('TALOS_')
-                ? cause.message
-                : attachmentErrorMessage(cause)
+            draft.error = attachmentErrorMessage(cause)
             error.value = 'This Vault file could not be authorized for the current message.'
             return false
         }

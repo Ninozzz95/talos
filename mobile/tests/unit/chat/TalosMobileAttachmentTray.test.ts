@@ -46,7 +46,8 @@ describe('TalosMobileAttachmentTray', () => {
             grantId: null,
             bindingId: null,
             permissions: [],
-            error: 'TALOS_ATTACHMENT_SIGNATURE_MISMATCH',
+            // N1.5: the composable now maps to a FRIENDLY reason (never a raw code).
+            error: 'The file contents do not match the declared file type.',
         }
         const wrapper = mount(TalosMobileAttachmentTray, {
             props: { items: [failed], busy: true, error: 'One file needs attention.' },
@@ -55,6 +56,9 @@ describe('TalosMobileAttachmentTray', () => {
         expect(wrapper.get('[role="status"]').text()).toContain('Adding files')
         expect(wrapper.get('[role="alert"]').text()).toContain('needs attention')
         expect(wrapper.get('[data-attachment-id="draft-failed"]').text()).toContain('Could not add file')
+        // The human-readable reason is shown on the chip, never a raw TALOS_* code.
+        expect(wrapper.get('[data-attachment-id="draft-failed"]').text()).toContain('The file contents do not match the declared file type.')
+        expect(wrapper.get('[data-attachment-id="draft-failed"]').text()).not.toContain('TALOS_')
 
         await wrapper.get('[aria-label="Remove spoofed.png"]').trigger('click')
         await wrapper.get('[aria-label="Dismiss attachment error"]').trigger('click')

@@ -112,7 +112,9 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
 
 <template>
     <TabsRoot default-value="design" activation-mode="automatic" orientation="horizontal">
-        <TabsList aria-label="Appearance sections" class="flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] pb-2">
+        <!-- Owner 2026-07-24: the section tabs stay PINNED (sticky) while the
+             panel scrolls, like a nav tab bar. (Swipe-to-switch is a follow-up.) -->
+        <TabsList aria-label="Appearance sections" class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))] pb-2 pt-1">
             <TabsTrigger value="design" :class="sectionTabClass">Design</TabsTrigger>
             <TabsTrigger value="motion" :class="sectionTabClass">Motion</TabsTrigger>
             <TabsTrigger value="voice" :class="sectionTabClass">Voice</TabsTrigger>

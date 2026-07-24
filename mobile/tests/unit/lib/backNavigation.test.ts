@@ -6,11 +6,15 @@ import { resolveTalosBackAction, type TalosBackState } from '@/lib/backNavigatio
 // to chat. Back walks the stack: wizard → sidebar → sheet sub-view → station →
 // history/exit. Pure resolver so the (native-only) Back decision is testable.
 function state(patch: Partial<TalosBackState> = {}): TalosBackState {
-    return { wizardOpen: false, sidebarOpen: false, hasSheetSubView: false, isStation: false, canGoBack: false, ...patch }
+    return { composerOverlayOpen: false, wizardOpen: false, sidebarOpen: false, hasSheetSubView: false, isStation: false, canGoBack: false, ...patch }
 }
 
 describe('resolveTalosBackAction', () => {
-    it('dismisses the wizard first (top-most surface)', () => {
+    it('closes a composer overlay/drawer FIRST (top-most; owner: back must not exit the app)', () => {
+        expect(resolveTalosBackAction(state({ composerOverlayOpen: true, wizardOpen: true, isStation: true }))).toBe('close-overlay')
+    })
+
+    it('dismisses the wizard next (top-most surface below overlays)', () => {
         expect(resolveTalosBackAction(state({ wizardOpen: true, sidebarOpen: true, isStation: true }))).toBe('dismiss-wizard')
     })
 
