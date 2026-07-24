@@ -168,6 +168,27 @@ function parseTonePreferences(value: unknown): TalosMobileTonePreferences {
     return { preset: isTalosToneId(record.preset) ? record.preset : TALOS_DEFAULT_TONE }
 }
 
+// Owner 2026-07-24 — voice (text-to-speech) for assistant replies: the device
+// voice ("model") + rate/pitch ("tone").
+export interface TalosMobileVoicePreferences {
+    voice_uri: string | null
+    rate: number
+    pitch: number
+}
+
+const DEFAULT_VOICE_PREFERENCES: TalosMobileVoicePreferences = { voice_uri: null, rate: 1, pitch: 1 }
+
+function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
+    const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
+    const num = (candidate: unknown, fallback: number, min: number, max: number): number =>
+        typeof candidate === 'number' && Number.isFinite(candidate) ? Math.min(max, Math.max(min, candidate)) : fallback
+    return {
+        voice_uri: typeof record.voice_uri === 'string' && record.voice_uri.length <= 256 ? record.voice_uri : null,
+        rate: num(record.rate, DEFAULT_VOICE_PREFERENCES.rate, 0.5, 2),
+        pitch: num(record.pitch, DEFAULT_VOICE_PREFERENCES.pitch, 0, 2),
+    }
+}
+
 export interface TalosMobileSettingsState {
     shell: TalosMobileShellPreferences
     onboarding: TalosMobileOnboardingState
@@ -180,6 +201,7 @@ export interface TalosMobileSettingsState {
     appearance_visibility: TalosAppearanceVisibility
     model_lab: TalosMobileModelLabPreferences
     browser: TalosMobileBrowserPreferences
+    voice: TalosMobileVoicePreferences
 }
 
 export type TalosMotionPreferencePatch = Partial<Omit<TalosMotionV6Preferences, 'interface'>> & {
@@ -282,6 +304,7 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         browser: parseTalosMobileBrowserPreferences(
             value.browser ?? TALOS_DEFAULT_MOBILE_BROWSER_PREFERENCES,
         ),
+        voice: parseVoicePreferences(value.voice),
     }
 }
 
@@ -299,6 +322,7 @@ export interface SettingsStore {
     setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
     setModelLabPreferences(value: TalosMobileModelLabPreferences): Promise<void>
     setBrowserPreferences(value: Partial<Omit<TalosMobileBrowserPreferences, 'schema_version'>>): Promise<void>
+    setVoicePreferences(patch: Partial<TalosMobileVoicePreferences>): Promise<void>
     setMotionPreferences(patch: TalosMotionPreferencePatch): Promise<void>
     resetMotionPreferences(): Promise<void>
     setVisibility(group: TalosAppearanceGroup, key: string, value: boolean): Promise<void>
@@ -329,6 +353,7 @@ export function useSettingsStore(): SettingsStore {
                 appearance_visibility: state.appearance_visibility,
                 model_lab: state.model_lab,
                 browser: state.browser,
+                voice: state.voice,
             }),
         }))
     }
@@ -346,6 +371,7 @@ export function useSettingsStore(): SettingsStore {
             state.appearance_visibility = parsed.appearance_visibility
             state.model_lab = parsed.model_lab
             state.browser = parsed.browser
+            state.voice = parsed.voice
             state.shell = parsed.shell
             state.onboarding = parsed.onboarding
             state.security = parsed.security
@@ -389,6 +415,10 @@ export function useSettingsStore(): SettingsStore {
                 ...value,
                 schema_version: 1,
             })
+            await persist()
+        },
+        async setVoicePreferences(patch) {
+            state.voice = parseVoicePreferences({ ...state.voice, ...patch })
             await persist()
         },
         async setMotionPreferences(patch) {
