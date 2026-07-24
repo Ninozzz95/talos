@@ -116,7 +116,7 @@ test('immersive header toggle swaps the header bar for floating pills', async ({
     const chrome = page.locator('[data-testid="talos-mobile-immersive-chrome"]')
     await expect(chrome).toBeVisible()
     await chrome.locator('[aria-label="Chat options"]').click()
-    await expect(page.locator('[data-testid="talos-immersive-options"]')).toContainText('New chat')
+    await expect(page.locator('[data-testid="talos-chat-options-menu"]')).toContainText('New chat')
 })
 
 test('Account panel replays the introduction from Settings', async ({ page }) => {

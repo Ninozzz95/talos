@@ -54,10 +54,13 @@ const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border 
 </script>
 
 <template>
-    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex min-h-0 flex-col overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-card)] md:min-h-[540px] md:flex-row">
+    <!-- Owner 2026-07-24: the framed card was redundant nesting inside the
+         sheet — on mobile the categories/detail go FULL-WIDTH with the coherent
+         parent padding; the framed side-by-side stays on tablet (md). -->
+    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex min-h-0 flex-col overflow-hidden md:min-h-[540px] md:flex-row md:rounded-md md:border md:border-[var(--talos-border)] md:bg-[var(--talos-card)]">
         <aside
             data-testid="settings-category-pane"
-            class="min-h-0 flex-1 border-b border-[var(--talos-border)] bg-[var(--talos-sidebar)]/80 p-3 md:block md:w-56 md:flex-none md:border-b-0 md:border-r"
+            class="min-h-0 flex-1 md:block md:w-56 md:flex-none md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
             :class="mobilePane === 'detail' ? 'hidden' : 'block'"
             aria-label="Settings categories"
         >
@@ -79,7 +82,7 @@ const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border 
 
         <section
             data-testid="settings-detail-pane"
-            class="min-w-0 flex-1 overflow-y-auto p-4 md:block"
+            class="min-w-0 flex-1 overflow-y-auto md:block md:p-4"
             :class="mobilePane === 'categories' ? 'hidden' : 'block'"
             :aria-label="`${selectedTab.label} settings`"
         >

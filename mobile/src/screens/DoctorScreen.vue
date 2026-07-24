@@ -43,7 +43,15 @@ async function scan(): Promise<void> {
         ok: persistence === 'ready',
     })
 
-    const dictation = await talosWithTimeout(talosDictationDiagnostics(), 6000, 'TALOS_DOCTOR_SPEECH').catch(() => null)
+    const dictation = await talosWithTimeout(talosDictationDiagnostics(), 12000, 'TALOS_DOCTOR_SPEECH').catch(() => null)
+    // Owner deep-debug: the build stamp is its OWN row — the single fact that
+    // tells us which APK is running (a stale build was the whole "bug in R2").
+    collected.push({
+        id: 'build',
+        label: 'Build',
+        value: dictation?.buildId ?? 'unknown',
+        ok: true,
+    })
     collected.push({
         id: 'speech',
         label: 'Speech recognizer',

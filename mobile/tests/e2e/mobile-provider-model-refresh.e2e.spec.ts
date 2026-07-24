@@ -62,6 +62,7 @@ test('saving a key refreshes models immediately and preserves context across two
     })
 
     await openModelSettings(page)
+    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-sentinel-gemini-key')
     await page.getByLabel('Save Google Gemini key').click()
 
@@ -102,6 +103,7 @@ test('failed discovery keeps chat reachable and does not reopen Settings', async
     })
 
     await openModelSettings(page)
+    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-rejected-key')
     await page.getByLabel('Save Google Gemini key').click()
     await expect(page.locator('[data-settings-panel="models"]').getByRole('alert'))

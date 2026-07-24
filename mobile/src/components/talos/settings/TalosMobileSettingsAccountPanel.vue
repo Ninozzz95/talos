@@ -30,7 +30,8 @@ const dictationDiag = ref<TalosDictationDiagnostics | null>(null)
 onMounted(async () => {
     biometricAvailable.value = await biometricUnlockAvailable().catch(() => false)
     dictationDiag.value = await talosDictationDiagnostics().catch((error) => ({
-        native: false, pluginLoaded: false, available: null, error: String(error),
+        buildId: 'unknown', native: false, registered: false, pluginLoaded: false,
+        methods: [], permissionsRaw: null, availableRaw: null, available: null, error: String(error),
     }))
 })
 

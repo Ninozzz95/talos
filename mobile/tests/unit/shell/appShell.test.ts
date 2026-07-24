@@ -147,40 +147,49 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         expect(router.currentRoute.value.name).toBe('chat')
     })
 
-    it('creates a durable session from the global New Chat rail command', async () => {
+    // Owner 2026-07-24: New Chat now lives inside the header 3-dot options menu
+    // (shared with the immersive chrome), not as a standalone button.
+    async function newChatFromOptions(wrapper: ReturnType<typeof mount>): Promise<void> {
+        await wrapper.get('[aria-label="Chat options"]').trigger('click')
+        await flushPromises()
+        const item = [...document.body.querySelectorAll('[role="menuitem"]')]
+            .find((el) => el.textContent?.trim() === 'New chat') as HTMLElement
+        item.click()
+        await flushPromises()
+    }
+
+    it('creates a durable session from the header 3-dot New chat', async () => {
         const router = makeRouter()
         router.push('/research')
         await router.isReady()
-        const wrapper = mount(App, { global: { plugins: [router] } })
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
         await flushPromises()
 
-        await wrapper.get('[aria-label="New Chat"]').trigger('click')
-        await flushPromises()
+        await newChatFromOptions(wrapper)
 
         expect((mockState.controller as ReturnType<typeof makeController>).newSession).toHaveBeenCalledTimes(1)
         await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('chat'))
+        wrapper.unmount()
     })
 
-    // R2-SF-M2: the shell lost its busy guard when actions moved to the
-    // lifecycle facade — a rapid double-tap created TWO empty sessions.
-    it('a rapid double-tap on New Chat creates only ONE session (busy guard)', async () => {
+    // R2-SF-M2: the shell busy guard refuses a second session action while the
+    // first is still in flight (a rapid re-tap once created TWO empty sessions).
+    it('the shell busy guard refuses a second New chat while the first is in flight', async () => {
         const controller = makeController()
         let release: () => void = () => {}
         controller.newSession = vi.fn(() => new Promise<void>((resolve) => { release = resolve }))
         mockState.controller = controller
-        const wrapper = mount(App, { global: { plugins: [makeRouter()] } })
+        const wrapper = mount(App, { global: { plugins: [makeRouter()] }, attachTo: document.body })
         await flushPromises()
 
-        const button = wrapper.get('[aria-label="New Chat"]')
-        await button.trigger('click')
-        await button.trigger('click')
-        await flushPromises()
+        await newChatFromOptions(wrapper)   // starts the (deferred) action → busy
+        await newChatFromOptions(wrapper)   // guard must refuse this one
         expect(controller.newSession).toHaveBeenCalledTimes(1)
-        // The button reflects the busy state while the action is in flight.
-        expect(wrapper.get('[aria-label="New Chat"]').attributes('disabled')).toBeDefined()
 
         release()
         await flushPromises()
-        expect(wrapper.get('[aria-label="New Chat"]').attributes('disabled')).toBeUndefined()
+        await newChatFromOptions(wrapper)   // busy released → allowed again
+        expect(controller.newSession).toHaveBeenCalledTimes(2)
+        wrapper.unmount()
     })
 })

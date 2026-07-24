@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { Menu, MessageSquarePlus } from '@lucide/vue'
+import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
 
 // F1-T3 (D5): app-level header — hamburger opens the full-width sidebar,
-// centered session title, New Chat on the right. Replaces the top icon rail
-// and the chat-local header in one calm bar.
-const props = defineProps<{
+// centered session title. RIGHT = the 3-dot chat options (owner 2026-07-24:
+// "i 3 puntini anche nell'header versione non immersive") — the SAME menu the
+// immersive chrome uses, so both shells behave identically.
+defineProps<{
     title: string
     creatingSession: boolean
     /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
@@ -15,6 +17,9 @@ const props = defineProps<{
 const emit = defineEmits<{
     openMenu: []
     newChat: []
+    rename: [title: string]
+    delete: []
+    export: []
 }>()
 </script>
 
@@ -25,7 +30,7 @@ const emit = defineEmits<{
         class="relative z-10 flex h-[calc(3.75rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)] backdrop-blur"
     >
         <Button
-            v-if="!props.hideMenu"
+            v-if="!hideMenu"
             type="button"
             size="icon-lg"
             class="min-h-11 min-w-11"
@@ -42,23 +47,22 @@ const emit = defineEmits<{
                 data-testid="talos-mobile-header-title"
                 class="truncate text-base font-semibold leading-tight text-[var(--talos-text)]"
             >
-                {{ props.title.trim() || 'New chat' }}
+                {{ title.trim() || 'New chat' }}
             </p>
         </div>
 
-        <!-- SF6-F3: on tablet the panel owns New Chat too — no duplicates. -->
-        <Button
-            v-if="!props.hideMenu"
-            type="button"
-            size="icon-lg"
-            class="min-h-11 min-w-11"
-            variant="ghost"
-            aria-label="New Chat"
-            :disabled="props.creatingSession"
-            @click="emit('newChat')"
-        >
-            <MessageSquarePlus aria-hidden="true" />
-        </Button>
+        <!-- 3-dot chat options (shared with the immersive chrome). New chat
+             lives inside it, so the tablet-panel case just hides the whole
+             menu (the panel owns those actions). -->
+        <TalosMobileChatOptionsMenu
+            v-if="!hideMenu"
+            :active-title="title"
+            :busy="creatingSession"
+            @new-chat="emit('newChat')"
+            @rename="emit('rename', $event)"
+            @delete="emit('delete')"
+            @export="emit('export')"
+        />
         <span v-else class="min-w-11" aria-hidden="true" />
     </header>
 </template>

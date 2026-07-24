@@ -426,6 +426,9 @@ onBeforeUnmount(async () => {
                         :hide-menu="tabletLayout.isTablet.value"
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
+                        @rename="immersiveRename"
+                        @delete="immersiveDelete"
+                        @export="exportSheetOpen = true"
                     />
                     <TalosMobileImmersiveChrome
                         v-else
