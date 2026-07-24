@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { RotateCcw } from '@lucide/vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
@@ -108,13 +108,32 @@ const sectionTabClass = 'min-h-11 shrink-0 rounded-md border border-transparent 
 const selectLabelClass = 'text-xs font-semibold uppercase text-[var(--talos-muted)]'
 const switchRowClass = 'flex min-h-14 cursor-pointer items-start justify-between gap-3 border-t border-[var(--talos-border)] py-3'
 const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
+
+// Owner 2026-07-24: swipe left/right switches section (like ChatGPT tabs). The
+// tabs are now controlled; a horizontal-dominant swipe steps the active section.
+const SECTIONS = ['design', 'motion', 'voice', 'visibility'] as const
+const activeSection = ref<(typeof SECTIONS)[number]>('design')
+let swipeX: number | null = null
+let swipeY: number | null = null
+function onSwipeStart(event: PointerEvent): void { swipeX = event.clientX; swipeY = event.clientY }
+function onSwipeEnd(event: PointerEvent): void {
+    if (swipeX === null || swipeY === null) return
+    const dx = event.clientX - swipeX
+    const dy = event.clientY - swipeY
+    swipeX = null; swipeY = null
+    // Only a clearly horizontal swipe changes tabs — vertical scrolling is safe.
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+    const index = SECTIONS.indexOf(activeSection.value)
+    const target = dx < 0 ? Math.min(SECTIONS.length - 1, index + 1) : Math.max(0, index - 1)
+    activeSection.value = SECTIONS[target]!
+}
 </script>
 
 <template>
-    <TabsRoot default-value="design" activation-mode="automatic" orientation="horizontal">
+    <TabsRoot v-model="activeSection" activation-mode="automatic" orientation="horizontal" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd">
         <!-- Owner 2026-07-24: the section tabs stay PINNED (sticky) while the
-             panel scrolls, like a nav tab bar. (Swipe-to-switch is a follow-up.) -->
-        <TabsList aria-label="Appearance sections" class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))] pb-2 pt-1">
+             panel scrolls; a horizontal SWIPE changes section (ChatGPT-style). -->
+        <TabsList aria-label="Appearance sections" class="sticky -top-4 z-10 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))] px-4 pb-2 pt-4">
             <TabsTrigger value="design" :class="sectionTabClass">Design</TabsTrigger>
             <TabsTrigger value="motion" :class="sectionTabClass">Motion</TabsTrigger>
             <TabsTrigger value="voice" :class="sectionTabClass">Voice</TabsTrigger>

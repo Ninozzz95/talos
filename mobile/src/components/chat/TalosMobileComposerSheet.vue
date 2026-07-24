@@ -19,6 +19,7 @@ defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const entered = ref(false)
+const closing = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 // SF-7 / SF5-4: shared real modality — inert app root (ref-counted), Tab
@@ -28,15 +29,15 @@ const { trapTab } = useTalosModalSurface(root)
 // Owner 2026-07-24: (1) close ANIMATES out — reuse the enter transform, then
 // emit close so the parent unmounts; (2) the system Back gesture closes THIS
 // drawer instead of exiting the app (overlay-back registry). Reduced-motion
-// zeroes the delay honestly.
-let closing = false
+// zeroes the delay honestly. `closing` drives a FULL slide-out (not the tiny
+// 24px enter offset, which looked like it stalled then vanished).
 function requestClose(): void {
-    if (closing) return
-    closing = true
+    if (closing.value) return
+    closing.value = true
     entered.value = false
     const reduce = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
         && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.setTimeout(() => emit('close'), reduce ? 0 : 250)
+    window.setTimeout(() => emit('close'), reduce ? 0 : 300)
 }
 useTalosOverlayBack(requestClose)
 
@@ -50,7 +51,7 @@ onMounted(() => {
     <div class="pointer-events-auto fixed inset-0 z-[75] flex flex-col justify-end">
         <div
             class="absolute inset-0 bg-black/30 backdrop-blur-[2px] transition-opacity duration-250"
-            :class="entered ? 'opacity-100' : 'opacity-0'"
+            :class="entered && !closing ? 'opacity-100' : 'opacity-0'"
             aria-hidden="true"
             @click="requestClose"
         />
@@ -61,8 +62,8 @@ onMounted(() => {
             :aria-label="title"
             tabindex="-1"
             :data-testid="testid"
-            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-250 ease-out md:mx-auto md:w-[clamp(480px,50vw,600px)] md:border-x"
-            :class="entered ? 'translate-y-0' : 'translate-y-6'"
+            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none transition-transform duration-300 ease-in-out md:mx-auto md:w-[clamp(480px,50vw,600px)] md:border-x"
+            :class="closing ? 'translate-y-full' : (entered ? 'translate-y-0' : 'translate-y-6')"
             @keydown.escape="requestClose"
             @keydown="trapTab"
         >

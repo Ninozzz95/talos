@@ -83,6 +83,27 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(stores.theme.setMode).toHaveBeenCalledWith('dark')
     })
 
+    it('changes section on a horizontal swipe (owner: left → next, right → prev; vertical is ignored)', async () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        const activeText = (): string | undefined =>
+            wrapper.findAll('[role="tab"]').find((t) => t.attributes('data-state') === 'active')?.text()
+        const swipe = async (fromX: number, toX: number, toY = 104): Promise<void> => {
+            wrapper.element.dispatchEvent(new MouseEvent('pointerdown', { clientX: fromX, clientY: 100, bubbles: true }))
+            wrapper.element.dispatchEvent(new MouseEvent('pointerup', { clientX: toX, clientY: toY, bubbles: true }))
+            await nextTick()
+        }
+        expect(activeText()).toContain('Design')
+        await swipe(240, 110) // left → next
+        expect(activeText()).toContain('Motion')
+        await swipe(110, 240) // right → prev
+        expect(activeText()).toContain('Design')
+        await swipe(110, 130, 420) // vertical-dominant → no change
+        expect(activeText()).toContain('Design')
+    })
+
     it('persists bubble scale, composer mode, sheet presentation, and visibility', async () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
