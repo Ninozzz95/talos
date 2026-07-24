@@ -161,10 +161,14 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                      mobile — drop the duplicate eyebrow/title there, keep the
                      one-line description; the md side-by-side keeps the full
                      header (its sheet title stays "Settings Center"). -->
-                <header class="mb-4 border-b border-[var(--talos-border)] pb-3">
+                <!-- Owner 2026-07-24: on the phone the sheet header already titles
+                     the subsection, so the divider/eyebrow/title are md-only and
+                     the one-line description hides when empty (Appearance dropped
+                     its subtitle) — no stray bordered box above the content. -->
+                <header class="md:mb-4 md:border-b md:border-[var(--talos-border)] md:pb-3">
                     <div class="hidden text-[10px] font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
                     <h3 class="talos-serif hidden text-base font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
-                    <p class="text-xs leading-5 text-[var(--talos-muted)] md:mt-1">{{ tab.description }}</p>
+                    <p v-if="tab.description" class="mb-3 text-xs leading-5 text-[var(--talos-muted)] md:mb-0 md:mt-1">{{ tab.description }}</p>
                 </header>
 
                 <TalosMobileSettingsBrowserPanel

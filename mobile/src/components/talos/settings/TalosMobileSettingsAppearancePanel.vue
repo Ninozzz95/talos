@@ -133,7 +133,7 @@ function onSwipeEnd(event: PointerEvent): void {
     <TabsRoot v-model="activeSection" activation-mode="automatic" orientation="horizontal" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd">
         <!-- Owner 2026-07-24: the section tabs stay PINNED (sticky) while the
              panel scrolls; a horizontal SWIPE changes section (ChatGPT-style). -->
-        <TabsList aria-label="Appearance sections" class="sticky -top-4 z-10 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))] px-4 pb-2 pt-4">
+        <TabsList aria-label="Appearance sections" class="sticky top-0 z-10 -mx-4 flex gap-1 overflow-x-auto border-b border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-background))] px-4 pb-2 pt-3">
             <TabsTrigger value="design" :class="sectionTabClass">Design</TabsTrigger>
             <TabsTrigger value="motion" :class="sectionTabClass">Motion</TabsTrigger>
             <TabsTrigger value="voice" :class="sectionTabClass">Voice</TabsTrigger>
