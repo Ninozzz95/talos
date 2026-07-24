@@ -61,7 +61,10 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
                 provider: 'anthropic' as const,
                 displayName: model.display_name,
                 chatCompatibility: 'supported' as const,
-                inputModalities: ['text'],
+                // N1.5: every current Claude model is vision-capable (the /v1/models
+                // list carries no modality field, so declare it). Without image
+                // here the vision gate wrongly blocks attaching images to Claude.
+                inputModalities: ['text', 'image'],
                 outputModalities: ['text'],
                 supportedParameters: ['thinking'],
                 createdAt: model.created_at ?? null,

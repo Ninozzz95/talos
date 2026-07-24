@@ -46,8 +46,10 @@ describe('Gemini mobile adapter', () => {
         const catalog = await geminiAdapter.listModels({ apiKey: 'sentinel-secret' }, transport)
 
         expect(catalog.models).toEqual(expect.arrayContaining([
-            expect.objectContaining({ id: 'gemini-chat', displayName: 'Gemini Chat', chatCompatibility: 'supported', contextLength: 1000 }),
-            expect.objectContaining({ id: 'gemini-embed', chatCompatibility: 'unsupported' }),
+            // N1.5: generateContent Gemini models are multimodal → declare image;
+            // an embed-only model stays text (and is chat-unsupported anyway).
+            expect.objectContaining({ id: 'gemini-chat', displayName: 'Gemini Chat', chatCompatibility: 'supported', contextLength: 1000, inputModalities: expect.arrayContaining(['image']) }),
+            expect.objectContaining({ id: 'gemini-embed', chatCompatibility: 'unsupported', inputModalities: ['text'] }),
         ]))
         expect(new URL(request.mock.calls[1][0].url).searchParams.get('pageToken')).toBe('next page')
         expect(request.mock.calls[0][0].headers['x-goog-api-key']).toBe('sentinel-secret')
