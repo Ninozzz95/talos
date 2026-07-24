@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- GENERATED (theme icon backgrounds) by gen_theme_icons.py — do not edit by hand. -->
+<resources>
+    <color name="ic_talos_bg_forge">#080b11</color>
+    <color name="ic_talos_bg_paper">#f8fafc</color>
+    <color name="ic_talos_bg_terminal">#020403</color>
+    <color name="ic_talos_bg_aurora">#071113</color>
+    <color name="ic_talos_bg_glacier">#f4f9fb</color>
+    <color name="ic_talos_bg_ember">#10090a</color>
+    <color name="ic_talos_bg_atlas">#07101f</color>
+    <color name="ic_talos_bg_noir">#050505</color>
+    <color name="ic_talos_bg_signal">#091011</color>
+    <color name="ic_talos_bg_violet">#0d0a19</color>
+    <color name="ic_talos_bg_claudius">#faf9f5</color>
+    <color name="ic_talos_bg_basicus">#fafafa</color>
+    <color name="ic_talos_bg_telemetry">#0b0f11</color>
+    <color name="ic_talos_bg_calm">#1e1f22</color>
+</resources>

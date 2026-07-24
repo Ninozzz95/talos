@@ -79,6 +79,10 @@ export interface TalosMobileShellPreferences {
     /** Owner 2026-07-24: the "+" opens an anchored DROPDOWN (ChatGPT-style)
      *  instead of the bottom drawer. Same actions, different surface. */
     plus_dropdown: boolean
+    /** Owner 2026-07-24: the Android launcher icon follows the active theme
+     *  preset. Opt-in — a restart is required to apply, so switching prompts
+     *  the user (restart now / on next close). */
+    launcher_icon_follows_theme: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
 }
@@ -90,6 +94,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     composer_drawer: true,
     immersive_composer: false,
     plus_dropdown: false,
+    launcher_icon_follows_theme: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -108,6 +113,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         plus_dropdown: typeof record.plus_dropdown === 'boolean'
             ? record.plus_dropdown
             : DEFAULT_SHELL_PREFERENCES.plus_dropdown,
+        launcher_icon_follows_theme: typeof record.launcher_icon_follows_theme === 'boolean'
+            ? record.launcher_icon_follows_theme
+            : DEFAULT_SHELL_PREFERENCES.launcher_icon_follows_theme,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }

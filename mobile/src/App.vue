@@ -34,6 +34,8 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
+import { useLauncherIconController } from '@/services/launcherIcon'
+import TalosLauncherIconDialog from '@/components/talos/settings/TalosLauncherIconDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -43,6 +45,7 @@ const settingsStore = useSettingsStore()
 const accountStore = useTalosAccountStore()
 const chatController = useChatController()
 const toastsStore = useTalosMobileToasts()
+const launcherIcon = useLauncherIconController()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
 
@@ -143,6 +146,13 @@ const sidebarOpen = ref(false)
 watch(sidebarOpen, (open) => {
     if (open) sidebarEverOpened.value = true
 })
+// Owner 2026-07-24: when "launcher icon follows theme" is on, switching preset
+// (or enabling the toggle while off-icon) prompts to restart-and-reskin the
+// Android home-screen icon (opt-in, native).
+watch(
+    () => [themeStore.state.theme, settingsStore.state.shell.launcher_icon_follows_theme] as const,
+    ([theme, enabled]) => { launcherIcon.evaluate(theme, enabled) },
+)
 const chatScreen = ref<InstanceType<typeof ChatScreen> | null>(null)
 const headerTitle = computed(() => chatController.chat.activeSession.value?.title ?? '')
 const sessionBusy = computed(() =>
@@ -297,6 +307,8 @@ onMounted(async () => {
     } catch {
         settingsHydrated.value = false
     }
+    // Reconcile which launcher-icon alias is currently applied (native + mirror).
+    void launcherIcon.hydrate().catch(() => undefined)
     if (settingsStore.state.security.app_lock_enabled) {
         // Arm only when a REAL PIN record exists — a dangling flag without a
         // Keystore record must never brick the app (fail-open on the flag,
@@ -497,6 +509,8 @@ onBeforeUnmount(async () => {
             </div>
 
             <TalosMobileToastRegion />
+
+            <TalosLauncherIconDialog />
 
             <Transition
                 leave-active-class="transition duration-200 ease-in"
