@@ -253,38 +253,52 @@ async function onSend(): Promise<void> {
 // actions so attachment revocation + draft scoping stay in one place.
 defineExpose({ newSession, selectSession, renameSession, deleteSession, sessionActionBusy })
 
-function newSession(): void {
-    void sessionActions.run('New chat', async () => {
+// R2-7 — the SINGLE orchestration truth, registered on the controller so
+// every surface (Chats page, tablet panel, sidebar) flows through it.
+// Errors PROPAGATE: each caller keeps its own error UX (dialog vs toast).
+const orchestrator = {
+    async newSession(): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
         await attachments.discardAll()
         await controller.newSession()
         await draft.activateScope(activeSessionId.value ?? 'new')
-    })
-}
-
-function selectSession(sessionId: string): void {
-    void sessionActions.run('Open chat', async () => {
+    },
+    async selectSession(sessionId: string): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
         if (sessionId !== activeSessionId.value) await attachments.discardAll()
         await controller.selectSession(sessionId)
         await draft.activateScope(activeSessionId.value ?? 'new')
-    })
-}
-
-function renameSession(sessionId: string, title: string): void {
-    void sessionActions.run('Rename chat', () => controller.renameSession(sessionId, title))
-}
-
-function deleteSession(sessionId: string): void {
-    void sessionActions.run('Delete chat', async () => {
+    },
+    async renameSession(sessionId: string, title: string): Promise<void> {
+        await controller.renameSession(sessionId, title)
+    },
+    async deleteSession(sessionId: string): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
         if (sessionId === activeSessionId.value) await attachments.discardAll()
         await controller.deleteSession(sessionId)
         await draft.activateScope(activeSessionId.value ?? 'new')
-    })
+    },
+}
+controller.sessionLifecycle.register(orchestrator)
+onBeforeUnmount(() => controller.sessionLifecycle.unregister(orchestrator))
+
+function newSession(): void {
+    void sessionActions.run('New chat', () => orchestrator.newSession())
+}
+
+function selectSession(sessionId: string): void {
+    void sessionActions.run('Open chat', () => orchestrator.selectSession(sessionId))
+}
+
+function renameSession(sessionId: string, title: string): void {
+    void sessionActions.run('Rename chat', () => orchestrator.renameSession(sessionId, title))
+}
+
+function deleteSession(sessionId: string): void {
+    void sessionActions.run('Delete chat', () => orchestrator.deleteSession(sessionId))
 }
 
 function retryPersistence(): void {

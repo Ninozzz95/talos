@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
@@ -131,6 +131,15 @@ function makeController(messages: FakeMessage[] = []) {
         setBrowseMode,
         init: vi.fn().mockResolvedValue(undefined),
         newSession: vi.fn().mockResolvedValue(undefined),
+        // R2-7: ChatScreen registers its orchestrator on mount.
+        sessionLifecycle: {
+            register: vi.fn(),
+            unregister: vi.fn(),
+            newSession: vi.fn().mockResolvedValue(undefined),
+            selectSession: vi.fn().mockResolvedValue(undefined),
+            renameSession: vi.fn().mockResolvedValue(undefined),
+            deleteSession: vi.fn().mockResolvedValue(undefined),
+        },
         selectSession: vi.fn().mockResolvedValue(undefined),
         renameSession: vi.fn().mockResolvedValue(undefined),
         deleteSession: vi.fn().mockResolvedValue(undefined),
@@ -421,9 +430,11 @@ describe('ChatScreen (functional, local-first)', () => {
         exposed.newSession()
         await vi.waitFor(() => expect(controller.newSession).toHaveBeenCalledTimes(1))
         expect(controller.attachments.discardAll).toHaveBeenCalledTimes(1)
+        await flushPromises() // R2-7: release the runner busy-guard fully
 
         exposed.renameSession('chat-1', 'Renamed notes')
         await vi.waitFor(() => expect(controller.renameSession).toHaveBeenCalledWith('chat-1', 'Renamed notes'))
+        await flushPromises()
 
         exposed.deleteSession('chat-1')
         await vi.waitFor(() => expect(controller.deleteSession).toHaveBeenCalledWith('chat-1'))

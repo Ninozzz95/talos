@@ -96,7 +96,10 @@ export interface TalosStreamRequest {
     firstByteMs?: number
 }
 
-const DEFAULT_STREAM_STALL_MS = 45_000
+// Web-research correction (ledger R1-R3 §ricerca 1): 60s matches the
+// established inter-chunk budget (Copilot hardcodes 60s and still sees
+// congestion complaints — 45s was tighter than the industry floor).
+const DEFAULT_STREAM_STALL_MS = 60_000
 const DEFAULT_STREAM_FIRST_BYTE_MS = 180_000
 
 /**

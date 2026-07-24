@@ -42,17 +42,39 @@ const archived = computed(() => {
 const showArchived = ref(false)
 
 async function openSession(id: string): Promise<void> {
+    if (actionBusy.value) return
     void talosLightImpact()
-    await controller.selectSession(id)
-    if (props.embedded) emit('activated')
-    else void router.push({ name: 'chat' })
+    actionBusy.value = true
+    try {
+        // R2-7: through the lifecycle facade — draft flush + attachment
+        // revocation happen exactly like a switch from the chat itself.
+        // R2-SF-M3: the facade PROPAGATES — surface a failure, never a
+        // silent no-op tap.
+        await controller.sessionLifecycle.selectSession(id)
+        actionError.value = null
+        if (props.embedded) emit('activated')
+        else void router.push({ name: 'chat' })
+    } catch (error) {
+        actionError.value = `The chat could not be opened: ${actionErrorText(error)}`
+    } finally {
+        actionBusy.value = false
+    }
 }
 
 async function newChat(): Promise<void> {
+    if (actionBusy.value) return
     void talosLightImpact()
-    await controller.newSession()
-    if (props.embedded) emit('activated')
-    else void router.push({ name: 'chat' })
+    actionBusy.value = true
+    try {
+        await controller.sessionLifecycle.newSession()
+        actionError.value = null
+        if (props.embedded) emit('activated')
+        else void router.push({ name: 'chat' })
+    } catch (error) {
+        actionError.value = `The chat could not be started: ${actionErrorText(error)}`
+    } finally {
+        actionBusy.value = false
+    }
 }
 
 const renameTarget = ref<{ id: string; title: string } | null>(null)
@@ -84,7 +106,7 @@ async function submitRename(): Promise<void> {
     if (!target || !title || actionBusy.value) return
     actionBusy.value = true
     try {
-        await controller.renameSession(target.id, title)
+        await controller.sessionLifecycle.renameSession(target.id, title)
         renameTarget.value = null
         actionError.value = null
     } catch (error) {
@@ -104,7 +126,7 @@ async function confirmDelete(): Promise<void> {
     if (!target || actionBusy.value) return
     actionBusy.value = true
     try {
-        await controller.deleteSession(target.id)
+        await controller.sessionLifecycle.deleteSession(target.id)
         deleteTarget.value = null
         actionError.value = null
     } catch (error) {

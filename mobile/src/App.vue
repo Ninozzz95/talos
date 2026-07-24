@@ -25,6 +25,7 @@ import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { talosLightImpact } from '@/services/haptics'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 
@@ -34,12 +35,14 @@ const preferences = usePreferencesStore()
 const themeStore = useThemeStore()
 const settingsStore = useSettingsStore()
 const chatController = useChatController()
+const toastsStore = useTalosMobileToasts()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
 
 // Animated brand intro over the static native splash; dismisses to the chat.
 const showBoot = ref(true)
-const creatingSession = ref(false)
+// R2-SF-M2 — shell-level session-action guard (re-entrancy + busy indicator).
+const shellActionBusy = ref(false)
 
 // F2-T6 intro modal — versioned gating (opens after settings hydration, never
 // over the boot logo); the chunk loads ONLY when gating opens it.
@@ -120,37 +123,54 @@ watch(sidebarOpen, (open) => {
 })
 const chatScreen = ref<InstanceType<typeof ChatScreen> | null>(null)
 const headerTitle = computed(() => chatController.chat.activeSession.value?.title ?? '')
-const sessionBusy = computed(() => Boolean((chatScreen.value as { sessionActionBusy?: boolean } | null)?.sessionActionBusy) || creatingSession.value)
+const sessionBusy = computed(() =>
+    Boolean((chatScreen.value as { sessionActionBusy?: boolean } | null)?.sessionActionBusy)
+    || shellActionBusy.value)
 
 function sidebarNavigate(name: TalosMobileRouteName): void {
     sidebarOpen.value = false
     void navigate(name)
 }
 
+// R2-7 — the shell drives session actions through the controller's lifecycle
+// facade (single orchestration point, no duck-typed casts into ChatScreen).
+// Failures surface as toasts — the shell has no dialog to keep them in.
+// R2-SF-M2 — the shell lost its busy guard when actions moved to the
+// lifecycle facade: rapid double-tap created two empty sessions and the
+// buttons showed no spinner. shellActionBusy restores both (re-entrancy
+// refusal + the `:creating-session`/`:busy` indicator that feeds it).
+function lifecycleAction(label: string, action: () => Promise<void>): void {
+    if (shellActionBusy.value) return
+    shellActionBusy.value = true
+    void action()
+        .catch((error: unknown) => {
+            const detail = error instanceof Error && error.message ? error.message : String(error)
+            toastsStore.push({ message: `${label} failed: ${detail}`, durationMs: 6000 })
+        })
+        .finally(() => { shellActionBusy.value = false })
+}
+
 function sidebarNewChat(): void {
     sidebarOpen.value = false
-    const screen = chatScreen.value as { newSession?: () => void } | null
-    if (screen?.newSession) {
-        screen.newSession()
+    lifecycleAction('New chat', async () => {
+        await chatController.sessionLifecycle.newSession()
         // New Chat always LANDS in the chat — never leaves you on a station.
-        if (isStation.value) void navigate('chat')
-    } else {
-        void onNewChat()
-    }
+        if (isStation.value) await navigate('chat')
+    })
 }
 
 function sidebarSelect(sessionId: string): void {
     sidebarOpen.value = false
     void talosLightImpact()
-    ;(chatScreen.value as { selectSession?: (id: string) => void } | null)?.selectSession?.(sessionId)
+    lifecycleAction('Open chat', () => chatController.sessionLifecycle.selectSession(sessionId))
 }
 
 function sidebarRename(sessionId: string, title: string): void {
-    ;(chatScreen.value as { renameSession?: (id: string, t: string) => void } | null)?.renameSession?.(sessionId, title)
+    lifecycleAction('Rename chat', () => chatController.sessionLifecycle.renameSession(sessionId, title))
 }
 
 function sidebarDelete(sessionId: string): void {
-    ;(chatScreen.value as { deleteSession?: (id: string) => void } | null)?.deleteSession?.(sessionId)
+    lifecycleAction('Delete chat', () => chatController.sessionLifecycle.deleteSession(sessionId))
 }
 
 const exportSheetOpen = ref(false)
@@ -239,17 +259,6 @@ function pathFor(name: TalosMobileRouteName): string {
 async function navigate(name: TalosMobileRouteName): Promise<void> {
     await router.push(pathFor(name))
     await preferences.setLastRoute(name)
-}
-
-async function onNewChat(): Promise<void> {
-    if (creatingSession.value || chatController.chat.state.persistenceStatus !== 'ready') return
-    creatingSession.value = true
-    try {
-        await chatController.newSession()
-        await navigate('chat')
-    } finally {
-        creatingSession.value = false
-    }
 }
 
 onMounted(async () => {

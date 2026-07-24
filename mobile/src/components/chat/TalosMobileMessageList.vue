@@ -42,6 +42,55 @@ const copyStatus = ref('')
 // R1-5 — the in-flight reply lives in TalosMobileStreamingReply, which alone
 // subscribes to streamingText: a token burst no longer re-diffs this list.
 
+// R2-11 — ONE row-action grammar (competitor pattern: long-press a message
+// for its actions, the same gesture as the chat rows). The hold clicks the
+// SAME overflow trigger — no second menu implementation. Trade-off accepted
+// per competitor behavior: in-message long-press text selection gives way to
+// the actions menu (Copy lives there; code blocks keep their own Copy).
+const MESSAGE_HOLD_MS = 500
+const MESSAGE_HOLD_SLOP_PX = 10
+let messageHoldTimer: ReturnType<typeof setTimeout> | null = null
+let messageHoldOrigin: { x: number; y: number } | null = null
+let suppressNextMessageClick = false
+
+function clearMessageHold(): void {
+    if (messageHoldTimer !== null) clearTimeout(messageHoldTimer)
+    messageHoldTimer = null
+    messageHoldOrigin = null
+}
+
+function onMessagePointerDown(event: PointerEvent): void {
+    clearMessageHold()
+    messageHoldOrigin = { x: event.clientX, y: event.clientY }
+    const article = event.currentTarget as HTMLElement
+    messageHoldTimer = setTimeout(() => {
+        // Order matters: open the menu FIRST (reka opens on click, proven by
+        // TalosMobileMessageActions.test.ts), THEN arm suppression. If we set
+        // the flag first, our own programmatic click bubbles through the
+        // article's @click.capture guard and gets preventDefault()'d before
+        // it reaches reka (root cause of the R2-11 dead menu). Suppression is
+        // only for the finger's trailing real click after the hold.
+        article.querySelector<HTMLButtonElement>('[aria-label="More message actions"]')?.click()
+        suppressNextMessageClick = true
+        clearMessageHold()
+    }, MESSAGE_HOLD_MS)
+}
+
+function onMessagePointerMove(event: PointerEvent): void {
+    if (!messageHoldOrigin) return
+    if (Math.abs(event.clientX - messageHoldOrigin.x) > MESSAGE_HOLD_SLOP_PX
+        || Math.abs(event.clientY - messageHoldOrigin.y) > MESSAGE_HOLD_SLOP_PX) clearMessageHold()
+}
+
+function onMessageClickCapture(event: MouseEvent): void {
+    // The click that ends the long-press is part of the gesture.
+    if (suppressNextMessageClick) {
+        suppressNextMessageClick = false
+        event.preventDefault()
+        event.stopPropagation()
+    }
+}
+
 // Meta timestamps age honestly: a shared `now` ticks every 30s so "just now"
 // does not persist forever on an idle thread.
 const now = ref(new Date())
@@ -119,6 +168,11 @@ function formatBytes(value: number): string {
             :data-grouped="isGrouped(index) ? 'true' : undefined"
             class="talos-chat-message flex min-w-0 max-w-full flex-col"
             :class="[message.role === 'user' ? 'items-end' : 'items-start', isGrouped(index) ? 'mt-1' : 'mt-3 first:mt-0']"
+            @pointerdown="message.role === 'user' && onMessagePointerDown($event)"
+            @pointermove="onMessagePointerMove($event)"
+            @pointerup="clearMessageHold()"
+            @pointercancel="clearMessageHold()"
+            @click.capture="onMessageClickCapture($event)"
         >
             <TalosMobileStatusMessage v-if="message.role === 'system'" :message="message" />
             <template v-else>
@@ -140,7 +194,6 @@ function formatBytes(value: number): string {
                 >
                     <TalosMobileMessageContent
                         :content="message.content"
-                        :sensitive="message.metadata.sensitive === true"
                     />
                     <!-- F4 Memory: disclosure of injected untrusted memories -->
                     <div

@@ -12,7 +12,7 @@ import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
  * but every failure is ring-logged for the Doctor.
  */
 export interface TalosResumeRelockOptions {
-    /** Minimum background stay before a relock (default 30s). */
+    /** Minimum background stay before a relock (default 5min, see below). */
     graceMs?: number
     /** The lock applies only when the flag AND a real PIN record exist. */
     isEnabled(): Promise<boolean> | boolean
@@ -25,7 +25,10 @@ export interface TalosResumeRelockController {
     dispose(): Promise<void>
 }
 
-const DEFAULT_GRACE_MS = 30_000
+// Web-research correction (ledger R1-R3 §ricerca 2): Android fraud-prevention
+// guidance suggests ~15min with 1/5/15 presets; 30s frictioned every app
+// switch. 5min default; user presets in Settings = backlog ticket.
+const DEFAULT_GRACE_MS = 5 * 60_000
 
 export function registerTalosResumeRelock(options: TalosResumeRelockOptions): TalosResumeRelockController {
     const graceMs = options.graceMs ?? DEFAULT_GRACE_MS
