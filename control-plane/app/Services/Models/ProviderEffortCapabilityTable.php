@@ -46,10 +46,14 @@ final class ProviderEffortCapabilityTable
             'gemini' => self::hasAny($model, ['2.5', '2-5'])
                 ? ['effort_levels' => ['low', 'medium', 'high', 'xhigh'], 'supports_thinking' => false]
                 : self::none(),
-            // DeepSeek reasoner variants only.
-            'deepseek' => self::hasAny($model, ['reasoner', 'reason', '-r1', 'r1'])
-                ? ['effort_levels' => ['medium', 'high'], 'supports_thinking' => false]
-                : self::none(),
+            // DeepSeek V4 defaults to thinking and exposes the documented high/max
+            // effort controls. Earlier reasoner variants keep their conservative
+            // fallback until the provider catalog advertises a stronger contract.
+            'deepseek' => self::hasAny($model, ['deepseek-v4'])
+                ? ['effort_levels' => ['high', 'max'], 'supports_thinking' => true]
+                : (self::hasAny($model, ['reasoner', 'reason', '-r1', 'r1'])
+                    ? ['effort_levels' => ['medium', 'high'], 'supports_thinking' => false]
+                    : self::none()),
             default => self::none(),
         };
     }

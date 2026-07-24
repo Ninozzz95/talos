@@ -27,6 +27,7 @@ final readonly class ProviderTurnRequest
         public array $resources = [],
         public ?string $reasoningEffort = null,
         public ?bool $reasoningVisible = null,
+        public ?string $responseMimeType = null,
     ) {
         ToolContractGuard::nonEmptyString($provider, 'Provider turn provider', 64);
         ToolContractGuard::nonEmptyString($model, 'Provider turn model', 256);
@@ -85,6 +86,9 @@ final readonly class ProviderTurnRequest
             // here we only fail closed on an empty or over-long token.
             ToolContractGuard::nonEmptyString($reasoningEffort, 'Provider turn reasoning effort', 16);
         }
+        if ($responseMimeType !== null && $responseMimeType !== 'application/json') {
+            throw new InvalidArgumentException('Provider turn response MIME type is unsupported.');
+        }
     }
 
     /** @return array<string, mixed> */
@@ -101,6 +105,7 @@ final readonly class ProviderTurnRequest
             'temperature' => $this->temperature,
             'reasoning_effort' => $this->reasoningEffort,
             'reasoning_visible' => $this->reasoningVisible,
+            'response_mime_type' => $this->responseMimeType,
         ]);
     }
 }

@@ -23,6 +23,7 @@ final class TalosToolRepairPolicy
 
     private const TRANSIENT_REPAIR_CODES = [
         'TALOS_BROWSER_STALE_STATE',
+        'TALOS_BROWSER_TARGET_BLOCKED',
         'TALOS_WEB_SEARCH_TRANSIENT_FAILURE',
         'TALOS_BROWSER_WORKER_TRANSIENT',
     ];

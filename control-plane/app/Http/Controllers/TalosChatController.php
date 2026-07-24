@@ -1418,7 +1418,9 @@ PROMPT;
             [
                 'reason' => 'procedural_browser_turn_failed',
                 'code' => $payload['code'],
-                'status' => $status,
+                'response_status' => $status,
+                'provider_http_status' => $outcome->providerFailure?->httpStatus,
+                'provider_retryable' => $outcome->providerFailure?->retryable,
                 'agent_turn_status' => $outcome->status,
                 'provider' => $run->provider,
                 'model' => $run->model,
@@ -1833,6 +1835,9 @@ PROMPT;
         $rawCode = is_string($payload['code'] ?? null) && trim((string) $payload['code']) !== ''
             ? (string) $payload['code']
             : (is_string($eventPayload['code'] ?? null) && trim((string) $eventPayload['code']) !== '' ? (string) $eventPayload['code'] : null);
+        $providerRetryable = is_bool($eventPayload['provider_retryable'] ?? null)
+            ? $eventPayload['provider_retryable']
+            : null;
 
         if ($reason === 'connection_exception') {
             return $this->typedChatError(
@@ -1963,6 +1968,19 @@ PROMPT;
         if ($providerFailure) {
             $label = $this->providerLabel($provider);
 
+            if ($rawCode !== null && str_starts_with($rawCode, 'PROVIDER_PROTOCOL_')) {
+                return $this->typedChatError(
+                    layer: 'provider',
+                    code: $rawCode,
+                    message: "{$label} returned a response TALOS could not validate against the tool-call protocol.",
+                    nextAction: "Run Test in Model Lab to verify the {$label} tool-call contract, then inspect the failed run trace if the protocol fault persists.",
+                    retryable: $providerRetryable ?? false,
+                    status: $status,
+                    provider: $provider,
+                    model: $model,
+                );
+            }
+
             if ($this->isAuthenticationFailure($payload, $eventPayload, $status)) {
                 return $this->typedChatError(
                     layer: 'provider',
@@ -1981,7 +1999,7 @@ PROMPT;
                 code: $rawCode ?: 'PROVIDER_CHAT_FAILED',
                 message: "{$label} could not complete the chat request.",
                 nextAction: "Open Model Lab, run Test for the {$label} profile, and retry after the provider is healthy.",
-                retryable: $status === null || $status >= 500 || $status === 429,
+                retryable: $providerRetryable ?? ($status === null || $status >= 500 || $status === 429),
                 status: $status,
                 provider: $provider,
                 model: $model,
@@ -2031,7 +2049,11 @@ PROMPT;
      */
     private function failureStatus(array $payload, array $eventPayload): ?int
     {
-        foreach ([$payload['status'] ?? null, $eventPayload['status'] ?? null] as $status) {
+        foreach ([
+            $eventPayload['provider_http_status'] ?? null,
+            $payload['status'] ?? null,
+            $eventPayload['status'] ?? null,
+        ] as $status) {
             if (is_int($status) && $status >= 100 && $status <= 599) {
                 return $status;
             }

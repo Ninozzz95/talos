@@ -20,7 +20,9 @@ use App\Services\Talos\Browser\BrowserSessionClient;
 use App\Services\Talos\Browser\BrowserToolResult;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
+use App\Services\Talos\Browser\TalosBrowserArtifactReader;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBrowserSnapshotEvidence;
 use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use App\Services\Talos\Web\TalosWebFetchService;
 use App\Services\Talos\Web\WebSearchProviderFactory;
@@ -219,6 +221,74 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
         $this->assertSame($user->id, $browser->user_id);
     }
 
+    public function test_browser_read_correlates_a_post_mutation_snapshot_as_usage_without_rewriting_generation_provenance(): void
+    {
+        // STAGE2B-BREG-019
+        [$user, $chat, $run, $turn, $browser] = $this->context();
+        $client = new FakeBrowserSessionClient;
+        $client->snapshotResponse = [
+            'snapshot_id' => 'snap_generation-source',
+            'format' => 'accessibility_refs_v1',
+            'text_digest' => 'Cookie preferences Accept all',
+            'nodes' => [['ref' => 'r1', 'role' => 'button', 'name' => 'Accept all', 'visible' => true]],
+            'url' => 'https://example.com',
+            'title' => 'Example page',
+        ];
+        $this->app->instance(BrowserSessionClient::class, $client);
+
+        $backend = $this->app->make(TalosLaravelToolExecutionBackend::class);
+        $snapshot = $backend->execute(
+            $this->node($turn, $chat, $run, $browser, 'browser_snapshot'),
+            $turn,
+            $browser,
+        );
+        $this->assertFalse($snapshot->isError, json_encode($snapshot->structuredContent));
+        $browser->refresh();
+
+        $click = $backend->execute(
+            $this->node($turn, $chat, $run, $browser, 'browser_click', ['target' => 'r1']),
+            $turn,
+            $browser,
+        );
+        $this->assertFalse($click->isError, json_encode($click->structuredContent));
+
+        $browser->refresh();
+        $postClickSnapshot = TalosBrowserArtifact::query()->findOrFail($browser->last_snapshot_artifact_id);
+        $this->assertSame('call_browser_click', $postClickSnapshot->source_command_id);
+        $this->assertSame(0, $postClickSnapshot->source_state_version);
+        $this->assertSame(1, $postClickSnapshot->state_version);
+
+        $read = $backend->execute(
+            $this->node($turn, $chat, $run, $browser, 'browser_read', ['ref' => 'r1']),
+            $turn,
+            $browser,
+        );
+
+        $this->assertFalse($read->isError, json_encode($read->structuredContent));
+        $this->assertSame((string) $postClickSnapshot->id, $read->evidence[0]['artifact_id']);
+        $this->assertSame('snapshot_read', $read->evidence[0]['kind']);
+        $this->assertSame('sha256:'.$postClickSnapshot->sha256, $read->evidence[0]['sha256']);
+
+        $postClickSnapshot->refresh();
+        $this->assertSame('call_browser_click', $postClickSnapshot->source_command_id);
+        $this->assertSame(0, $postClickSnapshot->source_state_version);
+        $this->assertSame(1, $postClickSnapshot->state_version);
+
+        $links = TalosRunArtifact::query()
+            ->where('run_id', $run->id)
+            ->where('uri', 'talos-browser-artifact://'.$postClickSnapshot->id)
+            ->get();
+        $this->assertCount(2, $links);
+        $this->assertSame(
+            ['call_browser_click', 'call_browser_read'],
+            $links->map(static fn (TalosRunArtifact $link): mixed => $link->metadata['provider_call_id'] ?? null)
+                ->sort()
+                ->values()
+                ->all(),
+        );
+        $this->assertSame($user->id, $browser->user_id);
+    }
+
     public function test_browser_click_rejects_a_ref_missing_from_owned_snapshot_before_worker_dispatch(): void
     {
         [$user, $chat, $run, $turn, $browser] = $this->context();
@@ -323,7 +393,12 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
             'text_digest' => 'Cookie banner dismissed',
             'nodes' => [['ref' => 'r1', 'role' => 'heading', 'name' => 'Cookie banner dismissed', 'visible' => true]],
         ];
-        $snapshotHash = 'sha256:'.hash('sha256', json_encode($postSnapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+        $snapshotHash = TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: $postSnapshot['snapshot_id'],
+            format: $postSnapshot['format'],
+            textDigest: $postSnapshot['text_digest'],
+            nodes: $postSnapshot['nodes'],
+        );
         $postSnapshot['sha256'] = $snapshotHash;
         $screenshotHash = 'sha256:'.hash('sha256', $screenshotBytes);
         $client->callToolResponse = BrowserToolResult::fromArray([
@@ -618,6 +693,17 @@ final class TalosLaravelToolExecutionBackendTest extends TestCase
                 $snapshotId = is_array($artifact->metadata) && is_string($artifact->metadata['snapshot_id'] ?? null)
                     ? $artifact->metadata['snapshot_id']
                     : null;
+                if (! is_string($snapshotId)) {
+                    $snapshot = json_decode(
+                        $this->app->make(TalosBrowserArtifactReader::class)->read($artifact),
+                        false,
+                        512,
+                        JSON_THROW_ON_ERROR,
+                    );
+                    $snapshotId = is_object($snapshot) && is_string($snapshot->snapshotId ?? null)
+                        ? $snapshot->snapshotId
+                        : null;
+                }
                 $this->assertIsString($snapshotId);
                 $callFields = [
                     ...$callFields,

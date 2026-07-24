@@ -15,6 +15,7 @@ use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserCommand;
 use App\Services\Talos\Browser\TalosBrowserCommandService;
 use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBrowserSnapshotEvidence;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -23,6 +24,25 @@ use Tests\TestCase;
 final class TalosBrowserCanonicalToolDispatchTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_breg_016_snapshot_evidence_contract_is_versioned_and_jcs_compatible(): void
+    {
+        $nodes = [
+            ['ref' => 'r1', 'role' => 'link', 'name' => 'Vehicle A', 'href' => 'https://example.com/a?b=1', 'level' => 2, 'visible' => true],
+            ['ref' => 'r2', 'role' => 'button', 'name' => 'Open', 'visible' => false],
+        ];
+
+        $this->assertSame('talos_browser_tool_snapshot_evidence_v1', TalosBrowserSnapshotEvidence::SCHEMA_VERSION);
+        $this->assertSame(
+            'sha256:4beed7f36e687158638ee32491a5e1f13e787095de0568a8b10ddfda41366f38',
+            TalosBrowserSnapshotEvidence::sha256(
+                snapshotId: 'snap_conformance-1',
+                format: 'accessibility_refs_v1',
+                textDigest: 'digest-123',
+                nodes: $nodes,
+            ),
+        );
+    }
 
     public function test_canonical_read_input_can_bind_the_physical_command_to_a_persisted_tool_call_id(): void
     {
@@ -150,8 +170,12 @@ final class TalosBrowserCanonicalToolDispatchTest extends TestCase
             'started_at' => now(),
         ]);
         $command = TalosBrowserCommand::canonicalReadInput($run->id, $browser->id, 'snapshot', []);
-        $snapshotSource = ['snapshotId' => 'snap_out-of-order', 'format' => 'accessibility_refs_v1', 'nodes' => [], 'textDigest' => ''];
-        $sourceHash = 'sha256:'.hash('sha256', json_encode($snapshotSource, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+        $sourceHash = TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: 'snap_out-of-order',
+            format: 'accessibility_refs_v1',
+            textDigest: '',
+            nodes: [],
+        );
         $client = new FakeBrowserSessionClient();
         $client->callToolResponse = BrowserToolResult::fromArray([
             'schema_version' => BrowserToolResult::SCHEMA_VERSION,
@@ -388,8 +412,12 @@ final class TalosBrowserCanonicalToolDispatchTest extends TestCase
     {
         [$browser, $run] = $this->context('snapshot-cas-cleanup');
         $command = TalosBrowserCommand::canonicalReadInput($run->id, $browser->id, 'snapshot', []);
-        $snapshotSource = ['snapshotId' => 'snap_cas-cleanup', 'format' => 'accessibility_refs_v1', 'nodes' => [], 'textDigest' => ''];
-        $sourceHash = 'sha256:'.hash('sha256', json_encode($snapshotSource, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+        $sourceHash = TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: 'snap_cas-cleanup',
+            format: 'accessibility_refs_v1',
+            textDigest: '',
+            nodes: [],
+        );
         $client = new FakeBrowserSessionClient();
         $client->callToolResponse = BrowserToolResult::fromArray([
             'schema_version' => BrowserToolResult::SCHEMA_VERSION,

@@ -964,6 +964,287 @@ describe('useTalosBrowse chat isolation', () => {
             state_version: 7,
             delta_y: 480,
         })
+        browse.bindTalosSession('chat-b')
+    })
+
+    it('STAGE2A-BREG-007 promotes the returned scroll frame before deferred events and semantic targets settle', async () => {
+        const active = {
+            ...browserSession('chat-a'),
+            status: 'active',
+            state_version: 7,
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'],
+            last_screenshot_artifact_id: 'screen-7',
+        }
+        const updated = {
+            ...active,
+            state_version: 8,
+            last_screenshot_artifact_id: 'screen-8',
+            last_snapshot_artifact_id: 'snapshot-8',
+        }
+        let releaseEvents: (() => void) | null = null
+        const eventsSettled = new Promise<void>((resolve) => {
+            releaseEvents = resolve
+        })
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === `/api/talos/browser/sessions/${active.id}/interactions/scroll` && options?.method === 'POST') {
+                return { data: frameExecutionPayload(updated) } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/events`) {
+                await eventsSettled
+                return { data: [] } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/interaction-targets`) {
+                return { data: refTargetFrame(updated, 'e2', 'Next vehicle') } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse({ devBrowserEvidence: false })
+        browse.bindTalosSession('chat-a')
+        browse.activeSession.value = active
+        browse.sessions.value = [active]
+        browse.latestRefFrame.value = refTargetFrame(active)
+        let result: Awaited<ReturnType<typeof browse.scrollScreenshot>> | undefined
+        const operation = browse.scrollScreenshot(scrollFrame(active, 480)).then((value) => {
+            result = value
+            return value
+        })
+
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 0))
+
+            expect(result).toMatchObject({ status: 'executed', screenshot: { id: 'screen-8' } })
+            expect(browse.activeSession.value).toMatchObject({
+                state_version: 8,
+                last_screenshot_artifact_id: 'screen-8',
+            })
+            expect(browse.latestScreenshot.value).toContain('/api/talos/browser/artifacts/screen-8/preview')
+            expect(browse.latestRefFrame.value).toBeNull()
+            expect(browse.interactionPending.value).toBe(false)
+        } finally {
+            releaseEvents?.()
+            await operation
+            browse.bindTalosSession('chat-b')
+        }
+    })
+
+    it('STAGE2A-BREG-008 coalesces semantic refresh across consecutive scroll frames', async () => {
+        vi.useFakeTimers()
+        const active = {
+            ...browserSession('chat-a'),
+            status: 'active',
+            state_version: 7,
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'],
+            last_screenshot_artifact_id: 'screen-7',
+        }
+        const first = {
+            ...active,
+            state_version: 8,
+            last_screenshot_artifact_id: 'screen-8',
+            last_snapshot_artifact_id: 'snapshot-8',
+        }
+        const second = {
+            ...first,
+            state_version: 9,
+            last_screenshot_artifact_id: 'screen-9',
+            last_snapshot_artifact_id: 'snapshot-9',
+        }
+        let scrollCount = 0
+        const targetFrames: number[] = []
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === `/api/talos/browser/sessions/${active.id}/interactions/scroll` && options?.method === 'POST') {
+                scrollCount += 1
+                return {
+                    data: frameExecutionPayload(scrollCount === 1 ? first : second),
+                } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/events`) {
+                return { data: [] } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/interaction-targets`) {
+                targetFrames.push(second.state_version)
+                return { data: refTargetFrame(second, 'e9', 'Latest vehicle') } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse({ devBrowserEvidence: false })
+        browse.bindTalosSession('chat-a')
+        browse.activeSession.value = active
+        browse.sessions.value = [active]
+
+        try {
+            await browse.scrollScreenshot(scrollFrame(active, 480))
+            await browse.scrollScreenshot(scrollFrame(first, 480))
+
+            expect(targetFrames).toEqual([])
+            await vi.advanceTimersByTimeAsync(179)
+            expect(targetFrames).toEqual([])
+            await vi.advanceTimersByTimeAsync(1)
+
+            expect(targetFrames).toEqual([9])
+            expect(browse.latestRefFrame.value).toMatchObject({
+                state_version: 9,
+                targets: [expect.objectContaining({ ref: 'e9' })],
+            })
+        } finally {
+            browse.bindTalosSession('chat-b')
+            vi.useRealTimers()
+        }
+    })
+
+    it('STAGE2A-BREG-009 ignores late events and preview data from a superseded scroll frame', async () => {
+        const active = {
+            ...browserSession('chat-a'),
+            status: 'active',
+            state_version: 7,
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'],
+            last_screenshot_artifact_id: 'screen-7',
+        }
+        const first = {
+            ...active,
+            state_version: 8,
+            last_screenshot_artifact_id: 'screen-8',
+            last_snapshot_artifact_id: 'snapshot-8',
+        }
+        const second = {
+            ...first,
+            state_version: 9,
+            last_screenshot_artifact_id: 'screen-9',
+            last_snapshot_artifact_id: 'snapshot-9',
+        }
+        let scrollCount = 0
+        let eventRequestCount = 0
+        let releaseFirstEvents: (() => void) | null = null
+        let releaseFirstPreview: (() => void) | null = null
+        const firstEventsSettled = new Promise<void>((resolve) => {
+            releaseFirstEvents = resolve
+        })
+        const firstPreviewSettled = new Promise<void>((resolve) => {
+            releaseFirstPreview = resolve
+        })
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === `/api/talos/browser/sessions/${active.id}/interactions/scroll` && options?.method === 'POST') {
+                scrollCount += 1
+                return {
+                    data: frameExecutionPayload(scrollCount === 1 ? first : second),
+                } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/events`) {
+                eventRequestCount += 1
+                if (eventRequestCount === 1) {
+                    await firstEventsSettled
+                    return { data: [{ id: 'event-8', type: 'hmi.scroll', created_at: '2026-07-23T08:00:08Z' }] } as never
+                }
+                return { data: [{ id: 'event-9', type: 'hmi.scroll', created_at: '2026-07-23T08:00:09Z' }] } as never
+            }
+            if (String(url).includes('/artifacts/snapshot-8/preview')) {
+                await firstPreviewSettled
+                return { data: { snapshot: { frame: 8 } } } as never
+            }
+            if (String(url).includes('/artifacts/snapshot-9/preview')) {
+                return { data: { snapshot: { frame: 9 } } } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/interaction-targets`) {
+                return { data: refTargetFrame(second, 'e9', 'Latest vehicle') } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse({ devBrowserEvidence: true })
+        browse.bindTalosSession('chat-a')
+        browse.activeSession.value = active
+        browse.sessions.value = [active]
+
+        try {
+            await browse.scrollScreenshot(scrollFrame(active, 480))
+            await browse.scrollScreenshot(scrollFrame(first, 480))
+            await vi.waitFor(() => {
+                expect(browse.events.value).toEqual([
+                    expect.objectContaining({ id: 'event-9' }),
+                ])
+                expect(browse.latestSnapshot.value).toEqual({ snapshot: { frame: 9 } })
+            })
+
+            releaseFirstEvents?.()
+            releaseFirstPreview?.()
+            await new Promise((resolve) => setTimeout(resolve, 0))
+
+            expect(browse.latestScreenshot.value).toContain('/artifacts/screen-9/preview')
+            expect(browse.events.value).toEqual([
+                expect.objectContaining({ id: 'event-9' }),
+            ])
+            expect(browse.latestSnapshot.value).toEqual({ snapshot: { frame: 9 } })
+        } finally {
+            releaseFirstEvents?.()
+            releaseFirstPreview?.()
+            browse.bindTalosSession('chat-b')
+        }
+    })
+
+    it('STAGE2A-BREG-010 cancels a deferred scroll target refresh when a newer non-scroll frame wins', async () => {
+        vi.useFakeTimers()
+        const active = {
+            ...browserSession('chat-a'),
+            status: 'active',
+            state_version: 7,
+            capabilities: ['navigate', 'screenshot', 'snapshot', 'interact'],
+            last_screenshot_artifact_id: 'screen-7',
+        }
+        const scrolled = {
+            ...active,
+            state_version: 8,
+            last_screenshot_artifact_id: 'screen-8',
+            last_snapshot_artifact_id: 'snapshot-8',
+        }
+        const clicked = {
+            ...scrolled,
+            state_version: 9,
+            last_screenshot_artifact_id: 'screen-9',
+            last_snapshot_artifact_id: 'snapshot-9',
+        }
+        let targetRequestCount = 0
+        talosFetchMock.mockImplementation(async (url, options) => {
+            if (url === `/api/talos/browser/sessions/${active.id}/interactions/scroll` && options?.method === 'POST') {
+                return { data: frameExecutionPayload(scrolled) } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/interactions/pointer` && options?.method === 'POST') {
+                return { data: interactionPayload(clicked) } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/events`) {
+                return { data: [] } as never
+            }
+            if (url === `/api/talos/browser/sessions/${active.id}/interaction-targets`) {
+                targetRequestCount += 1
+                return {
+                    data: refTargetFrame(targetRequestCount === 1 ? clicked : scrolled, targetRequestCount === 1 ? 'e9' : 'e8'),
+                } as never
+            }
+            throw new Error(`Unexpected test request: ${url}`)
+        })
+        const browse = useTalosBrowse({ devBrowserEvidence: false })
+        browse.bindTalosSession('chat-a')
+        browse.activeSession.value = active
+        browse.sessions.value = [active]
+
+        try {
+            await browse.scrollScreenshot(scrollFrame(active, 480))
+            await browse.interactWithScreenshot(pointerFrame(scrolled))
+
+            expect(targetRequestCount).toBe(1)
+            expect(browse.latestRefFrame.value).toMatchObject({
+                state_version: 9,
+                targets: [expect.objectContaining({ ref: 'e9' })],
+            })
+
+            await vi.advanceTimersByTimeAsync(180)
+
+            expect(targetRequestCount).toBe(1)
+            expect(browse.latestRefFrame.value).toMatchObject({
+                state_version: 9,
+                targets: [expect.objectContaining({ ref: 'e9' })],
+            })
+        } finally {
+            browse.bindTalosSession('chat-b')
+            vi.useRealTimers()
+        }
     })
 
     it('STAGE2A-005 refreshes a stale scroll once without replay and keeps worker unavailability retryable', async () => {

@@ -60,6 +60,7 @@ export interface BrowserHmiRefTargetIdentity {
   target: BrowserHmiRefTarget;
   locator: Locator;
   point: { normalized_x: number; normalized_y: number; x: number; y: number };
+  position: { x: number; y: number };
   box: { x: number; y: number; width: number; height: number };
 }
 
@@ -189,9 +190,26 @@ export async function resolveBrowserHmiRefTarget(
     }
     const initialBox = await locator.boundingBox();
     if (!initialBox || !boxesMatch(initialBox, captured.box)) throw staleTarget();
+    const left = Math.max(0, initialBox.x);
+    const top = Math.max(0, initialBox.y);
+    const right = Math.min(snapshot.viewport.width, initialBox.x + initialBox.width);
+    const bottom = Math.min(snapshot.viewport.height, initialBox.y + initialBox.height);
+    if (right <= left || bottom <= top) throw staleTarget();
+    const x = Math.min(snapshot.viewport.width - 1, Math.max(0, Math.floor((left + right) / 2)));
+    const y = Math.min(snapshot.viewport.height - 1, Math.max(0, Math.floor((top + bottom) / 2)));
+    const position = {
+      x: x - initialBox.x,
+      y: y - initialBox.y,
+    };
     const scrollState = await readScrollState(locator);
 
-    await locator.click({ button: "left", clickCount: 1, trial: true, timeout: ACTIONABILITY_TIMEOUT_MS });
+    await locator.click({
+      button: "left",
+      clickCount: 1,
+      position,
+      trial: true,
+      timeout: ACTIONABILITY_TIMEOUT_MS,
+    });
 
     if (await readScrollState(locator) !== scrollState
       || await locator.count() !== 1
@@ -202,14 +220,6 @@ export async function resolveBrowserHmiRefTarget(
     const box = await locator.boundingBox();
     if (!box || !boxesMatch(box, initialBox) || !boxesMatch(box, captured.box)) throw staleTarget();
 
-    const left = Math.max(0, box.x);
-    const top = Math.max(0, box.y);
-    const right = Math.min(snapshot.viewport.width, box.x + box.width);
-    const bottom = Math.min(snapshot.viewport.height, box.y + box.height);
-    if (right <= left || bottom <= top) throw staleTarget();
-    const x = Math.min(snapshot.viewport.width - 1, Math.max(0, Math.round((left + right) / 2)));
-    const y = Math.min(snapshot.viewport.height - 1, Math.max(0, Math.round((top + bottom) / 2)));
-
     return {
       target,
       locator,
@@ -219,6 +229,7 @@ export async function resolveBrowserHmiRefTarget(
         x,
         y,
       },
+      position,
       box: { ...box },
     };
   } catch (error) {

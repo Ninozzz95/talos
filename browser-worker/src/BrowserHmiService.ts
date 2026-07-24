@@ -254,6 +254,7 @@ export class BrowserHmiService {
           session.page,
           inspected.identity.locator,
           inspected.identity.point,
+          inspected.identity.position,
           inspected.attestation,
           {
             button: input.button,

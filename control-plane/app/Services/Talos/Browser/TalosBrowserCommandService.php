@@ -191,12 +191,6 @@ final class TalosBrowserCommandService
         $workerResult = $this->invokeToolResult($session, $command, 'browser_snapshot', [], 0, $deadline);
         $worker = $workerResult->structuredContent ?? [];
         $this->assertActive($run, $deadline);
-        $workerEvidence = $this->verifiedWorkerEvidence($workerResult, 'snapshot', $this->canonicalEvidenceHash([
-            'snapshotId' => $worker['snapshot_id'] ?? null,
-            'format' => $worker['format'] ?? null,
-            'nodes' => $worker['nodes'] ?? null,
-            'textDigest' => $worker['text_digest'] ?? null,
-        ]));
         $safe = $this->safeSnapshot([
             'format' => $worker['format'] ?? null,
             'snapshotId' => $worker['snapshot_id'] ?? null,
@@ -205,6 +199,12 @@ final class TalosBrowserCommandService
             'url' => $worker['url'] ?? null,
             'title' => $worker['title'] ?? null,
         ]);
+        $workerEvidence = $this->verifiedWorkerEvidence($workerResult, 'snapshot', TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: (string) $worker['snapshot_id'],
+            format: (string) $worker['format'],
+            textDigest: (string) $worker['text_digest'],
+            nodes: $worker['nodes'],
+        ));
         $contents = json_encode($safe, JSON_THROW_ON_ERROR);
         if (strlen($contents) > $remainingEvidenceBytes) {
             throw new TalosBrowserCommandException('TALOS_BROWSER_EVIDENCE_BUDGET', 'Browser evidence budget exhausted.');
@@ -306,7 +306,16 @@ final class TalosBrowserCommandService
         $workerResult = $this->invokeToolResult($session, $command, 'browser_read', $arguments, 0, $deadline);
         $worker = $workerResult->structuredContent ?? [];
         $sourceEvidence = is_array($artifact->metadata['worker_evidence'] ?? null) ? $artifact->metadata['worker_evidence'] : [];
-        $sourceHash = is_string($sourceEvidence[0]['sha256'] ?? null) ? $sourceEvidence[0]['sha256'] : '';
+        $snapshotSourceEvidence = array_values(array_filter(
+            $sourceEvidence,
+            static fn (mixed $item): bool => is_array($item)
+                && ($item['kind'] ?? null) === 'snapshot'
+                && is_string($item['sha256'] ?? null)
+                && preg_match('/^sha256:[a-f0-9]{64}$/D', $item['sha256']) === 1,
+        ));
+        $sourceHash = count($snapshotSourceEvidence) === 1
+            ? $snapshotSourceEvidence[0]['sha256']
+            : '';
         $workerEvidence = $this->verifiedWorkerEvidence($workerResult, 'snapshot', $sourceHash);
         $matches = [];
         foreach (array_slice(is_array($worker['matches'] ?? null) ? $worker['matches'] : [], 0, 20) as $node) {

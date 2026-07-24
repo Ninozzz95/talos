@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\TalosAuditEvent;
 use App\Models\TalosModelProfile;
 use App\Services\Models\Catalog\TalosProviderModelCatalogException;
+use App\Services\Models\ProviderEffortCapabilityTable;
 use App\Services\Models\TalosModelProviderCatalog;
 use App\Services\Models\TalosModelProbeService;
 use App\Services\Models\TalosProviderModelCatalogService;
@@ -261,11 +262,17 @@ final class TalosModelProfileController extends Controller
         $this->abortUnlessOwnedByCurrentUser($request, $profile);
 
         $probe = $probeService->probe($profile);
+        $effortCapability = ProviderEffortCapabilityTable::resolve(
+            (string) $profile->provider,
+            (string) $profile->model,
+        );
 
         $profile->update([
             'status' => $probe['status'],
             'capabilities' => $probe['capabilities'],
             'probe_result' => $probe['result'],
+            'effort_levels' => $effortCapability['effort_levels'],
+            'supports_thinking' => $effortCapability['supports_thinking'],
         ]);
 
         return response()->json(['data' => $profile->refresh()->toApiArray()]);

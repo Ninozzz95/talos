@@ -76,6 +76,7 @@ const SETUP_INCOMPATIBILITY_CODES = new Set([
 
 const BROWSE_SETUP_FAULT_MESSAGE = 'Browse is unavailable because the browser worker is incompatible with this TALOS version. Update the browser worker to a compatible protocol, then enable Browse again.'
 const REF_TARGETS_UNAVAILABLE_MESSAGE = 'Semantic page controls are temporarily unavailable. You can still interact directly with the screenshot.'
+const SCROLL_REF_TARGET_REFRESH_DELAY_MS = 180
 
 type PendingInteractionApprovalBinding = {
     browserSessionId: string
@@ -206,6 +207,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     let taskLoadRevision = 0
     let refTargetLoadRevision = 0
     let browseIntentRevision = 0
+    let scrollRefTargetRefreshTimer: ReturnType<typeof setTimeout> | null = null
     let cancellationCommand: {
         taskId: string
         stateVersion: number
@@ -225,6 +227,12 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     function clearPendingInteractionApproval() {
         pendingInteractionApproval.value = null
         pendingInteractionApprovalBinding.value = null
+    }
+
+    function cancelScrollRefTargetRefresh() {
+        if (scrollRefTargetRefreshTimer === null) return
+        clearTimeout(scrollRefTargetRefreshTimer)
+        scrollRefTargetRefreshTimer = null
     }
 
     function approvalBindingMatchesSession(
@@ -281,6 +289,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     }
 
     function resetScopedState() {
+        cancelScrollRefTargetRefresh()
         taskLoadRevision += 1
         refTargetLoadRevision += 1
         sessions.value = []
@@ -329,6 +338,16 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
 
     function scopeIsCurrent(talosSessionId: string, revision: number) {
         return boundTalosSessionId.value === talosSessionId && scopeRevision === revision
+    }
+
+    function activeFrameIsCurrent(session: TalosBrowserSession, revision: number) {
+        const talosSessionId = session.talos_session_id ?? ''
+        const current = activeSession.value
+
+        return scopeIsCurrent(talosSessionId, revision)
+            && current?.id === session.id
+            && current.state_version === session.state_version
+            && current.last_screenshot_artifact_id === session.last_screenshot_artifact_id
     }
 
     function browseIntentIsCurrent(talosSessionId: string, revision: number, intentRevision: number) {
@@ -567,7 +586,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
 
     async function loadEvents(session: TalosBrowserSession, revision: number) {
         const response = await talosFetch<ApiEnvelope<TalosBrowserEvent[]>>(`/api/talos/browser/sessions/${idPath(session.id)}/events`, { headers: scopedHeaders(session.talos_session_id ?? '') })
-        if (scopeIsCurrent(session.talos_session_id ?? '', revision)) events.value = response.data
+        if (activeFrameIsCurrent(session, revision)) events.value = response.data
     }
 
     async function loadPreview(session: TalosBrowserSession, revision: number) {
@@ -578,7 +597,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
             ? (await talosFetch<ApiEnvelope<TalosBrowserSnapshotPreview>>(artifactPreviewUrl(session.last_snapshot_artifact_id, session.talos_session_id ?? ''), { headers: scopedHeaders(session.talos_session_id ?? '') })).data
             : null
 
-        if (!scopeIsCurrent(session.talos_session_id ?? '', revision)) return
+        if (!activeFrameIsCurrent(session, revision)) return
         latestScreenshot.value = screenshot
         latestSnapshot.value = snapshot
     }
@@ -640,6 +659,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     async function selectSession(id: string) {
         const talosSessionId = requiredTalosSessionId()
         const revision = scopeRevision
+        cancelScrollRefTargetRefresh()
         if (activeSession.value?.id !== id) clearPendingInteractionApproval()
         loadingSession.value = true
         sessionError.value = null
@@ -695,6 +715,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
     async function refreshActive(session: TalosBrowserSession, talosSessionId: string, revision: number) {
         assertScopedSession(session, talosSessionId)
         if (!scopeIsCurrent(talosSessionId, revision)) return
+        cancelScrollRefTargetRefresh()
         invalidatePendingApprovalForSession(session)
         activeSession.value = session
         sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)]
@@ -704,6 +725,25 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
             loadRefTargets(session, revision),
         ])
         if (browserMode.value.enabled) setBrowserMode(true, session)
+    }
+
+    function scheduleScrollFrameRefresh(
+        session: TalosBrowserSession,
+        talosSessionId: string,
+        revision: number,
+    ) {
+        cancelScrollRefTargetRefresh()
+        refTargetLoadRevision += 1
+        if (scopeIsCurrent(talosSessionId, revision) && activeSession.value?.id === session.id) {
+            latestRefFrame.value = null
+            refTargetsLoading.value = true
+            refTargetsError.value = null
+        }
+        scrollRefTargetRefreshTimer = setTimeout(() => {
+            scrollRefTargetRefreshTimer = null
+            if (!scopeIsCurrent(talosSessionId, revision) || activeSession.value?.id !== session.id) return
+            void loadRefTargets(session, revision)
+        }, SCROLL_REF_TARGET_REFRESH_DELAY_MS)
     }
 
     async function createSession(activationGuard: () => boolean = () => true) {
@@ -974,10 +1014,36 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
         return current
     }
 
-    async function applyFrameExecution(execution: TalosBrowserFrameExecution, talosSessionId: string, revision: number) {
+    async function applyFrameExecution(
+        execution: TalosBrowserFrameExecution,
+        talosSessionId: string,
+        revision: number,
+        fastPaint = false,
+    ) {
         assertScopedSession(execution.session, talosSessionId)
         if (!scopeIsCurrent(talosSessionId, revision)) return
         browserMode.value = { ...browserMode.value, enabled: true }
+        if (fastPaint) {
+            invalidatePendingApprovalForSession(execution.session)
+            activeSession.value = execution.session
+            sessions.value = [
+                execution.session,
+                ...sessions.value.filter((item) => item.id !== execution.session.id),
+            ]
+            latestRefFrame.value = null
+            latestSnapshot.value = null
+            recordInteractionFrame(execution)
+            latestScreenshot.value = execution.screenshot.preview_url
+                ? `${execution.screenshot.preview_url}?${new URLSearchParams({ talos_session_id: talosSessionId })}`
+                : artifactPreviewUrl(execution.screenshot.id, talosSessionId)
+            setBrowserMode(true, execution.session)
+            void Promise.allSettled([
+                loadEvents(execution.session, revision),
+                loadPreview(execution.session, revision),
+            ])
+            scheduleScrollFrameRefresh(execution.session, talosSessionId, revision)
+            return
+        }
         await refreshActive(execution.session, talosSessionId, revision)
         if (scopeIsCurrent(talosSessionId, revision)) {
             recordInteractionFrame(execution)
@@ -1057,7 +1123,7 @@ export function useTalosBrowse(options: { devBrowserEvidence?: boolean } = {}) {
                 }),
                 headers: scopedHeaders(talosSessionId),
             })
-            await applyFrameExecution(response.data, talosSessionId, revision)
+            await applyFrameExecution(response.data, talosSessionId, revision, true)
 
             return {
                 status: 'executed' as const,

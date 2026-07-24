@@ -23,7 +23,7 @@ use Tests\TestCase;
 
 final class TalosWebFetchServiceTest extends TestCase
 {
-    public function test_real_gzip_transport_is_decoded_and_bounded_by_both_wire_and_expanded_size(): void
+    public function test_real_bounded_fetch_keeps_curl_primary_ip_evidence_and_rejects_expanded_gzip_overflow(): void
     {
         $socket = stream_socket_server('tcp://127.0.0.1:0', $errorCode, $errorMessage);
         $this->assertIsResource($socket, "Could not reserve a gzip fixture port: {$errorCode} {$errorMessage}");
@@ -66,7 +66,7 @@ final class TalosWebFetchServiceTest extends TestCase
             );
             $service = new TalosWebFetchService(
                 $policy,
-                new PublicHttpRequestPinning($policy, curlResolveAvailable: true, requirePrimaryIpEvidence: false),
+                new PublicHttpRequestPinning($policy, curlResolveAvailable: true),
                 static fn (): string => '2026-07-13T12:00:00.000000Z',
             );
             $url = "http://127.0.0.1:{$port}/gzip";
@@ -276,15 +276,15 @@ final class TalosWebFetchServiceTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_deadline_expiry_during_bounded_stream_read_is_controlled(): void
+    public function test_deadline_expiry_during_bounded_sink_drain_is_controlled(): void
     {
         $now = 100.0;
         $stream = Utils::streamFor('stream body');
         $stream = FnStream::decorate($stream, [
-            'read' => static function (int $length) use (&$now, $stream): string {
+            'getContents' => static function () use (&$now, $stream): string {
                 $now = 100.2;
 
-                return $stream->read($length);
+                return $stream->getContents();
             },
         ]);
         Http::fake(['https://docs.example/stream-timeout' => static fn (): PromiseInterface => Create::promiseFor(
@@ -396,14 +396,16 @@ final class TalosWebFetchServiceTest extends TestCase
         }
     }
 
-    public function test_stream_exception_is_mapped_to_invalid_content_without_leaking_its_message(): void
+    public function test_sink_drain_exception_is_mapped_to_invalid_content_without_leaking_its_message(): void
     {
-        $stream = FnStream::decorate(Utils::streamFor('body'), [
-            'read' => static fn (int $length): string => throw new RuntimeException('stream internals'),
-        ]);
-        Http::fake(['https://docs.example/stream-failure' => static fn (): PromiseInterface => Create::promiseFor(
-            new PsrResponse(200, ['Content-Type' => 'text/plain'], $stream),
-        )]);
+        Http::fake(static function ($request, array $options): never {
+            $options['on_stats'](new TransferStats(
+                $request->toPsrRequest(),
+                new PsrResponse(200, ['Content-Type' => 'text/plain'], 'partial body'),
+            ));
+
+            throw new RuntimeException('stream internals');
+        });
 
         try {
             $this->service()->fetch('https://docs.example/stream-failure');

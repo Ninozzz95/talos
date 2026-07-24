@@ -356,6 +356,129 @@ describe("TALOS Browser HMI pointer boundary", () => {
     }
   });
 
+  it("STAGE2B-BREG-004 keeps a partially visible semantic card bound to its painted viewport point without auto-scroll", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        (window as unknown as { __stage2bPartialClicks: number }).__stage2bPartialClicks = 0;
+        document.body.style.minHeight = "1400px";
+        const card = document.createElement("article");
+        card.id = "semantic-partial-card";
+        card.setAttribute("role", "link");
+        card.setAttribute("tabindex", "0");
+        card.setAttribute("aria-label", "Open partially visible vehicle");
+        card.style.cssText = "position:absolute;left:120px;top:300px;width:520px;height:700px;z-index:100;background:white";
+        card.addEventListener("click", () => {
+          (window as unknown as { __stage2bPartialClicks: number }).__stage2bPartialClicks += 1;
+        });
+        document.body.append(card);
+        window.scrollTo(0, 0);
+      });
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const target = targetFrame.targets.find(
+        (candidate: { name: string }) => candidate.name === "Open partially visible vehicle",
+      );
+      expect(target).toBeDefined();
+      const payload = refPayload(
+        targetFrame,
+        target.ref,
+        "123e4567-e89b-42d3-a456-426614174019",
+      );
+
+      const inspected = await preflightRef(sessionId, payload);
+
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(await session.page.evaluate(() => window.scrollY)).toBe(0);
+      expect(inspected.json().data.point).toMatchObject({
+        x: expect.any(Number),
+        y: expect.any(Number),
+      });
+      expect(inspected.json().data.point.y).toBeLessThan(viewport.height);
+
+      const executed = await executeRef(
+        sessionId,
+        inspected.json(),
+        payload,
+        "sensitive",
+        "hmi_ref_cmd_partial_card",
+      );
+
+      expect(executed.statusCode, executed.body).toBe(200);
+      expect(await session.page.evaluate(() => window.scrollY)).toBe(0);
+      expect(await session.page.evaluate(
+        () => (window as unknown as { __stage2bPartialClicks: number }).__stage2bPartialClicks,
+      )).toBe(1);
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-BREG-005 commits a trusted sensitive SPA ref when pointerup removes the target before mouseup and click", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        (window as unknown as { __stage2bSpaActivations: number }).__stage2bSpaActivations = 0;
+        const card = document.createElement("article");
+        card.id = "semantic-spa-card";
+        card.setAttribute("role", "link");
+        card.setAttribute("tabindex", "0");
+        card.setAttribute("aria-label", "Open SPA vehicle detail");
+        card.style.cssText = "position:fixed;left:120px;top:520px;width:520px;height:400px;z-index:100;background:white";
+        card.addEventListener("pointerup", () => {
+          (window as unknown as { __stage2bSpaActivations: number }).__stage2bSpaActivations += 1;
+          history.pushState({}, "", "#vehicle-detail");
+          card.remove();
+          const heading = document.createElement("h1");
+          heading.textContent = "Vehicle detail";
+          document.body.append(heading);
+        });
+        document.body.append(card);
+      });
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const target = targetFrame.targets.find(
+        (candidate: { name: string }) => candidate.name === "Open SPA vehicle detail",
+      );
+      expect(target).toBeDefined();
+      const payload = refPayload(
+        targetFrame,
+        target.ref,
+        "123e4567-e89b-42d3-a456-426614174020",
+      );
+      const inspected = await preflightRef(sessionId, payload);
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(inspected.json().data.target.required_effect_classification).toBe("sensitive");
+
+      const executed = await executeRef(
+        sessionId,
+        inspected.json(),
+        payload,
+        "sensitive",
+        "hmi_ref_cmd_spa_pointerup_navigation",
+      );
+
+      expect(executed.statusCode, executed.body).toBe(200);
+      expect(executed.json().data).toMatchObject({
+        state_version: 2,
+        effect_classification: "sensitive",
+        screenshot: { mime_type: "image/png" },
+        snapshot: { format: "accessibility_refs_v1" },
+      });
+      expect(await session.page.evaluate(
+        () => (window as unknown as { __stage2bSpaActivations: number }).__stage2bSpaActivations,
+      )).toBe(1);
+      expect(session.page.url()).toContain("#vehicle-detail");
+      expect(session.status).toBe("active");
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
   it("STAGE2B-006 executes a listener-backed ref only as sensitive and replays one command exactly once", async () => {
     const sessionId = await createSession();
     try {

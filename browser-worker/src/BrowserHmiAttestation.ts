@@ -230,6 +230,7 @@ export async function dispatchGuardedBrowserRefClick(
   page: Page,
   locator: Locator,
   point: { x: number; y: number },
+  position: { x: number; y: number },
   expected: BrowserHmiTargetAttestation,
   options: {
     button: "left";
@@ -241,6 +242,7 @@ export async function dispatchGuardedBrowserRefClick(
   return dispatchGuardedBrowserAction(page, point, expected, options, () => locator.click({
     button: options.button,
     clickCount: options.clickCount,
+    position,
     timeout: 1_500,
   }));
 }
@@ -323,7 +325,7 @@ async function dispatchGuardedBrowserAction(
         const ordinary = effectClassification === "ordinary";
         const types = ordinary
           ? ${JSON.stringify(ORDINARY_GUARD_EVENT_TYPES)}
-          : ["mousedown", "mouseup", "click"];
+          : ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
         const transitionTypes = new globalThis.Set([
           "pointerout", "pointerleave", "mouseout", "mouseleave", "blur", "focusout",
         ]);
@@ -331,7 +333,14 @@ async function dispatchGuardedBrowserAction(
           "pointerdown", "pointerup", "mousedown", "mouseup", "click", "auxclick", "dblclick",
         ]);
         const detailTypes = new globalThis.Set(["mousedown", "mouseup", "click"]);
-        const state = { mousedown: false, mouseup: false, click: false, rejected: false };
+        const state = {
+          pointerdown: false,
+          mousedown: false,
+          pointerup: false,
+          mouseup: false,
+          click: false,
+          rejected: false,
+        };
         const effectMatches = () => {
           const attr = (name) => globalThis.Element.prototype.getAttribute.call(target, name);
           const has = (name) => globalThis.Element.prototype.hasAttribute.call(target, name);
@@ -390,10 +399,16 @@ async function dispatchGuardedBrowserAction(
         };
         const listener = (event) => {
           const path = globalThis.Event.prototype.composedPath.call(event);
+          const completedTargetBoundPointerActivation = !ordinary
+            && state.pointerdown === true
+            && state.mousedown === true
+            && state.pointerup === true
+            && !target.isConnected
+            && win.location.href !== expectedEffect.documentUrl;
           const allowed = event.isTrusted === true
             && (!buttonTypes.has(event.type) || event.button === 0)
             && (!detailTypes.has(event.type) || event.detail === expectedClickCount)
-            && (transitionTypes.has(event.type) || path.includes(target))
+            && (transitionTypes.has(event.type) || path.includes(target) || completedTargetBoundPointerActivation)
             && (!ordinary || effectMatches());
           if (!allowed) {
             state.rejected = true;
@@ -405,7 +420,15 @@ async function dispatchGuardedBrowserAction(
           if (ordinary) globalThis.Event.prototype.stopImmediatePropagation.call(event);
         };
         for (const type of types) win.addEventListener(type, listener, true);
-        return { win, types, listener, state };
+        return {
+          win,
+          types,
+          listener,
+          state,
+          target,
+          ordinary,
+          expectedDocumentUrl: expectedEffect.documentUrl,
+        };
       }`,
       arguments: [
         { value: options.clickCount },
@@ -426,11 +449,22 @@ async function dispatchGuardedBrowserAction(
         objectId: guardObjectId,
         functionDeclaration: `function () {
           for (const type of this.types) this.win.removeEventListener(type, this.listener, true);
+          const completedSensitiveNavigation = this.ordinary !== true
+            && this.state.pointerdown === true
+            && this.state.mousedown === true
+            && this.state.pointerup === true
+            && !this.target.isConnected
+            && this.win.location.href !== this.expectedDocumentUrl;
           return {
             allowed: this.state.rejected !== true
-              && this.state.mousedown === true
-              && this.state.mouseup === true
-              && this.state.click === true,
+              && (
+                (
+                  this.state.mousedown === true
+                  && this.state.mouseup === true
+                  && this.state.click === true
+                )
+                || completedSensitiveNavigation
+              ),
           };
         }`,
         returnByValue: true,

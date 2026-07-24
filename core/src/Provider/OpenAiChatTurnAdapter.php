@@ -101,6 +101,12 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
         if ($request->temperature !== null) {
             $payload['temperature'] = $request->temperature;
         }
+        if ($request->responseMimeType !== null) {
+            if (! in_array($this->provider, ['deepseek', 'openai'], true)) {
+                throw new InvalidArgumentException('This OpenAI-compatible provider does not support the requested response MIME type.');
+            }
+            $payload['response_format'] = ['type' => 'json_object'];
+        }
         foreach (ReasoningEffortMap::paramsFor(
             ReasoningEffortMap::TARGET_OPENAI_CHAT,
             $request->reasoningEffort,
@@ -108,6 +114,11 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             $request->maxTokens,
         ) as $reasoningKey => $reasoningValue) {
             $payload[$reasoningKey] = $reasoningValue;
+        }
+        if ($this->provider === 'deepseek' && $request->reasoningVisible !== null) {
+            $payload['thinking'] = [
+                'type' => $request->reasoningVisible ? 'enabled' : 'disabled',
+            ];
         }
         if ($request->tools !== []) {
             $payload['tools'] = array_map($this->providerTool(...), $request->tools);
@@ -189,7 +200,7 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             $messages[] = [
                 'role' => 'tool',
                 'tool_call_id' => $callId,
-                'content' => json_encode($result->toRedactedArray(), JSON_THROW_ON_ERROR),
+                'content' => json_encode($this->providerToolResultPayload($result), JSON_THROW_ON_ERROR),
             ];
         }
 
@@ -197,13 +208,32 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             'model' => ToolContractGuard::nonEmptyString($native['model'] ?? null, 'OpenAI continuation model', 256),
             'messages' => $messages,
         ];
-        foreach (['max_tokens', 'temperature', 'reasoning_effort', 'tools', 'tool_choice'] as $field) {
+        foreach (['max_tokens', 'temperature', 'response_format', 'reasoning_effort', 'thinking', 'tools', 'tool_choice'] as $field) {
             if (array_key_exists($field, $native)) {
                 $payload[$field] = $native[$field];
             }
         }
 
         return $this->perform($payload);
+    }
+
+    /** @return array<string, mixed> */
+    private function providerToolResultPayload(ToolResult $result): array
+    {
+        $redacted = $result->toRedactedArray();
+        $payload = [
+            'isError' => $result->isError,
+        ];
+
+        if ($result->structuredContent !== null) {
+            $payload['structuredContent'] = $redacted['structuredContent'];
+        } else {
+            $payload['content'] = $redacted['content'];
+        }
+
+        $payload['evidence'] = $redacted['evidence'];
+
+        return $payload;
     }
 
     /** @param array<string, mixed> $payload */
@@ -328,7 +358,7 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
                 'messages' => $requestPayload['messages'],
                 'assistant_message' => $assistantMessage,
             ];
-            foreach (['max_tokens', 'temperature', 'reasoning_effort', 'tools', 'tool_choice'] as $field) {
+            foreach (['max_tokens', 'temperature', 'response_format', 'reasoning_effort', 'thinking', 'tools', 'tool_choice'] as $field) {
                 if (array_key_exists($field, $requestPayload)) {
                     $nativeState[$field] = $requestPayload[$field];
                 }
