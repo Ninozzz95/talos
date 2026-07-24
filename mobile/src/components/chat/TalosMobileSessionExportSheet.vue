@@ -137,7 +137,13 @@ async function saveToLibrary(): Promise<void> {
         })
         savedToLibrary.value = true
     } catch (cause) {
-        error.value = cause instanceof Error && cause.message ? cause.message : String(cause)
+        // Never surface a raw TALOS_* code (e.g. a very long export exceeding the
+        // text cap) — the Library save has a friendly fallback like the rest of
+        // the attachment surface.
+        const raw = cause instanceof Error && cause.message ? cause.message : String(cause)
+        error.value = /^TALOS_[A-Z0-9_]+$/.test(raw)
+            ? 'TALOS could not save this export to the Library. It may be too large.'
+            : (raw || 'The export could not be saved to the Library.')
     } finally {
         savingToLibrary.value = false
     }

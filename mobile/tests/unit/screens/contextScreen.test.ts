@@ -152,6 +152,9 @@ describe('ContextScreen local Vault', () => {
         await wrapper.get('[data-testid="talos-library-origin-generated"]').trigger('click')
         // both seeded files are uploads (no metadata.origin) → none shown
         expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(false)
+        // empty-origin state must NOT read as a failed text search (SF-critic)
+        expect(wrapper.text()).toContain('No generated files yet')
+        expect(wrapper.text()).not.toContain('No files match')
         await wrapper.get('[data-testid="talos-library-origin-all"]').trigger('click')
         expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
     })

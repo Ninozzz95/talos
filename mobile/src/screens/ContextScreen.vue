@@ -144,14 +144,13 @@ onMounted(async () => {
             />
         </label>
 
-        <!-- Uploaded / Generated filter. -->
-        <div class="mb-4 flex gap-1" role="tablist" aria-label="Filter by origin">
+        <!-- Uploaded / Generated filter (single-select toggle chips, not tabs). -->
+        <div class="mb-4 flex gap-1" role="group" aria-label="Filter by origin">
             <button
                 v-for="tab in ORIGIN_TABS"
                 :key="tab.value"
                 type="button"
-                role="tab"
-                :aria-selected="origin === tab.value"
+                :aria-pressed="origin === tab.value"
                 :data-testid="`talos-library-origin-${tab.value}`"
                 class="talos-pressable min-h-9 rounded-full px-3 text-sm transition-colors"
                 :class="origin === tab.value
@@ -202,7 +201,7 @@ onMounted(async () => {
             v-else-if="filtered.length === 0"
             class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]"
         >
-            No files match “{{ query }}”.
+            {{ query.trim() ? `No files match “${query}”.` : `No ${origin} files yet.` }}
         </div>
 
         <div v-else class="space-y-2" role="list" aria-label="Library files">
