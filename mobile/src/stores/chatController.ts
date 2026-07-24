@@ -924,8 +924,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             selectedModelId.value,
             await prepareMemoryInjection(),
             attachments.bindings.value,
+            // Owner 2026-07-24: clear the composer's attachments the instant the
+            // user turn is COMMITTED — not after the whole generation, which left
+            // the sent file lingering in the composer for the entire response.
+            () => attachments.clearSent(),
         )
-        if (accepted) attachments.clearSent()
         return accepted
     }
 

@@ -101,7 +101,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
             <!-- Owner 2026-07-24 (Claude-style): account summary card on top +
                  grouped rounded cards (icon · label · gated hint · chevron).
                  Uniform radius (rounded-xl ≈ 12px). -->
-            <TabsList aria-label="TALOS settings categories" class="flex max-h-none w-full flex-col gap-5 px-4 py-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0">
+            <TabsList aria-label="TALOS settings categories" class="flex max-h-none w-full flex-col gap-5 px-3 py-4 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0">
                 <TabsTrigger
                     :value="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
                     :data-settings-tab="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
@@ -141,7 +141,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
 
         <section
             data-testid="settings-detail-pane"
-            class="min-w-0 px-4 py-2 md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
+            class="min-w-0 px-3 py-2 md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
             :class="mobilePane === 'categories' ? 'hidden' : 'block'"
             :aria-label="`${selectedTab.label} settings`"
         >
