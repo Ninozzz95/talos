@@ -40,7 +40,17 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
 
     it('reflects the listening state with pressed semantics', () => {
         const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
-        const mic = wrapper.get('button[aria-label="Stop dictation"]')
+        // The composer mic toggle carries aria-pressed; the listening pill's
+        // dedicated Stop button (Claude-style) does not — disambiguate.
+        const mic = wrapper.get('button[aria-label="Stop dictation"][aria-pressed]')
         expect(mic.attributes('aria-pressed')).toBe('true')
+    })
+
+    it('shows the Claude-style listening pill with a waveform and a Stop control', () => {
+        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
+        const pill = wrapper.get('[data-testid="talos-dictation-live"]')
+        expect(pill.text()).toContain('Listening')
+        expect(pill.find('[data-testid="talos-mic-waveform"]').exists()).toBe(true)
+        expect(pill.find('button[aria-label="Stop dictation"]').exists()).toBe(true)
     })
 })

@@ -33,7 +33,8 @@ async function configureGemini(page: Page): Promise<void> {
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
 
@@ -156,14 +157,16 @@ test('operates slash commands and disabled reasons at 360px without overflow', a
     await composer.press('Enter')
     await expect(page).toHaveURL(/\/settings\?tab=models$/)
     await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
 
     await composer.fill('/context')
     await composer.press('Enter')
     await expect(page).toHaveURL(/\/context$/)
     await expect(page.locator(SHEET)).toHaveAttribute('aria-label', 'Library')
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
 
     await composer.fill('/new')
     await composer.press('Enter')

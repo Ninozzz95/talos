@@ -49,7 +49,8 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="openai:gpt-e2e-vision"]').click()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
     return completions
 }
@@ -122,7 +123,8 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
     await expect(vault).toContainText('reference.png')
 
     await page.getByLabel('Attach release-brief.txt to message').click()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.getByTestId('talos-mobile-attachment-tray')).toContainText('release-brief.txt')
     await page.getByLabel('Remove release-brief.txt').click()
@@ -135,7 +137,8 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
     await expect(vault).not.toContainText('release-brief.txt')
     await expect(vault).toContainText('reference.png')
 
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
     await page.reload()
     const historicalAttachments = page.getByRole('list', { name: 'Attached files' })

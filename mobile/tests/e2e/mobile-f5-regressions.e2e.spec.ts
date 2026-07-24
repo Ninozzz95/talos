@@ -26,7 +26,8 @@ async function configureGemini(page: Page): Promise<void> {
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
     await page.getByLabel('Default chat model').click()
     await page.locator('[data-testid="talos-themed-select-item"][data-value="gemini:gemini-live"]').click()
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
 }
 
@@ -96,7 +97,8 @@ test('stations: tasks and notes persist across reload, doctor reports honestly',
     await expect(taskRow.first()).toHaveAttribute('data-task-status', 'doing')
 
     // Notes
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await page.locator(MENU).click()
     await page.locator(SIDEBAR).getByRole('button', { name: 'Open Notes' }).click()
     await expect(page.locator('[data-testid="talos-notes-screen"]')).toBeVisible()
@@ -113,15 +115,18 @@ test('stations: tasks and notes persist across reload, doctor reports honestly',
     await page.locator('[data-testid="talos-boot-logo"]').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined)
     await page.locator('[data-testid="talos-boot-logo"]').waitFor({ state: 'detached', timeout: 20_000 })
     await expect(page.locator('[data-testid="talos-note-row"]')).toHaveCount(1)
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await page.locator(MENU).click()
     await page.locator(SIDEBAR).getByRole('button', { name: 'Open Tasks' }).click()
     await expect(page.locator('[data-testid="talos-task-row"]')).toHaveCount(1)
     await expect(page.locator('[data-testid="talos-task-row"]').first()).toHaveAttribute('data-task-status', 'doing')
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
 
     // Doctor
-    await page.getByLabel('Back to chat').click()
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await page.locator(MENU).click()
     await page.locator(SIDEBAR).getByRole('button', { name: 'Open Doctor' }).click()
     await expect(page.locator('[data-testid="talos-doctor-screen"]')).toBeVisible()

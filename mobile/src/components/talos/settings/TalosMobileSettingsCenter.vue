@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Component } from 'vue'
-import { ArrowLeft, Bell, Bot, BrainCircuit, Globe2, Mail, Palette, Search, Settings, Shield, User, Wrench } from '@lucide/vue'
+import { computed, onBeforeUnmount, ref, watch, type Component } from 'vue'
+import { Bell, Bot, BrainCircuit, Globe2, Mail, Palette, Search, Settings, Shield, User, Wrench } from '@lucide/vue'
+import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosMobileSettingsModelsPanel from './TalosMobileSettingsModelsPanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
@@ -20,6 +21,19 @@ const activeTab = ref<TalosMobileSettingsTabId>('models')
 const mobilePane = ref<'categories' | 'detail'>('categories')
 const selectedTab = computed(() => talosMobileSettingsTab(activeTab.value))
 const developmentMode = import.meta.env.DEV
+
+// Owner 2026-07-24: drive the sheet header — in a detail pane the header shows
+// the subsection name and its Back returns to the categories list (ONE back,
+// no in-body second arrow). Only meaningful on the mobile master-detail; the
+// md side-by-side never enters a "detail-only" pane.
+const sheetNav = useTalosSheetNav()
+function openDetail(): void { mobilePane.value = 'detail' }
+function backToCategories(): void { mobilePane.value = 'categories' }
+watch([mobilePane, selectedTab], ([pane, tab]) => {
+    if (pane === 'detail') sheetNav.setSubView({ title: tab.label, back: backToCategories })
+    else sheetNav.clear()
+}, { immediate: true })
+onBeforeUnmount(() => sheetNav.clear())
 
 watch(() => props.requestedTab, (requested) => {
     if (!requested) return
@@ -71,7 +85,7 @@ const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border 
                     :value="tab.id"
                     :data-settings-tab="tab.id"
                     :class="triggerClass"
-                    @click="mobilePane = 'detail'"
+                    @click="openDetail"
                 >
                     <component :is="ICONS[tab.id]" class="h-4 w-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                     <span class="min-w-0 flex-1 truncate">{{ tab.label }}</span>
@@ -86,15 +100,8 @@ const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border 
             :class="mobilePane === 'categories' ? 'hidden' : 'block'"
             :aria-label="`${selectedTab.label} settings`"
         >
-            <button
-                type="button"
-                aria-label="Back to settings categories"
-                class="mb-3 inline-flex min-h-11 items-center gap-2 rounded-md pr-3 text-sm font-medium text-[var(--talos-muted)] md:hidden"
-                @click="mobilePane = 'categories'"
-            >
-                <ArrowLeft class="h-4 w-4" aria-hidden="true" />
-                Categories
-            </button>
+            <!-- Owner 2026-07-24: the in-body "Categories" back is GONE — the
+                 sheet header's single contextual Back now returns to the list. -->
             <TabsContent
                 v-for="tab in TALOS_MOBILE_SETTINGS_TABS"
                 :key="tab.id"
@@ -102,10 +109,14 @@ const triggerClass = 'flex min-h-11 w-full items-center gap-2 rounded-md border 
                 :data-settings-panel="tab.id"
                 class="outline-none"
             >
+                <!-- Owner: the sheet header already shows the subsection title on
+                     mobile — drop the duplicate eyebrow/title there, keep the
+                     one-line description; the md side-by-side keeps the full
+                     header (its sheet title stays "Settings Center"). -->
                 <header class="mb-4 border-b border-[var(--talos-border)] pb-3">
-                    <div class="text-[10px] font-semibold uppercase text-[var(--talos-muted)]">Protected preferences</div>
-                    <h3 class="mt-1 text-base font-semibold text-[var(--talos-text)]">{{ tab.label }}</h3>
-                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ tab.description }}</p>
+                    <div class="hidden text-[10px] font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
+                    <h3 class="hidden text-base font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
+                    <p class="text-xs leading-5 text-[var(--talos-muted)] md:mt-1">{{ tab.description }}</p>
                 </header>
 
                 <TalosMobileSettingsBrowserPanel

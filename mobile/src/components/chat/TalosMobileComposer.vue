@@ -371,17 +371,31 @@ watch(() => props.prompt, () => {
             </Button>
         </div>
 
-        <!-- F5.2 (owner): live dictation feedback — waveform reacting to the
-             incoming speech while the recognizer is hot. -->
+        <!-- Owner 2026-07-24 (Claude/ChatGPT-style): a distinct listening state —
+             accent-tinted pill, a live pulsing dot, a volume-reactive waveform
+             filling the width, a clear "Listening" label and a dedicated Stop
+             control (transcription flows inline into the field). -->
         <div
             v-if="dictationListening || dictationStarting"
             data-testid="talos-dictation-live"
-            class="mb-1 flex min-h-9 items-center gap-2 rounded-xl border border-[var(--talos-accent,var(--primary))]/40 bg-[var(--talos-panel,var(--card))]/80 px-3"
+            class="talos-dictation-live mb-2 flex items-center gap-3 rounded-2xl border border-[var(--talos-accent,var(--primary))]/30 bg-[color-mix(in_srgb,var(--talos-accent,#c08b3c)_10%,transparent)] px-3 py-2"
         >
-            <TalosMicWaveform :level="dictationStarting ? 0.1 : dictationLevel" />
-            <span class="text-xs text-[var(--talos-muted,var(--muted-foreground))]">
-                {{ dictationStarting ? 'Starting dictation…' : 'Listening — tap the mic to stop' }}
+            <span class="relative flex size-2.5 shrink-0" aria-hidden="true">
+                <span class="absolute inline-flex h-full w-full rounded-full bg-[var(--talos-accent,var(--primary))] opacity-60 motion-safe:animate-ping"></span>
+                <span class="relative inline-flex size-2.5 rounded-full bg-[var(--talos-accent,var(--primary))]"></span>
             </span>
+            <TalosMicWaveform :level="dictationStarting ? 0.12 : dictationLevel" :bars="18" class="min-w-0 flex-1" />
+            <span class="shrink-0 text-xs font-semibold tracking-wide text-[var(--talos-accent,var(--primary))]">
+                {{ dictationStarting ? 'Starting…' : 'Listening' }}
+            </span>
+            <button
+                type="button"
+                aria-label="Stop dictation"
+                class="talos-pressable flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                @click="emit('toggleDictation')"
+            >
+                <Square class="size-3.5" fill="currentColor" aria-hidden="true" />
+            </button>
         </div>
 
         <div class="relative min-w-0">
