@@ -33,6 +33,16 @@ export interface TalosAccountStore {
 
 const ACCOUNT_KEY = 'talos.mobile.account'
 
+/**
+ * The avatar initial for a display name — a whole leading grapheme (code POINT,
+ * so an emoji/astral first char stays intact), uppercased; 'T' when empty.
+ * Exported so the wizard's live preview shares the store's exact rule.
+ */
+export function talosAccountInitialFrom(name: string): string {
+    const trimmed = name.trim()
+    return trimmed ? [...trimmed][0]!.toUpperCase() : 'T'
+}
+
 const OAUTH_PROVIDERS: readonly TalosOAuthProvider[] = Object.freeze([
     { id: 'google', label: 'Continue with Google', available: false, gateReason: 'Sign-in syncs with the sovereign core — arriving with local encrypted sync.' },
     { id: 'apple', label: 'Continue with Apple', available: false, gateReason: 'Sign-in syncs with the sovereign core — arriving with local encrypted sync.' },
@@ -59,12 +69,9 @@ export function useTalosAccountStore(): TalosAccountStore {
     if (singleton) return singleton
     const state = reactive<TalosAccountState>({ display_name: '', auth_provider: 'local' })
 
-    const initial = computed(() => {
-        const name = state.display_name.trim()
-        // SF-critic m4: [...name] splits by code POINT so an emoji/astral first
-        // char yields a whole glyph, not a lone surrogate.
-        return name ? [...name][0]!.toUpperCase() : 'T'
-    })
+    // SF-critic m4: talosAccountInitialFrom splits by code POINT so an
+    // emoji/astral first char yields a whole glyph, not a lone surrogate.
+    const initial = computed(() => talosAccountInitialFrom(state.display_name))
 
     async function persist(): Promise<void> {
         await talosBridgeCall('TALOS_ACCOUNT_PERSIST', () => Preferences.set({

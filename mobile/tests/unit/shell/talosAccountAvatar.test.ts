@@ -24,4 +24,8 @@ describe('TalosAccountAvatar', () => {
     it('is a decorative chip (aria-hidden) — the labelled control around it names it', () => {
         expect(mount(TalosAccountAvatar).get('span').attributes('aria-hidden')).toBe('true')
     })
+
+    it('renders the `initial` prop override (wizard live preview) over the store value', () => {
+        expect(mount(TalosAccountAvatar, { props: { initial: 'Z' } }).text()).toBe('Z')
+    })
 })
