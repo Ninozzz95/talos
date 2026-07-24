@@ -197,6 +197,37 @@ test('shell stays functional with lifecycle registration disabled and default ba
     expect(errors, errors.join('\n')).toEqual([])
 })
 
+test('settings subsection back returns to the categories list, not straight to chat', async ({ page }) => {
+    // Owner 2026-07-24 regression: on the phone the header shows ONE contextual
+    // Back. Opening a subsection (Account) titles the header "Account"; Back must
+    // return to the categories list with the sheet STILL open (not close it).
+    await page.setViewportSize({ width: 375, height: 720 })
+    await page.goto('/')
+    await openStation(page, 'Settings')
+    await expect(page.locator(SHEET)).toBeVisible()
+
+    // Categories list is shown first.
+    await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
+    await page.locator('[data-settings-tab="account"]').click()
+
+    // Detail pane open; the sheet header reflects the subsection + Back arrow.
+    await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
+    const back = page.locator('[data-testid="talos-sheet-back"]')
+    await expect(back).toHaveAttribute('aria-label', 'Back')
+
+    // Back returns to the categories list — the sheet stays open.
+    await back.click()
+    await page.waitForTimeout(320)
+    await expect(page.locator(SHEET)).toBeVisible()
+    await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
+    await expect(back).toHaveAttribute('aria-label', 'Back to chat')
+
+    // A second Back closes the sheet, returning to chat.
+    await back.click()
+    await page.waitForTimeout(320)
+    await expect(page.locator(SHEET)).toHaveCount(0)
+})
+
 test('shell renders a fail-closed fallback when upstream ui components are disabled', async ({ page }) => {
     await disableSubsystems(page, ['ui'])
     await page.goto('/')

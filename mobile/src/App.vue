@@ -28,6 +28,7 @@ import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
+import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 
 const router = useRouter()
@@ -185,6 +186,7 @@ const TalosMobileSessionExportSheet = defineAsyncComponent(
 // the panel from the stored value. The settings write happens once per
 // gesture at `commit`.
 const tabletLayout = useTalosTabletLayout()
+const sheetNav = useTalosSheetNav()
 const tabletDragWidth = ref<number | null>(null)
 const tabletSidebarWidth = computed(() => tabletDragWidth.value
     ?? clampTalosTabletSidebarWidth(settingsStore.state.shell.tablet_sidebar_width))
@@ -309,9 +311,16 @@ onMounted(async () => {
         })
         lifecycle = registerNativeAppLifecycle({
             onBack: (event) => {
-                // Android Back: sidebar first, then an open station sheet.
+                // Android Back: sidebar first; then a station SUB-VIEW (e.g. a
+                // Settings subsection) goes up ONE level, not straight to chat
+                // (owner: back from Account must return to the Settings list);
+                // then an open station sheet closes to chat.
                 if (sidebarOpen.value) {
                     sidebarOpen.value = false
+                    return 'handled'
+                }
+                if (sheetNav.subView.value) {
+                    sheetNav.subView.value.back()
                     return 'handled'
                 }
                 if (isStation.value) {
