@@ -7,11 +7,12 @@
  */
 import { inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check, RotateCcw } from '@lucide/vue'
+import { Check, RotateCcw, Wand2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileAppLockModal from '@/components/talos/settings/TalosMobileAppLockModal.vue'
 import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
+import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosAccountStore } from '@/stores/account'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -20,6 +21,7 @@ import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/ser
 
 const router = useRouter()
 const intro = inject(TALOS_MOBILE_INTRO_KEY, null)
+const wizard = inject(TALOS_MOBILE_WIZARD_KEY, null)
 const settings = useSettingsStore()
 const account = useTalosAccountStore()
 const toasts = useTalosMobileToasts()
@@ -60,6 +62,14 @@ function replayIntroduction(): void {
     // never opens behind the settings surface, then replay exactly once.
     void router.push({ name: 'chat' })
     intro?.replayIntro()
+}
+
+async function replayWizardSetup(): Promise<void> {
+    // Same rule as the intro replay, but AWAIT the route change first (SF M1):
+    // the fullscreen wizard must not mount behind the settings sheet while its
+    // leave transition is still painting.
+    await router.push({ name: 'chat' })
+    wizard?.replayWizard()
 }
 
 function toggleAppLock(): void {
@@ -223,6 +233,23 @@ async function toggleBiometric(): Promise<void> {
                 </template>
                 <template v-else>Probing…</template>
             </p>
+        </section>
+
+        <section>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Workspace setup</h4>
+            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
+                Re-run the guided setup — identity, appearance, app lock and sign-in.
+            </p>
+            <Button
+                type="button"
+                variant="outline"
+                data-testid="talos-wizard-replay"
+                class="talos-pressable mt-2 min-h-11 gap-2"
+                @click="replayWizardSetup"
+            >
+                <Wand2 class="size-4" aria-hidden="true" />
+                Set up workspace
+            </Button>
         </section>
 
         <section>

@@ -25,6 +25,8 @@ import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
+import { useTalosMobileWizardState } from '@/composables/useTalosMobileWizardState'
+import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
@@ -51,6 +53,11 @@ const shellActionBusy = ref(false)
 // over the boot logo); the chunk loads ONLY when gating opens it.
 const TalosMobileIntroModal = defineAsyncComponent(
     () => import('@/components/intro/TalosMobileIntroModal.vue'),
+)
+// N1 — the guided account wizard chunk loads only when its gate opens it
+// (first run after the intro, or an explicit replay from Settings).
+const TalosMobileAccountWizard = defineAsyncComponent(
+    () => import('@/components/onboarding/TalosMobileAccountWizard.vue'),
 )
 // F2-T6 app lock: armed on cold start when the opt-in flag AND a real PIN
 // record exist; the lock screen chunk loads only when the lock is armed.
@@ -87,6 +94,16 @@ const intro = useTalosMobileIntroState({
     setOnboarding: (patch) => settingsStore.setOnboarding(patch),
 })
 provide(TALOS_MOBILE_INTRO_KEY, intro)
+
+// N1 — guided account wizard: opens after the intro is resolved (ONE fullscreen
+// surface at a time), once per wizard version; replayable from Settings.
+const accountWizard = useTalosMobileWizardState({
+    hydrated: () => settingsHydrated.value,
+    blocked: () => showBoot.value || locked.value || intro.introOpen.value,
+    onboarding: () => settingsStore.state.onboarding,
+    setOnboarding: (patch) => settingsStore.setOnboarding(patch),
+})
+provide(TALOS_MOBILE_WIZARD_KEY, accountWizard)
 
 // F4-#18: ask for the mic permission at a MEANINGFUL moment — completing the
 // intro (the user just read what TALOS does), never at cold start. Skippers
@@ -311,6 +328,12 @@ onMounted(async () => {
         })
         lifecycle = registerNativeAppLifecycle({
             onBack: (event) => {
+                // N1 — the guided account wizard is the top-most surface: Back
+                // walks its steps one level up (no app exit) while it is open.
+                if (accountWizard.wizardOpen.value) {
+                    accountWizard.handleBack()
+                    return 'handled'
+                }
                 // Android Back: sidebar first; then a station SUB-VIEW (e.g. a
                 // Settings subsection) goes up ONE level, not straight to chat
                 // (owner: back from Account must return to the Settings list);
@@ -364,6 +387,10 @@ onBeforeUnmount(async () => {
             v-if="intro.introOpen.value"
             @close="onIntroClose($event)"
         />
+
+        <!-- N1 guided account wizard: opens after the intro, once per version.
+             The shell persists its own outcome via the injected wizard state. -->
+        <TalosMobileAccountWizard v-if="accountWizard.wizardOpen.value" />
 
         <div
             v-if="themeStore.state.theme !== 'calm'"

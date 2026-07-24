@@ -101,36 +101,51 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
 // F2-T6 — versioned intro/onboarding contract (mobile-local mirror of the
 // desktop intro spec): compared against TALOS_MOBILE_INTRO_VERSION at open.
 export type TalosMobileIntroOutcome = 'completed' | 'skipped'
+// N1 — guided account-creation wizard outcome (mirrors the intro contract).
+export type TalosMobileWizardOutcome = 'completed' | 'skipped'
 
 export interface TalosMobileOnboardingState {
     intro_version: number
     intro_outcome: TalosMobileIntroOutcome | null
     setup_dismissed: boolean
+    /** N1 — account wizard: version gate + outcome, same shape as the intro. */
+    wizard_version: number
+    wizard_outcome: TalosMobileWizardOutcome | null
 }
 
 const DEFAULT_ONBOARDING_STATE: TalosMobileOnboardingState = {
     intro_version: 0,
     intro_outcome: null,
     setup_dismissed: false,
+    wizard_version: 0,
+    wizard_outcome: null,
+}
+
+function parseVersion(candidate: unknown, fallback: number): number {
+    return typeof candidate === 'number'
+        && Number.isInteger(candidate)
+        && candidate >= 0
+        && candidate <= 65535
+        ? candidate
+        : fallback
 }
 
 function parseOnboarding(value: unknown): TalosMobileOnboardingState {
     const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
-    const version = typeof record.intro_version === 'number'
-        && Number.isInteger(record.intro_version)
-        && record.intro_version >= 0
-        && record.intro_version <= 65535
-        ? record.intro_version
-        : DEFAULT_ONBOARDING_STATE.intro_version
     const outcome = record.intro_outcome === 'completed' || record.intro_outcome === 'skipped'
         ? record.intro_outcome
         : null
+    const wizardOutcome = record.wizard_outcome === 'completed' || record.wizard_outcome === 'skipped'
+        ? record.wizard_outcome
+        : null
     return {
-        intro_version: version,
+        intro_version: parseVersion(record.intro_version, DEFAULT_ONBOARDING_STATE.intro_version),
         intro_outcome: outcome,
         setup_dismissed: typeof record.setup_dismissed === 'boolean'
             ? record.setup_dismissed
             : DEFAULT_ONBOARDING_STATE.setup_dismissed,
+        wizard_version: parseVersion(record.wizard_version, DEFAULT_ONBOARDING_STATE.wizard_version),
+        wizard_outcome: wizardOutcome,
     }
 }
 

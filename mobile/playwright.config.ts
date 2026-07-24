@@ -23,7 +23,9 @@ export default defineConfig({
                         defaults_v3: true,
                         presentation_v2: true,
                         shell: { immersive_header: false, composer_drawer: false },
-                        onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true },
+                        // N1: returning user — intro AND the account wizard are
+                        // already resolved so existing journeys aren't intercepted.
+                        onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true, wizard_version: 1, wizard_outcome: 'completed' },
                     }),
                 }],
             }],

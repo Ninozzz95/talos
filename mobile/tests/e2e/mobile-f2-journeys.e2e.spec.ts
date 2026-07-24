@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 // F2 journeys — intro modal (versioned, mobile-truth), first-run checklist,
 // immersive header toggle, Account replay and the app lock. The config seeds
@@ -9,6 +9,16 @@ const CHECKLIST = '[data-testid="talos-setup-checklist"]'
 const LOCK = '[data-testid="talos-lock-screen"]'
 
 const EMPTY_STATE = { cookies: [], origins: [] }
+const WIZARD = '[data-testid="talos-account-wizard"]'
+
+// N1: the guided account wizard follows the intro on a fresh install. The
+// fresh-install journeys dismiss it (skip) so they can assert the shell beneath;
+// skipping persists wizard_version so it never re-offers on reload.
+async function dismissWizard(page: Page): Promise<void> {
+    await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+    await page.locator('[data-testid="talos-wizard-close"]').click()
+    await expect(page.locator(WIZARD)).toHaveCount(0)
+}
 
 // Owner #15: fresh installs boot into the NEW defaults.
 test.describe('fresh-install defaults (owner #15)', () => {
@@ -19,6 +29,8 @@ test.describe('fresh-install defaults (owner #15)', () => {
         const intro = page.locator(INTRO)
         await expect(intro).toBeVisible({ timeout: 15000 })
         await intro.getByRole('button', { name: 'Skip introduction' }).click()
+        // N1: the account wizard now follows the intro on a fresh install.
+        await dismissWizard(page)
         await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
         await expect(page.locator(HEADER)).toHaveCount(0)
         await expect(page.locator('[aria-label="Add to chat"]')).toBeVisible()
@@ -36,7 +48,7 @@ const SEEN_NOT_DISMISSED = {
                 defaults_v3: true,
             presentation_v2: true,
             shell: { immersive_header: false, composer_drawer: false },
-            onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: false },
+            onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: false, wizard_version: 1, wizard_outcome: 'completed' },
             }),
         }],
     }],
@@ -64,6 +76,9 @@ test.describe('intro first-run (fresh install)', () => {
         await expect(intro).toContainText('Step 6 of 6')
         await page.locator('[data-testid="talos-intro-cta"]').click()
         await expect(intro).toHaveCount(0)
+        // N1: the account wizard follows the intro; skip it so the fresh install
+        // lands in the shell and the reload assertion is clean.
+        await dismissWizard(page)
         // The completed version persists — a reload must NOT re-offer the
         // intro; fresh installs land in the immersive default shell (#15).
         await page.reload()
@@ -77,6 +92,8 @@ test.describe('intro first-run (fresh install)', () => {
         await expect(intro).toBeVisible({ timeout: 15000 })
         await intro.getByRole('button', { name: 'Skip introduction' }).click()
         await expect(intro).toHaveCount(0)
+        // N1: skip the wizard that follows the intro (persists so no re-offer).
+        await dismissWizard(page)
         await page.reload()
         await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
         await expect(page.locator(INTRO)).toHaveCount(0)

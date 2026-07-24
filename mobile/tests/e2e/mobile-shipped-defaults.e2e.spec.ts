@@ -22,7 +22,7 @@ test.use({
                     defaults_v3: true,
                     presentation_v2: true,
                     shell: { immersive_header: true, composer_drawer: true },
-                    onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true },
+                    onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true, wizard_version: 1, wizard_outcome: 'completed' },
                 }),
             }],
         }],
