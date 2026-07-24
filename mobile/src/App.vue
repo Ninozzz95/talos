@@ -27,6 +27,7 @@ import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { useTalosMobileWizardState } from '@/composables/useTalosMobileWizardState'
 import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
+import { resolveTalosBackAction } from '@/lib/backNavigation'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
@@ -328,29 +329,25 @@ onMounted(async () => {
         })
         lifecycle = registerNativeAppLifecycle({
             onBack: (event) => {
-                // N1 — the guided account wizard is the top-most surface: Back
-                // walks its steps one level up (no app exit) while it is open.
-                if (accountWizard.wizardOpen.value) {
-                    accountWizard.handleBack()
-                    return 'handled'
+                // Owner 2026-07-24: the sidebar is the MAIN MENU. Back walks the
+                // stack (wizard → sidebar → settings sub-view → station → chat).
+                // A station TOP returns to the sidebar, NOT straight to chat, so
+                // leaving Settings/a tool reopens the menu it was launched from.
+                const action = resolveTalosBackAction({
+                    wizardOpen: accountWizard.wizardOpen.value,
+                    sidebarOpen: sidebarOpen.value,
+                    hasSheetSubView: sheetNav.subView.value !== null,
+                    isStation: isStation.value,
+                    canGoBack: event.canGoBack,
+                })
+                switch (action) {
+                    case 'dismiss-wizard': accountWizard.handleBack(); return 'handled'
+                    case 'close-sidebar': sidebarOpen.value = false; return 'handled'
+                    case 'sheet-subview-back': sheetNav.subView.value?.back(); return 'handled'
+                    case 'station-to-sidebar': void navigate('chat'); sidebarOpen.value = true; return 'handled'
+                    case 'history': return 'history'
+                    case 'exit': return 'exit'
                 }
-                // Android Back: sidebar first; then a station SUB-VIEW (e.g. a
-                // Settings subsection) goes up ONE level, not straight to chat
-                // (owner: back from Account must return to the Settings list);
-                // then an open station sheet closes to chat.
-                if (sidebarOpen.value) {
-                    sidebarOpen.value = false
-                    return 'handled'
-                }
-                if (sheetNav.subView.value) {
-                    sheetNav.subView.value.back()
-                    return 'handled'
-                }
-                if (isStation.value) {
-                    void navigate('chat')
-                    return 'handled'
-                }
-                return event.canGoBack ? 'history' : 'exit'
             },
             onError: (error) => {
                 console.error(`[native-lifecycle] ${error.code}: ${error.message}`)
