@@ -14,6 +14,10 @@ use Throwable;
 
 final class TalosOperationalClaimInspector
 {
+    private const MAX_EXTERNAL_HTTP_URLS = 128;
+
+    private const MAX_EXTERNAL_HTTP_URL_BYTES = 4096;
+
     private readonly MarkdownParser $parser;
 
     public function __construct()
@@ -57,6 +61,85 @@ final class TalosOperationalClaimInspector
     public function referencesTalosEvidence(string $markdown): bool
     {
         return $this->talosEvidenceIds($markdown) !== [];
+    }
+
+    /** @return list<string> */
+    public function externalHttpUrls(string $text): array
+    {
+        $matched = preg_match_all('~https?://[^\s<>"\'`]+~iu', $text, $matches);
+        if ($matched === false) {
+            throw new TalosGroundingException(
+                'TALOS_GROUNDING_OUTPUT_INVALID',
+                'The provider response could not be inspected for bounded URLs.',
+            );
+        }
+        if ($matched > self::MAX_EXTERNAL_HTTP_URLS) {
+            throw new TalosGroundingException(
+                'TALOS_GROUNDING_OUTPUT_INVALID',
+                'The provider response contains too many external URLs.',
+            );
+        }
+
+        $urls = [];
+        foreach ($matches[0] ?? [] as $raw) {
+            $candidate = $this->boundedHttpCandidate((string) $raw);
+            if ($this->evidenceIdFromUri($candidate) !== null) {
+                continue;
+            }
+            $normalized = $this->normalizeHttpUrl($candidate);
+            if ($normalized !== null) {
+                $urls[$normalized] = true;
+            }
+        }
+
+        return array_keys($urls);
+    }
+
+    private function boundedHttpCandidate(string $value): string
+    {
+        $candidate = rtrim($value, ".,;:!?)]}");
+        if ($candidate === '' || strlen($candidate) > self::MAX_EXTERNAL_HTTP_URL_BYTES) {
+            throw new TalosGroundingException(
+                'TALOS_GROUNDING_OUTPUT_INVALID',
+                'The provider response contains an invalid or oversized external URL.',
+            );
+        }
+
+        return $candidate;
+    }
+
+    private function normalizeHttpUrl(string $url): ?string
+    {
+        $parts = parse_url($url);
+        if (! is_array($parts)
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || ! is_string($parts['scheme'] ?? null)
+            || ! is_string($parts['host'] ?? null)) {
+            return null;
+        }
+
+        $scheme = strtolower($parts['scheme']);
+        $host = strtolower(rtrim($parts['host'], '.'));
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return null;
+        }
+
+        $normalized = $scheme.'://'.$host;
+        $port = $parts['port'] ?? null;
+        if (is_int($port) && ! (($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443))) {
+            $normalized .= ':'.$port;
+        }
+        $path = is_string($parts['path'] ?? null) && $parts['path'] !== '' ? $parts['path'] : '/';
+        $normalized .= $path;
+        if (is_string($parts['query'] ?? null) && $parts['query'] !== '') {
+            $normalized .= '?'.$parts['query'];
+        }
+        if (is_string($parts['fragment'] ?? null) && $parts['fragment'] !== '') {
+            $normalized .= '#'.$parts['fragment'];
+        }
+
+        return $normalized;
     }
 
     private function evidenceIdFromUri(string $uri): ?string

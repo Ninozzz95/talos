@@ -57,4 +57,22 @@ final class TalosOperationalClaimInspectorTest extends TestCase
             ."[second](https://talo.sh/artifact/{$second})",
         ));
     }
+
+    public function test_it_extracts_bounded_external_http_urls_from_json_code_and_markdown_without_talos_artifact_links(): void
+    {
+        $inspector = new TalosOperationalClaimInspector;
+        $artifactId = '019f6041-b3d6-7f8e-87f9-02110be8a48a';
+
+        $this->assertSame([
+            'https://example.com/vehicles/one?color=red',
+            'https://example.com/vehicles/two',
+        ], $inspector->externalHttpUrls(
+            "```json\n"
+            .'[{"url":"https://Example.COM:443/vehicles/one?color=red"},'
+            .'{"url":"https://example.com/vehicles/two"}]'
+            ."\n```\n"
+            ."[duplicate](https://example.com/vehicles/one?color=red)\n"
+            ."![owned evidence](https://talo.sh/artifact/{$artifactId})",
+        ));
+    }
 }

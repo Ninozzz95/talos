@@ -35,7 +35,12 @@ function providerFixture(string $name): array
     return $decoded;
 }
 
-function providerTurnRequest(string $provider = 'deepseek', bool $emptyProperties = false): ProviderTurnRequest
+function providerTurnRequest(
+    string $provider = 'deepseek',
+    bool $emptyProperties = false,
+    ?bool $reasoningVisible = null,
+    ?string $responseMimeType = null,
+): ProviderTurnRequest
 {
     $definition = json_decode(
         (string) file_get_contents(__DIR__.'/fixtures/tool-contracts/valid-definition.json'),
@@ -59,6 +64,8 @@ function providerTurnRequest(string $provider = 'deepseek', bool $emptyPropertie
         tools: [ToolDefinition::fromStrictArray($definition)],
         maxTokens: 2048,
         temperature: 0.0,
+        reasoningVisible: $reasoningVisible,
+        responseMimeType: $responseMimeType,
     );
 }
 
@@ -186,6 +193,90 @@ function testOpenAiAdapterContinuesWithNativeRoleToolResults(): void
     assertProviderTurn(($toolPayload['isError'] ?? null) === true, 'Tool-level failures must remain visible to the provider as results.');
 }
 
+function testOpenAiAdapterProjectsCanonicalToolResultsOnceForChatContinuation(): void
+{
+    $responses = [
+        providerFixture('mixed-preamble-tool-call')['provider_response'],
+        providerFixture('final-text')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests);
+    $first = $adapter->start(providerTurnRequest());
+    $structured = [
+        'tool' => 'browser_snapshot',
+        'observation' => [
+            'nodes' => [[
+                'ref' => 'r1',
+                'role' => 'link',
+                'name' => str_repeat('Vehicle result ', 256),
+            ]],
+        ],
+        'evidence_ids' => ['artifact-1'],
+    ];
+    $canonical = new ToolResult(
+        toolUseId: 'call_browser_1',
+        isError: false,
+        content: [[
+            'type' => 'text',
+            'text' => json_encode($structured, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        ]],
+        structuredContent: $structured,
+        evidence: [[
+            'artifact_id' => 'artifact-1',
+            'kind' => 'browser_snapshot',
+            'sha256' => 'sha256:'.str_repeat('a', 64),
+            'trusted_boundary' => 'browser-worker',
+        ]],
+    );
+
+    $adapter->continue($first->state, [$canonical]);
+
+    $messages = $requests[1]['payload']['messages'] ?? [];
+    $toolMessage = $messages[count($messages) - 1] ?? [];
+    $providerPayload = json_decode((string) ($toolMessage['content'] ?? ''), true, flags: JSON_THROW_ON_ERROR);
+    assertProviderTurn(
+        array_keys($providerPayload) === ['isError', 'structuredContent', 'evidence'],
+        'A structured provider result must be projected once without duplicated MCP compatibility fields.',
+    );
+    assertProviderTurn(
+        ($providerPayload['structuredContent'] ?? null) === $structured,
+        'Compact provider projection must preserve the complete structured result.',
+    );
+    assertProviderTurn(
+        ($providerPayload['evidence'][0]['artifact_id'] ?? null) === 'artifact-1',
+        'Compact provider projection must preserve redacted evidence identity.',
+    );
+    assertProviderTurn(
+        strlen((string) $toolMessage['content']) < strlen(json_encode($canonical->toRedactedArray(), JSON_THROW_ON_ERROR)),
+        'Compact provider projection must be smaller than the persisted canonical result.',
+    );
+
+    $responses = [
+        providerFixture('mixed-preamble-tool-call')['provider_response'],
+        providerFixture('final-text')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests);
+    $first = $adapter->start(providerTurnRequest());
+    $adapter->continue($first->state, [new ToolResult(
+        toolUseId: 'call_browser_1',
+        isError: false,
+        content: [['type' => 'text', 'text' => 'Unstructured fallback result.']],
+        structuredContent: null,
+        evidence: [],
+    )]);
+    $messages = $requests[1]['payload']['messages'] ?? [];
+    $fallbackPayload = json_decode((string) ($messages[count($messages) - 1]['content'] ?? ''), true, flags: JSON_THROW_ON_ERROR);
+    assertProviderTurn(
+        array_keys($fallbackPayload) === ['isError', 'content', 'evidence'],
+        'An unstructured provider result must retain its redacted content fallback.',
+    );
+    assertProviderTurn(
+        ($fallbackPayload['content'][0]['text'] ?? null) === 'Unstructured fallback result.',
+        'Compact provider projection must preserve unstructured text.',
+    );
+}
+
 function testDeepSeekReasoningStateIsReplayedButNeverExposedInAuditOutput(): void
 {
     $responses = [
@@ -206,6 +297,72 @@ function testDeepSeekReasoningStateIsReplayedButNeverExposedInAuditOutput(): voi
     $continuationMessages = $requests[1]['payload']['messages'] ?? [];
     $assistantMessage = $continuationMessages[count($continuationMessages) - 2] ?? [];
     assertProviderTurn(($assistantMessage['reasoning_content'] ?? null) === 'private-reasoning-trace', 'DeepSeek reasoning continuation state must be replayed exactly when required.');
+}
+
+function testDeepSeekThinkingToggleIsExplicitAndDurableAcrossToolContinuation(): void
+{
+    $responses = [
+        providerFixture('mixed-preamble-tool-call')['provider_response'],
+        providerFixture('tool-error-continuation')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests);
+    $first = $adapter->start(providerTurnRequest(reasoningVisible: false));
+    $adapter->continue(
+        $first->state,
+        [ToolResult::error('call_browser_1', 'BROWSER_TIMEOUT', 'Retry with another source.')],
+    );
+
+    assertProviderTurn(
+        ($requests[0]['payload']['thinking']['type'] ?? null) === 'disabled',
+        'DeepSeek must receive an explicit disabled thinking toggle when the composer turns thinking off.',
+    );
+    assertProviderTurn(
+        ($requests[1]['payload']['thinking']['type'] ?? null) === 'disabled',
+        'DeepSeek continuation must preserve the exact thinking toggle from the initial tool turn.',
+    );
+
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    openAiFixtureAdapter($responses, $requests)->start(providerTurnRequest(reasoningVisible: true));
+    assertProviderTurn(
+        ($requests[0]['payload']['thinking']['type'] ?? null) === 'enabled',
+        'DeepSeek must receive an explicit enabled thinking toggle when requested.',
+    );
+
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    openAiFixtureAdapter($responses, $requests, 'openai')->start(
+        providerTurnRequest('openai', reasoningVisible: false),
+    );
+    assertProviderTurn(
+        ! array_key_exists('thinking', $requests[0]['payload']),
+        'DeepSeek-specific thinking wire fields must not leak into OpenAI requests.',
+    );
+}
+
+function testDeepSeekJsonResponseMimeTypeIsNativeAndDurableAcrossToolContinuation(): void
+{
+    $responses = [
+        providerFixture('mixed-preamble-tool-call')['provider_response'],
+        providerFixture('final-text')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests);
+    $first = $adapter->start(providerTurnRequest(responseMimeType: 'application/json'));
+    $adapter->continue(
+        $first->state,
+        [ToolResult::error('call_browser_1', 'BROWSER_TIMEOUT', 'The page timed out.')],
+    );
+
+    assertProviderTurn(
+        ($requests[0]['payload']['response_format']['type'] ?? null) === 'json_object',
+        'DeepSeek JSON output must use its stable native response_format contract.',
+    );
+    assertProviderTurn(
+        ($requests[1]['payload']['response_format']['type'] ?? null) === 'json_object',
+        'DeepSeek JSON output mode must survive the full tool continuation.',
+    );
 }
 
 function testOpenAiAdapterReturnsRedactedProviderFailures(): void
@@ -384,7 +541,10 @@ $tests = [
     'testOpenAiAdapterFailsClosedForMalformedCallsRefusalAndTruncation',
     'testOpenAiAdapterRejectsListShapedToolArguments',
     'testOpenAiAdapterContinuesWithNativeRoleToolResults',
+    'testOpenAiAdapterProjectsCanonicalToolResultsOnceForChatContinuation',
     'testDeepSeekReasoningStateIsReplayedButNeverExposedInAuditOutput',
+    'testDeepSeekThinkingToggleIsExplicitAndDurableAcrossToolContinuation',
+    'testDeepSeekJsonResponseMimeTypeIsNativeAndDurableAcrossToolContinuation',
     'testOpenAiAdapterReturnsRedactedProviderFailures',
     'testOpenAiAdapterAllowsCredentialFreeOllamaOnlyOnLoopback',
     'testChatCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState',

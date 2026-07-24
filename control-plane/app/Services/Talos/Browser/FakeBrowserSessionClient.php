@@ -592,7 +592,12 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             ];
             $sources = [
                 ['kind' => 'screenshot', 'source' => $screenshotBytes],
-                ['kind' => 'snapshot', 'source' => json_encode($snapshotSource, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)],
+                ['kind' => 'snapshot', 'source' => TalosBrowserSnapshotEvidence::canonicalJson(
+                    snapshotId: (string) $snapshotSource['snapshot_id'],
+                    format: (string) $snapshotSource['format'],
+                    textDigest: (string) $snapshotSource['text_digest'],
+                    nodes: is_array($snapshotSource['nodes']) ? $snapshotSource['nodes'] : [],
+                )],
             ];
             $evidence = [];
             foreach ($sources as $source) {
@@ -734,7 +739,12 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'text_digest' => 'Browser action completed',
             'nodes' => [['ref' => 'r1', 'role' => 'heading', 'name' => 'Browser action completed', 'visible' => true]],
         ];
-        $snapshot['sha256'] = 'sha256:'.hash('sha256', json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
+        $snapshot['sha256'] = TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: $snapshot['snapshot_id'],
+            format: $snapshot['format'],
+            textDigest: $snapshot['text_digest'],
+            nodes: $snapshot['nodes'],
+        );
         $bytes = self::pngBytes(1280, 800);
         $this->latestToolSnapshot = [
             'snapshot_id' => $snapshot['snapshot_id'],
@@ -763,8 +773,7 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
         ];
     }
 
-    /** @return array{snapshotId: string, format: string, nodes: array<mixed>, textDigest: string} */
-    private function fakeSnapshotEvidenceSource(): array
+    private function fakeSnapshotEvidenceSource(): string
     {
         $snapshot = $this->latestToolSnapshot ?? [
             'snapshot_id' => 'snap_fake',
@@ -772,12 +781,12 @@ final class FakeBrowserSessionClient implements BrowserSessionClient
             'text_digest' => '',
         ];
 
-        return [
-            'snapshotId' => (string) $snapshot['snapshot_id'],
-            'format' => 'accessibility_refs_v1',
-            'nodes' => is_array($snapshot['nodes']) ? $snapshot['nodes'] : [],
-            'textDigest' => (string) $snapshot['text_digest'],
-        ];
+        return TalosBrowserSnapshotEvidence::canonicalJson(
+            snapshotId: (string) $snapshot['snapshot_id'],
+            format: 'accessibility_refs_v1',
+            textDigest: (string) $snapshot['text_digest'],
+            nodes: is_array($snapshot['nodes']) ? $snapshot['nodes'] : [],
+        );
     }
 
     private static function pngBytes(int $width, int $height): string

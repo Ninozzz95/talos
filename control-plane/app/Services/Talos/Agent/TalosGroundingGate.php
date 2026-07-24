@@ -22,6 +22,7 @@ final class TalosGroundingGate
         'browser_snapshot',
         'browser_read',
         'browser_take_screenshot',
+        'browser_click',
         'browser_file_upload',
         'web_search',
         'web_fetch',
@@ -39,6 +40,7 @@ final class TalosGroundingGate
         }
 
         $referencedEvidenceIds = $this->claimInspector->talosEvidenceIds($response->text);
+        $claimedExternalUrls = $this->claimInspector->externalHttpUrls($response->text);
         $turn->load(['calls.results']);
         if ($turn->calls->isEmpty()) {
             if ($referencedEvidenceIds !== []) {
@@ -49,6 +51,8 @@ final class TalosGroundingGate
         }
 
         $verifiedEvidenceIds = [];
+        $verifiedExternalUrls = [];
+        $usedEvidenceTools = false;
         foreach ($turn->calls as $call) {
             $this->assertCallOwnership($turn, $call);
             if ($call->results->count() !== 1) {
@@ -70,6 +74,17 @@ final class TalosGroundingGate
                 throw new TalosGroundingException('TALOS_GROUNDING_RESULT_INVALID', 'Persisted tool result error state is inconsistent.');
             }
 
+            if (in_array($call->tool_name, self::EVIDENCE_TOOLS, true)) {
+                $usedEvidenceTools = true;
+                $resultJson = json_encode(
+                    $result->toRedactedArray(),
+                    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR,
+                );
+                foreach ($this->claimInspector->externalHttpUrls($resultJson) as $observedUrl) {
+                    $verifiedExternalUrls[$observedUrl] = true;
+                }
+            }
+
             if (! $result->isError && in_array($call->tool_name, self::EVIDENCE_TOOLS, true)) {
                 foreach ($this->assertEvidence($turn, $persisted, $result) as $evidenceId) {
                     $verifiedEvidenceIds[$evidenceId] = true;
@@ -83,6 +98,16 @@ final class TalosGroundingGate
         foreach ($referencedEvidenceIds as $referencedEvidenceId) {
             if (! isset($verifiedEvidenceIds[$referencedEvidenceId])) {
                 throw new TalosGroundingException('TALOS_GROUNDING_EVIDENCE_INVALID', 'Provider evidence references do not match the current tool results.');
+            }
+        }
+        if ($usedEvidenceTools) {
+            foreach ($claimedExternalUrls as $claimedUrl) {
+                if (! isset($verifiedExternalUrls[$claimedUrl])) {
+                    throw new TalosGroundingException(
+                        'TALOS_GROUNDING_URL_UNVERIFIED',
+                        'The provider response contains an external URL absent from correlated tool evidence.',
+                    );
+                }
             }
         }
 

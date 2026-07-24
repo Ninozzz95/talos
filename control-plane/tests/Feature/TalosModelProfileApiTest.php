@@ -408,7 +408,24 @@ final class TalosModelProfileApiTest extends TestCase
     public function test_draft_probe_normalizes_openai_compatible_base_url_without_duplicate_chat_path(): void
     {
         Http::fake([
-            'api.deepseek.test/v1/chat/completions' => Http::response(['id' => 'normalized-probe-ok'], 200),
+            'api.deepseek.test/v1/chat/completions' => Http::response([
+                'id' => 'normalized-probe-ok',
+                'choices' => [[
+                    'finish_reason' => 'tool_calls',
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => null,
+                        'tool_calls' => [[
+                            'id' => 'call-normalized-probe',
+                            'type' => 'function',
+                            'function' => [
+                                'name' => 'talos_health_check',
+                                'arguments' => '{"status":"ok"}',
+                            ],
+                        ]],
+                    ],
+                ]],
+            ], 200),
         ]);
 
         $this->postJson('/api/talos/model-profiles/probe-draft', [
@@ -730,6 +747,123 @@ final class TalosModelProfileApiTest extends TestCase
 
         Http::assertSent(fn ($request): bool => $request->url() === 'https://api.openai.test/v1/chat/completions'
             && $request->hasHeader('Authorization', 'Bearer probe-secret'));
+    }
+
+    public function test_deepseek_v4_profiles_advertise_current_thinking_and_effort_capabilities(): void
+    {
+        $this->postJson('/api/talos/model-profiles', [
+            'provider' => 'deepseek',
+            'model' => 'deepseek-v4-pro',
+            'display_name' => 'DeepSeek V4 Pro',
+            'secret' => 'deepseek-secret',
+            'base_url' => 'https://api.deepseek.test/v1',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.effort_levels', ['high', 'max'])
+            ->assertJsonPath('data.supports_thinking', true);
+    }
+
+    public function test_deepseek_probe_requires_a_valid_forced_tool_call_before_marking_the_profile_healthy(): void
+    {
+        Http::fake([
+            'api.deepseek.test/v1/chat/completions' => Http::response([
+                'id' => 'probe-invalid-tool-call',
+                'choices' => [[
+                    'finish_reason' => 'tool_calls',
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => null,
+                        'tool_calls' => [[
+                            'type' => 'function',
+                            'function' => [
+                                'name' => 'talos_health_check',
+                                'arguments' => '{"status":"ok"}',
+                            ],
+                        ]],
+                    ],
+                ]],
+            ], 200),
+        ]);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'deepseek',
+            'model' => 'deepseek-v4-pro',
+            'display_name' => 'DeepSeek stale probe',
+            'encrypted_secret' => Crypt::encryptString('probe-secret'),
+            'base_url' => 'https://api.deepseek.test/v1',
+            'status' => 'healthy',
+            'capabilities' => ['json' => true, 'tools' => false],
+            'effort_levels' => [],
+            'supports_thinking' => false,
+        ]);
+
+        $this->postJson("/api/talos/model-profiles/{$profile->id}/probe")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'degraded')
+            ->assertJsonPath('data.probe_result.ok', false)
+            ->assertJsonPath('data.probe_result.code', 'PROVIDER_TOOL_PROTOCOL_ERROR')
+            ->assertJsonPath('data.probe_result.http_status', 200)
+            ->assertJsonPath('data.capabilities.json', true)
+            ->assertJsonPath('data.capabilities.tools', false)
+            ->assertJsonPath('data.effort_levels', ['high', 'max'])
+            ->assertJsonPath('data.supports_thinking', true);
+
+        Http::assertSent(function ($request): bool {
+            $payload = $request->data();
+
+            return $request->url() === 'https://api.deepseek.test/v1/chat/completions'
+                && ($payload['thinking']['type'] ?? null) === 'disabled'
+                && ($payload['tool_choice']['type'] ?? null) === 'function'
+                && ($payload['tool_choice']['function']['name'] ?? null) === 'talos_health_check'
+                && ($payload['tools'][0]['function']['name'] ?? null) === 'talos_health_check'
+                && ! array_key_exists('strict', $payload['tools'][0]['function'] ?? []);
+        });
+    }
+
+    public function test_deepseek_probe_marks_a_valid_tool_protocol_healthy_and_refreshes_existing_capabilities(): void
+    {
+        Http::fake([
+            'api.deepseek.test/v1/chat/completions' => Http::response([
+                'id' => 'probe-tool-ok',
+                'choices' => [[
+                    'finish_reason' => 'tool_calls',
+                    'message' => [
+                        'role' => 'assistant',
+                        'content' => null,
+                        'tool_calls' => [[
+                            'id' => 'call-health-1',
+                            'type' => 'function',
+                            'function' => [
+                                'name' => 'talos_health_check',
+                                'arguments' => '{"status":"ok"}',
+                            ],
+                        ]],
+                    ],
+                ]],
+            ], 200),
+        ]);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'deepseek',
+            'model' => 'deepseek-v4-pro',
+            'display_name' => 'DeepSeek V4 Pro',
+            'encrypted_secret' => Crypt::encryptString('probe-secret'),
+            'base_url' => 'https://api.deepseek.test/v1',
+            'status' => 'untested',
+            'effort_levels' => [],
+            'supports_thinking' => false,
+        ]);
+
+        $this->postJson("/api/talos/model-profiles/{$profile->id}/probe")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'healthy')
+            ->assertJsonPath('data.probe_result.ok', true)
+            ->assertJsonPath('data.probe_result.code', 'PROVIDER_OK')
+            ->assertJsonPath('data.capabilities.json', true)
+            ->assertJsonPath('data.capabilities.tools', true)
+            ->assertJsonPath('data.capabilities.remote', true)
+            ->assertJsonPath('data.effort_levels', ['high', 'max'])
+            ->assertJsonPath('data.supports_thinking', true);
     }
 
     public function test_probe_pins_dns_approved_public_ip_for_the_transport_connection(): void

@@ -10,9 +10,11 @@ use App\Models\TalosBrowserSession;
 use App\Models\TalosFile;
 use App\Models\TalosMessage;
 use App\Models\TalosModelProfile;
+use App\Models\TalosRun;
 use App\Models\TalosRunEvent;
 use App\Models\TalosSession;
 use App\Models\TalosToolTurn;
+use App\Services\Runs\RunEventNormalizer;
 use App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore;
 use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProviderOutcomeCodec;
@@ -21,6 +23,9 @@ use App\Services\Talos\Browser\BrowserToolResult;
 use App\Services\Talos\Browser\BrowserWorkerException;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
+use App\Services\Talos\Browser\TalosBrowserCommand;
+use App\Services\Talos\Browser\TalosBrowserCommandService;
+use App\Services\Talos\Browser\TalosBrowserSnapshotEvidence;
 use App\Services\Talos\FileAuthority\TalosFileAuthorityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
@@ -29,6 +34,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Kadmos\Provider\ProviderCapabilities;
+use Kadmos\Provider\ProviderFailure;
 use Kadmos\Provider\ProviderTurnAdapter;
 use Kadmos\Tool\ProceduralLoopGuard;
 use Kadmos\Tool\ProviderTurnRequest;
@@ -274,6 +280,85 @@ final class TalosChatProceduralBrowserTest extends TestCase
         $this->assertSame('failed', $response->json('run.status'));
     }
 
+    public function test_provider_protocol_failure_does_not_masquerade_as_upstream_http_422(): void
+    {
+        $user = $this->authenticateTalosUser();
+        $session = TalosSession::query()->create([
+            'user_id' => $user->id,
+            'title' => 'DeepSeek protocol failure',
+            'mode' => 'verified_execution',
+            'surface' => 'chat',
+        ]);
+        $profile = TalosModelProfile::query()->create([
+            'user_id' => $user->id,
+            'provider' => 'deepseek',
+            'model' => 'deepseek-v4-pro',
+            'display_name' => 'DeepSeek V4 Pro',
+            'encrypted_secret' => Crypt::encryptString('provider-secret'),
+            'base_url' => 'https://api.deepseek.com/v1',
+            'status' => 'healthy',
+        ]);
+        $browser = TalosBrowserSession::query()->create([
+            'user_id' => $user->id,
+            'talos_session_id' => $session->id,
+            'worker_session_id' => 'worker-deepseek-protocol-failure',
+            'status' => 'ready',
+            'mode' => 'read_only',
+            'viewport_width' => 1280,
+            'viewport_height' => 800,
+            'capabilities' => [
+                'navigation' => true,
+                'screenshots' => true,
+                'accessibilitySnapshot' => true,
+                'hmiActions' => true,
+            ],
+            'policy' => [],
+            'worker_state_version' => 0,
+            'expires_at' => now()->addHour(),
+        ]);
+        $userMessage = TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Apri https://caradero-web.vercel.app/vehicles e restituisci un array JSON delle auto.',
+            'metadata' => ['source' => 'talos_chat_page'],
+        ]);
+        $this->app->instance(BrowserSessionClient::class, new FakeBrowserSessionClient);
+        $this->app->instance(
+            TalosProviderAdapterResolver::class,
+            new ProceduralBrowserRouteResolver(new ProceduralBrowserProviderFailureAdapter),
+        );
+
+        $response = $this->postJson('/api/talos/chat', [
+            'session_id' => $session->id,
+            'user_message_id' => $userMessage->id,
+            'message' => $userMessage->content,
+            'model_profile_id' => $profile->id,
+            'browser_mode' => [
+                'enabled' => true,
+                'browser_session_id' => $browser->id,
+            ],
+            'thinking' => false,
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath('code', 'PROVIDER_PROTOCOL_ERROR')
+            ->assertJsonPath('chat_error.layer', 'provider')
+            ->assertJsonPath('chat_error.code', 'PROVIDER_PROTOCOL_ERROR')
+            ->assertJsonPath('chat_error.retryable', false)
+            ->assertJsonPath('chat_error.provider', 'deepseek')
+            ->assertJsonPath('chat_error.model', 'deepseek-v4-pro')
+            ->assertJsonPath(
+                'chat_error.message',
+                'DeepSeek returned a response TALOS could not validate against the tool-call protocol.',
+            )
+            ->assertJsonPath(
+                'chat_error.next_action',
+                'Run Test in Model Lab to verify the DeepSeek tool-call contract, then inspect the failed run trace if the protocol fault persists.',
+            )
+            ->assertJsonMissingPath('chat_error.status');
+        $this->assertStringNotContainsString('HTTP 422', $response->getContent());
+    }
+
     public function test_breg_006_browser_click_is_presented_for_exact_approval_and_resumes_the_same_turn_with_evidence(): void
     {
         $user = $this->authenticateTalosUser();
@@ -446,6 +531,71 @@ final class TalosChatProceduralBrowserTest extends TestCase
             'type' => 'screenshot',
             'source_command_id' => 'provider-browser-click',
         ]);
+        $postClickSnapshot = TalosBrowserArtifact::query()
+            ->where('browser_session_id', $browser->id)
+            ->where('type', 'snapshot')
+            ->where('source_command_id', 'provider-browser-click')
+            ->firstOrFail();
+        $postClickPayload = json_decode(
+            Storage::disk($postClickSnapshot->storage_disk)->get($postClickSnapshot->storage_path),
+            true,
+            32,
+            JSON_THROW_ON_ERROR,
+        );
+        $this->assertIsArray($postClickPayload);
+        $snapshotWorkerEvidence = collect($postClickSnapshot->metadata['worker_evidence'] ?? [])
+            ->firstWhere('kind', 'snapshot');
+        $this->assertIsArray($snapshotWorkerEvidence);
+        $this->assertSame(
+            TalosBrowserSnapshotEvidence::sha256(
+                snapshotId: (string) ($postClickPayload['snapshotId'] ?? ''),
+                format: (string) ($postClickPayload['format'] ?? ''),
+                textDigest: (string) ($postClickPayload['textDigest'] ?? ''),
+                nodes: is_array($postClickPayload['nodes'] ?? null) ? $postClickPayload['nodes'] : [],
+            ),
+            $snapshotWorkerEvidence['sha256'] ?? null,
+        );
+        $postClickRef = $postClickPayload['nodes'][0]['ref'] ?? null;
+        $this->assertIsString($postClickRef);
+        $completedRun = TalosRun::query()->findOrFail((string) $approved->json('run.id'));
+        $postClickRead = app(TalosBrowserCommandService::class)->execute(
+            $browser->refresh(),
+            $completedRun,
+            TalosBrowserCommand::canonicalReadInput(
+                runId: $completedRun->id,
+                browserSessionId: $browser->id,
+                operation: 'read',
+                arguments: ['ref' => $postClickRef],
+                expectedEvidenceHash: 'sha256:'.$postClickSnapshot->sha256,
+                commandId: 'breg-018-read-after-click',
+            ),
+            new RunEventNormalizer,
+        );
+        $this->assertArrayNotHasKey('error', $postClickRead, json_encode($postClickRead, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $this->assertSame(
+            $snapshotWorkerEvidence['sha256'] ?? null,
+            $postClickRead['worker_evidence'][0]['sha256'] ?? null,
+        );
+        $duplicateMetadata = $postClickSnapshot->metadata;
+        $duplicateMetadata['worker_evidence'][] = [
+            ...$snapshotWorkerEvidence,
+            'artifact_id' => 'duplicate-snapshot-evidence',
+        ];
+        $postClickSnapshot->forceFill(['metadata' => $duplicateMetadata])->save();
+        $duplicateSourceRead = app(TalosBrowserCommandService::class)->execute(
+            $browser->refresh(),
+            $completedRun,
+            TalosBrowserCommand::canonicalReadInput(
+                runId: $completedRun->id,
+                browserSessionId: $browser->id,
+                operation: 'read',
+                arguments: ['ref' => $postClickRef],
+                expectedEvidenceHash: 'sha256:'.$postClickSnapshot->sha256,
+                commandId: 'breg-018-duplicate-source-read',
+            ),
+            new RunEventNormalizer,
+        );
+        $this->assertSame('TALOS_BROWSER_WORKER_FAILURE', $duplicateSourceRead['error']['code'] ?? null);
         $this->assertDatabaseHas('talos_messages', [
             'session_id' => $session->id,
             'run_id' => $approved->json('run.id'),
@@ -621,9 +771,13 @@ final class TalosChatProceduralBrowserTest extends TestCase
             'text_digest' => 'Selected proof.txt',
             'nodes' => [['ref' => 'r4', 'role' => 'button', 'name' => 'proof.txt', 'visible' => true]],
         ];
-        $snapshotBytes = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $screenshotHash = 'sha256:'.hash('sha256', $png);
-        $snapshotHash = 'sha256:'.hash('sha256', $snapshotBytes);
+        $snapshotHash = TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: $snapshot['snapshot_id'],
+            format: $snapshot['format'],
+            textDigest: $snapshot['text_digest'],
+            nodes: $snapshot['nodes'],
+        );
         $evidence = [
             ['artifact_id' => 'shot-upload-route', 'kind' => 'screenshot', 'sha256' => $screenshotHash, 'trusted_boundary' => 'untrusted_browser_content'],
             ['artifact_id' => 'snap-upload-route', 'kind' => 'snapshot', 'sha256' => $snapshotHash, 'trusted_boundary' => 'untrusted_browser_content'],
@@ -933,6 +1087,28 @@ final class ProceduralBrowserRouteAdapter implements ProviderTurnAdapter
             'stop',
             new TokenUsage(12, 8, 20),
         );
+    }
+}
+
+final class ProceduralBrowserProviderFailureAdapter implements ProviderTurnAdapter
+{
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('deepseek', 'procedural_provider_failure_v1', true, false, false, false, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        return ProviderTurnResponse::failure(new ProviderFailure(
+            'PROVIDER_PROTOCOL_ERROR',
+            'The provider response did not satisfy the adapter contract.',
+            false,
+        ));
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        throw new \RuntimeException('A terminal provider protocol failure must not continue.');
     }
 }
 

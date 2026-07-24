@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { afterAll, describe, expect, it } from "vitest";
 import { BrowserSessionManager } from "../src/BrowserSessionManager.js";
 import { buildServer } from "../src/server.js";
+import { canonicalJson } from "../src/BrowserCanonicalJson.js";
 import { BrowserToolResultSchema, validateToolStructuredOutput } from "../src/BrowserToolContracts.js";
 import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
 import { TALOS_BROWSER_IDEMPOTENT_SESSION_BOOTSTRAP_PATH } from "../src/BrowserWorkerProtocol.js";
@@ -42,6 +43,10 @@ const createPayload = {
 };
 
 afterAll(async () => app.close());
+
+function canonicalDigest(value: unknown): string {
+  return `sha256:${createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
+}
 
 async function createSession(payload = createPayload): Promise<string> {
   const response = await app.inject({ method: "POST", url: "/sessions", headers: ownerHeaders, payload });
@@ -323,6 +328,77 @@ describe("TALOS REST browser tool adapter", () => {
     }
   }, 20_000);
 
+  it("STAGE2B-BREG-016 preserves one canonical snapshot evidence identity across snapshot, click, and read", async () => {
+    expect(canonicalDigest({
+      schema_version: "talos_browser_tool_snapshot_evidence_v1",
+      snapshot_id: "snap_conformance-1",
+      format: "accessibility_refs_v1",
+      text_digest: "digest-123",
+      nodes: [
+        { ref: "r1", role: "link", name: "Vehicle A", href: "https://example.com/a?b=1", level: 2, visible: true },
+        { ref: "r2", role: "button", name: "Open", visible: false },
+      ],
+    })).toBe("sha256:4beed7f36e687158638ee32491a5e1f13e787095de0568a8b10ddfda41366f38");
+
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "canonical-evidence-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const captured = (await callTool(
+        sessionId,
+        "canonical-evidence-snapshot",
+        "browser_snapshot",
+        { state_version: 1 },
+      )).json();
+      const capturedSnapshot = captured.structuredContent;
+      const capturedHash = canonicalDigest({
+        schema_version: "talos_browser_tool_snapshot_evidence_v1",
+        snapshot_id: capturedSnapshot.snapshot_id,
+        format: capturedSnapshot.format,
+        text_digest: capturedSnapshot.text_digest,
+        nodes: capturedSnapshot.nodes,
+      });
+      expect(captured.evidence.find((item: { kind: string }) => item.kind === "snapshot")?.sha256).toBe(capturedHash);
+
+      const readCaptured = (await callTool(sessionId, "canonical-evidence-read", "browser_read", {
+        ref: capturedSnapshot.nodes[0].ref,
+        snapshot_id: capturedSnapshot.snapshot_id,
+        state_version: 1,
+      })).json();
+      expect(readCaptured).toMatchObject({ isError: false, structuredContent: { snapshot_id: capturedSnapshot.snapshot_id } });
+      expect(readCaptured.evidence.find((item: { kind: string }) => item.kind === "snapshot")?.sha256).toBe(capturedHash);
+
+      const target = capturedSnapshot.nodes.find((node: { name: string }) => node.name === "Reject optional cookies");
+      expect(target).toEqual(expect.objectContaining({ ref: expect.stringMatching(/^r\d+$/) }));
+      const clicked = (await callTool(sessionId, "canonical-evidence-click", "browser_click", {
+        target: target.ref,
+        element: "Reject optional cookies",
+        snapshot_id: capturedSnapshot.snapshot_id,
+        state_version: 1,
+      })).json();
+      const clickedSnapshot = clicked.structuredContent.snapshot;
+      const clickedHash = canonicalDigest({
+        schema_version: "talos_browser_tool_snapshot_evidence_v1",
+        snapshot_id: clickedSnapshot.snapshot_id,
+        format: clickedSnapshot.format,
+        text_digest: clickedSnapshot.text_digest,
+        nodes: clickedSnapshot.nodes,
+      });
+      expect(clicked).toMatchObject({ isError: false, structuredContent: { state_version: 2 } });
+      expect(clickedSnapshot.sha256).toBe(clickedHash);
+      expect(clicked.evidence.find((item: { kind: string }) => item.kind === "snapshot")?.sha256).toBe(clickedHash);
+
+      const readAfterClick = (await callTool(sessionId, "canonical-evidence-read-after-click", "browser_read", {
+        ref: clickedSnapshot.nodes[0].ref,
+        snapshot_id: clickedSnapshot.snapshot_id,
+        state_version: 2,
+      })).json();
+      expect(readAfterClick).toMatchObject({ isError: false, structuredContent: { snapshot_id: clickedSnapshot.snapshot_id } });
+      expect(readAfterClick.evidence.find((item: { kind: string }) => item.kind === "snapshot")?.sha256).toBe(clickedHash);
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
   it("resolves the exact snapshot ref when multiple controls share the same accessible name", async () => {
     const sessionId = await createSession();
     try {
@@ -509,14 +585,16 @@ describe("TALOS REST browser tool adapter", () => {
           body.clickCount = (body.clickCount ?? 0) + 1;
         });
       });
-      const binding = (sessions.snapshot(sessionId)?.value as { refBindings?: Map<string, { click: () => Promise<void> }> }).refBindings?.get(target.ref);
+      const binding = (sessions.snapshot(sessionId)?.value as {
+        refBindings?: Map<string, { click: (options?: { trial?: boolean }) => Promise<void> }>;
+      }).refBindings?.get(target.ref);
       expect(binding).toBeDefined();
       const originalClick = binding!.click.bind(binding);
       Object.defineProperty(binding!, "click", {
         configurable: true,
-        value: async () => {
-          await originalClick();
-          throw new Error("late-click-error");
+        value: async (options?: Parameters<typeof originalClick>[0]) => {
+          await originalClick(options);
+          if (options?.trial !== true) throw new Error("late-click-error");
         },
       });
       const arguments_ = { target: target.ref, snapshot_id: snapshot.snapshot_id, state_version: 1 };
@@ -528,6 +606,280 @@ describe("TALOS REST browser tool adapter", () => {
       expect(retry.json()).toEqual(first.json());
       expect(await page.locator("body").evaluate((body) => (body as HTMLBodyElement & { clickCount?: number }).clickCount)).toBe(1);
       expect((await sessions.get(sessionId)).status).toBe("recovery_required");
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
+  it("STAGE2B-BREG-011 rejects an overlay-blocked canonical click before dispatch and keeps the session retryable", async () => {
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "blocked-actionability-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const snapshot = (await callTool(sessionId, "blocked-actionability-snapshot", "browser_snapshot", { state_version: 1 })).json().structuredContent;
+      const target = snapshot.nodes.find((node: { name: string }) => node.name === "Reject optional cookies");
+      const page = (await sessions.get(sessionId)).page;
+      page.setDefaultTimeout(250);
+      await page.locator("#dismiss-cookie").evaluate((element) => {
+        element.addEventListener("click", () => {
+          const body = document.body as HTMLBodyElement & { blockedTargetClickCount?: number };
+          body.blockedTargetClickCount = (body.blockedTargetClickCount ?? 0) + 1;
+        });
+        const overlay = document.createElement("div");
+        overlay.id = "delayed-blocking-overlay";
+        overlay.setAttribute("role", "dialog");
+        overlay.setAttribute("aria-label", "Cookie preferences");
+        overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6)";
+        document.body.append(overlay);
+      });
+      const arguments_ = {
+        target: target.ref,
+        element: "Reject optional cookies",
+        snapshot_id: snapshot.snapshot_id,
+        state_version: 1,
+      };
+
+      const startedAt = Date.now();
+      const blocked = await callTool(sessionId, "blocked-actionability-click", "browser_click", arguments_);
+      const elapsedMs = Date.now() - startedAt;
+
+      expect(elapsedMs).toBeLessThan(3_000);
+      expect(blocked.json()).toMatchObject({
+        isError: true,
+        structuredContent: {
+          code: "TALOS_BROWSER_TARGET_BLOCKED",
+          state_version: 1,
+          reason_code: "playwright_actionability_failed",
+        },
+      });
+      expect((await sessions.get(sessionId)).stateVersion).toBe(1);
+      expect((await sessions.get(sessionId)).status).toBe("active");
+      expect(await page.locator("body").evaluate((body) => (
+        (body as HTMLBodyElement & { blockedTargetClickCount?: number }).blockedTargetClickCount ?? 0
+      ))).toBe(0);
+
+      await page.locator("#delayed-blocking-overlay").evaluate((element) => element.remove());
+      const retry = await callTool(sessionId, "blocked-actionability-click", "browser_click", arguments_);
+
+      expect(retry.json()).toMatchObject({
+        isError: false,
+        structuredContent: { state_version: 2, target: { ref: target.ref } },
+      });
+      expect(await page.locator("body").evaluate((body) => (
+        (body as HTMLBodyElement & { blockedTargetClickCount?: number }).blockedTargetClickCount ?? 0
+      ))).toBe(1);
+      expect((await sessions.get(sessionId)).status).toBe("active");
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
+  it("STAGE2B-BREG-012 scopes canonical refs to an active ARIA modal and restores document refs after close", async () => {
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "modal-snapshot-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const page = (await sessions.get(sessionId)).page;
+      await page.evaluate(() => {
+        const background = document.createDocumentFragment();
+        for (let index = 1; index <= 220; index += 1) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = `Background action ${index}`;
+          background.append(button);
+        }
+        document.body.append(background);
+
+        const overlay = document.createElement("div");
+        overlay.dataset.modalOverlay = "cookie";
+        overlay.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6)";
+        const dialog = document.createElement("section");
+        dialog.setAttribute("role", "dialog");
+        dialog.setAttribute("aria-modal", "true");
+        dialog.setAttribute("aria-labelledby", "late-cookie-title");
+        dialog.style.cssText = "position:absolute;left:560px;top:160px;width:420px;padding:24px;background:white";
+        const title = document.createElement("h2");
+        title.id = "late-cookie-title";
+        title.textContent = "Cookie consent";
+        const reject = document.createElement("button");
+        reject.type = "button";
+        reject.textContent = "Rifiuta tutti";
+        reject.addEventListener("click", () => {
+          document.body.setAttribute("data-modal-decision", "rejected");
+          overlay.remove();
+        });
+        dialog.append(title, reject);
+        overlay.append(dialog);
+        document.body.append(overlay);
+      });
+
+      const snapshot = (await callTool(sessionId, "modal-snapshot", "browser_snapshot", { state_version: 1 })).json().structuredContent;
+      const target = snapshot.nodes.find((node: { role: string; name: string }) => (
+        node.role === "button" && node.name === "Rifiuta tutti"
+      ));
+
+      expect(target).toEqual(expect.objectContaining({ ref: expect.stringMatching(/^r\d+$/), visible: true }));
+      expect(snapshot.nodes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ role: "heading", name: "Cookie consent" }),
+      ]));
+      expect(snapshot.nodes).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "Background action 1" }),
+      ]));
+
+      const clicked = await callTool(sessionId, "modal-reject-click", "browser_click", {
+        target: target.ref,
+        element: "Rifiuta tutti",
+        snapshot_id: snapshot.snapshot_id,
+        state_version: 1,
+      });
+      const result = clicked.json();
+
+      expect(result).toMatchObject({
+        isError: false,
+        structuredContent: {
+          state_version: 2,
+          target: { ref: target.ref, role: "button", name: "Rifiuta tutti" },
+          snapshot: { nodes: expect.arrayContaining([expect.objectContaining({ name: "Background action 1" })]) },
+        },
+      });
+      expect(result.structuredContent.snapshot.nodes).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({ name: "Rifiuta tutti" }),
+      ]));
+      expect(await page.locator("body").getAttribute("data-modal-decision")).toBe("rejected");
+      expect((await sessions.get(sessionId)).status).toBe("active");
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
+  it("STAGE2B-BREG-013 commits stable post-click evidence while background network remains active", async () => {
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "network-active-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const snapshot = (await callTool(sessionId, "network-active-snapshot", "browser_snapshot", { state_version: 1 })).json().structuredContent;
+      const target = snapshot.nodes.find((node: { name: string }) => node.name === "Reject optional cookies");
+      const page = (await sessions.get(sessionId)).page;
+      const originalWaitForLoadState = page.waitForLoadState.bind(page);
+      let networkIdleCalls = 0;
+      Object.defineProperty(page, "waitForLoadState", {
+        configurable: true,
+        value: async (...args: Parameters<typeof originalWaitForLoadState>) => {
+          if (args[0] === "networkidle") {
+            networkIdleCalls += 1;
+            throw new Error("background-network-remains-active");
+          }
+          return originalWaitForLoadState(...args);
+        },
+      });
+
+      const clicked = await callTool(sessionId, "network-active-click", "browser_click", {
+        target: target.ref,
+        snapshot_id: snapshot.snapshot_id,
+        state_version: 1,
+      });
+      const result = clicked.json();
+
+      expect(result).toMatchObject({
+        isError: false,
+        structuredContent: {
+          state_version: 2,
+          target: { ref: target.ref, name: "Reject optional cookies" },
+          screenshot: { sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+          snapshot: { sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+        },
+        evidence: [
+          expect.objectContaining({ kind: "screenshot" }),
+          expect.objectContaining({ kind: "snapshot" }),
+        ],
+      });
+      expect(networkIdleCalls).toBe(0);
+      expect(await page.locator("#cookie-banner").count()).toBe(0);
+      expect((await sessions.get(sessionId)).status).toBe("active");
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
+  it("STAGE2B-BREG-014 waits for two consecutive stable post-click evidence samples", async () => {
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "transient-evidence-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const snapshot = (await callTool(sessionId, "transient-evidence-snapshot", "browser_snapshot", { state_version: 1 })).json().structuredContent;
+      const target = snapshot.nodes.find((node: { name: string }) => node.name === "Reject optional cookies");
+      const page = (await sessions.get(sessionId)).page;
+      const originalScreenshot = page.screenshot.bind(page);
+      let screenshotCalls = 0;
+      Object.defineProperty(page, "screenshot", {
+        configurable: true,
+        value: async (options: Parameters<typeof originalScreenshot>[0]) => {
+          const result = await originalScreenshot(options);
+          screenshotCalls += 1;
+          if (screenshotCalls === 2) {
+            await page.evaluate(() => document.body.setAttribute("data-transient-evidence-race", "settled"));
+          }
+          return result;
+        },
+      });
+
+      const clicked = await callTool(sessionId, "transient-evidence-click", "browser_click", {
+        target: target.ref,
+        snapshot_id: snapshot.snapshot_id,
+        state_version: 1,
+      });
+
+      expect(clicked.json()).toMatchObject({
+        isError: false,
+        structuredContent: {
+          state_version: 2,
+          target: { ref: target.ref, name: "Reject optional cookies" },
+          screenshot: { sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+          snapshot: { sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+        },
+      });
+      expect(screenshotCalls).toBeGreaterThanOrEqual(3);
+      expect(await page.locator("body").getAttribute("data-transient-evidence-race")).toBe("settled");
+      expect((await sessions.get(sessionId)).status).toBe("active");
+    } finally {
+      await deleteSession(sessionId);
+    }
+  }, 20_000);
+
+  it("STAGE2B-BREG-015 uses the upstream five-second evidence window for slow canonical samples", async () => {
+    const sessionId = await createSession();
+    try {
+      await callTool(sessionId, "slow-evidence-nav", "browser_navigate", { url: hmiFixtureUrl });
+      const snapshot = (await callTool(sessionId, "slow-evidence-snapshot", "browser_snapshot", { state_version: 1 })).json().structuredContent;
+      const target = snapshot.nodes.find((node: { name: string }) => node.name === "Reject optional cookies");
+      const page = (await sessions.get(sessionId)).page;
+      const originalScreenshot = page.screenshot.bind(page);
+      let screenshotCalls = 0;
+      Object.defineProperty(page, "screenshot", {
+        configurable: true,
+        value: async (options: Parameters<typeof originalScreenshot>[0]) => {
+          await page.waitForTimeout(1_100);
+          const result = await originalScreenshot(options);
+          screenshotCalls += 1;
+          if (screenshotCalls === 2) {
+            await page.evaluate(() => document.body.setAttribute("data-slow-evidence-race", "settled"));
+          }
+          return result;
+        },
+      });
+
+      const clicked = await callTool(sessionId, "slow-evidence-click", "browser_click", {
+        target: target.ref,
+        snapshot_id: snapshot.snapshot_id,
+        state_version: 1,
+      });
+
+      expect(clicked.json()).toMatchObject({
+        isError: false,
+        structuredContent: {
+          state_version: 2,
+          target: { ref: target.ref, name: "Reject optional cookies" },
+        },
+      });
+      expect(screenshotCalls).toBeGreaterThanOrEqual(3);
+      expect(await page.locator("body").getAttribute("data-slow-evidence-race")).toBe("settled");
+      expect((await sessions.get(sessionId)).status).toBe("active");
     } finally {
       await deleteSession(sessionId);
     }
@@ -547,8 +899,8 @@ describe("TALOS REST browser tool adapter", () => {
         value: async (options: Parameters<typeof originalScreenshot>[0]) => {
           const result = await originalScreenshot(options);
           screenshotCalls += 1;
-          if (screenshotCalls === 2) {
-            await page.evaluate(() => document.body.setAttribute("data-invisible-evidence-race", "changed"));
+          if (screenshotCalls >= 2) {
+            await page.evaluate((value) => document.body.setAttribute("data-invisible-evidence-race", value), String(screenshotCalls));
           }
           return result;
         },

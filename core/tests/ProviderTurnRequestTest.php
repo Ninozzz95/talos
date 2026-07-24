@@ -77,8 +77,53 @@ function testReasoningEffortRejectsEmptyAndOverlong(): void
     );
 }
 
+function testResponseMimeTypeDefaultsToNullAndIsAudited(): void
+{
+    $default = new ProviderTurnRequest('openai', 'gpt-4', 'sys', durableUserMessage(), []);
+    assertProviderTurnRequest($default->responseMimeType === null, 'responseMimeType defaults to null');
+    assertProviderTurnRequest(
+        array_key_exists('response_mime_type', $default->toRedactedArray()),
+        'toRedactedArray exposes response_mime_type',
+    );
+    assertProviderTurnRequest(
+        $default->toRedactedArray()['response_mime_type'] === null,
+        'default response_mime_type is null',
+    );
+
+    $json = new ProviderTurnRequest(
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        systemPrompt: 'Return JSON.',
+        messages: durableUserMessage(),
+        tools: [],
+        responseMimeType: 'application/json',
+    );
+    assertProviderTurnRequest($json->responseMimeType === 'application/json', 'JSON response MIME is stored');
+    assertProviderTurnRequest(
+        $json->toRedactedArray()['response_mime_type'] === 'application/json',
+        'response_mime_type participates in the audited idempotency payload',
+    );
+}
+
+function testResponseMimeTypeRejectsUnsupportedValues(): void
+{
+    assertProviderTurnRequestThrows(
+        fn () => new ProviderTurnRequest(
+            provider: 'deepseek',
+            model: 'deepseek-chat',
+            systemPrompt: 'Return JSON.',
+            messages: durableUserMessage(),
+            tools: [],
+            responseMimeType: 'text/csv',
+        ),
+        'unsupported response MIME types must fail closed',
+    );
+}
+
 testReasoningFieldsDefaultToNull();
 testReasoningFieldsCarryThroughRedactedArray();
 testReasoningEffortRejectsEmptyAndOverlong();
+testResponseMimeTypeDefaultsToNullAndIsAudited();
+testResponseMimeTypeRejectsUnsupportedValues();
 
 echo "ProviderTurnRequestTest passed\n";
