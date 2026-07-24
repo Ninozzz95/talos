@@ -175,7 +175,8 @@ describe('useTalosMobileAttachments', () => {
 
         expect(attachments.items).toEqual([expect.objectContaining({
             status: 'failed',
-            error: 'TALOS_ATTACHMENT_SIGNATURE_MISMATCH',
+            // N1.5: the chip shows the FRIENDLY message, never the raw TALOS_* code.
+            error: 'The file contents do not match the declared file type.',
         })])
         expect(attachments.blocking.value).toBe(true)
         await attachments.remove('draft-failed')

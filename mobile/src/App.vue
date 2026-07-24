@@ -28,6 +28,7 @@ import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 import { useTalosMobileWizardState } from '@/composables/useTalosMobileWizardState'
 import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { resolveTalosBackAction } from '@/lib/backNavigation'
+import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
@@ -334,6 +335,7 @@ onMounted(async () => {
                 // A station TOP returns to the sidebar, NOT straight to chat, so
                 // leaving Settings/a tool reopens the menu it was launched from.
                 const action = resolveTalosBackAction({
+                    composerOverlayOpen: talosOverlayBackActive(),
                     wizardOpen: accountWizard.wizardOpen.value,
                     sidebarOpen: sidebarOpen.value,
                     hasSheetSubView: sheetNav.subView.value !== null,
@@ -341,6 +343,7 @@ onMounted(async () => {
                     canGoBack: event.canGoBack,
                 })
                 switch (action) {
+                    case 'close-overlay': handleTalosOverlayBack(); return 'handled'
                     case 'dismiss-wizard': accountWizard.handleBack(); return 'handled'
                     case 'close-sidebar': sidebarOpen.value = false; return 'handled'
                     case 'sheet-subview-back': sheetNav.subView.value?.back(); return 'handled'

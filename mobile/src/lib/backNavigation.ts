@@ -11,6 +11,7 @@
  * maps each action to its effect.
  */
 export type TalosBackAction =
+    | 'close-overlay'
     | 'dismiss-wizard'
     | 'close-sidebar'
     | 'sheet-subview-back'
@@ -19,6 +20,9 @@ export type TalosBackAction =
     | 'exit'
 
 export interface TalosBackState {
+    /** A composer bottom-sheet / drawer (the "+" tool drawer, model/effort,
+     *  enhancer) is open — the TOP-most overlay, closed first. */
+    composerOverlayOpen: boolean
     wizardOpen: boolean
     sidebarOpen: boolean
     hasSheetSubView: boolean
@@ -27,6 +31,7 @@ export interface TalosBackState {
 }
 
 export function resolveTalosBackAction(state: TalosBackState): TalosBackAction {
+    if (state.composerOverlayOpen) return 'close-overlay'
     if (state.wizardOpen) return 'dismiss-wizard'
     if (state.sidebarOpen) return 'close-sidebar'
     if (state.hasSheetSubView) return 'sheet-subview-back'
