@@ -2,10 +2,11 @@
 import { nextTick, ref } from 'vue'
 import {
     Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquarePlus, MessageSquareText,
-    Pencil, Settings, Trash2, X,
+    Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import {
     Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer'
@@ -209,19 +210,22 @@ function confirmDelete(): void {
                     </ul>
                 </nav>
 
+                <!-- Owner 2026-07-24 (Claude-style): bottom bar — account avatar
+                     on the left, floating New chat pill on the right. -->
                 <div
                     data-testid="talos-sidebar-settings"
-                    class="border-t border-[var(--talos-border)] px-3 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                    class="flex items-center justify-between gap-3 border-t border-[var(--talos-border)] px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
                 >
                     <button
                         type="button"
                         aria-label="Open Settings"
-                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
+                        class="talos-pressable flex min-h-11 items-center gap-2 rounded-full pr-3 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="emit('openSettings')"
                     >
-                        <Settings class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        Settings
+                        <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-accent)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">A</span>
+                        <span class="text-[var(--talos-muted)]">Account</span>
                     </button>
+                    <TalosMobileNewChatFab :disabled="props.creatingSession" @click="emit('newChat')" />
                 </div>
             </div>
         </DrawerContent>

@@ -115,13 +115,23 @@ describe('ChatsScreen (F3-T3)', () => {
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'chat' })
     })
 
-    it('starts a new chat from the top action', async () => {
+    it('starts a new chat from the floating FAB (full page)', async () => {
+        // Owner 2026-07-24: on the full page the New action is the bottom-right
+        // FAB (the inline top button is embedded/tablet-panel only).
         const wrapper = mountScreen()
-        await wrapper.get('[data-testid="talos-chats-new"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-chats-new"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-new-chat-fab"]').trigger('click')
         await flushPromises()
         const controller = mockState.controller as ReturnType<typeof makeController>
         expect(controller.newSession).toHaveBeenCalledOnce()
         expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'chat' })
+    })
+
+    it('keeps the inline New button in embedded (tablet panel) mode', () => {
+        const wrapper = mount(ChatsScreen, { props: { embedded: true }, attachTo: document.body })
+        expect(wrapper.find('[data-testid="talos-chats-new"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-new-chat-fab"]').exists()).toBe(false)
+        wrapper.unmount()
     })
 })
 

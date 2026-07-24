@@ -11,6 +11,7 @@ import { useRouter } from 'vue-router'
 import { Archive, ArchiveRestore, Check, ChevronDown, MessageSquarePlus, MessageSquareText, Pencil, Search, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import { useChatController } from '@/stores/chatController'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
 import { talosRelativeTime } from '@/lib/relativeTime'
@@ -234,7 +235,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
     <!-- SF6-F1: min-h-full in embedded mode overflows the aside by the panel
          header height (single-class specificity tie — stylesheet order wins),
          clipping the last chat row behind the shell's overflow-hidden. -->
-    <div class="flex flex-col" :class="props.embedded ? 'min-h-0' : 'min-h-full'" data-testid="talos-chats-screen">
+    <div class="relative flex flex-col" :class="props.embedded ? 'min-h-0' : 'min-h-full'" data-testid="talos-chats-screen">
         <div class="flex items-center gap-2 px-4 pt-3">
             <div class="relative min-w-0 flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
@@ -247,7 +248,10 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     class="min-h-11 w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
             </div>
+            <!-- Embedded (tablet panel): compact inline New keeps the narrow
+                 panel tidy. Full-page uses the floating FAB (owner Claude-style). -->
             <Button
+                v-if="props.embedded"
                 type="button"
                 data-testid="talos-chats-new"
                 aria-label="New chat"
@@ -338,6 +342,16 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     </li>
                 </ul>
             </section>
+        </div>
+
+        <!-- Owner 2026-07-24 (Claude-style): floating New chat FAB, bottom-right
+             thumb zone, on the full page only (the tablet panel keeps its
+             inline New button). -->
+        <div
+            v-if="!props.embedded"
+            class="sticky bottom-0 z-20 mt-auto flex justify-end bg-gradient-to-t from-[var(--talos-background)] via-[var(--talos-background)]/85 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6"
+        >
+            <TalosMobileNewChatFab @click="newChat" />
         </div>
 
         <!-- F5.1 — hold dropdown: one menu for the held row -->

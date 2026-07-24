@@ -30,12 +30,19 @@ export interface TalosDictationEngine {
 // a finite `listeningState`, and crash fixes.
 // R1-mic — OWNER DEVICE EVIDENCE (Doctor F5.3): `registered:true` but
 // `import:FAIL TALOS_SPEECH_STEP_import_TIMEOUT` — the native plugin is fine;
-// the DYNAMIC import of this micro-chunk never settles on the owner's WebView.
-// The wrapper is a few KB: import it STATICALLY and the failing hop no longer
-// exists. loadPlugin stays as the single access point (and diagnostics step).
+// the DYNAMIC import never settled on the owner's WebView → import STATICALLY.
+//
+// R-mic ROOT CAUSE (Doctor deep debug: `resolve:FAIL TIMEOUT` on a static
+// return): a Capacitor plugin proxy is THENABLE. Its get-trap returns a caller
+// function for EVERY property, including `then`, so `await pluginProxy` /
+// `return pluginProxy` from an async function assimilates it as a promise —
+// calling `proxy.then(...)`, which the bridge forwards as a native method
+// "then" that never answers → 4s hang. loadPlugin is therefore SYNCHRONOUS and
+// callers must NEVER await the plugin OBJECT — only its method results (those
+// are real bridge promises, safe to await).
 type SpeechRecognitionPlugin = typeof SpeechRecognition
 
-async function loadPlugin(): Promise<SpeechRecognitionPlugin> {
+function loadPlugin(): SpeechRecognitionPlugin {
     return SpeechRecognition
 }
 
@@ -44,7 +51,7 @@ function nativeEngine(): TalosDictationEngine {
     return {
         async supported() {
             try {
-                const plugin = await loadPlugin()
+                const plugin = loadPlugin()
                 const probe = await talosWithTimeout(plugin.available(), 3000, 'TALOS_SPEECH_AVAILABLE')
                 return probe.available !== false
             } catch (error) {
@@ -56,7 +63,7 @@ function nativeEngine(): TalosDictationEngine {
         },
         async requestPermission() {
             try {
-                const plugin = await loadPlugin()
+                const plugin = loadPlugin()
                 const status = (await talosWithTimeout(
                     plugin.requestPermissions(),
                     30000,
@@ -69,7 +76,7 @@ function nativeEngine(): TalosDictationEngine {
             }
         },
         async start(events) {
-            const plugin = await loadPlugin()
+            const plugin = loadPlugin()
             active = true
             await plugin.removeAllListeners()
             await plugin.addListener('partialResults', (data: { matches?: string[]; accumulatedText?: string }) => {
@@ -110,7 +117,7 @@ function nativeEngine(): TalosDictationEngine {
             }
         },
         async stop() {
-            const plugin = await loadPlugin()
+            const plugin = loadPlugin()
             active = false
             // SF5-1 discipline kept: never trust a native stop to settle.
             void plugin.stop().catch(() => undefined)
@@ -269,12 +276,22 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
         return { buildId, native, registered, pluginLoaded: false, methods: [], permissionsRaw: null, availableRaw: null, available: null, error: steps.join(' · ') }
     }
 
-    // Step 1 — resolve the wrapper (STATIC since R1; if this ever times out
-    // again the build is stale). Inventory which methods the object exposes,
-    // so we can PROVE it's the real capgo plugin, not a stub.
-    const plugin = await step('resolve', () => loadPlugin(), 4000)
+    // Step 1 — resolve the wrapper SYNCHRONOUSLY. It is a thenable Capacitor
+    // proxy, so it must NEVER be awaited / wrapped in a promise (that is the
+    // R-mic hang: `resolve:FAIL TIMEOUT`). A plain property read is safe and
+    // does not touch the bridge; inventory the methods to PROVE it's the real
+    // capgo plugin.
+    let plugin: SpeechRecognitionPlugin | null = null
+    try {
+        plugin = loadPlugin()
+        steps.push('resolve:ok(sync)')
+    } catch (error) {
+        steps.push(`resolve:FAIL ${String(error).slice(0, 120)}`)
+        talosLogDeviceIssue('TALOS_SPEECH_STEP_resolve', String(error).slice(0, 120))
+    }
     if (!plugin) return { buildId, native, registered, pluginLoaded: false, methods: [], permissionsRaw: null, availableRaw: null, available: null, error: steps.join(' · ') }
-    const methods = PLUGIN_METHODS.filter((name) => typeof (plugin as unknown as Record<string, unknown>)[name] === 'function')
+    const pluginObj = plugin as unknown as Record<string, unknown>
+    const methods = PLUGIN_METHODS.filter((name) => typeof pluginObj[name] === 'function')
     steps.push(`methods:[${methods.join(',')}]`)
 
     const version = await step('version', () => plugin.getPluginVersion?.() ?? Promise.resolve({ version: 'n/a' }))
@@ -311,7 +328,7 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
 export async function requestTalosDictationPermission(): Promise<boolean> {
     if (!Capacitor.isNativePlatform()) return true
     try {
-        const plugin = await loadPlugin()
+        const plugin = loadPlugin()
         const status = (await talosWithTimeout(
             plugin.requestPermissions(),
             30000,

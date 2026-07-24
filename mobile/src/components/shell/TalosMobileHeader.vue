@@ -25,9 +25,11 @@ const emit = defineEmits<{
 
 <template>
     <!-- F3-T1 owner: 56px was still too short on device — 96px breathes. -->
+    <!-- Owner 2026-07-24: a SOFT fade under the header, not a hard border (like
+         Claude). A very-low downward shadow dissolves into the content. -->
     <header
         data-testid="talos-mobile-header"
-        class="relative z-10 flex h-[calc(3.75rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)] backdrop-blur"
+        class="relative z-10 flex h-[calc(3.75rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 bg-[var(--talos-header)]/92 px-3 pt-[env(safe-area-inset-top)] shadow-[0_8px_16px_-14px_rgba(0,0,0,0.55)] backdrop-blur"
     >
         <Button
             v-if="!hideMenu"
