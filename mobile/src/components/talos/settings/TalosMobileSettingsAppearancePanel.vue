@@ -232,6 +232,21 @@ function onSwipeEnd(event: PointerEvent): void {
                         @click="settings.setShell({ plus_dropdown: !settings.state.shell.plus_dropdown })"
                     ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.plus_dropdown ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
                 </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">App icon follows theme</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">The home-screen icon matches your theme. Switching prompts a restart to apply.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.launcher_icon_follows_theme"
+                        aria-label="App icon follows theme"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.launcher_icon_follows_theme ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ launcher_icon_follows_theme: !settings.state.shell.launcher_icon_follows_theme })"
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.launcher_icon_follows_theme ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
                 <label class="block">
                     <span :class="selectLabelClass">Chat message size</span>
                     <TalosThemedSelect
