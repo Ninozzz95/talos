@@ -107,12 +107,17 @@ export function useLauncherIconController(): LauncherIconController {
     if (singleton) return singleton
     const deps = depsOverride ?? defaultDeps()
     const state = reactive<LauncherIconState>({ applied: TALOS_DEFAULT_THEME, pending: null })
+    // A single deferred target (latest "later" wins), applied on the next pause.
+    let deferred: TalosThemeId | null = null
+    let pauseArmed = false
 
     async function apply(target: TalosThemeId): Promise<void> {
-        // Mirror BEFORE the native toggle so a restart mid-switch still resolves here.
+        // Toggle the native alias FIRST; only then persist the mirror + in-memory
+        // state. A native failure thus leaves state consistent (unchanged) and the
+        // user is re-prompted next time instead of the feature silently wedging.
+        await deps.applyNative(target)
         await deps.setApplied(target)
         state.applied = target
-        await deps.applyNative(target)
     }
 
     singleton = {
@@ -132,16 +137,32 @@ export function useLauncherIconController(): LauncherIconController {
         },
         async confirmNow() {
             const target = state.pending?.target
-            state.pending = null
             if (!target) return
-            await apply(target)
+            try {
+                await apply(target)
+            } catch {
+                // Keep the prompt so the user can retry; never restart on failure.
+                return
+            }
+            state.pending = null
             await deps.restart()
         },
         later() {
             const target = state.pending?.target
             state.pending = null
             if (!target) return
-            deps.onNextPause(() => { void apply(target) })
+            // One deferred slot + a single armed listener: multiple "later" choices
+            // must not stack pause listeners (which could toggle two aliases → two
+            // home-screen icons). The latest target wins on the next pause.
+            deferred = target
+            if (pauseArmed) return
+            pauseArmed = true
+            deps.onNextPause(() => {
+                pauseArmed = false
+                const next = deferred
+                deferred = null
+                if (next) void apply(next).catch(() => undefined)
+            })
         },
         dismiss() {
             state.pending = null

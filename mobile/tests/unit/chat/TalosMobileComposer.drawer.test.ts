@@ -113,6 +113,32 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(wrapper.find('[data-testid="talos-composer-plus-menu"]').exists()).toBe(false)
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
     })
+
+    // SF-critic fix: in immersive mode a control tap must NOT blur the textarea
+    // (which would unmount the row before the click resolves → dead controls).
+    it('immersive: pressing a control cancels the mousedown so the field keeps focus', async () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        await wrapper.get('textarea').trigger('focus') // reveal the controls row
+        const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+        wrapper.get('[aria-label="Add to chat"]').element.dispatchEvent(ev)
+        expect(ev.defaultPrevented).toBe(true)
+    })
+
+    // SF-critic fix: aria must describe the surface the "+" actually opens.
+    it('the "+" advertises a menu with plus-dropdown on and a dialog (the drawer) off', () => {
+        const on = mountComposer({ drawerMode: true, plusDropdown: true })
+        expect(on.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('menu')
+        const off = mountComposer({ drawerMode: true, plusDropdown: false })
+        expect(off.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('dialog')
+    })
+
+    it('plus-dropdown: Escape closes the menu', async () => {
+        const wrapper = mountComposer({ drawerMode: true, plusDropdown: true })
+        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-composer-plus-menu"]').exists()).toBe(true)
+        await wrapper.get('[data-testid="talos-composer-plus-menu"]').trigger('keydown.escape')
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-plus-menu"]').exists()).toBe(false))
+    })
 })
 
 // F4-#20 — the enhancer must never present a mute disabled control on touch
