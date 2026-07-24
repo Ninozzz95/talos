@@ -63,6 +63,7 @@ test('manages a discovered Gemini model from Model Lab through the live Chat pic
     })
 
     await openModelSettings(page)
+    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-model-lab-gemini-key')
     await page.getByLabel('Save Google Gemini key').click()
     await expect(page.getByText('2 models available', { exact: true })).toBeVisible()
@@ -140,6 +141,8 @@ test('persists an OpenAI-compatible endpoint and timeout and recovers a manual m
     })
 
     await openModelSettings(page)
+    // Providers are collapsed by default — expand OpenAI before configuring.
+    if (await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').click()
     await page.getByLabel('OpenAI custom endpoint').fill('https://models.example.test/v1')
     await page.getByLabel('OpenAI timeout seconds').fill('75')
     await page.getByLabel('Save OpenAI runtime options').click()

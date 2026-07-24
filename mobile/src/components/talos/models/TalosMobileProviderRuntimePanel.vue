@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
-import { BadgeCheck, KeyRound, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
+import { BadgeCheck, ChevronDown, KeyRound, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import { TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
@@ -16,6 +16,19 @@ const endpointDrafts = reactive<Partial<Record<TalosMobileProviderId, string>>>(
 const timeoutDrafts = reactive<Partial<Record<TalosMobileProviderId, number>>>({})
 const busyProvider = ref<TalosMobileProviderId | null>(null)
 const error = ref('')
+
+// Owner 2026-07-24: each provider is a collapsible accordion, default
+// COLLAPSED to declutter the long list. Accessible disclosure — button header,
+// aria-expanded/controls, body display:none when collapsed (v-show → out of
+// tab order + SR). The header shows status (model count / Key saved / Not
+// configured) so state is legible without expanding; tap to configure.
+const expanded = reactive<Partial<Record<TalosMobileProviderId, boolean>>>({})
+function isExpanded(id: TalosMobileProviderId): boolean {
+    return expanded[id] === true
+}
+function toggleProvider(id: TalosMobileProviderId): void {
+    expanded[id] = !isExpanded(id)
+}
 
 watch(() => controller.endpoints, (value) => {
     for (const provider of providers) {
@@ -96,9 +109,15 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             data-provider-runtime
             :data-provider="provider.id"
             :aria-labelledby="`provider-${provider.id}-title`"
-            class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3"
+            class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)]"
         >
-            <header class="flex min-w-0 items-center gap-2">
+            <button
+                type="button"
+                :aria-expanded="isExpanded(provider.id)"
+                :aria-controls="`provider-${provider.id}-body`"
+                class="talos-pressable flex w-full min-w-0 items-center gap-2 rounded-md p-3 text-left"
+                @click="toggleProvider(provider.id)"
+            >
                 <TalosMobileProviderIcon :provider="provider.id" class="size-7 shrink-0" />
                 <div class="min-w-0 flex-1">
                     <h5 :id="`provider-${provider.id}-title`" class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ provider.label }}</h5>
@@ -112,9 +131,15 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                 <span v-if="controller.secrets[provider.id]" data-testid="key-present" class="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--talos-success,var(--talos-accent))]">
                     <BadgeCheck class="size-3.5" aria-hidden="true" /> Key saved
                 </span>
-            </header>
+                <ChevronDown
+                    class="size-4 shrink-0 text-[var(--talos-muted)] transition-transform"
+                    :class="isExpanded(provider.id) ? '' : '-rotate-90'"
+                    aria-hidden="true"
+                />
+            </button>
 
-            <div v-if="provider.requiresSecret" class="mt-3 flex gap-2">
+            <div v-show="isExpanded(provider.id)" :id="`provider-${provider.id}-body`" class="px-3 pb-3">
+            <div v-if="provider.requiresSecret" class="flex gap-2">
                 <label class="min-w-0 flex-1">
                     <span class="sr-only">{{ provider.label }} API key</span>
                     <input
@@ -174,6 +199,7 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             <p v-if="controller.catalogs[provider.id].error" role="status" class="mt-2 text-xs text-[var(--talos-danger,var(--talos-muted))]">
                 {{ controller.catalogs[provider.id].error }}
             </p>
+            </div>
         </section>
     </div>
 </template>

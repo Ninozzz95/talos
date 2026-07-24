@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const state = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => state.controller }))
@@ -78,5 +78,31 @@ describe('TalosMobileProviderRuntimePanel', () => {
 
         expect(target.removeEndpoint).toHaveBeenCalledWith('openai')
         expect(target.refreshProvider).toHaveBeenCalledWith('anthropic')
+    })
+})
+
+// Owner 2026-07-24 — providers are collapsible accordions, DEFAULT COLLAPSED
+// to declutter; the header shows status, tap expands to configure.
+describe('collapsible provider accordions', () => {
+    it('renders every provider collapsed by default', async () => {
+        const wrapper = mount(TalosMobileProviderRuntimePanel, { attachTo: document.body })
+        await flushPromises()
+        for (const id of ['openai', 'deepseek', 'openrouter']) {
+            const header = wrapper.get(`[data-provider="${id}"] button[aria-controls="provider-${id}-body"]`)
+            expect(header.attributes('aria-expanded')).toBe('false')
+        }
+        wrapper.unmount()
+    })
+
+    it('toggles a provider open and closed on header tap', async () => {
+        const wrapper = mount(TalosMobileProviderRuntimePanel, { attachTo: document.body })
+        await flushPromises()
+        const header = wrapper.get('[data-provider="openrouter"] button[aria-controls="provider-openrouter-body"]')
+        expect(header.attributes('aria-expanded')).toBe('false')
+        await header.trigger('click')
+        expect(header.attributes('aria-expanded')).toBe('true')
+        await header.trigger('click')
+        expect(header.attributes('aria-expanded')).toBe('false')
+        wrapper.unmount()
     })
 })

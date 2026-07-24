@@ -39,6 +39,7 @@ async function configureGemini(page: Page): Promise<void> {
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
+    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-thread-parity-key')
     await page.getByLabel('Save Google Gemini key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()

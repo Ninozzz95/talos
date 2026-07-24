@@ -18,6 +18,7 @@ async function configureGemini(page: Page): Promise<void> {
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
+    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-durable-gemini-key')
     await page.getByLabel('Save Google Gemini key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
@@ -91,7 +92,8 @@ test('persists contextual chat sessions through reload, rename, switch and activ
     expect(JSON.stringify(completions[1])).toContain(firstTitle)
     expect(JSON.stringify(completions[1])).toContain('Alpha is recorded.')
 
-    await page.getByTestId('talos-mobile-header').getByLabel('New Chat').click()
+    await page.getByTestId('talos-mobile-header').getByLabel('Chat options').click()
+    await page.getByRole('menuitem', { name: 'New chat' }).click()
     await expect(page.getByTestId('talos-empty-brand')).toBeVisible()
 
     const secondTitle = 'Draft a secondary release plan.'

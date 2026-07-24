@@ -43,6 +43,7 @@ async function configureVisionModel(page: Page): Promise<Array<Record<string, un
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
+    if (await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="openai"] button[aria-controls="provider-openai-body"]').click()
     await page.getByLabel('OpenAI API key').fill('e2e-files-openai-key')
     await page.getByLabel('Save OpenAI key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()

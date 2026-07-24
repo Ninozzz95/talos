@@ -57,7 +57,7 @@ test('header and sidebar actions expose accessible names and 44x44 touch targets
     await page.goto('/')
     await expect(page.locator(HEADER)).toBeVisible()
     const headerButtons = page.locator(`${HEADER} button`)
-    await expect(headerButtons).toHaveCount(2) // hamburger + New Chat
+    await expect(headerButtons).toHaveCount(2) // hamburger + 3-dot chat options
     for (let i = 0; i < 2; i += 1) {
         const button = headerButtons.nth(i)
         expect(await button.getAttribute('aria-label')).toBeTruthy()

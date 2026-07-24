@@ -20,6 +20,7 @@ async function configureGemini(page: Page): Promise<void> {
     await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
     await expect(page.locator(SHEET)).toBeVisible()
     await page.locator('[data-settings-tab="models"]').click()
+    if (await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').getAttribute('aria-expanded') === 'false') await page.locator('[data-provider="gemini"] button[aria-controls="provider-gemini-body"]').click()
     await page.getByLabel('Google Gemini API key').fill('e2e-f5-key')
     await page.getByLabel('Save Google Gemini key').click()
     await expect(page.getByText('1 model available', { exact: true })).toBeVisible()
@@ -126,5 +127,7 @@ test('stations: tasks and notes persist across reload, doctor reports honestly',
     await expect(page.locator('[data-testid="talos-doctor-screen"]')).toBeVisible()
     await expect(page.locator('[data-doctor-id="storage"]')).toContainText('ready')
     await expect(page.locator('[data-doctor-id="platform"]')).toContainText('web preview')
-    await expect(page.locator('[data-testid="talos-doctor-row"]')).toHaveCount(6)
+    // 7 rows: build stamp + platform + storage + speech + biometrics + share + network.
+    await expect(page.locator('[data-testid="talos-doctor-row"]')).toHaveCount(7)
+    await expect(page.locator('[data-doctor-id="build"]')).toBeVisible()
 })
