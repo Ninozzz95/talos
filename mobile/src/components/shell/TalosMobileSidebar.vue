@@ -7,6 +7,7 @@ import {
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
+import { useTalosAccountStore } from '@/stores/account'
 import {
     Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer'
@@ -34,6 +35,8 @@ const emit = defineEmits<{
     openModelLab: []
     openSettings: []
 }>()
+
+const account = useTalosAccountStore()
 
 const TOOLS: Array<{ label: string; route: TalosMobileRouteName; icon: unknown }> = [
     { label: 'Memory', route: 'memory', icon: BookMarked },
@@ -222,8 +225,8 @@ function confirmDelete(): void {
                         class="talos-pressable flex min-h-11 items-center gap-2 rounded-full pr-3 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="emit('openSettings')"
                     >
-                        <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-accent)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">A</span>
-                        <span class="text-[var(--talos-muted)]">Account</span>
+                        <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-accent)] text-sm font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))]" aria-hidden="true">{{ account.initial.value }}</span>
+                        <span class="max-w-[120px] truncate text-[var(--talos-muted)]">{{ account.state.display_name || 'Account' }}</span>
                     </button>
                     <TalosMobileNewChatFab :disabled="props.creatingSession" @click="emit('newChat')" />
                 </div>

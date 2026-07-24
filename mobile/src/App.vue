@@ -10,6 +10,7 @@ import { TALOS_MOBILE_ROUTES, type TalosMobileRouteName } from '@/lib/mobileRout
 import { usePreferencesStore } from '@/stores/preferences'
 import { useThemeStore } from '@/stores/theme'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosAccountStore } from '@/stores/account'
 import {
     registerNativeAppLifecycle,
     type NativeLifecycleController,
@@ -34,6 +35,7 @@ const route = useRoute()
 const preferences = usePreferencesStore()
 const themeStore = useThemeStore()
 const settingsStore = useSettingsStore()
+const accountStore = useTalosAccountStore()
 const chatController = useChatController()
 const toastsStore = useTalosMobileToasts()
 const disabled = talosDisabledSubsystems()
@@ -263,6 +265,9 @@ async function navigate(name: TalosMobileRouteName): Promise<void> {
 
 onMounted(async () => {
     await preferences.hydrate()
+    // Local account (name/avatar initial) — fail-soft: a bad read just keeps
+    // the default TALOS initial.
+    void accountStore.hydrate().catch(() => undefined)
     // Intro gating waits for the REAL persisted onboarding state — a failed
     // read keeps the modal closed (fail-closed, no flash).
     try {

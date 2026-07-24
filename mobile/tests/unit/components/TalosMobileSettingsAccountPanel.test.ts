@@ -61,10 +61,25 @@ function mountPanel(replayIntro = vi.fn()) {
 }
 
 describe('TalosMobileSettingsAccountPanel (F2-T6)', () => {
-    it('states the local-first identity honestly', () => {
+    it('states the local-first identity honestly with PREDISPOSED (gated) sign-in', () => {
         const { wrapper } = mountPanel()
         expect(wrapper.text()).toMatch(/local/i)
-        expect(wrapper.text()).not.toMatch(/sign in|log in/i)
+        expect(wrapper.text()).toMatch(/no account is required/i)
+        // Owner 2026-07-24: OAuth is present but PREDISPOSED — gated ("Soon"),
+        // no fake session; the local-first honesty is preserved.
+        expect(wrapper.find('[data-testid="talos-oauth-google"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-oauth-apple"]').exists()).toBe(true)
+        expect(wrapper.text()).toMatch(/predisposed/i)
+        expect(wrapper.text()).toMatch(/soon/i)
+    })
+
+    it('edits and persists the local display name', async () => {
+        const { wrapper } = mountPanel()
+        const input = wrapper.get('[data-testid="talos-account-name"]')
+        await input.setValue('Antonio')
+        await wrapper.get('[data-testid="talos-account-name-save"]').trigger('click')
+        await wrapper.vm.$nextTick()
+        expect((wrapper.get('[data-testid="talos-account-name"]').element as HTMLInputElement).value).toBe('Antonio')
     })
 
     it('replays the introduction and returns to the chat', async () => {
