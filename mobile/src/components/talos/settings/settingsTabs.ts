@@ -28,7 +28,7 @@ export const TALOS_MOBILE_SETTINGS_TABS: readonly TalosMobileSettingsTab[] = Obj
     { id: 'integrations', label: 'Integrations', description: 'External connectors and provider integrations.', availability: 'gated', gateReason: 'Mobile connector services are not installed yet.' },
     { id: 'email', label: 'Email', description: 'Email triage, drafts and policy-gated sending.', availability: 'gated', gateReason: 'No authorized mobile email connector is configured.' },
     { id: 'reminders', label: 'Reminders', description: 'Local reminders and delivery channels.', availability: 'gated', gateReason: 'The mobile reminder delivery worker is not installed yet.' },
-    { id: 'appearance', label: 'Appearance', description: 'Theme, motion, layout and visible controls.', availability: 'available' },
+    { id: 'appearance', label: 'Appearance', description: '', availability: 'available' },
     { id: 'account', label: 'Account', description: 'Local workspace identity, app lock and introduction replay.', availability: 'available' },
     { id: 'agent_tools', label: 'Agent Tools', description: 'Capability grants and agent execution limits.', availability: 'gated', group: 'Admin', gateReason: 'The sovereign mobile tool runtime is not installed yet.' },
     { id: 'system', label: 'System', description: 'Doctor, policy, audit and backup readiness.', availability: 'gated', group: 'Admin', gateReason: 'Mobile Doctor and backup services are not installed yet.' },

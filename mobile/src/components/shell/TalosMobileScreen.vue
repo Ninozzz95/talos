@@ -39,7 +39,11 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
                 :class="{ 'mt-2': eyebrow }"
             >{{ title }}</h1>
         </header>
-        <div class="flex-1 overflow-y-auto p-4">
+        <!-- Owner 2026-07-24: no TOP padding on the scroll container so a
+             sticky section header (Appearance tabs) can pin FLUSH to the top
+             (top-0 was landing 16px inside the old p-4). Sides/bottom keep the
+             16px gutter; screens add their own top breathing room. -->
+        <div class="flex-1 overflow-y-auto px-4 pb-4 pt-0">
             <slot />
         </div>
     </section>
