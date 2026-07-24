@@ -379,15 +379,22 @@ onBeforeUnmount(async () => {
             @unlocked="locked = false"
         />
 
-        <!-- F2-T6 intro modal: mounts only when the versioned gating opens it. -->
-        <TalosMobileIntroModal
-            v-if="intro.introOpen.value"
-            @close="onIntroClose($event)"
-        />
+        <!-- F2-T6 intro modal: mounts only when the versioned gating opens it.
+             Owner 2026-07-24: a leave transition so closing FADES out instead of
+             snapping (v-if unmounts instantly on its own). -->
+        <Transition leave-active-class="transition-opacity duration-200 ease-in motion-reduce:transition-none" leave-to-class="opacity-0">
+            <TalosMobileIntroModal
+                v-if="intro.introOpen.value"
+                @close="onIntroClose($event)"
+            />
+        </Transition>
 
         <!-- N1 guided account wizard: opens after the intro, once per version.
-             The shell persists its own outcome via the injected wizard state. -->
-        <TalosMobileAccountWizard v-if="accountWizard.wizardOpen.value" />
+             The shell persists its own outcome via the injected wizard state.
+             Owner 2026-07-24: leave transition (fade + soft lift) on close. -->
+        <Transition leave-active-class="transition duration-200 ease-in motion-reduce:transition-none" leave-to-class="opacity-0 scale-[0.98]">
+            <TalosMobileAccountWizard v-if="accountWizard.wizardOpen.value" />
+        </Transition>
 
         <div
             v-if="themeStore.state.theme !== 'calm'"
