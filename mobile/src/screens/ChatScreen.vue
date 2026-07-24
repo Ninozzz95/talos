@@ -681,6 +681,8 @@ onBeforeUnmount(() => {
                 :dictation-starting="dictation.status.value === 'starting'"
                 :dictation-level="dictation.level.value"
                 :drawer-mode="settings.state.shell.composer_drawer"
+                :immersive-composer="settings.state.shell.immersive_composer"
+                :plus-dropdown="settings.state.shell.plus_dropdown"
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"
                 @stop="chat.stopStreaming()"

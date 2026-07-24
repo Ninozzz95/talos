@@ -73,6 +73,12 @@ export const TALOS_DEFAULT_COMPOSER_DEFAULTS: TalosComposerDefaults = Object.fre
 export interface TalosMobileShellPreferences {
     immersive_header: boolean
     composer_drawer: boolean
+    /** Owner 2026-07-24 (ChatGPT-style): compact single-line composer that
+     *  expands (shows model+effort) on focus. Additive to the other modes. */
+    immersive_composer: boolean
+    /** Owner 2026-07-24: the "+" opens an anchored DROPDOWN (ChatGPT-style)
+     *  instead of the bottom drawer. Same actions, different surface. */
+    plus_dropdown: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
 }
@@ -82,6 +88,8 @@ export interface TalosMobileShellPreferences {
 const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_header: true,
     composer_drawer: true,
+    immersive_composer: false,
+    plus_dropdown: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -94,6 +102,12 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         composer_drawer: typeof record.composer_drawer === 'boolean'
             ? record.composer_drawer
             : DEFAULT_SHELL_PREFERENCES.composer_drawer,
+        immersive_composer: typeof record.immersive_composer === 'boolean'
+            ? record.immersive_composer
+            : DEFAULT_SHELL_PREFERENCES.immersive_composer,
+        plus_dropdown: typeof record.plus_dropdown === 'boolean'
+            ? record.plus_dropdown
+            : DEFAULT_SHELL_PREFERENCES.plus_dropdown,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }
