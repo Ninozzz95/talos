@@ -25,6 +25,7 @@
 import { pipeline, env, type FeatureExtractionPipeline } from '@huggingface/transformers'
 import { PROBE_DOCS, PROBE_QUERIES } from './corpus'
 import { LONG_DOCS, LONG_QUERIES } from './corpusLong'
+import { SCALE_FILLERS } from './corpusScale'
 import { rankLibraryDocs, type LibraryDoc } from '../src/lib/chat/libraryContext'
 
 env.allowLocalModels = false
@@ -79,9 +80,9 @@ const CANDIDATES: Candidate[] = [
     },
     {
         id: 'gemma-cpu',
-        label: 'EmbeddingGemma q4 (CPU)',
+        label: 'EmbeddingGemma q8 (CPU)',
         model: 'onnx-community/embeddinggemma-300m-ONNX',
-        dtype: 'q4',
+        dtype: 'q8',
         pooling: 'mean',
         forceWasm: true,
         query: (text) => `task: search result | query: ${text}`,
@@ -89,9 +90,9 @@ const CANDIDATES: Candidate[] = [
     },
     {
         id: 'qwen3',
-        label: 'Qwen3-0.6B q4 (last-token)',
+        label: 'Qwen3-0.6B q8 (last-token)',
         model: 'onnx-community/Qwen3-Embedding-0.6B-ONNX',
-        dtype: 'q4',
+        dtype: 'q8',
         pooling: 'last',
         query: (text) => `Instruct: Given a search query, retrieve relevant documents\nQuery: ${text}`,
         passage: plainPassage,
@@ -129,7 +130,31 @@ function chunk(text: string): string[] {
     return chunks
 }
 
-const results: Record<string, unknown>[] = []
+// SF of my own round-2 run: after a failed ONNX session the page state is
+// poisoned and every later arm inherits the previous error — three arms were
+// reported as failures without ever running. Each arm now gets a PRISTINE page
+// and results survive the reload in sessionStorage.
+const STORE_KEY = 'talos.probe.round3'
+const NL = String.fromCharCode(10)
+
+function loadResults(): Record<string, unknown>[] {
+    try {
+        const raw = sessionStorage.getItem(STORE_KEY)
+        return raw ? JSON.parse(raw) as Record<string, unknown>[] : []
+    } catch {
+        return []
+    }
+}
+
+function saveResults(): void {
+    try {
+        sessionStorage.setItem(STORE_KEY, JSON.stringify(results))
+    } catch {
+        // A full session store must not lose the run; the table still shows it.
+    }
+}
+
+const results: Record<string, unknown>[] = loadResults()
 const log = document.querySelector<HTMLPreElement>('#log')!
 const table = document.querySelector<HTMLTableSectionElement>('#rows')!
 
@@ -200,18 +225,24 @@ function keywordRank(docs: LibraryDoc[], query: string): Ranked[] {
     return rankLibraryDocs(docs, query).map((row) => ({ id: row.doc.id, score: row.score }))
 }
 
-/** Reciprocal rank fusion — the standard way to combine two rankers. */
-function fuse(a: Ranked[], b: Ranked[], k = 60): Ranked[] {
+/**
+ * Weighted reciprocal rank fusion. Round 2 showed equal weights HURT: fusing a
+ * near-random keyword ranking into a strong semantic one dropped recall@1 from
+ * 1.00 to 0.78. So the weight is swept instead of assumed.
+ */
+function fuse(semantic: Ranked[], keyword: Ranked[], weight: number, k = 60): Ranked[] {
     const scores = new Map<string, number>()
-    const add = (list: Ranked[]): void => {
+    const add = (list: Ranked[], factor: number): void => {
         list.forEach((entry, position) => {
-            scores.set(entry.id, (scores.get(entry.id) ?? 0) + 1 / (k + position + 1))
+            scores.set(entry.id, (scores.get(entry.id) ?? 0) + factor / (k + position + 1))
         })
     }
-    add(a)
-    add(b)
+    add(semantic, weight)
+    add(keyword, 1)
     return [...scores.entries()].map(([id, score]) => ({ id, score })).sort((x, y) => y.score - x.score)
 }
+
+const FUSION_WEIGHTS = [1, 2, 3, 5] as const
 
 function accuracy(rankings: Array<{ ranked: Ranked[]; relevant: string }>) {
     let hit1 = 0
@@ -238,9 +269,15 @@ function addRow(cells: string[]): HTMLTableRowElement {
     return row
 }
 
+// Round 3: the same 18 long-document questions, but the right answer now has
+// to beat 92 neighbours instead of 7 — the question that decides whether this
+// survives a real Library.
+const SCALE_DOCS = [...LONG_DOCS, ...PROBE_DOCS, ...SCALE_FILLERS]
+
 const CORPORA = [
     { name: 'corti', docs: PROBE_DOCS, queries: PROBE_QUERIES },
     { name: 'lunghi', docs: LONG_DOCS, queries: LONG_QUERIES },
+    { name: 'scala', docs: SCALE_DOCS, queries: LONG_QUERIES },
 ] as const
 
 // ---- Baseline over BOTH corpora -------------------------------------------
@@ -359,25 +396,32 @@ async function runCandidate(candidate: Candidate): Promise<void> {
 
         const latencies: number[] = []
         const semantic: Array<{ ranked: Ranked[]; relevant: string }> = []
-        const hybrid: Array<{ ranked: Ranked[]; relevant: string }> = []
+        const hybrids = new Map<number, Array<{ ranked: Ranked[]; relevant: string }>>()
+        for (const weight of FUSION_WEIGHTS) hybrids.set(weight, [])
         for (const probe of corpus.queries) {
             const queryStart = performance.now()
             const vector = await embed(extractor, candidate.query(probe.query), candidate.pooling)
             const ranked = rankByVector(vector, index)
             latencies.push(performance.now() - queryStart)
             semantic.push({ ranked, relevant: probe.relevant })
-            hybrid.push({ ranked: fuse(ranked, keywordRank(library, probe.query)), relevant: probe.relevant })
+            const words = keywordRank(library, probe.query)
+            for (const weight of FUSION_WEIGHTS) {
+                hybrids.get(weight)!.push({ ranked: fuse(ranked, words, weight), relevant: probe.relevant })
+            }
         }
         latencies.sort((a, b) => a - b)
         const semanticScores = accuracy(semantic)
-        const hybridScores = accuracy(hybrid)
+        const fusionSweep: Record<string, unknown> = {}
+        for (const weight of FUSION_WEIGHTS) fusionSweep[`peso_${weight}`] = accuracy(hybrids.get(weight)!)
+        const hybridScores = accuracy(hybrids.get(3)!)
         Object.assign(record, {
             [`${corpus.name}_pezzi`]: pieces,
             [`${corpus.name}_indicizzazione_ms`]: Math.round(indexMs),
             [`${corpus.name}_caratteri_al_secondo`]: Math.round(chars / (indexMs / 1000)),
             [`${corpus.name}_query_p50_ms`]: Math.round(latencies[Math.floor(latencies.length / 2)]!),
             [`${corpus.name}_semantico`]: semanticScores,
-            [`${corpus.name}_ibrido`]: hybridScores,
+            [`${corpus.name}_ibrido_3a1`]: hybridScores,
+            [`${corpus.name}_fusione`]: fusionSweep,
         })
         say(`${corpus.name}: ${pieces} pezzi in ${(indexMs / 1000).toFixed(1)}s — semantico ${(semanticScores.recall_1 * 100).toFixed(0)}% / ibrido ${(hybridScores.recall_1 * 100).toFixed(0)}% al 1° colpo`)
     }
@@ -388,25 +432,68 @@ async function runCandidate(candidate: Candidate): Promise<void> {
 
     const short = record.corti_semantico as { recall_1: number }
     const long = record.lunghi_semantico as { recall_1: number }
-    const longHybrid = record.lunghi_ibrido as { recall_1: number }
+    const scale = record.scala_semantico as { recall_1: number }
     row.innerHTML = [
         `${candidate.label}<br><span style="color:#7f9aa1">${backend}</span>`,
         `${record.download_mb} MB`,
         `${(coldMs / 1000).toFixed(1)}s / ${record.avvio_caldo_ms !== null ? `${((record.avvio_caldo_ms as number) / 1000).toFixed(1)}s` : '—'}`,
-        `${((record.lunghi_indicizzazione_ms as number) / 1000).toFixed(1)}s`,
-        `${record.lunghi_query_p50_ms} ms`,
+        `${((record.scala_indicizzazione_ms as number) / 1000).toFixed(1)}s`,
+        `${record.scala_query_p50_ms} ms`,
         `${(short.recall_1 * 100).toFixed(0)}%`,
         `${(long.recall_1 * 100).toFixed(0)}%`,
-        `${(longHybrid.recall_1 * 100).toFixed(0)}%`,
+        `${(scale.recall_1 * 100).toFixed(0)}%`,
     ].map((cell) => `<td>${cell}</td>`).join('')
 }
 
-async function runAll(): Promise<void> {
-    baseline()
-    say(`WebGPU: ${(navigator as { gpu?: unknown }).gpu ? 'disponibile' : 'NON disponibile'}`)
-    say(navigator.userAgent)
-    for (const candidate of CANDIDATES) await runCandidate(candidate)
-    say('\n=== FINE. Tocca "Copia risultati" e incolla in chat. ===')
+function renderStored(): void {
+    for (const record of results) {
+        if (typeof record.errore === 'string') {
+            addRow([`${record.candidato}`, `<span class="bad">FALLITO — ${record.errore}</span>`, '', '', '', '', '', ''])
+            continue
+        }
+        const short = record.corti_semantico as { recall_1: number } | undefined
+        const long = record.lunghi_semantico as { recall_1: number } | undefined
+        const scale = record.scala_semantico as { recall_1: number } | undefined
+        addRow([
+            `${record.candidato}${record.backend ? `<br><span style="color:#7f9aa1">${record.backend}</span>` : ''}`,
+            record.download_mb !== undefined ? `${record.download_mb} MB` : '—',
+            record.avvio_caldo_ms ? `${((record.avvio_freddo_ms as number) / 1000).toFixed(1)}s / ${((record.avvio_caldo_ms as number) / 1000).toFixed(1)}s` : '—',
+            record.scala_indicizzazione_ms ? `${((record.scala_indicizzazione_ms as number) / 1000).toFixed(1)}s` : '—',
+            record.scala_query_p50_ms ? `${record.scala_query_p50_ms} ms` : `${record.query_p50_ms ?? '—'} ms`,
+            short ? `${(short.recall_1 * 100).toFixed(0)}%` : `${((record.recall_1 as number ?? 0) * 100).toFixed(0)}%`,
+            long ? `${(long.recall_1 * 100).toFixed(0)}%` : '—',
+            scale ? `${(scale.recall_1 * 100).toFixed(0)}%` : '—',
+        ])
+    }
+}
+
+function goToArm(id: string, chain: boolean): void {
+    window.location.search = `?arm=${id}${chain ? '&chain=1' : ''}`
+}
+
+async function driveFromUrl(): Promise<void> {
+    const params = new URLSearchParams(window.location.search)
+    const armId = params.get('arm')
+    const chain = params.get('chain') === '1'
+    if (!armId) return
+    if (armId === 'base') {
+        baseline()
+        saveResults()
+        if (chain && CANDIDATES[0]) goToArm(CANDIDATES[0].id, true)
+        return
+    }
+    const index = CANDIDATES.findIndex((candidate) => candidate.id === armId)
+    if (index < 0) return
+    say(`Pagina pulita per ${CANDIDATES[index]!.label} — nessuno stato ereditato dal candidato precedente.`)
+    await runCandidate(CANDIDATES[index]!)
+    saveResults()
+    const next = CANDIDATES[index + 1]
+    if (chain && next) {
+        say(`${NL}Ricarico la pagina per ${next.label}…`)
+        window.setTimeout(() => goToArm(next.id, true), 1200)
+        return
+    }
+    say(NL + '=== FINE. Tocca "Copia risultati" e incolla in chat. ===')
 }
 
 const picker = document.querySelector<HTMLDivElement>('#picker')!
@@ -414,30 +501,32 @@ for (const candidate of CANDIDATES) {
     const button = document.createElement('button')
     button.className = 'ghost small'
     button.textContent = candidate.label
-    button.addEventListener('click', () => {
-        button.setAttribute('disabled', 'true')
-        void runCandidate(candidate).finally(() => button.removeAttribute('disabled'))
-    })
+    button.addEventListener('click', () => { goToArm(candidate.id, false) })
     picker.append(button)
 }
 
-document.querySelector('#run')!.addEventListener('click', (event) => {
-    (event.currentTarget as HTMLButtonElement).setAttribute('disabled', 'true')
-    void runAll()
+document.querySelector('#run')!.addEventListener('click', () => { goToArm('base', true) })
+document.querySelector('#base')!.addEventListener('click', () => { baseline(); saveResults() })
+document.querySelector('#reset')!.addEventListener('click', () => {
+    sessionStorage.removeItem(STORE_KEY)
+    window.location.search = ''
 })
-document.querySelector('#base')!.addEventListener('click', () => { baseline() })
 document.querySelector('#copy')!.addEventListener('click', async () => {
     const payload = JSON.stringify({
-        round: 2,
+        round: 3,
         dispositivo: navigator.userAgent,
         webgpu: Boolean((navigator as { gpu?: unknown }).gpu),
         chunk: { caratteri: CHUNK_CHARS, sovrapposizione: CHUNK_OVERLAP },
+        documenti: { corti: PROBE_DOCS.length, lunghi: LONG_DOCS.length, scala: SCALE_DOCS.length },
         misure: results,
     }, null, 1)
     try {
         await navigator.clipboard.writeText(payload)
-        say('\nRisultati copiati negli appunti.')
+        say(NL + 'Risultati copiati negli appunti.')
     } catch {
-        log.textContent += `\n${payload}\n`
+        log.textContent += NL + payload + NL
     }
 })
+
+renderStored()
+void driveFromUrl()
