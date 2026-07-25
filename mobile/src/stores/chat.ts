@@ -22,6 +22,14 @@ import type {
 } from '@/repositories/chatRepository'
 
 /**
+ * Owner 2026-07-25 (defect #4): opening a chat loaded EVERY message, so the
+ * conversations you use most became the slowest to open. The newest page is
+ * loaded first and older ones arrive as you scroll up — the shape WhatsApp and
+ * ChatGPT both use. 40 covers most conversations in one read.
+ */
+export const TALOS_MESSAGE_PAGE_SIZE = 40
+
+/**
  * Defect #5: the trace is model output like any other — it can rehearse the
  * library-save syntax, and it can be enormous. Markers are stripped and the
  * text is capped, with the truncation stated rather than hidden.
@@ -96,6 +104,9 @@ export interface ChatState {
     streamingText: string | null
     /** Defect #5: the reasoning of the reply being streamed right now. */
     streamingReasoning: string | null
+    /** Defect #4: false once the oldest message of the session is on screen. */
+    hasOlderMessages: boolean
+    loadingOlderMessages: boolean
     lastError: string | null
     persistenceStatus: ChatPersistenceStatus
     persistenceError: string | null
@@ -119,6 +130,8 @@ export interface ChatStore {
     retryPersistence(): Promise<void>
     createSession(title?: string, modelProfileId?: string | null): Promise<TalosLocalChatSession>
     selectSession(sessionId: string): Promise<void>
+    /** Defect #4: prepend the page above the oldest message; returns how many. */
+    loadOlderMessages(): Promise<number>
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<void>
     setSessionArchived(sessionId: string, archived: boolean): Promise<void>
@@ -191,6 +204,7 @@ function toMessageView(
     const role: TalosMobileMessageRole = message.role
     const view: TalosMobileMessageView = {
         id: message.id,
+        ordinal: message.ordinal,
         role,
         content: message.content,
         created_at: message.created_at,
@@ -276,6 +290,8 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         sending: false,
         streamingText: null,
         streamingReasoning: null,
+        hasOlderMessages: false,
+        loadingOlderMessages: false,
         lastError: null,
         persistenceStatus: 'idle',
         persistenceError: null,
@@ -288,6 +304,16 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             repository.listMessageToolActivities(message.id),
         ])
         return toMessageView(message, attachments, toolActivities)
+    }
+
+    /**
+     * Defect #4: a full page means there is probably more above it. Asking the
+     * database for a count on every open would cost the scan the paging exists
+     * to avoid — a full page is the cheap, honest signal, and the first
+     * `loadOlderMessages` corrects it if it was wrong.
+     */
+    function markPageLoaded(rows: readonly unknown[]): void {
+        state.hasOlderMessages = rows.length >= TALOS_MESSAGE_PAGE_SIZE
     }
 
     function markPersistenceFailure(error: unknown): void {
@@ -310,9 +336,11 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             if (activeId) await repository.selectSession(activeId)
         }
         const active = available.find((session) => session.id === activeId) ?? null
-        const restored = active
-            ? await Promise.all((await repository.listMessages(active.id)).map(loadMessageView))
+        const restoredRows = active
+            ? await repository.listMessages(active.id, { limit: TALOS_MESSAGE_PAGE_SIZE })
             : []
+        markPageLoaded(restoredRows)
+        const restored = await Promise.all(restoredRows.map(loadMessageView))
         const browserActivities = active
             ? (await repository.listSessionToolActivities(active.id))
                 .filter((activity) => activity.message_id === null)
@@ -410,13 +438,42 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         }
     }
 
+    /**
+     * Defect #4: prepend the page ABOVE the oldest message on screen. Returns
+     * how many arrived so the list can restore the scroll anchor — prepending
+     * without that makes the view jump, which is worse than the slow open it
+     * replaced.
+     */
+    async function loadOlderMessages(): Promise<number> {
+        const session = activeSession.value
+        const oldest = messages[0]
+        if (!session || !oldest || state.loadingOlderMessages || !state.hasOlderMessages) return 0
+        state.loadingOlderMessages = true
+        try {
+            const rows = await repository.listMessages(session.id, {
+                limit: TALOS_MESSAGE_PAGE_SIZE,
+                before: { ordinal: oldest.ordinal ?? 0, id: oldest.id },
+            })
+            state.hasOlderMessages = rows.length >= TALOS_MESSAGE_PAGE_SIZE
+            if (rows.length === 0) return 0
+            const older = await Promise.all(rows.map(loadMessageView))
+            messages.splice(0, 0, ...older)
+            return older.length
+        } catch (error) {
+            markPersistenceFailure(error)
+            return 0
+        } finally {
+            state.loadingOlderMessages = false
+        }
+    }
+
     async function selectSession(sessionId: string): Promise<void> {
         requirePersistence()
         try {
             await repository.selectSession(sessionId)
-            const restored = await Promise.all((await repository.listMessages(sessionId)).map(async (message) =>
-                loadMessageView(message),
-            ))
+            const restoredRows = await repository.listMessages(sessionId, { limit: TALOS_MESSAGE_PAGE_SIZE })
+            markPageLoaded(restoredRows)
+            const restored = await Promise.all(restoredRows.map(async (message) => loadMessageView(message)))
             const browserActivities = (await repository.listSessionToolActivities(sessionId))
                 .filter((activity) => activity.message_id === null)
                 .flatMap((activity) => {
@@ -455,9 +512,11 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             const nextId = await repository.deleteSession(sessionId)
             const available = await repository.listSessions()
             const next = available.find((session) => session.id === nextId) ?? null
-            const restored = next
-                ? await Promise.all((await repository.listMessages(next.id)).map(loadMessageView))
+            const nextRows = next
+                ? await repository.listMessages(next.id, { limit: TALOS_MESSAGE_PAGE_SIZE })
                 : []
+            markPageLoaded(nextRows)
+            const restored = await Promise.all(nextRows.map(loadMessageView))
             const browserActivities = next
                 ? (await repository.listSessionToolActivities(next.id))
                     .filter((activity) => activity.message_id === null)
@@ -802,6 +861,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         retryPersistence,
         createSession,
         selectSession,
+        loadOlderMessages,
         renameSession,
         deleteSession,
         setSessionArchived,

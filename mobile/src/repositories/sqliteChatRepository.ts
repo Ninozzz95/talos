@@ -472,16 +472,33 @@ export function createSqliteChatRepository(
                 return next
             })
         },
-        async listMessages(sessionId: string) {
+        async listMessages(sessionId, options) {
+            const limit = options?.limit
+            if (limit === undefined) {
+                const rows = await (await db()).query(
+                    `SELECT id, session_id, role, content, state, model_profile_id, run_id,
+                            ordinal, metadata_json, created_at, updated_at
+                     FROM talos_chat_messages
+                     WHERE session_id = ?
+                     ORDER BY ordinal ASC, created_at ASC, id ASC`,
+                    [sessionId],
+                )
+                return rows.map(parseMessage)
+            }
+            // Defect #4: read the NEWEST page and reverse it. Keyset, not
+            // offset: `(ordinal, id) < (cursor)` seeks straight to the row
+            // instead of walking and discarding everything above it.
+            const cursor = options?.before
             const rows = await (await db()).query(
                 `SELECT id, session_id, role, content, state, model_profile_id, run_id,
                         ordinal, metadata_json, created_at, updated_at
                  FROM talos_chat_messages
-                 WHERE session_id = ?
-                 ORDER BY ordinal ASC, created_at ASC, id ASC`,
-                [sessionId],
+                 WHERE session_id = ?${cursor ? ' AND (ordinal < ? OR (ordinal = ? AND id < ?))' : ''}
+                 ORDER BY ordinal DESC, created_at DESC, id DESC
+                 LIMIT ?`,
+                cursor ? [sessionId, cursor.ordinal, cursor.ordinal, cursor.id, limit] : [sessionId, limit],
             )
-            return rows.map(parseMessage)
+            return rows.map(parseMessage).reverse()
         },
         async appendMessage(input: AppendChatMessageInput) {
             const metadata = encodeObject(input.metadata)

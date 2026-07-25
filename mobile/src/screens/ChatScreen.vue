@@ -182,6 +182,30 @@ function onChatScroll(): void {
     const el = chatScroll.value
     if (!el) return
     liveEdge.onScroll({ scrollTop: el.scrollTop, scrollHeight: el.scrollHeight, clientHeight: el.clientHeight })
+    // Defect #4: older messages arrive as you approach the top. One screen of
+    // margin, so the page is already there by the time you would have seen the
+    // gap — and never while a page is in flight.
+    if (el.scrollTop <= el.clientHeight && chat.state.hasOlderMessages && !chat.state.loadingOlderMessages) {
+        void loadOlderPage()
+    }
+}
+
+/**
+ * Prepending grows the document ABOVE the viewport, which would shove the
+ * content the user is reading down the screen. The classic fix, and the one the
+ * research names: remember the distance from the bottom, restore it after the
+ * DOM settles. Bottom-anchored because that distance is the thing that must not
+ * change.
+ */
+async function loadOlderPage(): Promise<void> {
+    const el = chatScroll.value
+    if (!el) return
+    const anchor = el.scrollHeight - el.scrollTop
+    const added = await chat.loadOlderMessages()
+    if (added === 0) return
+    await nextTick()
+    const restored = chatScroll.value
+    if (restored) restored.scrollTop = restored.scrollHeight - anchor
 }
 
 function scrollChatToBottom(behavior: ScrollBehavior = 'auto'): void {
