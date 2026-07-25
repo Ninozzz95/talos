@@ -142,6 +142,23 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(off.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('dialog')
     })
 
+    // Global review (test axis): duplicate mics with the SAME accessible name
+    // shipped in R21 — the morphing right button plus a second one in each
+    // control row. One control per label, in every mode.
+    it.each([
+        ['drawer', { drawerMode: true }],
+        ['classic', { drawerMode: false }],
+        ['immersive', { drawerMode: true, immersiveComposer: true }],
+    ])('exposes exactly one dictation control in %s mode', (_mode, overrides) => {
+        const wrapper = mountComposer({ ...overrides, dictationSupported: true, prompt: '' })
+        expect(wrapper.findAll('[aria-label="Dictate"]')).toHaveLength(1)
+    })
+
+    it('exposes exactly one Stop-dictation control while listening', () => {
+        const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, dictationListening: true })
+        expect(wrapper.findAll('[aria-label="Stop dictation"]').length).toBeLessThanOrEqual(2) // right button + live pill
+    })
+
     it('plus-dropdown: Escape closes the menu', async () => {
         const wrapper = mountComposer({ drawerMode: true, plusDropdown: true })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')

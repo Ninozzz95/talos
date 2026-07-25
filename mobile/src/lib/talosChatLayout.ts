@@ -10,9 +10,9 @@ export const TALOS_CHAT_BUBBLE_SCALE_OPTIONS: Array<{
     value: TalosChatBubbleScale
     label: string
 }> = [
-    { value: 'compact', label: 'Compact' },
-    { value: 'balanced', label: 'Balanced' },
-    { value: 'expanded', label: 'Expanded' },
+    { value: 'compact', label: 'Small' },
+    { value: 'balanced', label: 'Default' },
+    { value: 'expanded', label: 'Large' },
 ]
 
 export const TALOS_CHAT_COMPOSER_MODE_OPTIONS: Array<{

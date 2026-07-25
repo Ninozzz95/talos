@@ -66,6 +66,13 @@ export interface TalosLocalVaultFile {
     updated_at: string
 }
 
+/** Perf (review 2026-07-25): the Library list without every document's full
+ *  extracted_text — reading that on every send shipped the whole corpus across
+ *  the native bridge. `text_preview` is a short excerpt for ranking only. */
+export interface TalosLocalVaultFileSummary extends Omit<TalosLocalVaultFile, 'extracted_text'> {
+    text_preview: string | null
+}
+
 export interface TalosLocalFileAuthorityGrant {
     id: string
     vault_file_id: string
@@ -284,6 +291,7 @@ export interface TalosChatRepository {
     listMessageToolActivities(messageId: string): Promise<TalosLocalToolActivity[]>
     listSessionToolActivities(sessionId: string): Promise<TalosLocalToolActivity[]>
     listVaultFiles(): Promise<TalosLocalVaultFile[]>
+    listVaultFileSummaries(): Promise<TalosLocalVaultFileSummary[]>
     getVaultFile(fileId: string): Promise<TalosLocalVaultFile | null>
     createVaultFile(input: CreateVaultFileInput): Promise<TalosLocalVaultFile>
     updateVaultFile(fileId: string, input: UpdateVaultFileInput): Promise<TalosLocalVaultFile>

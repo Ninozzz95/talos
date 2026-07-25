@@ -10,6 +10,7 @@ import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
+import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { parseVaultOrigin } from '@/lib/vaultLibrary'
 
 const controller = useChatController()
@@ -28,13 +29,13 @@ const viewMode = computed({
     set: (value) => { void settings.setShell({ library_view: value }) },
 })
 const typeFilter = ref<'all' | 'images' | 'files'>('all')
-const groupByChat = ref(false)
+const groupByChat = ref(true) // owner 2026-07-25: grouped by origin chat by default
 const query = ref('')
 const menuOpen = ref(false)
 const TYPE_TABS: Array<{ value: typeof typeFilter.value; label: string }> = [
-    { value: 'all', label: 'Tutti' },
-    { value: 'images', label: 'Immagini' },
-    { value: 'files', label: 'File' },
+    { value: 'all', label: 'All' },
+    { value: 'images', label: 'Images' },
+    { value: 'files', label: 'Files' },
 ]
 
 function isImage(file: TalosLocalVaultFile): boolean {
@@ -103,6 +104,14 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
     }
     docView.value = file
 }
+// Product review 2026-07-25: Android Back inside a fullscreen preview used to
+// fall through to 'station-to-sidebar' — it ejected the user to the chat with the
+// sidebar open instead of closing the preview.
+useTalosOverlayBack(() => {
+    if (docView.value) { docView.value = null; return }
+    if (lightboxUrl.value) closeLightbox()
+}, () => lightboxUrl.value !== null || docView.value !== null)
+
 function closeLightbox(): void {
     if (lightboxUrl.value && !Object.values(thumbs.value).includes(lightboxUrl.value)) URL.revokeObjectURL(lightboxUrl.value)
     lightboxUrl.value = null
@@ -127,8 +136,8 @@ function formatModified(iso: string): string {
     const now = new Date()
     const day = 86_400_000
     const diff = Math.floor((now.setHours(0, 0, 0, 0) - new Date(iso).setHours(0, 0, 0, 0)) / day)
-    if (diff <= 0) return 'oggi'
-    if (diff === 1) return 'ieri'
+    if (diff <= 0) return 'today'
+    if (diff === 1) return 'yesterday'
     return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 }
 
@@ -200,12 +209,12 @@ onMounted(async () => {
                     leave-to-class="opacity-0 scale-95"
                 >
                 <div v-if="menuOpen" role="menu" data-testid="talos-library-menu" class="absolute right-0 top-full z-[60] mt-1 min-w-52 origin-top-right overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl">
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Carica file</button>
-                    <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> Nuova cartella</button>
+                    <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Upload files</button>
+                    <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> New folder</button>
                     <div class="my-1 border-t border-[var(--talos-border)]" />
-                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Griglia <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'list'" data-testid="talos-library-view-list" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'list'; menuOpen = false"><List class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Elenco <CheckCircle2 v-if="viewMode === 'list'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                    <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Raggruppa per chat <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Grid <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'list'" data-testid="talos-library-view-list" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'list'; menuOpen = false"><List class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> List <CheckCircle2 v-if="viewMode === 'list'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Group by chat <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                 </div>
                 </Transition>
             </div>
@@ -213,11 +222,11 @@ onMounted(async () => {
 
         <label class="relative mb-3 block">
             <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
-            <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" placeholder="Cerca nella libreria" aria-label="Search the Library" class="min-h-11 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
+            <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" placeholder="Search the Library" aria-label="Search the Library" class="min-h-11 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
         </label>
 
         <div class="mb-4 flex gap-1" role="group" aria-label="Filter by type">
-            <button v-for="tab in TYPE_TABS" :key="tab.value" type="button" :aria-pressed="typeFilter === tab.value" :data-testid="`talos-library-type-${tab.value}`" class="talos-pressable min-h-9 rounded-full px-3 text-sm transition-colors" :class="typeFilter === tab.value ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]' : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'" @click="typeFilter = tab.value">{{ tab.label }}</button>
+            <button v-for="tab in TYPE_TABS" :key="tab.value" type="button" :aria-pressed="typeFilter === tab.value" :data-testid="`talos-library-type-${tab.value}`" class="talos-pressable min-h-11 rounded-full px-3 text-sm transition-colors" :class="typeFilter === tab.value ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]' : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'" @click="typeFilter = tab.value">{{ tab.label }}</button>
         </div>
 
         <div v-if="attachments.vaultError.value" role="alert" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
@@ -270,7 +279,7 @@ onMounted(async () => {
                         <span class="line-clamp-2 text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</span>
                         <span class="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--talos-muted)]">
                             <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="text-[var(--talos-accent)]">Generated</span>
-                            <span v-else>Modificato {{ formatModified(file.updated_at) }}</span>
+                            <span v-else> Modified {{ formatModified(file.updated_at) }}</span>
                             <span v-if="!groupByChat && originChat(file)" class="truncate">· {{ originChat(file) }}</span>
                         </span>
                     </button>

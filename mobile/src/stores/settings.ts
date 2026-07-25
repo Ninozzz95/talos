@@ -104,9 +104,9 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_composer: false,
     plus_dropdown: false,
     launcher_icon_follows_theme: false,
-    library_context_enabled: true,
-    library_autosave_generated: true,
-    library_view: 'grid',
+    library_context_enabled: false,
+    library_autosave_generated: false,
+    library_view: 'list',
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -344,12 +344,9 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         chatLayout.bubble_scale = 'compact'
         if (motionParsed.mode === 'off') motionParsed.mode = 'complex'
     }
-    // Owner 2026-07-25: library context shipped OFF in R19 and is now ON by
-    // default — one-shot so an existing install picks it up (a later deliberate
-    // opt-out persists via library_defaults_v1).
-    if (value.library_defaults_v1 !== true) {
-        shellParsed.library_context_enabled = true
-    }
+    // Security review 2026-07-25: sending the whole Library to a third-party
+    // provider, and letting model output write files, are BOTH explicit opt-ins.
+    // No migration force-enables them.
     return {
         shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),

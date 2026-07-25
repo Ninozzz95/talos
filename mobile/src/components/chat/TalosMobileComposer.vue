@@ -155,7 +155,11 @@ const plusMenuOpen = ref(false)
 const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
 const plusMenu = ref<HTMLElement | null>(null)
 async function openPlus(): Promise<void> {
-    if (!props.plusDropdown) { toolDrawerOpen.value = true; return }
+    // Product review 2026-07-25: the bottom drawer only renders under drawerMode,
+    // so with (immersive on, plusDropdown off, drawerMode off) the "+" opened
+    // NOTHING while announcing aria-expanded=true. The dropdown is always a valid
+    // surface, so fall back to it rather than to a drawer that cannot mount.
+    if (!props.plusDropdown && props.drawerMode) { toolDrawerOpen.value = true; return }
     if (plusMenuOpen.value) { await closePlusMenu(); return }
     plusMenuOpen.value = true
     await nextTick()
@@ -481,7 +485,7 @@ watch(() => props.prompt, () => {
                  the field focused / keyboard up when a control is tapped (Android WebView
                  blurs on pointerdown, before any mousedown handler could run). -->
             <Button
-                v-if="composerCompact"
+                v-if="composerCompact || (plusDropdown && !drawerMode)"
                 ref="plusTrigger"
                 type="button"
                 size="icon"
@@ -503,7 +507,7 @@ watch(() => props.prompt, () => {
                 aria-label="Message TALOS"
                 placeholder="Message TALOS..."
                 class="max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
-                :class="composerCompact ? 'min-h-12 py-3 pl-14 pr-14' : 'min-h-14 py-2 px-2 pr-14'"
+                :class="composerCompact ? 'min-h-12 py-3 pl-14 pr-14' : (plusDropdown && !drawerMode ? 'min-h-14 py-2 pl-14 pr-14' : 'min-h-14 py-2 px-2 pr-14')"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
                 @focus="composerFocused = true"
@@ -622,27 +626,9 @@ watch(() => props.prompt, () => {
                 </span>
             </button>
             <span class="flex-1" aria-hidden="true" />
-            <Button
-                v-if="dictationSupported"
-                type="button"
-                size="icon"
-                variant="outline"
-                data-mobile-icon-only="true"
-                :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
-                :title="dictationStarting ? 'Starting dictation…' : (dictationListening ? 'Stop dictation' : 'Dictate')"
-                :aria-pressed="dictationListening || dictationStarting"
-                :disabled="sending && !dictationListening && !dictationStarting"
-                class="talos-pressable min-h-11 min-w-11 rounded-2xl"
-                :class="dictationListening || dictationStarting
-                    ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
-                    : ''"
-                @click="emit('toggleDictation')"
-            >
-                <!-- F5-#29: the tap ALWAYS answers visually — spinner while the
-                     recognizer arms, pulse while it truly listens. -->
-                <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
-                <Mic v-else class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
-            </Button>
+            <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25):
+                 a second control with the same accessible name was ambiguous for
+                 assistive tech and gave the user two different mics to tap. -->
         </div>
 
         <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
@@ -709,25 +695,7 @@ watch(() => props.prompt, () => {
                 >
                     <Paperclip class="size-4" aria-hidden="true" />
                 </Button>
-                <Button
-                    v-if="dictationSupported"
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
-                    :title="dictationStarting ? 'Starting dictation…' : (dictationListening ? 'Stop dictation' : 'Dictate')"
-                    :aria-pressed="dictationListening || dictationStarting"
-                    :disabled="sending && !dictationListening && !dictationStarting"
-                    class="talos-pressable min-h-11 min-w-11"
-                    :class="dictationListening || dictationStarting
-                        ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
-                        : ''"
-                    @click="emit('toggleDictation')"
-                >
-                    <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
-                    <Mic v-else class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
-                </Button>
+                <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25). -->
                 <Button
                     type="button"
                     size="icon"

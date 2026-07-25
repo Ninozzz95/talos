@@ -432,13 +432,21 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         librarySelection = []
         if (!deps.settings.state.shell?.library_context_enabled) return {}
         try {
-            // Ensure the model sees the CURRENT global Library (a file added in
-            // another chat may not be in this session's in-memory list yet).
-            await attachments.refreshVault()
-            const files = attachments.vaultFiles.filter((file) => file.status === 'available')
-            if (files.length === 0) return {}
+            // Security review 2026-07-25:
+            // - NEVER inject origin='generated' documents. Model-authored content
+            //   must not become future model input, or a single poisoned reply
+            //   becomes a permanent instruction in every later chat.
+            // - Per-file opt-out (metadata.library_shared === false) is honored.
+            // Perf review: the vault list is read WITHOUT extracted_text; only the
+            // few selected documents are hydrated (a full read shipped every
+            // document's whole body across the bridge on every single send).
+            const summaries = (await deps.chatRepository.listVaultFileSummaries())
+                .filter((file) => file.status === 'available')
+                .filter((file) => parseVaultOrigin(file.metadata) === 'uploaded')
+                .filter((file) => (file.metadata as { library_shared?: boolean }).library_shared !== false)
+            if (summaries.length === 0) return {}
             const titles = new Map(chat.sessions.map((session) => [session.id, session.title]))
-            const docs: LibraryDoc[] = files.map((file) => {
+            const toDoc = (file: { id: string; display_name: string; metadata: Record<string, unknown>; created_at: string }, text: string): LibraryDoc => {
                 const originSessionId = (file.metadata as { origin_session_id?: string | null }).origin_session_id ?? null
                 return {
                     id: file.id,
@@ -446,13 +454,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     origin: parseVaultOrigin(file.metadata),
                     originSessionId,
                     originSessionTitle: originSessionId ? (titles.get(originSessionId) ?? null) : null,
-                    text: file.extracted_text ?? '',
+                    text,
                     createdAt: file.created_at,
                 }
-            })
-            const selected = selectLibraryDocsForInjection(docs, {
-                query, charBudget: 24_000, maxDocs: 8, perDocChars: 4_000,
-            })
+            }
+            // Rank on names + the search preview only, then hydrate the winners.
+            const ranked = selectLibraryDocsForInjection(
+                summaries.map((file) => toDoc(file, file.text_preview ?? '')),
+                { query, charBudget: 24_000, maxDocs: 8, perDocChars: 4_000 },
+            )
+            const selected: LibraryDoc[] = []
+            for (const doc of ranked) {
+                const full = await deps.chatRepository.getVaultFile(doc.id)
+                if (full?.extracted_text) selected.push({ ...doc, text: full.extracted_text })
+            }
             if (selected.length === 0) return {}
             librarySelection = selected
             pendingLibraryBlock = 'pending'
@@ -1020,7 +1035,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const accepted = await chat.send(
             text,
             selectedModelId.value,
-            { ...await prepareMemoryInjection(), ...await prepareLibraryInjection(text) },
+            // Perf review 2026-07-25: the two retrievals run in PARALLEL (they were
+            // sequential awaits in the argument list, so both completed before the
+            // user's own turn was even appended — the composer emptied and nothing
+            // appeared for the duration).
+            Object.assign({}, ...await Promise.all([prepareMemoryInjection(), prepareLibraryInjection(text)])),
             attachments.bindings.value,
             // Owner 2026-07-24: clear the composer's attachments the instant the
             // user turn is COMMITTED — not after the whole generation, which left
@@ -1034,9 +1053,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         clearPromptEnhancement()
         const message = chat.messages.find((candidate) => candidate.id === messageId)
         if (!message || message.role !== 'user') throw new Error('TALOS could not find the message to resend.')
+        const [memoryMeta, libraryMeta] = await Promise.all([
+            prepareMemoryInjection(), prepareLibraryInjection(message.content),
+        ])
         await chat.send(message.content, selectedModelId.value, {
-            ...await prepareMemoryInjection(),
-            ...await prepareLibraryInjection(message.content),
+            ...memoryMeta,
+            ...libraryMeta,
             command_id: 'resend_message',
             resend_of_message_id: message.id,
         })
@@ -1049,9 +1071,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (!message || message.role !== 'assistant') throw new Error('TALOS could not find the response to retry.')
         const previousUser = chat.messages.slice(0, index).reverse().find((candidate) => candidate.role === 'user')
         if (!previousUser) throw new Error('TALOS could not find the prompt that produced this answer.')
+        const [memoryMeta, libraryMeta] = await Promise.all([
+            prepareMemoryInjection(), prepareLibraryInjection(previousUser.content),
+        ])
         await chat.send(previousUser.content, selectedModelId.value, {
-            ...await prepareMemoryInjection(),
-            ...await prepareLibraryInjection(previousUser.content),
+            ...memoryMeta,
+            ...libraryMeta,
             command_id: 'retry_assistant_response',
             retry_of_message_id: message.id,
             resend_of_message_id: previousUser.id,

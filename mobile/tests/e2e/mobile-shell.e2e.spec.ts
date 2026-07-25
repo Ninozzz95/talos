@@ -114,6 +114,11 @@ test('reload restores the active route and presentation preference', async ({ pa
 test('shell opens and navigates locally in airplane mode', async ({ page, context }) => {
     await page.goto('/')
     await expect(page.locator(HEADER)).toBeVisible()
+    // Perf review 2026-07-25: station chunks are warmed AFTER mount (awaiting them
+    // before first paint was a 792KB cold-start regression). On device they are
+    // local file:// assets; on the web preview they must finish warming before the
+    // network is cut — the shell is already interactive well before this resolves.
+    await page.waitForFunction(() => window.__TALOS_ROUTES_WARM__ === true, null, { timeout: 20_000 })
     await context.setOffline(true)
     await openStation(page, 'Research')
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'research')

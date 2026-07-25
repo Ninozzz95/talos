@@ -18,6 +18,7 @@ import { preloadTalosMobileRoutes } from '@/lib/mobileRoutes'
 
 declare global {
     interface Window {
+        __TALOS_ROUTES_WARM__?: boolean
         // Fail-closed degraded-mode switch (charter section 11). Names present
         // in this array disable the matching subsystem; the shell must stay
         // functional. Never set in production; used only by controlled tests.
@@ -63,14 +64,26 @@ if (!disabled.has('native')) {
     })
 }
 
-async function bootstrapTalosMobileApp(): Promise<void> {
-    try {
-        await preloadTalosMobileRoutes()
-    } catch (error) {
-        console.error('[mobile-routes] Packaged station preload failed; starting Chat in degraded mode.', error)
-    }
-
+function bootstrapTalosMobileApp(): void {
+    // Perf review 2026-07-25: this AWAITED the preload of all 10 route chunks + 6
+    // shell chunks before mounting — 792KB of boot-blocking JS instead of the
+    // 505KB the budget gate measures, and nothing (not even the boot logo) painted
+    // until it finished. In a packaged APK every chunk is a local file:// asset,
+    // so the "offline readiness" rationale buys nothing on device.
+    // Mount first; warm the station chunks once the main thread is free.
     createApp(App).use(router).mount('#app')
+
+    const warm = (): void => {
+        void preloadTalosMobileRoutes()
+            .catch((error: unknown) => {
+                console.error('[mobile-routes] Packaged station preload failed; stations load on demand.', error)
+            })
+            // Observable signal: the shell is interactive BEFORE this resolves, but
+            // offline navigation only becomes safe once the chunks are warm.
+            .finally(() => { window.__TALOS_ROUTES_WARM__ = true })
+    }
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 3_000 })
+    else setTimeout(warm, 0)
 }
 
 void bootstrapTalosMobileApp()

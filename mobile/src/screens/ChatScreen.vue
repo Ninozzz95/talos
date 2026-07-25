@@ -640,6 +640,7 @@ onBeforeUnmount(() => {
                     :sending="chat.state.sending"
                     :model-labels="modelLabels"
                     :message-style="settings.state.chat_layout.message_style"
+                    :text-scale="settings.state.chat_layout.bubble_scale"
                     @reuse="reuseMessage"
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"

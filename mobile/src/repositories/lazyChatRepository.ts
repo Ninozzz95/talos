@@ -101,6 +101,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async listVaultFiles() {
             return (await ready()).listVaultFiles()
         },
+        async listVaultFileSummaries() {
+            return (await ready()).listVaultFileSummaries()
+        },
         async getVaultFile(fileId: string) {
             return (await ready()).getVaultFile(fileId)
         },
