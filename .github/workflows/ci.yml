@@ -109,3 +109,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/tests/talos-docker-integration.sh
+
+  # Owner 2026-07-25 (defect #2): the mobile app was the one part of this repo
+  # nobody checked automatically — "tested" meant a command run by hand and the
+  # owner's thumb, so a regression could sit unnoticed until he hit it.
+  mobile:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      # The repo pins npm as tightly as node (preinstall fails closed outside
+      # the frozen ranges), so the runner has to match before `npm ci` runs.
+      - run: npm install -g npm@11.16.0
+      - run: cd mobile && npm ci
+      - run: cd mobile && npm run typecheck
+      - run: cd mobile && npm run test:unit
+      # `build` is the gate that matters most: it runs vue-tsc, the initial-JS
+      # and CSS budgets, and the parity ledger check.
+      - run: cd mobile && npm run build
+      - run: cd mobile && npx playwright install --with-deps chromium
+      # One worker, one retry: the suite is flaky at ~2/64 under parallel load
+      # (proven pre-existing by stashing the change and re-running the
+      # baseline). Serialising removes the contention; the single retry keeps a
+      # residual flake from turning CI red without hiding a real failure, which
+      # would show up as a repeated failure across runs.
+      - run: cd mobile && npx playwright test --workers=1 --retries=1
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: talos-mobile-playwright-diagnostics
+          path: |
+            mobile/playwright-report
+            mobile/test-results
+          if-no-files-found: warn
+          retention-days: 7
