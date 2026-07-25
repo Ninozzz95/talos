@@ -125,6 +125,20 @@ onMounted(scan)
             </li>
         </ul>
 
+        <!-- TEMPORARY (owner 2026-07-25, "VIA AL TEST"): entry point to the
+             semantic-retrieval probe. The probe is a SEPARATE build in
+             dist/probe/ — it imports nothing from the app and the app bundle is
+             untouched. Remove this block together with the probe once the
+             measurement is done. -->
+        <a
+            href="/probe/index.html"
+            data-testid="talos-doctor-probe-link"
+            class="talos-pressable mt-1 flex min-h-12 items-center justify-between rounded-xl border border-dashed border-[var(--talos-accent)]/60 bg-[var(--talos-panel)]/70 px-3 text-sm text-[var(--talos-text)]"
+        >
+            <span>Test ricerca intelligente <span class="text-2xs text-[var(--talos-muted)]">(misura, temporaneo)</span></span>
+            <span aria-hidden="true" class="text-[var(--talos-accent)]">&rsaquo;</span>
+        </a>
+
         <!-- F5.1: recent device issues (fenced timeouts, swallowed native
              errors) — the evidence channel for device-only failures. -->
         <section v-if="issues.length" class="mt-2">

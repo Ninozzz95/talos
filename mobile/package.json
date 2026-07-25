@@ -31,7 +31,8 @@
         "test:unit": "vitest run",
         "test:e2e": "playwright test",
         "verify:parity": "node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
-        "typecheck": "vue-tsc -b --force"
+        "typecheck": "vue-tsc -b --force",
+        "build:probe": "vite build --config vite.probe.config.ts"
     },
     "dependencies": {
         "@aparajita/capacitor-biometric-auth": "10.0.0",
@@ -77,6 +78,7 @@
     },
     "devDependencies": {
         "@capacitor/cli": "8.4.2",
+        "@huggingface/transformers": "4.2.0",
         "@playwright/test": "1.61.1",
         "@tailwindcss/vite": "4.3.3",
         "@types/markdown-it": "14.1.2",
