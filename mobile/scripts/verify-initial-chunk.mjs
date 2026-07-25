@@ -1,7 +1,20 @@
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { gzipSync } from 'node:zlib'
 import { resolve } from 'node:path'
 
-const DEFAULT_MAXIMUM_BYTES = 512_000
+// Owner 2026-07-25 (defect #3): the ceiling was 512,000 and the app sat 1.3 KB
+// under it, so every feature became a negotiation with the gate. Raised to a
+// number with a reason rather than a round one: the security work (the lock
+// decides before anything renders), reasoning capture and paging are all
+// permanent entry-graph residents, and 560,000 leaves ~9% of room for the tool
+// runtime's own entry-side glue while everything optional stays lazy.
+//
+// It also stopped measuring half the payload. The render-blocking CSS was never
+// counted — 131 KB of it — so the gate could stay green while first paint got
+// slower. Both are budgeted now, and gzip transfer is reported beside raw bytes
+// because that is what a phone actually downloads.
+const DEFAULT_MAXIMUM_BYTES = 560_000
+const DEFAULT_MAXIMUM_CSS_BYTES = 150_000
 const DYNAMIC_BOUNDARIES = [
     {
         suffix: 'src/repositories/productionChatRepository.ts',
@@ -79,6 +92,7 @@ function matchesBoundary(manifest, key, suffix) {
 try {
     const dist = resolve(argument('--dist', 'dist'))
     const maximum = Number(argument('--max-initial-bytes', String(DEFAULT_MAXIMUM_BYTES)))
+    const maximumCss = Number(argument('--max-initial-css-bytes', String(DEFAULT_MAXIMUM_CSS_BYTES)))
     if (!Number.isSafeInteger(maximum) || maximum <= 0) {
         throw new Error('TALOS_BUILD_ARGUMENT_INVALID: --max-initial-bytes')
     }
@@ -145,21 +159,47 @@ try {
 
     if (!boundaryFailure) {
         let initialBytes = 0
+        let initialCssBytes = 0
+        let initialGzipBytes = 0
+        let initialCssGzipBytes = 0
+        const seenCss = new Set()
         for (const key of staticClosure) {
             const row = manifestRow(manifest[key], key)
             if (typeof row.file !== 'string') throw new Error(`TALOS_BUILD_MANIFEST_INVALID: file for ${key}`)
-            if (row.file.endsWith('.js')) initialBytes += statSync(resolve(dist, row.file)).size
+            if (row.file.endsWith('.js')) {
+                const contents = readFileSync(resolve(dist, row.file))
+                initialBytes += contents.length
+                initialGzipBytes += gzipSync(contents).length
+            }
+            // Defect #3: the CSS a chunk pulls in is render-blocking on first
+            // paint. Budgeting only JS measured half the cost.
+            for (const sheet of Array.isArray(row.css) ? row.css : []) {
+                if (typeof sheet !== 'string' || seenCss.has(sheet)) continue
+                seenCss.add(sheet)
+                const contents = readFileSync(resolve(dist, sheet))
+                initialCssBytes += contents.length
+                initialCssGzipBytes += gzipSync(contents).length
+            }
         }
         if (initialBytes > maximum) {
             fail(
                 'TALOS_INITIAL_CHUNK_BUDGET_EXCEEDED',
                 `${initialBytes} bytes exceeds ${maximum} bytes`,
             )
+        } else if (initialCssBytes > maximumCss) {
+            fail(
+                'TALOS_INITIAL_CSS_BUDGET_EXCEEDED',
+                `${initialCssBytes} CSS bytes exceeds ${maximumCss} bytes`,
+            )
         } else {
             process.stdout.write(`${JSON.stringify({
                 ok: true,
                 initial_javascript_bytes: initialBytes,
                 maximum_initial_javascript_bytes: maximum,
+                initial_css_bytes: initialCssBytes,
+                maximum_initial_css_bytes: maximumCss,
+                initial_javascript_gzip_bytes: initialGzipBytes,
+                initial_css_gzip_bytes: initialCssGzipBytes,
                 sqlite_dynamic_entry: dynamicEntries[0],
                 message_renderer_dynamic_entry: dynamicEntries[1],
                 message_overflow_dynamic_entry: dynamicEntries[2],
