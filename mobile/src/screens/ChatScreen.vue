@@ -238,6 +238,10 @@ async function onSend(): Promise<void> {
     controller.clearPromptEnhancement()
     draft.updatePrompt('')
     await draft.flush()
+    // Owner 2026-07-25: sending your own message always snaps to the bottom —
+    // rejoin the live edge so the message-add watch auto-scrolls (it was gated
+    // when the user had scrolled up).
+    rejoinLiveEdge()
     const accepted = await controller.send(text)
     if (!accepted) {
         draft.updatePrompt(text)

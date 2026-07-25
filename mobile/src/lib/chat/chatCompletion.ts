@@ -93,7 +93,22 @@ export function buildChatCompletion(
                 if (sawChunk || aborted || stalled) throw error
             }
         }
-        const result = await adapter.complete(input, credential, transport)
+        // The buffered transport is CapacitorHttp (native — not AbortSignal-aware),
+        // so Stop can't cancel the in-flight native request server-side. Race it
+        // against the abort signal so Stop still frees the UI immediately (the store
+        // treats the AbortError as a user abort and drops the result).
+        const result = await Promise.race([
+            adapter.complete(input, credential, transport),
+            abortSignalRejection(stream?.signal),
+        ])
         return result.text
     }
+}
+
+function abortSignalRejection(signal?: AbortSignal): Promise<never> {
+    return new Promise<never>((_resolve, reject) => {
+        if (!signal) return // never settles → Promise.race resolves on the completion
+        if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return }
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    })
 }

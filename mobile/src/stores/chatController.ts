@@ -432,6 +432,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         librarySelection = []
         if (!deps.settings.state.shell?.library_context_enabled) return {}
         try {
+            // Ensure the model sees the CURRENT global Library (a file added in
+            // another chat may not be in this session's in-memory list yet).
+            await attachments.refreshVault()
             const files = attachments.vaultFiles.filter((file) => file.status === 'available')
             if (files.length === 0) return {}
             const titles = new Map(chat.sessions.map((session) => [session.id, session.title]))
@@ -548,6 +551,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             }
             return finalText
         } catch (error) {
+            // A user Stop must stay an AbortError all the way to the chat store, or
+            // it gets persisted as a failed system message instead of a clean cancel.
+            if (error instanceof Error && error.name === 'AbortError') throw error
             const safeMessage = safeProviderMessage(error, apiKey)
             if (error instanceof TalosMobileProviderError) {
                 throw new TalosMobileProviderError({
