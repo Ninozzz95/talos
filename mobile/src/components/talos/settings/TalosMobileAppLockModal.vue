@@ -10,6 +10,7 @@ import {
     requestBiometricUnlock,
     setupAppLockPin,
     verifyAppLockPin,
+    appLockThrottleRemainingMs,
 } from '@/services/appLock'
 
 /**
@@ -72,7 +73,12 @@ async function onVerifySubmit(): Promise<void> {
         emit('completed')
         return
     }
-    error.value = 'PIN not recognized. The app lock stays on.'
+    // Debt S3: after three misses the CORRECT PIN is refused too — saying
+    // "not recognized" there would be a lie by this codebase's own standard.
+    const waiting = await appLockThrottleRemainingMs().catch(() => 0)
+    error.value = waiting > 0
+        ? `Too many attempts. Try again in ${Math.ceil(waiting / 1000)}s.`
+        : 'PIN not recognized. The app lock stays on.'
     verifyInput.value?.clear()
 }
 

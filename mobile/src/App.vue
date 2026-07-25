@@ -30,6 +30,7 @@ import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { resolveTalosBackAction } from '@/lib/backNavigation'
 import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
+import { setTalosScreenSecure } from '@/services/privacyScreen'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
@@ -143,6 +144,15 @@ const shellStyle = computed(() => ({
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
 // (attachment revocation + draft scoping stay orchestrated in one place).
 const sidebarOpen = ref(false)
+// Debt S2: FLAG_SECURE — no screenshots, no screen recording, no readable
+// recents thumbnail. SF: do NOT fire before hydration; the pre-hydration
+// default would CLEAR the flag for the whole boot window, which is exactly the
+// window where the restored route is already painted.
+watch(() => settingsHydrated.value && settingsStore.state.security.screen_secure, (secure) => {
+    if (!settingsHydrated.value) return
+    void setTalosScreenSecure(secure === true)
+})
+
 watch(sidebarOpen, (open) => {
     if (open) sidebarEverOpened.value = true
 })

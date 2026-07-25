@@ -192,11 +192,16 @@ function parseOnboarding(value: unknown): TalosMobileOnboardingState {
 export interface TalosMobileSecurityPreferences {
     app_lock_enabled: boolean
     app_lock_biometric: boolean
+    /** Debt S2: FLAG_SECURE — no screenshots, no readable recents thumbnail. */
+    screen_secure: boolean
 }
 
 const DEFAULT_SECURITY_PREFERENCES: TalosMobileSecurityPreferences = {
     app_lock_enabled: false,
     app_lock_biometric: false,
+    // Deliberately OFF by default: screenshotting a chat is an everyday need.
+    // Turning the app lock ON turns this on with it (visible, and reversible).
+    screen_secure: false,
 }
 
 function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreferences {
@@ -208,6 +213,9 @@ function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreference
         app_lock_biometric: typeof record.app_lock_biometric === 'boolean'
             ? record.app_lock_biometric
             : DEFAULT_SECURITY_PREFERENCES.app_lock_biometric,
+        screen_secure: typeof record.screen_secure === 'boolean'
+            ? record.screen_secure
+            : DEFAULT_SECURITY_PREFERENCES.screen_secure,
     }
 }
 

@@ -28,6 +28,18 @@ function flush(): Promise<void> {
 }
 
 describe('registerTalosResumeRelock (R1-3)', () => {
+    it('a short background stay never relocks (grace window)', async () => {
+        let now = 1_000
+        const onRelock = vi.fn()
+        registerTalosResumeRelock({ graceMs: 30_000, isEnabled: async () => true, onRelock, now: () => now })
+        await flush()
+        listeners.stateChange?.({ isActive: false })
+        now += 1_000
+        listeners.stateChange?.({ isActive: true })
+        await flush()
+        expect(onRelock).not.toHaveBeenCalled()
+    })
+
     it('relocks after resuming from a background stay longer than the grace window', async () => {
         let now = 1_000
         const onRelock = vi.fn()

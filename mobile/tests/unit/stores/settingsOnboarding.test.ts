@@ -123,6 +123,7 @@ describe('security preferences (F2-T6 app lock)', () => {
         expect(parseTalosMobileSettings(null).security).toEqual({
             app_lock_enabled: false,
             app_lock_biometric: false,
+            screen_secure: false,
         })
     })
 
@@ -130,16 +131,16 @@ describe('security preferences (F2-T6 app lock)', () => {
         const parsed = parseTalosMobileSettings(JSON.stringify({
             security: { app_lock_enabled: 'yes', app_lock_biometric: 1 },
         }))
-        expect(parsed.security).toEqual({ app_lock_enabled: false, app_lock_biometric: false })
+        expect(parsed.security).toEqual({ app_lock_enabled: false, app_lock_biometric: false, screen_secure: false })
     })
 
     it('setSecurity persists and survives hydrate', async () => {
         const store = useSettingsStore()
-        await store.setSecurity({ app_lock_enabled: true, app_lock_biometric: true })
+        await store.setSecurity({ app_lock_enabled: true, app_lock_biometric: true, screen_secure: false })
         __resetSettingsStoreForTests()
         const fresh = useSettingsStore()
         await fresh.hydrate()
-        expect(fresh.state.security).toEqual({ app_lock_enabled: true, app_lock_biometric: true })
+        expect(fresh.state.security).toEqual({ app_lock_enabled: true, app_lock_biometric: true, screen_secure: false })
     })
 })
 

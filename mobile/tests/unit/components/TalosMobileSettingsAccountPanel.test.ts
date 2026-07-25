@@ -18,6 +18,8 @@ const appLock = vi.hoisted(() => ({
     hasAppLockPin: vi.fn(async () => false),
     biometricUnlockAvailable: vi.fn(async () => false),
     verifyAppLockPin: vi.fn(async () => false),
+    appLockThrottleRemainingMs: vi.fn(async () => 0),
+    appLockPinIsWeak: vi.fn(async () => false),
     requestBiometricUnlock: vi.fn(async () => false),
 }))
 vi.mock('@/services/appLock', () => appLock)
@@ -102,7 +104,7 @@ describe('TalosMobileSettingsAccountPanel app lock (F4-#25 OTP flow)', () => {
         await wrapper.get('[data-testid="talos-applock-pin-confirm"]').setValue('123456')
         await flushPromises()
         expect(appLock.setupAppLockPin).toHaveBeenCalledWith('123456')
-        expect(settingsMock.setSecurity).toHaveBeenCalledWith({ app_lock_enabled: true })
+        expect(settingsMock.setSecurity).toHaveBeenCalledWith({ app_lock_enabled: true, screen_secure: true })
     })
 
     it('rejects a mismatched confirmation honestly and restarts the confirm step', async () => {

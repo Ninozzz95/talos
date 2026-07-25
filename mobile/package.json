@@ -31,7 +31,7 @@
         "test:unit": "vitest run",
         "test:e2e": "playwright test",
         "verify:parity": "node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
-        "typecheck": "vue-tsc --noEmit"
+        "typecheck": "vue-tsc -b --force"
     },
     "dependencies": {
         "@aparajita/capacitor-biometric-auth": "10.0.0",
