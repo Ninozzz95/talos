@@ -287,6 +287,15 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 .sort(byMostRecentVaultFile)
                 .map(copyVaultFile)
         },
+        async listVaultFileSummaries() {
+            return [...vaultFiles.values()]
+                .filter((file) => file.status !== 'revoked')
+                .sort(byMostRecentVaultFile)
+                .map((file) => {
+                    const { extracted_text: text, ...rest } = copyVaultFile(file)
+                    return { ...rest, text_preview: text === null ? null : text.slice(0, 600) }
+                })
+        },
         async getVaultFile(fileId: string) {
             const file = vaultFiles.get(fileId)
             return !file || file.status === 'revoked' ? null : copyVaultFile(file)

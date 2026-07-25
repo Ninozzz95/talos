@@ -680,6 +680,22 @@ export function createSqliteChatRepository(
             )
             return rows.map(parseVaultFile)
         },
+        async listVaultFileSummaries() {
+            // No extracted_text: only a bounded preview for ranking.
+            const rows = await (await db()).query(
+                `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
+                        sha256, substr(COALESCE(extracted_text, ''), 1, 600) AS text_preview,
+                        failure_code, metadata_json, created_at, updated_at
+                 FROM talos_vault_files
+                 WHERE status != 'revoked'
+                 ORDER BY updated_at DESC, created_at DESC, id DESC`,
+            )
+            return rows.map((row) => {
+                const preview = typeof row.text_preview === 'string' ? row.text_preview : null
+                const { extracted_text: _unused, ...rest } = parseVaultFile({ ...row, extracted_text: null })
+                return { ...rest, text_preview: preview === '' ? null : preview }
+            })
+        },
         async getVaultFile(fileId: string) {
             const rows = await (await db()).query(
                 `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,

@@ -8,24 +8,40 @@ import { onScopeDispose } from 'vue'
  * app. Module-scoped so the deep-in-the-tree composer doesn't have to
  * prop-drill its open state up to the shell.
  */
-const stack: Array<() => void> = []
+interface OverlayEntry {
+    close: () => void
+    /** Optional: an always-mounted host registers once and reports when its
+     *  overlay is actually open (product review 2026-07-25 — the Library preview). */
+    isActive?: () => boolean
+}
 
-export function useTalosOverlayBack(close: () => void): void {
-    stack.push(close)
+const stack: OverlayEntry[] = []
+
+export function useTalosOverlayBack(close: () => void, isActive?: () => boolean): void {
+    const entry: OverlayEntry = { close, isActive }
+    stack.push(entry)
     onScopeDispose(() => {
-        const index = stack.lastIndexOf(close)
+        const index = stack.lastIndexOf(entry)
         if (index >= 0) stack.splice(index, 1)
     })
 }
 
+function topActive(): OverlayEntry | null {
+    for (let index = stack.length - 1; index >= 0; index -= 1) {
+        const entry = stack[index]!
+        if (!entry.isActive || entry.isActive()) return entry
+    }
+    return null
+}
+
 export function talosOverlayBackActive(): boolean {
-    return stack.length > 0
+    return topActive() !== null
 }
 
 export function handleTalosOverlayBack(): boolean {
-    const top = stack[stack.length - 1]
+    const top = topActive()
     if (!top) return false
-    top()
+    top.close()
     return true
 }
 

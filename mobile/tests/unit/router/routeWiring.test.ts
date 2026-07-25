@@ -47,18 +47,24 @@ describe('router wiring', () => {
         }
     }, 15_000)
 
-    it('preloads every packaged station chunk once before exposing the interactive shell', async () => {
+    it('preloads every packaged station chunk exactly once, and only AFTER mount', async () => {
         const firstPreload = preloadTalosMobileRoutes()
         const secondPreload = preloadTalosMobileRoutes()
 
         expect(secondPreload).toBe(firstPreload)
         await firstPreload
 
+        // Perf review 2026-07-25: the previous assertion demanded the preload be
+        // awaited BEFORE mount, which is exactly the cold-start regression (792KB
+        // boot-blocking instead of 505KB). The station chunks must be warmed only
+        // once the shell is on screen.
         const source = readFileSync(resolve(process.cwd(), 'src/main.ts'), 'utf8')
-        const preloadIndex = source.indexOf('await preloadTalosMobileRoutes()')
         const mountIndex = source.indexOf("createApp(App).use(router).mount('#app')")
+        const preloadIndex = source.indexOf('preloadTalosMobileRoutes()', mountIndex)
 
-        expect(preloadIndex).toBeGreaterThan(-1)
-        expect(mountIndex).toBeGreaterThan(preloadIndex)
+        expect(mountIndex).toBeGreaterThan(-1)
+        expect(source).not.toContain('await preloadTalosMobileRoutes()')
+        expect(preloadIndex).toBeGreaterThan(mountIndex)
+        expect(source).toMatch(/requestIdleCallback|setTimeout\(warm/)
     }, 15_000)
 })

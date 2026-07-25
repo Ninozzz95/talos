@@ -15,6 +15,8 @@ const props = defineProps<{
     // Desktop-parity message style (owner: assistant replies are full-width
     // sections by default; bubbles remain a Settings toggle).
     messageStyle?: 'sections' | 'bubbles'
+    /** Owner 2026-07-25: real chat text size (was a dead preference). */
+    textScale?: 'compact' | 'balanced' | 'expanded'
 }>()
 
 const emit = defineEmits<{
@@ -159,7 +161,12 @@ function formatBytes(value: number): string {
 </script>
 
 <template>
-    <div class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4" data-testid="talos-mobile-message-list">
+    <div
+        class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4"
+        data-testid="talos-mobile-message-list"
+        :data-text-scale="props.textScale ?? 'balanced'"
+        :style="{ fontSize: props.textScale === 'compact' ? '0.9375rem' : props.textScale === 'expanded' ? '1.1875rem' : '1.0625rem' }"
+    >
         <article
             v-for="(message, index) in messages"
             :key="message.id"

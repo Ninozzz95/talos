@@ -6,6 +6,7 @@ import type {
     TalosMobileBrowserActivityView,
 } from '@/components/chat/mobileChatTypes'
 import { parseTalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'
+import { stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
@@ -655,7 +656,8 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             const reply = await complete(turns, {
                 onChunk: (text) => {
                     streamed += text
-                    state.streamingText = streamed
+                    // Security review: never render raw save-markers mid-stream.
+                    state.streamingText = stripLibrarySaveMarkers(streamed)
                 },
                 signal: abort.signal,
             })
@@ -665,7 +667,9 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             // A streamed partial is preserved honestly, never re-fetched or dropped.
             if (streamed) {
                 try {
-                    await appendDurable(session.id, 'assistant', streamed, 'persisted', modelProfileId, { interrupted: true })
+                    // Sanitize at the PERSISTENCE boundary: an interrupted reply used
+                    // to store raw markers, which then fed back as in-context examples.
+                    await appendDurable(session.id, 'assistant', stripLibrarySaveMarkers(streamed), 'persisted', modelProfileId, { interrupted: true })
                 } catch (persistenceError) {
                     markPersistenceFailure(persistenceError)
                 }

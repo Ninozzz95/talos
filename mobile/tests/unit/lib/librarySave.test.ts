@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractLibrarySaveBlocks, librarySaveInstruction } from '@/lib/chat/librarySave'
+import { extractLibrarySaveBlocks, librarySaveInstruction, stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 
 describe('extractLibrarySaveBlocks', () => {
     it('returns the text unchanged when there is no marker', () => {
@@ -38,6 +38,32 @@ describe('extractLibrarySaveBlocks', () => {
     it('ignores an unterminated marker (no partial capture)', () => {
         const raw = '[TALOS_SAVE_LIBRARY: x.md]\nunfinished'
         expect(extractLibrarySaveBlocks(raw).blocks).toEqual([])
+    })
+})
+
+// Security review 2026-07-25: untrusted model output must not be able to create
+// unbounded files, and marker syntax must never reach the view or the DB.
+describe('librarySave hard caps and stripping', () => {
+    it('captures at most 3 blocks, unwrapping the rest for display', () => {
+        const raw = Array.from({ length: 6 }, (_v, index) =>
+            `[TALOS_SAVE_LIBRARY: f${index}.md]\nbody ${index}\n[/TALOS_SAVE_LIBRARY]`).join('\n')
+        const out = extractLibrarySaveBlocks(raw)
+        expect(out.blocks).toHaveLength(3)
+        expect(out.text).toContain('body 5')
+        expect(out.text).not.toContain('TALOS_SAVE_LIBRARY')
+    })
+
+    it('never captures a block over the size cap', () => {
+        const raw = `[TALOS_SAVE_LIBRARY: big.md]\n${'A'.repeat(262_145)}\n[/TALOS_SAVE_LIBRARY]`
+        expect(extractLibrarySaveBlocks(raw).blocks).toHaveLength(0)
+    })
+
+    it('strips markers for display/persistence, including an unterminated one', () => {
+        expect(stripLibrarySaveMarkers('a\n[TALOS_SAVE_LIBRARY: x.md]\nbody\n[/TALOS_SAVE_LIBRARY]\nb'))
+            .toBe('a\nbody\nb')
+        // mid-stream: the opening marker has arrived but the closing one has not
+        expect(stripLibrarySaveMarkers('intro\n[TALOS_SAVE_LIBRARY: x.md]\npartial'))
+            .toBe('intro\npartial')
     })
 })
 

@@ -98,7 +98,7 @@ describe('ContextScreen Library gallery', () => {
         const wrapper = mount(ContextScreen)
         await flushPromises()
         await wrapper.get('[aria-label="Library options"]').trigger('click')
-        const upload = wrapper.findAll('[role="menuitem"]').find((node) => node.text().includes('Carica file'))!
+        const upload = wrapper.findAll('[role="menuitem"]').find((node) => node.text().includes('Upload files'))!
         await upload.trigger('click')
         expect(mockState.controller.attachments.selectFiles).toHaveBeenCalledOnce()
     })
