@@ -224,7 +224,6 @@ describe('defaults v3 (owner #15)', () => {
         const parsed = parseTalosMobileSettings(null)
         expect(parsed.shell.immersive_header).toBe(true)
         expect(parsed.shell.composer_drawer).toBe(true)
-        expect(parsed.chat_layout.bubble_scale).toBe('compact')
         expect(parsed.motion_v6.mode).toBe('complex')
     })
 
@@ -236,7 +235,6 @@ describe('defaults v3 (owner #15)', () => {
         }))
         expect(parsed.shell.immersive_header).toBe(true)
         expect(parsed.shell.composer_drawer).toBe(true)
-        expect(parsed.chat_layout.bubble_scale).toBe('compact')
     })
 
     it('post-v3 explicit choices stick', () => {

@@ -44,14 +44,15 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
         const w = mount(ResearchScreen)
         expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Deep Research V3')
         expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Deep research')
-        expect(w.text()).toContain('Queue or select a report to inspect source status, claims, graph evidence, and artifacts.')
+        // Honest gating (product review 2026-07-25): the stub no longer implies a backend query.
+        expect(w.text()).toContain('Not in this build')
     })
 
     it('runs: Runtime cockpit header + Runtime eyebrow + real empty copy', () => {
         const w = mount(RunsScreen)
         expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Runtime cockpit')
         expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Runtime')
-        expect(w.text()).toContain('No execution runs returned by the run API yet.')
+        expect(w.text()).toContain('Not in this build')
     })
 
     it('context: Library header + Context Vault section chrome + local-first empty state', () => {

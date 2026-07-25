@@ -32,6 +32,8 @@ export interface TalosVaultService {
     revokeGrant(grantId: string): Promise<void>
     resolveMessageParts(messageId: string): Promise<TalosMobileInputPart[]>
     listFiles(): Promise<TalosLocalVaultFile[]>
+    /** Perf review: the boot path must not pull every document body into memory. */
+    listSummaries(): Promise<TalosLocalVaultFile[]>
     deleteFile(fileId: string): Promise<void>
     reconcilePending(): Promise<void>
 }
@@ -211,6 +213,12 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             return parts
         },
         listFiles: () => options.repository.listVaultFiles(),
+        async listSummaries() {
+            const rows = await options.repository.listVaultFileSummaries()
+            // Same shape as listFiles; the body is replaced by its bounded preview
+            // (the Library hydrates the full text only when a doc is opened).
+            return rows.map(({ text_preview: preview, ...rest }) => ({ ...rest, extracted_text: preview }))
+        },
         async deleteFile(fileId) {
             const file = await options.repository.getVaultFile(fileId)
             if (!file) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')

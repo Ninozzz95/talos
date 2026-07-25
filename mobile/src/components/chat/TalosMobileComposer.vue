@@ -18,6 +18,7 @@ import TalosMobileModelEffortDrawer from '@/components/chat/TalosMobileModelEffo
 import TalosMobileEnhancerDrawer from '@/components/chat/TalosMobileEnhancerDrawer.vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { Button } from '@/components/ui/button'
+import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
@@ -154,12 +155,17 @@ const composerCompact = computed(() =>
 const plusMenuOpen = ref(false)
 const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
 const plusMenu = ref<HTMLElement | null>(null)
+// Re-review 2026-07-25: Back with the menu open used to skip it and eject the user.
+useTalosOverlayBack(() => { void closePlusMenu() }, () => plusMenuOpen.value)
+/** The "+" opens the anchored menu whenever the bottom drawer cannot mount. */
+const plusUsesMenu = computed(() => props.plusDropdown || !props.drawerMode)
+
 async function openPlus(): Promise<void> {
     // Product review 2026-07-25: the bottom drawer only renders under drawerMode,
     // so with (immersive on, plusDropdown off, drawerMode off) the "+" opened
     // NOTHING while announcing aria-expanded=true. The dropdown is always a valid
     // surface, so fall back to it rather than to a drawer that cannot mount.
-    if (!props.plusDropdown && props.drawerMode) { toolDrawerOpen.value = true; return }
+    if (!plusUsesMenu.value) { toolDrawerOpen.value = true; return }
     if (plusMenuOpen.value) { await closePlusMenu(); return }
     plusMenuOpen.value = true
     await nextTick()
@@ -471,7 +477,7 @@ watch(() => props.prompt, () => {
             </span>
             <button
                 type="button"
-                aria-label="Stop dictation"
+                aria-label="Cancel dictation"
                 class="talos-pressable flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 @click="emit('toggleDictation')"
             >
@@ -492,8 +498,8 @@ watch(() => props.prompt, () => {
                 variant="outline"
                 data-mobile-icon-only="true"
                 aria-label="Add to chat"
-                :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
-                :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
+                :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
+                :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
                 class="talos-pressable absolute left-1.5 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-2xl"
                 @pointerdown.prevent
                 @click="openPlus"
@@ -595,8 +601,8 @@ watch(() => props.prompt, () => {
                 variant="outline"
                 data-mobile-icon-only="true"
                 aria-label="Add to chat"
-                :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
-                :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
+                :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
+                :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
                 class="talos-pressable min-h-11 min-w-11 rounded-2xl"
                 @click="openPlus"
             >

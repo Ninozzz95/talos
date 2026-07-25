@@ -1,8 +1,8 @@
 /**
  * Chat-generated files → Library (owner 2026-07-25): the chat cannot hand out
  * download links, so instead the model wraps any file it should save in a marker
- * and TALOS captures it into the Library (origin='generated'), after an explicit
- * user confirmation. Mirrors the proven TONE_SUGGESTION marker pipeline
+ * and TALOS captures it into the Library (origin='generated') when the user has
+ * enabled auto-save, announced with an undoable toast. Mirrors the TONE_SUGGESTION
  * (lib/tone.ts): a system-prompt instruction + a strip/extract pass.
  *
  * Marker: [TALOS_SAVE_LIBRARY: <filename.ext>]\n<content>\n[/TALOS_SAVE_LIBRARY]
@@ -19,8 +19,8 @@ export interface LibrarySaveBlock {
     text: string
 }
 
-const BLOCK_PATTERN = /\[TALOS_SAVE_LIBRARY:\s*([^\]\n]+)\]\r?\n?([\s\S]*?)\[\/TALOS_SAVE_LIBRARY\]/g
-const OPEN_MARKER_PATTERN = /\[TALOS_SAVE_LIBRARY:[^\]\n]*\]\r?\n?/g
+const BLOCK_PATTERN = /\[TALOS_SAVE_LIBRARY:([^\]\n]{1,200})\]\r?\n?([\s\S]*?)\[\/TALOS_SAVE_LIBRARY\]/g
+const OPEN_MARKER_PATTERN = /\[TALOS_SAVE_LIBRARY:[^\]\n]{0,200}\]\r?\n?/g
 const CLOSE_MARKER_PATTERN = /\[\/TALOS_SAVE_LIBRARY\]\r?\n?/g
 // C0 controls + DEL, written as escapes (they used to be literal bytes here).
 
@@ -36,13 +36,24 @@ const MEDIA_TYPE_BY_EXT: Record<string, string> = {
     // would be same-origin script execution from model-authored content.
 }
 
+function isUnsafeNameCodePoint(code: number): boolean {
+    if (code < 0x20) return true                       // C0 controls
+    if (code >= 0x7f && code <= 0x9f) return true       // DEL + C1 controls
+    if (code >= 0x200b && code <= 0x200f) return true   // zero-width + LRM/RLM
+    if (code >= 0x202a && code <= 0x202e) return true   // bidi embedding/override
+    if (code >= 0x2066 && code <= 0x2069) return true   // bidi isolates
+    return false
+}
+
 function stripControlChars(value: string): string {
-    // No control-char regex in source (it kept round-tripping as raw bytes):
-    // drop C0 controls and DEL by code point.
+    // Re-review 2026-07-25: filenames come from UNTRUSTED model output. Beyond C0
+    // controls, bidi overrides let "invoice<U+202E>fdp.exe" render reversed in the
+    // Library list, and zero-width chars hide differences between two entries.
+    // NFKC first so look-alike compositions collapse before filtering.
     let result = ''
-    for (const char of value) {
+    for (const char of value.normalize('NFKC')) {
         const code = char.codePointAt(0) ?? 0
-        if (code >= 0x20 && code !== 0x7f) result += char
+        if (!isUnsafeNameCodePoint(code)) result += char
     }
     return result
 }

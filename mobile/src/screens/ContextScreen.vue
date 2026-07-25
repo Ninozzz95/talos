@@ -95,6 +95,9 @@ onBeforeUnmount(() => {
 const lightboxFile = ref<TalosLocalVaultFile | null>(null)
 const lightboxUrl = ref<string | null>(null)
 const docView = ref<TalosLocalVaultFile | null>(null)
+// Perf review 2026-07-25: the list now holds bounded previews, so the viewer
+// hydrates the full extracted text on open.
+const docText = ref<string | null>(null)
 async function openFile(file: TalosLocalVaultFile): Promise<void> {
     if (file.status !== 'available') return
     if (isImage(file)) {
@@ -103,14 +106,18 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
         return
     }
     docView.value = file
+    docText.value = file.extracted_text
+    const full = await attachments.hydrateText(file.id)
+    if (docView.value?.id === file.id && full !== null) docText.value = full
 }
 // Product review 2026-07-25: Android Back inside a fullscreen preview used to
 // fall through to 'station-to-sidebar' — it ejected the user to the chat with the
 // sidebar open instead of closing the preview.
 useTalosOverlayBack(() => {
+    if (menuOpen.value) { menuOpen.value = false; return }
     if (docView.value) { docView.value = null; return }
     if (lightboxUrl.value) closeLightbox()
-}, () => lightboxUrl.value !== null || docView.value !== null)
+}, () => menuOpen.value || lightboxUrl.value !== null || docView.value !== null)
 
 function closeLightbox(): void {
     if (lightboxUrl.value && !Object.values(thumbs.value).includes(lightboxUrl.value)) URL.revokeObjectURL(lightboxUrl.value)
@@ -317,7 +324,7 @@ onMounted(async () => {
                 <button type="button" aria-label="Close" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="docView = null"><X class="size-5" aria-hidden="true" /></button>
             </header>
             <div class="min-h-0 flex-1 overflow-auto p-4">
-                <pre v-if="docView.extracted_text" class="whitespace-pre-wrap break-words font-sans text-sm leading-6">{{ docView.extracted_text }}</pre>
+                <pre v-if="docText" class="whitespace-pre-wrap break-words font-sans text-sm leading-6">{{ docText }}</pre>
                 <p v-else class="text-sm text-[var(--talos-muted)]">No preview text is available for this file.</p>
             </div>
         </div>
