@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
-import { BookMarked, FileText, Image, Library } from '@lucide/vue'
+import { BookMarked, FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
@@ -207,17 +207,10 @@ function formatBytes(value: number): string {
                         {{ message.metadata.used_memories.length }}
                         {{ message.metadata.used_memories.length === 1 ? 'memory' : 'memories' }} used
                     </div>
-                    <!-- Owner 2026-07-25 Library: disclosure of injected library docs -->
-                    <div
-                        v-if="Array.isArray(message.metadata.used_library) && message.metadata.used_library.length"
-                        data-testid="talos-used-library"
-                        class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-[11px] leading-4"
-                        :title="(message.metadata.used_library as Array<{ title?: string; from_chat?: string | null }>).map((entry) => `${entry?.title ?? ''}${entry?.from_chat ? ` (from ${entry.from_chat})` : ''}`).join(' · ')"
-                    >
-                        <Library class="size-3.5 shrink-0" aria-hidden="true" />
-                        {{ message.metadata.used_library.length }}
-                        {{ message.metadata.used_library.length === 1 ? 'library file' : 'library files' }} used
-                    </div>
+                    <!-- Owner 2026-07-25 Library: the injected-docs disclosure stays in
+                         the message metadata (auditable) but is NOT badged on every
+                         message — with library context on by default that was constant
+                         noise. Memory keeps its badge: it is occasional and meaningful. -->
                     <div
                         v-if="message.attachments?.length"
                         class="mt-2 flex max-w-full flex-wrap gap-1.5"

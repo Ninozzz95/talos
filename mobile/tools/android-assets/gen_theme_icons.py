@@ -83,7 +83,7 @@ def foreground_vector(accent: str) -> str:
         # sits low (hexagon body + 3 lower nodes vs a single top node), so it read as
         # not-quite-centred. Scale 0.90 for presence + translateY -9 lifts it to a
         # balanced top/bottom gap inside the adaptive safe zone (verified by render).
-        '  <group android:scaleX="0.9" android:scaleY="0.9" android:pivotX="250" android:pivotY="250" android:translateY="-9">\n'
+        '  <group android:scaleX="0.82" android:scaleY="0.82" android:pivotX="250" android:pivotY="250" android:translateY="-8">\n'
         f'{body}\n'
         f'{branch.format(deg=45)}\n'
         f'{branch.format(deg=-45)}\n'

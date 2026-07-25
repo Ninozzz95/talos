@@ -219,6 +219,45 @@ const statusText = computed(() => {
     return props.sendDisabledReason
 })
 
+// Owner 2026-07-25: ONE morphing right button on EVERY composer style —
+// empty → Mic, typing/attachment → Send, streaming → Stop, dictating → Stop.
+// Content present → ALWAYS the send affordance (disabled with a reason when it
+// cannot be sent); the mic only replaces it on a genuinely empty composer.
+const composerHasContent = computed(() => (
+    props.prompt.trim().length > 0 || (props.attachments?.length ?? 0) > 0
+))
+const rightAction = computed<'stop' | 'dictating' | 'send' | 'mic'>(() => {
+    if (props.sending) return 'stop'
+    if (props.dictationListening || props.dictationStarting) return 'dictating'
+    if (composerHasContent.value) return 'send'
+    // No dictation on this device → keep the send affordance rather than a dead mic.
+    return props.dictationSupported ? 'mic' : 'send'
+})
+/** Stable accessible name; the reason travels in the title. */
+const rightActionLabel = computed(() => {
+    switch (rightAction.value) {
+        case 'stop': return 'Stop response'
+        case 'dictating': return 'Stop dictation'
+        case 'send': return 'Send message'
+        default: return 'Dictate'
+    }
+})
+const rightActionTitle = computed(() => {
+    if (rightAction.value === 'dictating' && props.dictationStarting) return 'Starting dictation…'
+    if (rightAction.value === 'send') return statusText.value || 'Send message'
+    return rightActionLabel.value
+})
+const rightActionDisabled = computed(() => {
+    if (rightAction.value === 'send') return !canSubmit.value
+    if (rightAction.value === 'mic') return !props.dictationSupported
+    return false
+})
+function onRightAction(): void {
+    if (rightAction.value === 'stop') emit('stop')
+    else if (rightAction.value === 'send') requestSend()
+    else emit('toggleDictation') // start OR stop dictation
+}
+
 function resizePrompt(): void {
     const field = promptField.value
     if (!field) return
@@ -463,25 +502,32 @@ watch(() => props.prompt, () => {
                 :rows="composerCompact ? 1 : 2"
                 aria-label="Message TALOS"
                 placeholder="Message TALOS..."
-                class="max-h-48 w-full resize-none overflow-y-auto bg-transparent py-2 text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
-                :class="composerCompact ? 'min-h-12 pl-14 pr-28' : 'min-h-14 px-2 pr-14'"
+                class="max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
+                :class="composerCompact ? 'min-h-12 py-3 pl-14 pr-14' : 'min-h-14 py-2 px-2 pr-14'"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
                 @focus="composerFocused = true"
                 @blur="composerFocused = false"
             />
-            <!-- One persistent shell that genuinely morphs Send↔Stop: only the
-                 glyph transitions (~150ms), the button never unmounts. -->
+            <!-- ONE morphing right button on EVERY composer style (owner 2026-07-25):
+                 Mic when empty, Send while typing, Stop while streaming or dictating.
+                 Only the glyph transitions (~150ms); the button never unmounts. -->
             <Button
                 type="button"
                 size="icon"
                 data-mobile-icon-only="true"
-                :aria-label="sending ? 'Stop response' : 'Send message'"
-                :title="sending ? 'Stop response' : (statusText || 'Send message')"
-                :disabled="!sending && !canSubmit"
-                class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-2xl bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
-                :class="composerCompact ? 'top-1/2 -translate-y-1/2' : 'bottom-1.5'"
-                @click="sending ? emit('stop') : requestSend()"
+                :aria-label="rightActionLabel"
+                :title="rightActionTitle"
+                :aria-pressed="rightAction === 'dictating'"
+                :disabled="rightActionDisabled"
+                class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-2xl"
+                :class="[
+                    composerCompact ? 'top-1/2 -translate-y-1/2' : 'bottom-1.5',
+                    rightAction === 'mic'
+                        ? 'border border-[var(--talos-border,var(--border))] text-[var(--talos-muted,var(--muted-foreground))]'
+                        : 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]',
+                ]"
+                @click="onRightAction"
             >
                 <Transition
                     mode="out-in"
@@ -492,49 +538,41 @@ watch(() => props.prompt, () => {
                     leave-from-class="opacity-100 scale-100"
                     leave-to-class="opacity-0 scale-75"
                 >
-                    <Square v-if="sending" class="size-4" aria-hidden="true" />
-                    <ArrowUp v-else class="size-5" aria-hidden="true" />
+                    <Loader2 v-if="rightAction === 'dictating' && dictationStarting" key="starting" class="size-4 animate-spin" aria-hidden="true" />
+                    <Square v-else-if="rightAction === 'stop' || rightAction === 'dictating'" key="stop" class="size-4" aria-hidden="true" />
+                    <ArrowUp v-else-if="rightAction === 'send'" key="send" class="size-5" aria-hidden="true" />
+                    <Mic v-else key="mic" class="size-5" aria-hidden="true" />
                 </Transition>
-            </Button>
-
-            <!-- compact immersive: mic sits inline, just left of Send — same outline
-                 style as the expanded controls row (owner 2026-07-24). -->
-            <Button
-                v-if="composerCompact && dictationSupported"
-                type="button"
-                size="icon"
-                variant="outline"
-                data-mobile-icon-only="true"
-                :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
-                :aria-pressed="dictationListening || dictationStarting"
-                :disabled="sending && !dictationListening && !dictationStarting"
-                class="talos-pressable absolute right-14 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-2xl"
-                :class="dictationListening || dictationStarting ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]' : ''"
-                @pointerdown.prevent
-                @click="emit('toggleDictation')"
-            >
-                <Loader2 v-if="dictationStarting" class="size-4 animate-spin" aria-hidden="true" />
-                <Mic v-else class="size-4" :class="dictationListening ? 'animate-pulse' : ''" aria-hidden="true" />
             </Button>
 
             <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown, anchored above the
                  composer so it opens whether the pill is compact or expanded. -->
             <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="closePlusMenu" />
+            <!-- Owner 2026-07-25: every dropdown inherits the chat 3-dot menu motion. -->
+            <Transition
+                enter-active-class="transition duration-150 ease-out"
+                enter-from-class="opacity-0 scale-95"
+                enter-to-class="opacity-100 scale-100"
+                leave-active-class="transition duration-100 ease-in"
+                leave-from-class="opacity-100 scale-100"
+                leave-to-class="opacity-0 scale-95"
+            >
             <div
                 v-if="plusMenuOpen"
                 ref="plusMenu"
                 role="menu"
                 tabindex="-1"
                 data-testid="talos-composer-plus-menu"
-                class="absolute bottom-full left-1 z-[60] mb-2 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
+                class="absolute bottom-full left-1 z-[60] mb-2 min-w-52 origin-bottom-left overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
                 @keydown.escape="closePlusMenu"
             >
                 <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Attach a file</button>
                 <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Library</button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Model Lab</button>
                 <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? 'Browsing on' : 'Browse the web' }}</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('enhancePrompt'); closePlusMenu()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Improve prompt</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Improve prompt</button>
             </div>
+            </Transition>
         </div>
 
         <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic.

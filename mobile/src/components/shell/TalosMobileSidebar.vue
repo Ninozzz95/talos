@@ -122,20 +122,23 @@ function confirmDelete(): void {
                      Owner 2026-07-24: the single "New chat" affordance is the
                      bottom FAB (matching the reference screenshot) — no
                      duplicate outline button up here. -->
-                <div class="px-3 pt-3 md:hidden">
+                <!-- Owner 2026-07-25: the Chats entry is styled exactly like the
+                     Tools rows (one visual language), and the huge flex-1 spacer
+                     that pushed Tools to the bottom is gone — the sections now sit
+                     together and the footer is pinned with mt-auto. -->
+                <nav aria-label="Chats" class="px-3 py-3 md:hidden">
+                    <p class="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Chats</p>
                     <button
                         type="button"
                         data-testid="talos-sidebar-chats-entry"
-                        class="talos-pressable flex min-h-12 w-full items-center gap-2 rounded-xl border border-[var(--talos-border)] px-3 text-left text-sm font-medium text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
+                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="emit('navigate', 'chats')"
                     >
                         <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        <span class="min-w-0 flex-1 truncate">Chats</span>
+                        <span class="min-w-0 flex-1 truncate">All chats</span>
                         <span class="text-xs text-[var(--talos-muted)]">{{ props.sessions.length }}</span>
                     </button>
-                </div>
-
-                <span class="flex-1 md:hidden" aria-hidden="true" />
+                </nav>
 
                 <nav
                     data-testid="talos-sidebar-recents"
@@ -174,7 +177,7 @@ function confirmDelete(): void {
                 <nav
                     data-testid="talos-sidebar-tools"
                     aria-label="Tools"
-                    class="border-t border-[var(--talos-border)] px-3 py-3"
+                    class="px-3 pb-3 md:border-t md:border-[var(--talos-border)] md:pt-3"
                 >
                     <p class="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Tools</p>
                     <ul class="space-y-0.5">
@@ -207,7 +210,7 @@ function confirmDelete(): void {
                      on the left, floating New chat pill on the right. -->
                 <div
                     data-testid="talos-sidebar-settings"
-                    class="flex items-center justify-between gap-3 border-t border-[var(--talos-border)] px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+                    class="mt-auto flex items-center justify-between gap-3 border-t border-[var(--talos-border)] px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
                 >
                     <button
                         type="button"

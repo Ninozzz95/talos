@@ -113,7 +113,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await page.getByRole('button', { name: 'Save', exact: true }).click()
         await expect(nameInput).toHaveCount(0)
         await page.locator(MENU).click()
-        await page.locator(SIDEBAR).getByRole('button', { name: /^Chats/ }).click()
+        await page.locator(SIDEBAR).getByTestId('talos-sidebar-chats-entry').click()
         const row = page.locator('[data-testid="talos-chats-row"]')
         await expect(row).toHaveCount(1)
         await expect(row.first()).toContainText('Titolo rinominato')
@@ -127,7 +127,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await page.getByRole('button', { name: 'Delete', exact: true }).click()
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toHaveCount(0)
         await page.locator(MENU).click()
-        await page.locator(SIDEBAR).getByRole('button', { name: /^Chats/ }).click()
+        await page.locator(SIDEBAR).getByTestId('talos-sidebar-chats-entry').click()
         await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(0)
     })
 
@@ -242,7 +242,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 
         await page.locator(MENU).click()
-        await page.locator(SIDEBAR).getByRole('button', { name: /^Chats/ }).click()
+        await page.locator(SIDEBAR).getByTestId('talos-sidebar-chats-entry').click()
         const row = page.locator('[data-testid="talos-chats-row"]')
         await expect(row).toHaveCount(1)
 
@@ -290,7 +290,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
 
         await page.locator(MENU).click()
-        await page.locator(SIDEBAR).getByRole('button', { name: /^Chats/ }).click()
+        await page.locator(SIDEBAR).getByTestId('talos-sidebar-chats-entry').click()
         const row = page.locator('[data-testid="talos-chats-row"]')
         await expect(row).toHaveCount(1)
 
