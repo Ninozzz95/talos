@@ -117,7 +117,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
     // the WebView origin; otherwise the pre-first-byte failure falls back.
     async streamComplete(input, credential, handlers) {
         const endpoint = normalizeHttpEndpoint('ollama', 'complete', credential.endpoint)
-        const text = await talosStreamText({
+        const stream = await talosStreamText({
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
             body: ollamaCompletionData(input, true),
@@ -127,9 +127,16 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
                 const event = JSON.parse(payload) as { message?: { content?: string } }
                 return event.message?.content ?? ''
             },
+            // Defect #5: Ollama puts the model's thinking on `message.thinking`
+            // when `think` is requested.
+            extractReasoning: (payload) => {
+                const event = JSON.parse(payload) as { message?: { thinking?: string | null } }
+                return event.message?.thinking ?? ''
+            },
             onChunk: handlers.onChunk,
+            onReasoning: handlers.onReasoning,
         })
-        if (!text) throw malformedProviderResponse('ollama', 'complete')
-        return { text, model: input.model.id }
+        if (!stream.text) throw malformedProviderResponse('ollama', 'complete')
+        return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
     },
 }

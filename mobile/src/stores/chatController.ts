@@ -628,6 +628,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 text: stripLibrarySaveMarkers(finalText),
                 finishReason: completion.finishReason ?? null,
                 toolCalls: completion.toolCalls,
+                // Defect #5: the reasoning reaches the store, which persists it
+                // with the message instead of letting it evaporate.
+                reasoning: completion.reasoning,
             }
         } catch (error) {
             // A user Stop must stay an AbortError all the way to the chat store, or

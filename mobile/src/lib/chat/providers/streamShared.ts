@@ -174,6 +174,19 @@ export interface TalosStreamTextOptions {
     /** Extract the text piece from ONE payload; malformed payloads are skipped. */
     extract: (payload: string) => string
     onChunk: (text: string) => void
+    /**
+     * Owner 2026-07-25 (defect #5): models stream their reasoning next to the
+     * answer and TALOS threw it away. Each family carries it on a different
+     * field, so the adapter supplies the extractor and the transport keeps the
+     * two streams apart — reasoning must never leak into the answer text.
+     */
+    extractReasoning?: (payload: string) => string
+    onReasoning?: (text: string) => void
+}
+
+export interface TalosStreamTextResult {
+    text: string
+    reasoning: string
 }
 
 /**
@@ -181,8 +194,9 @@ export interface TalosStreamTextOptions {
  * through the accumulator, extract text pieces and forward them live.
  * Returns the concatenated text (may be empty when the stream carried none).
  */
-export async function talosStreamText(options: TalosStreamTextOptions): Promise<string> {
+export async function talosStreamText(options: TalosStreamTextOptions): Promise<TalosStreamTextResult> {
     let text = ''
+    let reasoning = ''
     const consume = (payloads: string[]): void => {
         for (const payload of payloads) {
             let piece = ''
@@ -196,6 +210,17 @@ export async function talosStreamText(options: TalosStreamTextOptions): Promise<
                 text += piece
                 options.onChunk(piece)
             }
+            if (!options.extractReasoning) continue
+            let thought = ''
+            try {
+                thought = options.extractReasoning(payload)
+            } catch {
+                thought = ''
+            }
+            if (thought) {
+                reasoning += thought
+                options.onReasoning?.(thought)
+            }
         }
     }
     await talosFetchStream({
@@ -206,5 +231,5 @@ export async function talosStreamText(options: TalosStreamTextOptions): Promise<
         onText: (chunk) => consume(options.accumulator.push(chunk)),
     })
     consume(options.accumulator.flush())
-    return text
+    return { text, reasoning }
 }

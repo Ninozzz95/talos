@@ -94,3 +94,62 @@ describe('chat store streaming (F2-T4)', () => {
         expect(store.messages.filter((message) => message.role === 'system')).toHaveLength(1)
     })
 })
+
+/**
+ * Defect #5 (owner decision): the reasoning is PERSISTED with the message, so
+ * it survives the session and reaches the export. The first version of this
+ * feature had no store test at all — which is how a fallback ended up pairing
+ * one generation's trace with another generation's answer.
+ */
+describe('reasoning persistence (defect #5)', () => {
+    it('persists the streamed reasoning beside the answer, not inside it', async () => {
+        const complete: ChatCompletion = async (_turns, stream) => {
+            stream?.onReasoning?.('Prima valuto. ')
+            stream?.onReasoning?.('Poi decido.')
+            stream?.onChunk('Decisione presa.')
+            return { text: 'Decisione presa.' }
+        }
+        const store = await readyStore(complete)
+        await store.send('hi')
+        const assistant = store.messages.filter((message) => message.role === 'assistant').at(-1)!
+        expect(assistant.content).toBe('Decisione presa.')
+        expect(assistant.metadata.reasoning).toBe('Prima valuto. Poi decido.')
+        expect(store.state.streamingReasoning).toBeNull()
+    })
+
+    it('a transport that abandons the stream must not pair the old trace with the new answer', async () => {
+        const complete: ChatCompletion = async (_turns, stream) => {
+            stream?.onReasoning?.('Ragionamento del tentativo fallito')
+            // The buffered fallback fires this before re-asking.
+            stream?.onReasoningReset?.()
+            stream?.onChunk('Risposta del secondo tentativo.')
+            return { text: 'Risposta del secondo tentativo.' }
+        }
+        const store = await readyStore(complete)
+        await store.send('hi')
+        const assistant = store.messages.filter((message) => message.role === 'assistant').at(-1)!
+        // Persisting the first attempt's reasoning under the second attempt's
+        // answer is a lie the export would carry.
+        expect(assistant.metadata.reasoning).toBeUndefined()
+        expect(assistant.content).toBe('Risposta del secondo tentativo.')
+    })
+
+    it('Stop during the thinking phase keeps the trace instead of discarding it', async () => {
+        const complete: ChatCompletion = (_turns, stream) => new Promise((_resolve, reject) => {
+            stream?.onReasoning?.('Stavo ancora pensando')
+            stream?.signal?.addEventListener('abort', () => {
+                const error = new Error('aborted')
+                error.name = 'AbortError'
+                reject(error)
+            })
+        })
+        const store = await readyStore(complete)
+        const pending = store.send('hi')
+        await vi.waitFor(() => expect(store.state.streamingReasoning).toBe('Stavo ancora pensando'))
+        store.stopStreaming()
+        await pending
+        const assistant = store.messages.filter((message) => message.role === 'assistant').at(-1)
+        expect(assistant?.metadata.interrupted).toBe(true)
+        expect(assistant?.metadata.reasoning).toBe('Stavo ancora pensando')
+    })
+})

@@ -21,6 +21,20 @@ import type {
     CreateToolActivityInput,
 } from '@/repositories/chatRepository'
 
+/**
+ * Defect #5: the trace is model output like any other — it can rehearse the
+ * library-save syntax, and it can be enormous. Markers are stripped and the
+ * text is capped, with the truncation stated rather than hidden.
+ */
+const REASONING_MAX_CHARS = 64_000
+
+function capturedReasoning(text: string): string {
+    const clean = stripLibrarySaveMarkers(text)
+    return clean.length <= REASONING_MAX_CHARS
+        ? clean
+        : `${clean.slice(0, REASONING_MAX_CHARS)}\n… reasoning truncated at ${REASONING_MAX_CHARS} characters.`
+}
+
 /** Debt A1: a provider-agnostic tool call (hub-and-spoke IR — each adapter
  *  translates this to its own wire shape). */
 export interface TalosToolCall {
@@ -46,6 +60,18 @@ export interface ChatTurn {
 // exactly once (final text, or the partial marked interrupted).
 export interface TalosStreamHandlers {
     onChunk: (text: string) => void
+    /**
+     * Owner 2026-07-25 (defect #5): the model's reasoning arrives on its own
+     * channel. It is rendered collapsed and persisted with the message — it was
+     * being discarded, which threw away the one signal that explains an answer.
+     */
+    onReasoning?: (text: string) => void
+    /**
+     * Fired when the transport abandons a streamed attempt and re-asks over the
+     * buffered path: the trace collected so far belongs to an answer nobody
+     * will ever see.
+     */
+    onReasoningReset?: () => void
     signal?: AbortSignal
 }
 
@@ -55,6 +81,8 @@ export interface ChatCompletionResult {
     text: string
     finishReason?: string | null
     toolCalls?: TalosToolCall[]
+    /** Defect #5: kept beside the answer, never mixed into it. */
+    reasoning?: string
 }
 
 export type ChatCompletion = (
@@ -66,6 +94,8 @@ export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 export interface ChatState {
     sending: boolean
     streamingText: string | null
+    /** Defect #5: the reasoning of the reply being streamed right now. */
+    streamingReasoning: string | null
     lastError: string | null
     persistenceStatus: ChatPersistenceStatus
     persistenceError: string | null
@@ -245,6 +275,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     const state = reactive<ChatState>({
         sending: false,
         streamingText: null,
+        streamingReasoning: null,
         lastError: null,
         persistenceStatus: 'idle',
         persistenceError: null,
@@ -679,6 +710,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         const abort = new AbortController()
         activeStreamAbort = abort
         let streamed = ''
+        let reasoned = ''
         try {
             const reply = await complete(turns, {
                 onChunk: (text) => {
@@ -691,22 +723,46 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                         ? stripLibrarySaveMarkers(streamed)
                         : streamed
                 },
+                onReasoning: (text) => {
+                    reasoned += text
+                    state.streamingReasoning = reasoned
+                },
+                onReasoningReset: () => {
+                    reasoned = ''
+                    state.streamingReasoning = null
+                },
                 signal: abort.signal,
             })
             // Debt A1: the loop dispatches on finishReason. No tool is registered
             // yet, so 'tool_calls' cannot occur — but the turn is persisted with its
             // calls so the round-trip is durable the moment tools land, instead of
             // the send path being rewritten again.
+            const rawThinking = reply.reasoning ?? (reasoned || undefined)
+            const thinking = rawThinking ? capturedReasoning(rawThinking) : undefined
+            const assistantMetadata = {
+                ...(reply.toolCalls?.length
+                    ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null }
+                    : {}),
+                // Defect #5: persisted, so it survives the session and reaches
+                // the export — a reasoning trace you cannot revisit is a demo.
+                ...(thinking ? { reasoning: thinking } : {}),
+            }
             await appendDurable(session.id, 'assistant', reply.text, 'persisted', modelProfileId,
-                reply.toolCalls?.length ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null } : undefined)
+                Object.keys(assistantMetadata).length ? assistantMetadata : undefined)
         } catch (error) {
             const aborted = error instanceof Error && error.name === 'AbortError'
             // A streamed partial is preserved honestly, never re-fetched or dropped.
-            if (streamed) {
+            if (streamed || reasoned) {
                 try {
                     // Sanitize at the PERSISTENCE boundary: an interrupted reply used
                     // to store raw markers, which then fed back as in-context examples.
-                    await appendDurable(session.id, 'assistant', stripLibrarySaveMarkers(streamed), 'persisted', modelProfileId, { interrupted: true })
+                    await appendDurable(session.id, 'assistant', stripLibrarySaveMarkers(streamed), 'persisted', modelProfileId,
+                        reasoned
+                            // Stop after 30s of thinking and before the first
+                            // token used to discard everything — exactly the
+                            // case where the trace is the only artifact left.
+                            ? { interrupted: true, reasoning: stripLibrarySaveMarkers(reasoned) }
+                            : { interrupted: true })
                 } catch (persistenceError) {
                     markPersistenceFailure(persistenceError)
                 }
@@ -724,6 +780,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             }
         } finally {
             state.streamingText = null
+            state.streamingReasoning = null
             activeStreamAbort = null
             state.sending = false
         }

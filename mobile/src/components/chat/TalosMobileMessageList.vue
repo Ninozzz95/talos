@@ -4,6 +4,7 @@ import { BookMarked, FileText, Image } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
+import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
@@ -200,6 +201,13 @@ function formatBytes(value: number): string {
                             : 'rounded-2xl')]"
                     :data-message-kind="message.role"
                 >
+                    <!-- Defect #5: the model's own reasoning, collapsed, ABOVE
+                         the answer — it is how the answer was reached, so
+                         putting it after would read backwards. -->
+                    <TalosMobileReasoningBlock
+                        v-if="typeof message.metadata.reasoning === 'string'"
+                        :reasoning="message.metadata.reasoning"
+                    />
                     <TalosMobileMessageContent
                         :content="message.content"
                     />

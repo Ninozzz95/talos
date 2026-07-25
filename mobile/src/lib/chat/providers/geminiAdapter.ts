@@ -65,7 +65,23 @@ function geminiCompletionData(input: TalosMobileCompletionInput): Record<string,
         })),
     }
     if (input.system?.trim()) data.systemInstruction = { parts: [{ text: input.system }] }
+    // SF-MAJOR: Gemini returns `thought` parts ONLY when the request asks for
+    // them. Without this the reasoning extractor was dead code — the block
+    // could never appear for a Gemini model, while the feature claimed five
+    // families. Gated on the same `thinking` flag Anthropic and Ollama use.
+    if (input.thinking) {
+        data.generationConfig = { thinkingConfig: { includeThoughts: true } }
+    }
     return data
+}
+
+/** One splitter for both transports: they drifted, and that drift is a leak. */
+function geminiAnswerText(parts: ReadonlyArray<{ text?: string; thought?: boolean }>): string {
+    return parts.filter((part) => part.thought !== true).map((part) => part.text ?? '').join('')
+}
+
+function geminiThoughtText(parts: ReadonlyArray<{ text?: string; thought?: boolean }>): string {
+    return parts.filter((part) => part.thought === true).map((part) => part.text ?? '').join('')
 }
 
 export const geminiAdapter: TalosMobileProviderAdapter = {
@@ -126,32 +142,49 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
         const parsed = completionSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('gemini', 'complete')
         const candidate = parsed.data.candidates[0]!
-        const text = candidate.content.parts.map((part) => part.text ?? '').join('')
+        // SF-MAJOR: the buffered path had no thought filter while the streaming
+        // one did. The moment thoughts are requested, this path would join them
+        // into the answer — which is then persisted AND replayed as history.
+        const text = geminiAnswerText(candidate.content.parts)
+        const reasoning = geminiThoughtText(candidate.content.parts)
         if (!text) throw malformedProviderResponse('gemini', 'complete')
         return {
             text,
             model: parsed.data.modelVersion ?? input.model.id,
             finishReason: candidate.finishReason ?? null,
             usage: parsed.data.usageMetadata ?? null,
+            reasoning: reasoning || undefined,
         }
     },
     // F2-T4: native fetch SSE via `:streamGenerateContent?alt=sse` — Gemini
     // allows browser-origin calls with the x-goog-api-key header.
     async streamComplete(input, credential, handlers) {
         const apiKey = requireProviderApiKey('gemini', 'complete', credential)
-        const text = await talosStreamText({
+        const stream = await talosStreamText({
             url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:streamGenerateContent?alt=sse`,
             headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
             body: geminiCompletionData(input),
             signal: handlers.signal,
             accumulator: createTalosSseAccumulator(),
             extract: (payload) => {
-                const event = JSON.parse(payload) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-                return (event.candidates?.[0]?.content?.parts ?? []).map((part) => part.text ?? '').join('')
+                const event = JSON.parse(payload) as {
+                    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
+                }
+                return geminiAnswerText(event.candidates?.[0]?.content?.parts ?? [])
+            },
+            // Defect #5: Gemini marks thinking parts with `thought: true` in the
+            // SAME parts array — without the filter above they were silently
+            // concatenated into the answer.
+            extractReasoning: (payload) => {
+                const event = JSON.parse(payload) as {
+                    candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
+                }
+                return geminiThoughtText(event.candidates?.[0]?.content?.parts ?? [])
             },
             onChunk: handlers.onChunk,
+            onReasoning: handlers.onReasoning,
         })
-        if (!text) throw malformedProviderResponse('gemini', 'complete')
-        return { text, model: input.model.id }
+        if (!stream.text) throw malformedProviderResponse('gemini', 'complete')
+        return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
     },
 }

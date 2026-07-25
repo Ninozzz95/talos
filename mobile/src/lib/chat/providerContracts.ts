@@ -52,11 +52,15 @@ export interface TalosMobileCompletionResult {
     model: string
     finishReason?: string | null
     usage?: Record<string, number> | null
+    /** Defect #5: the model's own reasoning, when the provider streams it. */
+    reasoning?: string
 }
 
 /** F2-T4 — live streaming callbacks handed to a provider adapter. */
 export interface TalosProviderStreamHandlers {
     onChunk: (text: string) => void
+    /** Defect #5: reasoning arrives on its own channel and stays separate. */
+    onReasoning?: (text: string) => void
     signal?: AbortSignal
 }
 

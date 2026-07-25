@@ -76,6 +76,7 @@ function sessionPayload(session: TalosLocalChatSession) {
 }
 
 function messagePayload(message: TalosLocalChatMessage) {
+    const reasoning = typeof message.metadata.reasoning === 'string' ? message.metadata.reasoning : null
     return {
         id: message.id,
         role: message.role,
@@ -84,6 +85,10 @@ function messagePayload(message: TalosLocalChatMessage) {
         model_profile_id: message.model_profile_id,
         ordinal: message.ordinal,
         created_at: message.created_at,
+        // Defect #5 (owner decision): the reasoning is persisted WITH the
+        // message, so an export that dropped it would be an export of half the
+        // record — and the trace is the part that explains the answer.
+        ...(reasoning ? { reasoning } : {}),
     }
 }
 
@@ -135,6 +140,12 @@ function markdownTranscript(input: TalosMobileSessionExportInput): string {
     ]
     for (const message of input.messages) {
         lines.push('', `### ${message.role.toUpperCase()} - ${message.created_at}`, '', message.content)
+        const reasoning = typeof message.metadata.reasoning === 'string' ? message.metadata.reasoning.trim() : ''
+        if (reasoning) {
+            // Quoted, and after the answer: in a document the conclusion leads
+            // and the working is shown below it.
+            lines.push('', '> **Reasoning**', ...reasoning.split(/\r?\n/).map((line) => `> ${line}`))
+        }
     }
     return `${lines.join('\n')}\n`
 }
