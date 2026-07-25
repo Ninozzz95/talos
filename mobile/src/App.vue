@@ -30,6 +30,7 @@ import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { resolveTalosBackAction } from '@/lib/backNavigation'
 import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
+import { Capacitor } from '@capacitor/core'
 import { setTalosScreenSecure } from '@/services/privacyScreen'
 import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -342,8 +343,14 @@ onMounted(async () => {
     // key is wrapped and the flag never made it to disk, deriving the lock from
     // the flag alone left the user with intact data, a valid PIN, and no
     // surface anywhere in the app that would accept it.
-    const { talosDatabaseKeyIsProtected } = await import('@/services/databaseKey')
-    if (await talosDatabaseKeyIsProtected().catch(() => false)) {
+    // Only native has an encrypted database — on web this was a Keystore
+    // round-trip on the boot path that bought nothing and delayed first paint.
+    const keyProtected = Capacitor.isNativePlatform()
+        ? await import('@/services/databaseKey')
+            .then((module) => module.talosDatabaseKeyIsProtected())
+            .catch(() => false)
+        : false
+    if (keyProtected) {
         locked.value = true
     } else if (settingsStore.state.security.app_lock_enabled) {
         // Arm only when a REAL PIN record exists — a dangling flag without a
@@ -543,7 +550,7 @@ onBeforeUnmount(async () => {
                     />
 
                     <main class="relative flex-1 overflow-hidden">
-                        <ChatScreen ref="chatScreen" />
+                        <ChatScreen ref="chatScreen" @export="exportSheetOpen = true" />
                     </main>
                 </div>
             </div>

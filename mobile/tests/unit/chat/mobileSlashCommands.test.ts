@@ -6,33 +6,23 @@ import {
 } from '@/lib/mobileSlashCommands'
 
 describe('mobile slash commands', () => {
-    it('maps the frozen aliases and intentionally omits send and shell policy', () => {
+    it('maps only the aliases of commands that really run', () => {
+        // Owner 2026-07-25 (defect #6): the alias list used to advertise 21
+        // commands, 17 of them greyed out. What is left is what works.
         const commands = toTalosMobileSlashCommands(TALOS_MOBILE_COMMANDS)
         expect(commands.map((command) => command.slash)).toEqual([
             '/new',
             '/browse',
             '/file',
             '/context',
-            '/compare',
-            '/trace',
-            '/recover',
-            '/bench',
             '/model',
             '/doctor',
-            '/audit',
-            '/policy',
-            '/backup',
-            '/restore',
             '/export',
             '/notes',
             '/tasks',
-            '/calendar',
-            '/email',
-            '/draft',
-            '/send-email',
         ])
         expect(commands.some((command) => command.id === 'send_message')).toBe(false)
-        expect(commands.some((command) => command.id === 'open_shell_policy_panel')).toBe(false)
+        expect(commands.every((command) => command.disabledReason === undefined)).toBe(true)
     })
 
     it.each([
@@ -40,9 +30,9 @@ describe('mobile slash commands', () => {
         ['/MODEL', 'open_model_center'],
         ['provider profiles', 'open_model_center'],
         ['context', 'open_context_vault'],
-        ['benchmark', 'run_avm_compare'],
         ['talos.browser.read', 'open_browse'],
-        ['EMAIL', 'open_email_triage'],
+        ['NOTES', 'open_notes'],
+        ['/export', 'export_report'],
     ])('filters %s across alias label description category and capability', (query, expectedId) => {
         expect(filterTalosMobileSlashCommands(TALOS_MOBILE_COMMANDS, query).map((command) => command.id))
             .toContain(expectedId)

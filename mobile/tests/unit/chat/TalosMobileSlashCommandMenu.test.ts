@@ -23,13 +23,13 @@ function mountMenu(query = '', activeIndex = 0): VueWrapper {
 }
 
 describe('TalosMobileSlashCommandMenu', () => {
-    it('renders a named flat listbox with selection and disabled reasons', () => {
+    it('renders a named flat listbox where every row is executable', () => {
         const view = mountMenu('', 1)
         const listbox = view.get('[role="listbox"]')
         const options = listbox.findAll('[role="option"]')
 
         expect(listbox.attributes('aria-label')).toBe('Composer slash commands')
-        expect(options).toHaveLength(21)
+        expect(options).toHaveLength(9)
         expect(options[1]?.attributes('aria-selected')).toBe('true')
         expect(options.every((option) => option.find('[role="option"]').exists() === false)).toBe(true)
 
@@ -43,17 +43,18 @@ describe('TalosMobileSlashCommandMenu', () => {
         expect(context.text()).toContain('/context')
     })
 
-    it('emits only enabled command selections', async () => {
+    it('emits every offered command, because none of them is decorative any more', async () => {
         const view = mountMenu()
 
         await view.get('[data-command-id="open_browse"]').trigger('click')
         expect(view.emitted('selected')).toEqual([['open_browse']])
 
+        // `/file` was greyed out while attaching files worked; it runs now.
         await view.get('[data-command-id="attach_file"]').trigger('click')
-        expect(view.emitted('selected')).toEqual([['open_browse']])
+        expect(view.emitted('selected')).toEqual([['open_browse'], ['attach_file']])
 
         await view.get('[data-command-id="open_model_center"]').trigger('click')
-        expect(view.emitted('selected')).toEqual([['open_browse'], ['open_model_center']])
+        expect(view.emitted('selected')).toEqual([['open_browse'], ['attach_file'], ['open_model_center']])
     })
 
     it('filters without replacing the registry availability state', () => {

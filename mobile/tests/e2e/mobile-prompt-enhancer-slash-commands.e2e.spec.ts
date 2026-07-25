@@ -135,7 +135,7 @@ test('uses the selected model to preview cancel insert replace and finally send'
     await expect(page.locator(SHEET)).toHaveCount(0)
 })
 
-test('operates slash commands and disabled reasons at 360px without overflow', async ({ page }) => {
+test('operates slash commands at 360px without overflow, and every row runs', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 640 })
     await page.goto('/')
 
@@ -143,14 +143,18 @@ test('operates slash commands and disabled reasons at 360px without overflow', a
     await composer.fill('/')
     const menu = page.getByRole('listbox', { name: 'Composer slash commands' })
     await expect(menu).toBeVisible()
-    await expect(menu.getByRole('option')).toHaveCount(21)
+    // Owner 2026-07-25 (defect #6): the menu offered 21 commands, 17 greyed
+    // out and four of those lying about features that shipped. What is left is
+    // exactly what runs.
+    await expect(menu.getByRole('option')).toHaveCount(9)
+    await expect(menu.locator('[aria-disabled="true"]')).toHaveCount(0)
 
     await composer.fill('/file')
     const attachFile = menu.getByRole('option', { name: /Attach file/ })
-    await expect(attachFile).toHaveAttribute('aria-disabled', 'true')
-    await expect(attachFile).toContainText('The local Vault ingestion bridge is not installed.')
+    await expect(attachFile).toHaveAttribute('aria-disabled', 'false')
     await composer.press('Enter')
-    await expect(composer).toHaveValue('/file')
+    // It clears the prompt and opens the picker instead of sitting there inert.
+    await expect(composer).toHaveValue('')
     await expect(page).toHaveURL(/\/$/)
 
     await composer.fill('/model')
