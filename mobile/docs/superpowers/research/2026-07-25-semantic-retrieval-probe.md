@@ -109,6 +109,66 @@ appears; the win on battery would be large.
    measure, and it is what production RAG actually ships.
 5. Retry Qwen3 and MiniLM.
 
+## Results — round 2 (same device, chunks 800/150, best-chunk scoring)
+
+| arm | backend | MB | cold / warm start | index (long) | chars/s | query | R@1 short | R@1 long | R@1 hybrid |
+|---|---|---|---|---|---|---|---|---|---|
+| keyword (today) — short | — | 0 | — | — | — | 0.4 ms | **0.46** | — | — |
+| keyword (today) — long | — | 0 | — | — | — | 0.2 ms | — | **0.50** | — |
+| **e5-small q8** | webgpu | 118 | 2.6 s / **1.35 s** | 11.7 s | 1518 | 111 ms | 0.83 | **0.83** | 0.72 |
+| **gte-base q8 (CLS)** | webgpu | 340 | 2.0 s / **1.43 s** | 41.6 s | 427 | 272 ms | 0.96 | **1.00** | 0.78 |
+| EmbeddingGemma q4 (CPU) | wasm | — | — | — | — | — | — | — | **FAILED** |
+| Qwen3-0.6B q4 | wasm | — | — | — | — | — | — | — | **FAILED** |
+| e5-large q8 | wasm | — | — | — | — | — | — | — | **FAILED (harness fault)** |
+
+### What round 2 settled
+
+1. **The per-launch cost is 1.35 s, not 29 s.** Round 1's load time was almost
+   entirely download. Warm start is what the user actually pays, and it is
+   acceptable.
+2. **Round 1 was unfair to gte, and it was my fault.** Pooled with CLS as its
+   family requires, gte goes from 0.75 to 0.96 on short documents and **1.00 on
+   page-length ones**. The round-1 number must never be quoted again.
+3. **Chunking works, and long documents are EASIER than short notes** for the
+   semantic ranker: e5-small indexes long documents at 1518 chars/s versus 809
+   on notes (longer sequences amortise the per-call overhead), and best-chunk
+   scoring keeps the answering paragraph from being diluted.
+4. **Naive hybrid fusion makes things WORSE, and this is the round's most
+   valuable finding.** Reciprocal rank fusion with equal weights drags a strong
+   semantic ranking down towards a weak keyword one: e5-small 0.83 → 0.72 on
+   long documents (0.83 → 0.54 on short), gte 1.00 → 0.78. Textbook advice says
+   "always hybrid"; on a corpus where the keyword ranker is near-random, equal
+   weighting is actively harmful. Note the nuance: hybrid *improves* recall@3
+   (0.89 → 0.94 for e5-small) while damaging position 1 — keyword finds the
+   document but pollutes the top slot. Any fusion we ship must be weighted in
+   favour of semantics, or gated on keyword confidence, and it must be measured
+   before it is believed.
+
+### Harness fault to fix before round 3
+
+The last three arms all failed with the SAME message — `GatherBlockQuantized`
+missing for a `Gather_Q4` node — including **e5-large q8, which has no q4 node
+at all**. Two conclusions, of different weight:
+
+- Genuine: `GatherBlockQuantized` is not implemented in this ORT WASM build, so
+  the **q4** exports of EmbeddingGemma and Qwen3 cannot run on CPU here. Their
+  q8 exports remain untested.
+- My bug: after a failed session the ONNX runtime state in the page is
+  poisoned, and every later arm inherits the previous error. **e5-large was not
+  measured; its round-1 numbers stand and its round-2 "failure" is meaningless.**
+  Round 3 must run each arm in a pristine page.
+
+## Round 3 — the last measurement before the decision
+
+1. Run every arm in a **fresh page** (state poisoning killed three arms).
+2. **EmbeddingGemma q8 and Qwen3 q8 on CPU** — the q4 path is dead on this
+   device, the q8 path is untested.
+3. **Weighted fusion sweep** (semantic:keyword at 1:1, 2:1, 3:1, 5:1) computed
+   from vectors already in memory — nearly free, and it decides whether hybrid
+   ships at all.
+4. **Scale test**: ~100 documents instead of 32, to see whether accuracy holds
+   and how ranking time grows when the index is realistic.
+
 ## Decision (to be written with the numbers in hand)
 
 The recommendation must answer four things explicitly:
