@@ -26,8 +26,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     close: []
-    /** setup: PIN armed · verify: identity confirmed (caller disarms). */
-    completed: []
+    /** setup: PIN armed (the PIN travels so the caller can wrap the database
+     *  key with it) · verify: identity confirmed (caller disarms). */
+    completed: [pin?: string]
 }>()
 
 const surfaceRoot = ref<HTMLElement | null>(null)
@@ -61,7 +62,9 @@ async function onSetupConfirmComplete(): Promise<void> {
     }
     try {
         await setupAppLockPin(pin.value)
-        emit('completed')
+        // Debt S1: the panel needs the PIN to wrap the database key. It never
+        // leaves this pair of components and is never persisted in the clear.
+        emit('completed', pin.value)
     } catch (cause) {
         error.value = cause instanceof Error ? cause.message : 'The PIN could not be saved.'
     }

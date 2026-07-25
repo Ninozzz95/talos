@@ -24,6 +24,14 @@ const appLock = vi.hoisted(() => ({
 }))
 vi.mock('@/services/appLock', () => appLock)
 
+// Debt S1: arming the lock now wraps the DATABASE key with the PIN. The panel
+// must not claim a lock it failed to arm.
+const protection = vi.hoisted(() => ({
+    enableTalosDatabaseProtection: vi.fn(async () => ({ migrated: false })),
+    disableTalosDatabaseProtection: vi.fn(async () => {}),
+}))
+vi.mock('@/services/databaseProtection', () => protection)
+
 const settingsMock = vi.hoisted(() => {
     const state = { security: { app_lock_enabled: false, app_lock_biometric: false } }
     return {
@@ -38,6 +46,8 @@ vi.mock('@/stores/settings', () => ({ useSettingsStore: () => settingsMock }))
 beforeEach(() => {
     push.mockReset()
     appLock.setupAppLockPin.mockReset().mockResolvedValue(undefined)
+    protection.enableTalosDatabaseProtection.mockReset().mockResolvedValue({ migrated: false })
+    protection.disableTalosDatabaseProtection.mockReset().mockResolvedValue(undefined)
     appLock.clearAppLock.mockReset().mockResolvedValue(undefined)
     appLock.biometricUnlockAvailable.mockReset().mockResolvedValue(false)
     settingsMock.state.security = { app_lock_enabled: false, app_lock_biometric: false }
@@ -137,6 +147,22 @@ describe('TalosMobileSettingsAccountPanel app lock (F4-#25 OTP flow)', () => {
             app_lock_enabled: false,
             app_lock_biometric: false,
         })
+    })
+
+    it('S1: refuses to arm the lock when the database key could not be protected', async () => {
+        protection.enableTalosDatabaseProtection.mockRejectedValue(new Error('export refused'))
+        const { wrapper } = mountPanel()
+        await wrapper.get('[data-testid="talos-applock-toggle"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-applock-pin"]').setValue('481902')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-applock-pin-confirm"]').setValue('481902')
+        await flushPromises()
+        // A lock that reads "on" over an unprotected database is the exact
+        // defect this change removes; failing closed is the only honest option.
+        expect(settingsMock.setSecurity).not.toHaveBeenCalledWith(
+            expect.objectContaining({ app_lock_enabled: true }))
+        expect(wrapper.find('[data-testid="talos-applock-protect-error"]').exists()).toBe(true)
     })
 
     it('keeps the lock armed when the verification PIN is wrong', async () => {

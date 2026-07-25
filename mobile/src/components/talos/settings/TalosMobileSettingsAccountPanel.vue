@@ -17,6 +17,10 @@ import { useSettingsStore } from '@/stores/settings'
 import { useTalosAccountStore } from '@/stores/account'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { appLockPinIsWeak, biometricUnlockAvailable, clearAppLock } from '@/services/appLock'
+import {
+    disableTalosDatabaseProtection,
+    enableTalosDatabaseProtection,
+} from '@/services/databaseProtection'
 import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/services/dictation'
 
 const router = useRouter()
@@ -48,6 +52,11 @@ const lockModal = ref<'setup' | 'verify' | null>(null)
 const biometricAvailable = ref(false)
 // Debt S3: true when the stored PIN was last verified with fewer than 6 digits.
 const weakPin = ref(false)
+// Debt S1: an install created before the key was managed has to have its
+// database rebuilt under a key we can wrap. That is the only slow path, and it
+// must never look like a frozen screen.
+const protecting = ref(false)
+const protectionError = ref<string | null>(null)
 
 const dictationDiag = ref<TalosDictationDiagnostics | null>(null)
 
@@ -81,11 +90,40 @@ function toggleAppLock(): void {
     lockModal.value = settings.state.security.app_lock_enabled ? 'verify' : 'setup'
 }
 
-async function onLockModalCompleted(): Promise<void> {
+async function onLockModalCompleted(pin?: string): Promise<void> {
     if (lockModal.value === 'setup') {
+        // Debt S1: the PIN becomes the real database key here. On a fresh
+        // install this wraps 32 bytes and is instant; on a legacy install the
+        // data is exported and rebuilt, which is why the panel shows progress.
+        protectionError.value = null
+        if (pin) {
+            protecting.value = true
+            try {
+                await enableTalosDatabaseProtection(pin)
+            } catch (cause) {
+                protecting.value = false
+                lockModal.value = null
+                protectionError.value = cause instanceof Error
+                    ? `The lock was not armed: ${cause.message}`
+                    : 'The lock was not armed.'
+                return
+            }
+            protecting.value = false
+        }
         await settings.setSecurity({ app_lock_enabled: true, screen_secure: true })
         weakPin.value = false
     } else if (lockModal.value === 'verify') {
+        try {
+            await disableTalosDatabaseProtection()
+        } catch (cause) {
+            // SF: this threw into an unhandled rejection and the toggle simply
+            // did nothing — the user could not turn the lock off at all.
+            protectionError.value = cause instanceof Error
+                ? `The lock could not be removed: ${cause.message}`
+                : 'The lock could not be removed.'
+            lockModal.value = null
+            return
+        }
         await clearAppLock()
         await settings.setSecurity({ app_lock_enabled: false, app_lock_biometric: false })
         weakPin.value = false
@@ -169,8 +207,18 @@ async function toggleBiometric(): Promise<void> {
         <section>
             <h4 class="text-sm font-semibold text-[var(--talos-text)]">App lock</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                Require a PIN when TALOS starts. The PIN never leaves this device — only a
-                salted derivation is kept in the secure Keystore.
+                Require a PIN when TALOS starts. With the lock on, the PIN <b>is</b> the key that
+                encrypts your chats and documents on this device: nobody can open them without it —
+                and <b>if you forget it, the data is lost for good</b>. There is no recovery, not
+                even for us. The PIN never leaves this device.
+            </p>
+            <p
+                v-if="!settings.state.security.app_lock_enabled"
+                data-testid="talos-applock-off-warning"
+                class="mt-2 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs leading-5 text-[var(--talos-muted)]"
+            >
+                The lock is off: your chats and documents on this phone can be read by anyone with
+                access to the device.
             </p>
             <div class="mt-1 flex items-center justify-between gap-3">
                 <span class="text-sm text-[var(--talos-text)]">Require PIN on start</span>
@@ -204,6 +252,22 @@ async function toggleBiometric(): Promise<void> {
                 @close="lockModal = null"
                 @completed="onLockModalCompleted"
             />
+            <p
+                v-if="protecting"
+                data-testid="talos-applock-protecting"
+                role="status"
+                class="mt-3 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs leading-5 text-[var(--talos-text)]"
+            >
+                Locking your data with the new key. Keep the app open — this happens once.
+            </p>
+            <p
+                v-if="protectionError"
+                data-testid="talos-applock-protect-error"
+                role="alert"
+                class="mt-3 rounded-lg border border-[var(--talos-danger)]/40 bg-[var(--talos-danger)]/10 px-3 py-2 text-xs leading-5 text-[var(--talos-text)]"
+            >
+                {{ protectionError }}
+            </p>
             <!-- Debt S3: the 6-digit minimum only ever ran at setup, so a PIN
                  armed before it existed stayed 4 digits with nothing saying so. -->
             <p

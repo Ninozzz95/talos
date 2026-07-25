@@ -25,4 +25,8 @@ export interface TalosSqliteRuntime {
     connect(): Promise<TalosSqlConnection>
     persist(): Promise<void>
     close(): Promise<void>
+    /** Debt S1: close AND drop the stored passphrase, so the PIN really gates. */
+    forgetSecret?(): Promise<void>
+    /** Debt S1: move a legacy database onto a key we can wrap with the PIN. */
+    adoptManagedSecret?(secret: string): Promise<void>
 }
