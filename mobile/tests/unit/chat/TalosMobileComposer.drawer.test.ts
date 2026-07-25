@@ -164,6 +164,27 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(wrapper.findAll('[aria-label="Cancel dictation"]').length).toBeLessThanOrEqual(1)
     })
 
+    // Owner device 2026-07-25: the mic was "extremely hard" to start. Root cause:
+    // in compact the right button is vertically centred; tapping it focused the
+    // textarea, the pill EXPANDED, and the button moved away before the click
+    // resolved. The press must not steal focus, and activating the mic must
+    // actively blur so the keyboard gets out of the way for speech.
+    it('the right button does not steal focus (no layout shift mid-tap)', () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, dictationSupported: true, prompt: '' })
+        const ev = new Event('pointerdown', { bubbles: true, cancelable: true })
+        wrapper.get('[aria-label="Dictate"]').element.dispatchEvent(ev)
+        expect(ev.defaultPrevented).toBe(true)
+    })
+
+    it('starting dictation blurs the composer so the keyboard yields', async () => {
+        const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, prompt: '' })
+        const field = wrapper.get('textarea').element as HTMLTextAreaElement
+        field.focus()
+        await wrapper.get('[aria-label="Dictate"]').trigger('click')
+        expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
+        expect(document.activeElement).not.toBe(field)
+    })
+
     it('plus-dropdown: Escape closes the menu', async () => {
         const wrapper = mountComposer({ drawerMode: true, plusDropdown: true })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')

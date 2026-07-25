@@ -9,7 +9,10 @@ const statusBar = {
     setBackgroundColor: vi.fn().mockResolvedValue(undefined),
     setOverlaysWebView: vi.fn().mockResolvedValue(undefined),
 }
-const keyboard = { setResizeMode: vi.fn().mockResolvedValue(undefined) }
+const keyboard = {
+    setResizeMode: vi.fn().mockResolvedValue(undefined),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+}
 
 vi.mock('@capacitor/core', () => ({
     Capacitor: {
@@ -26,13 +29,17 @@ vi.mock('@capacitor/status-bar', () => ({
     Style: { Dark: 'DARK', Light: 'LIGHT', Default: 'DEFAULT' },
 }))
 vi.mock('@capacitor/keyboard', () => ({
-    Keyboard: { setResizeMode: (o: unknown) => keyboard.setResizeMode(o) },
+    Keyboard: {
+        setResizeMode: (o: unknown) => keyboard.setResizeMode(o),
+        addListener: (event: string, handler: () => void) => keyboard.addListener(event, handler),
+    },
     KeyboardResize: { Native: 'native', Body: 'body', Ionic: 'ionic', None: 'none' },
 }))
 
-import { configureNativeFraming, NativeFramingError } from '@/services/nativeFraming'
+import { configureNativeFraming, NativeFramingError, __resetNativeFramingForTests } from '@/services/nativeFraming'
 
 beforeEach(() => {
+    __resetNativeFramingForTests()
     platform.isNative = true
     platform.name = 'android'
     vi.clearAllMocks()
@@ -85,5 +92,23 @@ describe('native framing', () => {
         expect(err.code).toBe('NATIVE_STATUSBAR_FAILED')
         // fail-closed on one channel must not block the other
         expect(keyboard.setResizeMode).toHaveBeenCalledOnce()
+    })
+
+    // Owner device 2026-07-25: dismissing the keyboard left DOM focus on the field,
+    // so the composer stayed in its focused/expanded state with no keyboard.
+    it('releases input focus when the keyboard is dismissed', async () => {
+        await configureNativeFraming({ native: true, scheme: 'dark', background: '#000000' })
+
+        const registered = keyboard.addListener.mock.calls.find(([event]) => event === 'keyboardDidHide')
+        expect(registered).toBeDefined()
+
+        const field = document.createElement('textarea')
+        document.body.appendChild(field)
+        field.focus()
+        expect(document.activeElement).toBe(field)
+
+        ;(registered![1] as () => void)()
+        expect(document.activeElement).not.toBe(field)
+        field.remove()
     })
 })

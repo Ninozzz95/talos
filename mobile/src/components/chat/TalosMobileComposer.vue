@@ -263,18 +263,23 @@ const rightActionDisabled = computed(() => {
     return false
 })
 function onRightAction(): void {
-    if (rightAction.value === 'stop') emit('stop')
-    else if (rightAction.value === 'send') requestSend()
-    else emit('toggleDictation') // start OR stop dictation
+    if (rightAction.value === 'stop') { emit('stop'); return }
+    if (rightAction.value === 'send') { requestSend(); return }
+    // Dictation: hand the screen back to the user's voice — keeping the textarea
+    // focused kept the keyboard up over the listening pill.
+    promptField.value?.blur()
+    composerFocused.value = false
+    emit('toggleDictation') // start OR stop
 }
 
 function resizePrompt(): void {
     const field = promptField.value
     if (!field) return
     field.style.height = 'auto'
-    // Compact immersive pill is a single centred line (~48px); the standard
-    // composer floors at 56px (two visible rows).
-    const floor = composerCompact.value ? 48 : 56
+    // One 48px box in both states: 12px padding + a 24px line = 48px, and the
+    // 44px buttons bottom-anchor at 2px, so text and controls share one optical
+    // line and stay correct as the field grows.
+    const floor = 48
     field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, 192))}px`
 }
 // Recompute the field height when the pill flips compact↔expanded so the floor
@@ -500,7 +505,7 @@ watch(() => props.prompt, () => {
                 aria-label="Add to chat"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
                 :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable absolute left-1.5 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-2xl"
+                class="talos-pressable absolute bottom-0.5 left-1.5 z-10 min-h-11 min-w-11 rounded-2xl"
                 @pointerdown.prevent
                 @click="openPlus"
             >
@@ -509,11 +514,14 @@ watch(() => props.prompt, () => {
             <textarea
                 ref="promptField"
                 :value="prompt"
-                :rows="composerCompact ? 1 : 2"
+                rows="1"
                 aria-label="Message TALOS"
                 placeholder="Message TALOS..."
-                class="max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
-                :class="composerCompact ? 'min-h-12 py-3 pl-14 pr-14' : (plusDropdown && !drawerMode ? 'min-h-14 py-2 pl-14 pr-14' : 'min-h-14 py-2 px-2 pr-14')"
+                class="block max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
+                :class="[
+                    'min-h-12 py-3',
+                    composerCompact || (plusDropdown && !drawerMode) ? 'pl-14 pr-14' : 'px-2 pr-14',
+                ]"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
                 @focus="composerFocused = true"
@@ -530,9 +538,10 @@ watch(() => props.prompt, () => {
                 :title="rightActionTitle"
                 :aria-pressed="rightAction === 'dictating'"
                 :disabled="rightActionDisabled"
+                @pointerdown.prevent
                 class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-2xl"
                 :class="[
-                    composerCompact ? 'top-1/2 -translate-y-1/2' : 'bottom-1.5',
+                    'bottom-0.5',
                     rightAction === 'mic'
                         ? 'border border-[var(--talos-border,var(--border))] text-[var(--talos-muted,var(--muted-foreground))]'
                         : 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]',
