@@ -35,6 +35,9 @@ function messageOf(error: unknown): string {
  * never blocks the other and never throws into the render path. Safe-area insets
  * themselves are handled in CSS via `env(safe-area-inset-*)`.
  */
+// Registered once: configureNativeFraming may run again on theme changes.
+let keyboardHideListenerAttached = false
+
 export async function configureNativeFraming(options: ConfigureNativeFramingOptions): Promise<void> {
     if (!Capacitor.isNativePlatform()) return
 
@@ -51,7 +54,26 @@ export async function configureNativeFraming(options: ConfigureNativeFramingOpti
 
     try {
         await Keyboard.setResizeMode({ mode: KeyboardResize.Native })
+        // Owner device 2026-07-25: dismissing the keyboard (gesture / system back)
+        // hides it natively but leaves DOM focus on the field, so the composer
+        // stayed in its focused/expanded state with no keyboard. Capacitor's
+        // keyboardDidHide is the documented hook; release focus there.
+        // https://capacitorjs.com/docs/apis/keyboard
+        if (!keyboardHideListenerAttached) {
+            keyboardHideListenerAttached = true
+            await Keyboard.addListener('keyboardDidHide', () => {
+                const active = document.activeElement
+                if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) {
+                    active.blur()
+                }
+            })
+        }
     } catch (error) {
         options.onError?.(new NativeFramingError('NATIVE_KEYBOARD_FAILED', messageOf(error)))
     }
+}
+
+/** Test-only: the keyboard listener is registered once per process. */
+export function __resetNativeFramingForTests(): void {
+    keyboardHideListenerAttached = false
 }
