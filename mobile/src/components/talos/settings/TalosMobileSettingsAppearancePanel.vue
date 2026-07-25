@@ -247,6 +247,36 @@ function onSwipeEnd(event: PointerEvent): void {
                         @click="settings.setShell({ launcher_icon_follows_theme: !settings.state.shell.launcher_icon_follows_theme })"
                     ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.launcher_icon_follows_theme ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
                 </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">Let chats use your Library</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">The model can reference your global Library (all chats) as context. Adds tokens per message.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.library_context_enabled"
+                        aria-label="Let chats use your Library"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.library_context_enabled ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ library_context_enabled: !settings.state.shell.library_context_enabled })"
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.library_context_enabled ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
+                <label class="flex items-center justify-between gap-3 py-1">
+                    <span>
+                        <span :class="selectLabelClass">Auto-save generated files</span>
+                        <span class="block text-xs text-[var(--talos-muted)]">When the chat generates a file/document, save it to your Library automatically.</span>
+                    </span>
+                    <button
+                        type="button"
+                        role="switch"
+                        :aria-checked="settings.state.shell.library_autosave_generated"
+                        aria-label="Auto-save generated files to the Library"
+                        class="talos-pressable relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                        :class="settings.state.shell.library_autosave_generated ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
+                        @click="settings.setShell({ library_autosave_generated: !settings.state.shell.library_autosave_generated })"
+                    ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.library_autosave_generated ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
                 <label class="block">
                     <span :class="selectLabelClass">Chat message size</span>
                     <TalosThemedSelect

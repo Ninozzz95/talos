@@ -48,6 +48,8 @@ export interface TalosMobileAttachmentsController {
     selectFiles(): Promise<void>
     /** Save a chat-generated artifact into the Library (origin='generated'). */
     saveGenerated(input: { name: string; mediaType: string; text: string }): Promise<TalosLocalVaultFile>
+    /** Object URL for a file's bytes (image thumbnail / open). Caller revokes it. */
+    previewUrl(fileId: string): Promise<string | null>
     attachExisting(file: TalosLocalVaultFile): Promise<boolean>
     remove(itemId: string): Promise<void>
     deleteVaultFile(fileId: string): Promise<void>
@@ -218,6 +220,16 @@ export function useTalosMobileAttachments(
         return result.file
     }
 
+    async function previewUrl(fileId: string): Promise<string | null> {
+        try {
+            const preview = await options.vault.readFilePreview(fileId)
+            if (!preview) return null
+            return URL.createObjectURL(new Blob([preview.bytes as BlobPart], { type: preview.mediaType }))
+        } catch {
+            return null
+        }
+    }
+
     async function attachExisting(file: TalosLocalVaultFile): Promise<boolean> {
         error.value = null
         if (items.some((item) => item.vaultFileId === file.id)) {
@@ -331,6 +343,7 @@ export function useTalosMobileAttachments(
         refreshVault,
         selectFiles,
         saveGenerated,
+        previewUrl,
         attachExisting,
         remove,
         deleteVaultFile,

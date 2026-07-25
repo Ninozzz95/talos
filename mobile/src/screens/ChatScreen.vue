@@ -339,6 +339,26 @@ function resendMessage(messageId: string): void {
     void runMessageAction(() => controller.resendMessage(messageId))
 }
 
+function deriveLibraryFilename(content: string): string {
+    const firstLine = content.split('\n').map((line) => line.replace(/^#+\s*/, '').trim()).find((line) => line.length > 0) ?? 'response'
+    const slug = firstLine.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'response'
+    return `${slug}.md`
+}
+
+// Owner 2026-07-25: save any assistant reply straight into the Library.
+function saveMessageToLibrary(messageId: string): void {
+    const message = messageById(messageId)
+    if (!message || message.role !== 'assistant' || message.content.trim() === '') return
+    void runMessageAction(async () => {
+        const file = await attachments.saveGenerated({
+            name: deriveLibraryFilename(message.content),
+            mediaType: 'text/markdown',
+            text: message.content,
+        })
+        toasts.push({ message: `Saved “${file.display_name}” to your Library.`, durationMs: 6000 })
+    })
+}
+
 function retryAssistantMessage(messageId: string): void {
     void runMessageAction(() => controller.retryAssistantMessage(messageId))
 }
@@ -619,6 +639,7 @@ onBeforeUnmount(() => {
                     @reuse="reuseMessage"
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"
+                    @save-to-library="saveMessageToLibrary"
                 />
             </div>
         </div>

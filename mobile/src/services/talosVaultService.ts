@@ -25,6 +25,9 @@ export interface TalosVaultService {
         input: { name: string; mediaType: string; text: string },
         originSessionId?: string | null,
     ): Promise<TalosVaultTrayItem>
+    /** Owner 2026-07-25: raw bytes of an available file for in-Library preview
+     *  (image thumbnails / open). Null if unavailable. */
+    readFilePreview(fileId: string): Promise<{ bytes: Uint8Array; mediaType: string } | null>
     createGrant(fileId: string): Promise<TalosLocalFileAuthorityGrant>
     revokeGrant(grantId: string): Promise<void>
     resolveMessageParts(messageId: string): Promise<TalosMobileInputPart[]>
@@ -162,6 +165,12 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             }, 'generated', originSessionId)
         },
         createGrant,
+        async readFilePreview(fileId) {
+            const file = await options.repository.getVaultFile(fileId)
+            if (!file || file.status !== 'available' || !file.private_uri) return null
+            const bytes = await options.fileStore.readPrivate(file.private_uri)
+            return { bytes, mediaType: file.media_type }
+        },
         revokeGrant: (grantId) => options.repository.revokeFileAuthorityGrant(grantId),
         async resolveMessageParts(messageId) {
             const bindings = await options.repository.listMessageAttachments(messageId)

@@ -110,7 +110,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         const nameInput = page.getByLabel('Chat name')
         await expect(nameInput).toBeVisible()
         await nameInput.fill('Titolo rinominato')
-        await page.getByRole('button', { name: 'Save' }).click()
+        await page.getByRole('button', { name: 'Save', exact: true }).click()
         await expect(nameInput).toHaveCount(0)
         await page.locator(MENU).click()
         await page.locator(SIDEBAR).getByRole('button', { name: /^Chats/ }).click()
@@ -309,7 +309,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await page.locator('[data-testid="talos-chats-row-menu"]').getByRole('menuitem', { name: 'Rename' }).click()
         const nameInput = page.getByLabel('Chat name')
         await nameInput.fill('Lista rinominata')
-        await page.getByRole('button', { name: 'Save' }).click()
+        await page.getByRole('button', { name: 'Save', exact: true }).click()
         await expect(nameInput).toHaveCount(0)
         await expect(row.first()).toContainText('Lista rinominata')
 

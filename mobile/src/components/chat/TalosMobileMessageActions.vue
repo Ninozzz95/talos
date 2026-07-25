@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
-import { Copy, RefreshCcw, RotateCcw, Square, Volume2 } from '@lucide/vue'
+import { Copy, Library, RefreshCcw, RotateCcw, Square, Volume2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import { useTalosSpeech } from '@/composables/useTalosSpeech'
@@ -18,6 +18,7 @@ const emit = defineEmits<{
     reuse: [message: TalosMobileMessageView]
     resend: [message: TalosMobileMessageView]
     retry: [message: TalosMobileMessageView]
+    saveToLibrary: [message: TalosMobileMessageView]
 }>()
 
 // Owner 2026-07-24: speak the assistant reply aloud (device TTS). One at a
@@ -52,6 +53,11 @@ function toggleSpeak(): void {
         </Button>
         <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-11 min-w-11" aria-label="Retry assistant response" title="Retry response" :disabled="busy || !canRetry" @click="emit('retry', message)">
             <RotateCcw class="size-3.5" aria-hidden="true" />
+        </Button>
+        <!-- Owner 2026-07-25: the chat can't hand out download links; instead save
+             the generated reply straight into the Library (origin='generated'). -->
+        <Button v-if="message.role === 'assistant'" type="button" variant="ghost" size="icon" class="min-h-11 min-w-11" aria-label="Save to Library" title="Save to Library" @click="emit('saveToLibrary', message)">
+            <Library class="size-3.5" aria-hidden="true" />
         </Button>
         <TalosMobileMessageOverflowMenu v-if="message.role === 'user'" :message="message" @reuse="emit('reuse', $event)" />
     </div>
