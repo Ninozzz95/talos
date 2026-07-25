@@ -11,7 +11,7 @@ const account = useTalosAccountStore()
 <template>
     <div data-testid="wizard-step-signin" class="flex flex-col">
         <h1 class="talos-serif text-2xl font-semibold leading-tight text-[var(--talos-text)]">Sign in</h1>
-        <p class="mt-3 text-[15px] leading-7 text-[var(--talos-text)]">
+        <p class="mt-3 text-md leading-7 text-[var(--talos-text)]">
             TALOS runs fully local — no account is required. Sign-in is predisposed for the optional
             encrypted sync arriving with the sovereign core.
         </p>
@@ -25,7 +25,7 @@ const account = useTalosAccountStore()
                 @click="emit('oauth', provider.id)"
             >
                 {{ provider.label }}
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Soon</span>
+                <span class="text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Soon</span>
             </button>
         </div>
     </div>

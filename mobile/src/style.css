@@ -54,9 +54,44 @@
     --radius-xl: 0.75rem;
     --radius-2xl: 0.75rem;
     --radius-3xl: 0.75rem;
+
+    /* Owner 2026-07-25: "il font size DEVE impattare anche il font dei menù e
+       di tutto il sistema, non solo la chat". Tailwind v4 emits every text
+       utility as `font-size: var(--text-*)`, so redefining the scale HERE is
+       the one lever that reaches menus, settings, header, toasts, sheets and
+       chat at once — no per-component plumbing, nothing left behind.
+       `--talos-ui-scale` is written on <html> at runtime from the setting;
+       Tailwind keeps line heights as unitless ratios, so they follow along.
+       3xs/2xs/xsm/md exist so the hand-written 10/11/13/15px sizes scale too. */
+    --text-3xs: calc(0.625rem * var(--talos-ui-scale, 1));
+    --text-2xs: calc(0.6875rem * var(--talos-ui-scale, 1));
+    --text-xs: calc(0.75rem * var(--talos-ui-scale, 1));
+    --text-xsm: calc(0.8125rem * var(--talos-ui-scale, 1));
+    --text-sm: calc(0.875rem * var(--talos-ui-scale, 1));
+    --text-md: calc(0.9375rem * var(--talos-ui-scale, 1));
+    --text-base: calc(1rem * var(--talos-ui-scale, 1));
+    --text-lg: calc(1.125rem * var(--talos-ui-scale, 1));
+    --text-xl: calc(1.25rem * var(--talos-ui-scale, 1));
+    --text-2xl: calc(1.5rem * var(--talos-ui-scale, 1));
+    --text-3xl: calc(1.875rem * var(--talos-ui-scale, 1));
+    --text-4xl: calc(2.25rem * var(--talos-ui-scale, 1));
+    --text-5xl: calc(3rem * var(--talos-ui-scale, 1));
+    --text-6xl: calc(3.75rem * var(--talos-ui-scale, 1));
+    --text-7xl: calc(4.5rem * var(--talos-ui-scale, 1));
+    --text-8xl: calc(6rem * var(--talos-ui-scale, 1));
+    --text-9xl: calc(8rem * var(--talos-ui-scale, 1));
 }
 
+/* The vendored shadcn button (provenance-pinned by
+   upstream/shadcn-vue-2.8.0-manifest.json — it must stay byte-identical) sizes
+   its `sm` variant with an arbitrary `text-[0.8rem]` utility, which would
+   ignore the global font scale. Editing a hashed upstream file to fix that is
+   the wrong trade; redefining the emitted class is not. Unlayered rules beat
+   Tailwind's @layer utilities, so this wins without !important. */
+.text-\[0\.8rem\] { font-size: calc(0.8rem * var(--talos-ui-scale, 1)); }
+
 :root {
+    --talos-ui-scale: 1;
     --talos-font-ui: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --talos-font-display: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --talos-font-mono: "JetBrains Mono", ui-monospace, monospace;

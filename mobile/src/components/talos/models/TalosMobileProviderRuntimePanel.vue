@@ -121,14 +121,14 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                 <TalosMobileProviderIcon :provider="provider.id" class="size-7 shrink-0" />
                 <div class="min-w-0 flex-1">
                     <h5 :id="`provider-${provider.id}-title`" class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ provider.label }}</h5>
-                    <p class="text-[11px] text-[var(--talos-muted)]">
+                    <p class="text-2xs text-[var(--talos-muted)]">
                         <template v-if="controller.catalogs[provider.id].status === 'ready'">{{ modelCountLabel(controller.catalogs[provider.id].models.length) }}</template>
                         <template v-else-if="controller.catalogs[provider.id].status === 'loading'">Discovering models...</template>
                         <template v-else-if="controller.catalogs[provider.id].status === 'error'">Discovery failed</template>
                         <template v-else>Not configured</template>
                     </p>
                 </div>
-                <span v-if="controller.secrets[provider.id]" data-testid="key-present" class="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--talos-success,var(--talos-accent))]">
+                <span v-if="controller.secrets[provider.id]" data-testid="key-present" class="inline-flex items-center gap-1 text-2xs font-semibold text-[var(--talos-success,var(--talos-accent))]">
                     <BadgeCheck class="size-3.5" aria-hidden="true" /> Key saved
                 </span>
                 <ChevronDown

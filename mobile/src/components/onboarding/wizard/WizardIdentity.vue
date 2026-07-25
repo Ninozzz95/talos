@@ -13,7 +13,7 @@ const liveInitial = computed(() => talosAccountInitialFrom(props.modelValue))
 <template>
     <div data-testid="wizard-step-identity" class="flex flex-col">
         <h1 class="talos-serif text-2xl font-semibold leading-tight text-[var(--talos-text)]">Your identity</h1>
-        <p class="mt-3 text-[15px] leading-7 text-[var(--talos-text)]">
+        <p class="mt-3 text-md leading-7 text-[var(--talos-text)]">
             How should TALOS address you? You can change this anytime in Settings.
         </p>
         <div class="mt-5 flex items-center gap-4">

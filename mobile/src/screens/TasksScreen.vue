@@ -145,7 +145,7 @@ function shortId(value: string | null): string {
                             {{ task.title }}
                         </div>
                         <p v-if="task.description" class="mt-0.5 line-clamp-2 text-xs leading-5 text-[var(--talos-muted)]">{{ task.description }}</p>
-                        <p class="mt-1 font-mono text-[11px] text-[var(--talos-muted)]">
+                        <p class="mt-1 font-mono text-2xs text-[var(--talos-muted)]">
                             run_id {{ shortId(task.run_id) }} · {{ talosRelativeTime(task.updated_at) }}
                         </p>
                     </div>

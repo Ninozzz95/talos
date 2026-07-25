@@ -31,6 +31,7 @@ import { resolveTalosBackAction } from '@/lib/backNavigation'
 import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
 import { setTalosScreenSecure } from '@/services/privacyScreen'
+import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
@@ -144,6 +145,12 @@ const shellStyle = computed(() => ({
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
 // (attachment revocation + draft scoping stay orchestrated in one place).
 const sidebarOpen = ref(false)
+// Owner 2026-07-25: GLOBAL text size. One variable on <html> drives every
+// Tailwind text token, so menus, settings, chrome and chat scale together.
+watch(() => settingsStore.state.shell.ui_font_scale, (scale) => {
+    applyTalosFontScale(scale)
+}, { immediate: true })
+
 // Debt S2: FLAG_SECURE — no screenshots, no screen recording, no readable
 // recents thumbnail. SF: do NOT fire before hydration; the pre-hydration
 // default would CLEAR the flag for the whole boot window, which is exactly the

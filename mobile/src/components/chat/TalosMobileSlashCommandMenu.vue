@@ -43,7 +43,7 @@ defineExpose({ activateSelected })
         data-testid="talos-mobile-slash-command-menu"
         class="w-full max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-md border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] shadow-xl"
     >
-        <div class="border-b border-[var(--talos-border,var(--border))] px-3 py-2 font-mono text-[11px] font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
+        <div class="border-b border-[var(--talos-border,var(--border))] px-3 py-2 font-mono text-2xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
             Slash commands
         </div>
         <div
@@ -74,7 +74,7 @@ defineExpose({ activateSelected })
                         <span class="font-mono text-[var(--talos-accent,var(--primary))]">{{ command.slash }}</span>
                         {{ command.label }}
                     </span>
-                    <span class="shrink-0 rounded border border-[var(--talos-border-strong,var(--border))] px-1.5 py-0.5 font-mono text-[10px] uppercase text-[var(--talos-muted,var(--muted-foreground))]">
+                    <span class="shrink-0 rounded border border-[var(--talos-border-strong,var(--border))] px-1.5 py-0.5 font-mono text-3xs uppercase text-[var(--talos-muted,var(--muted-foreground))]">
                         {{ command.category }}
                     </span>
                 </span>

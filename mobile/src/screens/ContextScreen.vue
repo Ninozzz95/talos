@@ -200,7 +200,7 @@ onMounted(async () => {
         </template>
 
         <div class="mb-3 flex items-center justify-between gap-3">
-            <p class="font-mono text-[10px] text-[var(--talos-muted)]">{{ attachments.vaultFiles.length }} across every chat</p>
+            <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ attachments.vaultFiles.length }} across every chat</p>
             <div class="relative">
                 <Button type="button" size="icon" variant="ghost" aria-label="Library options" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-11 min-w-11 rounded-full" @click="menuOpen = !menuOpen">
                     <EllipsisVertical class="size-5" aria-hidden="true" />
@@ -270,7 +270,7 @@ onMounted(async () => {
                             </span>
                         </template>
                     </button>
-                    <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white"><Sparkles class="size-3" aria-hidden="true" /> Gen</span>
+                    <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-3xs font-medium text-white"><Sparkles class="size-3" aria-hidden="true" /> Gen</span>
                 </div>
             </div>
 

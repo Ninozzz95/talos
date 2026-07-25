@@ -75,12 +75,12 @@ function isImage(mediaType: string): boolean {
 
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-xs font-medium text-[var(--talos-text)]">{{ item.displayName }}</p>
-                    <p class="truncate text-[10px] text-[var(--talos-muted)]">
+                    <p class="truncate text-3xs text-[var(--talos-muted)]">
                         <template v-if="item.status === 'ingesting'">Adding file</template>
                         <template v-else-if="item.status === 'failed'">Could not add file</template>
                         <template v-else>{{ formatBytes(item.sizeBytes) }} · Model read · Browser upload</template>
                     </p>
-                    <p v-if="item.error" class="truncate text-[10px] text-[var(--talos-danger,var(--destructive))]">
+                    <p v-if="item.error" class="truncate text-3xs text-[var(--talos-danger,var(--destructive))]">
                         {{ item.error }}
                     </p>
                 </div>

@@ -134,7 +134,7 @@ onMounted(scan)
                     v-for="(issue, index) in issues"
                     :key="index"
                     data-testid="talos-doctor-issue"
-                    class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-2 font-mono text-[11px] leading-4 text-[var(--talos-muted)]"
+                    class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-2 font-mono text-2xs leading-4 text-[var(--talos-muted)]"
                 >
                     {{ issue.at.slice(11, 19) }} · {{ issue.tag }} · {{ issue.detail }}
                 </li>

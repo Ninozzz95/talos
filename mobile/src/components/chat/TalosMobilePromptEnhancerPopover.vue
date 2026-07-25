@@ -48,7 +48,7 @@ const emit = defineEmits<{
                  lines and the principles are a single quiet inline row. -->
             <p
                 id="talos-mobile-enhancer-description"
-                class="line-clamp-2 text-[11px] leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
+                class="line-clamp-2 text-2xs leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
             >
                 {{ result.summary || 'Review the enhanced prompt before changing your draft.' }}
             </p>
@@ -61,7 +61,7 @@ const emit = defineEmits<{
                 <li
                     v-for="principle in result.applied_principles"
                     :key="principle"
-                    class="rounded-full bg-[var(--talos-active)] px-1.5 py-0.5 text-[10px] leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
+                    class="rounded-full bg-[var(--talos-active)] px-1.5 py-0.5 text-3xs leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
                 >
                     {{ principle }}
                 </li>

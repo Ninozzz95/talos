@@ -126,7 +126,7 @@ async function remove(id: string): Promise<void> {
             <li v-for="entry in manualModels" :key="entry.id" class="flex min-w-0 items-center gap-2 py-2">
                 <div class="min-w-0 flex-1">
                     <div class="truncate text-sm font-medium text-[var(--talos-text)]">{{ entry.display_name }}</div>
-                    <div class="truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ talosMobileProviderById(entry.provider).label }} / {{ entry.model }}</div>
+                    <div class="truncate font-mono text-2xs text-[var(--talos-muted)]">{{ talosMobileProviderById(entry.provider).label }} / {{ entry.model }}</div>
                 </div>
                 <button type="button" :aria-label="`Remove ${entry.display_name} manual model`" :disabled="busy" class="inline-flex size-10 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="remove(entry.id)">
                     <Trash2 class="size-4" aria-hidden="true" />

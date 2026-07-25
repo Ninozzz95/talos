@@ -152,7 +152,7 @@ async function toggleBiometric(): Promise<void> {
                     @click="tryOAuth(provider)"
                 >
                     {{ provider.label }}
-                    <span class="text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Soon</span>
+                    <span class="text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Soon</span>
                 </Button>
             </div>
         </section>

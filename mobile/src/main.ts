@@ -13,6 +13,7 @@ import App from './App.vue'
 import { router } from './router'
 import { configureNativeFraming } from './services/nativeFraming'
 import { applyTalosTheme, DEFAULT_THEME_STATE, useThemeStore } from '@/stores/theme'
+import { applyTalosFontScale, readRememberedTalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore } from '@/stores/settings'
 import { preloadTalosMobileRoutes } from '@/lib/mobileRoutes'
 
@@ -46,6 +47,11 @@ if (!disabled.has('theme')) {
     applyTalosTheme(DEFAULT_THEME_STATE.theme, DEFAULT_THEME_STATE.mode)
     void useThemeStore().hydrate()
 }
+
+// Owner 2026-07-25 (global font size): paint the FIRST frame at the user's
+// scale. The persisted value arrives over an async bridge, so boot reads the
+// synchronous mirror — same pattern as the theme preset above.
+applyTalosFontScale(readRememberedTalosFontScale())
 
 // Non-secret local preferences drive layout, visibility, shortcuts and Motion V6.
 // Hydration is independent from provider credentials and never requires a server.

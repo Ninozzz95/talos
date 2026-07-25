@@ -34,7 +34,7 @@ function onKeydown(event: KeyboardEvent): void {
         class="space-y-3"
         @keydown="onKeydown"
     >
-        <div class="text-[0.6875rem] font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
+        <div class="text-2xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
             Reasoning effort
         </div>
         <div
@@ -81,7 +81,7 @@ function onKeydown(event: KeyboardEvent): void {
 
         <p
             v-if="effortLadder.length <= 1"
-            class="text-[0.6875rem] leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
+            class="text-2xs leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
         >
             This model runs without a reasoning setting.
         </p>

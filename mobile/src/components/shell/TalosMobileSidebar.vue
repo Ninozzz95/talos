@@ -127,7 +127,7 @@ function confirmDelete(): void {
                      that pushed Tools to the bottom is gone — the sections now sit
                      together and the footer is pinned with mt-auto. -->
                 <nav aria-label="Chats" class="px-3 py-3 md:hidden">
-                    <p class="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Chats</p>
+                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Chats</p>
                     <button
                         type="button"
                         data-testid="talos-sidebar-chats-entry"
@@ -145,7 +145,7 @@ function confirmDelete(): void {
                     aria-label="Recent chats"
                     class="hidden min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 md:block"
                 >
-                    <p class="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Recents</p>
+                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Recents</p>
                     <p class="px-1 pb-2 text-xs text-[var(--talos-muted)]">
                         {{ props.sessions.length }} conversation{{ props.sessions.length === 1 ? '' : 's' }} on this device
                     </p>
@@ -179,7 +179,7 @@ function confirmDelete(): void {
                     aria-label="Tools"
                     class="px-3 pb-3 md:border-t md:border-[var(--talos-border)] md:pt-3"
                 >
-                    <p class="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Tools</p>
+                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Tools</p>
                     <ul class="space-y-0.5">
                         <li v-for="tool in TOOLS" :key="tool.route">
                             <button

@@ -33,14 +33,14 @@ const providerLabel = computed(() => {
             <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center gap-2">
                     <strong class="text-sm font-semibold">{{ title }}</strong>
-                    <span class="rounded border border-[var(--talos-danger-border)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--talos-danger)]">{{ fault.code }}</span>
+                    <span class="rounded border border-[var(--talos-danger-border)] px-1.5 py-0.5 font-mono text-3xs text-[var(--talos-danger)]">{{ fault.code }}</span>
                 </div>
                 <p class="mt-2 break-words text-sm leading-6 [overflow-wrap:anywhere]">{{ fault.message }}</p>
                 <div v-if="fault.nextAction" class="mt-3 border-t border-[var(--talos-danger-border)] pt-2">
-                    <div class="text-[11px] font-semibold uppercase text-[var(--talos-danger)]">Next action</div>
+                    <div class="text-2xs font-semibold uppercase text-[var(--talos-danger)]">Next action</div>
                     <p class="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{{ fault.nextAction }}</p>
                 </div>
-                <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[var(--talos-muted)]">
+                <div class="mt-3 flex flex-wrap items-center gap-2 text-2xs text-[var(--talos-muted)]">
                     <span v-if="providerLabel">{{ providerLabel }}</span>
                     <span v-if="fault.status">HTTP {{ fault.status }}</span>
                     <span v-if="fault.retryable !== null" class="rounded border border-[var(--talos-border)] px-1.5 py-0.5">

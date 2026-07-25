@@ -263,7 +263,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             </Button>
         </div>
 
-        <p class="px-5 pt-2 text-[11px] text-[var(--talos-muted)]">Hold a chat for actions.</p>
+        <p class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">Hold a chat for actions.</p>
 
         <p
             v-if="actionError && renameTarget === null && deleteTarget === null"
@@ -299,7 +299,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         @click="openSession(session.id)"
                     >
                         <span class="w-full truncate text-sm text-[var(--talos-text)]">{{ session.title || 'New chat' }}</span>
-                        <span v-if="session.updated_at" class="text-[11px] text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
+                        <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
                     </button>
                 </li>
             </ul>
@@ -337,7 +337,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                             @click="openSession(session.id)"
                         >
                             <span class="w-full truncate text-sm text-[var(--talos-muted)]">{{ session.title || 'New chat' }}</span>
-                            <span v-if="session.updated_at" class="text-[11px] text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
+                            <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
                         </button>
                     </li>
                 </ul>
