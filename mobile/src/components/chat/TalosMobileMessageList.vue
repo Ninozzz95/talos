@@ -165,7 +165,7 @@ function formatBytes(value: number): string {
         class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4"
         data-testid="talos-mobile-message-list"
         :data-text-scale="props.textScale ?? 'balanced'"
-        :style="{ fontSize: props.textScale === 'compact' ? '0.9375rem' : props.textScale === 'expanded' ? '1.1875rem' : '1.0625rem' }"
+        :style="{ fontSize: `calc(${props.textScale === 'compact' ? '0.9375rem' : props.textScale === 'expanded' ? '1.1875rem' : '1.0625rem'} * var(--talos-ui-scale, 1))` }"
     >
         <article
             v-for="(message, index) in messages"
@@ -207,7 +207,7 @@ function formatBytes(value: number): string {
                     <div
                         v-if="Array.isArray(message.metadata.used_memories) && message.metadata.used_memories.length"
                         data-testid="talos-used-memories"
-                        class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-[11px] leading-4"
+                        class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
                         :title="(message.metadata.used_memories as Array<{ title?: string }>).map((entry) => entry?.title ?? '').join(' · ')"
                     >
                         <BookMarked class="size-3.5 shrink-0" aria-hidden="true" />
@@ -230,7 +230,7 @@ function formatBytes(value: number): string {
                             :data-message-attachment-id="attachment.id"
                             :title="attachment.media_type"
                             role="listitem"
-                            class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-[11px] leading-4"
+                            class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
                         >
                             <Image
                                 v-if="attachment.media_type.startsWith('image/')"
@@ -248,7 +248,7 @@ function formatBytes(value: number): string {
                         :activities="message.browserActivities"
                     />
                 </div>
-                <div v-if="isGroupEnd(index)" class="talos-message-meta mt-1 flex max-w-[92%] items-center gap-1.5 px-1 font-mono text-[11px] text-[var(--talos-muted)]">
+                <div v-if="isGroupEnd(index)" class="talos-message-meta mt-1 flex max-w-[92%] items-center gap-1.5 px-1 font-mono text-2xs text-[var(--talos-muted)]">
                     <span>{{ message.role === 'user' ? 'You' : 'TALOS' }}</span>
                     <template v-if="modelLabel(message)">
                         <span aria-hidden="true">·</span>

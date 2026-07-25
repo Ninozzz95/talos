@@ -97,14 +97,14 @@ async function saveDisplayName(profileId: string): Promise<void> {
                     <TalosMobileProviderIcon :provider="profile.provider" class="mt-0.5 size-7 shrink-0" />
                     <div class="min-w-0 flex-1">
                         <h5 class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ profile.display_name }}</h5>
-                        <p class="truncate font-mono text-[11px] text-[var(--talos-muted)]">{{ profile.model }}</p>
+                        <p class="truncate font-mono text-2xs text-[var(--talos-muted)]">{{ profile.model }}</p>
                     </div>
-                    <span class="shrink-0 rounded border border-[var(--talos-border)] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--talos-muted)]">
+                    <span class="shrink-0 rounded border border-[var(--talos-border)] px-1.5 py-0.5 text-3xs font-semibold uppercase text-[var(--talos-muted)]">
                         {{ talosMobileProviderById(profile.provider).shortLabel }}
                     </span>
                 </header>
 
-                <div class="mt-3 flex flex-wrap gap-1.5 text-[10px] font-medium text-[var(--talos-muted)]">
+                <div class="mt-3 flex flex-wrap gap-1.5 text-3xs font-medium text-[var(--talos-muted)]">
                     <span class="rounded border border-[var(--talos-border)] px-1.5 py-1">
                         {{ profile.capabilities?.provenance === 'declared' ? 'Declared capabilities' : 'Observed metadata' }}
                     </span>

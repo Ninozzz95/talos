@@ -16,7 +16,7 @@ function pick(mode: TalosThemeMode): void { void theme.setMode(mode) }
 <template>
     <div data-testid="wizard-step-personalize" class="flex flex-col">
         <h1 class="talos-serif text-2xl font-semibold leading-tight text-[var(--talos-text)]">Personalize</h1>
-        <p class="mt-3 text-[15px] leading-7 text-[var(--talos-text)]">
+        <p class="mt-3 text-md leading-7 text-[var(--talos-text)]">
             Choose your appearance. More options live in Settings → Appearance.
         </p>
         <div

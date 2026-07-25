@@ -190,12 +190,12 @@ async function saveToLibrary(): Promise<void> {
         <section v-if="generated" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="min-w-0">
-                    <div class="text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Export preview</div>
+                    <div class="text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Export preview</div>
                     <div class="mt-0.5 truncate text-sm font-semibold text-[var(--talos-text)]">{{ generated.reportType }}</div>
                 </div>
                 <span
                     v-if="generated.benchmarkReady"
-                    class="rounded-full bg-[var(--talos-success,#3f9d6b)]/15 px-2 py-0.5 text-[11px] font-semibold text-[var(--talos-success,#3f9d6b)]"
+                    class="rounded-full bg-[var(--talos-success,#3f9d6b)]/15 px-2 py-0.5 text-2xs font-semibold text-[var(--talos-success,#3f9d6b)]"
                 >Benchmark ready</span>
             </div>
             <pre

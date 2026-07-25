@@ -193,28 +193,28 @@ function onKeydown(event: KeyboardEvent): void {
                 leave-to-class="opacity-0"
             >
                 <div :key="index">
-                    <p class="text-[11px] uppercase tracking-[0.25em] text-[var(--talos-muted,var(--muted-foreground))]">
+                    <p class="text-2xs uppercase tracking-[0.25em] text-[var(--talos-muted,var(--muted-foreground))]">
                         Step {{ index + 1 }} of {{ SLIDES.length }} &middot; {{ slide.label }}
                     </p>
                     <h1 id="talos-intro-title" class="mt-3 text-2xl font-semibold leading-tight text-[var(--talos-text,var(--foreground))]">
                         {{ slide.title }}
                     </h1>
-                    <p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-[var(--talos-accent,var(--primary))]">
+                    <p class="mt-1 text-2xs font-medium uppercase tracking-wide text-[var(--talos-accent,var(--primary))]">
                         {{ slide.status }}
                     </p>
-                    <p id="talos-intro-body" class="mt-4 text-[15px] leading-7 text-[var(--talos-text,var(--foreground))]">
+                    <p id="talos-intro-body" class="mt-4 text-md leading-7 text-[var(--talos-text,var(--foreground))]">
                         {{ slide.body }}
                     </p>
                     <p
                         v-if="slide.roadmap"
                         class="mt-4 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/60 p-3 text-sm leading-6 text-[var(--talos-muted,var(--muted-foreground))]"
                     >
-                        <span class="mr-2 inline-block rounded border border-current px-1.5 py-0.5 font-mono text-[10px] tracking-wider">ROADMAP</span>
+                        <span class="mr-2 inline-block rounded border border-current px-1.5 py-0.5 font-mono text-3xs tracking-wider">ROADMAP</span>
                         {{ slide.roadmap }}
                     </p>
                     <p
                         v-if="index === SLIDES.length - 1"
-                        class="mt-5 text-[13px] leading-6 text-[var(--talos-muted,var(--muted-foreground))]"
+                        class="mt-5 text-xsm leading-6 text-[var(--talos-muted,var(--muted-foreground))]"
                     >
                         {{ CLOSING_NOTE }}
                     </p>

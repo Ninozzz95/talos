@@ -131,7 +131,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                 </TabsTrigger>
 
                 <div v-for="group in resolvedGroups" :key="group.label" class="w-full">
-                    <p class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>
+                    <p class="mb-1.5 px-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ group.label }}</p>
                     <div class="divide-y divide-[var(--talos-border)] overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
                         <TabsTrigger
                             v-for="tab in group.tabs"
@@ -178,7 +178,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                      the one-line description hides when empty (Appearance dropped
                      its subtitle) — no stray bordered box above the content. -->
                 <header class="md:mb-4 md:border-b md:border-[var(--talos-border)] md:pb-3">
-                    <div class="hidden text-[10px] font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
+                    <div class="hidden text-3xs font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
                     <h3 class="talos-serif hidden text-base font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
                     <p v-if="tab.description" class="mb-3 text-xs leading-5 text-[var(--talos-muted)] md:mb-0 md:mt-1">{{ tab.description }}</p>
                 </header>

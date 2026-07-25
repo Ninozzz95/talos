@@ -11,7 +11,7 @@ const settings = useSettingsStore()
 <template>
     <div data-testid="wizard-step-protect" class="flex flex-col">
         <h1 class="talos-serif text-2xl font-semibold leading-tight text-[var(--talos-text)]">Protect</h1>
-        <p class="mt-3 text-[15px] leading-7 text-[var(--talos-text)]">
+        <p class="mt-3 text-md leading-7 text-[var(--talos-text)]">
             Optionally require a PIN when TALOS starts. The PIN never leaves this device — only a
             salted derivation is kept in the secure Keystore.
         </p>

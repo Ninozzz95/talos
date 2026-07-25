@@ -144,7 +144,7 @@ function onListKeydown(event: KeyboardEvent): void {
                 >
                     <WandSparkles class="size-3.5 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
                     Auto
-                    <span class="ml-1 min-w-0 truncate text-[0.625rem] font-normal normal-case">
+                    <span class="ml-1 min-w-0 truncate text-3xs font-normal normal-case">
                         routing picks the model per turn
                     </span>
                 </header>
@@ -172,7 +172,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     <WandSparkles class="size-5 shrink-0 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.name }}</span>
-                        <span class="truncate text-[0.6875rem] text-[var(--talos-muted,var(--muted-foreground))]">
+                        <span class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
                             {{ profile.lane_count }} lanes - {{ profile.status }}
                         </span>
                     </span>
@@ -225,10 +225,10 @@ function onListKeydown(event: KeyboardEvent): void {
                     <TalosMobileProviderIcon :provider="profile.provider" class="size-8" />
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.display_name }}</span>
-                        <span class="truncate font-mono text-[0.6875rem] text-[var(--talos-muted,var(--muted-foreground))]">
+                        <span class="truncate font-mono text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
                             {{ profile.model }} - {{ profile.status }}
                         </span>
-                        <span class="truncate text-[0.6875rem] text-[var(--talos-muted,var(--muted-foreground))]">
+                        <span class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
                             {{ compatibilityLabel(profile) }}
                             <template v-if="contextLabel(profile)"> - {{ contextLabel(profile) }}</template>
                             <template v-if="modalityLabel(profile)"> - {{ modalityLabel(profile) }}</template>

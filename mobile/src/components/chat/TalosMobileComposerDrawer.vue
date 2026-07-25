@@ -161,7 +161,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                     </span>
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="text-sm">Improve prompt</span>
-                        <span class="text-[11px] text-[var(--talos-muted)]">
+                        <span class="text-2xs text-[var(--talos-muted)]">
                             {{ enhanceReason ?? 'Rewrite your draft with the selected model' }}
                         </span>
                     </span>

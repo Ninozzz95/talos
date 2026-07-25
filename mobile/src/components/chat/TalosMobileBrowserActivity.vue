@@ -109,14 +109,14 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
                     class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2"
                 >
                     <div class="font-semibold">{{ item.snapshot.title || 'Captured page' }}</div>
-                    <div v-if="item.snapshot.url" class="mt-1 break-all text-[10px] text-[var(--talos-muted)]">{{ item.snapshot.url }}</div>
+                    <div v-if="item.snapshot.url" class="mt-1 break-all text-3xs text-[var(--talos-muted)]">{{ item.snapshot.url }}</div>
                     <div class="mt-2 space-y-1">
                         <div
                             v-for="node in item.snapshot.nodes.slice(0, 100)"
                             :key="node.ref"
                             class="grid min-w-0 grid-cols-[72px_1fr] gap-2 rounded border border-[var(--talos-border)] px-2 py-1"
                         >
-                            <span class="truncate font-mono text-[10px] uppercase text-[var(--talos-accent)]">{{ node.role }}</span>
+                            <span class="truncate font-mono text-3xs uppercase text-[var(--talos-accent)]">{{ node.role }}</span>
                             <span class="min-w-0 break-words [overflow-wrap:anywhere]">{{ node.name || '(unnamed)' }}</span>
                         </div>
                     </div>

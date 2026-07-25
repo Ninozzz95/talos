@@ -209,15 +209,15 @@ function scopeLabel(memory: TalosLocalMemory): string {
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-1.5">
                             <span class="text-sm font-semibold text-[var(--talos-text)]">{{ memory.title }}</span>
-                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ memory.kind.replace('_', ' ') }}</span>
-                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ scopeLabel(memory) }}</span>
+                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ memory.kind.replace('_', ' ') }}</span>
+                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ scopeLabel(memory) }}</span>
                             <span
                                 v-if="memory.status !== 'active'"
-                                class="rounded-full bg-[var(--talos-danger,#dc5b5b)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-danger,#dc5b5b)]"
+                                class="rounded-full bg-[var(--talos-danger,#dc5b5b)]/15 px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-danger,#dc5b5b)]"
                             >{{ memory.status }}</span>
                         </div>
                         <p class="mt-1 line-clamp-2 text-xs leading-5 text-[var(--talos-muted)]">{{ memory.content }}</p>
-                        <p v-if="memory.last_used_at" class="mt-1 text-[11px] text-[var(--talos-muted)]">
+                        <p v-if="memory.last_used_at" class="mt-1 text-2xs text-[var(--talos-muted)]">
                             Used {{ talosRelativeTime(memory.last_used_at) }}
                         </p>
                     </div>

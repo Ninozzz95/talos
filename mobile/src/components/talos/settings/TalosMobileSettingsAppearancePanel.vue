@@ -21,6 +21,7 @@ import {
     TALOS_MOTION_QUALITY_LEVELS,
     TALOS_MOTION_RENDERER_MODES,
 } from '@/motion-v6/contracts'
+import { TALOS_FONT_SCALE_OPTIONS, type TalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore, type TalosMotionPreferencePatch } from '@/stores/settings'
 import { useThemeStore } from '@/stores/theme'
 
@@ -237,6 +238,22 @@ function onSwipeEnd(event: PointerEvent): void {
                         :class="settings.state.shell.launcher_icon_follows_theme ? 'bg-[var(--talos-accent)]' : 'bg-[var(--talos-border)]'"
                         @click="settings.setShell({ launcher_icon_follows_theme: !settings.state.shell.launcher_icon_follows_theme })"
                     ><span class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200" :class="settings.state.shell.launcher_icon_follows_theme ? 'left-[22px]' : 'left-0.5'" aria-hidden="true" /></button>
+                </label>
+                <!-- Owner 2026-07-25: this one is GLOBAL — menus, settings,
+                     header, sheets and chat all read the same scale. -->
+                <label class="block">
+                    <span :class="selectLabelClass">Font size</span>
+                    <TalosThemedSelect
+                        class="mt-2"
+                        data-testid="talos-font-scale-select"
+                        :model-value="settings.state.shell.ui_font_scale"
+                        :items="TALOS_FONT_SCALE_OPTIONS"
+                        aria-label="Font size"
+                        @update:model-value="settings.setShell({ ui_font_scale: $event as TalosFontScale })"
+                    />
+                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">
+                        Scales text across the whole app — chat, menus, settings and chrome.
+                    </span>
                 </label>
                 <label class="block">
                     <span :class="selectLabelClass">Chat message size</span>

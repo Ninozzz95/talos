@@ -78,7 +78,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                 </button>
                 <div class="min-w-0 flex-1">
                     <p class="talos-serif truncate text-lg font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
-                    <p v-if="!subView && description" class="truncate text-[11px] text-[var(--talos-muted)]">{{ description }}</p>
+                    <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
                 </div>
                 <button
                     v-if="presentation === 'drawer'"

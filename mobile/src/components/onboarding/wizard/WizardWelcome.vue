@@ -6,9 +6,9 @@ const emit = defineEmits<{ skipAll: [] }>()
 
 <template>
     <div data-testid="wizard-step-welcome" class="flex flex-col">
-        <p class="text-[11px] uppercase tracking-[0.25em] text-[var(--talos-muted)]">Set up your workspace</p>
+        <p class="text-2xs uppercase tracking-[0.25em] text-[var(--talos-muted)]">Set up your workspace</p>
         <h1 class="talos-serif mt-3 text-2xl font-semibold leading-tight text-[var(--talos-text)]">Set up your TALOS</h1>
-        <p class="mt-4 text-[15px] leading-7 text-[var(--talos-text)]">
+        <p class="mt-4 text-md leading-7 text-[var(--talos-text)]">
             A calm, local-first workspace. Give it a name, make it yours, and (optionally) lock it —
             it takes seconds and everything stays on this device.
         </p>

@@ -116,10 +116,10 @@ async function remove(note: TalosLocalNote): Promise<void> {
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-1.5">
                             <span class="text-sm font-semibold text-[var(--talos-text)]">{{ note.title }}</span>
-                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--talos-muted)]">untrusted</span>
+                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">untrusted</span>
                         </div>
                         <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-[var(--talos-muted)]">{{ note.content }}</p>
-                        <p class="mt-1 text-[11px] text-[var(--talos-muted)]">{{ talosRelativeTime(note.updated_at) }}</p>
+                        <p class="mt-1 text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(note.updated_at) }}</p>
                     </div>
                     <button
                         type="button"

@@ -38,7 +38,7 @@ const retryArtifactId = computed(() => {
 
 <template>
     <figure v-if="artifacts.length" class="mt-3 min-w-0 max-w-full overflow-hidden" data-testid="talos-mobile-browser-screenshot-evidence">
-        <figcaption class="mb-2 flex items-center justify-between gap-3 text-[10px] font-semibold uppercase text-[var(--talos-muted)]">
+        <figcaption class="mb-2 flex items-center justify-between gap-3 text-3xs font-semibold uppercase text-[var(--talos-muted)]">
             <span>Integrity-verified capture</span>
             <span>{{ artifacts.length }} capture{{ artifacts.length === 1 ? '' : 's' }}</span>
         </figcaption>
@@ -59,7 +59,7 @@ const retryArtifactId = computed(() => {
                     class="aspect-[8/5] w-full max-w-full bg-[var(--talos-panel-soft)] object-contain"
                     loading="lazy"
                 >
-                <span class="absolute bottom-2 right-2 rounded border border-[var(--talos-border)] bg-[var(--talos-background)]/90 px-2 py-1 text-[10px] font-semibold">Inspect</span>
+                <span class="absolute bottom-2 right-2 rounded border border-[var(--talos-border)] bg-[var(--talos-background)]/90 px-2 py-1 text-3xs font-semibold">Inspect</span>
             </button>
         </div>
     </figure>

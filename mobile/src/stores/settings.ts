@@ -23,6 +23,11 @@ import {
     type TalosMobileEffortLevel,
 } from '@/lib/mobileEffort'
 import { TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
+import {
+    parseTalosFontScale,
+    TALOS_DEFAULT_FONT_SCALE,
+    type TalosFontScale,
+} from '@/lib/talosFontScale'
 import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
@@ -87,6 +92,8 @@ export interface TalosMobileShellPreferences {
     library_autosave_generated: boolean
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
     library_view: 'grid' | 'list'
+    /** Owner 2026-07-25: GLOBAL text size — chat, menus, settings, chrome. */
+    ui_font_scale: TalosFontScale
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
 }
@@ -102,6 +109,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     library_context_enabled: false,
     library_autosave_generated: false,
     library_view: 'list',
+    ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -132,6 +140,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
         // documented 'list' default never shipped.
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
+        ui_font_scale: parseTalosFontScale(record.ui_font_scale),
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }
