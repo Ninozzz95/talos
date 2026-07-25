@@ -36,14 +36,15 @@
     <div id="app">
         <h1>Test della ricerca intelligente</h1>
         <p class="sub">
-            Misura sul TUO telefono sette modelli che capiscono il significato delle parole,
-            e li confronta con la ricerca che TALOS usa oggi. Sette candidati, dal piu leggero
-            (22 MB) al peso massimo (Qwen3 da 0,6 miliardi di parametri): in totale puo scaricare
-            oltre <b>1,5 GB</b>. <b>Solo su Wi-Fi</b>, con lo schermo acceso e la batteria non
-            scarica. Puoi lanciarli tutti in fila oppure uno per volta con i pulsanti sotto.
-            Nessun dato tuo viene usato o inviato: il test usa 24 documenti finti in italiano.
+            <b>Round 2.</b> Ora misura anche: quanto costa la <b>seconda</b> apertura (i modelli
+            gia scaricati restano in memoria del telefono), i modelli che la GPU aveva rifiutato
+            (riprovati su CPU), i <b>documenti lunghi spezzettati</b> come quelli veri, e la
+            <b>fusione</b> fra ricerca a parole chiave e ricerca per significato.
+            <b>Solo su Wi-Fi</b>, schermo acceso. Cio che avevi gia scaricato non si riscarica.
+            Nessun dato tuo viene usato: 24 note brevi + 8 documenti lunghi, tutti finti.
         </p>
         <button id="run">Avvia tutti in fila</button>
+        <button id="base" class="ghost">Solo riferimento</button>
         <button id="copy" class="ghost">Copia risultati</button>
         <div id="picker" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;"></div>
 
@@ -51,8 +52,9 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Candidato</th><th>Scaricato</th><th>Avvio</th><th>Indicizzazione</th>
-                        <th>Query</th><th>1° colpo</th><th>Nei primi 3</th><th>RAM</th>
+                        <th>Candidato</th><th>Scaricato</th><th>Avvio<br>freddo/caldo</th>
+                        <th>Indicizza<br>(lunghi)</th><th>Query</th><th>1° colpo<br>corti</th>
+                        <th>1° colpo<br>lunghi</th><th>1° colpo<br>ibrido</th>
                     </tr>
                 </thead>
                 <tbody id="rows"></tbody>
