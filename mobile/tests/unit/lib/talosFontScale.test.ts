@@ -19,7 +19,8 @@ describe('talosFontScale', () => {
         expect(parseTalosFontScale('enormous')).toBe(TALOS_DEFAULT_FONT_SCALE)
         expect(parseTalosFontScale(null)).toBe(TALOS_DEFAULT_FONT_SCALE)
         expect(parseTalosFontScale(0)).toBe(TALOS_DEFAULT_FONT_SCALE)
-        expect(talosFontScaleFactor(parseTalosFontScale(undefined))).toBe(1)
+        expect(talosFontScaleFactor(parseTalosFontScale(undefined)))
+            .toBe(talosFontScaleFactor(TALOS_DEFAULT_FONT_SCALE))
     })
 
     it('every offered option maps to a distinct, monotonically growing factor', () => {

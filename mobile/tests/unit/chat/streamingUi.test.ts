@@ -24,6 +24,8 @@ const profiles: TalosMobileModelProfileView[] = [{
     show_in_composer: true, capabilities: null, probe_ok: true,
 }]
 
+const LF = String.fromCharCode(10)
+
 function mountStreaming(sending: boolean, streamingText: string | null) {
     mockChatState.state = reactive({ sending, streamingText })
     return mount(TalosMobileStreamingReply)
@@ -31,28 +33,63 @@ function mountStreaming(sending: boolean, streamingText: string | null) {
 
 describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
     it('F5.1 (owner): streaming text renders as PROGRESSIVE MARKDOWN, not plain text', async () => {
-        const wrapper = mountStreaming(true, '## Piano\n\n- primo punto\n\n```ts\nconst x =')
-        const live = wrapper.get('[data-testid="talos-mobile-streaming"]')
+        const wrapper = mountStreaming(true, '## Piano' + LF + LF + '- primo punto' + LF + LF + '```ts' + LF + 'const x =')
+        // Owner 2026-07-25: the reveal is paced on a frame clock now, so the
+        // markdown appears as the letters land, not in one 120ms jump.
         await vi.waitFor(() => {
+            const live = wrapper.get('[data-testid="talos-mobile-streaming"]')
             expect(live.find('h2').exists()).toBe(true)
-        })
-        expect(live.get('h2').text()).toBe('Piano')
-        expect(live.find('li').exists()).toBe(true)
-        // The unterminated fence is auto-closed so the code renders instead of flickering raw.
-        expect(live.find('pre').exists()).toBe(true)
+            expect(live.find('li').exists()).toBe(true)
+            // The unterminated fence is auto-closed: code renders instead of raw.
+            expect(live.find('pre').exists()).toBe(true)
+        }, { timeout: 4000 })
+        expect(wrapper.get('h2').text()).toBe('Piano')
     })
 
-    it('renders the live streaming text as an in-progress assistant section instead of typing dots', () => {
+    it('renders the live streaming text as an in-progress assistant section instead of typing dots', async () => {
         const wrapper = mountStreaming(true, 'Streaming ans')
-        const live = wrapper.get('[data-testid="talos-mobile-streaming"]')
-        expect(live.text()).toContain('Streaming ans')
+        await vi.waitFor(() => {
+            expect(wrapper.get('[data-testid="talos-mobile-streaming"]').text()).toContain('Streaming ans')
+        }, { timeout: 4000 })
         expect(wrapper.find('[data-testid="talos-mobile-typing"]').exists()).toBe(false)
     })
 
-    it('keeps the typing dots while sending WITHOUT streamed text yet', () => {
+    it('owner 2026-07-25: while printing there are NO typing dots — the caret is the indicator', async () => {
+        const wrapper = mountStreaming(true, 'Sto scrivendo una risposta lunga abbastanza da restare in coda.')
+        await vi.waitFor(() => {
+            expect(wrapper.get('[data-testid="talos-mobile-streaming"]').text()).toContain('Sto scriv')
+            const caret = wrapper.find('[data-testid="talos-stream-caret"]')
+            expect(caret.exists()).toBe(true)
+            // Pin the CLASS: it is what paints the blinking block.
+            expect(caret.classes()).toContain('talos-stream-caret')
+        }, { timeout: 4000 })
+        expect(wrapper.find('.talos-typing-dot').exists()).toBe(false)
+    })
+
+    it('owner 2026-07-25: each revealed letter is its own animated node (fluid, not jumpy)', async () => {
+        const wrapper = mountStreaming(true, 'Fluido come una macchina da scrivere che non salta mai una lettera.')
+        await vi.waitFor(() => {
+            expect(wrapper.findAll('.talos-stream-char').length).toBeGreaterThan(0)
+        }, { timeout: 4000 })
+        const tail = wrapper.get('[data-testid="talos-stream-tail"]')
+        // The tail lives INSIDE the rendered markdown, so letters continue the
+        // current line instead of dropping to a new one.
+        expect(tail.element.closest('.talos-message-content')).not.toBeNull()
+    })
+
+    it('owner 2026-07-25: waiting shows the mark ALONE — no bubble, no container', () => {
         const wrapper = mountStreaming(true, null)
-        expect(wrapper.find('[data-testid="talos-mobile-typing"]').exists()).toBe(true)
+        const waiting = wrapper.get('[data-testid="talos-mobile-typing"]')
         expect(wrapper.find('[data-testid="talos-mobile-streaming"]').exists()).toBe(false)
+        // "levare il logo di caricamento dal suo container stile bolle,
+        // mantenere solo il logo": no border, no panel fill, no bubble radius.
+        // Any surface treatment at all re-creates the container the owner asked
+        // to remove — match the shape of the utility, not four known names.
+        for (const utility of waiting.classes()) {
+            expect(utility, `waiting state must stay bare: ${utility}`)
+                .not.toMatch(/^(rounded|border|bg-|shadow|ring|backdrop)/)
+        }
+        expect(waiting.find('svg').exists()).toBe(true)
     })
 
     it('renders nothing at all when idle', () => {

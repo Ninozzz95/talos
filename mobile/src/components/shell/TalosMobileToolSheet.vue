@@ -77,7 +77,7 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     <ArrowLeft class="h-4 w-4" aria-hidden="true" />
                 </button>
                 <div class="min-w-0 flex-1">
-                    <p class="talos-serif truncate text-lg font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
+                    <p class="talos-title truncate text-md font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
                     <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
                 </div>
                 <button

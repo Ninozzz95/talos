@@ -306,27 +306,56 @@
 
 /* Owner 2026-07-24 (Claude-style): editorial serif for surface titles. System
    serif stack — zero bundle cost, renders like Claude's "Chat"/"Impostazioni". */
+/* Owner 2026-07-25: "il font dei titoli dell'header più piccolo e coerente col
+   resto dei font size e family". Chrome titles (header, screen, tool sheet,
+   settings detail) now use the SAME family as the rest of the interface and a
+   size token from the same scale, so they grow and shrink with Font size
+   instead of standing apart in a serif at a fixed step above everything else.
+   `.talos-serif` stays for the branded onboarding wizard only. */
+.talos-title {
+    font-family: var(--talos-font-ui, ui-sans-serif, system-ui, sans-serif);
+    letter-spacing: 0.005em;
+}
+
 .talos-serif {
     font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
     letter-spacing: 0.01em;
 }
 
 /* F2-T2: 3-dot typing indicator (refinement-brief), engine-calm, reduced-motion safe. */
-.talos-typing-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 9999px;
-    background: var(--talos-accent, #c08b3c);
-    animation: talosTypingBounce 1.2s ease-in-out infinite;
+/* Owner 2026-07-25 — typewriter reveal. The three bouncing dots are GONE while
+   text is printing: the caret IS the activity indicator, sitting exactly where
+   the next letter lands. One span per freshly revealed letter, so only the new
+   glyph animates — text already on screen is never re-animated or re-laid-out. */
+.talos-stream-tail { white-space: pre-wrap; }
+.talos-stream-char {
+    display: inline;
+    animation: talosStreamInk var(--talos-motion-duration-control, 160ms)
+        var(--talos-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
 }
-.talos-typing-dot:nth-child(2) { animation-delay: 0.15s; }
-.talos-typing-dot:nth-child(3) { animation-delay: 0.3s; }
-@keyframes talosTypingBounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-    30% { transform: translateY(-4px); opacity: 1; }
+@keyframes talosStreamInk {
+    from { opacity: 0; filter: blur(1.6px); }
+    to { opacity: 1; filter: blur(0); }
+}
+/* The retro-futuristic prompt: a solid accent block with a faint bloom. */
+.talos-stream-caret {
+    display: inline-block;
+    width: 0.52em;
+    height: 1.02em;
+    margin-left: 0.08em;
+    vertical-align: -0.16em;
+    border-radius: 1px;
+    background: var(--talos-accent, #c08b3c);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--talos-accent, #c08b3c) 55%, transparent);
+    animation: talosCaretBlink calc(var(--talos-motion-duration-control, 160ms) * 6.6) steps(1, end) infinite;
+}
+@keyframes talosCaretBlink {
+    0%, 55% { opacity: 1; }
+    56%, 100% { opacity: 0.12; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .talos-typing-dot { animation: none; opacity: 0.7; }
+    .talos-stream-char { animation: none; }
+    .talos-stream-caret { animation: none; opacity: 0.85; }
 }
 
 /* F4-#24 (owner): loading-answer bubble — boot-logo styled line loader. The

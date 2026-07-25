@@ -179,7 +179,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                      its subtitle) — no stray bordered box above the content. -->
                 <header class="md:mb-4 md:border-b md:border-[var(--talos-border)] md:pb-3">
                     <div class="hidden text-3xs font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
-                    <h3 class="talos-serif hidden text-base font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
+                    <h3 class="talos-title hidden text-md font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
                     <p v-if="tab.description" class="mb-3 text-xs leading-5 text-[var(--talos-muted)] md:mb-0 md:mt-1">{{ tab.description }}</p>
                 </header>
 

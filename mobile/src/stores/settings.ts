@@ -10,6 +10,9 @@
 import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
+
+/** Owner 2026-07-25: "di default large font size e small chat font size". */
+const TALOS_MOBILE_DEFAULT_BUBBLE_SCALE = 'compact' as const
 import type { TalosChatLayoutPreferences } from '@/lib/talosTypes'
 import {
     parseTalosMotionV6Preferences,
@@ -369,6 +372,29 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         shellParsed.library_context_enabled = false
         shellParsed.library_autosave_generated = false
     }
+    // Owner 2026-07-25: "di default large font size e small chat font size".
+    // Same lesson as above — a changed default only reaches fresh installs, so
+    // this migration applies it ONCE to an install that already persisted the
+    // old values. A later deliberate change sticks: the flag is true by then.
+    // It only moves values the user never touched: an install still sitting on
+    // the PREVIOUS default follows the new one, while an explicit choice — the
+    // contract "post-v3 explicit choices stick" — is left exactly as chosen.
+    // Owner 2026-07-25: "di default large font size e small chat font size".
+    // ONE-TIME, and honestly scoped: a stored value equal to the PREVIOUS
+    // default is indistinguishable from "never touched", so it moves; anything
+    // else the user actually chose is left alone. `talosChatLayout.ts` is a
+    // hash-pinned desktop port, so the mobile default lives here — the
+    // divergence is deliberate and belongs in the desktop mirror ticket.
+    if (value.type_defaults_v1 !== true) {
+        const shellRecord = (value.shell ?? {}) as Record<string, unknown>
+        const layoutRecord = (value.chat_layout ?? {}) as Record<string, unknown>
+        if (shellRecord.ui_font_scale === undefined || shellRecord.ui_font_scale === 'default') {
+            shellParsed.ui_font_scale = TALOS_DEFAULT_FONT_SCALE
+        }
+        if (layoutRecord.bubble_scale === undefined || layoutRecord.bubble_scale === 'balanced') {
+            chatLayout.bubble_scale = TALOS_MOBILE_DEFAULT_BUBBLE_SCALE
+        }
+    }
     return {
         shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),
@@ -421,6 +447,7 @@ export function useSettingsStore(): SettingsStore {
                 presentation_v2: true,
                 defaults_v3: true,
                 library_defaults_v1: true,
+                type_defaults_v1: true,
                 shell: state.shell,
                 onboarding: state.onboarding,
                 security: state.security,
