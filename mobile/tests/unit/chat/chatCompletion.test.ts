@@ -66,7 +66,7 @@ describe('buildChatCompletion', () => {
         const ctx: CompletionContext = { profile: anthropicProfile, providerModel: anthropicModel, apiKey: 'sk-ant', timeoutMs: 47_000, effort: 'high', thinking: true, system: 'sys' }
         const complete = buildChatCompletion(() => ctx, transport)
         const out = await complete([{ role: 'user', content: 'ping' }])
-        expect(out).toBe('pong')
+        expect(out.text).toBe('pong')
         const arg = request.mock.calls[0][0]
         expect(arg.headers['x-api-key']).toBe('sk-ant')
         expect(arg.data.model).toBe('claude-opus-4-8')
@@ -88,7 +88,7 @@ describe('buildChatCompletion', () => {
             profile: { ...anthropicProfile, provider: 'openrouter', model: providerModel.id },
             providerModel, apiKey: 'k', effort: 'off', thinking: false,
         }), { request })
-        await expect(complete([{ role: 'user', content: 'hi' }])).resolves.toBe('router pong')
+        await expect(complete([{ role: 'user', content: 'hi' }])).resolves.toMatchObject({ text: 'router pong' })
         expect(request.mock.calls[0][0].url).toBe('https://openrouter.ai/api/v1/chat/completions')
     })
 })

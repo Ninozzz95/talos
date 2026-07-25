@@ -15,7 +15,7 @@ describe('chat store streaming (F2-T4)', () => {
         const complete: ChatCompletion = async (_turns, stream) => {
             stream?.onChunk('Hel')
             stream?.onChunk('lo')
-            return 'Hello'
+            return { text: 'Hello', finishReason: 'stop' }
         }
         const store = await readyStore(complete)
         const seen: Array<string | null> = []

@@ -42,7 +42,7 @@ describe('buildChatCompletion streaming routing (F2-T4)', () => {
             [{ role: 'user', content: 'hi' }],
             { onChunk: (chunk) => chunks.push(chunk) },
         )
-        expect(text).toBe('Hello')
+        expect(text.text).toBe('Hello')
         expect(chunks).toEqual(['He', 'llo'])
         expect(complete).not.toHaveBeenCalled()
     })
@@ -55,7 +55,7 @@ describe('buildChatCompletion streaming routing (F2-T4)', () => {
         })
         const completion = buildChatCompletion(contextFor)
         const text = await completion([{ role: 'user', content: 'hi' }], { onChunk: () => {} })
-        expect(text).toBe('Buffered answer')
+        expect(text.text).toBe('Buffered answer')
         expect(streamComplete).toHaveBeenCalledOnce()
         expect(complete).toHaveBeenCalledOnce()
     })
@@ -98,7 +98,7 @@ describe('buildChatCompletion streaming routing (F2-T4)', () => {
         })
         const completion = buildChatCompletion(contextFor)
         const text = await completion([{ role: 'user', content: 'hi' }], { onChunk: () => {} })
-        expect(text).toBe('Plain answer')
+        expect(text.text).toBe('Plain answer')
         expect(complete).toHaveBeenCalledOnce()
     })
 })

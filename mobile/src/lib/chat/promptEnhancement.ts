@@ -194,7 +194,7 @@ export async function runTalosMobilePromptEnhancement(
             }),
             transport,
         )
-        const content = await completion([{
+        const { text: content } = await completion([{
             role: 'user',
             content: JSON.stringify(payload),
         }])

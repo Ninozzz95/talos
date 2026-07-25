@@ -18,7 +18,7 @@ describe('createChatStore durable sessions', () => {
         const now = makeClock()
         const makeId = makeIds()
         const repository = createMemoryChatRepository({ now })
-        const first = createChatStore(vi.fn().mockResolvedValue('unused'), { repository, makeId, now })
+        const first = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
         await first.initialize()
 
         await first.setSurface('browse')
@@ -50,7 +50,7 @@ describe('createChatStore durable sessions', () => {
             expect.objectContaining({ id: 'manual-open', message_id: null }),
         ])
 
-        const restored = createChatStore(vi.fn().mockResolvedValue('unused'), { repository, makeId, now })
+        const restored = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
         await restored.initialize()
         expect(restored.activeSession.value?.surface).toBe('browse')
         expect(restored.sessionBrowserActivities).toEqual([
@@ -64,7 +64,7 @@ describe('createChatStore durable sessions', () => {
     it('BR-A5 persists late browser events to their owner without leaking into the selected session', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
-        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository, makeId: makeIds(), now,
         })
         await store.initialize()
@@ -96,7 +96,7 @@ describe('createChatStore durable sessions', () => {
         const now = makeClock()
         const makeId = makeIds()
         const repository = createMemoryChatRepository({ now })
-        const first = createChatStore(vi.fn().mockResolvedValue('Page summary.'), { repository, makeId, now })
+        const first = createChatStore(vi.fn().mockResolvedValue({ text: 'Page summary.', finishReason: 'stop' }), { repository, makeId, now })
         await first.initialize()
         await first.send('Inspect https://example.com', 'anthropic:claude-live')
         const assistant = first.messages.find((message) => message.role === 'assistant')!
@@ -131,7 +131,7 @@ describe('createChatStore durable sessions', () => {
             operation: 'session_start', status: 'succeeded', payload: {}, evidence: {}, created_at: now(),
         })
 
-        const restored = createChatStore(vi.fn().mockResolvedValue('unused'), { repository, makeId, now })
+        const restored = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
         await restored.initialize()
         const restoredAssistant = restored.messages.find((message) => message.id === assistant.id)!
 
@@ -184,7 +184,7 @@ describe('createChatStore durable sessions', () => {
             text: file.extracted_text!,
             sha256: file.sha256!,
         }])
-        const complete = vi.fn().mockResolvedValue('Read it.')
+        const complete = vi.fn().mockResolvedValue({ text: 'Read it.', finishReason: 'stop' })
         const first = createChatStore(complete, { repository, makeId, now, resolveMessageParts })
         await first.initialize()
 
@@ -206,7 +206,7 @@ describe('createChatStore durable sessions', () => {
         })])
         expect(resolveMessageParts).toHaveBeenCalledWith(user.id)
 
-        const restored = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const restored = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository,
             makeId,
             now,
@@ -228,7 +228,7 @@ describe('createChatStore durable sessions', () => {
             expect(await repository.listMessages(sessionId!)).toEqual([
                 expect.objectContaining({ role: 'user', content: 'Hello', state: 'persisted' }),
             ])
-            return 'Hi there'
+            return { text: 'Hi there', finishReason: 'stop' }
         })
         const store = createChatStore(complete, { repository, makeId: makeIds(), now })
 
@@ -248,7 +248,7 @@ describe('createChatStore durable sessions', () => {
         const now = makeClock()
         const makeId = makeIds()
         const repository = createMemoryChatRepository({ now })
-        const firstCompletion = vi.fn().mockResolvedValue('A1')
+        const firstCompletion = vi.fn().mockResolvedValue({ text: 'A1', finishReason: 'stop' })
         const first = createChatStore(firstCompletion, { repository, makeId, now })
         await first.initialize()
         await first.send('Q1', 'anthropic:claude-live')
@@ -275,14 +275,14 @@ describe('createChatStore durable sessions', () => {
         const now = makeClock()
         const makeId = makeIds()
         const repository = createMemoryChatRepository({ now })
-        const first = createChatStore(vi.fn().mockResolvedValue('A1'), { repository, makeId, now })
+        const first = createChatStore(vi.fn().mockResolvedValue({ text: 'A1', finishReason: 'stop' }), { repository, makeId, now })
         await first.initialize()
         await first.send('Q1', 'anthropic:claude-live', {
             command_id: 'resend_message',
             resend_of_message_id: 'original-user',
         })
 
-        const restored = createChatStore(vi.fn().mockResolvedValue('unused'), { repository, makeId, now })
+        const restored = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
         await restored.initialize()
         expect(restored.messages[0]).toMatchObject({
             model_profile_id: 'anthropic:claude-live',
@@ -297,7 +297,7 @@ describe('createChatStore durable sessions', () => {
     it('creates, switches, renames, and deletes durable sessions', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
-        const store = createChatStore(vi.fn().mockResolvedValue('answer'), {
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'answer', finishReason: 'stop' }), {
             repository,
             makeId: makeIds(),
             now,
@@ -328,7 +328,7 @@ describe('createChatStore durable sessions', () => {
     it('persists session-scoped drafts and an immediate active model change', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
-        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository,
             makeId: makeIds(),
             now,
@@ -357,7 +357,7 @@ describe('createChatStore durable sessions', () => {
         const initialize = vi.spyOn(repository, 'initialize')
             .mockRejectedValueOnce(new Error('database unavailable'))
             .mockResolvedValue(undefined)
-        const complete = vi.fn().mockResolvedValue('must not run')
+        const complete = vi.fn().mockResolvedValue({ text: 'must not run', finishReason: 'stop' })
         const store = createChatStore(complete, { repository, makeId: makeIds(), now })
 
         await store.initialize()
@@ -391,7 +391,7 @@ describe('createChatStore durable sessions', () => {
         await first.initialize()
         await first.send('hi', 'deepseek:deepseek-chat')
 
-        const restored = createChatStore(vi.fn().mockResolvedValue('unused'), { repository, makeId, now })
+        const restored = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), { repository, makeId, now })
         await restored.initialize()
         expect(restored.state.sending).toBe(false)
         expect(restored.messages.at(-1)).toMatchObject({
@@ -435,7 +435,7 @@ describe('createChatStore durable sessions', () => {
     it('assembles an export snapshot of the active session with sha256-enriched attachments', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
-        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository, makeId: makeIds(), now,
         })
         await store.initialize()
@@ -476,7 +476,7 @@ describe('createChatStore durable sessions', () => {
     it('archives and unarchives a session through metadata without losing other keys', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
-        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository, makeId: makeIds(), now,
         })
         await store.initialize()
@@ -497,7 +497,7 @@ describe('createChatStore durable sessions', () => {
     it('persists a manual order as sort_index for every listed session', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
-        const store = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository, makeId: makeIds(), now,
         })
         await store.initialize()
@@ -514,7 +514,7 @@ describe('createChatStore durable sessions', () => {
         expect(byId.get(third.id)?.metadata.sort_index).toBe(1)
         expect(byId.get(first.id)?.metadata.sort_index).toBe(2)
 
-        const reloaded = createChatStore(vi.fn().mockResolvedValue('unused'), {
+        const reloaded = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
             repository, makeId: makeIds(), now,
         })
         await reloaded.initialize()

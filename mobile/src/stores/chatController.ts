@@ -565,7 +565,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 pendingLibraryBlock = null
                 librarySelection = []
             }
-            const raw = await buildChatCompletion(
+            const completion = await buildChatCompletion(
                 () => ({
                     profile,
                     providerModel,
@@ -580,6 +580,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 }),
                 deps.transport,
             )(payloadTurns, stream)
+            const raw = completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
             const { text, suggestion } = extractToneSuggestion(raw)
@@ -621,7 +622,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // reply was persisted verbatim, and even with it on a reply truncated
             // mid-block kept its opening marker — which is then replayed to the
             // provider as history and teaches the syntax.
-            return stripLibrarySaveMarkers(finalText)
+            // Debt A1: the controller's completion returns the RESULT, carrying
+            // finishReason (and any tool calls) through to the store's loop.
+            return {
+                text: stripLibrarySaveMarkers(finalText),
+                finishReason: completion.finishReason ?? null,
+                toolCalls: completion.toolCalls,
+            }
         } catch (error) {
             // A user Stop must stay an AbortError all the way to the chat store, or
             // it gets persisted as a failed system message instead of a clean cancel.
