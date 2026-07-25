@@ -104,7 +104,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_composer: false,
     plus_dropdown: false,
     launcher_icon_follows_theme: false,
-    library_context_enabled: false,
+    library_context_enabled: true,
     library_autosave_generated: true,
     library_view: 'grid',
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,

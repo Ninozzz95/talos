@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
     AlertTriangle, CheckCircle2, Database, FileText, FolderPlus, Image as ImageIcon,
-    LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
+    EllipsisVertical, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
@@ -186,8 +186,8 @@ onMounted(async () => {
         <div class="mb-3 flex items-center justify-between gap-3">
             <p class="font-mono text-[10px] text-[var(--talos-muted)]">{{ attachments.vaultFiles.length }} across every chat</p>
             <div class="relative">
-                <Button type="button" size="sm" variant="outline" aria-label="Library options" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-11" @click="menuOpen = !menuOpen">
-                    <Upload class="size-4" aria-hidden="true" /> Options
+                <Button type="button" size="icon" variant="ghost" aria-label="Library options" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-11 min-w-11 rounded-full" @click="menuOpen = !menuOpen">
+                    <EllipsisVertical class="size-5" aria-hidden="true" />
                 </Button>
                 <div v-if="menuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="menuOpen = false" />
                 <div v-if="menuOpen" role="menu" data-testid="talos-library-menu" class="absolute right-0 top-full z-[60] mt-1 min-w-52 overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl">
@@ -228,7 +228,7 @@ onMounted(async () => {
 
         <!-- Grouped-by-chat wraps whichever view is active. -->
         <template v-else v-for="section in (groupByChat ? grouped : [{ title: '', files: filtered }])" :key="section.title || 'all'">
-            <h2 v-if="groupByChat" class="mb-2 mt-4 text-xs font-semibold text-[var(--talos-muted)]">{{ section.title }}</h2>
+            <h2 v-if="groupByChat" class="mb-2 mt-4 truncate text-xs font-semibold text-[var(--talos-muted)]">{{ section.title }}</h2>
 
             <!-- GRID (tap a tile to open; attach/delete live in the open view or
                  the list — a hover-only control is invisible/untappable on touch). -->

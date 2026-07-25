@@ -451,7 +451,7 @@ watch(() => props.prompt, () => {
                 aria-label="Add to chat"
                 :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
                 :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable absolute left-1.5 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-full"
+                class="talos-pressable absolute left-1.5 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-2xl"
                 @pointerdown.prevent
                 @click="openPlus"
             >
@@ -479,7 +479,7 @@ watch(() => props.prompt, () => {
                 :aria-label="sending ? 'Stop response' : 'Send message'"
                 :title="sending ? 'Stop response' : (statusText || 'Send message')"
                 :disabled="!sending && !canSubmit"
-                class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-2xl bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                 :class="composerCompact ? 'top-1/2 -translate-y-1/2' : 'bottom-1.5'"
                 @click="sending ? emit('stop') : requestSend()"
             >
@@ -508,7 +508,7 @@ watch(() => props.prompt, () => {
                 :aria-label="dictationListening || dictationStarting ? 'Stop dictation' : 'Dictate'"
                 :aria-pressed="dictationListening || dictationStarting"
                 :disabled="sending && !dictationListening && !dictationStarting"
-                class="talos-pressable absolute right-14 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-full"
+                class="talos-pressable absolute right-14 top-1/2 z-10 min-h-11 min-w-11 -translate-y-1/2 rounded-2xl"
                 :class="dictationListening || dictationStarting ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]' : ''"
                 @pointerdown.prevent
                 @click="emit('toggleDictation')"
@@ -555,7 +555,7 @@ watch(() => props.prompt, () => {
                 aria-label="Add to chat"
                 :aria-haspopup="plusDropdown ? 'menu' : 'dialog'"
                 :aria-expanded="plusDropdown ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable min-h-11 min-w-11 rounded-full"
+                class="talos-pressable min-h-11 min-w-11 rounded-2xl"
                 @click="openPlus"
             >
                 <Plus class="size-5" aria-hidden="true" />
@@ -568,7 +568,7 @@ watch(() => props.prompt, () => {
                 :title="modelTitle"
                 aria-haspopup="dialog"
                 :aria-expanded="modelPickerOpen"
-                class="talos-pressable flex min-h-11 min-w-0 items-center gap-2 rounded-full border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
+                class="talos-pressable flex min-h-11 min-w-0 items-center gap-2 rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
                 @click="toggleModelPicker"
             >
                 <TalosMobileProviderIcon
@@ -594,7 +594,7 @@ watch(() => props.prompt, () => {
                 :title="dictationStarting ? 'Starting dictation…' : (dictationListening ? 'Stop dictation' : 'Dictate')"
                 :aria-pressed="dictationListening || dictationStarting"
                 :disabled="sending && !dictationListening && !dictationStarting"
-                class="talos-pressable min-h-11 min-w-11 rounded-full"
+                class="talos-pressable min-h-11 min-w-11 rounded-2xl"
                 :class="dictationListening || dictationStarting
                     ? 'border-[var(--talos-accent,var(--primary))] text-[var(--talos-accent,var(--primary))]'
                     : ''"
