@@ -242,7 +242,7 @@ describe('useTalosMobileAttachments', () => {
 
         const file = await attachments.saveGenerated({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' })
 
-        expect(service.createGenerated).toHaveBeenCalledWith({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' })
+        expect(service.createGenerated).toHaveBeenCalledWith({ name: 'summary.md', mediaType: 'text/markdown', text: 'hello' }, null)
         expect(service.revokeGrant).toHaveBeenCalledWith('grant-gen') // not attached → no lingering grant
         expect(file.id).toBe('gen-1')
         expect(attachments.vaultFiles.map((candidate) => candidate.id)).toContain('gen-1')
