@@ -47,7 +47,7 @@ const emit = defineEmits<{
         <div class="min-w-0 flex-1 text-center">
             <p
                 data-testid="talos-mobile-header-title"
-                class="talos-serif truncate text-lg font-semibold leading-tight text-[var(--talos-text)]"
+                class="talos-title truncate text-md font-semibold leading-tight text-[var(--talos-text)]"
             >
                 {{ title.trim() || 'New chat' }}
             </p>

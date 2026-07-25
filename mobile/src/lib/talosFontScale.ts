@@ -18,7 +18,9 @@ export const TALOS_FONT_SCALES = ['small', 'default', 'large', 'xlarge'] as cons
 
 export type TalosFontScale = (typeof TALOS_FONT_SCALES)[number]
 
-export const TALOS_DEFAULT_FONT_SCALE: TalosFontScale = 'default'
+// Owner 2026-07-25: ships at `large` — the system type is deliberately bigger
+// than the chat body, which he wants small.
+export const TALOS_DEFAULT_FONT_SCALE: TalosFontScale = 'large'
 
 const FACTORS: Record<TalosFontScale, number> = {
     small: 0.9,

@@ -35,7 +35,7 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
             </p>
             <h1
                 data-testid="mobile-screen-title"
-                class="talos-serif text-base font-semibold text-[var(--talos-text)]"
+                class="talos-title text-md font-semibold text-[var(--talos-text)]"
                 :class="{ 'mt-2': eyebrow }"
             >{{ title }}</h1>
         </header>
