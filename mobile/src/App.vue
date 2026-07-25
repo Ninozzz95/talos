@@ -151,6 +151,18 @@ watch(() => settingsStore.state.shell.ui_font_scale, (scale) => {
     applyTalosFontScale(scale)
 }, { immediate: true })
 
+// Debt S1 / SF-MAJOR: the storage layer failed at boot with the key locked, and
+// nothing retried once the PIN opened it — the correct PIN landed on an error
+// banner over an empty session list.
+async function onUnlocked(): Promise<void> {
+    locked.value = false
+    try {
+        await chatController.chat.retryPersistence()
+    } catch {
+        // The banner stays; the Doctor already has the reason.
+    }
+}
+
 // Debt S2: FLAG_SECURE — no screenshots, no screen recording, no readable
 // recents thumbnail. SF: do NOT fire before hydration; the pre-hydration
 // default would CLEAR the flag for the whole boot window, which is exactly the
@@ -326,7 +338,14 @@ onMounted(async () => {
     }
     // Reconcile which launcher-icon alias is currently applied (native + mirror).
     void launcherIcon.hydrate().catch(() => undefined)
-    if (settingsStore.state.security.app_lock_enabled) {
+    // Debt S1 / SF-CRITICAL: the KEY decides, not the preference flag. If the
+    // key is wrapped and the flag never made it to disk, deriving the lock from
+    // the flag alone left the user with intact data, a valid PIN, and no
+    // surface anywhere in the app that would accept it.
+    const { talosDatabaseKeyIsProtected } = await import('@/services/databaseKey')
+    if (await talosDatabaseKeyIsProtected().catch(() => false)) {
+        locked.value = true
+    } else if (settingsStore.state.security.app_lock_enabled) {
         // Arm only when a REAL PIN record exists — a dangling flag without a
         // Keystore record must never brick the app (fail-open on the flag,
         // fail-closed on the verification itself).
@@ -355,6 +374,10 @@ onMounted(async () => {
                 // — the lock screen would be dead to taps over it.
                 sidebarOpen.value = false
                 locked.value = true
+                // Debt S1: the screen is not the lock. The key leaves memory and
+                // the plugin's store, so the database really closes. Imported on
+                // demand: re-locking is never part of the first paint.
+                void import('@/services/databaseProtection').then((module) => module.relockTalosDatabase())
             },
         })
         lifecycle = registerNativeAppLifecycle({
@@ -408,7 +431,7 @@ onBeforeUnmount(async () => {
         <TalosMobileLockScreen
             v-if="locked"
             :biometric-enabled="settingsStore.state.security.app_lock_biometric"
-            @unlocked="locked = false"
+            @unlocked="onUnlocked"
         />
 
         <!-- F2-T6 intro modal: mounts only when the versioned gating opens it.

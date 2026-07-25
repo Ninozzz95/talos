@@ -8,6 +8,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Fingerprint, Loader2, LockKeyhole } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { appLockThrottleRemainingMs, requestBiometricUnlock, verifyAppLockPin } from '@/services/appLock'
+import { unlockTalosDatabase } from '@/services/databaseProtection'
+import { talosDatabaseKeyIsProtected } from '@/services/databaseKey'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 
@@ -27,6 +29,10 @@ const pinField = ref<HTMLInputElement | null>(null)
 // Debt S3 — attempt throttling. The gate itself lives in the service (it is
 // persisted, so killing the app does not reset it); the screen mirrors it so
 // the user sees a countdown instead of a PIN that silently stops working.
+// SF-MAJOR: the database key is wrapped by the PIN alone, so a fingerprint
+// cannot open it. Offering biometrics there unlocked the SCREEN over a locked
+// database — the user sees their chats and the first send fails.
+const keyNeedsPin = ref(false)
 const throttleMs = ref(0)
 const throttled = computed(() => throttleMs.value > 0)
 const throttleLabel = computed(() => {
@@ -80,7 +86,15 @@ async function submitPin(): Promise<void> {
     error.value = null
     try {
         if (await verifyAppLockPin(pin.value)) {
-            unlock()
+            // Debt S1: the PIN is the database key now. Unlocking the screen
+            // without unwrapping it would show an empty workspace over data
+            // that is still there — worse than staying locked.
+            if (await unlockTalosDatabase(pin.value)) {
+                unlock()
+            } else {
+                error.value = 'PIN accepted but the data could not be opened. Try again.'
+                pin.value = ''
+            }
         } else {
             error.value = 'Wrong PIN. Try again.'
             pin.value = ''
@@ -92,11 +106,20 @@ async function submitPin(): Promise<void> {
 }
 
 async function tryBiometric(): Promise<void> {
+    if (await talosDatabaseKeyIsProtected().catch(() => false)) {
+        keyNeedsPin.value = true
+        error.value = 'Your data is encrypted with the PIN — enter it once to open it.'
+        pinField.value?.focus()
+        return
+    }
     if (await requestBiometricUnlock('Unlock TALOS')) unlock()
 }
 
 onMounted(() => {
     void refreshThrottle()
+    void talosDatabaseKeyIsProtected()
+        .then((value) => { keyNeedsPin.value = value })
+        .catch(() => { keyNeedsPin.value = false })
     if (props.biometricEnabled) {
         void tryBiometric()
     } else {
@@ -155,7 +178,7 @@ onMounted(() => {
         </form>
 
         <Button
-            v-if="biometricEnabled"
+            v-if="biometricEnabled && !keyNeedsPin"
             type="button"
             variant="ghost"
             data-testid="talos-lock-biometric"
