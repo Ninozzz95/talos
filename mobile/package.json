@@ -32,7 +32,7 @@
         "test:e2e": "playwright test",
         "verify:parity": "node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
         "typecheck": "vue-tsc -b --force",
-        "build:probe": "vite build --config vite.probe.config.ts"
+        "build:probe": "vite build --config vite.probe.config.ts && node -e \"require('node:fs').readdirSync('dist/probe/assets').filter(f=>f.endsWith('.wasm')).forEach(f=>require('node:fs').rmSync(`dist/probe/assets/${f}`))\""
     },
     "dependencies": {
         "@aparajita/capacitor-biometric-auth": "10.0.0",
