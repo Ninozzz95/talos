@@ -103,6 +103,7 @@ const productionVaultService: TalosVaultService = {
     resolveMessageParts: async (messageId) => (await loadProductionVaultService()).resolveMessageParts(messageId),
     listFiles: async () => (await loadProductionVaultService()).listFiles(),
     listSummaries: async () => (await loadProductionVaultService()).listSummaries(),
+    readFileText: async (fileId) => (await loadProductionVaultService()).readFileText(fileId),
     deleteFile: async (fileId) => (await loadProductionVaultService()).deleteFile(fileId),
     reconcilePending: async () => (await loadProductionVaultService()).reconcilePending(),
 }
@@ -123,6 +124,7 @@ const unavailableVaultService: TalosVaultService = {
     resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     listFiles: async () => [],
     listSummaries: async () => [],
+    readFileText: async () => null,
     deleteFile: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     reconcilePending: async () => undefined,
 }
@@ -162,6 +164,8 @@ export interface ChatControllerDeps {
                 readonly library_context_enabled?: boolean
                 readonly library_autosave_generated?: boolean
             }
+            /** Vision routing preference (now a real behaviour, not an inert switch). */
+            readonly ai_defaults?: { readonly vision_enabled?: boolean }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -379,6 +383,32 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const selectedProfile = computed(() =>
         profiles.value.find((profile) => profile.id === selectedModelId.value) ?? null,
     )
+    // Coherence audit 2026-07-25: `ai_defaults.vision_enabled` shipped as an inert
+    // switch promising "prefer a vision-capable profile when an image is attached".
+    // It now does exactly that: with an image in the tray and a text-only model
+    // selected, TALOS routes to the first vision-capable profile and says so.
+    function profileSeesImages(profile: TalosMobileModelProfileView): boolean {
+        const modalities = (profile.capabilities as { input_modalities?: unknown } | null)?.input_modalities
+        return Array.isArray(modalities) && modalities.includes('image')
+    }
+    function preferVisionProfileForAttachments(): void {
+        if (deps.settings.state.ai_defaults?.vision_enabled !== true) return
+        const hasImage = attachments.items.some((item) =>
+            item.status === 'authorized' && item.mediaType.startsWith('image/'))
+        if (!hasImage) return
+        const current = selectedProfile.value
+        if (!current || profileSeesImages(current)) return
+        const capable = profiles.value.find((profile) =>
+            profile.id !== current.id && profileSeesImages(profile) && talosMobileModelProfileIsCallable(profile))
+        if (!capable) return
+        if (!applyModelSelection(capable.id)) return
+        void persistComposerDefaults()
+        toasts.push({
+            message: `Switched to ${capable.display_name} — ${current.display_name} cannot read images.`,
+            durationMs: 8000,
+        })
+    }
+
     const selectedProviderModel = computed(() => {
         const profile = selectedProfile.value
         if (!profile) return null
@@ -1059,6 +1089,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     async function send(text: string): Promise<boolean> {
         clearPromptEnhancement()
+        preferVisionProfileForAttachments()
         const accepted = await chat.send(
             text,
             selectedModelId.value,

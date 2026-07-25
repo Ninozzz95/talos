@@ -7,7 +7,8 @@
  * the same accept/reject decision for every contract regression fixture.
  */
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const TALOS_PARITY_LEDGER_CONTRACT = 'talos.mobile.feature-parity/v1'
@@ -160,6 +161,16 @@ function validateEntry(entry, index, snapshotRevision, errors) {
     }
 
     const testIds = validateStringList(entry.test_ids, `${where}.test_ids`, errors)
+    // Coherence audit 2026-07-25: the gate validated SHAPE, not truth — 4 entries
+    // cited test files that do not exist, so a feature could claim evidence it
+    // never had. A cited test path must resolve on disk.
+    for (const testId of testIds) {
+        if (!testId.includes('/')) continue // symbolic ids (e.g. a test name) are allowed
+        const relative = testId.startsWith('mobile/') ? testId.slice('mobile/'.length) : testId
+        if (!existsSync(resolvePath(process.cwd(), relative))) {
+            errors.push(`${where}.test_ids: "${testId}" does not exist on disk`)
+        }
+    }
     if (entry.status === 'verified' && testIds.length === 0) {
         errors.push(`${where}: verified entries must reference at least one real test id in test_ids`)
     }

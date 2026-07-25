@@ -39,7 +39,9 @@ const MEDIA_TYPE_BY_EXT: Record<string, string> = {
 function isUnsafeNameCodePoint(code: number): boolean {
     if (code < 0x20) return true                       // C0 controls
     if (code >= 0x7f && code <= 0x9f) return true       // DEL + C1 controls
+    if (code === 0x00ad) return true                    // soft hyphen
     if (code >= 0x200b && code <= 0x200f) return true   // zero-width + LRM/RLM
+    if (code === 0xfeff) return true                    // zero-width no-break space
     if (code >= 0x202a && code <= 0x202e) return true   // bidi embedding/override
     if (code >= 0x2066 && code <= 0x2069) return true   // bidi isolates
     return false
@@ -61,7 +63,9 @@ function stripControlChars(value: string): string {
 function safeName(raw: string): string {
     // Vault leaf-name discipline: strip paths + control chars, never trust the
     // model's filename; fall back to a neutral default.
-    const leaf = stripControlChars(raw.split(/[\\/]/).at(-1) ?? '').trim()
+    // Round 3: normalise FIRST — NFKC maps the fullwidth solidus (U+FF0F) to '/',
+    // so splitting before normalising let a separator survive into the leaf.
+    const leaf = (stripControlChars(raw).split(/[\\/]/).at(-1) ?? '').trim()
     if (!leaf || leaf === '.' || leaf === '..' || leaf.length > 200) return 'generated.md'
     return leaf
 }

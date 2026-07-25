@@ -236,8 +236,8 @@ export function useTalosMobileAttachments(
 
     async function hydrateText(fileId: string): Promise<string | null> {
         try {
-            const files = await options.vault.listFiles()
-            return files.find((file) => file.id === fileId)?.extracted_text ?? null
+            // Round 3: this used to list the WHOLE corpus to return one body.
+            return await options.vault.readFileText(fileId)
         } catch {
             return null
         }

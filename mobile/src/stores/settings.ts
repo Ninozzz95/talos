@@ -349,7 +349,15 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
     }
     // Security review 2026-07-25: sending the whole Library to a third-party
     // provider, and letting model output write files, are BOTH explicit opt-ins.
-    // No migration force-enables them.
+    // Round 3 caught that fail-closed defaults only protect FRESH installs —
+    // anyone who ran the build that shipped them ON has `true` persisted, so the
+    // reversal never reached them. `library_defaults_v1` was written but never
+    // read; this is the migration it was meant to gate. It runs ONCE: a later
+    // deliberate opt-in persists because the flag is then already true.
+    if (value.library_defaults_v1 !== true) {
+        shellParsed.library_context_enabled = false
+        shellParsed.library_autosave_generated = false
+    }
     return {
         shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),

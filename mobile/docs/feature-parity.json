@@ -34,12 +34,23 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "ChatScreen + durable local repository + TalosMobileMessageList/TalosMobileComposer",
-                "execution_location": ["local_mobile", "trusted_node", "remote_provider"],
-                "required_capabilities": ["model.profile.selected", "avm.turn.execute"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node",
+                    "remote_provider"
+                ],
+                "required_capabilities": [
+                    "model.profile.selected",
+                    "avm.turn.execute"
+                ],
                 "evidence_contract": "Persistent multi-turn provider chat, drafts, reload, contextual follow-up, safe error recovery and attachment bindings pass the complete mobile browser corpus; APK/device promotion remains open",
                 "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": ["mobile/tests/e2e/mobile-chat-persistence.e2e.spec.ts", "mobile/tests/e2e/mobile-provider-model-refresh.e2e.spec.ts", "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"],
+                "test_ids": [
+                    "mobile/tests/e2e/mobile-chat-persistence.e2e.spec.ts",
+                    "mobile/tests/e2e/mobile-provider-model-refresh.e2e.spec.ts",
+                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -48,12 +59,22 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "TalosMobileAttachmentTray + system File Picker + private Filesystem store + bounded file-type/PDF.js/Mammoth extraction + explicit grants",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["vault.file.read", "vault.file.grant", "ingest.local.extract"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "vault.file.read",
+                    "vault.file.grant",
+                    "ingest.local.extract"
+                ],
                 "evidence_contract": "Real text and PNG selection reaches provider wire, persists safe labels and explicit authority, survives reload and fails closed for unsupported input; OCR and malware sidecars remain future capability gates",
                 "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": ["mobile/tests/e2e/mobile-chat-files.e2e.spec.ts", "mobile/tests/unit/chat/TalosMobileAttachmentTray.test.ts"],
+                "test_ids": [
+                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts",
+                    "mobile/tests/unit/chat/TalosMobileAttachmentTray.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -62,12 +83,20 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "Library / Context Vault with durable local file inventory, attach-existing, fresh grants, revoke and delete",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["vault.file.read", "rag.local.retrieve"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "vault.file.read",
+                    "rag.local.retrieve"
+                ],
                 "evidence_contract": "Vault reuse, grant renewal, revoke, delete and historical safe-label persistence pass real reload journeys; chunk retrieval, context sets and sync remain P2/P6 work",
                 "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": ["mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"],
+                "test_ids": [
+                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -76,12 +105,23 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "native_adapter",
                 "mobile_surface": "ChatScreen same-surface Browse + TalosMobileBrowserActivity/ScreenshotEvidence/InteractiveFrame + Browser Settings + official InAppBrowser 4.0.1 adapter",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["browser.task.submit", "browser.hmi.approve", "browser.evidence.read"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "browser.task.submit",
+                    "browser.hmi.approve",
+                    "browser.evidence.read"
+                ],
                 "evidence_contract": "Local manual Browse, durable lifecycle and screenshot evidence, reload and responsive Chromium journeys are green; trusted-node HMI automation and physical Android open/close evidence remain promotion gates; no AccessibilityService or ADB Playwright in production",
                 "status": "blocked",
                 "blocking_reason": "Trusted-node Playwright/HMI parity and physical-device install/launch remain open; the host adb exits with Windows status 0xC0000135 before device enumeration",
-                "test_ids": ["mobile/tests/e2e/mobile-browser-evidence.e2e.spec.ts", "mobile/tests/unit/services/inAppBrowserService.test.ts", "mobile/tests/unit/build/androidBrowserNativeContract.test.ts"],
+                "test_ids": [
+                    "mobile/tests/e2e/mobile-browser-evidence.e2e.spec.ts",
+                    "mobile/tests/unit/services/inAppBrowserService.test.ts",
+                    "mobile/tests/unit/build/androidBrowserNativeContract.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -90,12 +130,20 @@
                 "desktop_owner": "core",
                 "mobile_owner": "zethos_android",
                 "mobile_surface": "TalosMobileRuntimeCenter + TalosMobileDownloadCenter (M3); binding JNI/Capacitor, nessun daemon HTTP desktop nell'APK",
-                "execution_location": ["local_mobile", "trusted_node", "remote_provider"],
-                "required_capabilities": ["model.download", "model.load", "inference.local"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node",
+                    "remote_provider"
+                ],
+                "required_capabilities": [
+                    "model.download",
+                    "model.load",
+                    "inference.local"
+                ],
                 "evidence_contract": "M3 gate: install/run/benchmark/remove modello locale in airplane mode su tier fisici; 7-10B validation lane, 20/30B moonshot report onesto",
                 "status": "blocked",
                 "blocking_reason": "selezione runtime Android (llama.cpp/MLC/ExecuTorch) richiede benchmark fisico Z10/P3.A non eseguito; toolchain Rust/NDK assente sull'host (K0)",
-                "test_ids": ["mobile/tests/e2e/mobile-runtime.e2e.spec.ts", "mobile/android/app/src/androidTest/java/ai/talos/runtime/ZethosRuntimeInstrumentedTest.kt"],
+                "test_ids": [],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -104,8 +152,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "TalosMobileSettingsModelsPanel + TalosThemedSelect + TalosMobileComposerModelPicker + six-provider adapter registry",
-                "execution_location": ["local_mobile", "remote_provider"],
-                "required_capabilities": ["model.profile.selected"],
+                "execution_location": [
+                    "local_mobile",
+                    "remote_provider"
+                ],
+                "required_capabilities": [
+                    "model.profile.selected"
+                ],
                 "evidence_contract": "Dynamic provider catalog and probe feed one selected model shared by Model Lab and composer without reload; unsupported models remain visible but disabled; OpenRouter discovery and completion exercised against the real upstream API",
                 "status": "implemented",
                 "blocking_reason": null,
@@ -122,12 +175,19 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_shell",
                 "mobile_surface": "Settings screen mobile + preferences store (M1/M2); geometry device-specific mai sincronizzata",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["prefs.local.write"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "prefs.local.write"
+                ],
                 "evidence_contract": "M1 RED: payload preferenze invalidi/futuri falliscono chiusi ai default documentati senza cancellare i byte illeggibili",
                 "status": "planned",
                 "blocking_reason": null,
-                "test_ids": ["mobile/tests/unit/stores/preferences.test.ts"],
+                "test_ids": [
+                    "mobile/tests/unit/stores/preferences.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -136,12 +196,18 @@
                 "desktop_owner": "talos_ui",
                 "mobile_owner": "mobile_shell",
                 "mobile_surface": "Theme Engine mobile con renderer/editor propri (P2-F/M12+); consuma @talos-mobile/design-tokens",
-                "execution_location": ["local_mobile"],
-                "required_capabilities": ["prefs.local.write"],
+                "execution_location": [
+                    "local_mobile"
+                ],
+                "required_capabilities": [
+                    "prefs.local.write"
+                ],
                 "evidence_contract": "contratto token condiviso: design-tokens.test.ts rifiuta campi renderer desktop (canvas/DOM/fps/dpr); visual matrix mobile in fase tema",
                 "status": "planned",
                 "blocking_reason": null,
-                "test_ids": ["mobile/packages/design-tokens/tests/design-tokens.test.ts"],
+                "test_ids": [
+                    "mobile/packages/design-tokens/tests/design-tokens.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -150,8 +216,12 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "Doctor screen mobile + hardware capability scan/tier (P2-G)",
-                "execution_location": ["local_mobile"],
-                "required_capabilities": ["doctor.local.scan"],
+                "execution_location": [
+                    "local_mobile"
+                ],
+                "required_capabilities": [
+                    "doctor.local.scan"
+                ],
                 "evidence_contract": "P2 gate: scan hardware + readiness report su dispositivo fisico senza rete; bundle supporto con redazione",
                 "status": "planned",
                 "blocking_reason": null,
@@ -164,8 +234,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "sezione Tasks della shell (store locale M2; merge multi-master M6)",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["prefs.local.write"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "prefs.local.write"
+                ],
                 "evidence_contract": "design §8: task locali funzionanti in airplane mode; M6 gate: merge deterministico senza perdita silenziosa",
                 "status": "planned",
                 "blocking_reason": null,
@@ -178,8 +253,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "sezione Notes della shell (store locale M2; merge M6)",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["prefs.local.write"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "prefs.local.write"
+                ],
                 "evidence_contract": "design §8: note locali in airplane mode; conflitti visibili M6, nessun last-write-wins globale",
                 "status": "planned",
                 "blocking_reason": null,
@@ -192,8 +272,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "sezione Calendar della shell (bozze locali M2; write esterne via P6 con doppio gate)",
-                "execution_location": ["local_mobile", "remote_provider"],
-                "required_capabilities": ["prefs.local.write"],
+                "execution_location": [
+                    "local_mobile",
+                    "remote_provider"
+                ],
+                "required_capabilities": [
+                    "prefs.local.write"
+                ],
                 "evidence_contract": "design §8: calendario locale offline; write esterne solo con scope+grant+HMI+audit (P6)",
                 "status": "planned",
                 "blocking_reason": null,
@@ -206,8 +291,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "sezione Memory della shell (store locale M2; uso in chat M4 con disclosure)",
-                "execution_location": ["local_mobile"],
-                "required_capabilities": ["memory.local.read", "memory.local.write"],
+                "execution_location": [
+                    "local_mobile"
+                ],
+                "required_capabilities": [
+                    "memory.local.read",
+                    "memory.local.write"
+                ],
                 "evidence_contract": "design §8: memoria locale in airplane mode; untrusted boundary identica al desktop",
                 "status": "planned",
                 "blocking_reason": null,
@@ -220,8 +310,12 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "sezione Memory/Skills della shell (registry locale M2; esecuzione solo via capability gateway M7)",
-                "execution_location": ["local_mobile"],
-                "required_capabilities": ["skills.local.approve"],
+                "execution_location": [
+                    "local_mobile"
+                ],
+                "required_capabilities": [
+                    "skills.local.approve"
+                ],
                 "evidence_contract": "M7 gate: grant/revoca skill con evidence; nessuna skill importata modifica policy o capability",
                 "status": "planned",
                 "blocking_reason": null,
@@ -234,8 +328,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "superficie Research mobile non ancora assegnata a una fase M",
-                "execution_location": ["trusted_node", "remote_provider"],
-                "required_capabilities": ["research.remote.run"],
+                "execution_location": [
+                    "trusted_node",
+                    "remote_provider"
+                ],
+                "required_capabilities": [
+                    "research.remote.run"
+                ],
                 "evidence_contract": "delta decision MREG-010 pendente: nessuna fase M0-M8 riserva file Research; da assegnare con ledger amendment prima della superficie",
                 "status": "blocked",
                 "blocking_reason": "nessuna assegnazione di fase nel ledger 2026-07-15; serve delta decision (MREG-010) prima di qualsiasi superficie mobile",
@@ -248,12 +347,17 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "native_adapter",
                 "mobile_surface": "TalosMobileGoogleIntegration + TalosGoogleAuthPlugin (P6); AppAuth/system browser, PKCE",
-                "execution_location": ["remote_provider"],
-                "required_capabilities": ["google.oauth.connect", "google.drive.read"],
+                "execution_location": [
+                    "remote_provider"
+                ],
+                "required_capabilities": [
+                    "google.oauth.connect",
+                    "google.drive.read"
+                ],
                 "evidence_contract": "P6 gate: OAuth reale con revoca, token nel Vault, write con doppio gate; mai token in WebView/log",
                 "status": "blocked",
                 "blocking_reason": "fase P6/M7 non autorizzata; richiede decisione AppAuth e verifica client Google, pin OAuth freschi",
-                "test_ids": ["mobile/tests/e2e/mobile-google-integration.e2e.spec.ts"],
+                "test_ids": [],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -262,8 +366,13 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "superficie Email mobile non assegnata; triage remoto via P6 connector",
-                "execution_location": ["remote_provider", "unavailable"],
-                "required_capabilities": ["email.remote.read"],
+                "execution_location": [
+                    "remote_provider",
+                    "unavailable"
+                ],
+                "required_capabilities": [
+                    "email.remote.read"
+                ],
                 "evidence_contract": "P6 gate: solo con connector reale; send resta disabilitato senza policy completa; nessuna UI send attiva prima",
                 "status": "blocked",
                 "blocking_reason": "connettore email P6 non autorizzato; policy send disabilitata anche su desktop",
@@ -276,12 +385,17 @@
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "sezione Tools della shell + capability gateway (M7)",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["tools.registry.read"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "tools.registry.read"
+                ],
                 "evidence_contract": "M7 gate: registry con health reale; nessuna azione probe/enable/run senza endpoint+capability+test",
                 "status": "planned",
                 "blocking_reason": null,
-                "test_ids": ["mobile/tests/e2e/mobile-plugin-capabilities.e2e.spec.ts"],
+                "test_ids": [],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -290,8 +404,13 @@
                 "desktop_owner": "core",
                 "mobile_owner": "zethos_android",
                 "mobile_surface": "superficie Benchmarks mobile (viewer evidence + lane Z14 zethos); non assegnata a fase M",
-                "execution_location": ["local_mobile", "trusted_node"],
-                "required_capabilities": ["benchmark.local.run"],
+                "execution_location": [
+                    "local_mobile",
+                    "trusted_node"
+                ],
+                "required_capabilities": [
+                    "benchmark.local.run"
+                ],
                 "evidence_contract": "Z14 matrix + MREG-010: nessun claim ON/OFF senza raw evidence; superficie mobile da assegnare con delta decision",
                 "status": "blocked",
                 "blocking_reason": "harness benchmark Z14 non avviato e superficie mobile non assegnata a una fase M (MREG-010)",
@@ -304,7 +423,10 @@
                 "desktop_owner": "kadmos",
                 "mobile_owner": "mobile_core",
                 "mobile_surface": "nessuna superficie CLI su phone; parita semantica via servizi mobile core (Rust) e Doctor",
-                "execution_location": ["local_mobile", "unavailable"],
+                "execution_location": [
+                    "local_mobile",
+                    "unavailable"
+                ],
                 "required_capabilities": [],
                 "evidence_contract": "P1 gate: AVM Kernel Specification + differential fixtures PHP/Rust prima di qualsiasi parita comando; nessuna CLI phone pianificata",
                 "status": "blocked",
