@@ -29,6 +29,11 @@ function setMode(key: 'utility_model_mode' | 'research_model_mode', value: strin
 function setVision(event: Event): void {
     void settings.setAiDefaults({ vision_enabled: (event.target as HTMLInputElement).checked })
 }
+
+// Library behaviour lives in the shell prefs but belongs on this panel.
+function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generated', event: Event): void {
+    void settings.setShell({ [key]: (event.target as HTMLInputElement).checked })
+}
 </script>
 
 <template>
@@ -82,6 +87,38 @@ function setVision(event: Event): void {
                 :checked="settings.state.ai_defaults.vision_enabled"
                 class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
                 @change="setVision"
+            >
+        </label>
+
+        <!-- Owner 2026-07-25: Library behaviour belongs to AI defaults (what the
+             model may read / write), not to Appearance. -->
+        <label class="flex min-h-14 cursor-pointer items-start justify-between gap-3 border-b border-[var(--talos-border)] py-3">
+            <span>
+                <span class="block text-sm font-semibold text-[var(--talos-text)]">Let chats use your Library</span>
+                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">The model can reference your global Library (every chat) as context, with each document's origin chat. Adds tokens per message.</span>
+            </span>
+            <input
+                type="checkbox"
+                role="switch"
+                aria-label="Let chats use your Library"
+                :checked="settings.state.shell.library_context_enabled"
+                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
+                @change="setShellFlag('library_context_enabled', $event)"
+            >
+        </label>
+
+        <label class="flex min-h-14 cursor-pointer items-start justify-between gap-3 border-b border-[var(--talos-border)] py-3">
+            <span>
+                <span class="block text-sm font-semibold text-[var(--talos-text)]">Auto-save generated files</span>
+                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">When a chat generates a file or document, save it to your Library automatically.</span>
+            </span>
+            <input
+                type="checkbox"
+                role="switch"
+                aria-label="Auto-save generated files to the Library"
+                :checked="settings.state.shell.library_autosave_generated"
+                class="mt-1 h-5 w-9 accent-[var(--talos-accent)]"
+                @change="setShellFlag('library_autosave_generated', $event)"
             >
         </label>
     </div>

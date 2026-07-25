@@ -344,6 +344,12 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         chatLayout.bubble_scale = 'compact'
         if (motionParsed.mode === 'off') motionParsed.mode = 'complex'
     }
+    // Owner 2026-07-25: library context shipped OFF in R19 and is now ON by
+    // default — one-shot so an existing install picks it up (a later deliberate
+    // opt-out persists via library_defaults_v1).
+    if (value.library_defaults_v1 !== true) {
+        shellParsed.library_context_enabled = true
+    }
     return {
         shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),
@@ -398,6 +404,7 @@ export function useSettingsStore(): SettingsStore {
             value: JSON.stringify({
                 presentation_v2: true,
                 defaults_v3: true,
+                library_defaults_v1: true,
                 shell: state.shell,
                 onboarding: state.onboarding,
                 security: state.security,

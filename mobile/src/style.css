@@ -236,6 +236,16 @@
         outline: 2px solid var(--ring);
         outline-offset: 2px;
     }
+    /* Owner 2026-07-25: text selection uses the ACTIVE theme's accent (tinted so
+       the selected text stays readable on every preset). */
+    ::selection {
+        background: color-mix(in srgb, var(--talos-accent, #c08b3c) 32%, transparent);
+        color: var(--talos-text, inherit);
+    }
+    ::-moz-selection {
+        background: color-mix(in srgb, var(--talos-accent, #c08b3c) 32%, transparent);
+        color: var(--talos-text, inherit);
+    }
 }
 
 /* F1-T4 animation mandate: every interactive element gets a simple, engine-tuned

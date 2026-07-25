@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
 import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Mail, Palette, Search, Settings, Shield, User, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
@@ -54,6 +54,17 @@ watch([mobilePane, selectedTab, isMdLayout], ([pane, tab, md]) => {
     if (pane === 'detail' && !md) sheetNav.setSubView({ title: tab.label, back: backToCategories })
     else sheetNav.clear()
 }, { immediate: true })
+
+// Owner 2026-07-25: opening a panel kept the category list's scroll offset, so
+// Appearance appeared to start at "Color mode" (Theme preset was above the fold).
+// Every panel now opens at its top.
+const detailRoot = ref<HTMLElement | null>(null)
+watch([mobilePane, activeTab], async ([pane]) => {
+    if (pane !== 'detail') return
+    await nextTick()
+    const scroller = detailRoot.value?.closest<HTMLElement>('.overflow-y-auto')
+    scroller?.scrollTo({ top: 0 })
+})
 onBeforeUnmount(() => { sheetNav.clear() })
 
 watch(() => props.requestedTab, (requested) => {
@@ -143,6 +154,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
         </aside>
 
         <section
+            ref="detailRoot"
             data-testid="settings-detail-pane"
             class="min-w-0 px-0 py-2 md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
             :class="mobilePane === 'categories' ? 'hidden' : 'block'"

@@ -10,8 +10,11 @@ const settings = vi.hoisted(() => ({
             research_model_mode: 'same_as_chat',
             vision_enabled: true,
         },
+        // Library behaviour lives in shell prefs but is surfaced on this panel.
+        shell: { library_context_enabled: true, library_autosave_generated: true },
     },
     setAiDefaults: vi.fn().mockResolvedValue(undefined),
+    setShell: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/stores/settings', () => ({ useSettingsStore: () => settings }))
@@ -36,4 +39,15 @@ describe('local-first Settings panels', () => {
         expect(settings.setAiDefaults).toHaveBeenCalledWith({ vision_enabled: false })
     })
 
+    // Owner 2026-07-25: Library behaviour is an AI default, not an Appearance setting.
+    it('exposes the Library toggles on the AI Defaults panel and persists them', async () => {
+        const wrapper = mount(TalosMobileSettingsAiDefaultsPanel, {
+            global: { stubs: { TalosThemedSelect: true } },
+        })
+        await wrapper.get('[aria-label="Let chats use your Library"]').setValue(false)
+        await wrapper.get('[aria-label="Auto-save generated files to the Library"]').setValue(false)
+
+        expect(settings.setShell).toHaveBeenCalledWith({ library_context_enabled: false })
+        expect(settings.setShell).toHaveBeenCalledWith({ library_autosave_generated: false })
+    })
 })
