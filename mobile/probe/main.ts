@@ -20,6 +20,17 @@ import { rankLibraryDocs, type LibraryDoc } from '../src/lib/chat/libraryContext
 
 env.allowLocalModels = false
 
+// The ONNX runtime WASM is 23 MB. Bundling it made the probe APK too big to
+// hand over, so it is fetched from the CDN at the EXACT version transformers.js
+// 4.2.0 depends on (onnxruntime-web 1.26.0-dev.20260416-b7804b056c) — a
+// floating version here would fail on the phone, where debugging costs a
+// round trip. The probe needs the network for the models anyway.
+const ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/'
+env.backends.onnx.wasm.wasmPaths = {
+    wasm: `${ORT_CDN}ort-wasm-simd-threaded.asyncify.wasm`,
+    mjs: `${ORT_CDN}ort-wasm-simd-threaded.asyncify.mjs`,
+}
+
 interface Candidate {
     id: string
     label: string
