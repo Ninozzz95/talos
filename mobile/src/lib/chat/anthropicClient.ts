@@ -26,7 +26,9 @@ const THINKING_BUDGET: Readonly<Record<string, number>> = Object.freeze({
 })
 
 export interface AnthropicChatTurn {
-    role: 'user' | 'assistant'
+    // Debt A1: the IR carries 'tool'; this adapter maps it onto a user turn until
+    // real tool blocks are wired (Anthropic expects tool_result content blocks).
+    role: 'user' | 'assistant' | 'tool'
     content: string
     parts?: import('@/lib/chat/attachmentContracts').TalosMobileInputPart[]
 }

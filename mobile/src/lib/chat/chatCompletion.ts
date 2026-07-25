@@ -2,7 +2,7 @@ import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTy
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
 import { talosMobileHttpTransport, type TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { providerAdapterFor } from '@/lib/chat/providerRegistry'
-import type { ChatCompletion, ChatTurn, TalosStreamHandlers } from '@/stores/chat'
+import type { ChatCompletion, ChatCompletionResult, ChatTurn, TalosStreamHandlers } from '@/stores/chat'
 
 export class ChatConfigError extends Error {
     constructor(message: string) {
@@ -26,7 +26,7 @@ export function buildChatCompletion(
     getContext: () => CompletionContext,
     transport: TalosMobileHttpTransport = talosMobileHttpTransport,
 ): ChatCompletion {
-    return async (turns: ChatTurn[], stream?: TalosStreamHandlers): Promise<string> => {
+    return async (turns: ChatTurn[], stream?: TalosStreamHandlers): Promise<ChatCompletionResult> => {
         const context = getContext()
         if (!context.profile) {
             throw new ChatConfigError('Select a model before sending.')
@@ -82,7 +82,7 @@ export function buildChatCompletion(
                     },
                     signal: stream.signal,
                 })
-                return streamed.text
+                return { text: streamed.text, finishReason: streamed.finishReason ?? null }
             } catch (error) {
                 const aborted = error instanceof Error && error.name === 'AbortError'
                 // R1-SF-M3: a STALL means the server DID answer (or accepted
@@ -101,7 +101,9 @@ export function buildChatCompletion(
             adapter.complete(input, credential, transport),
             abortSignalRejection(stream?.signal),
         ])
-        return result.text
+        // Debt A1: finishReason used to be produced by every adapter and thrown
+        // away here — it is exactly what an agent loop dispatches on.
+        return { text: result.text, finishReason: result.finishReason ?? null }
     }
 }
 

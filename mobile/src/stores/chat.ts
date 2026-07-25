@@ -21,10 +21,24 @@ import type {
     CreateToolActivityInput,
 } from '@/repositories/chatRepository'
 
+/** Debt A1: a provider-agnostic tool call (hub-and-spoke IR — each adapter
+ *  translates this to its own wire shape). */
+export interface TalosToolCall {
+    id: string
+    name: string
+    /** JSON-encoded arguments, exactly as the provider emitted them. */
+    arguments: string
+}
+
 export interface ChatTurn {
-    role: 'user' | 'assistant'
+    /** 'tool' carries a tool RESULT back to the model (the DB already had it). */
+    role: 'user' | 'assistant' | 'tool'
     content: string
     parts?: TalosMobileInputPart[]
+    /** Set on an assistant turn that requested tools. */
+    toolCalls?: TalosToolCall[]
+    /** Set on a tool turn: which call this result answers. */
+    toolCallId?: string
 }
 
 // F2-T4 streaming: the completion may stream partial text through handlers.
@@ -35,7 +49,18 @@ export interface TalosStreamHandlers {
     signal?: AbortSignal
 }
 
-export type ChatCompletion = (turns: ChatTurn[], stream?: TalosStreamHandlers) => Promise<string>
+/** Debt A1: the result, not a bare string — `finishReason` is what an agent loop
+ *  dispatches on, and it used to be produced by every adapter and then discarded. */
+export interface ChatCompletionResult {
+    text: string
+    finishReason?: string | null
+    toolCalls?: TalosToolCall[]
+}
+
+export type ChatCompletion = (
+    turns: ChatTurn[],
+    stream?: TalosStreamHandlers,
+) => Promise<ChatCompletionResult>
 export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ChatState {
@@ -131,7 +156,9 @@ function toMessageView(
     attachments: TalosChatAttachmentBinding[] = [],
     toolActivities: TalosLocalToolActivity[] = [],
 ): TalosMobileMessageView {
-    const role: TalosMobileMessageRole = message.role === 'tool' ? 'system' : message.role
+    // Debt A1: tool turns are persistable AND readable now (they were collapsed
+    // to 'system', which made a tool loop impossible to render).
+    const role: TalosMobileMessageRole = message.role
     const view: TalosMobileMessageView = {
         id: message.id,
         role,
@@ -621,10 +648,10 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         let turns: ChatTurn[]
         try {
             turns = await Promise.all(messages
-                .filter((message) => message.role === 'user' || message.role === 'assistant')
+                .filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool')
                 .map(async (message) => {
                     const turn: ChatTurn = {
-                        role: message.role as 'user' | 'assistant',
+                        role: message.role as ChatTurn['role'],
                         content: message.content,
                     }
                     if (message.attachments?.length) {
@@ -666,7 +693,12 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 },
                 signal: abort.signal,
             })
-            await appendDurable(session.id, 'assistant', reply, 'persisted', modelProfileId)
+            // Debt A1: the loop dispatches on finishReason. No tool is registered
+            // yet, so 'tool_calls' cannot occur — but the turn is persisted with its
+            // calls so the round-trip is durable the moment tools land, instead of
+            // the send path being rewritten again.
+            await appendDurable(session.id, 'assistant', reply.text, 'persisted', modelProfileId,
+                reply.toolCalls?.length ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null } : undefined)
         } catch (error) {
             const aborted = error instanceof Error && error.name === 'AbortError'
             // A streamed partial is preserved honestly, never re-fetched or dropped.

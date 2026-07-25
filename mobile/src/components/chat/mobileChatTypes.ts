@@ -36,7 +36,9 @@ export interface TalosMobileRoutingProfileView {
     lane_count: number
 }
 
-export type TalosMobileMessageRole = 'user' | 'assistant' | 'system'
+// Debt A1: 'tool' is renderable now — it was persistable but collapsed to
+// 'system', which made a tool loop impossible to show.
+export type TalosMobileMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosMobileMessageState = 'persisted' | 'pending' | 'failed'
 
 export interface TalosMobileMessageView {
