@@ -36,15 +36,22 @@
     <div id="app">
         <h1>Test della ricerca intelligente</h1>
         <p class="sub">
-            <b>Round 2.</b> Ora misura anche: quanto costa la <b>seconda</b> apertura (i modelli
+            <b>Round 3.</b> Ogni candidato gira ora in una <b>pagina pulita</b> (nel round 2 un
+            fallimento avvelenava tutti quelli dopo, e tre risultati erano falsi). In piu:
+            versioni a 8 bit mai provate, <b>fusione pesata</b> invece che alla pari, e un archivio
+            da <b>116 documenti</b> per vedere se la precisione regge quando il documento giusto
+            deve battere novanta vicini. Misura inoltre: quanto costa la <b>seconda</b> apertura (i modelli
             gia scaricati restano in memoria del telefono), i modelli che la GPU aveva rifiutato
             (riprovati su CPU), i <b>documenti lunghi spezzettati</b> come quelli veri, e la
             <b>fusione</b> fra ricerca a parole chiave e ricerca per significato.
             <b>Solo su Wi-Fi</b>, schermo acceso. Cio che avevi gia scaricato non si riscarica.
-            Nessun dato tuo viene usato: 24 note brevi + 8 documenti lunghi, tutti finti.
+            Nessun dato tuo viene usato: 24 note brevi, 8 documenti lunghi e 84 documenti di
+            disturbo, tutti finti. La pagina si ricarica da sola tra un candidato e l altro:
+            e voluto, non e un errore.
         </p>
         <button id="run">Avvia tutti in fila</button>
         <button id="base" class="ghost">Solo riferimento</button>
+        <button id="reset" class="ghost">Azzera</button>
         <button id="copy" class="ghost">Copia risultati</button>
         <div id="picker" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:6px;"></div>
 
@@ -54,7 +61,7 @@
                     <tr>
                         <th>Candidato</th><th>Scaricato</th><th>Avvio<br>freddo/caldo</th>
                         <th>Indicizza<br>(lunghi)</th><th>Query</th><th>1° colpo<br>corti</th>
-                        <th>1° colpo<br>lunghi</th><th>1° colpo<br>ibrido</th>
+                        <th>1° colpo<br>lunghi</th><th>1° colpo<br>116 doc</th>
                     </tr>
                 </thead>
                 <tbody id="rows"></tbody>
