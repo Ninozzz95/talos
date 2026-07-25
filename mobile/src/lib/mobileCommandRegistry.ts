@@ -1,27 +1,22 @@
+/**
+ * Owner 2026-07-25 (defect #6): the menu that opens with "/" advertised 21
+ * commands, 17 of them permanently greyed out — and four of THOSE claimed the
+ * feature was "not installed" while it shipped and worked (Doctor, export chat,
+ * notes, tasks). A product that understates itself is as dishonest as one that
+ * overstates itself, so the four are live and everything that does not exist is
+ * gone rather than displayed as a promise.
+ */
 export type TalosMobileCommandId =
-    | 'new_session'
-    | 'send_message'
-    | 'open_browse'
     | 'attach_file'
-    | 'open_context_vault'
-    | 'run_avm_compare'
-    | 'open_trace_replay'
-    | 'recover_failed_node'
-    | 'open_benchmark_workbench'
-    | 'open_model_center'
-    | 'open_doctor'
-    | 'open_audit_log'
-    | 'open_policy_panel'
-    | 'open_shell_policy_panel'
-    | 'open_backup_panel'
-    | 'validate_backup_restore'
     | 'export_report'
+    | 'new_session'
+    | 'open_browse'
+    | 'open_context_vault'
+    | 'open_doctor'
+    | 'open_model_center'
     | 'open_notes'
     | 'open_tasks'
-    | 'open_calendar_drafts'
-    | 'open_email_triage'
-    | 'create_email_draft'
-    | 'send_email_draft'
+    | 'send_message'
 
 export type TalosMobileCommandRisk = 'low' | 'medium' | 'high' | 'critical'
 export type TalosMobileCommandCategory =
@@ -45,6 +40,22 @@ export interface TalosMobileCommand {
     disabledReason?: string
 }
 
+/**
+ * The desktop command set, frozen, kept as a PARITY LEDGER rather than as menu
+ * content: it is what the mobile surface is measured against, and dropping it
+ * would hide the gap instead of closing it. What the user sees is
+ * TALOS_MOBILE_COMMANDS below — only commands that really run.
+ */
+export const TALOS_DESKTOP_COMMAND_IDS = Object.freeze([
+    'new_session', 'send_message', 'open_browse', 'attach_file', 'open_context_vault',
+    'run_avm_compare', 'open_trace_replay', 'recover_failed_node', 'open_benchmark_workbench',
+    'open_model_center', 'open_doctor', 'open_audit_log', 'open_policy_panel',
+    'open_shell_policy_panel', 'open_backup_panel', 'validate_backup_restore', 'export_report',
+    'open_notes', 'open_tasks', 'open_calendar_drafts', 'open_email_triage', 'create_email_draft',
+    'send_email_draft',
+] as const)
+
+/** Commands the mobile app can actually execute today. */
 export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freeze([
     {
         id: 'new_session',
@@ -77,7 +88,6 @@ export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freez
         category: 'context',
         risk: 'medium',
         capability: 'talos.files.upload',
-        disabledReason: 'The local Vault ingestion bridge is not installed.',
     },
     {
         id: 'open_context_vault',
@@ -86,42 +96,6 @@ export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freez
         category: 'context',
         risk: 'low',
         capability: 'talos.context.read',
-    },
-    {
-        id: 'run_avm_compare',
-        label: 'Run AVM compare',
-        description: 'Run an AVM ON/OFF benchmark comparison with stored evidence.',
-        category: 'benchmark',
-        risk: 'medium',
-        capability: 'talos.benchmarks.create',
-        disabledReason: 'The local benchmark runtime and evidence store are not installed.',
-    },
-    {
-        id: 'open_trace_replay',
-        label: 'Open trace replay',
-        description: 'Inspect replayable trace events for a persisted TALOS run.',
-        category: 'run',
-        risk: 'low',
-        capability: 'talos.runs.replay',
-        disabledReason: 'The local run trace and replay store are not installed.',
-    },
-    {
-        id: 'recover_failed_node',
-        label: 'Recover failed node',
-        description: 'Request controlled HMI recovery for a failed AVM node.',
-        category: 'run',
-        risk: 'high',
-        capability: 'talos.runs.recover',
-        disabledReason: 'The local run recovery engine is not installed.',
-    },
-    {
-        id: 'open_benchmark_workbench',
-        label: 'Open benchmark workbench',
-        description: 'Open the workbench for AVM evidence comparisons.',
-        category: 'benchmark',
-        risk: 'low',
-        capability: 'talos.benchmarks.read',
-        disabledReason: 'The local benchmark workbench is not installed.',
     },
     {
         id: 'open_model_center',
@@ -138,52 +112,6 @@ export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freez
         category: 'system',
         risk: 'low',
         capability: 'talos.doctor.read',
-        disabledReason: 'Mobile Doctor services are not installed.',
-    },
-    {
-        id: 'open_audit_log',
-        label: 'Open audit log',
-        description: 'Inspect persisted security and operator audit events.',
-        category: 'system',
-        risk: 'low',
-        capability: 'talos.audit.read',
-        disabledReason: 'The local audit service is not installed.',
-    },
-    {
-        id: 'open_policy_panel',
-        label: 'Open policy panel',
-        description: 'Inspect default-deny capabilities and authorization state.',
-        category: 'system',
-        risk: 'low',
-        capability: 'talos.policy.read',
-        disabledReason: 'The sovereign mobile policy runtime is not installed.',
-    },
-    {
-        id: 'open_shell_policy_panel',
-        label: 'Open shell policy',
-        description: 'Preview shell policy decisions without executing host commands.',
-        category: 'system',
-        risk: 'high',
-        capability: 'talos.shell.preview',
-        disabledReason: 'Host shell execution is not available in the standalone mobile app.',
-    },
-    {
-        id: 'open_backup_panel',
-        label: 'Open backup panel',
-        description: 'Inspect backup domains and restore safety policy.',
-        category: 'system',
-        risk: 'medium',
-        capability: 'talos.backup.read',
-        disabledReason: 'The encrypted mobile backup service is not installed.',
-    },
-    {
-        id: 'validate_backup_restore',
-        label: 'Validate backup restore',
-        description: 'Validate a TALOS backup manifest without restoring data.',
-        category: 'system',
-        risk: 'high',
-        capability: 'talos.backup.restore',
-        disabledReason: 'The encrypted mobile backup validator is not installed.',
     },
     {
         id: 'export_report',
@@ -192,7 +120,6 @@ export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freez
         category: 'report',
         risk: 'medium',
         capability: 'talos.reports.export',
-        disabledReason: 'The local session export service is not installed.',
     },
     {
         id: 'open_notes',
@@ -201,7 +128,6 @@ export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freez
         category: 'productivity',
         risk: 'low',
         capability: 'talos.notes.read',
-        disabledReason: 'The local Notes repository is not installed.',
     },
     {
         id: 'open_tasks',
@@ -210,43 +136,6 @@ export const TALOS_MOBILE_COMMANDS: readonly TalosMobileCommand[] = Object.freez
         category: 'productivity',
         risk: 'low',
         capability: 'talos.tasks.read',
-        disabledReason: 'The local Tasks repository is not installed.',
-    },
-    {
-        id: 'open_calendar_drafts',
-        label: 'Open calendar drafts',
-        description: 'Inspect draft-only calendar actions that require confirmation.',
-        category: 'productivity',
-        risk: 'medium',
-        capability: 'talos.calendar.read',
-        disabledReason: 'No authorized mobile calendar connector is configured.',
-    },
-    {
-        id: 'open_email_triage',
-        label: 'Open email triage',
-        description: 'Inspect read-only email context and draft replies.',
-        category: 'email',
-        risk: 'medium',
-        capability: 'talos.email.read',
-        disabledReason: 'No authorized mobile email connector is configured.',
-    },
-    {
-        id: 'create_email_draft',
-        label: 'Create email draft',
-        description: 'Create a draft from selected email messages without sending it.',
-        category: 'email',
-        risk: 'medium',
-        capability: 'talos.email.draft',
-        disabledReason: 'No selected message or authorized mobile email connector is available.',
-    },
-    {
-        id: 'send_email_draft',
-        label: 'Send email draft',
-        description: 'Send a reviewed email draft.',
-        category: 'email',
-        risk: 'critical',
-        capability: 'talos.email.send',
-        disabledReason: 'Email send is disabled until mobile confirmation, policy, and audit exist.',
     },
 ])
 

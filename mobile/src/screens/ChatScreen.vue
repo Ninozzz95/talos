@@ -32,6 +32,10 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
 // bottom-docked composer. Local-first — the composer talks to the provider directly
 // from the device via the controller (key from the OS keystore). Mirrors the desktop
 // TalosComposerDock bottom dock (fixed + safe-area + reserved scroll padding).
+// Defect #6: `/export` is a real command now, but the export sheet lives in the
+// shell — the screen asks for it instead of duplicating the surface.
+const emit = defineEmits<{ export: [] }>()
+
 const router = useRouter()
 const controller = useChatController()
 const settings = useSettingsStore()
@@ -413,7 +417,9 @@ function replacePromptEnhancement(): void {
 }
 
 function selectSlashCommand(commandId: TalosMobileCommandId): void {
-    if (!['new_session', 'open_browse', 'open_context_vault', 'open_model_center'].includes(commandId)) return
+    // Owner 2026-07-25 (defect #6): four commands claimed "not installed" while
+    // the feature shipped and worked. The registry no longer lies, so the
+    // handler has to actually run them.
     void sessionActions.run('Run command', async () => {
         draft.updatePrompt('')
         await draft.flush()
@@ -433,7 +439,29 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
             await router.push({ name: 'context' })
             return
         }
-        await router.push({ name: 'settings', query: { tab: 'models' } })
+        if (commandId === 'attach_file') {
+            selectAttachments()
+            return
+        }
+        if (commandId === 'export_report') {
+            emit('export')
+            return
+        }
+        if (commandId === 'open_doctor') {
+            await router.push({ name: 'doctor' })
+            return
+        }
+        if (commandId === 'open_notes') {
+            await router.push({ name: 'notes' })
+            return
+        }
+        if (commandId === 'open_tasks') {
+            await router.push({ name: 'tasks' })
+            return
+        }
+        if (commandId === 'open_model_center') {
+            await router.push({ name: 'settings', query: { tab: 'models' } })
+        }
     })
 }
 

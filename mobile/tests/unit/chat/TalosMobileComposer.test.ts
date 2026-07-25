@@ -279,17 +279,19 @@ describe('TalosMobileComposer', () => {
         expect(view.emitted('update:prompt')?.at(-1)).toEqual([''])
     })
 
-    it('never activates a disabled slash command or breaks normal Enter Shift Enter and IME', async () => {
+    it('runs a real slash command and still handles Enter, Shift+Enter and IME', async () => {
+        // Owner 2026-07-25 (defect #6): `/file` used to render greyed out with
+        // "the local Vault ingestion bridge is not installed" while attaching
+        // files worked from the composer. Every row is executable now.
         const view = mountComposer({ prompt: '/file' })
         await flushPromises()
         const field = view.get<HTMLTextAreaElement>('textarea[aria-label="Message TALOS"]')
 
         await vi.waitFor(() => expect(view.find('[role="option"]').exists()).toBe(true))
-        expect(view.get('[role="option"]').attributes('aria-disabled')).toBe('true')
+        expect(view.get('[role="option"]').attributes('aria-disabled')).toBe('false')
         await field.trigger('keydown', { key: 'Enter' })
-        expect(view.emitted('selectSlashCommand')).toBeUndefined()
+        expect(view.emitted('selectSlashCommand')).toHaveLength(1)
         expect(view.emitted('send')).toBeUndefined()
-        expect(view.emitted('update:prompt')).toBeUndefined()
 
         await view.setProps({ prompt: 'normal message' })
         await field.trigger('keydown', { key: 'Enter', shiftKey: true })
