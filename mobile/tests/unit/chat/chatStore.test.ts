@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
-import { createChatStore, type ChatTurn } from '@/stores/chat'
+import { TALOS_MESSAGE_PAGE_SIZE, createChatStore, type ChatTurn } from '@/stores/chat'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 
 function makeClock(): () => string {
@@ -519,5 +519,73 @@ describe('createChatStore durable sessions', () => {
         })
         await reloaded.initialize()
         expect(reloaded.sessions.find((session) => session.id === second.id)?.metadata.sort_index).toBe(0)
+    })
+})
+
+/**
+ * Owner 2026-07-25 (defect #4): a chat used to load EVERY message on open, so
+ * the conversations you use most became the slowest. The newest page loads
+ * first and older ones arrive as you scroll up.
+ */
+describe('message paging (defect #4)', () => {
+    async function seeded(count: number) {
+        const repository = createMemoryChatRepository()
+        const store = createChatStore(async () => ({ text: 'ok' }), { repository })
+        await store.initialize()
+        // A fresh store has no session until one is created.
+        const session = await store.createSession('Conversazione lunga')
+        const sessionId = session.id
+        for (let index = 0; index < count; index += 1) {
+            await repository.appendMessage({
+                id: `m${String(index).padStart(3, '0')}`,
+                session_id: sessionId,
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `messaggio ${index}`,
+                state: 'persisted',
+                model_profile_id: null,
+            })
+        }
+        return { store, repository, sessionId }
+    }
+
+    it('opens with the NEWEST page, not the whole history', async () => {
+        const { store, sessionId } = await seeded(95)
+        await store.selectSession(sessionId)
+        expect(store.messages).toHaveLength(TALOS_MESSAGE_PAGE_SIZE)
+        // The newest must be on screen: opening on ancient history would be a
+        // different bug wearing the fix's clothes.
+        expect(store.messages.at(-1)?.content).toBe('messaggio 94')
+        expect(store.state.hasOlderMessages).toBe(true)
+    })
+
+    it('prepends older pages in order and stops when the top is reached', async () => {
+        const { store, sessionId } = await seeded(95)
+        await store.selectSession(sessionId)
+        expect(await store.loadOlderMessages()).toBe(TALOS_MESSAGE_PAGE_SIZE)
+        expect(store.messages).toHaveLength(80)
+        expect(store.messages[0]?.content).toBe('messaggio 15')
+        expect(await store.loadOlderMessages()).toBe(15)
+        expect(store.messages).toHaveLength(95)
+        expect(store.messages[0]?.content).toBe('messaggio 0')
+        expect(store.state.hasOlderMessages).toBe(false)
+        // Nothing left above: further calls must be free, not another query.
+        expect(await store.loadOlderMessages()).toBe(0)
+    })
+
+    it('a short conversation loads whole and never offers to load more', async () => {
+        const { store, sessionId } = await seeded(5)
+        await store.selectSession(sessionId)
+        expect(store.messages).toHaveLength(5)
+        expect(store.state.hasOlderMessages).toBe(false)
+        expect(await store.loadOlderMessages()).toBe(0)
+    })
+
+    it('never duplicates a message across pages', async () => {
+        const { store, sessionId } = await seeded(95)
+        await store.selectSession(sessionId)
+        await store.loadOlderMessages()
+        await store.loadOlderMessages()
+        const ids = store.messages.map((message) => message.id)
+        expect(new Set(ids).size).toBe(ids.length)
     })
 })

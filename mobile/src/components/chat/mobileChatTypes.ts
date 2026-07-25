@@ -43,6 +43,8 @@ export type TalosMobileMessageState = 'persisted' | 'pending' | 'failed'
 
 export interface TalosMobileMessageView {
     id: string
+    /** Defect #4: the keyset cursor for loading the page above this one. */
+    ordinal?: number
     role: TalosMobileMessageRole
     content: string
     created_at: string

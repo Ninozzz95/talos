@@ -284,7 +284,17 @@ export interface TalosChatRepository {
     /** SF-5: metadata-only write — recency (updated_at) is preserved. */
     updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<string | null>
-    listMessages(sessionId: string): Promise<TalosLocalChatMessage[]>
+    /**
+     * Owner 2026-07-25 (defect #4): opening a chat used to load EVERY message,
+     * so the conversations you use most became the slowest to open. `before` is
+     * a KEYSET cursor (ordinal, id) rather than an offset — offsets make the
+     * database walk and discard the rows it skips, which gets worse exactly as
+     * the history grows.
+     */
+    listMessages(
+        sessionId: string,
+        options?: { limit?: number; before?: { ordinal: number; id: string } },
+    ): Promise<TalosLocalChatMessage[]>
     appendMessage(input: AppendChatMessageInput): Promise<TalosLocalChatMessage>
     appendToolActivity(input: CreateToolActivityInput): Promise<TalosLocalToolActivity>
     updateToolActivity(activityId: string, input: UpdateToolActivityInput): Promise<void>

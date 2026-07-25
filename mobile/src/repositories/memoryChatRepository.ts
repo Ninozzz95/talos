@@ -196,13 +196,21 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             }
             return activeSessionId
         },
-        async listMessages(sessionId: string) {
-            return (messages.get(sessionId) ?? [])
+        async listMessages(sessionId: string, options?: { limit?: number; before?: { ordinal: number; id: string } }) {
+            const all = (messages.get(sessionId) ?? [])
                 .slice()
                 .sort((left, right) => left.ordinal - right.ordinal
                     || left.created_at.localeCompare(right.created_at)
                     || left.id.localeCompare(right.id))
                 .map(copyMessage)
+            if (options?.limit === undefined) return all
+            const cursor = options.before
+            const older = cursor
+                ? all.filter((message) => message.ordinal < cursor.ordinal
+                    || (message.ordinal === cursor.ordinal && message.id < cursor.id))
+                : all
+            // Same contract as SQLite: the NEWEST `limit` of what remains.
+            return older.slice(Math.max(0, older.length - options.limit))
         },
         async appendMessage(input: AppendChatMessageInput) {
             const session = requireSession(input.session_id)
