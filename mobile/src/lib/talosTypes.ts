@@ -22,14 +22,11 @@ export type RunStatus =
 export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosSessionSurface = 'chat' | 'browse'
 export type TalosChatBubbleScale = 'compact' | 'balanced' | 'expanded'
-export type TalosComposerMode = 'full' | 'minimal'
 export type TalosMessageStyle = 'sections' | 'bubbles'
 export type TalosMobileWindowPresentation = 'drawer' | 'fullscreen'
 export type TalosChatLayoutPreferences = {
     bubble_scale: TalosChatBubbleScale
-    composer_mode: TalosComposerMode
     message_style: TalosMessageStyle
-    advanced_rail_expanded: boolean
     mobile_window_presentation: TalosMobileWindowPresentation
 }
 export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'recovery_required' | 'stopped' | 'failed'

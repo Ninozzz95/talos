@@ -2,7 +2,7 @@
  * Local-first settings preferences — the desktop `preferences` subtrees that are pure
  * client render/behaviour prefs (chat layout, AI defaults, appearance visibility,
  * F4-#25: keyboard shortcuts REMOVED — hardware bindings make no sense on a phone). Each subtree is fail-closed through the ported desktop resolvers
- * (`sanitizeTalosChatLayout`, `resolveTalosAppearanceVisibility`)
+ * (`sanitizeTalosChatLayout`)
  * so parity is exact. Persisted in Capacitor Preferences; theme + color mode live in the
  * theme store. Server-coupled tabs (search/browser/integrations/…) are replicated in the
  * UI as gated/read-only per the identical-to-desktop rule but hold no live state here.
@@ -11,11 +11,6 @@ import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
 import type { TalosChatLayoutPreferences } from '@/lib/talosTypes'
-import {
-    resolveTalosAppearanceVisibility,
-    type TalosAppearanceGroup,
-    type TalosAppearanceVisibility,
-} from '@/lib/talosAppearancePreferences'
 import {
     parseTalosMotionV6Preferences,
     type TalosInterfaceMotionCategories,
@@ -256,7 +251,6 @@ export interface TalosMobileSettingsState {
     ai_defaults: TalosAiDefaults
     composer_defaults: TalosComposerDefaults
     motion_v6: TalosMotionV6Preferences
-    appearance_visibility: TalosAppearanceVisibility
     model_lab: TalosMobileModelLabPreferences
     browser: TalosMobileBrowserPreferences
     voice: TalosMobileVoicePreferences
@@ -367,7 +361,6 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         ai_defaults: parseAiDefaults(value.ai_defaults),
         composer_defaults: parseComposerDefaults(value.composer_defaults),
         motion_v6: motionParsed,
-        appearance_visibility: resolveTalosAppearanceVisibility(value.appearance_visibility),
         model_lab: parseTalosMobileModelLabPreferences(
             value.model_lab ?? TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
         ),
@@ -395,8 +388,6 @@ export interface SettingsStore {
     setVoicePreferences(patch: Partial<TalosMobileVoicePreferences>): Promise<void>
     setMotionPreferences(patch: TalosMotionPreferencePatch): Promise<void>
     resetMotionPreferences(): Promise<void>
-    setVisibility(group: TalosAppearanceGroup, key: string, value: boolean): Promise<void>
-    resetVisibility(group?: TalosAppearanceGroup): Promise<void>
 }
 
 let singleton: SettingsStore | null = null
@@ -421,7 +412,6 @@ export function useSettingsStore(): SettingsStore {
                 ai_defaults: state.ai_defaults,
                 composer_defaults: state.composer_defaults,
                 motion_v6: state.motion_v6,
-                appearance_visibility: state.appearance_visibility,
                 model_lab: state.model_lab,
                 browser: state.browser,
                 voice: state.voice,
@@ -439,7 +429,6 @@ export function useSettingsStore(): SettingsStore {
             state.ai_defaults = parsed.ai_defaults
             state.composer_defaults = parsed.composer_defaults
             state.motion_v6 = parsed.motion_v6
-            state.appearance_visibility = parsed.appearance_visibility
             state.model_lab = parsed.model_lab
             state.browser = parsed.browser
             state.voice = parsed.voice
@@ -512,25 +501,6 @@ export function useSettingsStore(): SettingsStore {
         },
         async resetMotionPreferences() {
             state.motion_v6 = createMobileDefaultMotionPreferences()
-            await persist()
-        },
-        async setVisibility(group, key, value) {
-            const groupMap = state.appearance_visibility[group] as Record<string, boolean>
-            if (key in groupMap) {
-                groupMap[key] = value
-                await persist()
-            }
-        },
-        async resetVisibility(group) {
-            const defaults = resolveTalosAppearanceVisibility({})
-            if (group) {
-                state.appearance_visibility = {
-                    ...state.appearance_visibility,
-                    [group]: defaults[group],
-                }
-            } else {
-                state.appearance_visibility = defaults
-            }
             await persist()
         },
     }

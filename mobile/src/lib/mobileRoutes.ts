@@ -82,6 +82,3 @@ export function isTalosMobileRouteName(value: unknown): value is TalosMobileRout
 
 // Compatibility symbol retained for test/consumer code that previously asked for
 // an async route component. Vue Router owns loading and caching the returned loader.
-export function asyncRouteComponent(route: TalosMobileRoute): TalosMobileRoute['component'] {
-    return route.component
-}
