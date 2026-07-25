@@ -169,11 +169,82 @@ at all**. Two conclusions, of different weight:
 4. **Scale test**: ~100 documents instead of 32, to see whether accuracy holds
    and how ranking time grows when the index is realistic.
 
-## Decision (to be written with the numbers in hand)
+## Results — round 3 (116 documents / 136 chunks, pristine page per arm)
 
-The recommendation must answer four things explicitly:
-1. which model ships (or that none does, and why),
-2. whether WebGPU was available or the WASM path is what we must design for,
-3. chunk size and whether the hybrid keyword+semantic fusion is worth it,
-4. what the download consent screen must say — the owner chose "downloaded on
-   first use, with explicit consent and the size stated".
+Scale corpus = 8 page-length documents + 24 notes + 84 distractors in the same
+register; the 18 long-document questions must now beat 90 neighbours.
+
+| arm | backend | MB | warm start | index 136 chunks | chars/s | query | R@1 semantic (8 docs → 116 docs) | **R@1 hybrid 3:1 @116** |
+|---|---|---|---|---|---|---|---|---|
+| keyword (today) | — | 0 | — | — | — | 0.4 ms | 0.50 → **0.50** | — |
+| e5-small q8 | webgpu | 118 | 1.35 s | 38 s | 1125 | 196 ms | 0.83 → **0.83** | 0.83 (R@3 0.94) |
+| gte-base q8 (CLS) | webgpu | 340 | 1.56 s | 122 s | 353 | 277 ms | 1.00 → 0.78 | **1.00** |
+| EmbeddingGemma q8 | **wasm (CPU)** | 309 | 1.92 s | 138 s | 312 | 291 ms | 1.00 → 0.89 | **1.00** |
+| Qwen3-0.6B q8 | wasm | — | — | — | — | — | — | **freezes the WebView** |
+
+### The two findings that decide the design
+
+1. **Round 2's "hybrid hurts" was an artefact of equal weighting.** Swept
+   properly, fusion is the best configuration everywhere, and at scale it is
+   decisive: gte goes 0.78 → **1.00** and EmbeddingGemma 0.89 → **1.00** once
+   the semantic ranker is weighted 2–3× the keyword one. At 1:1 it still hurts.
+   Shipping the textbook default would have cost 22 points of accuracy; so
+   would have believing round 2 and dropping hybrid altogether.
+2. **Scale hurts dense retrieval and the keyword ranker fixes exactly that.**
+   Semantic-only degrades as distractors grow (gte 1.00 → 0.78, Gemma
+   1.00 → 0.89) because near-neighbours crowd the top. The keyword signal —
+   worthless alone at 0.50 — supplies the literal disambiguation dense vectors
+   lose, and the fusion lands on 1.00. Neither half gets there by itself.
+
+### Other measurements worth keeping
+
+- **EmbeddingGemma runs on this device after all** — on CPU, with the q8
+  export. Its q4 export is dead here (`GatherBlockQuantized` has no CPU kernel)
+  and its WebGPU path is dead too (65,536-byte workgroup request against a
+  32,768 limit). Best-in-class accuracy is reachable, on the slow path.
+- **Qwen3-0.6B q8 freezes the WebView.** 0.6B parameters on WASM is past what
+  an Android WebView tolerates. Not viable, at any quality.
+- Warm start is 1.3–1.9 s for every candidate: not a differentiator.
+- Query latency 196–291 ms at 116 documents: not a differentiator either.
+- **Indexing throughput is the only real cost difference**, and it is 3×
+  between e5-small and the two big models.
+
+### Honesty about the sample
+
+18 queries. "1.00" means *no failure observed in 18 attempts*, not proof of
+perfection — the difference between gte+hybrid and Gemma+hybrid is inside the
+noise of this sample. What is well outside the noise is the gap to the current
+keyword search (0.50) and to semantic-only at scale.
+
+## Decision
+
+**Ship `onnx-community/gte-multilingual-base` q8 with CLS pooling, on WebGPU,
+fused with the existing keyword ranker by weighted reciprocal rank fusion at
+3:1 in favour of the semantic side (k = 60). Chunk at 800 characters with 150
+of overlap; a document scores as its best chunk.**
+
+Why this one over the alternatives:
+
+- vs **semantic-only**: 0.78 → 1.00 at realistic corpus size. The keyword
+  ranker already exists, so fusion costs nothing to run.
+- vs **EmbeddingGemma** (equal accuracy): Gemma is CPU-only on this hardware.
+  It would compete with the UI thread for the whole indexing pass and it is
+  slightly larger to download. Keep it as the **fallback when WebGPU is
+  absent** — it is the only candidate proven to work without a GPU.
+- vs **e5-small** (0.83 vs 1.00): the gap is one missed document in five.
+  Keep it as the **light profile** for storage-constrained devices: 118 MB
+  instead of 340, 3× faster indexing, 384-dimension vectors (half the storage).
+- vs **Qwen3 / e5-large**: not viable on device.
+
+### What this means for the product
+
+- **First-use download: 340 MB**, with explicit consent and the size stated —
+  as the owner decided. The consent screen must also say it works offline
+  afterwards and can be removed.
+- **Indexing is a background job with a progress bar**, incremental and
+  resumable: at 353 chars/s a 200 KB library takes ~9 minutes once. New
+  documents are indexed as they arrive, so the wait happens exactly once.
+- **Vector storage**: 768 dimensions × 4 bytes ≈ 3 KB per chunk, ~1.4 MB for a
+  200 KB library. Negligible; int8 quantisation is available if it ever isn't.
+- **Search stays instant when the index is missing**: the keyword ranker is the
+  fallback, not an error state.
