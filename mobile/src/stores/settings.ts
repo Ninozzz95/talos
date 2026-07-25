@@ -83,6 +83,15 @@ export interface TalosMobileShellPreferences {
      *  preset. Opt-in — a restart is required to apply, so switching prompts
      *  the user (restart now / on next close). */
     launcher_icon_follows_theme: boolean
+    /** Owner 2026-07-25: let the model in ANY chat read the GLOBAL Library
+     *  (injected as context). Opt-in — adds tokens to each message. */
+    library_context_enabled: boolean
+    /** Owner 2026-07-25: the model auto-saves generated files to the Library via a
+     *  marker. On by default (owner wants it) but opt-out — when off, the model is
+     *  not instructed to emit the marker and no capture runs. */
+    library_autosave_generated: boolean
+    /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
+    library_view: 'grid' | 'list'
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
 }
@@ -95,6 +104,9 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     immersive_composer: false,
     plus_dropdown: false,
     launcher_icon_follows_theme: false,
+    library_context_enabled: false,
+    library_autosave_generated: true,
+    library_view: 'grid',
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -116,6 +128,13 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         launcher_icon_follows_theme: typeof record.launcher_icon_follows_theme === 'boolean'
             ? record.launcher_icon_follows_theme
             : DEFAULT_SHELL_PREFERENCES.launcher_icon_follows_theme,
+        library_context_enabled: typeof record.library_context_enabled === 'boolean'
+            ? record.library_context_enabled
+            : DEFAULT_SHELL_PREFERENCES.library_context_enabled,
+        library_autosave_generated: typeof record.library_autosave_generated === 'boolean'
+            ? record.library_autosave_generated
+            : DEFAULT_SHELL_PREFERENCES.library_autosave_generated,
+        library_view: record.library_view === 'list' ? 'list' : 'grid',
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }

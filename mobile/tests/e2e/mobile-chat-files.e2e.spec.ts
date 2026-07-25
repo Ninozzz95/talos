@@ -118,6 +118,11 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
 
     await page.getByLabel('Choose grounding context').click()
     await expect(page).toHaveURL(/\/context$/)
+    // The gallery defaults to a grid (image tiles show no name text, tap-to-open);
+    // switch to the list view (remembered across visits) where names + per-file
+    // attach/delete actions live.
+    await page.getByLabel('Library options').click()
+    await page.getByTestId('talos-library-view-list').click()
     const vault = page.getByRole('list', { name: 'Library files' })
     await expect(vault).toContainText('release-brief.txt')
     await expect(vault).toContainText('reference.png')
@@ -131,6 +136,8 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
     await expect(page.getByTestId('talos-mobile-attachment-tray')).toHaveCount(0)
 
     await page.getByLabel('Choose grounding context').click()
+    await page.getByLabel('Library options').click()
+    await page.getByTestId('talos-library-view-list').click()
     await page.getByLabel('Delete release-brief.txt').click()
     await expect(page.getByRole('heading', { name: 'Delete file?' })).toBeVisible()
     await page.getByRole('button', { name: 'Delete file', exact: true }).click()

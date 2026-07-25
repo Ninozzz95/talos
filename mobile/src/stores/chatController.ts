@@ -44,6 +44,14 @@ import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
+import { extractLibrarySaveBlocks, librarySaveInstruction } from '@/lib/chat/librarySave'
+import {
+    buildTalosLibraryContextBlock,
+    selectLibraryDocsForInjection,
+    talosLibraryDisclosure,
+    type LibraryDoc,
+} from '@/lib/chat/libraryContext'
+import { parseVaultOrigin } from '@/lib/vaultLibrary'
 import { createStationFacades } from '@/stores/stationFacades'
 import {
     buildTalosMemoryContextMessage,
@@ -90,6 +98,7 @@ const productionVaultService: TalosVaultService = {
     ingest: async (file, originSessionId) => (await loadProductionVaultService()).ingest(file, originSessionId),
     createGenerated: async (input, originSessionId) => (await loadProductionVaultService()).createGenerated(input, originSessionId),
     createGrant: async (fileId) => (await loadProductionVaultService()).createGrant(fileId),
+    readFilePreview: async (fileId) => (await loadProductionVaultService()).readFilePreview(fileId),
     revokeGrant: async (grantId) => (await loadProductionVaultService()).revokeGrant(grantId),
     resolveMessageParts: async (messageId) => (await loadProductionVaultService()).resolveMessageParts(messageId),
     listFiles: async () => (await loadProductionVaultService()).listFiles(),
@@ -108,6 +117,7 @@ const unavailableVaultService: TalosVaultService = {
     ingest: async (_file, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGenerated: async (_input, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    readFilePreview: async () => null,
     revokeGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     listFiles: async () => [],
@@ -146,6 +156,10 @@ export interface ChatControllerDeps {
             readonly composer_defaults: TalosComposerDefaults
             readonly model_lab: TalosMobileModelLabPreferences
             readonly tone: { readonly preset: TalosToneId }
+            readonly shell?: {
+                readonly library_context_enabled?: boolean
+                readonly library_autosave_generated?: boolean
+            }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -406,6 +420,47 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
     let memorySelection: ReturnType<typeof selectTalosMemoriesForSession> = []
 
+    // Owner 2026-07-25: the model in ANY chat can read the GLOBAL Library. Mirrors
+    // prepareMemoryInjection — select (auto-scaling), stamp the disclosure, and set
+    // a pending block that complete() prepends to the last user turn. Each doc
+    // carries its origin chat so the model knows a document's provenance.
+    let pendingLibraryBlock: string | null = null
+    let librarySelection: LibraryDoc[] = []
+    async function prepareLibraryInjection(query: string): Promise<Record<string, unknown>> {
+        if (chat.state.sending) return {}
+        pendingLibraryBlock = null
+        librarySelection = []
+        if (!deps.settings.state.shell?.library_context_enabled) return {}
+        try {
+            const files = attachments.vaultFiles.filter((file) => file.status === 'available')
+            if (files.length === 0) return {}
+            const titles = new Map(chat.sessions.map((session) => [session.id, session.title]))
+            const docs: LibraryDoc[] = files.map((file) => {
+                const originSessionId = (file.metadata as { origin_session_id?: string | null }).origin_session_id ?? null
+                return {
+                    id: file.id,
+                    displayName: file.display_name,
+                    origin: parseVaultOrigin(file.metadata),
+                    originSessionId,
+                    originSessionTitle: originSessionId ? (titles.get(originSessionId) ?? null) : null,
+                    text: file.extracted_text ?? '',
+                    createdAt: file.created_at,
+                }
+            })
+            const selected = selectLibraryDocsForInjection(docs, {
+                query, charBudget: 24_000, maxDocs: 8, perDocChars: 4_000,
+            })
+            if (selected.length === 0) return {}
+            librarySelection = selected
+            pendingLibraryBlock = 'pending'
+            return { used_library: talosLibraryDisclosure(selected) }
+        } catch {
+            pendingLibraryBlock = null
+            librarySelection = []
+            return {}
+        }
+    }
+
     const complete: ChatCompletion = async (turns, stream) => {
         const profile = selectedProfile.value
         const providerModel = selectedProviderModel.value
@@ -416,20 +471,37 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             : undefined
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         try {
+            const autosaveGenerated = deps.settings.state.shell?.library_autosave_generated ?? true
             const tonePrompt = buildTalosSystemPrompt(
                 deps.settings.state.tone.preset,
                 profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
-            )
+            ) + (autosaveGenerated ? '\n' + librarySaveInstruction() : '')
             let payloadTurns = turns
+            let memoryWrapped = false
             if (pendingMemoryBlock !== null && memorySelection.length > 0) {
                 const lastUserIndex = turns.map((turn) => turn.role).lastIndexOf('user')
                 if (lastUserIndex >= 0) {
                     payloadTurns = turns.map((turn, index) => index === lastUserIndex
                         ? { ...turn, content: buildTalosMemoryContextMessage(turn.content, memorySelection) }
                         : turn)
+                    memoryWrapped = true
                 }
                 pendingMemoryBlock = null
                 memorySelection = []
+            }
+            if (pendingLibraryBlock !== null && librarySelection.length > 0) {
+                const block = buildTalosLibraryContextBlock(librarySelection, { perDocChars: 4_000 })
+                const lastUserIndex = payloadTurns.map((turn) => turn.role).lastIndexOf('user')
+                if (block !== '' && lastUserIndex >= 0) {
+                    payloadTurns = payloadTurns.map((turn, index) => index === lastUserIndex
+                        // If memory already wrapped the turn it carries the single final
+                        // USER_TASK, so just prepend; otherwise add the boundary here so
+                        // untrusted doc bodies are delimited from the user's instruction.
+                        ? { ...turn, content: memoryWrapped ? `${block}\n\n${turn.content}` : `${block}\n\nUSER_TASK:\n${turn.content}` }
+                        : turn)
+                }
+                pendingLibraryBlock = null
+                librarySelection = []
             }
             const raw = await buildChatCompletion(
                 () => ({
@@ -457,7 +529,24 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     durationMs: 12000,
                 })
             }
-            return text
+            // Owner 2026-07-25: the chat can't hand out downloads — a file the model
+            // wraps in the save marker is captured into the Library (generated,
+            // provenance-stamped) and the marker tags are stripped from the reply.
+            // Gated by the opt-out toggle so untrusted output never creates files
+            // silently when the user turned auto-save off.
+            const { text: finalText, blocks } = autosaveGenerated
+                ? extractLibrarySaveBlocks(text)
+                : { text, blocks: [] as ReturnType<typeof extractLibrarySaveBlocks>['blocks'] }
+            for (const block of blocks) {
+                void attachments.saveGenerated(block)
+                    .then((file) => toasts.push({
+                        message: `Saved “${file.display_name}” to your Library.`, durationMs: 6000,
+                    }))
+                    .catch(() => toasts.push({
+                        message: `“${block.name}” could not be saved to the Library.`, durationMs: 6000,
+                    }))
+            }
+            return finalText
         } catch (error) {
             const safeMessage = safeProviderMessage(error, apiKey)
             if (error instanceof TalosMobileProviderError) {
@@ -925,7 +1014,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const accepted = await chat.send(
             text,
             selectedModelId.value,
-            await prepareMemoryInjection(),
+            { ...await prepareMemoryInjection(), ...await prepareLibraryInjection(text) },
             attachments.bindings.value,
             // Owner 2026-07-24: clear the composer's attachments the instant the
             // user turn is COMMITTED — not after the whole generation, which left
@@ -941,6 +1030,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (!message || message.role !== 'user') throw new Error('TALOS could not find the message to resend.')
         await chat.send(message.content, selectedModelId.value, {
             ...await prepareMemoryInjection(),
+            ...await prepareLibraryInjection(message.content),
             command_id: 'resend_message',
             resend_of_message_id: message.id,
         })
@@ -955,6 +1045,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (!previousUser) throw new Error('TALOS could not find the prompt that produced this answer.')
         await chat.send(previousUser.content, selectedModelId.value, {
             ...await prepareMemoryInjection(),
+            ...await prepareLibraryInjection(previousUser.content),
             command_id: 'retry_assistant_response',
             retry_of_message_id: message.id,
             resend_of_message_id: previousUser.id,
