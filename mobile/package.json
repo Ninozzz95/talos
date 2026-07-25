@@ -26,10 +26,12 @@
     "scripts": {
         "preinstall": "node scripts/assert-runtime.mjs",
         "dev": "vite",
-        "build": "vue-tsc -b && vite build && node scripts/verify-initial-chunk.mjs",
+        "build": "vue-tsc -b && vite build && node scripts/verify-initial-chunk.mjs && npm run verify:parity",
         "preview": "vite preview",
         "test:unit": "vitest run",
-        "test:e2e": "playwright test"
+        "test:e2e": "playwright test",
+        "verify:parity": "node scripts/verify-parity-ledger.mjs docs/feature-parity.json",
+        "typecheck": "vue-tsc --noEmit"
     },
     "dependencies": {
         "@aparajita/capacitor-biometric-auth": "10.0.0",

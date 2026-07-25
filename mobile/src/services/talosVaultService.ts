@@ -34,6 +34,8 @@ export interface TalosVaultService {
     listFiles(): Promise<TalosLocalVaultFile[]>
     /** Perf review: the boot path must not pull every document body into memory. */
     listSummaries(): Promise<TalosLocalVaultFile[]>
+    /** Full extracted text for ONE file (never list the corpus to read one). */
+    readFileText(fileId: string): Promise<string | null>
     deleteFile(fileId: string): Promise<void>
     reconcilePending(): Promise<void>
 }
@@ -167,6 +169,10 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             }, 'generated', originSessionId)
         },
         createGrant,
+        async readFileText(fileId) {
+            const file = await options.repository.getVaultFile(fileId)
+            return file?.extracted_text ?? null
+        },
         async readFilePreview(fileId) {
             const file = await options.repository.getVaultFile(fileId)
             if (!file || file.status !== 'available' || !file.private_uri) return null
@@ -226,7 +232,9 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             if (file.private_uri) await options.fileStore.deletePrivate(file.private_uri)
         },
         async reconcilePending() {
-            const pending = (await options.repository.listVaultFiles())
+            // Round 3: the boot path must not pull every document body — pending
+            // rows are found from summaries, and only they are re-analysed.
+            const pending = (await options.repository.listVaultFileSummaries())
                 .filter((file) => file.status === 'pending')
             for (const file of pending) {
                 try {

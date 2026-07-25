@@ -657,7 +657,12 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 onChunk: (text) => {
                     streamed += text
                     // Security review: never render raw save-markers mid-stream.
-                    state.streamingText = stripLibrarySaveMarkers(streamed)
+                    // Round 3: stripping the WHOLE buffer on every chunk was O(n²)
+                    // (measured 8.3s for a marker-heavy reply). Only pay for it once
+                    // a marker character has actually appeared.
+                    state.streamingText = streamed.includes('[TALOS_SAVE_LIBRARY')
+                        ? stripLibrarySaveMarkers(streamed)
+                        : streamed
                 },
                 signal: abort.signal,
             })
