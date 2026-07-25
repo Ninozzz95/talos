@@ -197,7 +197,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
         async streamComplete(input, credential, handlers) {
             const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'complete')
-            const text = await talosStreamText({
+            const stream = await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
                 body: compatibleCompletionData(config, input, true),
@@ -207,10 +207,24 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     const event = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> }
                     return event.choices?.[0]?.delta?.content ?? ''
                 },
+                // Defect #5: DeepSeek streams `reasoning_content`, OpenRouter
+                // `reasoning`. Both are the model thinking out loud, and both
+                // used to be dropped on the floor.
+                extractReasoning: (payload) => {
+                    const event = JSON.parse(payload) as {
+                        choices?: Array<{ delta?: { reasoning_content?: string | null; reasoning?: string | null } }>
+                    }
+                    const delta = event.choices?.[0]?.delta
+                    // `||`, not `??`: a gateway that mirrors both fields sends an
+                    // EMPTY reasoning_content beside a populated reasoning, and
+                    // nullish-coalescing would take the empty one.
+                    return delta?.reasoning_content || delta?.reasoning || ''
+                },
                 onChunk: handlers.onChunk,
+                onReasoning: handlers.onReasoning,
             })
-            if (!text) throw malformedProviderResponse(config.provider, 'complete')
-            return { text, model: input.model.id }
+            if (!stream.text) throw malformedProviderResponse(config.provider, 'complete')
+            return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
         },
     }
 }

@@ -118,7 +118,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             effort: input.effort,
             thinking: input.thinking,
         })
-        const text = await talosStreamText({
+        const stream = await talosStreamText({
             url: request.url,
             headers: { ...request.headers, 'anthropic-dangerous-direct-browser-access': 'true' },
             body: { ...request.body, stream: true },
@@ -130,9 +130,18 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
                     ? event.delta.text ?? ''
                     : ''
             },
+            // Defect #5: extended thinking arrives as `thinking_delta` blocks
+            // in the same SSE stream. Same channel, different block type.
+            extractReasoning: (payload) => {
+                const event = JSON.parse(payload) as { type?: string; delta?: { type?: string; thinking?: string } }
+                return event.type === 'content_block_delta' && event.delta?.type === 'thinking_delta'
+                    ? event.delta.thinking ?? ''
+                    : ''
+            },
             onChunk: handlers.onChunk,
+            onReasoning: handlers.onReasoning,
         })
-        if (!text) throw malformedProviderResponse('anthropic', 'complete')
-        return { text, model: input.model.id }
+        if (!stream.text) throw malformedProviderResponse('anthropic', 'complete')
+        return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
     },
 }

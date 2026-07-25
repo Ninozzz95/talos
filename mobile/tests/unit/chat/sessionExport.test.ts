@@ -132,3 +132,38 @@ describe('benchmark readiness', () => {
         expect(readiness.scenario).toBeUndefined()
     })
 })
+
+/**
+ * Defect #5 (owner decision): the reasoning is persisted with the message and
+ * "entra anche nell'export" — an export that dropped it would carry half the
+ * record, and the trace is the half that explains the answer.
+ */
+describe('reasoning in the export (defect #5)', () => {
+    // Owner decision: the trace is persisted with the message and "entra anche
+    // nell'export" — an export without it carries half the record, and the
+    // missing half is the one that explains the answer.
+    function withReasoning(): TalosMobileSessionExportInput {
+        const base = input()
+        return {
+            ...base,
+            messages: base.messages.map((message) => (message.role === 'assistant'
+                ? { ...message, metadata: { reasoning: 'Prima ho valutato A.\nPoi ho scelto B.' } }
+                : message)),
+        }
+    }
+
+    it('carries the trace in the evidence pack and quotes it in the transcript', () => {
+        const pack = buildTalosMobileEvidencePack(withReasoning())
+        expect(pack.messages[1]).toMatchObject({ reasoning: 'Prima ho valutato A.\nPoi ho scelto B.' })
+        const markdown = buildTalosMobileMarkdownExport(withReasoning()).content
+        expect(markdown).toContain('> **Reasoning**')
+        expect(markdown).toContain('> Prima ho valutato A.')
+        expect(markdown).toContain('> Poi ho scelto B.')
+    })
+
+    it('says nothing about reasoning when the message has none', () => {
+        const pack = buildTalosMobileEvidencePack(input())
+        expect(pack.messages[1]).not.toHaveProperty('reasoning')
+        expect(buildTalosMobileMarkdownExport(input()).content).not.toContain('Reasoning')
+    })
+})

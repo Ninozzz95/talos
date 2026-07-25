@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
+import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
 import { useChatController } from '@/stores/chatController'
@@ -25,6 +26,9 @@ const controller = useChatController()
 const state = controller.chat.state
 
 const streamingText = computed(() => state.streamingText ?? '')
+// Defect #5: reasoning streams on its own channel, so it can appear before the
+// first letter of the answer — which is exactly when it is most useful.
+const streamingReasoning = computed(() => state.streamingReasoning ?? '')
 const sending = computed(() => state.sending)
 
 const { revealed } = useTalosTypewriterReveal(streamingText)
@@ -178,13 +182,14 @@ onBeforeUnmount(() => {
 
 <template>
     <article
-        v-if="sending && revealed"
+        v-if="sending && (revealed || streamingReasoning.trim())"
         ref="contentHost"
         data-testid="talos-mobile-streaming"
         class="w-full max-w-full px-1 py-1 leading-6 text-[var(--talos-text,var(--foreground))]"
     >
         <!-- The growing text stays OUTSIDE any live region: re-announcing
              the whole reply on every token is screen-reader noise. -->
+        <TalosMobileReasoningBlock v-if="streamingReasoning" :reasoning="streamingReasoning" live />
         <TalosMobileMessageContent :content="parsedMarkdown" />
         <span class="sr-only" role="status" aria-live="polite">Receiving response</span>
     </article>

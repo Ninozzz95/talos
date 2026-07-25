@@ -128,3 +128,89 @@ describe('ollamaAdapter.streamComplete (F2-T4)', () => {
         expect(JSON.parse(init.body as string).stream).toBe(true)
     })
 })
+
+/**
+ * Defect #5 (owner): each family carries the model's reasoning on a different
+ * field, and the first version of this feature shipped with Gemini's path DEAD
+ * — the request never asked for thoughts, so the block could never appear.
+ * These drive the REAL adapters, which is the only place that mistake is
+ * visible.
+ */
+describe('reasoning capture per provider family (defect #5)', () => {
+    it('anthropic: thinking_delta becomes reasoning, never answer text', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+            'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Valuto le opzioni."}}\n\n',
+            'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Scegli la seconda."}}\n\n',
+        ])))
+        const thoughts: string[] = []
+        const result = await anthropicAdapter.streamComplete!(
+            inputFor('anthropic', 'claude-opus-4-8'),
+            { apiKey: 'secret' },
+            { onChunk: () => {}, onReasoning: (text) => thoughts.push(text) },
+        )
+        expect(result.text).toBe('Scegli la seconda.')
+        expect(result.reasoning).toBe('Valuto le opzioni.')
+        expect(thoughts).toEqual(['Valuto le opzioni.'])
+    })
+
+    it('deepseek: reasoning_content becomes reasoning, never answer text', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+            'data: {"choices":[{"delta":{"reasoning_content":"Confronto i due casi."}}]}\n\n',
+            'data: {"choices":[{"delta":{"content":"Il primo."}}]}\n\n',
+        ])))
+        const result = await deepSeekAdapter.streamComplete!(
+            inputFor('deepseek', 'deepseek-reasoner'),
+            { apiKey: 'secret' },
+            { onChunk: () => {} },
+        )
+        expect(result.text).toBe('Il primo.')
+        expect(result.reasoning).toBe('Confronto i due casi.')
+    })
+
+    it('ollama: message.thinking becomes reasoning', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+            '{"message":{"thinking":"Rifletto."}}\n',
+            '{"message":{"content":"Fatto."},"done":true}\n',
+        ])))
+        const result = await ollamaAdapter.streamComplete!(
+            inputFor('ollama', 'qwen3'),
+            { apiKey: '', endpoint: 'http://localhost:11434' },
+            { onChunk: () => {} },
+        )
+        expect(result.text).toBe('Fatto.')
+        expect(result.reasoning).toBe('Rifletto.')
+    })
+
+    it('gemini: ASKS for thought summaries, then keeps them out of the answer', async () => {
+        const fetchMock = vi.fn(async () => streamResponse([
+            'data: {"candidates":[{"content":{"parts":[{"text":"Sto ragionando","thought":true},{"text":"Risposta."}]}}]}\n\n',
+        ]))
+        vi.stubGlobal('fetch', fetchMock)
+        const input = { ...inputFor('gemini', 'gemini-2.5-pro'), thinking: true }
+        const result = await geminiAdapter.streamComplete!(input, { apiKey: 'secret' }, { onChunk: () => {} })
+        // Without this request field Gemini never returns a thought part, and
+        // the extractor is dead code — which is exactly how it shipped first.
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+        expect(JSON.parse(String(init.body))).toMatchObject({
+            generationConfig: { thinkingConfig: { includeThoughts: true } },
+        })
+        expect(result.text).toBe('Risposta.')
+        expect(result.reasoning).toBe('Sto ragionando')
+    })
+
+    it('gemini: the BUFFERED path filters thoughts too, or they enter the history', async () => {
+        const transport = {
+            request: vi.fn(async () => ({
+                status: 200,
+                data: {
+                    candidates: [{ content: { parts: [{ text: 'pensiero', thought: true }, { text: 'risposta' }] } }],
+                    modelVersion: 'gemini-2.5-pro',
+                },
+            })),
+        }
+        const input = { ...inputFor('gemini', 'gemini-2.5-pro'), thinking: true }
+        const result = await geminiAdapter.complete(input, { apiKey: 'secret' }, transport as never)
+        expect(result.text).toBe('risposta')
+        expect(result.reasoning).toBe('pensiero')
+    })
+})

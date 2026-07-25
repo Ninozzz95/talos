@@ -80,9 +80,18 @@ export function buildChatCompletion(
                         sawChunk = true
                         stream.onChunk(text)
                     },
+                    // Defect #5: reasoning flows on its own channel. It must NOT
+                    // set sawChunk — a stream that only ever produced thinking
+                    // and then failed should still fall back to the buffered
+                    // transport rather than being persisted as an empty answer.
+                    onReasoning: (text) => stream.onReasoning?.(text),
                     signal: stream.signal,
                 })
-                return { text: streamed.text, finishReason: streamed.finishReason ?? null }
+                return {
+                    text: streamed.text,
+                    finishReason: streamed.finishReason ?? null,
+                    reasoning: streamed.reasoning,
+                }
             } catch (error) {
                 const aborted = error instanceof Error && error.name === 'AbortError'
                 // R1-SF-M3: a STALL means the server DID answer (or accepted
@@ -91,6 +100,12 @@ export function buildChatCompletion(
                 // it honestly instead of silently re-asking.
                 const stalled = error instanceof Error && /stream stalled|first byte/.test(error.message)
                 if (sawChunk || aborted || stalled) throw error
+                // SF-MAJOR: the buffered path is a SECOND generation. Whatever
+                // reasoning the failed stream produced belongs to an answer
+                // that will never be shown, and pairing it with the new one is
+                // a lie the export would carry. It also leaves the live header
+                // up with no loader behind it.
+                stream.onReasoningReset?.()
             }
         }
         // The buffered transport is CapacitorHttp (native — not AbortSignal-aware),
@@ -103,7 +118,7 @@ export function buildChatCompletion(
         ])
         // Debt A1: finishReason used to be produced by every adapter and thrown
         // away here — it is exactly what an agent loop dispatches on.
-        return { text: result.text, finishReason: result.finishReason ?? null }
+        return { text: result.text, finishReason: result.finishReason ?? null, reasoning: result.reasoning }
     }
 }
 
