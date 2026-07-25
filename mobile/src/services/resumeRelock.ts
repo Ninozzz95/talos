@@ -40,6 +40,9 @@ export function registerTalosResumeRelock(options: TalosResumeRelockOptions): Ta
     const registration = App.addListener('appStateChange', (state: { isActive: boolean }) => {
         if (disposed) return
         if (!state.isActive) {
+            // Debt S2 note: this fires at onStop, i.e. AFTER the task snapshot
+            // is taken — a JS-side curtain here would be theatre. The snapshot
+            // is closed by FLAG_SECURE (see services/privacyScreen.ts).
             hiddenAt = now()
             return
         }

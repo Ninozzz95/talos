@@ -16,7 +16,7 @@ import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosAccountStore } from '@/stores/account'
 import { useTalosMobileToasts } from '@/stores/toasts'
-import { biometricUnlockAvailable, clearAppLock } from '@/services/appLock'
+import { appLockPinIsWeak, biometricUnlockAvailable, clearAppLock } from '@/services/appLock'
 import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/services/dictation'
 
 const router = useRouter()
@@ -46,11 +46,14 @@ function tryOAuth(provider: { label: string; gateReason: string }): void {
 // the lock may fall). The panel only opens it and applies the outcome.
 const lockModal = ref<'setup' | 'verify' | null>(null)
 const biometricAvailable = ref(false)
+// Debt S3: true when the stored PIN was last verified with fewer than 6 digits.
+const weakPin = ref(false)
 
 const dictationDiag = ref<TalosDictationDiagnostics | null>(null)
 
 onMounted(async () => {
     biometricAvailable.value = await biometricUnlockAvailable().catch(() => false)
+    weakPin.value = await appLockPinIsWeak().catch(() => false)
     dictationDiag.value = await talosDictationDiagnostics().catch((error) => ({
         buildId: 'unknown', native: false, registered: false, pluginLoaded: false,
         methods: [], permissionsRaw: null, availableRaw: null, available: null, error: String(error),
@@ -80,12 +83,21 @@ function toggleAppLock(): void {
 
 async function onLockModalCompleted(): Promise<void> {
     if (lockModal.value === 'setup') {
-        await settings.setSecurity({ app_lock_enabled: true })
+        await settings.setSecurity({ app_lock_enabled: true, screen_secure: true })
+        weakPin.value = false
     } else if (lockModal.value === 'verify') {
         await clearAppLock()
         await settings.setSecurity({ app_lock_enabled: false, app_lock_biometric: false })
+        weakPin.value = false
     }
     lockModal.value = null
+}
+
+// Debt S2: FLAG_SECURE is its own posture — a user with no PIN still deserves
+// a private recents card, and a user with a PIN still deserves screenshots if
+// they want them. Enabling the lock turns it on, visibly and reversibly.
+async function toggleScreenSecure(): Promise<void> {
+    await settings.setSecurity({ screen_secure: !settings.state.security.screen_secure })
 }
 
 async function toggleBiometric(): Promise<void> {
@@ -192,6 +204,48 @@ async function toggleBiometric(): Promise<void> {
                 @close="lockModal = null"
                 @completed="onLockModalCompleted"
             />
+            <!-- Debt S3: the 6-digit minimum only ever ran at setup, so a PIN
+                 armed before it existed stayed 4 digits with nothing saying so. -->
+            <p
+                v-if="settings.state.security.app_lock_enabled && weakPin"
+                data-testid="talos-applock-weak"
+                role="status"
+                class="mt-3 rounded-lg border border-[var(--talos-danger)]/40 bg-[var(--talos-danger)]/10 px-3 py-2 text-xs leading-5 text-[var(--talos-text)]"
+            >
+                Your PIN is shorter than the current 6-digit minimum. Turn the lock off and on
+                again to set a longer one.
+            </p>
+            <div class="mt-3 flex items-center justify-between gap-3">
+                <span class="min-w-0 flex-1 text-sm text-[var(--talos-text)]">
+                    Hide in app switcher &amp; block screenshots
+                    <span class="mt-0.5 block text-xs leading-5 text-[var(--talos-muted)]">
+                        Android stops capturing this window — no screenshots, no screen
+                        recording, and a blank card in recents.
+                    </span>
+                </span>
+                <button
+                    type="button"
+                    role="switch"
+                    data-testid="talos-screen-secure-toggle"
+                    :aria-checked="settings.state.security.screen_secure"
+                    aria-label="Hide in app switcher and block screenshots"
+                    class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
+                    @click="toggleScreenSecure"
+                >
+                    <span
+                        class="relative h-6 w-11 rounded-full transition-colors duration-200"
+                        :class="settings.state.security.screen_secure
+                            ? 'bg-[var(--talos-accent,var(--primary))]'
+                            : 'bg-[var(--talos-border,var(--border))]'"
+                        aria-hidden="true"
+                    >
+                        <span
+                            class="absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] duration-200"
+                            :class="settings.state.security.screen_secure ? 'left-[22px]' : 'left-0.5'"
+                        />
+                    </span>
+                </button>
+            </div>
             <div
                 v-if="settings.state.security.app_lock_enabled && biometricAvailable"
                 class="mt-3 flex items-center justify-between gap-3"

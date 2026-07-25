@@ -9,12 +9,14 @@ import TalosMobileLockScreen from '@/components/security/TalosMobileLockScreen.v
 const appLock = vi.hoisted(() => ({
     verifyAppLockPin: vi.fn(async () => false),
     requestBiometricUnlock: vi.fn(async () => false),
+    appLockThrottleRemainingMs: vi.fn(async () => 0),
 }))
 vi.mock('@/services/appLock', () => appLock)
 
 beforeEach(() => {
     appLock.verifyAppLockPin.mockReset().mockResolvedValue(false)
     appLock.requestBiometricUnlock.mockReset().mockResolvedValue(false)
+    appLock.appLockThrottleRemainingMs.mockReset().mockResolvedValue(0)
     document.body.innerHTML = ''
 })
 
@@ -62,6 +64,38 @@ describe('TalosMobileLockScreen (F2-T6)', () => {
         await flushPromises()
         expect(appLock.requestBiometricUnlock).toHaveBeenCalled()
         expect(wrapper.emitted('unlocked')).toHaveLength(1)
+        wrapper.unmount()
+    })
+
+    it('Debt S3: shows the lockout and refuses to submit while throttled', async () => {
+        appLock.appLockThrottleRemainingMs.mockResolvedValue(45_000)
+        const wrapper = mountLock(false)
+        await flushPromises()
+        expect(document.body.textContent).toMatch(/too many attempts/i)
+        const submit = bodyGet<HTMLButtonElement>('[data-testid="talos-lock-submit"]')
+        expect(submit.disabled).toBe(true)
+        const pin = bodyGet<HTMLInputElement>('[data-testid="talos-lock-pin"]')
+        pin.value = '481902'
+        pin.dispatchEvent(new Event('input'))
+        await flushPromises()
+        submit.click()
+        await flushPromises()
+        // The gate is the service's, but the UI must not even ask while blocked.
+        expect(appLock.verifyAppLockPin).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('Debt S3: a failed attempt that trips the throttle surfaces the wait', async () => {
+        const wrapper = mountLock(false)
+        await flushPromises()
+        appLock.appLockThrottleRemainingMs.mockResolvedValue(15_000)
+        const pin = bodyGet<HTMLInputElement>('[data-testid="talos-lock-pin"]')
+        pin.value = '000000'
+        pin.dispatchEvent(new Event('input'))
+        await flushPromises()
+        bodyGet('[data-testid="talos-lock-submit"]').click()
+        await flushPromises()
+        expect(document.body.textContent).toMatch(/too many attempts/i)
         wrapper.unmount()
     })
 

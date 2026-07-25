@@ -4,10 +4,10 @@
  * through a verified PIN or a real OS biometric success (no skip, no fake
  * session). Loaded as an async chunk by App.vue only when the lock is armed.
  */
-import { onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Fingerprint, Loader2, LockKeyhole } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import { requestBiometricUnlock, verifyAppLockPin } from '@/services/appLock'
+import { appLockThrottleRemainingMs, requestBiometricUnlock, verifyAppLockPin } from '@/services/appLock'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 
@@ -24,6 +24,46 @@ const error = ref<string | null>(null)
 const verifying = ref(false)
 const pinField = ref<HTMLInputElement | null>(null)
 
+// Debt S3 — attempt throttling. The gate itself lives in the service (it is
+// persisted, so killing the app does not reset it); the screen mirrors it so
+// the user sees a countdown instead of a PIN that silently stops working.
+const throttleMs = ref(0)
+const throttled = computed(() => throttleMs.value > 0)
+const throttleLabel = computed(() => {
+    const seconds = Math.ceil(throttleMs.value / 1000)
+    if (seconds >= 60) {
+        const minutes = Math.ceil(seconds / 60)
+        return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+    }
+    return `Too many attempts. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`
+})
+
+let countdown: ReturnType<typeof setInterval> | null = null
+let alive = true
+async function refreshThrottle(): Promise<void> {
+    const remaining = await appLockThrottleRemainingMs().catch(() => 0)
+    // SF: a biometric success can unmount this screen while the read is still
+    // in flight — installing an interval afterwards holds the scope for the
+    // whole lockout.
+    if (!alive) return
+    throttleMs.value = remaining
+    if (!throttled.value || countdown !== null) return
+    // SF: WebView timers are throttled in background, so a decrementing
+    // counter drifts. Track the DEADLINE and recompute every tick.
+    const deadline = Date.now() + remaining
+    countdown = setInterval(() => {
+        throttleMs.value = Math.max(0, deadline - Date.now())
+        if (!throttled.value && countdown !== null) {
+            clearInterval(countdown)
+            countdown = null
+        }
+    }, 1000)
+}
+onBeforeUnmount(() => {
+    alive = false
+    if (countdown !== null) clearInterval(countdown)
+})
+
 // R1-3 — the lock was an overlay over a LIVE workspace (focusable behind it).
 // Teleported to body + shared modality: #app goes inert, Tab is trapped.
 const root = ref<HTMLElement | null>(null)
@@ -35,7 +75,7 @@ function unlock(): void {
 }
 
 async function submitPin(): Promise<void> {
-    if (verifying.value || !pin.value) return
+    if (verifying.value || !pin.value || throttled.value) return
     verifying.value = true
     error.value = null
     try {
@@ -44,6 +84,7 @@ async function submitPin(): Promise<void> {
         } else {
             error.value = 'Wrong PIN. Try again.'
             pin.value = ''
+            await refreshThrottle()
         }
     } finally {
         verifying.value = false
@@ -55,6 +96,7 @@ async function tryBiometric(): Promise<void> {
 }
 
 onMounted(() => {
+    void refreshThrottle()
     if (props.biometricEnabled) {
         void tryBiometric()
     } else {
@@ -91,18 +133,19 @@ onMounted(() => {
                 data-testid="talos-lock-pin"
                 type="password"
                 inputmode="numeric"
-                maxlength="8"
+                maxlength="12"
                 pattern="[0-9]*"
                 enterkeyhint="done"
                 autocomplete="off"
                 aria-label="PIN"
                 class="min-h-12 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] px-4 text-center text-lg tracking-[0.5em] text-[var(--talos-text,var(--foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
-            <p v-if="error" role="alert" class="text-center text-sm text-[var(--talos-danger)]">{{ error }}</p>
+            <p v-if="throttled" role="alert" data-testid="talos-lock-throttle" class="text-center text-sm text-[var(--talos-danger)]">{{ throttleLabel }}</p>
+            <p v-else-if="error" role="alert" class="text-center text-sm text-[var(--talos-danger)]">{{ error }}</p>
             <Button
                 type="submit"
                 data-testid="talos-lock-submit"
-                :disabled="verifying || !pin"
+                :disabled="verifying || !pin || throttled"
                 @click.prevent="submitPin"
                 class="talos-pressable min-h-12 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
             >
