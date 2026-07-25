@@ -1,6 +1,6 @@
 # TALOS mobile — open debt register
 
-**Verified at `71dbbd9` (2026-07-25).** Every line below was confirmed against the
+**Verified at `71dbbd9` (2026-07-25).** Progress: **A1 + D1–D5 closed** (`15988d7`, `+ dead-code batch`) — 30 items remain. Every line below was confirmed against the
 code, not recited from a review. This file exists because the owner asked that no
 debt be left on the road: a debt that lives only in a review transcript or a
 commit message is a debt nobody will pay.
@@ -30,7 +30,7 @@ it. Closing an item by editing this file is forbidden.
 
 | # | Item | Evidence | Blocks |
 |---|---|---|---|
-| A1 | The completion contract is `Promise<string>` | `src/stores/chat.ts:38`; `ChatTurn.role` admits only user/assistant; `finishReason` is discarded | **Tool calling cannot be added without breaking it.** Must be widened FIRST or the work is done twice |
+| ~~A1~~ ✅ **CLOSED** `15988d7` | The completion contract is `Promise<string>` | `src/stores/chat.ts:38`; `ChatTurn.role` admits only user/assistant; `finishReason` is discarded | **Tool calling cannot be added without breaking it.** Must be widened FIRST or the work is done twice |
 | A2 | `chatController.ts` is a god-object | **1256 lines**, 52 public members, ~28 module deps, imported by 11 screens | Every feature edits one file; nothing can be unit-tested without building the world |
 | A3 | No `dispose()`/teardown anywhere | `repository.close()` has zero production callers | Re-lock leaves messages, sessions and document text live in memory; blocks DB re-key and device-wipe |
 | A4 | Memory and Library are near-duplicate injection pipelines | 4 mutable closure vars in `chatController.ts` + a composition flag | A third (semantic) tier makes it 6 vars and a 3-way rule |
@@ -38,15 +38,15 @@ it. Closing an item by editing this file is forbidden.
 | A6 | 38-method repository god-interface × 3 implementations | `src/repositories/chatRepository.ts` | Each roadmap item adds ~4 methods × 3 impls by hand |
 | A7 | Layering inversion | `lib/` and `services/` import from `components/`; `lib/chat/providerContracts.ts` imports from `stores/` | No layer compiles or reasons in isolation |
 
-## DEAD CODE / INERT STATE
+## DEAD CODE / INERT STATE — ✅ CLOSED (15988d7 + this commit)
 
 | # | Item | Evidence |
 |---|---|---|
-| D1 | `appearance_visibility` (~250 lines + store API) has no UI consumer | 8 references in `src/stores/settings.ts`, zero in any `.vue` |
-| D2 | `composer_mode` and `advanced_rail_expanded` persist with no consumer | 2 references in `src/lib/talosChatLayout.ts`, no renderer |
-| D3 | `sensitive_blur` survives the owner's obliteration directive | `src/lib/talosAppearancePreferences.ts` |
-| D4 | Orphan exports: `resolveTalosMissionPathVisibility`, `TALOS_CHAT_COMPOSER_MODE_OPTIONS`, `resolvePresentation`, `TALOS_TABLET_MIN_WIDTH`, `asyncRouteComponent` | definition-only references |
-| D5 | Tests still assert removed behaviour (`setVisibility`/`resetVisibility`) | `tests/unit/theme/settingsStore.test.ts` |
+| ~~D1~~ ✅ | `appearance_visibility` (~250 lines + store API) has no UI consumer | 8 references in `src/stores/settings.ts`, zero in any `.vue` |
+| ~~D2~~ ✅ | `composer_mode` and `advanced_rail_expanded` persist with no consumer | 2 references in `src/lib/talosChatLayout.ts`, no renderer |
+| ~~D3~~ ✅ | `sensitive_blur` survives the owner's obliteration directive | `src/lib/talosAppearancePreferences.ts` |
+| ~~D4~~ ✅ | Orphan exports: `resolveTalosMissionPathVisibility`, `TALOS_CHAT_COMPOSER_MODE_OPTIONS`, `resolvePresentation`, `TALOS_TABLET_MIN_WIDTH`, `asyncRouteComponent` | definition-only references |
+| ~~D5~~ ✅ | Tests still assert removed behaviour (`setVisibility`/`resetVisibility`) | `tests/unit/theme/settingsStore.test.ts` |
 
 ## TEST COVERAGE STILL MISSING
 
@@ -77,7 +77,7 @@ it. Closing an item by editing this file is forbidden.
 
 - **Semantic retrieval probe**: A4 first (a third tier on four mutable closure
   variables is how the budget bug returns), then P8 so progress is expressible.
-- **Tool suite**: **A1 is blocking** — widen the completion contract before the
+- **Tool suite**: ~~A1 is blocking~~ ✅ **contract widened** — next are — widen the completion contract before the
   first tool exists. Then D1–D2 (do not add tool toggles to a repo that ships
   inert ones) and T3.
 - **Device filesystem / Shizuku**: **S1–S6 are blocking.** Broad device authority

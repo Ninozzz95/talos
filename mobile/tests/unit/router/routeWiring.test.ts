@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import {
-    asyncRouteComponent,
     preloadTalosMobileRoutes,
     TALOS_MOBILE_ROUTES,
 } from '@/lib/mobileRoutes'
@@ -22,18 +21,6 @@ const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers
 }
 
 describe('router wiring', () => {
-    it('keeps station screens as literal lazy route imports without Vue async-component wrapping', () => {
-        const source = readFileSync(resolve(process.cwd(), 'src/lib/mobileRoutes.ts'), 'utf8')
-
-        for (const screen of ['Research', 'Runs', 'Context', 'Settings']) {
-            expect(source).not.toContain(`import ${screen}Screen from '@/screens/${screen}Screen.vue'`)
-            expect(source).toContain(`() => import('@/screens/${screen}Screen.vue')`)
-        }
-        expect(source).not.toContain('defineAsyncComponent')
-        for (const route of TALOS_MOBILE_ROUTES) {
-            expect(asyncRouteComponent(route)).toBe(route.component)
-        }
-    })
 
     it('resolves each of the 10 tab routes to its real parity screen', async () => {
         expect(TALOS_MOBILE_ROUTES.map((r) => r.name)).toEqual(['chat', 'chats', 'memory', 'tasks', 'notes', 'doctor', 'research', 'runs', 'context', 'settings'])

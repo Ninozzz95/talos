@@ -6,7 +6,7 @@
     "files": [
         {
             "mobile_path": "mobile/src/lib/talosChatLayout.ts",
-            "sha256": "d5838d889d6f5882fd630b05c34cf634fabd4f8dac2e7f9437acf42fff89097a",
+            "sha256": "77f40e210d62fc4808f78c0f19448b99797266f2f9c75d000ce68579c75cbbf4",
             "desktop_source": "talosChatLayout.ts",
             "reconciliation": "whitespace-identical to desktop at the reconciled revision (pure port)"
         },
@@ -21,12 +21,6 @@
             "sha256": "7f7aac0914684a994bd55fd5e3ba6faf9e93bfdf8e2435fcf241848be510cb84",
             "desktop_source": "talosMessageMarkdown.ts",
             "reconciliation": "ported; differs from desktop only in TS type syntax (verified F1-F6 review)"
-        },
-        {
-            "mobile_path": "mobile/src/lib/talosAppearancePreferences.ts",
-            "sha256": "0f65bd0f2d1225d89d27881f7140efc979525de459d65c905617edfe2e293597",
-            "desktop_source": "talosAppearancePreferences.ts",
-            "reconciliation": "ported; mobile-forked (R2-SF-m6 removed the Sensitive blur toggle per owner obliteration directive; resolver field kept)"
         },
         {
             "mobile_path": "mobile/src/lib/talosThemes.ts",

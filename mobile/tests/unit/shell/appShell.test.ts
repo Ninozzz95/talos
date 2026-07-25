@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick, reactive, ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
-import { asyncRouteComponent, TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
+import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
 import { __resetSettingsStoreForTests } from '@/stores/settings'
 
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
@@ -88,7 +88,7 @@ function makeController() {
 function makeRouter(): Router {
     return createRouter({
         history: createMemoryHistory(),
-        routes: TALOS_MOBILE_ROUTES.map((r) => ({ path: r.path, name: r.name, component: asyncRouteComponent(r) })),
+        routes: TALOS_MOBILE_ROUTES.map((r) => ({ path: r.path, name: r.name, component: r.component })),
     })
 }
 
