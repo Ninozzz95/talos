@@ -87,8 +87,8 @@ function loadProductionVaultService(): Promise<TalosVaultService> {
 }
 
 const productionVaultService: TalosVaultService = {
-    ingest: async (file) => (await loadProductionVaultService()).ingest(file),
-    createGenerated: async (input) => (await loadProductionVaultService()).createGenerated(input),
+    ingest: async (file, originSessionId) => (await loadProductionVaultService()).ingest(file, originSessionId),
+    createGenerated: async (input, originSessionId) => (await loadProductionVaultService()).createGenerated(input, originSessionId),
     createGrant: async (fileId) => (await loadProductionVaultService()).createGrant(fileId),
     revokeGrant: async (grantId) => (await loadProductionVaultService()).revokeGrant(grantId),
     resolveMessageParts: async (messageId) => (await loadProductionVaultService()).resolveMessageParts(messageId),
@@ -105,8 +105,8 @@ const productionFilePicker: TalosNativeFilePicker = {
 }
 
 const unavailableVaultService: TalosVaultService = {
-    ingest: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
-    createGenerated: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    ingest: async (_file, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    createGenerated: async (_input, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     revokeGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
@@ -337,6 +337,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const attachments = useTalosMobileAttachments({
         picker: deps.filePicker ?? unavailableFilePicker,
         vault: vaultService,
+        currentSessionId: () => chat.activeSession.value?.id ?? null,
     })
 
     const modelLabPreferences = computed(() =>

@@ -16,10 +16,15 @@ export interface TalosVaultTrayItem {
 }
 
 export interface TalosVaultService {
-    ingest(file: TalosPickedFile): Promise<TalosVaultTrayItem>
+    /** originSessionId (owner 2026-07-25): the chat the file was uploaded in, so the
+     *  Library can group by chat and the model knows a doc's origin. */
+    ingest(file: TalosPickedFile, originSessionId?: string | null): Promise<TalosVaultTrayItem>
     /** Owner 2026-07-24: persist a chat-generated artifact into the Library as a
      *  reusable document (origin='generated', searchable via extracted text). */
-    createGenerated(input: { name: string; mediaType: string; text: string }): Promise<TalosVaultTrayItem>
+    createGenerated(
+        input: { name: string; mediaType: string; text: string },
+        originSessionId?: string | null,
+    ): Promise<TalosVaultTrayItem>
     createGrant(fileId: string): Promise<TalosLocalFileAuthorityGrant>
     revokeGrant(grantId: string): Promise<void>
     resolveMessageParts(messageId: string): Promise<TalosMobileInputPart[]>
@@ -99,6 +104,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
     async function ingestFile(
         pickedFile: TalosPickedFile,
         origin: 'uploaded' | 'generated',
+        originSessionId: string | null,
     ): Promise<TalosVaultTrayItem> {
         const fileId = idFactory()
         await options.repository.createVaultFile({
@@ -129,7 +135,10 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 sha256: analysis.sha256,
                 extracted_text: analysis.extractedText,
                 failure_code: null,
-                metadata: { extension: analysis.extension, page_count: analysis.pageCount, origin },
+                metadata: {
+                    extension: analysis.extension, page_count: analysis.pageCount,
+                    origin, origin_session_id: originSessionId,
+                },
             })
             const grant = await createGrant(file.id)
             return { file, grant }
@@ -139,8 +148,8 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
     }
 
     return {
-        ingest: (pickedFile) => ingestFile(pickedFile, 'uploaded'),
-        async createGenerated({ name, mediaType, text }) {
+        ingest: (pickedFile, originSessionId = null) => ingestFile(pickedFile, 'uploaded', originSessionId),
+        async createGenerated({ name, mediaType, text }, originSessionId = null) {
             // A chat-generated document flows through the SAME ingestion pipeline
             // (private copy + analysis → searchable extracted text + sha256), only
             // marked origin='generated'. Built from a web-blob so it needs no picker.
@@ -150,7 +159,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 declaredMediaType: mediaType,
                 sizeBytes: bytes.byteLength,
                 source: { kind: 'web-blob', blob: new Blob([bytes], { type: mediaType }) },
-            }, 'generated')
+            }, 'generated', originSessionId)
         },
         createGrant,
         revokeGrant: (grantId) => options.repository.revokeFileAuthorityGrant(grantId),
@@ -216,7 +225,11 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                         sha256: analysis.sha256,
                         extracted_text: analysis.extractedText,
                         failure_code: null,
-                        metadata: { extension: analysis.extension, page_count: analysis.pageCount, origin: 'uploaded' },
+                        metadata: {
+                            extension: analysis.extension, page_count: analysis.pageCount, origin: 'uploaded',
+                            // Preserve provenance stamped at ingest time.
+                            origin_session_id: (file.metadata as { origin_session_id?: string | null }).origin_session_id ?? null,
+                        },
                     })
                 } catch (error) {
                     try {

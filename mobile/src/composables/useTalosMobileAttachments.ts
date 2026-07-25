@@ -29,6 +29,8 @@ export interface TalosMobileAttachmentsOptions {
     picker: TalosNativeFilePicker
     vault: TalosVaultService
     idFactory?: () => string
+    /** The active chat, stamped as a file's origin (provenance + grouping). */
+    currentSessionId?: () => string | null
 }
 
 export interface TalosMobileAttachmentsController {
@@ -146,7 +148,7 @@ export function useTalosMobileAttachments(
 
     async function ingestDraft(draft: TalosMobileAttachmentDraft, pickedFile: Parameters<TalosVaultService['ingest']>[0]): Promise<void> {
         try {
-            const result = await options.vault.ingest(pickedFile)
+            const result = await options.vault.ingest(pickedFile, options.currentSessionId?.() ?? null)
             const current = items.find((item) => item.id === draft.id)
             if (!current) {
                 await options.vault.revokeGrant(result.grant.id)
@@ -208,7 +210,7 @@ export function useTalosMobileAttachments(
         input: { name: string; mediaType: string; text: string },
     ): Promise<TalosLocalVaultFile> {
         vaultError.value = null
-        const result = await options.vault.createGenerated(input)
+        const result = await options.vault.createGenerated(input, options.currentSessionId?.() ?? null)
         // Saved to the Library, not attached to a message → drop the pre-minted
         // grant; attaching it later from the Library mints its own.
         await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
