@@ -13,10 +13,8 @@ import {
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
-    TALOS_CHAT_COMPOSER_MODE_OPTIONS,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '@/lib/talosChatLayout'
-import { TALOS_APPEARANCE_GROUPS, type TalosAppearanceGroup } from '@/lib/talosAppearancePreferences'
 import {
     TALOS_INTERFACE_EASINGS,
     TALOS_INTERFACE_PROFILES,
@@ -62,13 +60,7 @@ function setChatLayout(key: 'bubble_scale' | 'composer_mode' | 'mobile_window_pr
     void settings.setChatLayout({ [key]: value })
 }
 
-function setAdvancedRail(event: Event): void {
-    void settings.setChatLayout({ advanced_rail_expanded: (event.target as HTMLInputElement).checked })
-}
 
-function setVisibility(group: TalosAppearanceGroup, key: string, event: Event): void {
-    void settings.setVisibility(group, key, (event.target as HTMLInputElement).checked)
-}
 
 function setMotionSelect(key: 'mode' | 'quality', value: string): void {
     void settings.setMotionPreferences({ [key]: value } as TalosMotionPreferencePatch)
@@ -111,7 +103,7 @@ const rangeClass = 'mt-2 h-2 w-full cursor-pointer accent-[var(--talos-accent)]'
 
 // Owner 2026-07-24: swipe left/right switches section (like ChatGPT tabs). The
 // tabs are now controlled; a horizontal-dominant swipe steps the active section.
-const SECTIONS = ['design', 'motion', 'voice', 'visibility'] as const
+const SECTIONS = ['design', 'motion', 'voice'] as const
 const activeSection = ref<(typeof SECTIONS)[number]>('design')
 let swipeX: number | null = null
 let swipeY: number | null = null
@@ -137,7 +129,6 @@ function onSwipeEnd(event: PointerEvent): void {
             <TabsTrigger value="design" :class="sectionTabClass">Design</TabsTrigger>
             <TabsTrigger value="motion" :class="sectionTabClass">Motion</TabsTrigger>
             <TabsTrigger value="voice" :class="sectionTabClass">Voice</TabsTrigger>
-            <TabsTrigger value="visibility" :class="sectionTabClass">Visibility</TabsTrigger>
         </TabsList>
 
         <TabsContent value="design" class="pt-4 outline-none">
@@ -258,16 +249,6 @@ function onSwipeEnd(event: PointerEvent): void {
                     />
                 </label>
                 <label class="block">
-                    <span :class="selectLabelClass">Chat composer</span>
-                    <TalosThemedSelect
-                        class="mt-2"
-                        :model-value="settings.state.chat_layout.composer_mode"
-                        :items="TALOS_CHAT_COMPOSER_MODE_OPTIONS"
-                        aria-label="Chat composer mode"
-                        @update:model-value="setChatLayout('composer_mode', $event)"
-                    />
-                </label>
-                <label class="block">
                     <span :class="selectLabelClass">Mobile tool windows</span>
                     <TalosThemedSelect
                         class="mt-2"
@@ -287,13 +268,6 @@ function onSwipeEnd(event: PointerEvent): void {
                     <p class="mt-2">{{ activePreset.description }}</p>
                 </div>
             </div>
-            <label :class="switchRowClass">
-                <span>
-                    <span class="block text-sm font-semibold text-[var(--talos-text)]">Expand Advanced by default</span>
-                    <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">Keep lower-frequency tools visible after reload.</span>
-                </span>
-                <input type="checkbox" role="switch" aria-label="Expand Advanced by default" :checked="settings.state.chat_layout.advanced_rail_expanded" class="mt-1 h-5 w-9 accent-[var(--talos-accent)]" @change="setAdvancedRail">
-            </label>
         </TabsContent>
 
         <TabsContent value="motion" class="space-y-4 pt-4 outline-none">
@@ -376,26 +350,5 @@ function onSwipeEnd(event: PointerEvent): void {
             <TalosMobileVoiceSettings />
         </TabsContent>
 
-        <TabsContent value="visibility" class="space-y-4 pt-4 outline-none">
-            <div class="flex items-start justify-between gap-3">
-                <div>
-                    <h4 class="text-sm font-semibold text-[var(--talos-text)]">Interface visibility</h4>
-                    <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Hide visible controls without deleting their command routes.</p>
-                </div>
-                <button type="button" class="min-h-11 rounded-md border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-text)]" @click="settings.resetVisibility()">Reset all</button>
-            </div>
-            <section v-for="group in TALOS_APPEARANCE_GROUPS" :key="group.id" class="border-t border-[var(--talos-border)] pt-3">
-                <div class="flex items-start justify-between gap-3">
-                    <div><h5 class="text-sm font-semibold text-[var(--talos-text)]">{{ group.label }}</h5><p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ group.description }}</p></div>
-                    <button type="button" class="min-h-11 px-2 text-xs text-[var(--talos-muted)]" @click="settings.resetVisibility(group.id)">Reset</button>
-                </div>
-                <div class="mt-2 grid gap-1 sm:grid-cols-2">
-                    <label v-for="item in group.items" :key="item.key" class="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--talos-border)] px-1 text-sm text-[var(--talos-text)]">
-                        {{ item.label }}
-                        <input type="checkbox" role="switch" :aria-label="item.label" :checked="Boolean((settings.state.appearance_visibility[group.id] as Record<string, boolean>)[item.key])" class="h-5 w-9 accent-[var(--talos-accent)]" @change="setVisibility(group.id, item.key, $event)">
-                    </label>
-                </div>
-            </section>
-        </TabsContent>
     </TabsRoot>
 </template>

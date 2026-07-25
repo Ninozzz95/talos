@@ -185,7 +185,7 @@ function formatBytes(value: number): string {
             <TalosMobileStatusMessage v-if="message.role === 'system'" :message="message" />
             <template v-else>
                 <div
-                    class="talos-message-bubble min-w-0 overflow-hidden text-sm leading-6"
+                    class="talos-message-bubble min-w-0 overflow-hidden leading-6"
                     :class="[message.role === 'assistant' && (props.messageStyle ?? 'sections') === 'sections'
                         ? 'w-full max-w-full px-1 py-1 text-[var(--talos-text,var(--foreground))]'
                         : 'max-w-[92%] px-3.5 py-2', message.role === 'user'

@@ -44,7 +44,9 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 </template>
 
 <style>
-.talos-message-content { overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.625; }
+/* Inherit the list-level chat text size (Small/Default/Large); nested rules
+   use em so headings/code/tables scale with it. */
+.talos-message-content { overflow-wrap: anywhere; font-size: 1em; line-height: 1.625; }
 .talos-message-content > :first-child { margin-top: 0; }
 .talos-message-content > :last-child { margin-bottom: 0; }
 .talos-message-content p,
@@ -56,9 +58,9 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 .talos-message-content h2,
 .talos-message-content h3,
 .talos-message-content h4 { margin: 1rem 0 0.45rem; font-weight: 650; line-height: 1.35; }
-.talos-message-content h2 { font-size: 1.125rem; }
-.talos-message-content h3 { font-size: 1rem; }
-.talos-message-content h4 { font-size: 0.925rem; }
+.talos-message-content h2 { font-size: 1.28em; }
+.talos-message-content h3 { font-size: 1.14em; }
+.talos-message-content h4 { font-size: 1.06em; }
 .talos-message-content ul,
 .talos-message-content ol { padding-left: 1.35rem; }
 .talos-message-content ul { list-style: disc; }
@@ -69,15 +71,15 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 .talos-message-content a:focus-visible { border-radius: 3px; outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-message-content :not(pre) > code { border: 1px solid var(--talos-border); border-radius: 4px; background: var(--talos-panel); padding: 0.08rem 0.3rem; font-size: 0.84em; }
 .talos-message-content .talos-code-block { min-width: 0; max-width: 100%; overflow: hidden; border: 1px solid var(--talos-code-border); border-radius: 6px; background: var(--talos-code-bg); color: var(--talos-code-text); }
-.talos-message-content .talos-code-block-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--talos-code-border); border-left: 2px solid var(--talos-code-accent); background: var(--talos-code-surface); padding: 0 0.65rem; color: var(--talos-muted); font-size: 0.7rem; text-transform: uppercase; }
+.talos-message-content .talos-code-block-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; gap: 0.75rem; border-bottom: 1px solid var(--talos-code-border); border-left: 2px solid var(--talos-code-accent); background: var(--talos-code-surface); padding: 0 0.65rem; color: var(--talos-muted); font-size: 0.8em; text-transform: uppercase; }
 .talos-message-content [data-talos-copy-code] { min-height: 2.75rem; min-width: 2.75rem; border-radius: 4px; padding: 0 0.5rem; color: var(--talos-code-text); text-transform: none; }
 .talos-message-content [data-talos-copy-code]:hover { background: var(--talos-code-surface); }
 .talos-message-content [data-talos-copy-code]:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
-.talos-message-content pre { max-width: 100%; max-height: 24rem; overflow: auto; padding: 0.8rem; font-size: 0.78rem; line-height: 1.6; }
+.talos-message-content pre { max-width: 100%; max-height: 24rem; overflow: auto; padding: 0.8rem; font-size: 0.89em; line-height: 1.6; }
 .talos-message-content pre:focus-visible,
 .talos-message-content .talos-message-table-scroll:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: -2px; }
 .talos-message-content .talos-message-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--talos-border); border-radius: 6px; }
-.talos-message-content table { width: 100%; min-width: 28rem; border-collapse: collapse; font-size: 0.8rem; }
+.talos-message-content table { width: 100%; min-width: 28rem; border-collapse: collapse; font-size: 0.91em; }
 .talos-message-content th,
 .talos-message-content td { border-bottom: 1px solid var(--talos-border); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
 .talos-message-content th { background: var(--talos-panel-soft); font-weight: 650; }

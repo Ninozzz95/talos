@@ -44,7 +44,7 @@ import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
 import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
-import { extractLibrarySaveBlocks, librarySaveInstruction } from '@/lib/chat/librarySave'
+import { extractLibrarySaveBlocks, librarySaveInstruction, stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import {
     buildTalosLibraryContextBlock,
     selectLibraryDocsForInjection,
@@ -102,6 +102,7 @@ const productionVaultService: TalosVaultService = {
     revokeGrant: async (grantId) => (await loadProductionVaultService()).revokeGrant(grantId),
     resolveMessageParts: async (messageId) => (await loadProductionVaultService()).resolveMessageParts(messageId),
     listFiles: async () => (await loadProductionVaultService()).listFiles(),
+    listSummaries: async () => (await loadProductionVaultService()).listSummaries(),
     deleteFile: async (fileId) => (await loadProductionVaultService()).deleteFile(fileId),
     reconcilePending: async () => (await loadProductionVaultService()).reconcilePending(),
 }
@@ -121,6 +122,7 @@ const unavailableVaultService: TalosVaultService = {
     revokeGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     listFiles: async () => [],
+    listSummaries: async () => [],
     deleteFile: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     reconcilePending: async () => undefined,
 }
@@ -463,10 +465,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 summaries.map((file) => toDoc(file, file.text_preview ?? '')),
                 { query, charBudget: 24_000, maxDocs: 8, perDocChars: 4_000 },
             )
-            const selected: LibraryDoc[] = []
-            for (const doc of ranked) {
+            // Re-review 2026-07-25: hydrate in PARALLEL (8 serial bridge round-trips
+            // sat on the send hot path), then enforce the char budget on the REAL
+            // bodies — ranking on 600-char previews made the budget check always
+            // pass, so up to 8x4000 chars could ship, 33% over the stated budget.
+            const hydrated = await Promise.all(ranked.map(async (doc) => {
                 const full = await deps.chatRepository.getVaultFile(doc.id)
-                if (full?.extracted_text) selected.push({ ...doc, text: full.extracted_text })
+                return full?.extracted_text ? { ...doc, text: full.extracted_text } : null
+            }))
+            const selected: LibraryDoc[] = []
+            let used = 0
+            for (const doc of hydrated) {
+                if (!doc) continue
+                const cost = Math.min(doc.text.length, 4_000)
+                if (selected.length > 0 && used + cost > 24_000) break
+                selected.push(doc)
+                used += cost
             }
             if (selected.length === 0) return {}
             librarySelection = selected
@@ -489,7 +503,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             : undefined
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         try {
-            const autosaveGenerated = deps.settings.state.shell?.library_autosave_generated ?? true
+            const autosaveGenerated = deps.settings.state.shell?.library_autosave_generated === true
             const tonePrompt = buildTalosSystemPrompt(
                 deps.settings.state.tone.preset,
                 profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
@@ -558,13 +572,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             for (const block of blocks) {
                 void attachments.saveGenerated(block)
                     .then((file) => toasts.push({
-                        message: `Saved “${file.display_name}” to your Library.`, durationMs: 6000,
+                        message: `Saved “${file.display_name}” to your Library.`,
+                        // Re-review 2026-07-25: a write driven by untrusted model output
+                        // must be reversible from where it is announced — the toast used
+                        // to be non-actionable and the only undo was hunting the file down
+                        // in the Library.
+                        action: {
+                            label: 'Undo',
+                            run: () => { void attachments.deleteVaultFile(file.id).catch(() => undefined) },
+                        },
+                        durationMs: 10000,
                     }))
                     .catch(() => toasts.push({
                         message: `“${block.name}” could not be saved to the Library.`, durationMs: 6000,
                     }))
             }
-            return finalText
+            // Re-review 2026-07-25: strip UNCONDITIONALLY. With autosave off the raw
+            // reply was persisted verbatim, and even with it on a reply truncated
+            // mid-block kept its opening marker — which is then replayed to the
+            // provider as history and teaches the syntax.
+            return stripLibrarySaveMarkers(finalText)
         } catch (error) {
             // A user Stop must stay an AbortError all the way to the chat store, or
             // it gets persisted as a failed system message instead of a clean cancel.

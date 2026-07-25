@@ -42,7 +42,7 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
         const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
         // The composer mic toggle carries aria-pressed; the listening pill's
         // dedicated Stop button (Claude-style) does not — disambiguate.
-        const mic = wrapper.get('button[aria-label="Stop dictation"][aria-pressed]')
+        const mic = wrapper.get('button[aria-label="Stop dictation"]')
         expect(mic.attributes('aria-pressed')).toBe('true')
     })
 
@@ -51,6 +51,8 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
         const pill = wrapper.get('[data-testid="talos-dictation-live"]')
         expect(pill.text()).toContain('Listening')
         expect(pill.find('[data-testid="talos-mic-waveform"]').exists()).toBe(true)
-        expect(pill.find('button[aria-label="Stop dictation"]').exists()).toBe(true)
+        // Re-review 2026-07-25: the pill's control is "Cancel dictation" so it does
+        // not share an accessible name with the morphing right button ("Stop dictation").
+        expect(pill.find('button[aria-label="Cancel dictation"]').exists()).toBe(true)
     })
 })

@@ -19,6 +19,7 @@ import { preloadTalosMobileRoutes } from '@/lib/mobileRoutes'
 declare global {
     interface Window {
         __TALOS_ROUTES_WARM__?: boolean
+        __TALOS_ROUTES_WARM_FAILED__?: boolean
         // Fail-closed degraded-mode switch (charter section 11). Names present
         // in this array disable the matching subsystem; the shell must stay
         // functional. Never set in production; used only by controlled tests.
@@ -75,12 +76,14 @@ function bootstrapTalosMobileApp(): void {
 
     const warm = (): void => {
         void preloadTalosMobileRoutes()
+            // Observable signal: the shell is interactive BEFORE this resolves, but
+            // offline navigation only becomes safe once the chunks are warm. It must
+            // NOT be set on failure — a green airplane-mode test would be a lie.
+            .then(() => { window.__TALOS_ROUTES_WARM__ = true })
             .catch((error: unknown) => {
+                window.__TALOS_ROUTES_WARM_FAILED__ = true
                 console.error('[mobile-routes] Packaged station preload failed; stations load on demand.', error)
             })
-            // Observable signal: the shell is interactive BEFORE this resolves, but
-            // offline navigation only becomes safe once the chunks are warm.
-            .finally(() => { window.__TALOS_ROUTES_WARM__ = true })
     }
     if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 3_000 })
     else setTimeout(warm, 0)

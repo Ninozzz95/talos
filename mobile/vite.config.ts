@@ -19,7 +19,23 @@ export default defineConfig({
     define: {
         __TALOS_BUILD_ID__: JSON.stringify(talosBuildId()),
     },
-    plugins: [vue(), tailwindcss()],
+    plugins: [
+        vue(),
+        tailwindcss(),
+        // Product review 2026-07-25: @fontsource ships .woff next to .woff2 and
+        // both end up in the APK. The Android System WebView is Chromium, which
+        // has supported WOFF2 since Chrome 36 — the .woff fallbacks can never be
+        // selected, so they were ~213KB of dead weight in the bundle and on disk.
+        {
+            name: 'talos-drop-legacy-woff',
+            enforce: 'post' as const,
+            generateBundle(_options: unknown, bundle: Record<string, unknown>) {
+                for (const fileName of Object.keys(bundle)) {
+                    if (fileName.endsWith('.woff')) delete bundle[fileName]
+                }
+            },
+        },
+    ],
     worker: {
         format: 'es',
     },

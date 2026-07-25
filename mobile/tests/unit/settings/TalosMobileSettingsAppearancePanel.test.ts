@@ -104,23 +104,24 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(activeText()).toContain('Design')
     })
 
-    it('persists bubble scale, composer mode, sheet presentation, and visibility', async () => {
+    // Product review 2026-07-25: the "Chat composer" select and the 34 Interface
+    // Visibility switches had NO consumer anywhere in src/ — they animated and
+    // persisted while changing nothing. They were deleted; chat text size is now a
+    // real setting (see the message list), so this asserts what still exists.
+    it('persists the real chat text size and tool-window presentation', async () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,
             global: { stubs: { TalosThemedSelect: true } },
         })
         const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
         selects.find((select) => select.props('ariaLabel') === 'Chat message size')?.vm.$emit('update:modelValue', 'expanded')
-        selects.find((select) => select.props('ariaLabel') === 'Chat composer mode')?.vm.$emit('update:modelValue', 'minimal')
         selects.find((select) => select.props('ariaLabel') === 'Mobile tool window presentation')?.vm.$emit('update:modelValue', 'fullscreen')
 
-        await activateTab(wrapper, 'Visibility')
-        await wrapper.get('[aria-label="Session header"]').setValue(false)
-
         expect(stores.settings.setChatLayout).toHaveBeenCalledWith({ bubble_scale: 'expanded' })
-        expect(stores.settings.setChatLayout).toHaveBeenCalledWith({ composer_mode: 'minimal' })
         expect(stores.settings.setChatLayout).toHaveBeenCalledWith({ mobile_window_presentation: 'fullscreen' })
-        expect(stores.settings.setVisibility).toHaveBeenCalledWith('chat_area', 'session_header', false)
+        // the dead controls are gone from the panel entirely
+        expect(selects.some((select) => select.props('ariaLabel') === 'Chat composer mode')).toBe(false)
+        expect(wrapper.text()).not.toContain('Interface visibility')
     })
 
     it('persists renderer, interface, performance, and visibility Motion V6 controls', async () => {

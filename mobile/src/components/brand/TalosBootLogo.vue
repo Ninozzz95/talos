@@ -17,7 +17,11 @@ let fadeTimer: ReturnType<typeof setTimeout> | undefined
 let doneTimer: ReturnType<typeof setTimeout> | undefined
 
 onMounted(() => {
-    const hold = reducedMotion ? 450 : 1900
+    // Perf re-review 2026-07-25: this was a fixed 1900+420ms hold — 2.32s of a
+    // full-screen overlay nobody could tap through. Removing ~285KB of
+    // boot-blocking JS bought nothing while this timer dominated the perceived
+    // cold start, and the native splash already covers the first frames.
+    const hold = reducedMotion ? 450 : 900
     fadeTimer = setTimeout(() => { leaving.value = true }, hold)
     doneTimer = setTimeout(() => emit('done'), hold + 420)
 })

@@ -69,6 +69,8 @@ function makeVault(overrides: Partial<TalosVaultService> = {}): TalosVaultServic
         revokeGrant: vi.fn().mockResolvedValue(undefined),
         resolveMessageParts: vi.fn().mockResolvedValue([]),
         listFiles: vi.fn().mockResolvedValue([]),
+        // Boot path now reads summaries (bodies are hydrated on demand).
+        listSummaries: vi.fn().mockResolvedValue([]),
         deleteFile: vi.fn().mockResolvedValue(undefined),
         reconcilePending: vi.fn().mockResolvedValue(undefined),
         ...overrides,
@@ -234,6 +236,7 @@ describe('useTalosMobileAttachments', () => {
         const service = makeVault({
             createGenerated: vi.fn().mockResolvedValue({ file: stored, grant: grant('grant-gen', 'gen-1') }),
             listFiles: vi.fn().mockResolvedValue([stored]),
+            listSummaries: vi.fn().mockResolvedValue([stored]),
         })
         const attachments = useTalosMobileAttachments({
             picker: { pickFiles: vi.fn().mockResolvedValue([]) },
@@ -253,7 +256,7 @@ describe('useTalosMobileAttachments', () => {
             vaultFile('vault-new', 'new.txt'),
             { ...vaultFile('vault-failed', 'failed.pdf'), status: 'failed' as const, failure_code: 'TALOS_ATTACHMENT_ANALYSIS_FAILED' },
         ]
-        const service = makeVault({ listFiles: vi.fn().mockResolvedValue(files) })
+        const service = makeVault({ listFiles: vi.fn().mockResolvedValue(files), listSummaries: vi.fn().mockResolvedValue(files) })
         const attachments = useTalosMobileAttachments({
             picker: { pickFiles: vi.fn().mockResolvedValue([]) },
             vault: service,
@@ -262,7 +265,7 @@ describe('useTalosMobileAttachments', () => {
         await attachments.initialize()
 
         expect(service.reconcilePending).toHaveBeenCalledOnce()
-        expect(service.listFiles).toHaveBeenCalledOnce()
+        expect(service.listSummaries).toHaveBeenCalledOnce()
         expect(attachments.vaultFiles).toEqual(files)
         expect(attachments.vaultLoading.value).toBe(false)
         expect(attachments.vaultError.value).toBeNull()
@@ -272,6 +275,9 @@ describe('useTalosMobileAttachments', () => {
         const file = vaultFile('vault-existing')
         const service = makeVault({
             listFiles: vi.fn()
+                .mockResolvedValueOnce([file])
+                .mockResolvedValueOnce([]),
+            listSummaries: vi.fn()
                 .mockResolvedValueOnce([file])
                 .mockResolvedValueOnce([]),
         })

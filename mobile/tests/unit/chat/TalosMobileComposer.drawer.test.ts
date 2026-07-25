@@ -154,9 +154,14 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(wrapper.findAll('[aria-label="Dictate"]')).toHaveLength(1)
     })
 
+    // Re-review 2026-07-25: the previous version PERMITTED two controls sharing
+    // the name ("right button + live pill"), rubber-stamping the duplication it
+    // was meant to catch. Exactly one control may be named "Stop dictation";
+    // the pill's own control is "Cancel dictation".
     it('exposes exactly one Stop-dictation control while listening', () => {
         const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, dictationListening: true })
-        expect(wrapper.findAll('[aria-label="Stop dictation"]').length).toBeLessThanOrEqual(2) // right button + live pill
+        expect(wrapper.findAll('[aria-label="Stop dictation"]')).toHaveLength(1)
+        expect(wrapper.findAll('[aria-label="Cancel dictation"]').length).toBeLessThanOrEqual(1)
     })
 
     it('plus-dropdown: Escape closes the menu', async () => {

@@ -54,7 +54,7 @@ onBeforeUnmount(() => { if (streamThrottle !== null) clearTimeout(streamThrottle
     <article
         v-if="sending && streamingText"
         data-testid="talos-mobile-streaming"
-        class="w-full max-w-full px-1 py-1 text-sm leading-6 text-[var(--talos-text,var(--foreground))]"
+        class="w-full max-w-full px-1 py-1 leading-6 text-[var(--talos-text,var(--foreground))]"
     >
         <!-- The growing text stays OUTSIDE any live region: re-announcing
              the whole reply on every token is screen-reader noise. -->
@@ -69,7 +69,7 @@ onBeforeUnmount(() => { if (streamThrottle !== null) clearTimeout(streamThrottle
     <div
         v-else-if="sending"
         data-testid="talos-mobile-typing"
-        class="max-w-[92%] self-start rounded-2xl rounded-bl-sm border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] px-3.5 py-2 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
+        class="max-w-[92%] self-start rounded-2xl rounded-bl-sm border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] px-3.5 py-2 text-[var(--talos-muted,var(--muted-foreground))]"
         role="status"
         aria-live="polite"
     >

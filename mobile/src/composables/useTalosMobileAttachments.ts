@@ -50,6 +50,8 @@ export interface TalosMobileAttachmentsController {
     saveGenerated(input: { name: string; mediaType: string; text: string }): Promise<TalosLocalVaultFile>
     /** Object URL for a file's bytes (image thumbnail / open). Caller revokes it. */
     previewUrl(fileId: string): Promise<string | null>
+    /** Full extracted text for one file (the list holds bounded previews). */
+    hydrateText(fileId: string): Promise<string | null>
     attachExisting(file: TalosLocalVaultFile): Promise<boolean>
     remove(itemId: string): Promise<void>
     deleteVaultFile(fileId: string): Promise<void>
@@ -128,7 +130,9 @@ export function useTalosMobileAttachments(
         vaultLoading.value = true
         vaultError.value = null
         try {
-            const files = await options.vault.listFiles()
+            // Perf review 2026-07-25: summaries only — the full corpus used to be
+            // read into a reactive array on every launch.
+            const files = await options.vault.listSummaries()
             if (revision !== vaultRevision) return
             vaultFiles.splice(0, vaultFiles.length, ...files)
         } catch (cause) {
@@ -225,6 +229,15 @@ export function useTalosMobileAttachments(
             const preview = await options.vault.readFilePreview(fileId)
             if (!preview) return null
             return URL.createObjectURL(new Blob([preview.bytes as BlobPart], { type: preview.mediaType }))
+        } catch {
+            return null
+        }
+    }
+
+    async function hydrateText(fileId: string): Promise<string | null> {
+        try {
+            const files = await options.vault.listFiles()
+            return files.find((file) => file.id === fileId)?.extracted_text ?? null
         } catch {
             return null
         }
@@ -344,6 +357,7 @@ export function useTalosMobileAttachments(
         selectFiles,
         saveGenerated,
         previewUrl,
+        hydrateText,
         attachExisting,
         remove,
         deleteVaultFile,

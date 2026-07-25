@@ -134,7 +134,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         library_autosave_generated: typeof record.library_autosave_generated === 'boolean'
             ? record.library_autosave_generated
             : DEFAULT_SHELL_PREFERENCES.library_autosave_generated,
-        library_view: record.library_view === 'list' ? 'list' : 'grid',
+        // Re-review 2026-07-25: this hardcoded 'grid' as the fallback, so the
+        // documented 'list' default never shipped.
+        library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }
@@ -341,7 +343,8 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
     if (value.defaults_v3 !== true) {
         shellParsed.immersive_header = true
         shellParsed.composer_drawer = true
-        chatLayout.bubble_scale = 'compact'
+        // Re-review 2026-07-25: bubble_scale is now the user-facing CHAT TEXT SIZE.
+        // Forcing it here shipped 'Small' pre-selected and overwrote an explicit choice.
         if (motionParsed.mode === 'off') motionParsed.mode = 'complex'
     }
     // Security review 2026-07-25: sending the whole Library to a third-party
