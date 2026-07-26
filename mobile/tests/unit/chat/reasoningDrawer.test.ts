@@ -67,4 +67,22 @@ describe('reasoning is a muted line that opens a drawer', () => {
         expect(mountBlock({ reasoning: '   ' }).find('[data-testid="talos-reasoning-toggle"]').exists())
             .toBe(false)
     })
+
+    it('the LIVE state never reshapes the row', () => {
+        // SF-CRITICAL: `talos-typing-pulse` used to be applied to the row root.
+        // That class is an unlayered 6px dot (width/height/border-radius/
+        // background), and unlayered rules beat Tailwind's @layer utilities —
+        // so it defeated `w-full` and painted the row as a 6px gold bar with the
+        // label truncated to nothing, on every streaming reply with reasoning.
+        // Only the icon may pulse, and only its opacity.
+        const wrapper = mountBlock({ live: true })
+        const row = wrapper.get('[data-testid="talos-reasoning-toggle"]')
+        expect(row.attributes('class') ?? '').not.toContain('talos-typing-pulse')
+        expect(wrapper.html()).not.toContain('talos-typing-pulse')
+    })
+
+    it('meets the 44px touch target the app enforces everywhere else', () => {
+        const row = mountBlock().get('[data-testid="talos-reasoning-toggle"]')
+        expect(row.attributes('class') ?? '').toContain('min-h-11')
+    })
 })

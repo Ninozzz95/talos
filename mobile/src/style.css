@@ -329,6 +329,13 @@
    glyph animates — text already on screen is never re-animated or re-laid-out. */
 /* Defect #4: the "earlier messages" indicator — a quiet pulse, not a spinner
    that competes with the reply being written below it. */
+.talos-trace-live {
+    /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
+       that rule sets width/height/border-radius/background, and being unlayered
+       it overrides Tailwind utilities on whatever element carries it. Animating
+       opacity alone cannot reshape its host. */
+    animation: talosPulse 1.1s ease-in-out infinite;
+}
 .talos-typing-pulse {
     width: 6px;
     height: 6px;
@@ -341,7 +348,14 @@
     50% { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-    .talos-typing-pulse { animation: none; opacity: 0.7; }
+    .talos-trace-live {
+    /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
+       that rule sets width/height/border-radius/background, and being unlayered
+       it overrides Tailwind utilities on whatever element carries it. Animating
+       opacity alone cannot reshape its host. */
+    animation: talosPulse 1.1s ease-in-out infinite;
+}
+.talos-typing-pulse { animation: none; opacity: 0.7; }
 }
 
 .talos-stream-tail { white-space: pre-wrap; }

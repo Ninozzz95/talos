@@ -12,6 +12,8 @@ defineProps<{
     creatingSession: boolean
     /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
     hideMenu?: boolean
+    /** False before a chat exists; the title then opens nothing, so it is inert. */
+    canOpenMedia?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -52,6 +54,7 @@ const emit = defineEmits<{
              same action lives in the ⋮ menu for anyone who never tries it. -->
         <div class="min-w-0 flex-1 text-center">
             <button
+                v-if="canOpenMedia"
                 type="button"
                 data-testid="talos-mobile-header-title"
                 aria-haspopup="dialog"
@@ -61,6 +64,11 @@ const emit = defineEmits<{
             >
                 {{ title.trim() || 'New chat' }}
             </button>
+            <p
+                v-else
+                data-testid="talos-mobile-header-title"
+                class="talos-title truncate text-md font-semibold leading-tight text-[var(--talos-text)]"
+            >{{ title.trim() || 'New chat' }}</p>
         </div>
 
         <!-- 3-dot chat options (shared with the immersive chrome). New chat
@@ -73,6 +81,7 @@ const emit = defineEmits<{
             @new-chat="emit('newChat')"
             @rename="emit('rename', $event)"
             @delete="emit('delete')"
+            :can-open-media="canOpenMedia"
             @export="emit('export')"
             @media="emit('media')"
         />

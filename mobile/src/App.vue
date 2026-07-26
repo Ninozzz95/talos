@@ -252,18 +252,33 @@ const TalosMobileChatMediaPanel = defineAsyncComponent(
 )
 const mediaPanelOpen = ref(false)
 const mediaAttachedFileIds = ref<string[]>([])
+/** Drops a slow answer that belongs to a chat the user has already left. */
+let mediaRequest = 0
+
+const canOpenChatMedia = computed(() => chatController.chat.activeSession.value !== null)
 
 async function openChatMedia(): Promise<void> {
     const sessionId = chatController.chat.activeSession.value?.id
     if (!sessionId) return
+    // SF-MAJOR: these used to survive the close, so opening the gallery on chat
+    // B rendered chat A's documents — captioned "in B", labelled "From your
+    // Library" — for as long as the SQLite query took. They are this chat's
+    // answer or nothing.
+    mediaAttachedFileIds.value = []
+    const request = mediaRequest += 1
     mediaPanelOpen.value = true
     // Best effort: a gallery that opens empty because one query failed is worse
     // than one that shows the files it can name from metadata alone.
-    mediaAttachedFileIds.value = await chatController
-        .listChatMediaFileIds(sessionId)
-        .catch(() => [])
+    const attached = await chatController.listChatMediaFileIds(sessionId).catch(() => [])
+    if (request !== mediaRequest) return
+    if (chatController.chat.activeSession.value?.id !== sessionId) return
+    mediaAttachedFileIds.value = attached
     await chatController.attachments.refreshVault().catch(() => {})
 }
+
+// The chat can be deleted, or the user can start a new one, while the gallery
+// is open — it would keep showing a chat that no longer exists.
+watch(() => chatController.chat.activeSession.value?.id, () => { mediaPanelOpen.value = false })
 // The write-consent sheet: loaded only when a tool actually asks.
 const TalosMobileToolConsentSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolConsentSheet.vue'),
@@ -544,6 +559,7 @@ onBeforeUnmount(async () => {
                 :attached-file-ids="mediaAttachedFileIds"
                 :library-context-enabled="settingsStore.state.shell.library_context_enabled === true"
                 :preview-url="chatController.attachments.previewUrl"
+                :read-text="chatController.attachments.hydrateText"
                 :set-shared="chatController.attachments.setVaultFileShared"
                 @close="mediaPanelOpen = false"
                 @open="mediaPanelOpen = false"
@@ -603,6 +619,7 @@ onBeforeUnmount(async () => {
                         @rename="immersiveRename"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
+                        :can-open-media="canOpenChatMedia"
                         @media="openChatMedia"
                     />
                     <TalosMobileImmersiveChrome
@@ -615,6 +632,7 @@ onBeforeUnmount(async () => {
                         @rename="immersiveRename"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
+                        :can-open-media="canOpenChatMedia"
                         @media="openChatMedia"
                     />
 

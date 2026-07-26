@@ -181,7 +181,66 @@ The manifest now states the divergence in full.
   files are identical while they were not.
 - **Blocking:** no. Mobile ships independently.
 
+## The SF review, and the three things this ledger claimed that were not true
+
+An adversarial critic ran over both commits and reproduced everything it
+reported. It found **two criticals**, and it was right about both.
+
+**C1 — the redesigned row destroyed itself while live.** `talos-typing-pulse`
+was applied to the trace row's ROOT. That class is an unlayered 6px dot —
+`width:6px; height:6px; border-radius:9999px; background:var(--talos-accent)` —
+and unlayered rules beat Tailwind's `@layer utilities` (this repo says so in its
+own stylesheet). So it defeated `w-full` and `rounded-lg` and rendered the row as
+a 6px gold pulsing bar with the label truncated to nothing — on *every* streaming
+reply with reasoning, and permanently for tool activity. The exact surface the
+commit was written to redesign. There is now a `.talos-trace-live` that animates
+opacity only, on the icon, and a test asserting the class never reaches the row.
+
+**C2 — the share switch could show the opposite of the truth.** A native
+checkbox flips itself on tap; Vue then skips the patch because the bound value
+has not changed. On a failed write the panel printed "the file is still where it
+was" directly above a switch saying otherwise. And the busy guard was one id for
+the whole panel, so a second file tapped during the first write was dropped in
+silence. Privacy-relevant, not cosmetic: the user would see "not readable" over a
+document the next send still injects. Both paths now correct the DOM explicitly,
+the guard is per-file, and both are tested.
+
+Also fixed: the gallery opened showing the PREVIOUS chat's files while its query
+ran (stale ids kept across closes, no revision guard); both entry points rendered
+and did nothing when no chat exists yet; a "readable" switch was offered on files
+the injection skips for not being `available`; the thumbnail composable leaked one
+blob per image if the panel closed mid-load — the very failure its docblock
+claims it prevents; the panel was the only `aria-modal` surface in the app with
+no focus trap, no `tabindex`, and no Escape; and `Images` was used in the options
+menu without being imported, so the only entry point in the DEFAULT immersive
+chrome rendered with no icon and logged a Vue warning. `vue-tsc` exits 0 on that
+(no `strictTemplates`), there is no ESLint, and no test mounted the component.
+
+### Claims corrected
+
+1. *"revokes every object URL it created, including the loser of a race"* — was
+   false for close-during-load. Now true: a `disposed` flag revokes late
+   arrivals.
+2. *"the thumbnail cache MOVED OUT of the Library screen rather than being
+   copied"* — was false; `ContextScreen.vue` kept its own copy, so there were
+   two. It now uses the composable, and there is one.
+3. *"asserted in the shared contract, which runs against all FOUR
+   implementations"* — three run it (memory, lazy, sqlite-engine). The contract
+   also now proves `DISTINCT`: the same file attached twice must appear once.
+4. The tile's `aria-label="Open …"` opened nothing — it dismissed the gallery.
+   There is now a viewer in the same surface: images full-bleed, documents as
+   their hydrated text, Back closing the viewer before the gallery.
+5. *"Readable by this chat"* was the wrong scope. `library_shared` is read
+   against the whole vault with no session predicate, so switching it off
+   withdraws the document from **every** chat. The label now says "Any chat may
+   read it".
+
+Out of the box `library_context_enabled` is **false** and a migration keeps it
+that way, so the context-panel switches are inert until the user turns the
+Library on in Settings. The panel says so; worth knowing before reading the
+feature as broken.
+
 ## Gates at close
 
-tsc 0 · unit 1627 passed / 2 skipped · parity ok · ported-lib conformance green.
+tsc 0 · unit 1635 passed / 2 skipped · parity ok · ported-lib conformance green.
 Build and e2e numbers recorded in the commit.

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Check, Download, EllipsisVertical, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
+import { Check, Download, EllipsisVertical, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 
@@ -15,7 +15,13 @@ const props = withDefaults(defineProps<{
     busy: boolean
     /** Pill styling on the immersive chrome; plain ghost in the solid header. */
     pill?: boolean
-}>(), { pill: false })
+    /**
+     * False before a chat exists — sessions are created lazily, so this is the
+     * state of a fresh install and of "deleted the last chat". The entry used to
+     * render anyway and do nothing at all when tapped.
+     */
+    canOpenMedia?: boolean
+}>(), { pill: false, canOpenMedia: true })
 
 const emit = defineEmits<{
     newChat: []
@@ -110,7 +116,7 @@ function confirmDelete(): void {
                      modes. Tapping the title only works in the solid header —
                      the immersive chrome renders no title at all, and it is the
                      default, so the menu is the entry that always exists. -->
-                <button type="button" role="menuitem" data-testid="talos-chat-options-media" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('media')">
+                <button v-if="props.canOpenMedia" type="button" role="menuitem" data-testid="talos-chat-options-media" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('media')">
                     <Images class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Media in this chat
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('export')">

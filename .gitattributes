@@ -1,0 +1,4 @@
+# A whole-file CRLF rewrite made a 12-line change land as 430 lines and
+# reassigned blame for every line in two components. Line endings are LF in
+# the repository, whatever the editing platform does locally.
+* text=auto eol=lf
