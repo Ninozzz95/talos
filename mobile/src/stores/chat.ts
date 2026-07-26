@@ -737,14 +737,21 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
 
         let turns: ChatTurn[]
         try {
-            turns = await Promise.all(messages
+            // Defect #4 follow-up (found while re-reviewing the six changes
+            // together): the view is PAGED now, so building turns from it would
+            // have silently truncated the model's memory to the last page on
+            // any long conversation — the answer would get worse the longer you
+            // had talked. The model's history is read in full, from the store.
+            const history = await repository.listMessages(session.id)
+            const withAttachments = new Set(await repository.listSessionAttachmentMessageIds(session.id))
+            turns = await Promise.all(history
                 .filter((message) => message.role === 'user' || message.role === 'assistant' || message.role === 'tool')
                 .map(async (message) => {
                     const turn: ChatTurn = {
                         role: message.role as ChatTurn['role'],
                         content: message.content,
                     }
-                    if (message.attachments?.length) {
+                    if (withAttachments.has(message.id)) {
                         if (!options.resolveMessageParts) {
                             throw new Error('TALOS_ATTACHMENT_RESOLVER_UNAVAILABLE')
                         }

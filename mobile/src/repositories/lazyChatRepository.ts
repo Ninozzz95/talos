@@ -122,6 +122,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async revokeFileAuthorityGrant(grantId: string) {
             return (await ready()).revokeFileAuthorityGrant(grantId)
         },
+        async listSessionAttachmentMessageIds(sessionId: string) {
+            return (await ready()).listSessionAttachmentMessageIds(sessionId)
+        },
         async listMessageAttachments(messageId: string) {
             return (await ready()).listMessageAttachments(messageId)
         },

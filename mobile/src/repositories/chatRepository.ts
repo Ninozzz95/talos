@@ -309,6 +309,13 @@ export interface TalosChatRepository {
     createFileAuthorityGrant(input: CreateFileAuthorityGrantInput): Promise<TalosLocalFileAuthorityGrant>
     revokeFileAuthorityGrant(grantId: string): Promise<void>
     listMessageAttachments(messageId: string): Promise<TalosChatAttachmentBinding[]>
+    /**
+     * Defect #4 follow-up: with the view paged, the turns sent to the model are
+     * rebuilt from the FULL history at send time — and resolving attachment
+     * parts message by message would be one query per message. This is the one
+     * query that says which messages have any.
+     */
+    listSessionAttachmentMessageIds(sessionId: string): Promise<string[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>
