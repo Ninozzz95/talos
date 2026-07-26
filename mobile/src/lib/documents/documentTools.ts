@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { TalosReportInput } from './reportBuilder'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 import { talosFailureMessage } from '@/lib/talosFailureMessage'
 import {
@@ -28,6 +29,8 @@ export interface TalosDocumentToolSources {
         body?: string
         rows?: string[][]
         slides?: Array<{ title: string; bullets: string[] }>
+        /** Declared, not merely tolerated by structural typing. */
+        report?: TalosReportInput
     }): Promise<TalosGeneratedDocument>
     verify(document: TalosGeneratedDocument): Promise<{ ok: boolean; detail: string }>
     /** Puts it in the user's Library, and returns how it can be referred to. */
@@ -84,26 +87,39 @@ export function createTalosDocumentTools(
                     text: z.string().optional(),
                     pageNo: z.boolean().optional(),
                 }).optional().describe('Repeated on every page.'),
-                blocks: z.array(z.union([
+                // DISCRIMINATED, not a plain union. A union reports the whole
+                // block as "Invalid input"; a discriminated one knows which
+                // block it is and names the single field that is wrong — the
+                // difference between a model that repairs its call and a model
+                // that re-emits the same six pages and fails again.
+                blocks: z.array(z.discriminatedUnion('t', [
                     z.object({
                         t: z.literal('cover'),
-                        title: z.string(),
-                        subtitle: z.string().optional(),
-                        date: z.string().optional(),
+                        title: cell,
+                        subtitle: cell.optional(),
+                        date: cell.optional(),
                     }),
-                    z.object({ t: z.literal('h'), lvl: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), x: z.string() }),
-                    z.object({ t: z.literal('p'), x: z.string() }),
-                    z.object({ t: z.literal('note'), x: z.string() }),
-                    z.object({ t: z.literal('list'), items: z.array(z.string()), ordered: z.boolean().optional() }),
+                    z.object({
+                        t: z.literal('h'),
+                        lvl: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+                        x: cell,
+                    }),
+                    z.object({ t: z.literal('p'), x: cell }),
+                    z.object({ t: z.literal('note'), x: cell }),
+                    z.object({
+                        t: z.literal('list'),
+                        items: z.array(cell),
+                        ordered: z.boolean().optional(),
+                    }),
                     z.object({
                         t: z.literal('kpi'),
-                        items: z.array(z.object({
-                            l: z.string(), v: z.string(), d: z.string().optional(),
-                        })),
+                        // A KPI value IS a number. Refusing one cost the owner
+                        // sixty seconds of writing and a whole regeneration.
+                        items: z.array(z.object({ l: cell, v: cell, d: cell.optional() })),
                     }),
                     z.object({
                         t: z.literal('table'),
-                        head: z.array(z.string()).optional(),
+                        head: z.array(cell).optional(),
                         align: z.array(z.enum(['l', 'c', 'r'])).optional(),
                         rows: z.array(z.array(cell)),
                         total: z.array(cell).optional(),
@@ -111,19 +127,28 @@ export function createTalosDocumentTools(
                     z.object({
                         t: z.literal('chart'),
                         kind: z.enum(['bar', 'pie']),
-                        labels: z.array(z.string()),
+                        // Years on an axis are numbers, and a value the model
+                        // wrote as "510" is still a value.
+                        labels: z.array(cell),
                         series: z.array(z.object({
                             name: z.string().optional(),
-                            data: z.array(z.number()),
+                            data: z.array(z.coerce.number()),
                         })),
                         unit: z.string().optional(),
                     }),
                     z.object({ t: z.literal('spacer') }),
                     z.object({ t: z.literal('pb') }),
-                ])).describe('The document, block by block, in order.'),
+                ]))
+                    // Bounded: pdfmake lays out synchronously on the phone's
+                    // main thread, and 2000 blocks is eleven seconds of frozen
+                    // UI. Refusing with a number the model can act on beats
+                    // freezing the app.
+                    .max(400, 'Too many blocks: a document may have at most 400. Split it, or summarise.')
+                    .describe('The document, block by block, in order.'),
             }).optional().describe(
-                'For pdf: a laid-out report — cover, headings, KPI cards, tables, bar and pie charts.'
-                + ' Prefer this over `body` when the user asks for a report, and never send both.',
+                'PDF ONLY: a laid-out report — cover, headings, KPI cards, tables, bar and pie'
+                + ' charts. Prefer it over `body` when the user asks for a report, and never send'
+                + ' both. For any other format use `body` or `rows`.',
             ),
             slides: z.array(z.object({
                 title: z.string(),

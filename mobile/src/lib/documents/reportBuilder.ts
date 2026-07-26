@@ -67,6 +67,15 @@ export interface TalosReportSpec {
     blocks: TalosReportBlock[]
 }
 
+/**
+ * What the MODEL sends: the same spec without `meta`.
+ *
+ * The title lives at the top level of the tool call, so a report never repeats
+ * it — one fewer thing to end up subtly different between the file name and the
+ * cover.
+ */
+export type TalosReportInput = Omit<TalosReportSpec, 'meta'>
+
 /** The shape pdfmake consumes. Kept loose: its own types are not published. */
 export interface TalosPdfDefinition {
     pageSize: string
@@ -112,42 +121,58 @@ function paletteFor(theme: TalosReportTheme, index: number): string {
 
 function barChart(block: Extract<TalosReportBlock, { t: 'chart' }>, theme: TalosReportTheme): unknown {
     const values = block.series[0]?.data ?? []
-    const peak = Math.max(1, ...values)
-    const gap = 14
-    const barWidth = values.length ? (CHART_WIDTH - gap * (values.length + 1)) / values.length : 0
+    if (values.length === 0) return { text: '', margin: [0, 0, 0, 0] }
+
+    // The scale spans zero, so a negative bar goes DOWN from the axis instead of
+    // being flattened to a stub. Owner's own prompt has "-2,4%" in it, and three
+    // negatives rendered as three identical 2pt marks say nothing at all.
+    const low = Math.min(0, ...values)
+    const high = Math.max(0, ...values)
+    const span = high - low || 1
+    const plot = CHART_HEIGHT - 34
+    const zeroY = 8 + (high / span) * plot
+
+    // Gap shrinks with the count: past 31 bars a fixed 14pt gap made the width
+    // NEGATIVE, and three years of monthly points is an ordinary request.
+    const gap = Math.min(14, CHART_WIDTH / (values.length * 4))
+    const pitch = CHART_WIDTH / values.length
+    const barWidth = Math.max(1, pitch - gap)
     const canvas: Record<string, unknown>[] = [boundingBox(CHART_WIDTH, CHART_HEIGHT)]
 
-    // Baseline first, so bars sit on something rather than float.
     canvas.push({
-        type: 'line', x1: 0, y1: CHART_HEIGHT - 18, x2: CHART_WIDTH, y2: CHART_HEIGHT - 18,
+        type: 'line', x1: 0, y1: zeroY, x2: CHART_WIDTH, y2: zeroY,
         lineWidth: 0.8, lineColor: theme.muted,
     })
     values.forEach((value, index) => {
-        const height = Math.max(2, ((value / peak) * (CHART_HEIGHT - 34)))
+        const height = Math.abs(value / span) * plot
         canvas.push({
             type: 'rect',
-            x: gap + index * (barWidth + gap),
-            y: CHART_HEIGHT - 18 - height,
+            x: index * pitch + gap / 2,
+            y: value >= 0 ? zeroY - height : zeroY,
             w: barWidth,
-            h: height,
-            r: 2,
-            color: paletteFor(theme, index),
+            h: Math.max(1, height),
+            r: 1,
+            color: value >= 0 ? paletteFor(theme, index) : theme.muted,
         })
     })
 
     return {
+        // The label row is measured in the SAME track as the bars: fixed
+        // columns of `pitch`, not '*' columns filling the page width. They drew
+        // on two different tracks before, and by the seventh bar the label sat
+        // entirely outside the bar it named.
         stack: [
             { canvas },
             {
                 columns: values.map((value, index) => ({
-                    width: '*',
+                    width: pitch,
                     stack: [
                         { text: String(value), style: 'chartValue' },
-                        { text: block.labels[index] ?? '', style: 'chartLabel' },
+                        { text: String(block.labels[index] ?? ''), style: 'chartLabel' },
                     ],
                 })),
                 columnGap: 0,
-                margin: [gap, 2, gap, 0],
+                margin: [0, 2, 0, 0],
             },
         ],
         margin: [0, 4, 0, 12],
@@ -156,7 +181,9 @@ function barChart(block: Extract<TalosReportBlock, { t: 'chart' }>, theme: Talos
 
 function pieChart(block: Extract<TalosReportBlock, { t: 'chart' }>, theme: TalosReportTheme): unknown {
     const values = block.series[0]?.data ?? []
-    const total = values.reduce((sum, value) => sum + value, 0)
+    // Only the positive part: summing negatives made the total smaller than a
+    // single slice, so two slices each drew a FULL circle, one over the other.
+    const total = values.reduce((sum, value) => sum + Math.max(0, value), 0)
     const radius = 68
     const canvas: Record<string, unknown>[] = [boundingBox(170, 150)]
     let angle = -Math.PI / 2
@@ -182,7 +209,7 @@ function pieChart(block: Extract<TalosReportBlock, { t: 'chart' }>, theme: Talos
                         { width: 10, canvas: [{ type: 'rect', x: 0, y: 3, w: 8, h: 8, color: paletteFor(theme, index) }] },
                         {
                             width: '*',
-                            text: `${block.labels[index] ?? ''} — ${total > 0 ? Math.round((value / total) * 100) : 0}%`,
+                            text: `${block.labels[index] ?? ''} — ${total > 0 ? Math.round((Math.max(0, value) / total) * 100) : 0}%`,
                             style: 'legend',
                         },
                     ],
@@ -234,36 +261,35 @@ function renderBlock(block: TalosReportBlock, theme: TalosReportTheme): unknown[
             }]
         case 'table': {
             const head = block.head ?? []
+            // Width is decided BEFORE the body is built, and every row is
+            // padded to it. A single missing cell in a sixty-store table used
+            // to throw "Malformed table row" out of pdfmake — after the model
+            // had written the entire report.
+            const columns = Math.max(
+                head.length,
+                ...block.rows.map((row) => row.length),
+                block.total?.length ?? 0,
+                1,
+            )
+            const cells = (row: readonly string[], style: string): unknown[] =>
+                Array.from({ length: columns }, (_, index) => ({
+                    text: row[index] ?? '',
+                    style,
+                    alignment: ALIGNMENT[block.align?.[index] ?? 'l'],
+                }))
+
             const body: unknown[][] = []
-            if (head.length) {
-                body.push(head.map((cell, index) => ({
-                    text: cell,
-                    style: 'th',
-                    alignment: ALIGNMENT[block.align?.[index] ?? 'l'],
-                })))
-            }
-            for (const row of block.rows) {
-                body.push(row.map((cell, index) => ({
-                    text: cell,
-                    style: 'td',
-                    alignment: ALIGNMENT[block.align?.[index] ?? 'l'],
-                })))
-            }
-            if (block.total?.length) {
-                body.push(block.total.map((cell, index) => ({
-                    text: cell,
-                    style: 'tdTotal',
-                    alignment: ALIGNMENT[block.align?.[index] ?? 'l'],
-                })))
-            }
-            const columns = Math.max(head.length, ...block.rows.map((row) => row.length), 1)
+            if (head.length) body.push(cells(head, 'th'))
+            for (const row of block.rows) body.push(cells(row, 'td'))
+            if (block.total?.length) body.push(cells(block.total, 'tdTotal'))
+
             return [{
                 table: {
                     // The header repeats on every page a long table spans —
                     // the reason a flow engine was chosen at all.
                     headerRows: head.length ? 1 : 0,
                     widths: Array.from({ length: columns }, (_, index) => (index === 0 ? '*' : 'auto')),
-                    body: body.length ? body : [['']],
+                    body: body.length ? body : [Array.from({ length: columns }, () => '')],
                 },
                 layout: {
                     hLineWidth: (index: number) => (index === 0 || index === 1 ? 0.8 : 0.4),
