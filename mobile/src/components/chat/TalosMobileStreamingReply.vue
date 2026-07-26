@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
-import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
+import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolRow.vue'
 import { BookMarked, Clock, FileText, Globe, ListTodo, NotebookPen, Sparkles, Wrench } from '@lucide/vue'
 import {
     talosToolActivityLabel,
@@ -250,17 +250,15 @@ onBeforeUnmount(() => {
              chips, which sat next to a borderless reasoning row and looked like
              two different features. -->
         <div v-if="runningTools.length" data-testid="talos-tool-activity" class="mb-0.5">
-            <TalosMobileTraceRow
+            <TalosMobileRunningToolRow
                 v-for="entry in runningTools"
                 :key="entry.key"
-                :label="`${entry.label}…`"
-                live
-                :interactive="false"
+                :label="entry.label"
             >
                 <template #icon>
                     <component :is="entry.icon" class="size-3.5" />
                 </template>
-            </TalosMobileTraceRow>
+            </TalosMobileRunningToolRow>
         </div>
         <TalosMobileReasoningBlock v-if="streamingReasoning" :reasoning="streamingReasoning" live />
         <TalosMobileMessageContent :content="parsedMarkdown" />
