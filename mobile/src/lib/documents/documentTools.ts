@@ -30,7 +30,7 @@ export interface TalosDocumentToolSources {
     }): Promise<TalosGeneratedDocument>
     verify(document: TalosGeneratedDocument): Promise<{ ok: boolean; detail: string }>
     /** Puts it in the user's Library, and returns how it can be referred to. */
-    save(document: TalosGeneratedDocument): Promise<{ id: string } | null>
+    save(document: TalosGeneratedDocument): Promise<{ id: string }>
 }
 
 export function createTalosDocumentTools(
@@ -76,11 +76,22 @@ export function createTalosDocumentTools(
                 }
             }
 
-            const saved = await sources.save(document).catch(() => null)
-            if (!saved) {
+            let saved: { id: string }
+            try {
+                saved = await sources.save(document)
+            } catch (error) {
+                // The real code, not a shrug. "Could not be saved" left the
+                // model to invent an explanation — it told the user it was a
+                // temporary storage problem, which was not true and not
+                // actionable. `TALOS_ATTACHMENT_TYPE_MISMATCH` is both.
+                const detail = error instanceof Error ? error.message : String(error)
                 return {
                     ok: false,
-                    content: `"${document.fileName}" was created and verified but could not be saved to the Library.`,
+                    content: [
+                        `"${document.fileName}" was created and verified, but saving it to the Library failed: ${detail}.`,
+                        'Tell the user exactly this, including the code, and do NOT claim the file was saved.',
+                        'Do not silently retry the same format — offer a different one, or ask.',
+                    ].join(' '),
                 }
             }
 

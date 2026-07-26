@@ -38,6 +38,25 @@ const marks = computed(() => props.sources.slice(0, 3).map((source) => ({
 })))
 
 const extra = computed(() => Math.max(0, props.sources.length - marks.value.length))
+
+/**
+ * Owner 2026-07-26: a source you cannot open is a footnote, not a citation.
+ * Opens in the in-app browser, which is where every other link in TALOS goes —
+ * so the page loads under the app's own rules rather than being handed to
+ * whatever browser happens to be default.
+ */
+async function openSource(source: TalosMobileWebSource): Promise<void> {
+    const { createTalosInAppBrowserService } = await import('@/services/inAppBrowserService')
+    const browser = createTalosInAppBrowserService({ onEvent: () => {} })
+    try {
+        await browser.open(source.url, 'isolated_webview')
+    } catch {
+        // A source that will not open is reported by staying put rather than by
+        // a dead tap: the url is on screen and can be copied.
+    } finally {
+        await browser.dispose?.()
+    }
+}
 </script>
 
 <template>
@@ -71,11 +90,14 @@ const extra = computed(() => Math.max(0, props.sources.length - marks.value.leng
             @close="open = false"
         >
             <ul class="space-y-2 pb-2">
-                <li
-                    v-for="source in sources"
-                    :key="source.url"
-                    class="rounded-xl border border-[var(--talos-border)] px-3 py-2"
-                >
+                <li v-for="source in sources" :key="source.url">
+                    <button
+                        type="button"
+                        class="talos-pressable block w-full rounded-xl border border-[var(--talos-border)] px-3 py-2 text-left"
+                        :data-testid="`talos-source-open`"
+                        :aria-label="`Open ${source.title || siteOf(source)}`"
+                        @click="openSource(source)"
+                    >
                     <p class="truncate text-xs text-[var(--talos-text)]">{{ source.title || siteOf(source) }}</p>
                     <p class="mt-0.5 truncate text-2xs text-[var(--talos-muted)]">{{ siteOf(source) }}</p>
                     <!-- D7 all the way to the surface: a page that declares no
@@ -85,6 +107,7 @@ const extra = computed(() => Math.max(0, props.sources.length - marks.value.leng
                         {{ source.publishedAt ?? 'date unknown' }}
                     </p>
                     <p class="mt-1 truncate text-3xs text-[var(--talos-muted)] opacity-80">{{ source.url }}</p>
+                    </button>
                 </li>
             </ul>
         </TalosMobileComposerSheet>

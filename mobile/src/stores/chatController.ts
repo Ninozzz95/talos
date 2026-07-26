@@ -718,6 +718,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             return verifyTalosDocument(document)
                         },
                         async save(document) {
+                            // The failure code travels. A save that fails with
+                            // "could not be saved" leaves the model guessing —
+                            // and a guessing model tells the user it was a
+                            // "temporary storage problem", which is a sentence
+                            // nobody can act on.
                             // The REAL bytes, always. Routing a binary format
                             // through the text sink produced a file named .xlsx
                             // containing a placeholder sentence — the document
@@ -727,7 +732,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 mediaType: document.mediaType,
                                 bytes: document.bytes,
                             })
-                            return saved ? { id: saved.id } : null
+                            return { id: saved.id }
                         },
                     }),
                     /**
