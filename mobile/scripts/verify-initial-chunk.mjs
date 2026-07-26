@@ -63,6 +63,13 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/chat/TalosMobileToolConsentSheet.vue',
         code: 'TALOS_TOOL_CONSENT_NOT_LAZY',
     },
+    // F2: docx, xlsx, pptx and pdf-lib together weigh megabytes — several times
+    // the entire startup budget. They are loaded when a document is actually
+    // made, and the build must fail loudly if that ever stops being true.
+    {
+        suffix: 'src/lib/documents/documentGenerator.ts',
+        code: 'TALOS_DOCUMENT_GENERATOR_NOT_LAZY',
+    },
     // The per-chat media gallery: a grid with thumbnails, opened occasionally.
     // The chat's first paint must never carry it.
     {

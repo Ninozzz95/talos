@@ -18,6 +18,7 @@ interface FixtureOptions {
     eagerModelCatalog?: boolean
     eagerModelAdvanced?: boolean
     eagerToolset?: boolean
+    eagerDocuments?: boolean
     syntheticSettingsEntry?: boolean
 }
 
@@ -38,6 +39,8 @@ function createFixture(options: FixtureOptions = {}): string {
     const agentLoopKey = 'src/lib/tools/agentLoop.ts'
     const toolConsentKey = 'src/components/chat/TalosMobileToolConsentSheet.vue'
     const chatMediaKey = 'src/components/chat/TalosMobileChatMediaPanel.vue'
+    const documentGeneratorKey = 'src/lib/documents/documentGenerator.ts'
+    const documentsAreDynamic = options.eagerDocuments !== true
     const toolsetIsDynamic = options.eagerToolset !== true
     const sqliteIsDynamic = options.sqliteIsDynamic ?? true
     const messageRendererIsDynamic = options.eagerMessageRenderer !== true
@@ -74,6 +77,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(promptEnhancerIsDynamic ? [] : [promptEnhancerKey]),
                 ...(slashCommandMenuIsDynamic ? [] : [slashCommandMenuKey]),
                 ...(toolsetIsDynamic ? [] : [toolsetKey]),
+                ...(documentsAreDynamic ? [] : [documentGeneratorKey]),
                 ...staticRouteKeys,
             ],
             dynamicImports: [
@@ -86,6 +90,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 agentLoopKey,
                 toolConsentKey,
                 chatMediaKey,
+                ...(documentsAreDynamic ? [documentGeneratorKey] : []),
                 ...dynamicRouteKeys,
             ],
         },
@@ -132,6 +137,10 @@ function createFixture(options: FixtureOptions = {}): string {
         [chatMediaKey]: {
             file: 'assets/chat-media.js',
             isDynamicEntry: true,
+        },
+        [documentGeneratorKey]: {
+            file: 'assets/document-generator.js',
+            isDynamicEntry: documentsAreDynamic,
         },
     }
     for (const [index, sourceKey] of routeKeys.entries()) {
@@ -205,6 +214,15 @@ describe('initial JavaScript chunk contract', () => {
 
         expect(result.status).toBe(1)
         expect(result.stderr).toContain('TALOS_TOOLSET_NOT_LAZY')
+    })
+
+    it('rejects the document generators when they enter the static initial graph', () => {
+        // docx + xlsx + pptxgenjs + pdf-lib are megabytes: several times the
+        // whole startup budget, for a feature many users never touch.
+        const result = verify(createFixture({ eagerDocuments: true }))
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_DOCUMENT_GENERATOR_NOT_LAZY')
     })
 
     it('rejects an initial JavaScript graph over its byte budget', () => {

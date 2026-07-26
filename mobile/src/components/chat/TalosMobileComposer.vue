@@ -500,7 +500,7 @@ watch(() => props.prompt, () => {
                 ref="plusTrigger"
                 type="button"
                 size="icon"
-                variant="outline"
+                variant="ghost"
                 data-mobile-icon-only="true"
                 aria-label="Add to chat"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
@@ -542,8 +542,12 @@ watch(() => props.prompt, () => {
                 class="talos-pressable absolute right-1.5 min-h-11 min-w-11 rounded-2xl"
                 :class="[
                     'bottom-0.5',
+                    // Owner 2026-07-26: the microphone is a bare icon at rest.
+                    // Send, stop and dictating keep the filled pill exactly as
+                    // it was — those are the states where the control is either
+                    // about to be pressed or must be findable in a hurry.
                     rightAction === 'mic'
-                        ? 'border border-[var(--talos-border,var(--border))] text-[var(--talos-muted,var(--muted-foreground))]'
+                        ? 'text-[var(--talos-muted,var(--muted-foreground))]'
                         : 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]',
                 ]"
                 @click="onRightAction"
@@ -607,7 +611,7 @@ watch(() => props.prompt, () => {
                 ref="plusTrigger"
                 type="button"
                 size="icon"
-                variant="outline"
+                variant="ghost"
                 data-mobile-icon-only="true"
                 aria-label="Add to chat"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
