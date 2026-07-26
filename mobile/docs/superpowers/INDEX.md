@@ -24,6 +24,12 @@ Nothing that governs the program may live only on one machine, and no phase is
 
 ## Reading order for a new session
 
+0. `plans/2026-07-26-talos-tool-catalogue-and-roadmap.md` — **the tool programme**:
+   every tool TALOS will ever call, first to last, with the engineering
+   constraints applied per row, the risk ladder, what is genuinely feasible on a
+   phone (and what the vision document assumes but cannot run there), and the
+   phase order F0→F8. Opened on owner instruction 2026-07-26: no tool is built
+   before its row here is filled in.
 1. `plans/2026-07-24-talos-mobile-remaining-program-roadmap.md` — the sequence.
 2. The newest file in `ledgers/` — what actually shipped last.
 3. `../feature-parity.json` — the machine-readable parity contract. **Treat with
@@ -37,3 +43,6 @@ Nothing that governs the program may live only on one machine, and no phase is
   evidence belongs.
 - The roadmap header still cites an older reconciliation point; a re-reconcile
   pass follows the current remediation work.
+- The tool catalogue supersedes the tool-related lines of the 2026-07-24
+  roadmap. Where the two disagree about tools, the catalogue wins — it is the
+  newer document and the one the owner asked for.
