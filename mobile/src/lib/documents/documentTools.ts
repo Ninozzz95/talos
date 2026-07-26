@@ -200,6 +200,17 @@ export function createTalosDocumentTools(
                         'Tell the user it was NOT saved. Do not claim otherwise, and do not invent a cause.',
                         'Do not silently retry the same format — offer a different one, or ask.',
                     ].join(' '),
+                    // Owner's R38 trace: THIS is the branch that fired, and it
+                    // was the one branch with no code — so the diagnostics JSON
+                    // read `errorCode: null` and the model's paraphrase ("un
+                    // problema tecnico di archiviazione") was all there was.
+                    // The trace must name the failure even when the model does
+                    // not, because the trace is the channel that cannot be
+                    // rewritten in the telling.
+                    code: (() => {
+                        const detail = error instanceof Error ? error.message : String(error)
+                        return /^TALOS_[A-Z0-9_]+$/.test(detail) ? detail : 'TALOS_DOCUMENT_SAVE_FAILED'
+                    })(),
                 }
             }
 

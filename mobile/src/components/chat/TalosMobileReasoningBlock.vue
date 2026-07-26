@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { Sparkles } from '@lucide/vue'
 import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
+import { talosElapsedLabel, useTalosElapsed } from '@/composables/useTalosElapsed'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 
 /**
@@ -34,6 +35,16 @@ const props = defineProps<{
 
 const showTrace = ref(false)
 const trimmed = computed(() => props.reasoning.trim())
+
+/**
+ * Owner 2026-07-26: "metti il tempo che è passato in secondi del ragionamento".
+ *
+ * Counting from mount, which is when reasoning first arrives on screen. A model
+ * thinking for fifty seconds and a model that has hung look identical without
+ * this, and after his 110-second run that difference is the whole question.
+ */
+const elapsed = useTalosElapsed()
+const elapsedLabel = computed(() => (props.live ? talosElapsedLabel(elapsed.value) : ''))
 </script>
 
 <template>
@@ -41,6 +52,7 @@ const trimmed = computed(() => props.reasoning.trim())
         <TalosMobileTraceRow
             testid="talos-reasoning-toggle"
             :label="live ? 'Reasoning…' : 'Reasoning'"
+            :detail="elapsedLabel"
             :live="live"
             @open="showTrace = true"
         >
@@ -51,7 +63,7 @@ const trimmed = computed(() => props.reasoning.trim())
 
         <TalosMobileComposerSheet
             v-if="showTrace"
-            title="Reasoning"
+            :title="elapsedLabel ? `Reasoning · ${elapsedLabel}` : 'Reasoning'"
             testid="talos-reasoning-drawer"
             @close="showTrace = false"
         >
