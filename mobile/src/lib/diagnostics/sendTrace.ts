@@ -1,3 +1,5 @@
+import { shallowRef } from 'vue'
+
 /**
  * Where one send spends its time.
  *
@@ -21,7 +23,18 @@ export interface TalosToolTrace {
     name: string
     /** Milliseconds from the start of the send, so rows can be compared. */
     startedAtMs: number
+    /** The WORK, with any wait for a permission sheet taken out. */
     durationMs: number
+    /**
+     * How long this call sat waiting for the user to answer a permission sheet.
+     *
+     * SF-critic 2026-07-26: the stopwatch started before the consent gate, so
+     * a tool doing 2ms of work behind a sheet the user took a minute over was
+     * recorded as a one-minute tool — and the owner would have gone hunting for
+     * a slow network. Human time is real time, but it is not TALOS being slow,
+     * so it is reported beside the work rather than folded into it.
+     */
+    waitedForConsentMs: number
     ok: boolean
 }
 
@@ -29,7 +42,7 @@ export interface TalosRoundTrace {
     startedAtMs: number
     durationMs: number
     /**
-     * How long until the first CHUNK of the answer arrived this round.
+     * How long until the first bytes of the response arrived this round.
      *
      * Chunk, not token, and the distinction is deliberate: OpenTelemetry splits
      * client metrics from server ones precisely because a client reading an SSE
@@ -37,9 +50,14 @@ export interface TalosRoundTrace {
      * never tokens. Their client-side key is `time_to_first_chunk`. Calling it
      * TTFT would claim a precision this side of the wire does not have.
      *
-     * Null, never 0, when the round never spoke: a tool-only turn produces no
-     * chunk, and a fictional best-case in the middle of a latency report is
-     * worse than an admitted gap.
+     * EITHER channel counts — visible text or reasoning. SF-critic 2026-07-26:
+     * only `onChunk` was wrapped, so on a reasoning model (DeepSeek, the
+     * owner's own provider) a round with bytes on the wire at 300ms that then
+     * thought for 44s reported 44300 — measuring the thinking, not the wait.
+     *
+     * Null, never 0, when the round never spoke at all: a tool-only turn
+     * produces nothing, and a fictional best-case in the middle of a latency
+     * report is worse than an admitted gap.
      */
     timeToFirstChunkMs: number | null
     tools: TalosToolTrace[]
@@ -71,10 +89,19 @@ export interface TalosSendTrace {
      * argument.
      */
     clockSuspect: boolean
+    /**
+     * The same span measured on the WALL clock.
+     *
+     * SF-critic 2026-07-26: the disagreement was detected and then the only
+     * usable number was thrown away — the monotonic total was still printed in
+     * bold under a footnote saying not to trust it. When the two disagree, THIS
+     * is the one that survived a device sleep.
+     */
+    wallDurationMs: number | null
 }
 
 export interface TalosToolTraceHandle {
-    finish(ok: boolean): void
+    finish(ok: boolean, waitedForConsentMs?: number): void
 }
 
 export interface TalosRoundTraceHandle {
@@ -131,7 +158,22 @@ export function createTalosTraceRecorder(
     options: TalosTraceRecorderOptions,
 ): TalosTraceRecorder {
     const keep = options.keep ?? 10
-    const sends: TalosSendTrace[] = []
+    /**
+     * A shallowRef holding a REPLACED array, not a mutated one.
+     *
+     * SF-critic 2026-07-26: this was a plain array in a closure, so a screen
+     * reading it through a computed had no reactive dependency at all — the
+     * computed ran once and never again. "Clear timings" emptied the data and
+     * left the list on screen, and a send recorded while the Doctor was open
+     * never appeared. The button LOOKED like it worked, which is worse than not
+     * having one.
+     *
+     * Shallow rather than deep on purpose: the handles mutate a trace in place
+     * while it runs, and making every field reactive would put a dependency on
+     * the hot path of every tool call for no gain — a running send is rendered
+     * from the array identity it was added with.
+     */
+    const sends = shallowRef<TalosSendTrace[]>([])
 
     return {
         begin(context) {
@@ -149,15 +191,15 @@ export function createTalosTraceRecorder(
                 outcome: 'ok',
                 rounds: [],
                 clockSuspect: false,
+                wallDurationMs: null,
             }
-            sends.unshift(trace)
-            if (sends.length > keep) sends.length = keep
+            sends.value = [trace, ...sends.value].slice(0, keep)
 
             return {
                 round() {
                     const roundStart = options.now()
                     const round: TalosRoundTrace = {
-                        startedAtMs: roundStart - sendStart,
+                        startedAtMs: Math.round(roundStart - sendStart),
                         durationMs: 0,
                         timeToFirstChunkMs: null,
                         tools: [],
@@ -173,14 +215,15 @@ export function createTalosTraceRecorder(
                     return {
                         firstChunk() {
                             if (round.timeToFirstChunkMs !== null) return
-                            round.timeToFirstChunkMs = options.now() - roundStart
+                            round.timeToFirstChunkMs = Math.round(options.now() - roundStart)
                         },
                         tool(name) {
                             const toolStart = options.now()
                             const tool: TalosToolTrace = {
                                 name,
-                                startedAtMs: toolStart - sendStart,
+                                startedAtMs: Math.round(toolStart - sendStart),
                                 durationMs: 0,
+                                waitedForConsentMs: 0,
                                 ok: false,
                             }
                             round.tools.push(tool)
@@ -188,32 +231,38 @@ export function createTalosTraceRecorder(
                             if (inFlight > 1) round.parallel = true
                             let done = false
                             return {
-                                finish(ok) {
+                                finish(ok, waitedForConsentMs = 0) {
                                     if (done) return
                                     done = true
                                     inFlight -= 1
-                                    tool.durationMs = options.now() - toolStart
+                                    tool.waitedForConsentMs = Math.round(waitedForConsentMs)
+                                    // The WORK, with the human's time removed.
+                                    tool.durationMs = Math.max(
+                                        0,
+                                        Math.round(options.now() - toolStart - waitedForConsentMs),
+                                    )
                                     tool.ok = ok
                                 },
                             }
                         },
                         finish() {
-                            round.durationMs = options.now() - roundStart
+                            round.durationMs = Math.round(options.now() - roundStart)
                         },
                     }
                 },
                 finish(outcome) {
-                    trace.durationMs = options.now() - sendStart
+                    trace.durationMs = Math.round(options.now() - sendStart)
                     trace.outcome = outcome
                     if (wallStart !== null && options.wallNow) {
                         const wallElapsed = options.wallNow() - wallStart
+                        trace.wallDurationMs = Math.round(wallElapsed)
                         trace.clockSuspect = Math.abs(wallElapsed - trace.durationMs)
                             > TALOS_CLOCK_DRIFT_TOLERANCE_MS
                     }
                 },
             }
         },
-        sends: () => sends,
-        clear() { sends.length = 0 },
+        sends: () => sends.value,
+        clear() { sends.value = [] },
     }
 }

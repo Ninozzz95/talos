@@ -158,6 +158,25 @@ describe('recording where a send spends its time', () => {
         expect(recorder.sends()[0]!.clockSuspect).toBe(false)
     })
 
+    it('reports the WORK, with the wait at a permission sheet kept apart', () => {
+        // SF-critic 2026-07-26: the stopwatch started before the consent gate,
+        // so a tool doing 2ms of work behind a sheet the user took a minute
+        // over was recorded as a one-minute tool — and the owner would have
+        // gone hunting for a slow network.
+        const recorder = createTalosTraceRecorder({
+            enabled: () => true,
+            now: clockFrom([0, 0, 0, 60_100, 60_200]),
+        })
+        const send = recorder.begin({ provider: 'openai', model: 'gpt-5' })
+        const round = send.round()
+        round.tool('document_create').finish(true, 60_000)
+        send.finish('ok')
+
+        const [tool] = recorder.sends()[0]!.rounds[0]!.tools
+        expect(tool!.durationMs).toBe(100)
+        expect(tool!.waitedForConsentMs).toBe(60_000)
+    })
+
     it('never records a prompt, a file name, or a key', () => {
         // A diagnostics export is the most natural way for a secret to leave an
         // app. This recorder is not given anything to leak: the surface takes a
@@ -170,6 +189,6 @@ describe('recording where a send spends its time', () => {
         const serialised = JSON.stringify(recorder.sends())
         expect(serialised).not.toMatch(/sk-|tvly-|Bearer/)
         expect(Object.keys(recorder.sends()[0]!.rounds[0]!.tools[0]!).sort())
-            .toEqual(['durationMs', 'name', 'ok', 'startedAtMs'])
+            .toEqual(['durationMs', 'name', 'ok', 'startedAtMs', 'waitedForConsentMs'])
     })
 })

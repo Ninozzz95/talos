@@ -18,7 +18,7 @@
 export interface TalosDoctorSection {
     id: 'status' | 'data' | 'advanced'
     label: string
-    /** Read by the tablist for its accessible name. */
+    /** One line on what the segment holds. Not rendered: labels must carry it. */
     hint: string
 }
 
