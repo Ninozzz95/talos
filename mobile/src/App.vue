@@ -563,6 +563,7 @@ onBeforeUnmount(async () => {
                 :library-context-enabled="settingsStore.state.shell.library_context_enabled === true"
                 :preview-url="chatController.attachments.previewUrl"
                 :read-text="chatController.attachments.hydrateText"
+                :read-bytes="chatController.attachments.previewBytes"
                 :set-shared="chatController.attachments.setVaultFileShared"
                 @close="mediaPanelOpen = false"
                 @open="mediaPanelOpen = false"

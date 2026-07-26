@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
+import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
@@ -86,8 +87,34 @@ const docView = ref<TalosLocalVaultFile | null>(null)
 // Perf review 2026-07-25: the list now holds bounded previews, so the viewer
 // hydrates the full extracted text on open.
 const docText = ref<string | null>(null)
+const openError = ref<string | null>(null)
+
 async function openFile(file: TalosLocalVaultFile): Promise<void> {
     if (file.status !== 'available') return
+    // Owner 2026-07-26: tapping an xlsx did nothing, and it could not do
+    // anything — the in-app viewer renders text, and a spreadsheet is not text.
+    // Hand it to the app the user already trusts with that format instead of
+    // showing a preview that is subtly wrong about a file they are about to
+    // send to someone.
+    if (talosNeedsExternalOpen(file.media_type)) {
+        const { openTalosVaultFileExternally } = await import('@/services/openVaultFile')
+        openError.value = null
+        const preview = await attachments.previewBytes(file.id).catch(() => null)
+        if (!preview) {
+            openError.value = `“${file.display_name}” could not be read from this device.`
+            return
+        }
+        try {
+            await openTalosVaultFileExternally({
+                displayName: file.display_name,
+                mediaType: file.media_type,
+                bytes: preview,
+            })
+        } catch {
+            openError.value = `No app on this phone offered to open “${file.display_name}”.`
+        }
+        return
+    }
     if (isImage(file)) {
         lightboxFile.value = file
         lightboxUrl.value = thumbs.value[file.id] ?? await attachments.previewUrl(file.id)
@@ -183,6 +210,12 @@ onMounted(async () => {
 
 <template>
     <TalosMobileScreen title="Library" eyebrow="Context Vault">
+        <p
+            v-if="openError"
+            role="alert"
+            data-testid="talos-library-open-error"
+            class="mb-2 rounded-lg bg-[var(--talos-panel)] px-3 py-2 text-2xs text-[var(--talos-text)]"
+        >{{ openError }}</p>
         <template #eyebrow-icon>
             <Database class="h-4 w-4 text-[var(--talos-accent)]" aria-hidden="true" />
         </template>

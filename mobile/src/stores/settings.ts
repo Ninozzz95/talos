@@ -103,6 +103,13 @@ export interface TalosMobileShellPreferences {
     library_view: 'grid' | 'list'
     /** Owner 2026-07-25: GLOBAL text size — chat, menus, settings, chrome. */
     ui_font_scale: TalosFontScale
+    /**
+     * Owner 2026-07-26: an alternative to the typewriter — "un'animazione più
+     * smooth con un leggero fade in, pulitissima". Typewriter paces the reveal
+     * character by character; fade lets the text arrive at the model's own pace
+     * and simply eases it in.
+     */
+    streaming_animation: 'typewriter' | 'fade'
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
 }
@@ -119,6 +126,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     library_autosave_generated: false,
     library_view: 'list',
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
+    streaming_animation: 'typewriter',
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -150,6 +158,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // documented 'list' default never shipped.
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
         ui_font_scale: parseTalosFontScale(record.ui_font_scale),
+        streaming_animation: record.streaming_animation === 'fade' ? 'fade' : 'typewriter',
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }

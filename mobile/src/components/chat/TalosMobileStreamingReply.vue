@@ -8,6 +8,7 @@ import { talosToolActivityLabel } from '@/lib/tools/toolLabels'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
 import { useChatController } from '@/stores/chatController'
+import { useSettingsStore } from '@/stores/settings'
 
 /**
  * R1-5 — the in-flight assistant reply, isolated. This component alone
@@ -39,7 +40,20 @@ const runningTools = computed(() => controller.toolActivity.value.map(talosToolA
 const streamingReasoning = computed(() => state.streamingReasoning ?? '')
 const sending = computed(() => state.sending)
 
-const { revealed } = useTalosTypewriterReveal(streamingText)
+/**
+ * Owner 2026-07-26: a second way for the answer to arrive — "un'animazione più
+ * smooth con un leggero fade in, pulitissima".
+ *
+ * Typewriter PACES the reveal on a frame clock, which is what makes it feel
+ * mechanical to some eyes. Fade does not pace at all: the text appears at the
+ * model's own speed and each new letter simply eases in. So the choice is not
+ * cosmetic — it changes whether TALOS holds text back.
+ */
+const settings = useSettingsStore()
+const fadeMode = computed(() => settings.state.shell.streaming_animation === 'fade')
+
+const { revealed: paced } = useTalosTypewriterReveal(streamingText)
+const revealed = computed(() => (fadeMode.value ? streamingText.value : paced.value))
 
 const PlainMessage = defineComponent({
     props: { content: { type: String, required: true } },
@@ -138,7 +152,7 @@ function appendChars(host: HTMLElement, text: string): void {
         // One span per letter: the ONLY node that animates is the new one, so
         // the text already on screen never re-lays-out or re-animates.
         const span = document.createElement('span')
-        span.className = 'talos-stream-char'
+        span.className = fadeMode.value ? 'talos-stream-char talos-stream-char--fade' : 'talos-stream-char'
         span.textContent = char
         host.insertBefore(span, caretEl)
     }

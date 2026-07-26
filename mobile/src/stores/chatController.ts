@@ -655,10 +655,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
         try {
             const autosaveGenerated = deps.settings.state.shell?.library_autosave_generated === true
-            const tonePrompt = buildTalosSystemPrompt(
+            const baseTonePrompt = buildTalosSystemPrompt(
                 deps.settings.state.tone.preset,
                 profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
-            ) + (autosaveGenerated ? '\n' + librarySaveInstruction() : '')
+            )
             let payloadTurns = turns
             let memoryWrapped = false
             if (pendingMemoryBlock !== null && memorySelection.length > 0) {
@@ -796,6 +796,29 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // Evaluated now, from the live settings, so a permission changed a
             // minute ago governs this message.
             const offeredTools = toolset.offer(deps.settings.state.tools)
+
+            /**
+             * Owner 2026-07-26: asking for a PDF produced the PDF *and* a
+             * parallel .md nobody wanted.
+             *
+             * Two mechanisms were doing the same job at once. The
+             * `[TALOS_SAVE_LIBRARY]` marker predates the tool suite — it was how
+             * a model without tools could still hand over a file. With
+             * `document_create` offered, instructing the model to ALSO emit
+             * markers guarantees it does both, and the marker version is the
+             * worse one: markdown pretending to be whatever was asked for,
+             * with no format and no verification.
+             *
+             * So the marker instruction is given only when the real tool is not
+             * there. The marker PARSER stays either way, because a model can
+             * still emit one unprompted and dropping it silently would lose
+             * content the user watched being written.
+             */
+            const documentToolOffered = offeredTools.some(
+                (tool: { name: string }) => tool.name === 'document_create',
+            )
+            const tonePrompt = baseTonePrompt
+                + (autosaveGenerated && !documentToolOffered ? '\n' + librarySaveInstruction() : '')
             const completeOnce = buildChatCompletion(
                 () => ({
                     profile,

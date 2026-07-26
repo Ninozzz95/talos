@@ -329,6 +329,16 @@
    glyph animates — text already on screen is never re-animated or re-laid-out. */
 /* Defect #4: the "earlier messages" indicator — a quiet pulse, not a spinner
    that competes with the reply being written below it. */
+.talos-stream-char--fade {
+    /* The calm alternative to the ink stamp: opacity only, slower, and no
+       transform — nothing moves, so a long paragraph does not shimmer while it
+       fills in. */
+    animation: talosStreamFade calc(var(--talos-motion-duration-control, 160ms) * 2.5) ease-out both;
+}
+@keyframes talosStreamFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
 .talos-trace-live {
     /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
        that rule sets width/height/border-radius/background, and being unlayered
@@ -348,7 +358,17 @@
     50% { opacity: 1; transform: scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-    .talos-trace-live {
+    .talos-stream-char--fade {
+    /* The calm alternative to the ink stamp: opacity only, slower, and no
+       transform — nothing moves, so a long paragraph does not shimmer while it
+       fills in. */
+    animation: talosStreamFade calc(var(--talos-motion-duration-control, 160ms) * 2.5) ease-out both;
+}
+@keyframes talosStreamFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.talos-trace-live {
     /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
        that rule sets width/height/border-radius/background, and being unlayered
        it overrides Tailwind utilities on whatever element carries it. Animating
