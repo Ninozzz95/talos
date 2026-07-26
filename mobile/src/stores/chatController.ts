@@ -664,6 +664,36 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // walked around one level up.
                     libraryEnabled: () => deps.settings.state.shell?.library_context_enabled === true,
                     /**
+                     * F2 — making documents. Always available: unlike search it
+                     * needs no third party and no key, because the generators
+                     * run on the device.
+                     */
+                    documents: () => ({
+                        async generate(spec) {
+                            const { generateTalosDocument } = await import('@/lib/documents/documentGenerator')
+                            return generateTalosDocument(spec)
+                        },
+                        async verify(document) {
+                            const { verifyTalosDocument } = await import('@/lib/documents/documentGenerator')
+                            return verifyTalosDocument(document)
+                        },
+                        async save(document) {
+                            // Text formats keep their content searchable in the
+                            // Library; binary ones are stored as a base64
+                            // payload because the vault holds text.
+                            const isText = ['md', 'csv', 'html'].includes(document.format)
+                            const text = isText
+                                ? new TextDecoder().decode(document.bytes)
+                                : `[${document.format.toUpperCase()} file, ${document.bytes.byteLength} bytes]`
+                            const saved = await attachments.saveGenerated({
+                                name: document.fileName,
+                                mediaType: document.mediaType,
+                                text,
+                            })
+                            return saved ? { id: saved.id } : null
+                        },
+                    }),
+                    /**
                      * F1 — the web tools exist only when a source is configured
                      * (D3). Evaluated per send, so choosing a source in Settings
                      * takes effect on the next message rather than the next

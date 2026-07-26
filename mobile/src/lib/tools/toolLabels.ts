@@ -20,6 +20,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     time_now: 'Checking the time',
     web_search: 'Searching the web',
     web_read: 'Reading a web page',
+    document_create: 'Making a document',
 }
 
 export interface TalosToolActivity {

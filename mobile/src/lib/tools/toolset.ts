@@ -1,5 +1,6 @@
 import { createTalosReadTools, type TalosToolSources } from '@/lib/tools/readTools'
 import { createTalosWebTools, type TalosWebToolSources } from '@/lib/search/webTools'
+import { createTalosDocumentTools, type TalosDocumentToolSources } from '@/lib/documents/documentTools'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
 import { decideTalosToolPermission, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
@@ -38,6 +39,11 @@ export interface TalosToolsetDeps {
      * to the model — the same shape as the Library opt-out above.
      */
     web?(): TalosWebToolSources | null
+    /**
+     * F2 — making documents. A `write`, so the permission gate governs it and
+     * D12's "ask once per conversation" applies.
+     */
+    documents?(): TalosDocumentToolSources | null
     now?(): string
 }
 
@@ -142,7 +148,12 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             // so a search source configured a minute ago must govern THIS
             // message rather than the next launch.
             const web = deps.web?.() ?? null
-            return [...all, ...(web ? createTalosWebTools(web) : [])]
+            const documents = deps.documents?.() ?? null
+            return [
+                ...all,
+                ...(web ? createTalosWebTools(web) : []),
+                ...(documents ? createTalosDocumentTools(documents) : []),
+            ]
                 .filter((tool) => libraryAllowed || !tool.name.startsWith('library_'))
                 // SF-MAJOR: the gate refused at EXECUTION but the schemas were
                 // advertised anyway, so "never" meant the model called a tool,
