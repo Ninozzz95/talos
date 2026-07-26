@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
 import TalosMobileBackground from '@/components/talos/workspace/TalosMobileBackground.vue'
 import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
@@ -231,8 +232,27 @@ function sidebarRename(sessionId: string, title: string): void {
     lifecycleAction('Rename chat', () => chatController.sessionLifecycle.renameSession(sessionId, title))
 }
 
-function sidebarDelete(sessionId: string): void {
-    lifecycleAction('Delete chat', () => chatController.sessionLifecycle.deleteSession(sessionId))
+/**
+ * Delete a chat, and — if the user asked — the files it produced.
+ *
+ * Owner 2026-07-26: deleting a chat left its documents in the Library with no
+ * mention that it would. The files go FIRST: if that half fails the chat is
+ * still there and the user can try again, whereas deleting the chat first and
+ * then failing leaves orphans nobody can find their way back to.
+ */
+function sidebarDelete(sessionId: string, choice?: { deleteMedia: boolean }): void {
+    lifecycleAction('Delete chat', async () => {
+        if (choice?.deleteMedia) {
+            const failed = await chatController.deleteSessionMedia(sessionId)
+            if (failed.length) {
+                toastsStore.push({
+                    message: `Chat deleted. ${failed.length} file${failed.length === 1 ? '' : 's'} could not be removed from the Library.`,
+                    durationMs: 6000,
+                })
+            }
+        }
+        await chatController.sessionLifecycle.deleteSession(sessionId)
+    })
 }
 
 const exportSheetOpen = ref(false)
@@ -326,10 +346,20 @@ function immersiveRename(title: string): void {
     const id = chatController.chat.activeSession.value?.id
     if (id) sidebarRename(id, title)
 }
-function immersiveDelete(): void {
+function immersiveDelete(choice: { deleteMedia: boolean }): void {
     const id = chatController.chat.activeSession.value?.id
-    if (id) sidebarDelete(id)
+    if (id) sidebarDelete(id, choice)
 }
+
+/** The delete confirmation's file count, for whichever chat is being deleted. */
+function cleanupPlanFor(sessionId: string): TalosSessionCleanupPlan {
+    return chatController.planSessionCleanup(sessionId)
+}
+
+const activeCleanupPlan = computed<TalosSessionCleanupPlan>(() => {
+    const id = chatController.chat.activeSession.value?.id
+    return id ? cleanupPlanFor(id) : { documents: [], sources: [] }
+})
 
 let lifecycle: NativeLifecycleController | null = null
 let resumeRelock: TalosResumeRelockController | null = null
@@ -590,6 +620,7 @@ onBeforeUnmount(async () => {
                 @new-chat="sidebarNewChat"
                 @select="sidebarSelect"
                 @rename="sidebarRename"
+                :cleanup-plan-for="cleanupPlanFor"
                 @delete="sidebarDelete"
                 @navigate="sidebarNavigate"
                 @open-model-lab="sidebarNavigate('settings')"
@@ -621,6 +652,7 @@ onBeforeUnmount(async () => {
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                         @rename="immersiveRename"
+                        :cleanup-plan="activeCleanupPlan"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
                         :can-open-media="canOpenChatMedia"
@@ -634,6 +666,7 @@ onBeforeUnmount(async () => {
                         @open-menu="sidebarOpen = true"
                         @new-chat="sidebarNewChat"
                         @rename="immersiveRename"
+                        :cleanup-plan="activeCleanupPlan"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
                         :can-open-media="canOpenChatMedia"

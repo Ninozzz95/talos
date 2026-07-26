@@ -114,6 +114,7 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         await flushPromises()
         ;(document.querySelector('[data-testid="talos-session-delete-confirm"]') as HTMLElement).click()
         await flushPromises()
-        expect(wrapper.emitted('delete')).toEqual([['chat-2']])
+        // The choice rides along: the chat, and whether its Library files go too.
+        expect(wrapper.emitted('delete')).toEqual([['chat-2', { deleteMedia: false }]])
     })
 })

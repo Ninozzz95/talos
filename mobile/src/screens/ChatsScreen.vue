@@ -8,9 +8,12 @@
  */
 import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Archive, ArchiveRestore, Check, ChevronDown, MessageSquarePlus, MessageSquareText, Pencil, Search, Trash2, X } from '@lucide/vue'
+import { Archive, ArchiveRestore, Check, CheckSquare, ChevronDown, LoaderCircle, MessageSquarePlus, MessageSquareText, Pencil, Search, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
+import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
+import { describeTalosCleanup, talosCleanupCount } from '@/lib/chat/sessionCleanup'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import { useChatController } from '@/stores/chatController'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
@@ -122,16 +125,93 @@ function openDelete(session: { id: string; title: string }): void {
     deleteTarget.value = session
 }
 
-async function confirmDelete(): Promise<void> {
+async function confirmDelete(choice: { deleteMedia: boolean }): Promise<void> {
     const target = deleteTarget.value
     if (!target || actionBusy.value) return
     actionBusy.value = true
     try {
+        // Files FIRST: if that half fails the chat is still there and the user
+        // can try again, whereas deleting the chat first and then failing leaves
+        // orphans nobody can find their way back to.
+        if (choice.deleteMedia) {
+            const failed = await controller.deleteSessionMedia(target.id)
+            if (failed.length) {
+                actionError.value = `${failed.length} file${failed.length === 1 ? '' : 's'} could not be removed from the Library.`
+            }
+        }
         await controller.sessionLifecycle.deleteSession(target.id)
         deleteTarget.value = null
-        actionError.value = null
     } catch (error) {
         actionError.value = `The chat could not be deleted: ${actionErrorText(error)}`
+    } finally {
+        actionBusy.value = false
+    }
+}
+
+/**
+ * Mass selection (owner 2026-07-26: "un pulsante per selezionare massivamente
+ * media e chat per eliminazione"). Same mode as the Library, so "N selected"
+ * means the same thing on both screens.
+ */
+/** What the chat being deleted would take from the Library. */
+const deletePlan = computed(() => (
+    deleteTarget.value
+        ? controller.planSessionCleanup(deleteTarget.value.id)
+        : { documents: [], sources: [] }
+))
+
+const bulk = useTalosBulkSelection()
+const bulkDeleteOpen = ref(false)
+const bulkDeleteMedia = ref(false)
+
+const selectableIds = computed(() => [
+    ...filtered.value.map((session) => session.id),
+    ...archived.value.map((session) => session.id),
+])
+
+/** What the whole selection would take from the Library, counted once. */
+const bulkPlan = computed(() => {
+    const documents = []
+    const sources = []
+    for (const id of bulk.ids.value) {
+        const plan = controller.planSessionCleanup(id)
+        documents.push(...plan.documents)
+        sources.push(...plan.sources)
+    }
+    return { documents, sources }
+})
+
+function tapSession(sessionId: string): void {
+    // In selection mode a tap PICKS. Opening a chat from here would be a
+    // different action wearing the same gesture.
+    if (bulk.active.value) bulk.toggle(sessionId)
+    else openSession(sessionId)
+}
+
+async function confirmBulkDelete(): Promise<void> {
+    if (actionBusy.value || bulk.count.value === 0) return
+    actionBusy.value = true
+    actionError.value = null
+    const ids = bulk.ids.value
+    const stubborn: string[] = []
+    try {
+        for (const id of ids) {
+            try {
+                if (bulkDeleteMedia.value) await controller.deleteSessionMedia(id)
+                await controller.sessionLifecycle.deleteSession(id)
+            } catch {
+                // One chat that refuses must not strand the rest of the batch.
+                stubborn.push(id)
+            }
+        }
+        if (stubborn.length) {
+            actionError.value = `${stubborn.length} chat${stubborn.length === 1 ? '' : 's'} could not be deleted.`
+        }
+        bulkDeleteOpen.value = false
+        bulkDeleteMedia.value = false
+        // Whatever survived stays selected; the rest must not linger as a count
+        // of rows the user can no longer see.
+        bulk.reconcile(controller.chat.sessions.map((session) => session.id))
     } finally {
         actionBusy.value = false
     }
@@ -218,7 +298,7 @@ function closeRowMenu(): void {
     rowMenu.value = null
 }
 
-function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delete'): void {
+function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delete' | 'select'): void {
     const target = rowMenu.value?.session
     // Menu actions always dismiss — the time guard only covers the backdrop.
     rowMenu.value = null
@@ -227,6 +307,9 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
     else if (action === 'rename') void openRename(target)
     else if (action === 'archive') void archiveSession(target, true)
     else if (action === 'unarchive') void archiveSession(target, false)
+    // Entering from a held row selects THAT row: the user was already pressing
+    // it, and a second tap to pick it back up would be a step for nothing.
+    else if (action === 'select') bulk.enter(target.id)
     else void openDelete(target)
 }
 </script>
@@ -263,7 +346,30 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             </Button>
         </div>
 
-        <p class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">Hold a chat for actions.</p>
+        <!-- Selection bar: replaces the hint while the mode is on, so the screen
+             has ONE meaning at a time. -->
+        <div
+            v-if="bulk.active.value"
+            data-testid="talos-chats-selection-bar"
+            class="mx-5 mt-2 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
+        >
+            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" aria-label="Cancel selection" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
+            <span class="text-sm font-medium">{{ bulk.count.value }} selected</span>
+            <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(selectableIds)">
+                {{ bulk.allSelected(selectableIds) ? 'None' : 'All' }}
+            </Button>
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger,#dc5b5b)]"
+                data-testid="talos-chats-bulk-delete"
+                aria-label="Delete selected chats"
+                :disabled="bulk.count.value === 0 || actionBusy"
+                @click="bulkDeleteOpen = true"
+            ><Trash2 class="size-4" aria-hidden="true" /></Button>
+        </div>
+        <p v-else class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">Hold a chat for actions.</p>
 
         <p
             v-if="actionError && renameTarget === null && deleteTarget === null"
@@ -295,11 +401,17 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     <button
                         type="button"
                         data-testid="talos-chats-open"
-                        class="talos-pressable flex min-h-13 w-full min-w-0 flex-col items-start justify-center rounded-lg px-2 text-left"
-                        @click="openSession(session.id)"
+                        class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left"
+                        :aria-pressed="bulk.active.value ? bulk.isSelected(session.id) : undefined"
+                        @click="tapSession(session.id)"
                     >
+                        <span v-if="bulk.active.value" class="flex size-5 shrink-0 items-center justify-center rounded-full border-2" :class="bulk.isSelected(session.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]' : 'border-[var(--talos-border)]'" aria-hidden="true">
+                            <Check v-if="bulk.isSelected(session.id)" class="size-3.5" />
+                        </span>
+                        <span class="flex min-w-0 flex-1 flex-col items-start">
                         <span class="w-full truncate text-sm text-[var(--talos-text)]">{{ session.title || 'New chat' }}</span>
                         <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
+                        </span>
                     </button>
                 </li>
             </ul>
@@ -333,11 +445,17 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         <button
                             type="button"
                             data-testid="talos-chats-archived-open"
-                            class="talos-pressable flex min-h-13 w-full min-w-0 flex-col items-start justify-center rounded-lg px-2 text-left"
-                            @click="openSession(session.id)"
+                            class="talos-pressable flex min-h-13 w-full min-w-0 items-center gap-2 rounded-lg px-2 text-left"
+                            :aria-pressed="bulk.active.value ? bulk.isSelected(session.id) : undefined"
+                            @click="tapSession(session.id)"
                         >
+                            <span v-if="bulk.active.value" class="flex size-5 shrink-0 items-center justify-center rounded-full border-2" :class="bulk.isSelected(session.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]' : 'border-[var(--talos-border)]'" aria-hidden="true">
+                                <Check v-if="bulk.isSelected(session.id)" class="size-3.5" />
+                            </span>
+                            <span class="flex min-w-0 flex-1 flex-col items-start">
                             <span class="w-full truncate text-sm text-[var(--talos-muted)]">{{ session.title || 'New chat' }}</span>
                             <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
+                            </span>
                         </button>
                     </li>
                 </ul>
@@ -390,6 +508,9 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     >
                         <ArchiveRestore class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Unarchive
                     </button>
+                    <button type="button" role="menuitem" data-testid="talos-chats-select" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('select')">
+                        <CheckSquare class="size-4" aria-hidden="true" /> Select
+                    </button>
                     <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-danger,#dc5b5b)] hover:bg-[var(--talos-active)]" @click="menuAction('delete')">
                         <Trash2 class="size-4" aria-hidden="true" /> Delete
                     </button>
@@ -421,17 +542,39 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             </template>
         </TalosMobileConfirmDialog>
 
-        <TalosMobileConfirmDialog
+        <TalosMobileDeleteChatDialog
             v-if="deleteTarget !== null"
-            title="Delete chat?"
-            :description="`This permanently removes &quot;${deleteTarget?.title || 'New chat'}&quot; and its messages.`"
+            :title="deleteTarget?.title ?? ''"
+            :plan="deletePlan"
+            :busy="actionBusy"
             @close="deleteTarget = null"
+            @confirm="confirmDelete"
+        />
+
+        <TalosMobileConfirmDialog
+            v-if="bulkDeleteOpen"
+            title="Delete selected chats?"
+            :description="`This permanently removes ${bulk.count.value} chat${bulk.count.value === 1 ? '' : 's'} and their messages.`"
+            @close="actionBusy ? undefined : bulkDeleteOpen = false"
         >
-            <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
+            <label
+                v-if="talosCleanupCount(bulkPlan) > 0"
+                class="talos-pressable flex min-h-11 items-start gap-3 rounded-lg px-1 py-2 text-left"
+                :class="actionBusy ? 'pointer-events-none opacity-60' : ''"
+                data-testid="talos-chats-bulk-media"
+            >
+                <input v-model="bulkDeleteMedia" type="checkbox" class="mt-0.5 size-4 shrink-0 accent-[var(--talos-danger,#dc5b5b)]" :disabled="actionBusy">
+                <span class="text-sm leading-5">
+                    Also delete these chats' files
+                    <span class="block text-xs text-[var(--talos-muted)]">{{ describeTalosCleanup(bulkPlan) }} in the Library</span>
+                </span>
+            </label>
             <template #footer>
-                <Button type="button" variant="ghost" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                <Button type="button" variant="destructive" :disabled="actionBusy" @click="confirmDelete">
-                    <Trash2 class="size-4" aria-hidden="true" /> Delete
+                <Button type="button" variant="ghost" :disabled="actionBusy" @click="bulkDeleteOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" variant="destructive" data-testid="talos-chats-bulk-delete-confirm" :disabled="actionBusy" @click="confirmBulkDelete">
+                    <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+                    <Trash2 v-else class="size-4" aria-hidden="true" />
+                    {{ actionBusy ? 'Deleting…' : 'Delete' }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>

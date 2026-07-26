@@ -67,6 +67,16 @@ export interface TalosMobileAttachmentsController {
     attachExisting(file: TalosLocalVaultFile): Promise<boolean>
     remove(itemId: string): Promise<void>
     deleteVaultFile(fileId: string): Promise<void>
+    /**
+     * Remove many files as ONE operation, and answer which ones survived.
+     *
+     * Not a loop over `deleteVaultFile`: that re-reads the whole vault after
+     * every file (twenty documents, twenty list queries, a list visibly
+     * disintegrating) and stops at the first failure, leaving the deletion half
+     * done with no account of what is left. Returns the ids it could NOT
+     * remove — empty means everything went.
+     */
+    deleteVaultFiles(fileIds: readonly string[]): Promise<string[]>
     /** Debt S7: withdraw a document from model context, or put it back. */
     setVaultFileShared(fileId: string, shared: boolean): Promise<void>
     discardAll(): Promise<void>
@@ -364,6 +374,32 @@ export function useTalosMobileAttachments(
         }
     }
 
+    async function deleteVaultFiles(fileIds: readonly string[]): Promise<string[]> {
+        if (fileIds.length === 0) return []
+        vaultError.value = null
+        const failed: string[] = []
+        for (const fileId of fileIds) {
+            try {
+                await options.vault.deleteFile(fileId)
+                for (let index = items.length - 1; index >= 0; index -= 1) {
+                    if (items[index]?.vaultFileId === fileId) items.splice(index, 1)
+                }
+            } catch {
+                // One file the store has already lost must not strand the rest.
+                failed.push(fileId)
+            }
+        }
+        // ONE read for the whole batch. The list is what the user sees; letting
+        // it re-render per file makes a bulk delete look like a fault.
+        await refreshVault()
+        if (failed.length) {
+            vaultError.value = failed.length === fileIds.length
+                ? 'TALOS could not remove these files.'
+                : `TALOS removed the rest, but ${failed.length} file${failed.length === 1 ? '' : 's'} could not be deleted.`
+        }
+        return failed
+    }
+
     async function setVaultFileShared(fileId: string, shared: boolean): Promise<void> {
         vaultError.value = null
         try {
@@ -419,6 +455,7 @@ export function useTalosMobileAttachments(
         attachExisting,
         remove,
         deleteVaultFile,
+        deleteVaultFiles,
         setVaultFileShared,
         discardAll,
         clearSent,
