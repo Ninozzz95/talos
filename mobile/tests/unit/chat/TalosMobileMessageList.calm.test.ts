@@ -3,7 +3,11 @@ import { mount } from '@vue/test-utils'
 
 // R1-5: the streaming/typing tail reads the chat store directly.
 vi.mock('@/stores/chatController', () => ({
-    useChatController: () => ({ chat: { state: { sending: true, streamingText: null } } }),
+    // The streaming reply now also reads which tools are running.
+    useChatController: () => ({
+        chat: { state: { sending: true, streamingText: null } },
+        toolActivity: { value: [] as string[] },
+    }),
 }))
 
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'

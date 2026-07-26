@@ -222,6 +222,14 @@ export interface ChatController {
     readonly thinking: Ref<boolean>
     /** Tool names running right now, so the chat can say what TALOS is doing. */
     readonly toolActivity: Readonly<Ref<string[]>>
+    /** A write waiting for the user's answer; null when nothing is pending. */
+    readonly pendingToolConsent: Readonly<Ref<{
+        title: string
+        description: string
+        input: unknown
+        allow(): void
+        deny(): void
+    } | null>>
     readonly canSend: ComputedRef<boolean>
     readonly browseMode: ComputedRef<boolean>
     readonly sendDisabledReason: ComputedRef<string>
@@ -355,7 +363,38 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     // once per controller, not per message. `toolActivity` is what the chat
     // renders while a round of tools is running.
     const toolActivity = ref<string[]>([])
+    /**
+     * The pending write the user has to answer. A promise resolver is parked
+     * here and the sheet settles it: the executor is already written to fail
+     * CLOSED, so an unanswered request is a refusal, never an implicit yes.
+     */
+    const pendingToolConsent = ref<{
+        title: string
+        description: string
+        input: unknown
+        allow(): void
+        deny(): void
+    } | null>(null)
     let toolsetPromise: Promise<import('@/lib/tools/toolset').TalosToolset> | null = null
+
+    function askToolConsent(request: { tool: { title: string; description: string }; input: unknown }): Promise<boolean> {
+        // Only one at a time: a second request while one is open would be a
+        // dialog the user cannot reason about, so it is refused.
+        if (pendingToolConsent.value) return Promise.resolve(false)
+        return new Promise<boolean>((resolve) => {
+            const settle = (allowed: boolean): void => {
+                pendingToolConsent.value = null
+                resolve(allowed)
+            }
+            pendingToolConsent.value = {
+                title: request.tool.title,
+                description: request.tool.description,
+                input: request.input,
+                allow: () => settle(true),
+                deny: () => settle(false),
+            }
+        })
+    }
     const effort = ref<TalosMobileEffortLevel>('high')
     const thinking = ref(false)
     const preferenceError = ref<string | null>(null)
@@ -586,9 +625,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     repository: deps.chatRepository,
                     readVaultFileText: (fileId) => deps.vaultService?.readFileText(fileId) ?? Promise.resolve(null),
                     sessionTitles: async () => new Map(chat.sessions.map((session) => [session.id, session.title])),
-                    // No consent surface is wired yet, so an "ask" permission
-                    // resolves to a refusal. The first tool set is read-only,
-                    // which is exactly why it can ship before the sheet does.
+                    requestConsent: (request) => askToolConsent(request as never),
                 })))
             const completeOnce = buildChatCompletion(
                 () => ({
@@ -1259,6 +1296,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         effortLadder,
         thinking,
         toolActivity,
+        pendingToolConsent,
         canSend,
         browseMode,
         sendDisabledReason,
