@@ -115,7 +115,10 @@ jobs:
   # owner's thumb, so a regression could sit unnoticed until he hit it.
   mobile:
     runs-on: windows-latest
-    timeout-minutes: 35
+    # Serialising Playwright is what removes the documented flake, and it is
+    # also what makes this the longest job: ~3 min of unit tests plus 17 spec
+    # files one at a time. 35 was tight on a slower runner.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

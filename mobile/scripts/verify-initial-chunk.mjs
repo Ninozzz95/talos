@@ -93,6 +93,11 @@ try {
     const dist = resolve(argument('--dist', 'dist'))
     const maximum = Number(argument('--max-initial-bytes', String(DEFAULT_MAXIMUM_BYTES)))
     const maximumCss = Number(argument('--max-initial-css-bytes', String(DEFAULT_MAXIMUM_CSS_BYTES)))
+    // SF: the JS ceiling was validated and the CSS one was not, so
+    // `--max-initial-css-bytes abc` made the gate pass with a null ceiling.
+    if (!Number.isSafeInteger(maximumCss) || maximumCss <= 0) {
+        fail('TALOS_INITIAL_CSS_BUDGET_INVALID', `--max-initial-css-bytes must be a positive integer`)
+    }
     if (!Number.isSafeInteger(maximum) || maximum <= 0) {
         throw new Error('TALOS_BUILD_ARGUMENT_INVALID: --max-initial-bytes')
     }
@@ -181,17 +186,24 @@ try {
                 initialCssGzipBytes += gzipSync(contents).length
             }
         }
+        // SF: an `if/else if` meant a JS overrun hid the CSS verdict AND the
+        // whole report. Both budgets are judged, then reported.
+        let exceeded = false
         if (initialBytes > maximum) {
             fail(
                 'TALOS_INITIAL_CHUNK_BUDGET_EXCEEDED',
                 `${initialBytes} bytes exceeds ${maximum} bytes`,
             )
-        } else if (initialCssBytes > maximumCss) {
+            exceeded = true
+        }
+        if (initialCssBytes > maximumCss) {
             fail(
                 'TALOS_INITIAL_CSS_BUDGET_EXCEEDED',
                 `${initialCssBytes} CSS bytes exceeds ${maximumCss} bytes`,
             )
-        } else {
+            exceeded = true
+        }
+        if (!exceeded) {
             process.stdout.write(`${JSON.stringify({
                 ok: true,
                 initial_javascript_bytes: initialBytes,

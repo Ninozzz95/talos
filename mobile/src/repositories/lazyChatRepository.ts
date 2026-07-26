@@ -80,8 +80,14 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async deleteSession(sessionId: string) {
             return (await ready()).deleteSession(sessionId)
         },
-        async listMessages(sessionId: string) {
-            return (await ready()).listMessages(sessionId)
+        async listMessages(sessionId: string, options?: Parameters<TalosChatRepository['listMessages']>[1]) {
+            // SF-CRITICAL: this wrapper is what production actually uses, and it
+            // dropped the paging options on the floor — TypeScript cannot catch
+            // it, because a 1-arity function satisfies a 2-arity signature. The
+            // effect was worse than "no paging": the cursor was dropped too, so
+            // scrolling up prepended the WHOLE thread again, doubling it every
+            // time and sending the model each message twice.
+            return (await ready()).listMessages(sessionId, options)
         },
         async appendMessage(input: AppendChatMessageInput) {
             return (await ready()).appendMessage(input)

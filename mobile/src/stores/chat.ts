@@ -414,10 +414,17 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         if (activeSession.value?.id === sessionId) activeSession.value = updated
     }
 
+    /** Defect #4: a fresh thread has nothing above it. */
+    function resetPaging(): void {
+        state.hasOlderMessages = false
+        state.loadingOlderMessages = false
+    }
+
     async function createSession(
         title = 'New chat',
         modelProfileId: string | null = null,
     ): Promise<TalosLocalChatSession> {
+        resetPaging()
         requirePersistence()
         try {
             const created = await repository.createSession({
@@ -454,9 +461,17 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 limit: TALOS_MESSAGE_PAGE_SIZE,
                 before: { ordinal: oldest.ordinal ?? 0, id: oldest.id },
             })
-            state.hasOlderMessages = rows.length >= TALOS_MESSAGE_PAGE_SIZE
-            if (rows.length === 0) return 0
+            if (rows.length === 0) {
+                state.hasOlderMessages = false
+                return 0
+            }
             const older = await Promise.all(rows.map(loadMessageView))
+            // SF-MAJOR: `session` and `oldest` were captured BEFORE two awaits.
+            // Tapping another chat while SQLite answered used to splice one
+            // conversation's history into the top of another — and the model
+            // then received it as context. Re-check before touching the array.
+            if (activeSession.value?.id !== session.id || messages[0]?.id !== oldest.id) return 0
+            state.hasOlderMessages = rows.length >= TALOS_MESSAGE_PAGE_SIZE
             messages.splice(0, 0, ...older)
             return older.length
         } catch (error) {

@@ -104,3 +104,12 @@ fixtures fail if either component becomes eager.
 - No desktop, backend, validator, core, package, or native Android file changes are
   required.
 
+---
+
+**Superseded in part, 2026-07-26 (defect #6, `f390c18`).** The registry no
+longer mirrors the desktop command set: it lists only the nine commands the
+mobile app can execute. `open_shell_policy_panel` and the other twelve
+non-existent ids were removed outright rather than shown greyed out, and the
+frozen desktop set survives as `TALOS_DESKTOP_COMMAND_IDS`, a parity ledger for
+measuring the gap. Anything below describing disabled rows or their reasons
+describes a surface that no longer exists.

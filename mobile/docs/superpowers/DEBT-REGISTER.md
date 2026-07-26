@@ -1,6 +1,8 @@
 # TALOS mobile — open debt register
 
-**Verified at `71dbbd9` (2026-07-25).** Progress: **A1 + D1–D5 closed** (`15988d7`, `+ dead-code batch`) — 30 items remain. Every line below was confirmed against the
+**Verified at `8c0e596` (2026-07-26).** Progress: **A1, D1–D5, S2, S3, S1, P1,
+P2, P4, P7, T5 closed** — plus the owner's six-defect batch (`ae06e8b`…`a463c96`)
+and its cross-cutting re-review (`8c0e596` + this commit). 19 items remain. Every line below was confirmed against the
 code, not recited from a review. This file exists because the owner asked that no
 debt be left on the road: a debt that lives only in a review transcript or a
 commit message is a debt nobody will pay.
@@ -14,9 +16,9 @@ it. Closing an item by editing this file is forbidden.
 
 | # | Item | Evidence | Why it matters |
 |---|---|---|---|
-| S1 | The PIN does not derive the SQLCipher key | `src/persistence/capacitorSqliteRuntime.ts` generates an independent random secret; `src/services/appLock.ts` only verifies a PBKDF2 hash | "Locked" is a Vue boolean over a live, decrypted DB. Flipping one flag is a full bypass |
-| S2 | No `FLAG_SECURE`; re-lock happens on *resume*, not *pause* | grep `FLAG_SECURE` in `android/` → **0 hits**; `src/services/resumeRelock.ts` records `hiddenAt` on hide, acts on resume | Android snapshots the screen at pause → the recents card shows the open chat, readable with no PIN |
-| S3 | No attempt throttling; 4-digit minimum | `src/services/appLock.ts` | 10 000 candidates, unthrottled, against a local verifier |
+| ~~S1~~ ✅ **CLOSED** `ae06e8b` | The PIN does not derive the SQLCipher key | `src/persistence/capacitorSqliteRuntime.ts` generates an independent random secret; `src/services/appLock.ts` only verifies a PBKDF2 hash | "Locked" is a Vue boolean over a live, decrypted DB. Flipping one flag is a full bypass |
+| ~~S2~~ ✅ **CLOSED** `510327b` | No `FLAG_SECURE`; re-lock happens on *resume*, not *pause* | grep `FLAG_SECURE` in `android/` → **0 hits**; `src/services/resumeRelock.ts` records `hiddenAt` on hide, acts on resume | Android snapshots the screen at pause → the recents card shows the open chat, readable with no PIN |
+| ~~S3~~ ✅ **CLOSED** `510327b` | No attempt throttling; 4-digit minimum | `src/services/appLock.ts` | 10 000 candidates, unthrottled, against a local verifier |
 | S4 | Vault file bodies are stored unencrypted | `src/services/attachmentFileStore.ts` writes raw bytes to `Directory.Data` | The DB is SQLCipher-encrypted while the passport scan next to it is plaintext — asymmetric in the wrong direction |
 | S5 | Endpoint override ships the API key to any host, no confirmation, no allowlist | `src/lib/chat/providers/openAiCompatibleAdapter.ts` prefers `credential.endpoint`; `providerErrors.ts` validates only scheme/parse | One settings change (or one persuasive reply) sends a live paid key to a third party |
 | S6 | Model output still writes files with **no confirmation** | `src/stores/chatController.ts` → `attachments.saveGenerated(block)` fire-and-forget | An opt-out toggle + an Undo toast is *mitigation*, not the per-write consent the review demanded |
@@ -56,19 +58,19 @@ it. Closing an item by editing this file is forbidden.
 | T2 | Stop/abort has no unit test and no e2e; no test presses Stop | The fix for a shipped device bug is undefended |
 | T3 | Provider adapters: one 401 test total across four adapters; no abort/stall/malformed-body coverage | The whole provider error surface is unguarded |
 | T4 | The native dictation engine is module-private and untested | "Mic not starting" is exactly this surface |
-| T5 | No CI at all (`.github/` absent); `device-smoke.mjs` exists but never runs | "Device-proven" currently means the owner's thumb |
+| ~~T5~~ ✅ **CLOSED** `a463c96` | The evidence was wrong even when written — `.github/workflows/ci.yml` had six jobs; MOBILE was the part never checked. It has a job now | "Device-proven" currently means the owner's thumb |
 
 ## PRODUCT / PERF
 
 | # | Item | Evidence |
 |---|---|---|
-| P1 | `verify-initial-chunk.mjs` budgets JS but ignores ~130KB of render-blocking CSS | `scripts/verify-initial-chunk.mjs` sums only `.js` |
-| P2 | The `.woff` plugin deletes bundle entries after CSS/manifest were emitted | shipped CSS still lists `.woff` URLs; manifest advertises 15 non-existent assets (harmless today — woff2 wins — but the manifest lies) |
+| ~~P1~~ ✅ **CLOSED** `42c4d4b` | `verify-initial-chunk.mjs` budgets JS but ignores ~130KB of render-blocking CSS | `scripts/verify-initial-chunk.mjs` sums only `.js` |
+| ~~P2~~ ✅ **CLOSED** `42c4d4b` + inline data URIs in the re-review | The `.woff` plugin deletes bundle entries after CSS/manifest were emitted | shipped CSS still lists `.woff` URLs; manifest advertises 15 non-existent assets (harmless today — woff2 wins — but the manifest lies) |
 | P3 | Idle warm-up is one un-yielded 284KB / 35-chunk burst, forced at 3s | `src/main.ts` |
-| P4 | Chat text size does not reach in-thread chrome (timestamps, chips, system messages) | `text-[11px]`/`text-xs` in `TalosMobileMessageList.vue`, `TalosMobileStatusMessage.vue` |
+| ~~P4~~ ✅ **CLOSED** `6cce6c6` (global font scale) | Chat text size does not reach in-thread chrome | `text-[11px]`/`text-xs` in `TalosMobileMessageList.vue`, `TalosMobileStatusMessage.vue` |
 | P5 | Composer sheet swallows one Back during its 300ms close animation | `TalosMobileComposerSheet.vue` registers without an `isActive` predicate |
 | P6 | Library grid has no per-item actions; group-by-chat is not persisted | `src/screens/ContextScreen.vue` |
-| P7 | No message virtualization; `listMessages` has no LIMIT | a long thread re-sanitizes every message on open |
+| ~~P7~~ ✅ **CLOSED** `d90668a` (keyset paging; the lazy wrapper that silently disabled it was caught by the cross-cutting re-review) | No message virtualization; `listMessages` has no LIMIT | a long thread re-sanitizes every message on open |
 | P8 | `feature-parity.json` still marks shipped features `planned` (settings, theme_engine, memory, tasks, notes, doctor) | the 4 phantom test ids are gone, the status lies are not |
 
 ---
