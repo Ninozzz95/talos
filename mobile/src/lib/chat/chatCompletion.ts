@@ -26,7 +26,13 @@ export function buildChatCompletion(
     getContext: () => CompletionContext,
     transport: TalosMobileHttpTransport = talosMobileHttpTransport,
 ): ChatCompletion {
-    return async (turns: ChatTurn[], stream?: TalosStreamHandlers): Promise<ChatCompletionResult> => {
+    // The tools travel as a third argument rather than through the context, so
+    // a caller that has no tool suite (tests, the enhancer) is unchanged.
+    return async (
+        turns: ChatTurn[],
+        stream?: TalosStreamHandlers,
+        tools?: readonly import('@/lib/tools/registry').TalosToolDefinition<never>[],
+    ): Promise<ChatCompletionResult> => {
         const context = getContext()
         if (!context.profile) {
             throw new ChatConfigError('Select a model before sending.')
@@ -63,6 +69,7 @@ export function buildChatCompletion(
             system: context.system,
             effort: context.effort,
             thinking: context.thinking,
+            ...(tools?.length ? { tools } : {}),
         }
         const credential = { apiKey: context.apiKey, endpoint: context.endpoint, timeoutMs: context.timeoutMs }
 
@@ -91,6 +98,7 @@ export function buildChatCompletion(
                     text: streamed.text,
                     finishReason: streamed.finishReason ?? null,
                     reasoning: streamed.reasoning,
+                    toolCalls: streamed.toolCalls,
                 }
             } catch (error) {
                 const aborted = error instanceof Error && error.name === 'AbortError'
@@ -118,7 +126,12 @@ export function buildChatCompletion(
         ])
         // Debt A1: finishReason used to be produced by every adapter and thrown
         // away here — it is exactly what an agent loop dispatches on.
-        return { text: result.text, finishReason: result.finishReason ?? null, reasoning: result.reasoning }
+        return {
+            text: result.text,
+            finishReason: result.finishReason ?? null,
+            reasoning: result.reasoning,
+            toolCalls: result.toolCalls,
+        }
     }
 }
 

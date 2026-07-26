@@ -166,6 +166,12 @@ export interface ChatControllerDeps {
             }
             /** Vision routing preference (now a real behaviour, not an inert switch). */
             readonly ai_defaults?: { readonly vision_enabled?: boolean }
+            /** Owner 2026-07-25: what the model may do without asking. */
+            readonly tools?: {
+                readonly read?: 'allow' | 'ask' | 'deny'
+                readonly write?: 'allow' | 'ask' | 'deny'
+                readonly outbound?: 'allow' | 'ask' | 'deny'
+            }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -214,6 +220,8 @@ export interface ChatController {
     readonly effort: Ref<TalosMobileEffortLevel>
     readonly effortLadder: ComputedRef<TalosMobileEffortLevel[]>
     readonly thinking: Ref<boolean>
+    /** Tool names running right now, so the chat can say what TALOS is doing. */
+    readonly toolActivity: Readonly<Ref<string[]>>
     readonly canSend: ComputedRef<boolean>
     readonly browseMode: ComputedRef<boolean>
     readonly sendDisabledReason: ComputedRef<string>
@@ -343,6 +351,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     const catalogs = reactive(initialCatalogs())
     const endpoints = reactive(initialEndpoints())
     const selectedModelId = ref<string | null>(null)
+    // Defect A2 discipline: the toolset is assembled in its OWN module and built
+    // once per controller, not per message. `toolActivity` is what the chat
+    // renders while a round of tools is running.
+    const toolActivity = ref<string[]>([])
+    let toolsetPromise: Promise<import('@/lib/tools/toolset').TalosToolset> | null = null
     const effort = ref<TalosMobileEffortLevel>('high')
     const thinking = ref(false)
     const preferenceError = ref<string | null>(null)
@@ -565,7 +578,19 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 pendingLibraryBlock = null
                 librarySelection = []
             }
-            const completion = await buildChatCompletion(
+            // The tool suite. Sources come from what the controller already
+            // owns; the loop runs the calls through the permission gate and
+            // writes an audit row for every outcome.
+            const toolset = await (toolsetPromise ??= import('@/lib/tools/toolset')
+                .then(({ createTalosToolset }) => createTalosToolset({
+                    repository: deps.chatRepository,
+                    readVaultFileText: (fileId) => deps.vaultService?.readFileText(fileId) ?? Promise.resolve(null),
+                    sessionTitles: async () => new Map(chat.sessions.map((session) => [session.id, session.title])),
+                    // No consent surface is wired yet, so an "ask" permission
+                    // resolves to a refusal. The first tool set is read-only,
+                    // which is exactly why it can ship before the sheet does.
+                })))
+            const completeOnce = buildChatCompletion(
                 () => ({
                     profile,
                     providerModel,
@@ -579,7 +604,30 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         : tonePrompt,
                 }),
                 deps.transport,
-            )(payloadTurns, stream)
+            )
+            const { runTalosAgentLoop } = await import('@/lib/tools/agentLoop')
+            const { executeTalosTool } = await import('@/lib/tools/executor')
+            const loop = await runTalosAgentLoop(payloadTurns, {
+                complete: (turns) => completeOnce(turns, stream, toolset.tools),
+                execute: async (call) => {
+                    const tool = toolset.tools.find((entry: { name: string }) => entry.name === call.name)
+                    if (!tool) {
+                        // A model can hallucinate a tool name. Saying so is more
+                        // useful than failing the turn.
+                        return { ok: false, content: `There is no tool called "${call.name}".` }
+                    }
+                    const result = await executeTalosTool(tool, call.arguments, {
+                        permissions: deps.settings.state.tools as never,
+                        requestConsent: toolset.requestConsent,
+                        audit: (row) => toolset.audit(row, chat.activeSession.value?.id ?? null),
+                        context: { sessionId: chat.activeSession.value?.id ?? null, signal: stream?.signal },
+                    })
+                    return { ok: result.ok, content: result.content }
+                },
+                onToolRound: (calls) => { toolActivity.value = calls.map((call) => call.name) },
+            })
+            toolActivity.value = []
+            const completion = loop
             const raw = completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
@@ -1210,6 +1258,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         effort,
         effortLadder,
         thinking,
+        toolActivity,
         canSend,
         browseMode,
         sendDisabledReason,

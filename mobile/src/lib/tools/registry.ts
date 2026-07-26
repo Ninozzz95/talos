@@ -16,7 +16,8 @@ import { z, type ZodType } from 'zod'
  * schema before any tool body runs — a tool that accepts free-form text is a
  * tool that can be talked into anything.
  */
-export type TalosToolAction = 'read' | 'write' | 'outbound'
+export type { TalosToolAction } from '@/lib/tools/permissionTypes'
+import type { TalosToolAction } from '@/lib/tools/permissionTypes'
 
 export interface TalosToolResult {
     ok: boolean

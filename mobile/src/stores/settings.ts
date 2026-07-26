@@ -31,6 +31,11 @@ import {
     TALOS_DEFAULT_FONT_SCALE,
     type TalosFontScale,
 } from '@/lib/talosFontScale'
+import {
+    TALOS_DEFAULT_TOOL_PERMISSIONS,
+    type TalosToolPermission,
+    type TalosToolPermissions,
+} from '@/lib/tools/permissionTypes'
 import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
@@ -216,6 +221,18 @@ const DEFAULT_SECURITY_PREFERENCES: TalosMobileSecurityPreferences = {
     screen_secure: false,
 }
 
+/** Anything unrecognised falls back to the SAFEST value for its class. */
+function parseToolPermissions(value: unknown): TalosToolPermissions {
+    const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+    const read = (key: keyof TalosToolPermissions): TalosToolPermission => {
+        const candidate = record[key]
+        return candidate === 'allow' || candidate === 'ask' || candidate === 'deny'
+            ? candidate
+            : TALOS_DEFAULT_TOOL_PERMISSIONS[key]
+    }
+    return { read: read('read'), write: read('write'), outbound: read('outbound') }
+}
+
 function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreferences {
     const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
     return {
@@ -263,6 +280,8 @@ function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
 }
 
 export interface TalosMobileSettingsState {
+    /** Owner 2026-07-25: tool permissions per ACTION TYPE, user-configured. */
+    tools: TalosToolPermissions
     shell: TalosMobileShellPreferences
     onboarding: TalosMobileOnboardingState
     security: TalosMobileSecurityPreferences
@@ -399,6 +418,7 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         shell: shellParsed,
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
+        tools: parseToolPermissions(value.tools),
         tone: parseTonePreferences(value.tone),
         chat_layout: chatLayout,
         ai_defaults: parseAiDefaults(value.ai_defaults),
@@ -423,6 +443,8 @@ export interface SettingsStore {
     setShell(patch: Partial<TalosMobileShellPreferences>): Promise<void>
     setOnboarding(patch: Partial<TalosMobileOnboardingState>): Promise<void>
     setSecurity(patch: Partial<TalosMobileSecurityPreferences>): Promise<void>
+    /** Owner 2026-07-25: what the model may do without asking. */
+    setToolPermissions(patch: Partial<TalosToolPermissions>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
     setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -451,6 +473,7 @@ export function useSettingsStore(): SettingsStore {
                 shell: state.shell,
                 onboarding: state.onboarding,
                 security: state.security,
+                tools: state.tools,
                 tone: state.tone,
                 chat_layout: state.chat_layout,
                 ai_defaults: state.ai_defaults,
@@ -491,6 +514,10 @@ export function useSettingsStore(): SettingsStore {
         },
         async setSecurity(patch) {
             state.security = parseSecurityPreferences({ ...state.security, ...patch })
+            await persist()
+        },
+        async setToolPermissions(patch) {
+            state.tools = parseToolPermissions({ ...state.tools, ...patch })
             await persist()
         },
         async setTone(preset) {

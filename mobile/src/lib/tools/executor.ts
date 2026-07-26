@@ -1,6 +1,7 @@
+import { decideTalosToolPermission } from '@/lib/tools/permissionTypes'
+import type { TalosToolAction, TalosToolPermissions } from '@/lib/tools/permissionTypes'
 import {
     parseTalosToolCallArguments,
-    type TalosToolAction,
     type TalosToolContext,
     type TalosToolDefinition,
     type TalosToolResult,
@@ -21,25 +22,12 @@ import {
  * policy" adapts and explains itself; an agent handed an exception derails
  * mid-run and the user sees a broken app instead of a boundary being enforced.
  */
-export type TalosToolPermission = 'allow' | 'ask' | 'deny'
-
-export type TalosToolPermissions = Record<TalosToolAction, TalosToolPermission>
-
-export const TALOS_DEFAULT_TOOL_PERMISSIONS: TalosToolPermissions = {
-    read: 'allow',
-    write: 'ask',
-    outbound: 'deny',
-}
-
-/** Anything unrecognised resolves to the SAFEST setting for that class. */
-export function decideTalosToolPermission(
-    action: TalosToolAction,
-    permissions: Partial<TalosToolPermissions> | undefined,
-): TalosToolPermission {
-    const value = permissions?.[action]
-    if (value === 'allow' || value === 'ask' || value === 'deny') return value
-    return TALOS_DEFAULT_TOOL_PERMISSIONS[action]
-}
+export type {
+    TalosToolAction,
+    TalosToolPermission,
+    TalosToolPermissions,
+} from '@/lib/tools/permissionTypes'
+export { TALOS_DEFAULT_TOOL_PERMISSIONS, decideTalosToolPermission } from '@/lib/tools/permissionTypes'
 
 export interface TalosToolConsentRequest {
     tool: TalosToolDefinition<never>
