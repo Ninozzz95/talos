@@ -10,14 +10,23 @@ import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTy
 // subscribes to the chat store DIRECTLY so token bursts never re-diff the
 // message list. The tests drive the store state the component really reads.
 const mockChatState = vi.hoisted(() => ({
-    state: null as unknown as { sending: boolean; streamingText: string | null },
+    state: null as unknown as {
+        sending: boolean
+        streamingText: string | null
+        streamingSessionId: string | null
+    },
     toolActivity: { value: [] as Array<{ name: string; detail: string | null }> },
 }))
 vi.mock('@/stores/chatController', () => ({
     // The tool block: the streaming reply now also shows which tools are
     // running, so the mock has to carry that signal too.
     useChatController: () => ({
-        chat: { state: mockChatState.state },
+        chat: {
+            state: mockChatState.state,
+            // The live reply belongs to a conversation now, so the component
+            // needs to know which one is on screen.
+            activeSession: { value: { id: 's1', title: 'A' } },
+        },
         toolActivity: mockChatState.toolActivity,
     }),
 }))
@@ -39,7 +48,10 @@ function mountStreaming(
     // rows all reading `web_read` told the user nothing about which page.
     tools: Array<{ name: string; detail: string | null }> = [],
 ) {
-    mockChatState.state = reactive({ sending, streamingText })
+    // The live reply now belongs to a conversation: without the owner it is
+    // rendered nowhere, which is the point of the fix and would silently make
+    // every assertion here vacuous.
+    mockChatState.state = reactive({ sending, streamingText, streamingSessionId: 's1' })
     mockChatState.toolActivity = reactive({ value: tools })
     return mount(TalosMobileStreamingReply)
 }

@@ -5,8 +5,13 @@ import { mount } from '@vue/test-utils'
 vi.mock('@/stores/chatController', () => ({
     // The streaming reply now also reads which tools are running.
     useChatController: () => ({
-        chat: { state: { sending: true, streamingText: null } },
-        toolActivity: { value: [] as string[] },
+        chat: {
+            state: { sending: true, streamingText: null, streamingSessionId: 's1' },
+            // The live reply belongs to a conversation now; without an active
+            // session it renders nowhere.
+            activeSession: { value: { id: 's1', title: 'A' } },
+        },
+        toolActivity: { value: [] as Array<{ name: string; detail: string | null }> },
     }),
 }))
 

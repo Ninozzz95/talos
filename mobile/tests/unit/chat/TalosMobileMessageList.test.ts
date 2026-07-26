@@ -8,7 +8,15 @@ vi.mock('@/services/clipboard', () => ({ writeTalosClipboardText: writeText }))
 
 // R1-5: the streaming/typing tail reads the chat store directly.
 vi.mock('@/stores/chatController', () => ({
-    useChatController: () => ({ chat: { state: { sending: true, streamingText: null } }, toolActivity: { value: [] as string[] } }),
+    useChatController: () => ({
+        chat: {
+            state: { sending: true, streamingText: null, streamingSessionId: 's1' },
+            // The live reply belongs to a conversation now; without an active
+            // session the component renders nothing at all.
+            activeSession: { value: { id: 's1', title: 'A' } },
+        },
+        toolActivity: { value: [] as Array<{ name: string; detail: string | null }> },
+    }),
 }))
 
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'

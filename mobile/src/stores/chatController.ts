@@ -889,6 +889,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             })
             const completion = loop
             keeper.release()
+            denyPendingToolConsent()
             toolActivity.value = []
             const raw = completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
@@ -979,6 +980,18 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // Unconditional: a notification that outlives its work is worse than
             // never having shown one.
             keeper.release()
+            /**
+             * Owner 2026-07-26: a new chat answered "you declined" and no sheet
+             * had ever appeared.
+             *
+             * A pending consent is settled by the user, or by the abort signal —
+             * but the buffered path has NO signal, so a send that died (Android
+             * killing the backgrounded WebView, for one) left the request hanging
+             * forever. Every later write then got "another confirmation is
+             * already open", which the model reports as a refusal. One dead send
+             * silently disabled writing for the rest of the app's life.
+             */
+            denyPendingToolConsent()
             // SF-MINOR: cleared only on the success path, so a failed or aborted
             // send left stale tool names for the start of the next one.
             toolActivity.value = []

@@ -57,7 +57,17 @@ const runningTools = computed(() => controller.toolActivity.value.map((activity)
 // Defect #5: reasoning streams on its own channel, so it can appear before the
 // first letter of the answer — which is exactly when it is most useful.
 const streamingReasoning = computed(() => state.streamingReasoning ?? '')
-const sending = computed(() => state.sending)
+/**
+ * Only while the in-flight reply belongs to the conversation on screen.
+ *
+ * Owner 2026-07-26: leaving a chat generating and opening a new one made a
+ * message appear there by itself — the other chat's reply, rendered by a global
+ * field. The answer still lands in the right conversation when it finishes;
+ * what was wrong was showing it anywhere at all.
+ */
+const sending = computed(() => state.sending
+    && state.streamingSessionId !== null
+    && state.streamingSessionId === controller.chat.activeSession.value?.id)
 
 /**
  * Owner 2026-07-26: a second way for the answer to arrive — "un'animazione più

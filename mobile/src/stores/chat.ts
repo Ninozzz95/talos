@@ -131,6 +131,17 @@ export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 export interface ChatState {
     sending: boolean
     streamingText: string | null
+    /**
+     * WHICH conversation the in-flight reply belongs to.
+     *
+     * Owner 2026-07-26: he left a chat generating, opened a new one, and a
+     * message appeared there on its own. It was not a new message — it was the
+     * OTHER chat's reply, because the streaming text is one global field and
+     * `selectSession` replaces the message list without touching it. The
+     * durable write always went to the right session; only the live rendering
+     * was homeless.
+     */
+    streamingSessionId: string | null
     /** Defect #5: the reasoning of the reply being streamed right now. */
     streamingReasoning: string | null
     /** Defect #4: false once the oldest message of the session is on screen. */
@@ -318,6 +329,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     const state = reactive<ChatState>({
         sending: false,
         streamingText: null,
+        streamingSessionId: null,
         streamingReasoning: null,
         hasOlderMessages: false,
         loadingOlderMessages: false,
@@ -775,6 +787,10 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             return false
         }
 
+        // From here the live reply BELONGS to this conversation. Switching chats
+        // must not carry it across, and the previous behaviour did exactly that.
+        state.streamingSessionId = session.id
+
         // The user turn is committed — let the composer clear NOW (text +
         // attachments) instead of lingering for the whole assistant stream.
         onPersisted?.()
@@ -893,6 +909,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             }
         } finally {
             state.streamingText = null
+            state.streamingSessionId = null
             state.streamingReasoning = null
             activeStreamAbort = null
             state.sending = false
