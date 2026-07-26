@@ -893,6 +893,16 @@ export function createSqliteChatRepository(
                 if (requiredString(rows[0] as TalosSqlRow, 'status') !== 'revoked') return invalidRow()
             })
         },
+        async listSessionAttachmentMessageIds(sessionId: string) {
+            const rows = await (await db()).query(
+                `SELECT DISTINCT message_id FROM talos_chat_attachments
+                 WHERE session_id = ? AND message_id IS NOT NULL`,
+                [sessionId],
+            )
+            return rows
+                .map((row) => (typeof row.message_id === 'string' ? row.message_id : null))
+                .filter((id): id is string => id !== null)
+        },
         async listMessageAttachments(messageId: string) {
             const rows = await (await db()).query(
                 `SELECT attachment.id, attachment.session_id, attachment.message_id,

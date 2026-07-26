@@ -589,3 +589,42 @@ describe('message paging (defect #4)', () => {
         expect(new Set(ids).size).toBe(ids.length)
     })
 })
+
+/**
+ * Found while re-reviewing the six changes TOGETHER: paging the VIEW is right,
+ * paging the model's memory is not. Building turns from the on-screen list
+ * would have truncated the conversation the model sees to the last page — the
+ * answers would silently get worse the longer you had talked, and nothing
+ * would say so.
+ */
+describe('the model still sees the whole conversation (defect #4 follow-up)', () => {
+    it('sends every message as history even when the view holds only a page', async () => {
+        const repository = createMemoryChatRepository()
+        const seen: ChatTurn[][] = []
+        const store = createChatStore(async (turns) => {
+            seen.push(turns)
+            return { text: 'ok' }
+        }, { repository })
+        await store.initialize()
+        const session = await store.createSession('Lunga')
+        for (let index = 0; index < 60; index += 1) {
+            await repository.appendMessage({
+                id: `h${String(index).padStart(3, '0')}`,
+                session_id: session.id,
+                role: index % 2 === 0 ? 'user' : 'assistant',
+                content: `storia ${index}`,
+                state: 'persisted',
+                model_profile_id: null,
+            })
+        }
+        await store.selectSession(session.id)
+        expect(store.messages).toHaveLength(TALOS_MESSAGE_PAGE_SIZE)
+
+        await store.send('e adesso?')
+        const turns = seen.at(-1)!
+        // 60 restored + the new user turn: the page size must not appear here.
+        expect(turns).toHaveLength(61)
+        expect(turns[0]?.content).toBe('storia 0')
+        expect(turns.at(-1)?.content).toBe('e adesso?')
+    })
+})

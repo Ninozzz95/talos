@@ -380,6 +380,13 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             grant.updated_at = now()
             grant.revoked_at = grant.updated_at
         },
+        async listSessionAttachmentMessageIds(sessionId: string): Promise<string[]> {
+            const ids: string[] = []
+            for (const [messageId, bindings] of attachmentBindings) {
+                if (bindings.some((binding) => binding.session_id === sessionId)) ids.push(messageId)
+            }
+            return ids
+        },
         async listMessageAttachments(messageId: string) {
             return (attachmentBindings.get(messageId) ?? []).map((binding) => {
                 const grant = grants.get(binding.grant_id)
