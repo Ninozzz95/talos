@@ -4,7 +4,7 @@
  * a REAL probe (no invented tiers): platform, storage engine + persistence
  * state, speech recognizer, biometrics, share bridge, network reachability.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import {
     Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Stethoscope, Timer,
@@ -43,7 +43,11 @@ const settings = useSettingsStore()
  * never trip over it by accident.
  */
 function toggleDiagnostics(event: Event): void {
-    void settings.setShell({ debug_diagnostics: (event.target as HTMLInputElement).checked })
+    const on = (event.target as HTMLInputElement).checked
+    void settings.setShell({ debug_diagnostics: on })
+    // Turning it off discards what was measured: otherwise the report says
+    // `timingsRecorded: false` beside a list of sends, which contradicts itself.
+    if (!on) controller.clearTraces()
 }
 
 const rows = ref<DoctorRow[]>([])
@@ -62,6 +66,7 @@ const issues = ref<readonly TalosDeviceIssue[]>([])
 const activeSection = ref<string>('status')
 const showPassing = ref(false)
 const copied = ref(false)
+let copyTimer: ReturnType<typeof setTimeout> | null = null
 const copyError = ref<string | null>(null)
 
 const verdict = computed(() => talosDoctorVerdict(rows.value))
@@ -104,7 +109,8 @@ async function copyReport(): Promise<void> {
         copied.value = true
         // No toast of our own: from Android 13 the system shows its own
         // clipboard confirmation, and Android's docs ask apps not to double it.
-        setTimeout(() => { copied.value = false }, 2_000)
+        if (copyTimer !== null) clearTimeout(copyTimer)
+        copyTimer = setTimeout(() => { copied.value = false }, 2_000)
     } catch {
         copyError.value = 'TALOS could not reach the clipboard on this device.'
     }
@@ -180,10 +186,23 @@ async function scan(): Promise<void> {
 
     rows.value = collected
     issues.value = talosDeviceIssues()
-    scanning.value = false
 }
 
-onMounted(scan)
+/**
+ * The switch and the issue log now live inside the scanned area, so a scan that
+ * never settles would take them with it. `finally`, always: a probe that throws
+ * must cost its own row, not the whole station.
+ */
+async function runScan(): Promise<void> {
+    try {
+        await scan()
+    } finally {
+        scanning.value = false
+    }
+}
+
+onMounted(runScan)
+onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
 </script>
 
 <template>
@@ -224,7 +243,6 @@ onMounted(scan)
                     :key="section.id"
                     :value="section.id"
                     :data-doctor-tab="section.id"
-                    :title="section.hint"
                     class="talos-pressable min-h-11 rounded-lg px-2 text-sm text-[var(--talos-muted)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] data-[state=active]:bg-[var(--talos-active)] data-[state=active]:font-semibold data-[state=active]:text-[var(--talos-text)]"
                 >
                     {{ section.label }}
@@ -278,21 +296,6 @@ onMounted(scan)
                     </ul>
                 </div>
 
-                <p class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
-                    The report carries timings, check results, provider and model names and the build
-                    stamp. It never carries your keys, your messages, or the names of your files.
-                </p>
-                <button
-                    type="button"
-                    data-testid="talos-doctor-copy"
-                    class="talos-pressable flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--talos-accent)] px-3 text-sm font-semibold text-[var(--talos-accent-contrast,#000)]"
-                    @click="copyReport"
-                >
-                    <ClipboardCopy class="size-4" aria-hidden="true" />
-                    {{ copied ? 'Copied' : 'Copy diagnostics' }}
-                </button>
-                <p aria-live="polite" class="sr-only">{{ copied ? 'Diagnostics copied to the clipboard' : '' }}</p>
-                <p v-if="copyError" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ copyError }}</p>
             </TabsContent>
 
             <!-- DATA -->
@@ -313,7 +316,7 @@ onMounted(scan)
                     >
                         <div class="flex items-center gap-2">
                             <Timer class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                            <span class="text-sm font-semibold text-[var(--talos-text)]">{{ millis(trace.durationMs) }}</span>
+                            <span class="text-sm font-semibold text-[var(--talos-text)]">{{ millis(trace.clockSuspect && trace.wallDurationMs !== null ? trace.wallDurationMs : trace.durationMs) }}</span>
                             <span class="min-w-0 truncate text-xs text-[var(--talos-muted)]">{{ trace.provider }} · {{ trace.model }}</span>
                             <span v-if="trace.outcome !== 'ok'" class="ml-auto shrink-0 text-2xs uppercase text-[var(--talos-danger,#dc5b5b)]">{{ trace.outcome }}</span>
                         </div>
@@ -321,8 +324,9 @@ onMounted(scan)
                              duration is not a measurement. Saying so beats a
                              confident wrong number. -->
                         <p v-if="trace.clockSuspect" class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
-                            The device slept during this send, so its total is not reliable.
-                            Per-round and per-tool timings above the sleep still are.
+                            The two clocks disagree on this send, so the total shown is the wall
+                            clock (the one that survives a device sleep). Per-round and per-tool
+                            timings come from the monotonic clock and are unaffected.
                         </p>
                         <ul class="mt-2 flex flex-col gap-1">
                             <li v-for="(round, roundIndex) in trace.rounds" :key="roundIndex" class="rounded-xl bg-[var(--talos-active)] px-2 py-1.5">
@@ -345,8 +349,7 @@ onMounted(scan)
                                          for one tool per turn, so the
                                          concurrency has nothing to work with. -->
                                     <span class="text-2xs" :class="round.parallel ? 'text-[var(--talos-success,#3f9d6b)]' : 'text-[var(--talos-muted)]'">
-                                        {{ round.tools.length }} call{{ round.tools.length === 1 ? '' : 's' }},
-                                        {{ round.parallel ? 'run together' : 'one after another' }}
+                                        {{ round.tools.length }} call{{ round.tools.length === 1 ? '' : 's' }}<template v-if="round.tools.length > 1">, {{ round.parallel ? 'run together' : 'one after another' }}</template>
                                     </span>
                                 </div>
                             </li>
@@ -403,6 +406,24 @@ onMounted(scan)
                 <p class="px-1 font-mono text-2xs text-[var(--talos-muted)]">build {{ buildId }}</p>
             </TabsContent>
         </TabsRoot>
+
+        <p class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
+            The report carries timings, check results, provider and model names and the
+            build stamp. It is never given your keys, your messages or your documents — and
+            anything key-shaped that reached the device log is scrubbed on the way out.
+        </p>
+        <button
+            type="button"
+            data-testid="talos-doctor-copy"
+            class="talos-pressable flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--talos-accent)] px-3 text-sm font-semibold text-[var(--talos-accent-contrast,#000)]"
+            @click="copyReport"
+        >
+            <ClipboardCopy class="size-4" aria-hidden="true" />
+            {{ copied ? 'Copied' : 'Copy diagnostics' }}
+        </button>
+        <p aria-live="polite" class="sr-only">{{ copied ? 'Diagnostics copied to the clipboard' : '' }}</p>
+        <p v-if="copyError" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ copyError }}</p>
+
 
     </div>
 </template>

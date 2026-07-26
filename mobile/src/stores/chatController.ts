@@ -50,6 +50,7 @@ import { createTalosConsentQueue } from '@/lib/tools/consentQueue'
 import {
     createTalosTraceRecorder,
     type TalosRoundTraceHandle,
+    type TalosSendTraceHandle,
 } from '@/lib/diagnostics/sendTrace'
 import {
     planTalosSessionCleanup,
@@ -704,12 +705,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     })
 
     const complete: ChatCompletion = async (turns, stream) => {
-        const trace = traceRecorder.begin({
-            provider: selectedProfile.value?.provider ?? 'unknown',
-            model: selectedProviderModel.value?.displayName
-                ?? selectedProfile.value?.model
-                ?? 'unknown',
-        })
+        // Assigned INSIDE the try. SF-critic 2026-07-26: three awaits sit
+        // between here and it (the secure-store key read, the endpoint read, a
+        // dynamic import), and any of them throwing left a trace in the list
+        // exactly as `begin` pushed it — "ok, 0ms" for a send the user watched
+        // fail, and one more on the recorded count.
+        let trace: TalosSendTraceHandle | null = null
         /**
          * A "round" is the model call AND the tools it then asks for.
          *
@@ -726,7 +727,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const round: { open: TalosRoundTraceHandle | null } = { open: null }
         function openRound(): void {
             round.open?.finish()
-            round.open = trace.round()
+            round.open = trace?.round() ?? null
         }
         const profile = selectedProfile.value
         const providerModel = selectedProviderModel.value
@@ -751,6 +752,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const { createTalosRunKeeper } = await import('@/services/longRunKeeper')
         const keeper = createTalosRunKeeper(chat.activeSession.value?.title || 'TALOS')
         try {
+            trace = traceRecorder.begin({
+                provider: selectedProfile.value?.provider ?? 'unknown',
+                model: selectedProviderModel.value?.displayName
+                    ?? selectedProfile.value?.model
+                    ?? 'unknown',
+            })
             const autosaveGenerated = deps.settings.state.shell?.library_autosave_generated === true
             const baseTonePrompt = buildTalosSystemPrompt(
                 deps.settings.state.tone.preset,
@@ -944,28 +951,46 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     openRound()
                     // The first chunk is the first word the user sees, which is
                     // the number that decides whether an answer FEELS slow.
+                    // BOTH channels: on a reasoning model the first bytes on
+                    // the wire are reasoning, and timing only visible text
+                    // measures how long the model thought, not how long the
+                    // provider took to answer.
                     const timed = stream && {
                         ...stream,
                         onChunk: (text: string) => { round.open?.firstChunk(); stream.onChunk(text) },
+                        onReasoning: (text: string) => {
+                            round.open?.firstChunk()
+                            stream.onReasoning?.(text)
+                        },
                     }
                     return completeOnce(turns, timed ?? stream, offeredTools)
                 },
                 execute: async (call) => {
                     const timing = round.open?.tool(call.name)
+                    // The permission sheet is human time, not TALOS being slow.
+                    // Measured here so the tool's duration can report the WORK.
+                    let waitedForConsentMs = 0
                     const tool = offeredTools.find((entry: { name: string }) => entry.name === call.name)
                     if (!tool) {
                         // A model can hallucinate a tool name. Saying so is more
                         // useful than failing the turn.
-                        timing?.finish(false)
+                        timing?.finish(false, waitedForConsentMs)
                         return { ok: false, content: `There is no tool called "${call.name}".` }
                     }
                     const result = await executeTalosTool(tool, call.arguments, {
                         permissions: deps.settings.state.tools as never,
-                        requestConsent: toolset.requestConsent,
+                        requestConsent: async (request: never) => {
+                            const askedAt = performance.now()
+                            try {
+                                return await toolset.requestConsent(request)
+                            } finally {
+                                waitedForConsentMs += performance.now() - askedAt
+                            }
+                        },
                         audit: (row) => toolset.audit(row, chat.activeSession.value?.id ?? null),
                         context: { sessionId: chat.activeSession.value?.id ?? null, signal: stream?.signal },
                     })
-                    timing?.finish(result.ok)
+                    timing?.finish(result.ok, waitedForConsentMs)
                     return { ok: result.ok, content: result.content }
                 },
                 onToolRound: (calls) => {
@@ -1058,7 +1083,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // here — with the send, whose duration is the number the owner is
             // holding a stopwatch against.
             round.open?.finish()
-            trace.finish('ok')
+            trace?.finish('ok')
             // Debt A1: the controller's completion returns the RESULT, carrying
             // finishReason (and any tool calls) through to the store's loop.
             return {
@@ -1078,7 +1103,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             round.open?.finish()
             // Stopping is not failing: the owner asked for it, and a report that
             // calls his own Stop an error teaches him to distrust the report.
-            trace.finish(stream?.signal?.aborted ? 'stopped' : 'error')
+            trace?.finish(stream?.signal?.aborted ? 'stopped' : 'error')
             // Unconditional: a notification that outlives its work is worse than
             // never having shown one.
             keeper.release()

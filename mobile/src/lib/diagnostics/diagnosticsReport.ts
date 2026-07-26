@@ -35,7 +35,11 @@ export interface TalosDiagnosticsReport {
     }
     /** False means nothing was measured — NOT that everything was fast. */
     timingsRecorded: boolean
-    /** How many secret-shaped strings had to be scrubbed. Should always be 0. */
+    /**
+     * How many secret-shaped spans had to be scrubbed. Zero is the expected
+     * value; one secret can account for more than one span, so treat any
+     * non-zero number as "something upstream leaked", not as a count of keys.
+     */
     redactions: number
     checks: TalosDoctorRow[]
     issues: TalosDeviceIssue[]
@@ -61,12 +65,27 @@ export interface TalosDiagnosticsInput {
  * holds for call sites that do not exist yet.
  */
 const SECRET_PATTERNS: readonly RegExp[] = [
-    // Provider-prefixed keys: OpenAI-style sk-…, Tavily tvly-…, Anthropic, Brave.
+    // The scheme AND what follows it. SF-critic 2026-07-26: ending at `\S+`
+    // consumed the word "Bearer" on the canonical two-token header and left the
+    // credential sitting in the payload — the exact opposite of the intent.
+    /\b(?:proxy-)?authorization\b\s*[:=]\s*(?:bearer|basic|token|apikey)?\s*[^\s,;]+/gi,
+    /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi,
+    /\b(?:x-)?(?:goog-)?api[-_ ]?key\b\s*[:=]\s*[^\s,;]+/gi,
+    // Deliberately a SUPERSET rather than one rule per vendor: TALOS will be
+    // distributed and providers come and go, so `sk-` catches OpenAI, DeepSeek
+    // and whatever ships next without anyone remembering to add a rule.
     /\b(?:sk|tvly|xai|gsk|pplx)[-_][A-Za-z0-9_-]{8,}/gi,
-    // Whatever follows a bearer/authorization, whatever it looks like.
-    /\b(?:bearer|authorization|api[-_ ]?key|x-api-key)\b\s*:?\s*\S+/gi,
-    // A bare token long enough that no diagnostic message would contain one.
-    /\b[A-Za-z0-9_-]{32,}\b/g,
+    // Google puts the key in the query string, so a Gemini URL inside an error
+    // message IS a live credential — matched by the PARAMETER NAME, never by
+    // hoping the value happens to be long enough.
+    /[?&](?:key|api[-_]?key|apikey|access_token|token|password|secret)=[^&\s]+/gi,
+    /\bAIza[\w-]{35}\b/g,
+    /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+    /-----BEGIN[ A-Z]*PRIVATE KEY-----/g,
+    // The last net: any opaque run long enough that no diagnostic sentence
+    // would contain one. `+ / = .` are INSIDE the class — excluding them is
+    // exactly how base64 and JWTs slipped between the dots.
+    /\b[A-Za-z0-9_-][A-Za-z0-9_\-+/=.]{19,}\b/g,
 ]
 
 export function redactTalosSecrets(text: string): { text: string; hits: number } {
@@ -91,6 +110,16 @@ export function buildTalosDiagnosticsReport(
         redactions += scrubbed.hits
         return { ...issue, detail: scrubbed.text }
     })
+    const checks = input.rows.map((row) => {
+        // Scrubbed as well: a probe VALUE is free text from a native plugin —
+        // the speech row embeds the plugin's own error string — and the critic
+        // was right that only the issue log was being cleaned. Computed BEFORE
+        // the literal: object properties evaluate in order, so counting these
+        // inside `checks:` reported them after `redactions` had been read.
+        const scrubbed = redactTalosSecrets(row.value)
+        redactions += scrubbed.hits
+        return { ...row, value: scrubbed.text }
+    })
     const slowest = input.traces.reduce<number | null>(
         (worst, trace) => (worst === null || trace.durationMs > worst ? trace.durationMs : worst),
         null,
@@ -112,7 +141,7 @@ export function buildTalosDiagnosticsReport(
         },
         timingsRecorded: input.diagnosticsEnabled,
         redactions,
-        checks: input.rows.map((row) => ({ ...row })),
+        checks,
         issues,
         sends: input.traces.map((trace) => ({
             ...trace,
