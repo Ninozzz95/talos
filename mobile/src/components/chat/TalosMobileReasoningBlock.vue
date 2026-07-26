@@ -1,17 +1,29 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ChevronRight } from '@lucide/vue'
+import { Sparkles } from '@lucide/vue'
+import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
+import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 
 /**
  * Owner 2026-07-25 (defect #5): "i modelli mandano anche il proprio
- * ragionamento, oggi lo buttiamo." Decision: a "Reasoning" block, COLLAPSED by
- * default, persisted with the message so it is still there tomorrow and in the
- * export.
+ * ragionamento, oggi lo buttiamo." Decision: the reasoning is kept, persisted
+ * with the message so it survives tomorrow and the export, and closed by
+ * default — a trace is routinely longer than the answer, and opening it in
+ * place buries the thing that was actually asked for.
  *
- * Collapsed because reasoning is routinely longer than the answer — open by
- * default would bury the thing that was actually asked for. Rendered as plain
- * text, never as markdown: a live trace is full of half-written syntax, and
- * parsing it produces broken headings mid-thought.
+ * Owner 2026-07-26, with a screenshot of the Claude Android app: it must stop
+ * being a bordered collapse and become "un semplice testo in grigio o colore
+ * primario sbiadito" that opens a DRAWER. That also settles the burying
+ * problem properly — the answer never moves at all now.
+ *
+ * The trace is rendered as plain text, never markdown: a live trace is full of
+ * half-written syntax, and parsing it produces broken headings mid-thought.
+ *
+ * The drawer shell is imported statically on purpose. It was briefly an async
+ * component "to keep it out of the chat chunk" — which bought nothing, because
+ * the composer drawers already import the same shell eagerly, and it cost a
+ * component that could not be asserted in a unit test. Laziness that saves no
+ * bytes is just a slower path with worse tests.
  */
 const props = defineProps<{
     reasoning: string
@@ -19,35 +31,36 @@ const props = defineProps<{
     live?: boolean
 }>()
 
-const open = ref(false)
-const words = computed(() => props.reasoning.trim().split(/\s+/).filter(Boolean).length)
+
+const showTrace = ref(false)
+const trimmed = computed(() => props.reasoning.trim())
+const words = computed(() => trimmed.value.split(/\s+/).filter(Boolean).length)
 </script>
 
 <template>
-    <div
-        v-if="reasoning.trim()"
-        data-testid="talos-reasoning-block"
-        class="mb-1.5 overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/60"
-    >
-        <button
-            type="button"
-            data-testid="talos-reasoning-toggle"
-            class="talos-pressable flex min-h-10 w-full items-center gap-2 px-3 text-left text-2xs font-medium uppercase tracking-wide text-[var(--talos-muted)]"
-            :aria-expanded="open"
-            @click="open = !open"
+    <div v-if="trimmed" data-testid="talos-reasoning-block" class="mb-1">
+        <TalosMobileTraceRow
+            testid="talos-reasoning-toggle"
+            :label="live ? 'Reasoning…' : 'Reasoning'"
+            :detail="live ? undefined : `${words} words`"
+            :live="live"
+            @open="showTrace = true"
         >
-            <ChevronRight
-                class="size-3.5 shrink-0 transition-transform duration-200"
-                :class="open ? 'rotate-90' : ''"
-                aria-hidden="true"
-            />
-            <span>{{ live ? 'Reasoning…' : 'Reasoning' }}</span>
-            <span v-if="!live" class="ml-auto normal-case tracking-normal">{{ words }} words</span>
-        </button>
-        <p
-            v-if="open"
-            data-testid="talos-reasoning-text"
-            class="whitespace-pre-wrap break-words border-t border-[var(--talos-border)] px-3 py-2 text-xs leading-5 text-[var(--talos-muted)] [overflow-wrap:anywhere]"
-        >{{ reasoning }}</p>
+            <template #icon>
+                <Sparkles class="size-3.5" />
+            </template>
+        </TalosMobileTraceRow>
+
+        <TalosMobileComposerSheet
+            v-if="showTrace"
+            title="Reasoning"
+            testid="talos-reasoning-drawer"
+            @close="showTrace = false"
+        >
+            <p
+                data-testid="talos-reasoning-text"
+                class="whitespace-pre-wrap break-words px-1 pb-2 text-xs leading-5 text-[var(--talos-muted)] [overflow-wrap:anywhere]"
+            >{{ reasoning }}</p>
+        </TalosMobileComposerSheet>
     </div>
 </template>

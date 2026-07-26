@@ -5,14 +5,37 @@ import type {
     TalosMobileWindowPresentation,
 } from './talosTypes'
 
+/**
+ * Chat text size, in rem, before the global `--talos-ui-scale` multiplier.
+ *
+ * The sizes used to live in a nested ternary inside the message list's inline
+ * style. Owner asked for a fourth step on 2026-07-26 ("extra small"), and a
+ * four-way ternary is where that expression stops being readable and starts
+ * being a place bugs hide — so the steps are a map, declared once, and the
+ * component reads it. Adding a fifth step is now a line, not a rewrite.
+ */
+export const TALOS_CHAT_TEXT_SCALE_REM: Record<TalosChatBubbleScale, number> = {
+    xcompact: 0.875,
+    compact: 0.9375,
+    balanced: 1.0625,
+    expanded: 1.1875,
+}
+
 export const TALOS_CHAT_BUBBLE_SCALE_OPTIONS: Array<{
     value: TalosChatBubbleScale
     label: string
 }> = [
+    { value: 'xcompact', label: 'Extra small' },
     { value: 'compact', label: 'Small' },
     { value: 'balanced', label: 'Default' },
     { value: 'expanded', label: 'Large' },
 ]
+
+/** The rendered size for a step, global UI scale included. */
+export function talosChatTextSize(scale: TalosChatBubbleScale | undefined): string {
+    const rem = TALOS_CHAT_TEXT_SCALE_REM[scale ?? 'balanced'] ?? TALOS_CHAT_TEXT_SCALE_REM.balanced
+    return `calc(${rem}rem * var(--talos-ui-scale, 1))`
+}
 
 
 export const TALOS_CHAT_MESSAGE_STYLE_OPTIONS: Array<{
@@ -45,9 +68,12 @@ export function sanitizeTalosChatLayout(value: unknown): TalosChatLayoutPreferen
     const layout = value as Record<string, unknown>
 
     return {
-        bubble_scale: layout.bubble_scale === 'compact'
-            || layout.bubble_scale === 'expanded'
-            ? layout.bubble_scale
+        // Reads from the option list, so a step added above is accepted here
+        // without a second edit — the previous form named each value twice and
+        // silently rejected any new one.
+        bubble_scale: TALOS_CHAT_BUBBLE_SCALE_OPTIONS
+            .some((option) => option.value === layout.bubble_scale)
+            ? layout.bubble_scale as TalosChatBubbleScale
             : 'balanced',
         message_style: layout.message_style === 'bubbles' ? 'bubbles' : 'sections',
         mobile_window_presentation: layout.mobile_window_presentation === 'fullscreen' ? 'fullscreen' : 'drawer',

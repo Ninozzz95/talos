@@ -8,6 +8,8 @@ import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlo
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
+import { talosChatTextSize } from '@/lib/talosChatLayout'
+import type { TalosChatBubbleScale } from '@/lib/talosTypes'
 
 const props = defineProps<{
     messages: readonly TalosMobileMessageView[]
@@ -17,7 +19,7 @@ const props = defineProps<{
     // sections by default; bubbles remain a Settings toggle).
     messageStyle?: 'sections' | 'bubbles'
     /** Owner 2026-07-25: real chat text size (was a dead preference). */
-    textScale?: 'compact' | 'balanced' | 'expanded'
+    textScale?: TalosChatBubbleScale
     /** Defect #4: true while pages above the window remain unloaded. */
     hasOlderMessages?: boolean
     loadingOlderMessages?: boolean
@@ -173,7 +175,7 @@ function formatBytes(value: number): string {
         class="mx-auto flex min-w-0 w-full max-w-[820px] flex-col overflow-x-hidden px-3 py-4"
         data-testid="talos-mobile-message-list"
         :data-text-scale="props.textScale ?? 'balanced'"
-        :style="{ fontSize: `calc(${props.textScale === 'compact' ? '0.9375rem' : props.textScale === 'expanded' ? '1.1875rem' : '1.0625rem'} * var(--talos-ui-scale, 1))` }"
+        :style="{ fontSize: talosChatTextSize(props.textScale) }"
     >
         <!-- Defect #4 (SF): paging had no visible state at all — no spinner and
              no affordance, so on a thread whose first page did not overflow

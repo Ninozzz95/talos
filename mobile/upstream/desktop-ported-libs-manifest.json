@@ -6,9 +6,9 @@
     "files": [
         {
             "mobile_path": "mobile/src/lib/talosChatLayout.ts",
-            "sha256": "77f40e210d62fc4808f78c0f19448b99797266f2f9c75d000ce68579c75cbbf4",
+            "sha256": "37b64b546076e43a0c4b6a34724ae4142550d54bd7c23dc26481eeea406d692f",
             "desktop_source": "talosChatLayout.ts",
-            "reconciliation": "whitespace-identical to desktop at the reconciled revision (pure port)"
+            "reconciliation": "DIVERGED from desktop on purpose (owner, 2026-07-26): mobile adds an \"Extra small\" chat text step below Small, and holds the four rem sizes in TALOS_CHAT_TEXT_SCALE_REM instead of a nested ternary in the message list. Note that the previous claim of whitespace-identity was already inaccurate before this change: mobile labels the steps Small/Default/Large where desktop says Compact/Balanced/Expanded, and desktop also carries advanced_rail_expanded, which has no mobile surface. Codex ticket KX-DESK-01 asks the desktop to take the fourth step."
         },
         {
             "mobile_path": "mobile/src/lib/talosContrast.ts",

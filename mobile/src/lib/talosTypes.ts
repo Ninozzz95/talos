@@ -21,7 +21,7 @@ export type RunStatus =
 
 export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosSessionSurface = 'chat' | 'browse'
-export type TalosChatBubbleScale = 'compact' | 'balanced' | 'expanded'
+export type TalosChatBubbleScale = 'xcompact' | 'compact' | 'balanced' | 'expanded'
 export type TalosMessageStyle = 'sections' | 'bubbles'
 export type TalosMobileWindowPresentation = 'drawer' | 'fullscreen'
 export type TalosChatLayoutPreferences = {
