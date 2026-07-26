@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+    TALOS_TOOL_ICONS,
     TALOS_TOOL_LABELS,
+    talosToolIconName,
     talosToolActivityDetail,
     talosToolActivityLabel,
 } from '@/lib/tools/toolLabels'
 import { createTalosReadTools } from '@/lib/tools/readTools'
 import { createTalosWebTools } from '@/lib/search/webTools'
+import { createTalosDocumentTools } from '@/lib/documents/documentTools'
 
 /**
  * Owner testing 2026-07-26, the first real run of the web tools: the chat showed
@@ -31,13 +34,41 @@ function everyToolName(): string[] {
         read: vi.fn(async () => null),
         remember: vi.fn(async () => {}),
     })
-    return [...read, ...web].map((tool) => tool.name)
+    // The DOCUMENT tools were missing from this list, which made the guards
+    // above vacuous for exactly the tool whose icon was wrong. A guard that does
+    // not cover the case that failed is not a guard.
+    const documents = createTalosDocumentTools({
+        generate: vi.fn(),
+        verify: vi.fn(),
+        save: vi.fn(),
+        diagnostics: () => false,
+    } as never)
+    return [...read, ...web, ...documents].map((tool) => tool.name)
 }
 
 describe('tool activity labels', () => {
     it('EVERY tool the app can run has a human label', () => {
         const missing = everyToolName().filter((name) => !(name in TALOS_TOOL_LABELS))
         expect(missing, `no label for: ${missing.join(', ')}`).toEqual([])
+    })
+
+    it('EVERY tool has its OWN icon', () => {
+        // Owner 2026-07-26: making a document showed the web-search globe,
+        // because the view hardcoded one icon for every row. A tool wearing
+        // another tool's mark is worse than a generic one — it says something
+        // false about what is happening.
+        const missing = everyToolName().filter((name) => !(name in TALOS_TOOL_ICONS))
+        expect(missing, `no icon for: ${missing.join(', ')}`).toEqual([])
+    })
+
+    it('two different tools never share the web mark by accident', () => {
+        expect(talosToolIconName('document_create')).toBe('document')
+        expect(talosToolIconName('web_search')).toBe('web')
+        expect(talosToolIconName('document_create')).not.toBe(talosToolIconName('web_search'))
+    })
+
+    it('an unknown tool gets the generic mark, not the last one used', () => {
+        expect(talosToolIconName('future_tool')).toBe('tool')
     })
 
     it('an unknown tool falls back to its name, not to nothing', () => {

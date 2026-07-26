@@ -14,6 +14,8 @@ public class MainActivity extends BridgeActivity {
         // Owner 2026-07-26: fingerprint unlock for a PIN-encrypted database —
         // a second wrapping of the SAME key, bound to biometrics in hardware.
         registerPlugin(TalosBiometricKeyPlugin.class);
+        // R-1b: keeps long operations alive when the app is backgrounded.
+        registerPlugin(TalosRunServicePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

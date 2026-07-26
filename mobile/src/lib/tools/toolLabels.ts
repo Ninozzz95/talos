@@ -23,6 +23,37 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     document_create: 'Making a document',
 }
 
+/**
+ * Which icon a running tool shows.
+ *
+ * Owner 2026-07-26: creating a document displayed the WEB SEARCH globe, because
+ * the streaming view hardcoded one icon for every tool row. Same failure as the
+ * labels a day earlier — a new tool inherits whatever the last one happened to
+ * use — so it gets the same guard: names live here beside the labels, and a test
+ * fails when a tool arrives without one.
+ *
+ * Names, not components: this module is pure, and pulling icon components into
+ * it would drag the view layer into every place that reads a tool label.
+ */
+export type TalosToolIconName = 'library' | 'note' | 'task' | 'memory' | 'clock' | 'web' | 'document' | 'tool'
+
+export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
+    library_search: 'library',
+    library_read: 'library',
+    notes_list: 'note',
+    tasks_list: 'task',
+    memory_search: 'memory',
+    time_now: 'clock',
+    web_search: 'web',
+    web_read: 'web',
+    document_create: 'document',
+}
+
+/** An unknown tool gets the generic mark rather than another tool's. */
+export function talosToolIconName(name: string): TalosToolIconName {
+    return TALOS_TOOL_ICONS[name] ?? 'tool'
+}
+
 export interface TalosToolActivity {
     name: string
     /** Which page, which query — the part that makes four rows distinguishable. */

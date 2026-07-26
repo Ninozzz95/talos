@@ -3,8 +3,12 @@ import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeU
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
-import { Globe } from '@lucide/vue'
-import { talosToolActivityLabel } from '@/lib/tools/toolLabels'
+import { BookMarked, Clock, FileText, Globe, ListTodo, NotebookPen, Sparkles, Wrench } from '@lucide/vue'
+import {
+    talosToolActivityLabel,
+    talosToolIconName,
+    type TalosToolIconName,
+} from '@/lib/tools/toolLabels'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
 import { useChatController } from '@/stores/chatController'
@@ -34,7 +38,22 @@ const streamingText = computed(() => state.streamingText ?? '')
 // than the wire names. Silence while a model searches your Library looks
 // identical to a hang — and four identical rows saying `web_read` are barely
 // better, which is why the label carries the page or the query.
-const runningTools = computed(() => controller.toolActivity.value.map(talosToolActivityLabel))
+const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
+    library: BookMarked,
+    note: NotebookPen,
+    task: ListTodo,
+    memory: Sparkles,
+    clock: Clock,
+    web: Globe,
+    document: FileText,
+    tool: Wrench,
+}
+
+const runningTools = computed(() => controller.toolActivity.value.map((activity) => ({
+    key: `${activity.name}:${activity.detail ?? ''}`,
+    label: talosToolActivityLabel(activity),
+    icon: TOOL_ICONS[talosToolIconName(activity.name)],
+})))
 // Defect #5: reasoning streams on its own channel, so it can appear before the
 // first letter of the answer — which is exactly when it is most useful.
 const streamingReasoning = computed(() => state.streamingReasoning ?? '')
@@ -222,14 +241,14 @@ onBeforeUnmount(() => {
              two different features. -->
         <div v-if="runningTools.length" data-testid="talos-tool-activity" class="mb-0.5">
             <TalosMobileTraceRow
-                v-for="label in runningTools"
-                :key="label"
-                :label="`${label}…`"
+                v-for="entry in runningTools"
+                :key="entry.key"
+                :label="`${entry.label}…`"
                 live
                 :interactive="false"
             >
                 <template #icon>
-                    <Globe class="size-3.5" />
+                    <component :is="entry.icon" class="size-3.5" />
                 </template>
             </TalosMobileTraceRow>
         </div>
