@@ -130,9 +130,23 @@ test('stations: tasks and notes persist across reload, doctor reports honestly',
     await page.locator(MENU).click()
     await page.locator(SIDEBAR).getByRole('button', { name: 'Open Doctor' }).click()
     await expect(page.locator('[data-testid="talos-doctor-screen"]')).toBeVisible()
+    // Owner 2026-07-26: three fixed segments, and one verdict line on top so a
+    // healthy device can be dismissed without reading anything.
+    await expect(page.locator('[data-testid="talos-doctor-verdict"]')).toBeVisible()
+    await expect(page.locator('[data-doctor-tab]')).toHaveCount(3)
+
+    // Checks that PASSED are folded into a single row; opening it reveals them.
+    await page.locator('[data-testid="talos-doctor-passing-toggle"]').click()
     await expect(page.locator('[data-doctor-id="storage"]')).toContainText('ready')
     await expect(page.locator('[data-doctor-id="platform"]')).toContainText('web preview')
     // 7 rows: build stamp + platform + storage + speech + biometrics + share + network.
     await expect(page.locator('[data-testid="talos-doctor-row"]')).toHaveCount(7)
     await expect(page.locator('[data-doctor-id="build"]')).toBeVisible()
+
+    // Timings are recorded only behind the debug switch — and the screen says
+    // so, rather than showing an empty list that reads as "it was fast".
+    await page.locator('[data-doctor-tab="data"]').click()
+    await expect(page.locator('[data-testid="talos-doctor-timings-off"]')).toBeVisible()
+    await page.locator('[data-doctor-tab="advanced"]').click()
+    await expect(page.locator('[data-testid="talos-debug-diagnostics"]')).toBeVisible()
 })
