@@ -24,6 +24,41 @@ import type { SecureKeyBackend } from '@/services/secureKeyStore'
  */
 const PLAIN_KEY = 'talos.db.key.v1'
 const WRAPPED_KEY = 'talos.db.key.wrapped.v1'
+/**
+ * The SECOND wrapping of the same database key — the one a fingerprint opens.
+ *
+ * Owner 2026-07-26: reopening the app asked only for the PIN. It had to: the
+ * key above is sealed by a PBKDF2 derivation of the PIN, and a fingerprint
+ * carries no material to derive one. So the key is wrapped twice — by the PIN,
+ * which stays the sole authority and the only recovery, and by an AES-256-GCM
+ * key held in the Android Keystore that only a live biometric scan releases.
+ *
+ * What lands in this record is ciphertext and an IV. The unwrapping key never
+ * enters this process, so reading the record off the device buys nothing.
+ */
+const BIOMETRIC_KEY = 'talos.db.key.biometric.v1'
+
+interface BiometricSeal {
+    iv: string
+    sealed: string
+}
+
+function parseSeal(raw: unknown): BiometricSeal | null {
+    // `unknown`, like `parseWrapped`: the native store hands back whatever it
+    // had, and a non-string there must read as "not armed" rather than throw —
+    // this runs before the lock screen paints.
+    if (typeof raw !== 'string' || raw === '') return null
+    try {
+        const value = JSON.parse(raw) as Partial<BiometricSeal>
+        return typeof value.iv === 'string' && typeof value.sealed === 'string'
+            ? { iv: value.iv, sealed: value.sealed }
+            : null
+    } catch {
+        // A damaged record must read as "not armed" at boot, never throw: this
+        // runs before the lock screen paints.
+        return null
+    }
+}
 const PBKDF2_ITERATIONS = 210_000
 
 export type TalosDatabaseKeyState = 'absent' | 'device' | 'locked' | 'unlocked'
@@ -223,6 +258,88 @@ export async function unprotectTalosDatabaseKey(backend: SecureKeyBackend = defa
     if (!cached) throw new Error('TALOS_DB_KEY_LOCKED: unlock before removing the protection.')
     await backend.set(PLAIN_KEY, cached)
     await backend.remove(WRAPPED_KEY)
+}
+
+/**
+ * The key currently held in memory, or null.
+ *
+ * Deliberately narrow: it reads the cache and never unwraps, mints or persists
+ * anything. Its one caller is the moment just after a verified PIN, where the
+ * key is already open and a second door onto it is about to be built.
+ */
+export function peekTalosDatabaseKey(): string | null {
+    return cached
+}
+
+/** True when a biometric copy exists, so the lock screen may offer the scan. */
+export async function talosBiometricUnlockIsArmed(
+    backend: SecureKeyBackend = defaultBackend,
+): Promise<boolean> {
+    return parseSeal(await backend.get(BIOMETRIC_KEY)) !== null
+}
+
+/**
+ * Store the biometric copy. Called after the PIN has already proven itself —
+ * never as a way to obtain the key, only as a second door onto a key the user
+ * has just legitimately opened.
+ */
+export async function armTalosBiometricUnlock(
+    key: string,
+    backend: SecureKeyBackend = defaultBackend,
+    ports: { wrap?: (secret: string) => Promise<BiometricSeal> } = {},
+): Promise<void> {
+    const wrap = ports.wrap ?? (async (secret: string) => {
+        const { wrapTalosKeyWithBiometrics } = await import('@/services/biometricKeyWrap')
+        return wrapTalosKeyWithBiometrics(secret)
+    })
+    const seal = await wrap(key)
+    await backend.set(BIOMETRIC_KEY, JSON.stringify(seal))
+}
+
+/** Remove it. Only the PIN opens the database afterwards. */
+export async function disarmTalosBiometricUnlock(
+    backend: SecureKeyBackend = defaultBackend,
+    ports: { forget?: () => Promise<void> } = {},
+): Promise<void> {
+    await backend.remove(BIOMETRIC_KEY)
+    const forget = ports.forget ?? (async () => {
+        const { forgetTalosBiometricKey } = await import('@/services/biometricKeyWrap')
+        await forgetTalosBiometricKey()
+    })
+    // The Keystore entry goes too. Leaving it alive would keep a key that can
+    // open a blob we have just told the user is gone.
+    await forget()
+}
+
+/**
+ * Open the database with a fingerprint.
+ *
+ * Every outcome that is NOT "the user changed their mind" drops the biometric
+ * copy: if Android invalidated the key because the enrolment changed, the seal
+ * is undecryptable from that moment on, and keeping it would mean offering a
+ * button that can only ever fail.
+ */
+export async function unlockTalosDatabaseKeyWithBiometrics(
+    backend: SecureKeyBackend = defaultBackend,
+    ports: { unwrap?: (seal: BiometricSeal) => Promise<string> } = {},
+): Promise<string> {
+    const seal = parseSeal(await backend.get(BIOMETRIC_KEY))
+    if (!seal) throw new Error('TALOS_BIO_KEY_ABSENT: no biometric copy on this device.')
+    const unwrap = ports.unwrap ?? (async (payload: BiometricSeal) => {
+        const { unwrapTalosKeyWithBiometrics } = await import('@/services/biometricKeyWrap')
+        return unwrapTalosKeyWithBiometrics(payload)
+    })
+    try {
+        const key = await unwrap(seal)
+        cached = key
+        return key
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.includes('TALOS_BIO_KEY_CANCELLED')) {
+            await backend.remove(BIOMETRIC_KEY)
+        }
+        throw error
+    }
 }
 
 /** Forget the key. After this the database cannot be opened without the PIN. */

@@ -7,6 +7,7 @@ import {
     resolveTalosDatabaseKey,
     talosDatabaseKeyIsProtected,
     unlockTalosDatabaseKey,
+    disarmTalosBiometricUnlock,
     unprotectTalosDatabaseKey,
 } from '@/services/databaseKey'
 import type { TalosSqliteRuntime } from '@/persistence/sqliteTypes'
@@ -66,6 +67,11 @@ export async function enableTalosDatabaseProtection(pin: string): Promise<TalosP
 
 /** Turn the lock off: the key returns to device-only protection. */
 export async function disableTalosDatabaseProtection(): Promise<void> {
+    // The biometric copy goes FIRST and unconditionally. It is a wrapping of
+    // the same key: leaving it behind would keep a hardware-backed door onto a
+    // database the user has just told us to stop protecting, and the Keystore
+    // entry would outlive every record that explains what it opens.
+    await disarmTalosBiometricUnlock().catch(() => {})
     if (!await talosDatabaseKeyIsProtected()) return
     await unprotectTalosDatabaseKey()
 }

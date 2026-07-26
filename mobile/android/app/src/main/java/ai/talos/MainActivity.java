@@ -11,6 +11,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(TalosAppIconPlugin.class);
         // Debt S2: FLAG_SECURE control (recents thumbnail / screenshots).
         registerPlugin(TalosPrivacyPlugin.class);
+        // Owner 2026-07-26: fingerprint unlock for a PIN-encrypted database —
+        // a second wrapping of the SAME key, bound to biometrics in hardware.
+        registerPlugin(TalosBiometricKeyPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

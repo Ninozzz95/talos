@@ -9,7 +9,14 @@ import { Fingerprint, Loader2, LockKeyhole } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { appLockThrottleRemainingMs, requestBiometricUnlock, verifyAppLockPin } from '@/services/appLock'
 import { unlockTalosDatabase } from '@/services/databaseProtection'
-import { talosDatabaseKeyIsProtected } from '@/services/databaseKey'
+import {
+    armTalosBiometricUnlock,
+    talosBiometricUnlockIsArmed,
+    peekTalosDatabaseKey,
+    talosDatabaseKeyIsProtected,
+    unlockTalosDatabaseKeyWithBiometrics,
+} from '@/services/databaseKey'
+import { talosBiometricKeyWasCancelled } from '@/services/biometricKeyWrap'
 import { talosLightImpact } from '@/services/haptics'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 
@@ -29,9 +36,15 @@ const pinField = ref<HTMLInputElement | null>(null)
 // Debt S3 — attempt throttling. The gate itself lives in the service (it is
 // persisted, so killing the app does not reset it); the screen mirrors it so
 // the user sees a countdown instead of a PIN that silently stops working.
-// SF-MAJOR: the database key is wrapped by the PIN alone, so a fingerprint
-// cannot open it. Offering biometrics there unlocked the SCREEN over a locked
-// database — the user sees their chats and the first send fails.
+// The database key is wrapped by the PIN, so a fingerprint cannot derive it —
+// offering biometrics on its own unlocked the SCREEN over a locked database:
+// the user saw their chats and the first send failed.
+//
+// Owner 2026-07-26 chose the real fix over that refusal: the key is wrapped a
+// SECOND time by a hardware Keystore key that a live scan releases. So the
+// fingerprint is offered when, and only when, that copy exists. `keyNeedsPin`
+// now means "protected, and no biometric copy yet" — the first unlock after
+// setting a PIN, and every unlock afterwards if the user declined biometrics.
 const keyNeedsPin = ref(false)
 const throttleMs = ref(0)
 const throttled = computed(() => throttleMs.value > 0)
@@ -90,6 +103,14 @@ async function submitPin(): Promise<void> {
             // without unwrapping it would show an empty workspace over data
             // that is still there — worse than staying locked.
             if (await unlockTalosDatabase(pin.value)) {
+                // The PIN has just proven itself, which is the only moment we
+                // are entitled to make a second door onto this key. Arming asks
+                // for a scan, so it must not block the unlock: a refusal there
+                // leaves the user with the PIN, exactly as before.
+                if (props.biometricEnabled && !await talosBiometricUnlockIsArmed().catch(() => true)) {
+                    const key = peekTalosDatabaseKey()
+                    if (key) await armTalosBiometricUnlock(key).catch(() => {})
+                }
                 unlock()
             } else {
                 error.value = 'PIN accepted but the data could not be opened. Try again.'
@@ -106,13 +127,33 @@ async function submitPin(): Promise<void> {
 }
 
 async function tryBiometric(): Promise<void> {
-    if (await talosDatabaseKeyIsProtected().catch(() => false)) {
+    const protectedKey = await talosDatabaseKeyIsProtected().catch(() => false)
+    if (!protectedKey) {
+        // No managed key: the screen is the only thing locked, so the OS prompt
+        // alone is a truthful gate.
+        if (await requestBiometricUnlock('Unlock TALOS')) unlock()
+        return
+    }
+    if (!await talosBiometricUnlockIsArmed().catch(() => false)) {
         keyNeedsPin.value = true
-        error.value = 'Your data is encrypted with the PIN — enter it once to open it.'
+        error.value = 'Your data is encrypted with the PIN — enter it once, and the fingerprint will work from then on.'
         pinField.value?.focus()
         return
     }
-    if (await requestBiometricUnlock('Unlock TALOS')) unlock()
+    try {
+        // This does open the database: the Keystore releases the unwrapping key
+        // only for a live scan, so success here is real access, not a screen
+        // dismissal over data that is still sealed.
+        await unlockTalosDatabaseKeyWithBiometrics()
+        unlock()
+    } catch (failure) {
+        keyNeedsPin.value = true
+        // A cancel is the user choosing the PIN, not a fault worth an alarm.
+        error.value = talosBiometricKeyWasCancelled(failure)
+            ? null
+            : 'Fingerprint unlock is no longer available on this device — enter your PIN.'
+        pinField.value?.focus()
+    }
 }
 
 onMounted(() => {

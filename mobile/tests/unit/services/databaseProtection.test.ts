@@ -16,6 +16,7 @@ const key = vi.hoisted(() => ({
     talosDatabaseKeyIsProtected: vi.fn(async () => false),
     unlockTalosDatabaseKey: vi.fn(async () => 'unwrapped'),
     unprotectTalosDatabaseKey: vi.fn(async () => {}),
+    disarmTalosBiometricUnlock: vi.fn(async () => {}),
 }))
 vi.mock('@/services/databaseKey', () => key)
 
@@ -134,6 +135,16 @@ describe('relockTalosDatabase', () => {
 })
 
 describe('disableTalosDatabaseProtection', () => {
+    it('destroys the biometric copy too, even when there is no PIN protection left', async () => {
+        // The fingerprint copy is a second wrapping of the SAME key. Removing
+        // the lock while leaving it behind would keep a hardware-backed door
+        // onto a database the user just asked us to stop protecting — and the
+        // Keystore entry would outlive every record explaining what it opens.
+        key.talosDatabaseKeyIsProtected.mockResolvedValue(false)
+        await disableTalosDatabaseProtection()
+        expect(key.disarmTalosBiometricUnlock).toHaveBeenCalled()
+    })
+
     it('returns the key to device protection', async () => {
         key.talosDatabaseKeyIsProtected.mockResolvedValue(true)
         await disableTalosDatabaseProtection()
