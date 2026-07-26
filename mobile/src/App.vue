@@ -242,16 +242,17 @@ function sidebarRename(sessionId: string, title: string): void {
  */
 function sidebarDelete(sessionId: string, choice?: { deleteMedia: boolean }): void {
     lifecycleAction('Delete chat', async () => {
-        if (choice?.deleteMedia) {
-            const failed = await chatController.deleteSessionMedia(sessionId)
-            if (failed.length) {
-                toastsStore.push({
-                    message: `Chat deleted. ${failed.length} file${failed.length === 1 ? '' : 's'} could not be removed from the Library.`,
-                    durationMs: 6000,
-                })
-            }
-        }
+        const failed = choice?.deleteMedia ? await chatController.deleteSessionMedia(sessionId) : []
         await chatController.sessionLifecycle.deleteSession(sessionId)
+        // Reported only AFTER the chat is actually gone: announcing it earlier
+        // put "Chat deleted" on screen next to "Delete chat failed" whenever the
+        // second half threw.
+        if (failed.length) {
+            toastsStore.push({
+                message: `Chat deleted. ${failed.length} file${failed.length === 1 ? '' : 's'} could not be removed from the Library.`,
+                durationMs: 6000,
+            })
+        }
     })
 }
 
@@ -653,6 +654,7 @@ onBeforeUnmount(async () => {
                         @new-chat="sidebarNewChat"
                         @rename="immersiveRename"
                         :cleanup-plan="activeCleanupPlan"
+                        :session-busy="sessionBusy"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
                         :can-open-media="canOpenChatMedia"

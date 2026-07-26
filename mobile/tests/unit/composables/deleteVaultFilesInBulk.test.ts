@@ -73,10 +73,10 @@ describe('removing several files at once', () => {
     })
 
     it('keeps going past a failure and names what it could not remove', async () => {
-        // A file the store has already lost must not strand the other nineteen.
+        // One stubborn file must not strand the other nineteen.
         const service = makeVault({
             deleteFile: vi.fn(async (id: string) => {
-                if (id === 'b') throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+                if (id === 'b') throw new Error('TALOS_ATTACHMENT_ANALYSIS_FAILED')
             }),
         })
         const attachments = useTalosMobileAttachments({
@@ -88,6 +88,26 @@ describe('removing several files at once', () => {
 
         expect(failed).toEqual(['b'])
         expect(service.deleteFile).toHaveBeenCalledTimes(3)
+        // And the real cause survives, once: a permission error, a locked file
+        // and a database fault are different problems.
+        expect(attachments.takeDeleteFailure()).toBe('TALOS could not inspect this file.')
+        expect(attachments.takeDeleteFailure()).toBeNull()
+    })
+
+    it('counts a file that was already gone as deleted, not as a failure', async () => {
+        // SF-critic 2026-07-26: the vault throwing NOT_FOUND means the row is no
+        // longer there — which is precisely what was asked for. Reporting it as
+        // a failure taught the user to distrust a deletion that had worked.
+        const service = makeVault({
+            deleteFile: vi.fn(async () => { throw new Error('TALOS_VAULT_FILE_NOT_FOUND') }),
+        })
+        const attachments = useTalosMobileAttachments({
+            picker: { pickFiles: vi.fn() },
+            vault: service,
+        })
+
+        expect(await attachments.deleteVaultFiles(['ghost'])).toEqual([])
+        expect(attachments.takeDeleteFailure()).toBeNull()
     })
 
     it('does nothing at all, quietly, when the list is empty', async () => {

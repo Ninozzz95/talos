@@ -13,7 +13,12 @@ import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
-import { describeTalosCleanup, talosCleanupCount } from '@/lib/chat/sessionCleanup'
+import {
+    describeTalosCleanup,
+    planTalosSessionCleanupFor,
+    talosCleanupCount,
+    type TalosSessionCleanupPlan,
+} from '@/lib/chat/sessionCleanup'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import { useChatController } from '@/stores/chatController'
 import { archivedChatSessions, orderChatSessions } from '@/lib/chatListGestures'
@@ -169,16 +174,15 @@ const selectableIds = computed(() => [
     ...archived.value.map((session) => session.id),
 ])
 
-/** What the whole selection would take from the Library, counted once. */
-const bulkPlan = computed(() => {
-    const documents = []
-    const sources = []
-    for (const id of bulk.ids.value) {
-        const plan = controller.planSessionCleanup(id)
-        documents.push(...plan.documents)
-        sources.push(...plan.sources)
-    }
-    return { documents, sources }
+/**
+ * What the whole selection would take from the Library, in ONE pass.
+ *
+ * Per-chat planning re-scanned the entire vault for every selected row — 50
+ * chats against 500 files is 25,000 comparisons, redone on every vault change.
+ */
+const bulkPlan = computed<TalosSessionCleanupPlan>(() => {
+    const wanted = new Set(bulk.ids.value)
+    return planTalosSessionCleanupFor(controller.attachments.vaultFiles, wanted)
 })
 
 function tapSession(sessionId: string): void {
@@ -194,19 +198,30 @@ async function confirmBulkDelete(): Promise<void> {
     actionError.value = null
     const ids = bulk.ids.value
     const stubborn: string[] = []
+    let strandedFiles = 0
     try {
+        // The files of ALL the selected chats go in ONE vault operation: a call
+        // per chat would re-read the whole Library twenty times over, which is
+        // the very thing the bulk delete exists to avoid.
+        if (bulkDeleteMedia.value) {
+            const plan = bulkPlan.value
+            const fileIds = [...plan.documents, ...plan.sources].map((entry) => entry.id)
+            strandedFiles = (await controller.attachments.deleteVaultFiles(fileIds)).length
+        }
         for (const id of ids) {
             try {
-                if (bulkDeleteMedia.value) await controller.deleteSessionMedia(id)
                 await controller.sessionLifecycle.deleteSession(id)
             } catch {
                 // One chat that refuses must not strand the rest of the batch.
                 stubborn.push(id)
             }
         }
-        if (stubborn.length) {
-            actionError.value = `${stubborn.length} chat${stubborn.length === 1 ? '' : 's'} could not be deleted.`
-        }
+        // Both halves are reported. Dropping the file failures on the floor left
+        // the user believing a deletion that never happened.
+        const problems: string[] = []
+        if (stubborn.length) problems.push(`${stubborn.length} chat${stubborn.length === 1 ? '' : 's'} could not be deleted`)
+        if (strandedFiles) problems.push(`${strandedFiles} file${strandedFiles === 1 ? '' : 's'} could not be removed from the Library`)
+        actionError.value = problems.length ? `${problems.join(', ')}.` : null
         bulkDeleteOpen.value = false
         bulkDeleteMedia.value = false
         // Whatever survived stays selected; the rest must not linger as a count
@@ -257,6 +272,11 @@ function clearHold(): void {
 }
 
 function onRowPointerDown(session: { id: string; title: string }, isArchived: boolean, event: PointerEvent): void {
+    // In selection mode the row menu is a second, contradictory way to act on a
+    // row: "Open" navigates away mid-selection, and its single Delete never
+    // reconciled the selection, leaving a count that referred to a chat that no
+    // longer existed.
+    if (bulk.active.value) return
     clearHold()
     holdOrigin = { x: event.clientX, y: event.clientY }
     const anchor = (event.currentTarget as HTMLElement).getBoundingClientRect()

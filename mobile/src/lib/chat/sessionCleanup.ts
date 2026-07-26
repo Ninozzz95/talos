@@ -1,4 +1,4 @@
-import { parseVaultKind, parseVaultOriginSession } from '@/lib/vaultLibrary'
+import { parseVaultKind, parseVaultOrigin, parseVaultOriginSession } from '@/lib/vaultLibrary'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 
 /**
@@ -24,18 +24,47 @@ export interface TalosSessionCleanupPlan {
 export function planTalosSessionCleanup(
     files: readonly TalosLocalVaultFile[],
     sessionId: string,
-    attachedFileIds: readonly string[] = [],
 ): TalosSessionCleanupPlan {
-    const attached = new Set(attachedFileIds)
     const documents: TalosLocalVaultFile[] = []
     const sources: TalosLocalVaultFile[] = []
 
     for (const file of files) {
-        const bornHere = parseVaultOriginSession(file.metadata) === sessionId
         // A file merely ATTACHED here belongs to whatever chat created it, and
         // deleting this conversation must not take it away from that one.
-        if (!bornHere) continue
-        if (attached.has(file.id) && !bornHere) continue
+        if (parseVaultOriginSession(file.metadata) !== sessionId) continue
+        // TALOS may delete what TALOS made. What the USER brought is theirs.
+        //
+        // SF-critic 2026-07-26: `origin_session_id` is stamped on uploads too —
+        // it records the chat you uploaded INTO, not authorship. Without this
+        // line, a contract uploaded in one chat and since attached to four
+        // others was destroyed, private copy and all, by deleting the first.
+        if (parseVaultOrigin(file.metadata) !== 'generated') continue
+        if (parseVaultKind(file.metadata) === 'web_source') sources.push(file)
+        else documents.push(file)
+    }
+
+    return { documents, sources }
+}
+
+/**
+ * The same plan for MANY chats at once, in one pass over the vault.
+ *
+ * Calling the single-session version per chat re-scans the whole Library every
+ * time; a bulk delete of 50 chats against 500 files did 25,000 comparisons and
+ * redid them on every vault change.
+ */
+export function planTalosSessionCleanupFor(
+    files: readonly TalosLocalVaultFile[],
+    sessionIds: ReadonlySet<string>,
+): TalosSessionCleanupPlan {
+    const documents: TalosLocalVaultFile[] = []
+    const sources: TalosLocalVaultFile[] = []
+    if (sessionIds.size === 0) return { documents, sources }
+
+    for (const file of files) {
+        const session = parseVaultOriginSession(file.metadata)
+        if (session === null || !sessionIds.has(session)) continue
+        if (parseVaultOrigin(file.metadata) !== 'generated') continue
         if (parseVaultKind(file.metadata) === 'web_source') sources.push(file)
         else documents.push(file)
     }
