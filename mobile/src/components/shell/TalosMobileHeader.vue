@@ -11,6 +11,12 @@ import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOption
 defineProps<{
     title: string
     creatingSession: boolean
+    /**
+     * A session action is actually RUNNING. Distinct from `creatingSession`,
+     * which is also true while persistence is not ready — conflating them made
+     * the delete dialog spin over work that had never started.
+     */
+    sessionBusy?: boolean
     /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
     hideMenu?: boolean
     /** False before a chat exists; the title then opens nothing, so it is inert. */
@@ -81,7 +87,7 @@ const emit = defineEmits<{
             :cleanup-plan="cleanupPlan"
             v-if="!hideMenu"
             :active-title="title"
-            :busy="creatingSession"
+            :busy="sessionBusy ?? creatingSession"
             @new-chat="emit('newChat')"
             @rename="emit('rename', $event)"
             @delete="(choice) => emit('delete', choice)"

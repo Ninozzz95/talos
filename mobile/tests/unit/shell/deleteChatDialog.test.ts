@@ -71,6 +71,9 @@ describe('deleting a chat, and what it takes with it', () => {
         const wrapper = mountDialog(FULL)
         ;(document.querySelector(CONFIRM) as HTMLElement).click()
         await wrapper.vm.$nextTick()
+        // The parent has taken the work: that, and only that, is what the
+        // spinner reports. A spinner with no work behind it is a lie.
+        await wrapper.setProps({ busy: true })
 
         const button = document.querySelector(CONFIRM) as HTMLButtonElement
         expect(button.textContent).toContain('Deleting')
@@ -81,6 +84,55 @@ describe('deleting a chat, and what it takes with it', () => {
         expect(wrapper.emitted('confirm')).toHaveLength(1)
         // Nor may a tap outside abandon a deletion already in flight.
         expect(wrapper.emitted('close')).toBeUndefined()
+    })
+
+    it('is never a trap when the parent does nothing at all', async () => {
+        // SF-critic 2026-07-26, BLOCKER: the only exit was a busy true->false
+        // edge. A handler that refuses the work (no active session, an action
+        // already in flight, a persistence error pinning `busy` true) never
+        // produced that edge, and Cancel/confirm/Escape/backdrop were ALL
+        // disabled while it waited — the app was unusable until force-killed.
+        const wrapper = mountDialog(FULL)
+        ;(document.querySelector(CONFIRM) as HTMLElement).click()
+        await wrapper.vm.$nextTick()
+
+        // No busy edge ever arrives. Cancel must still work.
+        const cancel = [...document.querySelectorAll('button')]
+            .find((button) => button.textContent?.includes('Cancel')) as HTMLButtonElement
+        expect(cancel.disabled).toBe(false)
+        cancel.click()
+        await wrapper.vm.$nextTick()
+        expect(wrapper.emitted('close')).toHaveLength(1)
+    })
+
+    it('refuses to start while the shell is already busy', async () => {
+        // The parents all early-return when another action is in flight. Left
+        // enabled, the button "succeeded" silently: nothing was deleted, and
+        // when the UNRELATED action finished, the busy edge closed the dialog
+        // as if the chat had gone.
+        const wrapper = mountDialog(FULL, true)
+        const button = document.querySelector(CONFIRM) as HTMLButtonElement
+        expect(button.disabled).toBe(true)
+        button.click()
+        await wrapper.vm.$nextTick()
+        expect(wrapper.emitted('confirm')).toBeUndefined()
+    })
+
+    it('keeps the choice when the Library changes underneath it', async () => {
+        // The plan is a computed over a reactive array: any refreshVault — a
+        // tool saving a document — hands over a NEW object with the same
+        // contents. Resetting on identity silently unticked the box the user
+        // had ticked, and only the chat went.
+        const wrapper = mountDialog(FULL)
+        const box = document.querySelector(CHECKBOX)!.querySelector('input')!
+        box.checked = true
+        box.dispatchEvent(new Event('change'))
+        await wrapper.vm.$nextTick()
+
+        await wrapper.setProps({ plan: { documents: [file('a'), file('b')], sources: [file('c')] } })
+        ;(document.querySelector(CONFIRM) as HTMLElement).click()
+        await wrapper.vm.$nextTick()
+        expect(wrapper.emitted('confirm')).toEqual([[{ deleteMedia: true }]])
     })
 
     it('closes itself once the deletion is over', async () => {

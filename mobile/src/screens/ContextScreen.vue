@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
@@ -193,6 +193,19 @@ const bulkDeleteOpen = ref(false)
 
 const visibleIds = computed(() => filtered.value.map((file) => file.id))
 
+/**
+ * The selection can only ever mean what is on screen.
+ *
+ * SF-critic 2026-07-26: the type chips stay live during selection mode. Select
+ * All (20 files), then tap "Images" — three tiles remain, the bar still reads
+ * "20 selected", and Delete removed all twenty including the seventeen the user
+ * could no longer see. The composable already forgets rows that disappear; it
+ * just was not being told when the filter, rather than a deletion, removed them.
+ */
+watch(visibleIds, (ids) => {
+    if (bulk.active.value) bulk.reconcile(ids)
+})
+
 function tapFile(file: TalosLocalVaultFile): void {
     // In selection mode a tap PICKS. Opening a file from here would be a
     // different action wearing the same gesture.
@@ -217,8 +230,9 @@ async function confirmBulkDelete(): Promise<void> {
         }
         thumbs.value = next
         const gone = ids.length - failed.length
+        const why = attachments.takeDeleteFailure()
         feedback.value = failed.length
-            ? gone + ' deleted, ' + failed.length + ' could not be removed.'
+            ? gone + ' deleted, ' + failed.length + ' could not be removed. ' + (why ?? '')
             : gone + (gone === 1 ? ' file was deleted.' : ' files were deleted.')
         bulkDeleteOpen.value = false
         // Whatever survived stays selected; the rest must not linger as a count

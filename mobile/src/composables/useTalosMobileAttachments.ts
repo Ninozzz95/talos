@@ -77,6 +77,8 @@ export interface TalosMobileAttachmentsController {
      * remove — empty means everything went.
      */
     deleteVaultFiles(fileIds: readonly string[]): Promise<string[]>
+    /** The reason the last `deleteVaultFiles` lost a file, once. Null if none. */
+    takeDeleteFailure(): string | null
     /** Debt S7: withdraw a document from model context, or put it back. */
     setVaultFileShared(fileId: string, shared: boolean): Promise<void>
     discardAll(): Promise<void>
@@ -376,28 +378,43 @@ export function useTalosMobileAttachments(
 
     async function deleteVaultFiles(fileIds: readonly string[]): Promise<string[]> {
         if (fileIds.length === 0) return []
-        vaultError.value = null
         const failed: string[] = []
         for (const fileId of fileIds) {
             try {
                 await options.vault.deleteFile(fileId)
-                for (let index = items.length - 1; index >= 0; index -= 1) {
-                    if (items[index]?.vaultFileId === fileId) items.splice(index, 1)
+            } catch (cause) {
+                // A row the vault has already lost is not a failure — the file
+                // is gone, which is what was asked for.
+                const code = cause instanceof Error ? cause.message : ''
+                if (code !== 'TALOS_VAULT_FILE_NOT_FOUND') {
+                    // One stubborn file must not strand the rest.
+                    failed.push(fileId)
+                    // Keep the FIRST real cause: a permission error, a locked
+                    // file and a database fault are different problems, and a
+                    // generic summary makes them indistinguishable.
+                    if (deleteFailure === null) deleteFailure = attachmentErrorMessage(cause)
+                    continue
                 }
-            } catch {
-                // One file the store has already lost must not strand the rest.
-                failed.push(fileId)
+            }
+            for (let index = items.length - 1; index >= 0; index -= 1) {
+                if (items[index]?.vaultFileId === fileId) items.splice(index, 1)
             }
         }
         // ONE read for the whole batch. The list is what the user sees; letting
         // it re-render per file makes a bulk delete look like a fault.
         await refreshVault()
-        if (failed.length) {
-            vaultError.value = failed.length === fileIds.length
-                ? 'TALOS could not remove these files.'
-                : `TALOS removed the rest, but ${failed.length} file${failed.length === 1 ? '' : 's'} could not be deleted.`
-        }
+        // Deliberately NOT written to vaultError: this runs for chat deletion
+        // too, and that banner is rendered only by the Library — the user would
+        // meet it hours later, out of context and undated. The caller reports.
         return failed
+    }
+
+    /** Why the last bulk delete failed, in the user's words. Null if it did not. */
+    let deleteFailure: string | null = null
+    function takeDeleteFailure(): string | null {
+        const message = deleteFailure
+        deleteFailure = null
+        return message
     }
 
     async function setVaultFileShared(fileId: string, shared: boolean): Promise<void> {
@@ -456,6 +473,7 @@ export function useTalosMobileAttachments(
         remove,
         deleteVaultFile,
         deleteVaultFiles,
+        takeDeleteFailure,
         setVaultFileShared,
         discardAll,
         clearSent,

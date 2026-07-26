@@ -46,9 +46,20 @@ const FILES = [
 describe('what a deleted chat takes with it', () => {
     it('separates the documents from the pages a search collected', () => {
         const plan = planTalosSessionCleanup(FILES, 's1')
-        expect(plan.documents.map((entry) => entry.id).sort()).toEqual(['doc-here', 'upload-here'])
+        expect(plan.documents.map((entry) => entry.id)).toEqual(['doc-here'])
         expect(plan.sources.map((entry) => entry.id)).toEqual(['source-here'])
-        expect(talosCleanupCount(plan)).toBe(3)
+        expect(talosCleanupCount(plan)).toBe(2)
+    })
+
+    it('NEVER takes a file the user uploaded, even from this very chat', () => {
+        // SF-critic 2026-07-26, the worst finding of the review: `origin_session_id`
+        // is stamped on uploads too — it is the chat you uploaded INTO. A contract
+        // you uploaded in January and have since attached to four other chats would
+        // have been destroyed, with its private copy, by deleting the first one.
+        // TALOS may delete what TALOS made. What the user brought is theirs.
+        const plan = planTalosSessionCleanup(FILES, 's1')
+        const ids = [...plan.documents, ...plan.sources].map((entry) => entry.id)
+        expect(ids).not.toContain('upload-here')
     })
 
     it('never touches another conversation, whatever it is', () => {
@@ -60,17 +71,16 @@ describe('what a deleted chat takes with it', () => {
         expect(ids).not.toContain('orphan')
     })
 
-    it('a file merely ATTACHED here still belongs to the chat that made it', () => {
-        // Picking a document from the Library into this conversation must not
-        // let deleting this conversation take it from the other one.
-        const plan = planTalosSessionCleanup(FILES, 's1', ['doc-elsewhere'])
-        expect([...plan.documents, ...plan.sources].map((entry) => entry.id))
-            .not.toContain('doc-elsewhere')
+    it('matches nothing at all when the session id is empty', () => {
+        // A missing origin parses to null, and null never equals '' — but this is
+        // the difference between "deletes nothing" and "deletes the Library", so
+        // it is pinned rather than reasoned about.
+        expect(talosCleanupCount(planTalosSessionCleanup(FILES, ''))).toBe(0)
     })
 
     it('describes what will go in plain words', () => {
         expect(describeTalosCleanup(planTalosSessionCleanup(FILES, 's1')))
-            .toBe('2 documents and 1 saved page')
+            .toBe('1 document and 1 saved page')
     })
 
     it('says nothing when there is nothing to say', () => {
@@ -79,8 +89,11 @@ describe('what a deleted chat takes with it', () => {
         expect(describeTalosCleanup(empty)).toBe('')
     })
 
-    it('gets the singular right, because "1 documents" reads like a bug', () => {
-        const one = planTalosSessionCleanup([FILES[0]!], 's1')
-        expect(describeTalosCleanup(one)).toBe('1 document')
+    it('gets the plural right, because "1 documents" reads like a bug', () => {
+        const many = planTalosSessionCleanup([
+            file('a', { origin: 'generated', origin_session_id: 's1' }),
+            file('b', { origin: 'generated', origin_session_id: 's1' }),
+        ], 's1')
+        expect(describeTalosCleanup(many)).toBe('2 documents')
     })
 })
