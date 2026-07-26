@@ -385,6 +385,17 @@ onMounted(async () => {
                 // — the lock screen would be dead to taps over it.
                 sidebarOpen.value = false
                 locked.value = true
+                // SF-MAJOR: a consent sheet rendered ABOVE the lock screen and
+                // stayed tappable, so anyone picking up the phone could allow a
+                // tool without the PIN. The lock now outranks every sheet, and
+                // the pending request dies with the session.
+                chatController.denyPendingToolConsent()
+                // SF-MAJOR: the in-flight send survived the lock. Every tool read
+                // then threw TALOS_DB_KEY_LOCKED, the answer could not be
+                // persisted and was lost — and, worse, the conversation kept
+                // being sent to the provider while the screen showed a PIN pad.
+                // Stop the send BEFORE taking the key away.
+                chatController.chat.stopStreaming()
                 // Debt S1: the screen is not the lock. The key leaves memory and
                 // the plugin's store, so the database really closes. Imported on
                 // demand: re-locking is never part of the first paint.

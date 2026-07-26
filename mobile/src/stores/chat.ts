@@ -62,6 +62,14 @@ export interface ChatTurn {
     toolCalls?: TalosToolCall[]
     /** Set on a tool turn: which call this result answers. */
     toolCallId?: string
+    /**
+     * Set on a tool turn: WHICH TOOL produced it. The OpenAI and Anthropic
+     * families match a result to its call by id, so this looks redundant — but
+     * Gemini matches by `functionResponse.name` and Ollama by `tool_name`, and
+     * neither carries a call id at all. Without the name those two cannot be
+     * handed a result, which is exactly why they shipped unwired.
+     */
+    toolName?: string
 }
 
 // F2-T4 streaming: the completion may stream partial text through handlers.

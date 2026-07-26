@@ -138,7 +138,7 @@ onMounted(() => {
         aria-modal="true"
         aria-label="TALOS is locked"
         tabindex="-1"
-        class="pointer-events-auto fixed inset-0 z-[90] flex flex-col items-center justify-center gap-6 bg-[var(--talos-background)] px-8 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+        class="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-6 bg-[var(--talos-background)] px-8 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
         @keydown="trapTab"
     >
         <LockKeyhole class="size-10 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />

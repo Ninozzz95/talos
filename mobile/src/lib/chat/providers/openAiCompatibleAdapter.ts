@@ -40,10 +40,14 @@ const completionSchema = z.object({
     choices: z.array(z.object({
         finish_reason: z.string().nullable().optional(),
         message: z.object({
+            // OpenAI documents content as "required UNLESS tool_calls is
+            // specified", and sends a literal null on a tool-calling turn.
+            // Demanding a string here rejected every buffered tool response as
+            // malformed — before the tool calls were ever read.
             content: z.union([
                 z.string(),
                 z.array(z.object({ type: z.string().optional(), text: z.string().optional() }).passthrough()),
-            ]),
+            ]).nullish(),
         }).passthrough(),
     }).passthrough()).min(1),
     usage: z.record(z.string(), z.unknown()).optional(),
@@ -205,7 +209,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete')
             const choice = parsed.data.choices[0]!
-            const text = contentText(choice.message.content)
+            const text = contentText(choice.message.content ?? '')
             const toolCalls = parseOpenAiToolCalls(choice.message)
             // A tool-calling turn legitimately has NO text: refusing it as
             // malformed would break the loop before it started.

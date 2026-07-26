@@ -73,23 +73,72 @@ function safeToolInput(argumentsJson: string): unknown {
     }
 }
 
+/** A `tool` turn that may carry the results of a whole round, not just one call. */
+type MergedTurn = BuildAnthropicRequestInput['turns'][number] & {
+    toolResults?: Array<{ id: string; content: string }>
+}
+
+/**
+ * Anthropic expects every `tool_result` of one round inside a SINGLE user
+ * message. Our IR keeps one turn per call, which mapped to N consecutive user
+ * messages: first-party merges them silently, Bedrock and several proxies
+ * answer `messages: roles must alternate`. Merge here, at the translation, so
+ * the IR stays one-turn-per-call for every other provider.
+ */
+function mergeToolRuns(turns: BuildAnthropicRequestInput['turns']): MergedTurn[] {
+    const merged: MergedTurn[] = []
+    for (const turn of turns) {
+        const previous = merged[merged.length - 1]
+        if (turn.role === 'tool' && previous?.role === 'tool') {
+            previous.toolResults = [
+                ...(previous.toolResults ?? [{ id: previous.toolCallId ?? '', content: previous.content }]),
+                { id: turn.toolCallId ?? '', content: turn.content },
+            ]
+            continue
+        }
+        merged.push({ ...turn })
+    }
+    return merged
+}
+
 export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicRequestInput): AnthropicHttpRequest {
     const budget = input.thinking === true && input.effort && input.effort !== 'off'
         ? THINKING_BUDGET[input.effort] ?? 0
         : 0
-    const useThinking = budget > 0
+    /**
+     * Anthropic requires the COMPLETE, signed thinking blocks to be replayed on
+     * an assistant turn that precedes a `tool_result`. We cannot: the reasoning
+     * channel is a flat string with no block identity and no signature, because
+     * `signature_delta` is not captured. Sending the turn without them is a
+     * documented 400 — and since every Anthropic model advertises `thinking`
+     * and the composer toggle is one tap away, round two of ANY tool-using
+     * conversation failed outright.
+     *
+     * So thinking is dropped for exactly the requests that carry a tool result.
+     * The first round still thinks, and the user still sees the reasoning block
+     * for it; what is lost is thinking on the follow-up rounds, which is a great
+     * deal better than an error where the answer should be. Capturing and
+     * replaying signed blocks is the real fix and is written up as a debt.
+     */
+    const carriesToolResult = input.turns.some((turn) => turn.role === 'tool')
+    const useThinking = budget > 0 && !carriesToolResult
     const maxTokens = Math.max(input.maxTokens ?? DEFAULT_MAX_TOKENS, useThinking ? budget + 2048 : 0)
 
     const body: Record<string, unknown> = {
         model: input.model,
         max_tokens: maxTokens,
-        messages: input.turns.map((turn) => ({
+        // One round of N tool calls produces N `tool` turns, each of which maps
+        // to a separate USER message. api.anthropic.com merges them; Bedrock and
+        // several proxies answer `roles must alternate`. Batch a run of tool
+        // turns into the single user message the protocol actually describes.
+        messages: mergeToolRuns(input.turns).map((turn) => ({
             // Anthropic has no `tool` role: a result is a USER message carrying
             // tool_result blocks, and the call itself is an ASSISTANT message
             // carrying tool_use blocks. Getting this wrong is rejected outright.
             role: turn.role === 'tool' ? 'user' : turn.role,
             content: turn.role === 'tool'
-                ? [{ type: 'tool_result', tool_use_id: turn.toolCallId ?? '', content: turn.content }]
+                ? (turn.toolResults ?? [{ id: turn.toolCallId ?? '', content: turn.content }])
+                    .map((result) => ({ type: 'tool_result', tool_use_id: result.id, content: result.content }))
                 : turn.toolCalls?.length
                     ? [
                         ...(turn.content ? [{ type: 'text', text: turn.content }] : []),

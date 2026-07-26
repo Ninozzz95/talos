@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { createTalosLineAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
+import { parseOllamaToolCalls } from '@/lib/tools/wire'
+import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import type { TalosMobileCompletionInput, TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
     malformedProviderResponse,
@@ -34,11 +36,31 @@ function requestTimeouts(timeout: number | undefined): { connectTimeout: number;
         : {}
 }
 
-function ollamaTurn(turn: TalosMobileCompletionInput['turns'][number]): {
-    role: string
-    content: string
-    images?: string[]
-} {
+/** Arguments travel as a JSON string internally; Ollama wants the object. */
+function safeToolArgs(argumentsJson: string): unknown {
+    try {
+        return JSON.parse(argumentsJson || '{}')
+    } catch {
+        return {}
+    }
+}
+
+function ollamaTurn(turn: TalosMobileCompletionInput['turns'][number]): Record<string, unknown> {
+    // Ollama keys a result by `tool_name`, NOT by a call id: it has none.
+    // This is the documented shape, checked before wiring. Assuming the OpenAI
+    // `tool_call_id` here is how a result silently stops matching its call.
+    if (turn.role === 'tool') {
+        return { role: 'tool', tool_name: turn.toolName ?? '', content: turn.content }
+    }
+    if (turn.toolCalls?.length) {
+        return {
+            role: 'assistant',
+            content: turn.content,
+            tool_calls: turn.toolCalls.map((call) => ({
+                function: { name: call.name, arguments: safeToolArgs(call.arguments) },
+            })),
+        }
+    }
     if (!turn.parts?.length) return { role: turn.role, content: turn.content }
     const text = [turn.content]
     const images: string[] = []
@@ -56,13 +78,15 @@ function ollamaTurn(turn: TalosMobileCompletionInput['turns'][number]): {
 }
 
 function ollamaCompletionData(input: TalosMobileCompletionInput, stream: boolean): Record<string, unknown> {
-    const messages: Array<{ role: string; content: string }> = []
+    const messages: Array<Record<string, unknown>> = []
     if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
     messages.push(...input.turns.map(ollamaTurn))
     return {
         model: input.model.id,
         messages,
         stream,
+        // Ollama speaks the OpenAI tool shape.
+        ...(input.tools?.length ? { tools: talosToolsForOpenAi(input.tools as never) } : {}),
         ...(input.thinking ? { think: input.effort === 'off' ? true : input.effort } : {}),
     }
 }
@@ -105,11 +129,18 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         })
         requireHttpSuccess({ provider: 'ollama', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
-        if (!parsed.success || !parsed.data.message.content) throw malformedProviderResponse('ollama', 'complete')
+        if (!parsed.success) throw malformedProviderResponse('ollama', 'complete')
+        const toolCalls = parseOllamaToolCalls(parsed.data.message)
+        // A tool-calling turn has an EMPTY content, which this used to treat as
+        // a malformed response.
+        if (!parsed.data.message.content && toolCalls.length === 0) {
+            throw malformedProviderResponse('ollama', 'complete')
+        }
         return {
             text: parsed.data.message.content,
             model: parsed.data.model ?? input.model.id,
             finishReason: parsed.data.done_reason ?? null,
+            ...(toolCalls.length ? { toolCalls } : {}),
         }
     },
     // F2-T4: Ollama streams NDJSON lines (`message.content`), not SSE. The
@@ -117,6 +148,10 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
     // the WebView origin; otherwise the pre-first-byte failure falls back.
     async streamComplete(input, credential, handlers) {
         const endpoint = normalizeHttpEndpoint('ollama', 'complete', credential.endpoint)
+        // Ollama streams a tool call as a COMPLETE object on one NDJSON line —
+        // there are no argument deltas to reassemble, so the buffered parser is
+        // the right reader here too.
+        const collected: ReturnType<typeof parseOllamaToolCalls> = []
         const stream = await talosStreamText({
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
@@ -125,6 +160,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
             accumulator: createTalosLineAccumulator(),
             extract: (payload) => {
                 const event = JSON.parse(payload) as { message?: { content?: string } }
+                collected.push(...parseOllamaToolCalls(event.message))
                 return event.message?.content ?? ''
             },
             // Defect #5: Ollama puts the model's thinking on `message.thinking`
@@ -136,7 +172,15 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
         })
-        if (!stream.text) throw malformedProviderResponse('ollama', 'complete')
-        return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
+        // Ids are positional for Ollama, so they must be assigned once over the
+        // whole stream rather than per line — otherwise every call is `-0`.
+        const calls = collected.map((call, index) => ({ ...call, id: `${call.name}-${index}` }))
+        if (!stream.text && calls.length === 0) throw malformedProviderResponse('ollama', 'complete')
+        return {
+            text: stream.text,
+            model: input.model.id,
+            reasoning: stream.reasoning || undefined,
+            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+        }
     },
 }

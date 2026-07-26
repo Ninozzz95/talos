@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
+import { createGeminiToolCallAccumulator } from '@/lib/tools/wire'
+import { talosToolsForGemini } from '@/lib/tools/registry'
 import type { TalosMobileCompletionInput, TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
     malformedProviderResponse,
@@ -39,7 +41,36 @@ function requestTimeouts(timeout: number | undefined): { connectTimeout: number;
         : {}
 }
 
+/** Arguments travel as a JSON string internally; Gemini wants the object. */
+function safeToolArgs(argumentsJson: string): unknown {
+    try {
+        return JSON.parse(argumentsJson || '{}')
+    } catch {
+        return {}
+    }
+}
+
 function geminiTurnParts(turn: TalosMobileCompletionInput['turns'][number]): Array<Record<string, unknown>> {
+    // A tool RESULT is a `user` turn carrying functionResponse parts, matched to
+    // its call by NAME: Gemini has no call id. Researched against the Gemini
+    // function-calling reference before wiring, rather than inferred from the
+    // OpenAI shape, which is a different protocol wearing similar words.
+    if (turn.role === 'tool') {
+        return [{
+            functionResponse: {
+                name: turn.toolName ?? turn.toolCallId ?? '',
+                response: { result: turn.content },
+            },
+        }]
+    }
+    if (turn.toolCalls?.length) {
+        return [
+            ...(turn.content ? [{ text: turn.content }] : []),
+            ...turn.toolCalls.map((call) => ({
+                functionCall: { name: call.name, args: safeToolArgs(call.arguments) },
+            })),
+        ]
+    }
     if (!turn.parts?.length) return [{ text: turn.content }]
     const parts: Array<Record<string, unknown>> = []
     if (turn.content) parts.push({ text: turn.content })
@@ -60,10 +91,12 @@ function geminiTurnParts(turn: TalosMobileCompletionInput['turns'][number]): Arr
 function geminiCompletionData(input: TalosMobileCompletionInput): Record<string, unknown> {
     const data: Record<string, unknown> = {
         contents: input.turns.map((turn) => ({
+            // 'tool' collapses to 'user': that is where a functionResponse lives.
             role: turn.role === 'assistant' ? 'model' : 'user',
             parts: geminiTurnParts(turn),
         })),
     }
+    if (input.tools?.length) data.tools = talosToolsForGemini(input.tools as never)
     if (input.system?.trim()) data.systemInstruction = { parts: [{ text: input.system }] }
     // SF-MAJOR: Gemini returns `thought` parts ONLY when the request asks for
     // them. Without this the reasoning extractor was dead code — the block
@@ -147,19 +180,26 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
         // into the answer — which is then persisted AND replayed as history.
         const text = geminiAnswerText(candidate.content.parts)
         const reasoning = geminiThoughtText(candidate.content.parts)
-        if (!text) throw malformedProviderResponse('gemini', 'complete')
+        const accumulator = createGeminiToolCallAccumulator()
+        accumulator.push(parsed.data)
+        const toolCalls = accumulator.calls()
+        // A turn that only calls a function carries no text. Refusing it as
+        // malformed is how the loop would die before its first round.
+        if (!text && toolCalls.length === 0) throw malformedProviderResponse('gemini', 'complete')
         return {
             text,
             model: parsed.data.modelVersion ?? input.model.id,
             finishReason: candidate.finishReason ?? null,
             usage: parsed.data.usageMetadata ?? null,
             reasoning: reasoning || undefined,
+            ...(toolCalls.length ? { toolCalls } : {}),
         }
     },
     // F2-T4: native fetch SSE via `:streamGenerateContent?alt=sse` — Gemini
     // allows browser-origin calls with the x-goog-api-key header.
     async streamComplete(input, credential, handlers) {
         const apiKey = requireProviderApiKey('gemini', 'complete', credential)
+        const toolCalls = createGeminiToolCallAccumulator()
         const stream = await talosStreamText({
             url: `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model.id)}:streamGenerateContent?alt=sse`,
             headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
@@ -170,6 +210,7 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
                 const event = JSON.parse(payload) as {
                     candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
                 }
+                toolCalls.push(event)
                 return geminiAnswerText(event.candidates?.[0]?.content?.parts ?? [])
             },
             // Defect #5: Gemini marks thinking parts with `thought: true` in the
@@ -184,7 +225,13 @@ export const geminiAdapter: TalosMobileProviderAdapter = {
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
         })
-        if (!stream.text) throw malformedProviderResponse('gemini', 'complete')
-        return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
+        const calls = toolCalls.calls()
+        if (!stream.text && calls.length === 0) throw malformedProviderResponse('gemini', 'complete')
+        return {
+            text: stream.text,
+            model: input.model.id,
+            reasoning: stream.reasoning || undefined,
+            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+        }
     },
 }

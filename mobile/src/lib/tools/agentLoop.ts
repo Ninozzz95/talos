@@ -53,13 +53,42 @@ export async function runTalosAgentLoop(
     let completion = await deps.complete(turns)
     let rounds = 0
     let stoppedByLimit = false
+    /**
+     * Every round's prose, in order.
+     *
+     * Models routinely speak before they call ("Let me look that up…"), and the
+     * stream handler is allocated once per send — so the user WATCHES that
+     * sentence arrive. Returning only the last completion meant the durable
+     * message replaced the stream with strictly less text than had just been on
+     * screen. What is persisted must equal what was rendered.
+     */
+    const spoken: string[] = []
+    const say = (text: string) => { if (text) spoken.push(text) }
 
     while (completion.toolCalls?.length) {
         if (rounds >= maxRounds) {
             stoppedByLimit = true
+            // SF-MAJOR: this used to `break` and RETURN the tool-requesting
+            // completion, whose text is legitimately empty for a tool-only turn
+            // — so the user got a blank assistant bubble and the model never
+            // learned why it stopped. Answer every pending call, then ask once
+            // more for a final answer, exactly as the call cap does.
+            say(completion.text)
+            turns = [
+                ...turns,
+                { role: 'assistant', content: completion.text, toolCalls: completion.toolCalls },
+                ...completion.toolCalls.map((call) => ({
+                    role: 'tool' as const,
+                    content: `Not run: the limit of ${maxRounds} tool rounds for one message was reached. Answer with what you have.`,
+                    toolCallId: call.id,
+                    toolName: call.name,
+                })),
+            ]
+            completion = await deps.complete(turns)
             break
         }
         rounds += 1
+        say(completion.text)
         const requested = completion.toolCalls
         deps.onToolRound?.(requested)
 
@@ -74,12 +103,13 @@ export async function runTalosAgentLoop(
                     role: 'tool',
                     content: `Not run: the limit of ${maxCalls} tool calls for one message was reached. Answer with what you have.`,
                     toolCallId: call.id,
+                    toolName: call.name,
                 })
                 continue
             }
             const result = await deps.execute(call)
             executed.push({ call, ok: result.ok })
-            results.push({ role: 'tool', content: result.content, toolCallId: call.id })
+            results.push({ role: 'tool', content: result.content, toolCallId: call.id, toolName: call.name })
         }
 
         turns = [
@@ -90,8 +120,10 @@ export async function runTalosAgentLoop(
         completion = await deps.complete(turns)
     }
 
+    say(completion.text)
     return {
         ...completion,
+        text: spoken.join('\n\n'),
         executed,
         rounds,
         stoppedByLimit,

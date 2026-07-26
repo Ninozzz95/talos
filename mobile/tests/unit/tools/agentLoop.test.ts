@@ -67,8 +67,11 @@ describe('agent loop', () => {
         const outcome = await runTalosAgentLoop([{ role: 'user', content: 'vai' }], { complete, execute })
         expect(outcome.rounds).toBe(TALOS_AGENT_MAX_ROUNDS)
         expect(outcome.stoppedByLimit).toBe(true)
-        // One initial call plus one per round: the loop cannot outrun its bound.
-        expect(complete).toHaveBeenCalledTimes(TALOS_AGENT_MAX_ROUNDS + 1)
+        // One initial call, one per round, and ONE final request for an answer
+        // after the model is told its tool budget is spent. That last one is the
+        // difference between a blank bubble and a reply.
+        expect(complete).toHaveBeenCalledTimes(TALOS_AGENT_MAX_ROUNDS + 2)
+        expect(outcome.text).toBe('')
     })
 
     it('caps calls WITHIN a round and tells the model, instead of dropping call ids', async () => {
@@ -111,5 +114,52 @@ describe('agent loop', () => {
             complete,
             execute: async () => ({ content: 'ok', ok: true }),
         })).rejects.toThrow(/provider exploded/)
+    })
+
+    it('keeps the preamble the user already watched being streamed', async () => {
+        // Models routinely speak before calling ("Let me look that up…"). That
+        // text is streamed to the screen, but only the LAST completion was
+        // returned — so the moment the durable message replaced the stream, the
+        // sentence the user had just read vanished.
+        const complete = vi.fn()
+            .mockResolvedValueOnce({ text: 'Guardo nella tua Libreria.', toolCalls: [call('c1')] })
+            .mockResolvedValueOnce({ text: 'La fattura è di 2196 euro.' })
+        const execute = vi.fn(async () => ({ content: 'found', ok: true }))
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'quanto devo?' }], { complete, execute })
+        expect(outcome.text).toBe(['Guardo nella tua Libreria.', 'La fattura è di 2196 euro.'].join('\n\n'))
+    })
+
+    it('a silent tool round adds no blank lines to the answer', async () => {
+        const complete = vi.fn()
+            .mockResolvedValueOnce({ text: '', toolCalls: [call('c1')] })
+            .mockResolvedValueOnce({ text: 'Sono 2196 euro.' })
+        const execute = vi.fn(async () => ({ content: 'found', ok: true }))
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'quanto?' }], { complete, execute })
+        expect(outcome.text).toBe('Sono 2196 euro.')
+    })
+
+    it('the ROUND bound tells the model and gets a real answer, never a blank bubble', async () => {
+        // The docstring promised this for both bounds; it was true only for the
+        // call bound. The round bound broke out and returned the tool-requesting
+        // completion, whose text is legitimately empty — so the user watched
+        // five rounds of tool chips and received an empty message.
+        const complete = vi.fn(async () => ({ text: '', toolCalls: [call('c1')] }))
+        complete.mockResolvedValue({ text: '', toolCalls: [call('c1')] })
+        const execute = vi.fn(async () => ({ content: 'found', ok: true }))
+        let lastTurns: ChatTurn[] = []
+        const wrapped = vi.fn(async (turns: ChatTurn[]) => {
+            lastTurns = turns
+            return turns.filter((turn) => turn.role === 'tool').some((turn) => turn.content.includes('limit of'))
+                ? { text: 'Con quello che ho: sono 2196 euro.' }
+                : { text: '', toolCalls: [call('c1')] }
+        })
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'quanto?' }], { complete: wrapped, execute })
+        expect(outcome.stoppedByLimit).toBe(true)
+        expect(outcome.rounds).toBe(TALOS_AGENT_MAX_ROUNDS)
+        expect(outcome.text).toBe('Con quello che ho: sono 2196 euro.')
+        // Every call the model asked for is answered, or the next request is
+        // invalid for every provider that checks call ids.
+        expect(lastTurns.filter((turn) => turn.role === 'tool').at(-1)?.toolCallId).toBe('c1')
+        expect(complete).not.toHaveBeenCalled()
     })
 })

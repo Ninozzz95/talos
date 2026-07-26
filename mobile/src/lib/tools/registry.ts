@@ -52,7 +52,12 @@ type JsonSchema = Record<string, unknown>
 function schemaOf(tool: TalosToolDefinition<never>): JsonSchema {
     // zod 4 emits JSON Schema natively — no second schema to keep in sync, and
     // no chance of the validated shape and the advertised shape drifting apart.
-    return z.toJSONSchema(tool.input, { io: 'input' }) as JsonSchema
+    // It also emits `$schema`, which Gemini's OpenAPI-subset validator rejects
+    // outright and OpenAI's strict mode refuses; nobody needs the dialect URL
+    // inside a function declaration, so it is dropped here rather than in each
+    // of the four translations.
+    const { $schema: _dialect, ...schema } = z.toJSONSchema(tool.input, { io: 'input' }) as JsonSchema
+    return schema
 }
 
 /** OpenAI, DeepSeek, OpenRouter and Ollama all speak this shape. */
