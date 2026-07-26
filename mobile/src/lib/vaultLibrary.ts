@@ -41,6 +41,17 @@ export function isTalosLibraryFileShared(
     return (metadata as { library_shared?: boolean } | null | undefined)?.library_shared !== false
 }
 
+/**
+ * Whether a file is something the user (or the model) MADE, or a page that was
+ * read while researching. Fifteen sources from one search must not bury the
+ * user's own documents — see `kind` in the vault service.
+ */
+export function parseVaultKind(
+    metadata: Record<string, unknown> | null | undefined,
+): 'document' | 'web_source' {
+    return metadata?.kind === 'web_source' ? 'web_source' : 'document'
+}
+
 export interface LibraryFilter {
     query: string
     origin: 'all' | TalosVaultOrigin
@@ -49,6 +60,8 @@ export interface LibraryFilter {
      * ORIGIN is this chat: uploaded here, or generated here by the model.
      */
     sessionId?: string | null
+    /** Omit sources, or show only them. Absent means everything. */
+    kind?: 'document' | 'web_source'
     /**
      * Extra ids to admit regardless of origin — the files actually ATTACHED in
      * this chat, which may have been picked from the global Library and so
@@ -66,6 +79,7 @@ export function filterLibraryFiles(
     const query = filter.query.trim().toLowerCase()
     const admitted = new Set(filter.alsoFileIds ?? [])
     return files
+        .filter((file) => !filter.kind || parseVaultKind(file.metadata) === filter.kind)
         .filter((file) => !filter.sessionId
             || admitted.has(file.id)
             || parseVaultOriginSession(file.metadata) === filter.sessionId)

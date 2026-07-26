@@ -5,6 +5,7 @@ import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
+import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
@@ -232,6 +233,13 @@ function formatBytes(value: number): string {
                     />
                     <TalosMobileMessageContent
                         :content="message.content"
+                    />
+                    <!-- Owner 2026-07-26: the "Sources" pill, under the answer
+                         and never above it — you read the claim, then check what
+                         it rests on. -->
+                    <TalosMobileSourcesChip
+                        v-if="Array.isArray(message.metadata.sources) && message.metadata.sources.length"
+                        :sources="message.metadata.sources as never"
                     />
                     <!-- F4 Memory: disclosure of injected untrusted memories -->
                     <div

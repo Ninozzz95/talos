@@ -98,6 +98,7 @@ function loadProductionVaultService(): Promise<TalosVaultService> {
 const productionVaultService: TalosVaultService = {
     ingest: async (file, originSessionId) => (await loadProductionVaultService()).ingest(file, originSessionId),
     createGenerated: async (input, originSessionId) => (await loadProductionVaultService()).createGenerated(input, originSessionId),
+    createGeneratedBinary: async (input, originSessionId) => (await loadProductionVaultService()).createGeneratedBinary(input, originSessionId),
     createGrant: async (fileId) => (await loadProductionVaultService()).createGrant(fileId),
     readFilePreview: async (fileId) => (await loadProductionVaultService()).readFilePreview(fileId),
     revokeGrant: async (grantId) => (await loadProductionVaultService()).revokeGrant(grantId),
@@ -120,6 +121,7 @@ const productionFilePicker: TalosNativeFilePicker = {
 const unavailableVaultService: TalosVaultService = {
     ingest: async (_file, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGenerated: async (_input, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
+    createGeneratedBinary: async (_input, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     readFilePreview: async () => null,
     setFileShared: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
@@ -232,6 +234,8 @@ export interface ChatController {
     readonly toolActivity: Readonly<Ref<TalosToolActivity[]>>
     /** Deny whatever consent is open — the shell calls this when it re-locks. */
     denyPendingToolConsent(): void
+    /** Forget a conversation-scoped yes (D12): the shell calls it on re-lock. */
+    clearSessionToolConsent(): void
     /**
      * The vault ids attached anywhere in one chat — the half of "this chat's
      * media" that metadata cannot answer, since a document picked out of the
@@ -379,6 +383,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     // once per controller, not per message. `toolActivity` is what the chat
     // renders while a round of tools is running.
     const toolActivity = ref<TalosToolActivity[]>([])
+    /** The pages read while answering the message currently in flight. */
+    const readSources: Array<{
+        url: string
+        title: string
+        site: string | null
+        publishedAt: string | null
+    }> = []
     /**
      * The pending write the user has to answer. A promise resolver is parked
      * here and the sheet settles it: the executor is already written to fail
@@ -393,6 +404,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     } | null>(null)
     let toolsetPromise: Promise<import('@/lib/tools/toolset').TalosToolset> | null = null
 
+    /**
+     * D12 — "ask once per conversation".
+     *
+     * Owner testing 2026-07-26: creating one PDF asked for permission five
+     * times. The decision was taken and never implemented — the gate still only
+     * knew `allow / ask / deny`, and `ask` means EVERY time. Five sheets for one
+     * document is not a safeguard, it is an obstacle people learn to tap through
+     * without reading, which is worse than no gate at all.
+     *
+     * So a granted `write` now covers the rest of THAT conversation. It is
+     * cleared when the chat changes, and it never covers a destructive action
+     * (D13) — a yes given for "make a document" cannot authorise "delete".
+     */
+    const writeConsentGrantedFor = ref<string | null>(null)
+
+    function clearSessionToolConsent(): void {
+        writeConsentGrantedFor.value = null
+    }
+
     /** SF-MAJOR: a pending request must die with the run it belongs to. */
     function denyPendingToolConsent(): void {
         pendingToolConsent.value?.deny()
@@ -405,6 +435,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // Only one at a time: a second request while one is open would be a
         // dialog the user cannot reason about, so it is refused — and marked as
         // a machine refusal, not attributed to the user.
+        // D12: already granted for this conversation, and this is not a
+        // destructive action, so it does not ask again.
+        if (writeConsentGrantedFor.value !== null
+            && writeConsentGrantedFor.value === chat.activeSession.value?.id) {
+            return Promise.resolve(true)
+        }
         if (pendingToolConsent.value) return Promise.resolve<'busy'>('busy')
         // SF-MAJOR: Stop used to leave the sheet open and the send stuck with
         // `sending` true. A cancelled request's honest answer is "deny".
@@ -419,7 +455,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 title: request.tool.title,
                 description: request.tool.description,
                 input: request.input,
-                allow: () => settle(true),
+                allow: () => {
+                    // The yes lasts for this conversation (D12).
+                    writeConsentGrantedFor.value = chat.activeSession.value?.id ?? null
+                    settle(true)
+                },
                 deny: () => settle(false),
             }
         })
@@ -678,17 +718,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             return verifyTalosDocument(document)
                         },
                         async save(document) {
-                            // Text formats keep their content searchable in the
-                            // Library; binary ones are stored as a base64
-                            // payload because the vault holds text.
-                            const isText = ['md', 'csv', 'html'].includes(document.format)
-                            const text = isText
-                                ? new TextDecoder().decode(document.bytes)
-                                : `[${document.format.toUpperCase()} file, ${document.bytes.byteLength} bytes]`
-                            const saved = await attachments.saveGenerated({
+                            // The REAL bytes, always. Routing a binary format
+                            // through the text sink produced a file named .xlsx
+                            // containing a placeholder sentence — the document
+                            // was generated correctly and thrown away here.
+                            const saved = await attachments.saveGeneratedBinary({
                                 name: document.fileName,
                                 mediaType: document.mediaType,
-                                text,
+                                bytes: document.bytes,
                             })
                             return saved ? { id: saved.id } : null
                         },
@@ -702,6 +739,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     web: () => {
                         const source = deps.settings.state.search?.source ?? null
                         if (!source) return null
+                        // Which pages THIS answer rests on. Kept per send, so a
+                        // chip under one reply cannot show another reply's
+                        // sources — the whole point of citing.
+                        readSources.length = 0
                         return {
                             async search(query: string, maxResults: number) {
                                 const [{ runTalosSearch }, { getProviderKey }] = await Promise.all([
@@ -726,7 +767,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                              * is never re-injected as if the user had uploaded it.
                              */
                             async remember(page) {
+                                readSources.push({
+                                    url: page.url,
+                                    title: page.title,
+                                    site: page.siteName,
+                                    publishedAt: page.publishedAt,
+                                })
                                 await attachments.saveGenerated({
+                                    // A source, not a document the user made.
+                                    kind: 'web_source',
                                     name: `${page.title || new URL(page.url).hostname}.md`,
                                     mediaType: 'text/markdown',
                                     text: [
@@ -871,6 +920,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 // Defect #5: the reasoning reaches the store, which persists it
                 // with the message instead of letting it evaporate.
                 reasoning: completion.reasoning,
+                // Owner 2026-07-26: the pages THIS answer rests on, so the chat
+                // can show a "Sources" chip under it — the way Claude and
+                // ChatGPT do. Per answer, never per chat: a chip that shows
+                // everything the conversation ever read is not a citation.
+                ...(readSources.length ? { sources: readSources.slice() } : {}),
             }
         } catch (error) {
             // SF-MINOR: cleared only on the success path, so a failed or aborted
@@ -1456,6 +1510,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         toolActivity,
         pendingToolConsent,
         denyPendingToolConsent,
+        clearSessionToolConsent,
         /**
          * The vault ids attached anywhere in one chat — the half of "this
          * chat's media" that metadata cannot answer, since a document picked

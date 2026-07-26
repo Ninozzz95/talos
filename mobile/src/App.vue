@@ -433,6 +433,9 @@ onMounted(async () => {
                 // tool without the PIN. The lock now outranks every sheet, and
                 // the pending request dies with the session.
                 chatController.denyPendingToolConsent()
+                // A conversation-scoped yes must not survive the lock: whoever
+                // unlocks next is not necessarily who granted it.
+                chatController.clearSessionToolConsent()
                 // SF-MAJOR: the in-flight send survived the lock. Every tool read
                 // then threw TALOS_DB_KEY_LOCKED, the answer could not be
                 // persisted and was lost — and, worse, the conversation kept

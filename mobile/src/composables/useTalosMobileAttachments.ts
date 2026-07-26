@@ -47,7 +47,17 @@ export interface TalosMobileAttachmentsController {
     refreshVault(): Promise<void>
     selectFiles(): Promise<void>
     /** Save a chat-generated artifact into the Library (origin='generated'). */
-    saveGenerated(input: { name: string; mediaType: string; text: string }): Promise<TalosLocalVaultFile>
+    saveGenerated(input: {
+        name: string
+        mediaType: string
+        text: string
+        /** `web_source` keeps read pages out of the user's own document list. */
+        kind?: 'document' | 'web_source'
+    }): Promise<TalosLocalVaultFile>
+    /** F2: a generated file that is bytes (xlsx, pdf, docx, pptx). */
+    saveGeneratedBinary(
+        input: { name: string; mediaType: string; bytes: Uint8Array },
+    ): Promise<TalosLocalVaultFile>
     /** Object URL for a file's bytes (image thumbnail / open). Caller revokes it. */
     previewUrl(fileId: string): Promise<string | null>
     /** Full extracted text for one file (the list holds bounded previews). */
@@ -215,12 +225,38 @@ export function useTalosMobileAttachments(
     }
 
     async function saveGenerated(
-        input: { name: string; mediaType: string; text: string },
+        input: {
+            name: string
+            mediaType: string
+            text: string
+            kind?: 'document' | 'web_source'
+        },
     ): Promise<TalosLocalVaultFile> {
         vaultError.value = null
         const result = await options.vault.createGenerated(input, options.currentSessionId?.() ?? null)
         // Saved to the Library, not attached to a message → drop the pre-minted
         // grant; attaching it later from the Library mints its own.
+        await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
+        await refreshVault()
+        return result.file
+    }
+
+    /**
+     * F2 — a generated file whose content is BYTES.
+     *
+     * `saveGenerated` encodes a string, so routing an xlsx through it produced a
+     * text file named `.xlsx` holding a placeholder sentence: the generator was
+     * making valid documents and this sink was discarding them. Nothing in the
+     * Library opened, because there was nothing in it to open.
+     */
+    async function saveGeneratedBinary(
+        input: { name: string; mediaType: string; bytes: Uint8Array },
+    ): Promise<TalosLocalVaultFile> {
+        vaultError.value = null
+        const result = await options.vault.createGeneratedBinary(
+            input,
+            options.currentSessionId?.() ?? null,
+        )
         await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
         await refreshVault()
         return result.file
@@ -369,6 +405,7 @@ export function useTalosMobileAttachments(
         refreshVault,
         selectFiles,
         saveGenerated,
+        saveGeneratedBinary,
         previewUrl,
         hydrateText,
         attachExisting,

@@ -505,7 +505,7 @@ watch(() => props.prompt, () => {
                 aria-label="Add to chat"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
                 :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable absolute bottom-0.5 left-1.5 z-10 min-h-11 min-w-11 rounded-2xl"
+                class="talos-pressable absolute bottom-0.5 left-0.5 z-10 min-h-11 min-w-11 rounded-2xl"
                 @pointerdown.prevent
                 @click="openPlus"
             >
@@ -520,7 +520,7 @@ watch(() => props.prompt, () => {
                 class="block max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
                 :class="[
                     'min-h-12 py-3',
-                    composerCompact || (plusDropdown && !drawerMode) ? 'pl-14 pr-14' : 'px-2 pr-14',
+                    composerCompact || (plusDropdown && !drawerMode) ? 'pl-12 pr-14' : 'px-2 pr-14',
                 ]"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
@@ -529,10 +529,17 @@ watch(() => props.prompt, () => {
             />
             <!-- ONE morphing right button on EVERY composer style (owner 2026-07-25):
                  Mic when empty, Send while typing, Stop while streaming or dictating.
-                 Only the glyph transitions (~150ms); the button never unmounts. -->
+                 Only the glyph transitions (~150ms); the button never unmounts.
+
+                 Owner 2026-07-26: bare icon while it is a microphone, matching
+                 the "+", and the filled pill from send onwards. It needed
+                 variant="ghost" as well — the Button's DEFAULT variant brings
+                 its own filled background, so removing the border alone left
+                 the container exactly where it was. -->
             <Button
                 type="button"
                 size="icon"
+                variant="ghost"
                 data-mobile-icon-only="true"
                 :aria-label="rightActionLabel"
                 :title="rightActionTitle"
@@ -547,7 +554,7 @@ watch(() => props.prompt, () => {
                     // it was — those are the states where the control is either
                     // about to be pressed or must be findable in a hurry.
                     rightAction === 'mic'
-                        ? 'text-[var(--talos-muted,var(--muted-foreground))]'
+                        ? 'text-[var(--talos-text,var(--foreground))]'
                         : 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]',
                 ]"
                 @click="onRightAction"

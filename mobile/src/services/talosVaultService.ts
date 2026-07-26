@@ -22,7 +22,33 @@ export interface TalosVaultService {
     /** Owner 2026-07-24: persist a chat-generated artifact into the Library as a
      *  reusable document (origin='generated', searchable via extracted text). */
     createGenerated(
-        input: { name: string; mediaType: string; text: string },
+        input: {
+            name: string
+            mediaType: string
+            text: string
+            /**
+             * Owner 2026-07-26: a web research that reads fifteen pages created
+             * fifteen Library documents sitting next to the user's own invoice,
+             * as though he had made them. D5 is still right — a dossier that
+             * survives dead links is the point — but a SOURCE is not a
+             * document, and marking it lets the Library group them instead of
+             * burying everything else.
+             */
+            kind?: 'document' | 'web_source'
+        },
+        originSessionId?: string | null,
+    ): Promise<TalosVaultTrayItem>
+    /**
+     * A generated file whose content is BYTES, not text.
+     *
+     * F2 shipped without this and it was a real defect: `createGenerated`
+     * encodes a string, so an xlsx saved through it became a text file named
+     * `.xlsx` containing a placeholder sentence. The generator was producing
+     * valid documents and the sink was throwing them away — nothing in the
+     * Library would open, because there was nothing there to open.
+     */
+    createGeneratedBinary(
+        input: { name: string; mediaType: string; bytes: Uint8Array },
         originSessionId?: string | null,
     ): Promise<TalosVaultTrayItem>
     /** Owner 2026-07-25: raw bytes of an available file for in-Library preview
@@ -118,6 +144,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
         pickedFile: TalosPickedFile,
         origin: 'uploaded' | 'generated',
         originSessionId: string | null,
+        kind: 'document' | 'web_source' = 'document',
     ): Promise<TalosVaultTrayItem> {
         const fileId = idFactory()
         await options.repository.createVaultFile({
@@ -150,7 +177,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 failure_code: null,
                 metadata: {
                     extension: analysis.extension, page_count: analysis.pageCount,
-                    origin, origin_session_id: originSessionId,
+                    origin, origin_session_id: originSessionId, kind,
                 },
             })
             const grant = await createGrant(file.id)
@@ -162,7 +189,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
 
     return {
         ingest: (pickedFile, originSessionId = null) => ingestFile(pickedFile, 'uploaded', originSessionId),
-        async createGenerated({ name, mediaType, text }, originSessionId = null) {
+        async createGenerated({ name, mediaType, text, kind }, originSessionId = null) {
             // A chat-generated document flows through the SAME ingestion pipeline
             // (private copy + analysis → searchable extracted text + sha256), only
             // marked origin='generated'. Built from a web-blob so it needs no picker.
@@ -172,6 +199,16 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 declaredMediaType: mediaType,
                 sizeBytes: bytes.byteLength,
                 source: { kind: 'web-blob', blob: new Blob([bytes], { type: mediaType }) },
+            }, 'generated', originSessionId, kind)
+        },
+        async createGeneratedBinary({ name, mediaType, bytes }, originSessionId = null) {
+            // The same ingestion pipeline: private copy, analysis, sha256. Only
+            // the source differs — real bytes rather than an encoded string.
+            return ingestFile({
+                name,
+                declaredMediaType: mediaType,
+                sizeBytes: bytes.byteLength,
+                source: { kind: 'web-blob', blob: new Blob([bytes as BlobPart], { type: mediaType }) },
             }, 'generated', originSessionId)
         },
         createGrant,
