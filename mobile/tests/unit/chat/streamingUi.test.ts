@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
@@ -11,9 +11,15 @@ import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTy
 // message list. The tests drive the store state the component really reads.
 const mockChatState = vi.hoisted(() => ({
     state: null as unknown as { sending: boolean; streamingText: string | null },
+    toolActivity: { value: [] as string[] },
 }))
 vi.mock('@/stores/chatController', () => ({
-    useChatController: () => ({ chat: { state: mockChatState.state } }),
+    // The tool block: the streaming reply now also shows which tools are
+    // running, so the mock has to carry that signal too.
+    useChatController: () => ({
+        chat: { state: mockChatState.state },
+        toolActivity: mockChatState.toolActivity,
+    }),
 }))
 
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
@@ -26,8 +32,9 @@ const profiles: TalosMobileModelProfileView[] = [{
 
 const LF = String.fromCharCode(10)
 
-function mountStreaming(sending: boolean, streamingText: string | null) {
+function mountStreaming(sending: boolean, streamingText: string | null, tools: string[] = []) {
     mockChatState.state = reactive({ sending, streamingText })
+    mockChatState.toolActivity = reactive({ value: tools })
     return mount(TalosMobileStreamingReply)
 }
 
@@ -123,5 +130,33 @@ describe('TalosMobileComposer stop control (F2-T4)', () => {
         const wrapper = mountComposer(false)
         expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(true)
         expect(wrapper.find('button[aria-label="Stop response"]').exists()).toBe(false)
+    })
+})
+
+/**
+ * The tool block: silence while a model searches your Library looks exactly
+ * like a hang. These pin that the chat says what it is doing, in words a person
+ * reads rather than the wire names the model uses.
+ */
+describe('tool activity in the streaming reply', () => {
+    it('names the running tools in plain language, before any text exists', async () => {
+        const wrapper = mountStreaming(true, null, ['library_search'])
+        await flushPromises()
+        const activity = wrapper.get('[data-testid="talos-tool-activity"]')
+        expect(activity.text()).toContain('Searching your Library')
+        // The wire name must not leak into the interface.
+        expect(activity.text()).not.toContain('library_search')
+    })
+
+    it('shows an unknown tool by name rather than hiding it', async () => {
+        const wrapper = mountStreaming(true, null, ['some_future_tool'])
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-tool-activity"]').text()).toContain('some_future_tool')
+    })
+
+    it('shows nothing when no tool is running', async () => {
+        const wrapper = mountStreaming(true, 'testo')
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-tool-activity"]').exists()).toBe(false)
     })
 })

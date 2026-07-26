@@ -12,7 +12,10 @@ const settings = vi.hoisted(() => ({
         },
         // Library behaviour lives in shell prefs but is surfaced on this panel.
         shell: { library_context_enabled: true, library_autosave_generated: true },
+        // The tool block: what the model may do on its own, same panel.
+        tools: { read: 'allow', write: 'ask', outbound: 'deny' },
     },
+    setToolPermissions: vi.fn(async () => {}),
     setAiDefaults: vi.fn().mockResolvedValue(undefined),
     setShell: vi.fn().mockResolvedValue(undefined),
 }))

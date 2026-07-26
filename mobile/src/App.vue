@@ -236,6 +236,10 @@ function sidebarDelete(sessionId: string): void {
 }
 
 const exportSheetOpen = ref(false)
+// The write-consent sheet: loaded only when a tool actually asks.
+const TalosMobileToolConsentSheet = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileToolConsentSheet.vue'),
+)
 const TalosMobileSessionExportSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSessionExportSheet.vue'),
 )
@@ -492,6 +496,17 @@ onBeforeUnmount(async () => {
 
         <template v-else>
             <TalosMobileSessionExportSheet v-if="exportSheetOpen" @close="exportSheetOpen = false" />
+
+            <!-- Tool consent: dismissing it DENIES, which is why there is no
+                 close affordance other than the two explicit answers. -->
+            <TalosMobileToolConsentSheet
+                v-if="chatController.pendingToolConsent.value"
+                :title="chatController.pendingToolConsent.value.title"
+                :description="chatController.pendingToolConsent.value.description"
+                :input="chatController.pendingToolConsent.value.input"
+                @allow="chatController.pendingToolConsent.value?.allow()"
+                @deny="chatController.pendingToolConsent.value?.deny()"
+            />
 
             <TalosMobileSidebar
                 v-if="sidebarEverOpened"

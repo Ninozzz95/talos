@@ -26,6 +26,19 @@ const controller = useChatController()
 const state = controller.chat.state
 
 const streamingText = computed(() => state.streamingText ?? '')
+// The tool block: what TALOS is doing right now, in the user's words rather
+// than the wire names. Silence while a model searches your Library looks
+// identical to a hang.
+const TOOL_LABELS: Record<string, string> = {
+    library_search: 'Searching your Library',
+    library_read: 'Reading a document',
+    notes_list: 'Looking at your notes',
+    tasks_list: 'Looking at your tasks',
+    memory_search: 'Checking what it remembers',
+    time_now: 'Checking the time',
+}
+const runningTools = computed(() => controller.toolActivity.value
+    .map((name) => TOOL_LABELS[name] ?? name))
 // Defect #5: reasoning streams on its own channel, so it can appear before the
 // first letter of the answer — which is exactly when it is most useful.
 const streamingReasoning = computed(() => state.streamingReasoning ?? '')
@@ -182,13 +195,27 @@ onBeforeUnmount(() => {
 
 <template>
     <article
-        v-if="sending && (revealed || streamingReasoning.trim())"
+        v-if="sending && (revealed || streamingReasoning.trim() || runningTools.length)"
         ref="contentHost"
         data-testid="talos-mobile-streaming"
         class="w-full max-w-full px-1 py-1 leading-6 text-[var(--talos-text,var(--foreground))]"
     >
         <!-- The growing text stays OUTSIDE any live region: re-announcing
              the whole reply on every token is screen-reader noise. -->
+        <div
+            v-if="runningTools.length"
+            data-testid="talos-tool-activity"
+            class="mb-1.5 flex flex-wrap items-center gap-1.5"
+        >
+            <span
+                v-for="label in runningTools"
+                :key="label"
+                class="inline-flex items-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 py-1 text-2xs text-[var(--talos-muted)]"
+            >
+                <span class="talos-typing-pulse" aria-hidden="true"></span>
+                {{ label }}…
+            </span>
+        </div>
         <TalosMobileReasoningBlock v-if="streamingReasoning" :reasoning="streamingReasoning" live />
         <TalosMobileMessageContent :content="parsedMarkdown" />
         <span class="sr-only" role="status" aria-live="polite">Receiving response</span>

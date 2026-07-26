@@ -19,6 +19,9 @@ function makeController() {
         selectedModelId: ref(null),
         effort: ref('high'),
         thinking: ref(false),
+        // The tool block: what is running, and any write waiting for an answer.
+        toolActivity: ref([] as string[]),
+        pendingToolConsent: ref(null),
         canSend: ref(false),
         sendDisabledReason: ref('Add a provider API key in Settings'),
         preferenceError: ref(null),
