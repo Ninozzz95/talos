@@ -2,6 +2,8 @@
 import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
+import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
+import { Globe } from '@lucide/vue'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
 import { useChatController } from '@/stores/chatController'
@@ -202,19 +204,22 @@ onBeforeUnmount(() => {
     >
         <!-- The growing text stays OUTSIDE any live region: re-announcing
              the whole reply on every token is screen-reader noise. -->
-        <div
-            v-if="runningTools.length"
-            data-testid="talos-tool-activity"
-            class="mb-1.5 flex flex-wrap items-center gap-1.5"
-        >
-            <span
+        <!-- Owner 2026-07-26: in the Claude screenshot the tool line and the
+             reasoning line are the SAME muted row. These used to be bordered
+             chips, which sat next to a borderless reasoning row and looked like
+             two different features. -->
+        <div v-if="runningTools.length" data-testid="talos-tool-activity" class="mb-0.5">
+            <TalosMobileTraceRow
                 v-for="label in runningTools"
                 :key="label"
-                class="inline-flex items-center gap-1.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 py-1 text-2xs text-[var(--talos-muted)]"
+                :label="`${label}…`"
+                live
+                :interactive="false"
             >
-                <span class="talos-typing-pulse" aria-hidden="true"></span>
-                {{ label }}…
-            </span>
+                <template #icon>
+                    <Globe class="size-3.5" />
+                </template>
+            </TalosMobileTraceRow>
         </div>
         <TalosMobileReasoningBlock v-if="streamingReasoning" :reasoning="streamingReasoning" live />
         <TalosMobileMessageContent :content="parsedMarkdown" />

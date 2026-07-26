@@ -3,6 +3,12 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
+import {
+    TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
+    TALOS_CHAT_TEXT_SCALE_REM,
+    sanitizeTalosChatLayout,
+} from '@/lib/talosChatLayout'
+import type { TalosChatBubbleScale } from '@/lib/talosTypes'
 
 /**
  * Review 2026-07-25: "chat text size" shipped BROKEN TWICE — first as a
@@ -23,7 +29,7 @@ function message(id: string) {
     }
 }
 
-function mountList(textScale: 'compact' | 'balanced' | 'expanded') {
+function mountList(textScale: TalosChatBubbleScale) {
     return mount(TalosMobileMessageList, {
         props: { messages: [message('m1')], sending: false, textScale },
         global: { stubs: { teleport: true } },
@@ -31,13 +37,35 @@ function mountList(textScale: 'compact' | 'balanced' | 'expanded') {
 }
 
 describe('chat text size actually renders', () => {
-    it('produces three DISTINCT font sizes on the thread root', () => {
-        const sizes = (['compact', 'balanced', 'expanded'] as const).map((scale) => {
+    const scales = TALOS_CHAT_BUBBLE_SCALE_OPTIONS.map((option) => option.value)
+
+    it('offers an EXTRA SMALL step below small (owner, 2026-07-26)', () => {
+        expect(scales).toEqual(['xcompact', 'compact', 'balanced', 'expanded'])
+        // Strictly ordered: a "smaller" option that is not smaller is a lie.
+        const rem = scales.map((scale) => TALOS_CHAT_TEXT_SCALE_REM[scale])
+        expect(rem).toEqual([...rem].sort((left, right) => left - right))
+        expect(new Set(rem).size).toBe(rem.length)
+    })
+
+    it('produces a DISTINCT font size per step on the thread root', () => {
+        const sizes = scales.map((scale) => {
             const root = mountList(scale).get('[data-testid="talos-mobile-message-list"]')
             return (root.attributes('style') ?? '').match(/font-size:\s*([^;]+)/)?.[1]?.trim()
         })
         expect(sizes.every(Boolean)).toBe(true)
-        expect(new Set(sizes).size).toBe(3)
+        expect(new Set(sizes).size).toBe(scales.length)
+    })
+
+    it('every step still multiplies by the GLOBAL ui scale, so one knob moves all type', () => {
+        for (const scale of scales) {
+            const root = mountList(scale).get('[data-testid="talos-mobile-message-list"]')
+            expect(root.attributes('style')).toContain('var(--talos-ui-scale, 1)')
+        }
+    })
+
+    it('keeps an unknown or dropped stored value on the default, never on nothing', () => {
+        expect(sanitizeTalosChatLayout({ bubble_scale: 'xcompact' }).bubble_scale).toBe('xcompact')
+        expect(sanitizeTalosChatLayout({ bubble_scale: 'microscopic' }).bubble_scale).toBe('balanced')
     })
 
     it('leaves no absolute font size between the root and the message text', () => {
