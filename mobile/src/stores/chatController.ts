@@ -48,6 +48,10 @@ import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type
 import { extractLibrarySaveBlocks, librarySaveInstruction, stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import { createTalosConsentQueue } from '@/lib/tools/consentQueue'
 import {
+    createTalosTraceRecorder,
+    type TalosRoundTraceHandle,
+} from '@/lib/diagnostics/sendTrace'
+import {
     planTalosSessionCleanup,
     type TalosSessionCleanupPlan,
 } from '@/lib/chat/sessionCleanup'
@@ -294,6 +298,9 @@ export interface ChatController {
     planSessionCleanup(sessionId: string): TalosSessionCleanupPlan
     /** Remove those files. Returns the ids it could NOT delete. */
     deleteSessionMedia(sessionId: string): Promise<string[]>
+    /** Timings of the recent sends, newest first. Empty unless debug is on. */
+    traces(): readonly import('@/lib/diagnostics/sendTrace').TalosSendTrace[]
+    clearTraces(): void
     /** R2-7 — single orchestration point for session actions (see impl). */
     sessionLifecycle: TalosSessionLifecycle
     tasks: {
@@ -679,7 +686,48 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     }
 
+    /**
+     * Where a send spends its time (owner 2026-07-26).
+     *
+     * Behind the same debug switch as the technical error codes, and reading
+     * `performance.now()` rather than `Date.now()`: the system clock can be
+     * corrected mid-answer and print a negative duration in the one report
+     * meant to settle an argument.
+     */
+    const traceRecorder = createTalosTraceRecorder({
+        enabled: () => deps.settings.state.shell?.debug_diagnostics === true,
+        now: () => performance.now(),
+        // Read alongside the monotonic clock to catch a send that spanned a
+        // device sleep: on Android CLOCK_MONOTONIC stops while suspended, and
+        // the owner leaves the app WHILE it generates.
+        wallNow: () => Date.now(),
+    })
+
     const complete: ChatCompletion = async (turns, stream) => {
+        const trace = traceRecorder.begin({
+            provider: selectedProfile.value?.provider ?? 'unknown',
+            model: selectedProviderModel.value?.displayName
+                ?? selectedProfile.value?.model
+                ?? 'unknown',
+        })
+        /**
+         * A "round" is the model call AND the tools it then asks for.
+         *
+         * That is the unit a reader wants: the loop calls the model, runs what
+         * it asked for, calls again. Timing the model call alone would hide
+         * exactly the half the owner is chasing, and timing the tools alone
+         * would hide the thinking. So a new round OPENS at each model call and
+         * the previous one closes there — its duration therefore covers the
+         * call plus everything that call set in motion.
+         */
+        // A holder, not a bare `let`: the assignment happens inside a callback
+        // the compiler cannot follow, so a plain variable stays narrowed to null
+        // at every later use and `round?.finish()` fails to typecheck.
+        const round: { open: TalosRoundTraceHandle | null } = { open: null }
+        function openRound(): void {
+            round.open?.finish()
+            round.open = trace.round()
+        }
         const profile = selectedProfile.value
         const providerModel = selectedProviderModel.value
         const apiKey = profile ? await deps.getKey(profile.provider) : null
@@ -892,12 +940,23 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const { runTalosAgentLoop } = await import('@/lib/tools/agentLoop')
             const { executeTalosTool } = await import('@/lib/tools/executor')
             const loop = await runTalosAgentLoop(payloadTurns, {
-                complete: (turns) => completeOnce(turns, stream, offeredTools),
+                complete: (turns) => {
+                    openRound()
+                    // The first chunk is the first word the user sees, which is
+                    // the number that decides whether an answer FEELS slow.
+                    const timed = stream && {
+                        ...stream,
+                        onChunk: (text: string) => { round.open?.firstChunk(); stream.onChunk(text) },
+                    }
+                    return completeOnce(turns, timed ?? stream, offeredTools)
+                },
                 execute: async (call) => {
+                    const timing = round.open?.tool(call.name)
                     const tool = offeredTools.find((entry: { name: string }) => entry.name === call.name)
                     if (!tool) {
                         // A model can hallucinate a tool name. Saying so is more
                         // useful than failing the turn.
+                        timing?.finish(false)
                         return { ok: false, content: `There is no tool called "${call.name}".` }
                     }
                     const result = await executeTalosTool(tool, call.arguments, {
@@ -906,6 +965,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         audit: (row) => toolset.audit(row, chat.activeSession.value?.id ?? null),
                         context: { sessionId: chat.activeSession.value?.id ?? null, signal: stream?.signal },
                     })
+                    timing?.finish(result.ok)
                     return { ok: result.ok, content: result.content }
                 },
                 onToolRound: (calls) => {
@@ -994,6 +1054,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // reply was persisted verbatim, and even with it on a reply truncated
             // mid-block kept its opening marker — which is then replayed to the
             // provider as history and teaches the syntax.
+            // The last round has no next model call to close it, so it closes
+            // here — with the send, whose duration is the number the owner is
+            // holding a stopwatch against.
+            round.open?.finish()
+            trace.finish('ok')
             // Debt A1: the controller's completion returns the RESULT, carrying
             // finishReason (and any tool calls) through to the store's loop.
             return {
@@ -1010,6 +1075,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ...(readSources.length ? { sources: readSources.slice() } : {}),
             }
         } catch (error) {
+            round.open?.finish()
+            // Stopping is not failing: the owner asked for it, and a report that
+            // calls his own Stop an error teaches him to distrust the report.
+            trace.finish(stream?.signal?.aborted ? 'stopped' : 'error')
             // Unconditional: a notification that outlives its work is worse than
             // never having shown one.
             keeper.release()
@@ -1674,6 +1743,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         deleteSession,
         planSessionCleanup,
         deleteSessionMedia,
+        /** Owner 2026-07-26: what the Doctor reads to show where time went. */
+        traces: () => traceRecorder.sends(),
+        clearTraces: () => traceRecorder.clear(),
         memories,
         tasks,
         notes,
