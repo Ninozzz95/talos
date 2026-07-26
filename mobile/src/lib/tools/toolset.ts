@@ -1,4 +1,5 @@
 import { createTalosReadTools, type TalosToolSources } from '@/lib/tools/readTools'
+import { createTalosWebTools, type TalosWebToolSources } from '@/lib/search/webTools'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
 import { decideTalosToolPermission, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
@@ -29,6 +30,14 @@ export interface TalosToolsetDeps {
      * either — otherwise the tools are a way around the opt-out.
      */
     libraryEnabled?(): boolean
+    /**
+     * F1 — the web tools, present only when a search source is configured.
+     *
+     * D3: with nothing chosen the model does not receive the schemas at all, so
+     * it cannot promise a search it will not perform. Absent here means absent
+     * to the model — the same shape as the Library opt-out above.
+     */
+    web?(): TalosWebToolSources | null
     now?(): string
 }
 
@@ -129,7 +138,11 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         tools: all,
         offer(permissions) {
             const libraryAllowed = deps.libraryEnabled ? deps.libraryEnabled() : true
-            return all
+            // Evaluated per send, like the permissions: the toolset is memoised,
+            // so a search source configured a minute ago must govern THIS
+            // message rather than the next launch.
+            const web = deps.web?.() ?? null
+            return [...all, ...(web ? createTalosWebTools(web) : [])]
                 .filter((tool) => libraryAllowed || !tool.name.startsWith('library_'))
                 // SF-MAJOR: the gate refused at EXECUTION but the schemas were
                 // advertised anyway, so "never" meant the model called a tool,

@@ -9,6 +9,7 @@
  */
 import { reactive, readonly } from 'vue'
 import { Preferences } from '@capacitor/preferences'
+import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import { TALOS_DEFAULT_CHAT_LAYOUT, sanitizeTalosChatLayout } from '@/lib/talosChatLayout'
 
 /** Owner 2026-07-25: "di default large font size e small chat font size". */
@@ -233,6 +234,39 @@ function parseToolPermissions(value: unknown): TalosToolPermissions {
     return { read: read('read'), write: read('write'), outbound: read('outbound') }
 }
 
+/**
+ * F1 — which search source the user chose, and where it lives.
+ *
+ * The KEY is deliberately not here: it goes to the OS secure storage through
+ * `setProviderKey`, like every provider key, and this state only ever knows
+ * which source is selected. D3 then hangs off `source === null`: with nothing
+ * chosen the web tools are not offered to the model at all, so it cannot
+ * promise a search it will not perform.
+ */
+export interface TalosMobileSearchPreferences {
+    source: TalosSearchSourceId | null
+    /** SearXNG and custom: the instance the user runs or trusts. */
+    endpoint: string | null
+}
+
+const TALOS_DEFAULT_SEARCH_PREFERENCES: TalosMobileSearchPreferences = {
+    source: null,
+    endpoint: null,
+}
+
+function parseSearchPreferences(value: unknown): TalosMobileSearchPreferences {
+    const record = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+    const source = record.source
+    const known = source === 'tavily' || source === 'brave' || source === 'searxng' || source === 'custom'
+    const endpoint = typeof record.endpoint === 'string' && record.endpoint.trim() !== ''
+        ? record.endpoint.trim()
+        : TALOS_DEFAULT_SEARCH_PREFERENCES.endpoint
+    // Fail closed: anything unrecognised reads as "no source chosen", which by
+    // D3 means the web tools are not offered at all — never as a half-configured
+    // source the model would try and fail to use.
+    return { source: known ? source : TALOS_DEFAULT_SEARCH_PREFERENCES.source, endpoint }
+}
+
 function parseSecurityPreferences(value: unknown): TalosMobileSecurityPreferences {
     const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
     return {
@@ -282,6 +316,8 @@ function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
 export interface TalosMobileSettingsState {
     /** Owner 2026-07-25: tool permissions per ACTION TYPE, user-configured. */
     tools: TalosToolPermissions
+    /** F1: the chosen web-search source. The key itself lives in secure storage. */
+    search: TalosMobileSearchPreferences
     shell: TalosMobileShellPreferences
     onboarding: TalosMobileOnboardingState
     security: TalosMobileSecurityPreferences
@@ -419,6 +455,7 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
         tools: parseToolPermissions(value.tools),
+        search: parseSearchPreferences(value.search),
         tone: parseTonePreferences(value.tone),
         chat_layout: chatLayout,
         ai_defaults: parseAiDefaults(value.ai_defaults),
@@ -445,6 +482,7 @@ export interface SettingsStore {
     setSecurity(patch: Partial<TalosMobileSecurityPreferences>): Promise<void>
     /** Owner 2026-07-25: what the model may do without asking. */
     setToolPermissions(patch: Partial<TalosToolPermissions>): Promise<void>
+    setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
     setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -474,6 +512,7 @@ export function useSettingsStore(): SettingsStore {
                 onboarding: state.onboarding,
                 security: state.security,
                 tools: state.tools,
+                search: state.search,
                 tone: state.tone,
                 chat_layout: state.chat_layout,
                 ai_defaults: state.ai_defaults,
@@ -507,6 +546,10 @@ export function useSettingsStore(): SettingsStore {
             // to its defaults. A user who set "never read my things" got
             // "always allow" back after one restart — a silent escalation.
             state.tools = parsed.tools
+            // Rehydrated for the same reason `tools` is: a choice that vanishes
+            // on restart is a setting that lies, and that defect already shipped
+            // once on the tool permissions.
+            state.search = parsed.search
             state.tone = parsed.tone
         },
         async setShell(patch) {
@@ -523,6 +566,10 @@ export function useSettingsStore(): SettingsStore {
         },
         async setToolPermissions(patch) {
             state.tools = parseToolPermissions({ ...state.tools, ...patch })
+            await persist()
+        },
+        async setSearchPreferences(patch) {
+            state.search = parseSearchPreferences({ ...state.search, ...patch })
             await persist()
         },
         async setTone(preset) {
