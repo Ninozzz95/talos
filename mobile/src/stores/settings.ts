@@ -110,6 +110,18 @@ export interface TalosMobileShellPreferences {
      * and simply eases it in.
      */
     streaming_animation: 'typewriter' | 'fade'
+    /**
+     * Owner 2026-07-26: technical failure codes are for whoever is debugging,
+     * not for whoever is using the app.
+     *
+     * OFF (the default, and what ships): a failure is explained in plain words.
+     * ON: the same explanation, plus the code that names the step that failed.
+     *
+     * What does NOT change with the switch is the honesty. The model is told not
+     * to claim success either way — hiding a code is acceptable, inventing an
+     * outcome never is.
+     */
+    debug_diagnostics: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
 }
@@ -127,6 +139,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     library_view: 'list',
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',
+    debug_diagnostics: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
 }
 
@@ -159,6 +172,9 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
         ui_font_scale: parseTalosFontScale(record.ui_font_scale),
         streaming_animation: record.streaming_animation === 'fade' ? 'fade' : 'typewriter',
+        // Fail closed: anything unrecognised is OFF, so a corrupt preference
+        // cannot start showing internals to a user who never asked.
+        debug_diagnostics: record.debug_diagnostics === true,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
     }
 }

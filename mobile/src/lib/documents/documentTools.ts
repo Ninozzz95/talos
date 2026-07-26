@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import { talosFailureMessage } from '@/lib/talosFailureMessage'
 import {
     TALOS_DOCUMENT_FORMATS,
     type TalosDocumentFormat,
@@ -31,6 +32,8 @@ export interface TalosDocumentToolSources {
     verify(document: TalosGeneratedDocument): Promise<{ ok: boolean; detail: string }>
     /** Puts it in the user's Library, and returns how it can be referred to. */
     save(document: TalosGeneratedDocument): Promise<{ id: string }>
+    /** True when the user has switched diagnostics on; see talosFailureMessage. */
+    diagnostics(): boolean
 }
 
 export function createTalosDocumentTools(
@@ -84,12 +87,17 @@ export function createTalosDocumentTools(
                 // model to invent an explanation — it told the user it was a
                 // temporary storage problem, which was not true and not
                 // actionable. `TALOS_ATTACHMENT_TYPE_MISMATCH` is both.
-                const detail = error instanceof Error ? error.message : String(error)
                 return {
                     ok: false,
                     content: [
-                        `"${document.fileName}" was created and verified, but saving it to the Library failed: ${detail}.`,
-                        'Tell the user exactly this, including the code, and do NOT claim the file was saved.',
+                        talosFailureMessage(
+                            `"${document.fileName}" was created and checked, but it could not be stored in the Library, so it is not there.`,
+                            error,
+                            sources.diagnostics(),
+                        ),
+                        // Unconditional: the switch decides how much detail the
+                        // user sees, never whether the model tells the truth.
+                        'Tell the user it was NOT saved. Do not claim otherwise, and do not invent a cause.',
                         'Do not silently retry the same format — offer a different one, or ask.',
                     ].join(' '),
                 }

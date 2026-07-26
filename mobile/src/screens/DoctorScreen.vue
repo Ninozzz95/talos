@@ -8,6 +8,7 @@ import { onMounted, ref } from 'vue'
 import { Activity, CircleCheck, CircleX, Stethoscope } from '@lucide/vue'
 import { Capacitor } from '@capacitor/core'
 import { useChatController } from '@/stores/chatController'
+import { useSettingsStore } from '@/stores/settings'
 import { talosDictationDiagnostics } from '@/services/dictation'
 import { talosDeviceIssues, talosWithTimeout, type TalosDeviceIssue } from '@/lib/talosDeviceLog'
 import { biometricUnlockAvailable } from '@/services/appLock'
@@ -20,6 +21,21 @@ interface DoctorRow {
 }
 
 const controller = useChatController()
+const settings = useSettingsStore()
+
+/**
+ * Owner 2026-07-26: technical codes belong to whoever is debugging, not to
+ * whoever is using the app. Off is what ships; on adds the code that names the
+ * step that failed, right beside the plain sentence.
+ *
+ * It lives in Doctor rather than Appearance because this is the diagnostics
+ * station — someone looking for it is already here, and someone who is not will
+ * never trip over it by accident.
+ */
+function toggleDiagnostics(event: Event): void {
+    void settings.setShell({ debug_diagnostics: (event.target as HTMLInputElement).checked })
+}
+
 const rows = ref<DoctorRow[]>([])
 const scanning = ref(true)
 const issues = ref<readonly TalosDeviceIssue[]>([])
@@ -139,6 +155,28 @@ onMounted(scan)
                     {{ issue.at.slice(11, 19) }} · {{ issue.tag }} · {{ issue.detail }}
                 </li>
             </ul>
+        </section>
+
+        <section class="mt-4">
+            <label class="flex items-start justify-between gap-3 rounded-xl border border-[var(--talos-border)] px-3 py-2.5">
+                <span class="min-w-0">
+                    <span class="block text-sm text-[var(--talos-text)]">Show technical detail in errors</span>
+                    <span class="mt-1 block text-2xs leading-4 text-[var(--talos-muted)]">
+                        Adds the internal code beside the message when something fails — useful when
+                        reporting a problem, noise otherwise. What TALOS tells you happened does not
+                        change either way.
+                    </span>
+                </span>
+                <input
+                    type="checkbox"
+                    role="switch"
+                    data-testid="talos-debug-diagnostics"
+                    aria-label="Show technical detail in errors"
+                    :checked="settings.state.shell.debug_diagnostics"
+                    class="mt-1 h-5 w-9 shrink-0 accent-[var(--talos-accent)]"
+                    @change="toggleDiagnostics"
+                >
+            </label>
         </section>
     </div>
 </template>
