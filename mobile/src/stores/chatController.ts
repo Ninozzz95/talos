@@ -168,6 +168,8 @@ export interface ChatControllerDeps {
             readonly shell?: {
                 readonly library_context_enabled?: boolean
                 readonly library_autosave_generated?: boolean
+            /** Owner 2026-07-26: show technical codes, off in production. */
+            readonly debug_diagnostics?: boolean
             }
             /** Vision routing preference (now a real behaviour, not an inert switch). */
             readonly ai_defaults?: { readonly vision_enabled?: boolean }
@@ -709,6 +711,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * run on the device.
                      */
                     documents: () => ({
+                        diagnostics: () => deps.settings.state.shell?.debug_diagnostics === true,
                         async generate(spec) {
                             const { generateTalosDocument } = await import('@/lib/documents/documentGenerator')
                             return generateTalosDocument(spec)
