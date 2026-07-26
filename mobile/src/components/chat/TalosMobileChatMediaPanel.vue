@@ -199,7 +199,9 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
             @keydown="trapTab"
             @keydown.escape="opened ? closeFile() : emit('close')"
         >
-            <header class="flex items-start gap-2 border-b border-[var(--talos-border)] px-3 py-2.5">
+            <!-- Owner 2026-07-26: the header ran under the status bar. Same
+                 inset convention the shell header and the tool sheet use. -->
+            <header class="flex items-start gap-2 border-b border-[var(--talos-border)] px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))]">
                 <div class="min-w-0 flex-1">
                     <p class="talos-title truncate text-sm text-[var(--talos-text)]">Media</p>
                     <!-- "che fa capire che sia relativo a quella chat": the chat's
@@ -249,7 +251,7 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
                 Settings, so nothing here reaches the model whatever these say.
             </p>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-2">
+            <div class="min-h-0 flex-1 overflow-y-auto px-3 pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                 <p
                     v-if="!mine.length"
                     data-testid="talos-chat-media-empty"
@@ -329,7 +331,7 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
                 data-testid="talos-chat-media-viewer"
                 class="absolute inset-0 z-10 flex flex-col bg-[var(--talos-bg,var(--background))]"
             >
-                <header class="flex items-center gap-2 border-b border-[var(--talos-border)] px-3 py-2.5">
+                <header class="flex items-center gap-2 border-b border-[var(--talos-border)] px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))]">
                     <p class="min-w-0 flex-1 truncate text-xs text-[var(--talos-text)]">{{ opened.display_name }}</p>
                     <button
                         type="button"
@@ -341,7 +343,7 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
                         <X class="size-4" aria-hidden="true" />
                     </button>
                 </header>
-                <div class="min-h-0 flex-1 overflow-auto p-3">
+                <div class="min-h-0 flex-1 overflow-auto p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                     <p v-if="openingFailed" class="py-8 text-center text-xs text-[var(--talos-muted)]">
                         TALOS could not read this file. It may still be processing, or the copy on this device is gone.
                     </p>

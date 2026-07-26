@@ -139,7 +139,15 @@ async function toggleScreenSecure(): Promise<void> {
 }
 
 async function toggleBiometric(): Promise<void> {
-    await settings.setSecurity({ app_lock_biometric: !settings.state.security.app_lock_biometric })
+    const next = !settings.state.security.app_lock_biometric
+    await settings.setSecurity({ app_lock_biometric: next })
+    // Turning it OFF must destroy the second wrapping of the database key, not
+    // merely hide a button. A preference that leaves a hardware-backed door
+    // standing is a setting that lies about what it did.
+    if (!next) {
+        const { disarmTalosBiometricUnlock } = await import('@/services/databaseKey')
+        await disarmTalosBiometricUnlock().catch(() => {})
+    }
 }
 </script>
 

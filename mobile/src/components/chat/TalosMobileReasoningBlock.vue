@@ -34,7 +34,6 @@ const props = defineProps<{
 
 const showTrace = ref(false)
 const trimmed = computed(() => props.reasoning.trim())
-const words = computed(() => trimmed.value.split(/\s+/).filter(Boolean).length)
 </script>
 
 <template>
@@ -42,7 +41,6 @@ const words = computed(() => trimmed.value.split(/\s+/).filter(Boolean).length)
         <TalosMobileTraceRow
             testid="talos-reasoning-toggle"
             :label="live ? 'Reasoning…' : 'Reasoning'"
-            :detail="live ? undefined : `${words} words`"
             :live="live"
             @open="showTrace = true"
         >
