@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { FileText, Image as ImageIcon, Sparkles, Upload, X } from '@lucide/vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
@@ -46,6 +46,8 @@ const props = defineProps<{
     /** False when the global "let chats use your Library" switch is off. */
     libraryContextEnabled: boolean
     previewUrl: (fileId: string) => Promise<string | null>
+    /** Full extracted text for ONE document, hydrated when it is opened. */
+    readText: (fileId: string) => Promise<string | null>
     setShared: (fileId: string, shared: boolean) => Promise<void>
 }>()
 
@@ -53,12 +55,22 @@ const emit = defineEmits<{ close: []; open: [file: TalosLocalVaultFile] }>()
 
 const root = ref<HTMLElement | null>(null)
 const entered = ref(false)
-const busyFileId = ref<string | null>(null)
 const failure = ref<string | null>(null)
 const tab = ref<'all' | 'images' | 'files'>('all')
+/**
+ * SF-CRITICAL: this was ONE id, so tapping a second file's switch while the
+ * first write was in flight dropped it silently — the control stayed where the
+ * tap left it while the document underneath did not move. Per-file now.
+ */
+const busy = reactive(new Set<string>())
 
-useTalosModalSurface(root)
-useTalosOverlayBack(() => emit('close'))
+// SF-MAJOR: `trapTab` was discarded and the section had no `tabindex="-1"`, so
+// the focus call inside the composable was a no-op, the opener went inert, and
+// focus fell to <body> — outside the dialog, for keyboard and TalkBack users.
+const { trapTab } = useTalosModalSurface(root)
+// Back closes the viewer first, then the gallery — one gesture per layer, the
+// way the Library's own lightbox behaves.
+useTalosOverlayBack(() => { if (opened.value) closeFile(); else emit('close') })
 onMounted(() => { requestAnimationFrame(() => { entered.value = true }) })
 
 const mine = computed(() => filterLibraryFiles(props.files, {
@@ -66,7 +78,10 @@ const mine = computed(() => filterLibraryFiles(props.files, {
     origin: 'all',
     sessionId: props.sessionId,
     alsoFileIds: props.attachedFileIds,
-}))
+    // SF-MAJOR: both flag consumers filter on `status === 'available'` first, so
+    // a failed or still-analysing upload rendered a tile with a checked
+    // "readable" switch that governed nothing.
+}).filter((file) => file.status === 'available'))
 
 const visible = computed(() => mine.value.filter((file) => {
     if (tab.value === 'all') return true
@@ -99,18 +114,69 @@ function canShare(file: TalosLocalVaultFile): boolean {
     return parseVaultOrigin(file.metadata) === 'uploaded'
 }
 
-async function toggleShared(file: TalosLocalVaultFile): Promise<void> {
-    if (busyFileId.value) return
-    busyFileId.value = file.id
+async function toggleShared(file: TalosLocalVaultFile, event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement
+    /**
+     * A native checkbox flips ITSELF on tap. Vue then skips the patch because
+     * the bound value has not changed, so a refused or dropped write left the
+     * control showing the opposite of the truth — a switch reading "the model
+     * cannot read this" over a document the next send would still inject.
+     * Every early return therefore puts the DOM back by hand.
+     */
+    if (busy.has(file.id)) {
+        input.checked = shared(file)
+        return
+    }
+    busy.add(file.id)
     failure.value = null
     try {
         await props.setShared(file.id, !shared(file))
     } catch {
+        input.checked = shared(file)
         failure.value = `TALOS could not change “${file.display_name}”. The file is still where it was.`
     } finally {
-        busyFileId.value = null
+        busy.delete(file.id)
     }
 }
+
+// ---- The viewer. A gallery whose tiles say "Open" and open nothing is worse
+// than one with no tiles: the tap dismissed the whole panel and showed nothing.
+const opened = ref<TalosLocalVaultFile | null>(null)
+const openedUrl = ref<string | null>(null)
+const openedText = ref<string | null>(null)
+const openingFailed = ref(false)
+
+async function openFile(file: TalosLocalVaultFile): Promise<void> {
+    opened.value = file
+    openedUrl.value = null
+    openedText.value = null
+    openingFailed.value = false
+    if (file.media_type.startsWith('image/')) {
+        // A fresh URL: the grid thumbnail's is owned by the thumbnail cache and
+        // revoking it here would blank the tile behind the viewer.
+        const url = await props.previewUrl(file.id).catch(() => null)
+        if (opened.value?.id !== file.id) {
+            if (url) URL.revokeObjectURL(url)
+            return
+        }
+        if (!url) { openingFailed.value = true; return }
+        openedUrl.value = url
+        return
+    }
+    const text = await props.readText(file.id).catch(() => null)
+    if (opened.value?.id !== file.id) return
+    if (text === null) { openingFailed.value = true; return }
+    openedText.value = text
+}
+
+function closeFile(): void {
+    if (openedUrl.value) URL.revokeObjectURL(openedUrl.value)
+    openedUrl.value = null
+    openedText.value = null
+    opened.value = null
+}
+
+onBeforeUnmount(closeFile)
 
 const TABS: Array<{ value: typeof tab.value; label: string }> = [
     { value: 'all', label: 'All' },
@@ -127,8 +193,11 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
             aria-modal="true"
             :aria-label="`Media in ${sessionTitle || 'this chat'}`"
             data-testid="talos-chat-media-panel"
-            class="pointer-events-auto fixed inset-0 z-[95] flex flex-col bg-[var(--talos-bg,var(--background))] transition-opacity duration-200"
+            tabindex="-1"
+            class="pointer-events-auto fixed inset-0 z-[95] flex flex-col bg-[var(--talos-bg,var(--background))] transition-opacity duration-200 outline-none"
             :class="entered ? 'opacity-100' : 'opacity-0'"
+            @keydown="trapTab"
+            @keydown.escape="opened ? closeFile() : emit('close')"
         >
             <header class="flex items-start gap-2 border-b border-[var(--talos-border)] px-3 py-2.5">
                 <div class="min-w-0 flex-1">
@@ -200,7 +269,8 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
                             type="button"
                             class="talos-pressable block aspect-square w-full"
                             :aria-label="`Open ${file.display_name}`"
-                            @click="emit('open', file)"
+                            :data-testid="`talos-chat-media-open-${file.id}`"
+                            @click="openFile(file)"
                         >
                             <img
                                 v-if="thumbs[file.id]"
@@ -224,16 +294,23 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
                                 v-if="canShare(file)"
                                 class="mt-1.5 flex items-center justify-between gap-2 text-3xs text-[var(--talos-muted)]"
                             >
-                                <span>Readable by this chat</span>
+                                <!-- SF-MAJOR: the flag is global. `library_shared`
+                                     is read against the whole vault with no
+                                     session predicate, so the old label
+                                     ("Readable by this chat") promised a scope
+                                     the data does not have — switching it off
+                                     here withdraws the document from EVERY
+                                     chat. -->
+                                <span>Any chat may read it</span>
                                 <input
                                     type="checkbox"
                                     role="switch"
                                     :data-testid="`talos-chat-media-share-${file.id}`"
                                     :aria-label="`Let the model read ${file.display_name}`"
                                     :checked="shared(file)"
-                                    :disabled="busyFileId === file.id"
+                                    :disabled="busy.has(file.id)"
                                     class="size-4 accent-[var(--talos-accent)]"
-                                    @change="toggleShared(file)"
+                                    @change="toggleShared(file, $event)"
                                 >
                             </label>
                             <p v-else class="mt-1.5 text-3xs text-[var(--talos-muted)] opacity-80">
@@ -242,6 +319,44 @@ const TABS: Array<{ value: typeof tab.value; label: string }> = [
                         </div>
                     </li>
                 </ul>
+            </div>
+
+            <!-- The viewer, in the same surface: images full-bleed, documents as
+                 their hydrated text. The list holds bounded previews only, so
+                 the full body is read here and nowhere else. -->
+            <div
+                v-if="opened"
+                data-testid="talos-chat-media-viewer"
+                class="absolute inset-0 z-10 flex flex-col bg-[var(--talos-bg,var(--background))]"
+            >
+                <header class="flex items-center gap-2 border-b border-[var(--talos-border)] px-3 py-2.5">
+                    <p class="min-w-0 flex-1 truncate text-xs text-[var(--talos-text)]">{{ opened.display_name }}</p>
+                    <button
+                        type="button"
+                        data-testid="talos-chat-media-viewer-close"
+                        aria-label="Close file"
+                        class="talos-pressable -mr-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-[var(--talos-muted)]"
+                        @click="closeFile"
+                    >
+                        <X class="size-4" aria-hidden="true" />
+                    </button>
+                </header>
+                <div class="min-h-0 flex-1 overflow-auto p-3">
+                    <p v-if="openingFailed" class="py-8 text-center text-xs text-[var(--talos-muted)]">
+                        TALOS could not read this file. It may still be processing, or the copy on this device is gone.
+                    </p>
+                    <img
+                        v-else-if="openedUrl"
+                        :src="openedUrl"
+                        :alt="opened.display_name"
+                        class="mx-auto max-h-full max-w-full object-contain"
+                    >
+                    <pre
+                        v-else-if="openedText !== null"
+                        class="whitespace-pre-wrap break-words text-2xs leading-5 text-[var(--talos-text)] [overflow-wrap:anywhere]"
+                    >{{ openedText }}</pre>
+                    <p v-else class="py-8 text-center text-xs text-[var(--talos-muted)]">Opening…</p>
+                </div>
             </div>
         </section>
     </Teleport>

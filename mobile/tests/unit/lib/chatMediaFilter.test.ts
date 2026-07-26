@@ -108,4 +108,13 @@ describe('metadata parsers', () => {
         expect(parseVaultOrigin({ origin: 'generated' })).toBe('generated')
         expect(parseVaultOrigin({ origin: 'nonsense' })).toBe('uploaded')
     })
+
+    it('an attached file still obeys the origin filter it is asked for', () => {
+        // `alsoFileIds` admits by id; it must not also smuggle a file past the
+        // uploaded/generated filter the caller asked for.
+        const ids = filterLibraryFiles(ALL, {
+            query: '', origin: 'generated', sessionId: 's1', alsoFileIds: ['ccc'],
+        }).map((f) => f.id)
+        expect(ids).toEqual(['bb'])
+    })
 })

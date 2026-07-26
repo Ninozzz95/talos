@@ -12,6 +12,8 @@ defineProps<{
     busy: boolean
     /** F6 — tablet split view: the panel owns the hamburger, hide ours. */
     hideMenu?: boolean
+    /** False before a chat exists; the media entry then opens nothing. */
+    canOpenMedia?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,6 +55,7 @@ const emit = defineEmits<{
                 @new-chat="emit('newChat')"
                 @rename="emit('rename', $event)"
                 @delete="emit('delete')"
+                :can-open-media="canOpenMedia"
                 @export="emit('export')"
                 @media="emit('media')"
             />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
     AlertTriangle, CheckCircle2, Database, FileText, FolderPlus, Image as ImageIcon,
     EllipsisVertical, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
@@ -72,24 +73,11 @@ const grouped = computed(() => {
     return [...groups.entries()].map(([title, files]) => ({ title, files }))
 })
 
-// Thumbnails: an object URL per image file, loaded lazily and revoked on unmount.
-const thumbs = ref<Record<string, string>>({})
-const loadingThumbs = new Set<string>()
-watch(filtered, async (files) => {
-    for (const file of files) {
-        if (!isImage(file) || file.status !== 'available' || thumbs.value[file.id] || loadingThumbs.has(file.id)) continue
-        loadingThumbs.add(file.id) // guard: overlapping runs (rapid search) must not double-load + leak
-        const url = await attachments.previewUrl(file.id)
-        loadingThumbs.delete(file.id)
-        if (!url) continue
-        if (thumbs.value[file.id]) { URL.revokeObjectURL(url); continue } // lost the race — free the loser
-        thumbs.value = { ...thumbs.value, [file.id]: url }
-    }
-}, { immediate: true })
-onBeforeUnmount(() => {
-    for (const url of Object.values(thumbs.value)) URL.revokeObjectURL(url)
-    closeLightbox()
-})
+// Thumbnails: one implementation, shared with the per-chat gallery. This screen
+// held the original; leaving a second copy here was how the in-flight leak
+// stayed fixed in one place and open in the other.
+const { thumbs } = useTalosVaultThumbnails(filtered, attachments.previewUrl)
+onBeforeUnmount(closeLightbox)
 
 // Open: images in a lightbox, documents in a text viewer (both in-app).
 const lightboxFile = ref<TalosLocalVaultFile | null>(null)

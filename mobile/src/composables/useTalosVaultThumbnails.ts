@@ -22,8 +22,17 @@ export function useTalosVaultThumbnails(
 ) {
     const thumbs = ref<Record<string, string>>({})
     const loading = new Set<string>()
+    /**
+     * SF-MAJOR: the release below can only revoke URLs that already LANDED. A
+     * preview resolving after the component is gone created a blob nobody would
+     * ever free — and closing a gallery before its images finish is the normal
+     * mobile gesture, so this stranded one blob per in-flight image, every time.
+     * Exactly the failure this file claims to exist to prevent.
+     */
+    let disposed = false
 
     watch(files, async (current) => {
+        if (disposed) return
         for (const file of current) {
             if (!file.media_type.startsWith('image/')) continue
             if (file.status !== 'available') continue
@@ -32,6 +41,7 @@ export function useTalosVaultThumbnails(
             const url = await previewUrl(file.id).catch(() => null)
             loading.delete(file.id)
             if (!url) continue
+            if (disposed) { URL.revokeObjectURL(url); return }
             if (thumbs.value[file.id]) {
                 // Lost the race against another run — free the loser rather
                 // than overwrite the reference and strand the blob.
@@ -47,7 +57,10 @@ export function useTalosVaultThumbnails(
         thumbs.value = {}
     }
 
-    onBeforeUnmount(releaseTalosThumbnails)
+    onBeforeUnmount(() => {
+        disposed = true
+        releaseTalosThumbnails()
+    })
 
     return { thumbs, releaseTalosThumbnails }
 }

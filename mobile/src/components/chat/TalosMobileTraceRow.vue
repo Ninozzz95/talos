@@ -45,14 +45,15 @@ defineEmits<{ open: [] }>()
         :type="interactive ? 'button' : undefined"
         :data-testid="testid"
         :aria-haspopup="interactive ? 'dialog' : undefined"
-        class="group flex min-h-9 w-full items-center gap-2 rounded-lg pr-1 text-left text-[var(--talos-muted)] transition-colors duration-150"
-        :class="[
-            interactive ? 'talos-pressable hover:text-[var(--talos-text)]' : '',
-            live ? 'talos-typing-pulse' : '',
-        ]"
-        @click="interactive && $emit('open')"
+        class="group flex min-h-11 w-full items-center gap-2 rounded-lg pr-1 text-left text-[var(--talos-muted)] transition-colors duration-150"
+        :class="interactive ? 'talos-pressable hover:text-[var(--talos-text)]' : ''"
+        v-on="interactive ? { click: () => $emit('open') } : {}"
     >
-        <span class="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+        <span
+            class="flex size-4 shrink-0 items-center justify-center"
+            :class="live ? 'talos-trace-live' : ''"
+            aria-hidden="true"
+        >
             <slot name="icon">
                 <span class="size-1.5 rounded-full bg-current opacity-70" />
             </slot>

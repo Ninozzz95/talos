@@ -103,6 +103,23 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     // dropped an argument the direct implementations honoured, and the broken
     // one was the production path.
     expect(await repository.listSessionAttachmentFileIds(alpha.id)).toEqual([vaultFile.id])
+    // The SAME file attached to a second message must appear ONCE — dropping
+    // DISTINCT (sqlite) or the Set (memory) is otherwise undetectable, and the
+    // gallery would render duplicate tiles.
+    await repository.appendMessage({
+        id: 'message-a4',
+        session_id: alpha.id,
+        role: 'user',
+        content: 'The same file again.',
+        state: 'persisted',
+        created_at: '2026-07-22T10:00:05.000Z',
+        attachments: [{
+            id: 'binding-alpha-2',
+            vault_file_id: vaultFile.id,
+            grant_id: grant.id,
+        }],
+    })
+    expect(await repository.listSessionAttachmentFileIds(alpha.id)).toEqual([vaultFile.id])
     expect(await repository.listSessionAttachmentFileIds('session-that-does-not-exist')).toEqual([])
 
     expect((await repository.listMessageAttachments(messageWithFile.id))).toEqual([
@@ -194,6 +211,7 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
         'Remember alpha.',
         'Alpha is recorded.',
         'Use the attached file.',
+        'The same file again.',
     ])
 
     const renamed = await repository.renameSession(alpha.id, '  Durable alpha  ')

@@ -57,10 +57,16 @@ test('header and sidebar actions expose accessible names and 44x44 touch targets
     await page.goto('/')
     await expect(page.locator(HEADER)).toBeVisible()
     const headerButtons = page.locator(`${HEADER} button`)
-    // hamburger + chat title (owner 2026-07-26: opens this chat's media, the way
-    // a messaging app opens chat info) + 3-dot chat options
-    await expect(headerButtons).toHaveCount(3)
-    for (let i = 0; i < 3; i += 1) {
+    // Two on a fresh app: hamburger + 3-dot chat options. Sessions are created
+    // lazily, and with no chat there is nothing to show media FOR — so the
+    // title stays a plain <p> rather than a button that opens nothing. That is
+    // the fix for a dead affordance, and it is asserted below.
+    await expect(headerButtons).toHaveCount(2)
+    await expect(page.getByTestId('talos-mobile-header-title')).toHaveCount(1)
+    await expect(page.locator(`${HEADER} button[data-testid="talos-mobile-header-title"]`))
+        .toHaveCount(0)
+    const count = await headerButtons.count()
+    for (let i = 0; i < count; i += 1) {
         const button = headerButtons.nth(i)
         expect(await button.getAttribute('aria-label')).toBeTruthy()
         const box = await button.boundingBox()
@@ -243,4 +249,45 @@ test('shell renders a fail-closed fallback when upstream ui components are disab
     await expect(page.locator(HEADER)).toHaveCount(0)
     await page.locator('[data-testid="ui-fallback"] [data-nav="context"]').click()
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'context')
+})
+
+test('the chat title opens that chat\u2019s media once a chat exists, and not before', async ({ page }) => {
+    // Owner 2026-07-26. The gallery had zero e2e coverage: neither entry point,
+    // neither header mode — which is how a missing icon import reached a commit.
+    await page.addInitScript(() => {
+        window.localStorage.setItem('talos.mobile.settings.v1', JSON.stringify({
+            shell: { immersive_header: false },
+        }))
+    })
+    await page.goto('/')
+    await expect(page.locator(HEADER)).toBeVisible()
+
+    // No chat yet: the title is inert and the menu offers no media entry.
+    await expect(page.locator(`${HEADER} button[data-testid="talos-mobile-header-title"]`))
+        .toHaveCount(0)
+    await page.locator(`${HEADER} [aria-label="Chat options"]`).first().click()
+    await expect(page.getByTestId('talos-chat-options-media')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+
+    // Create one, and both entry points appear.
+    await page.locator(`${HEADER} [aria-label="Chat options"]`).first().click()
+    await page.getByRole('menuitem', { name: 'New chat' }).click()
+    await expect(page.locator(`${HEADER} button[data-testid="talos-mobile-header-title"]`))
+        .toHaveCount(1, { timeout: 15_000 })
+
+    await page.locator(`${HEADER} [aria-label="Chat options"]`).first().click()
+    const mediaEntry = page.getByTestId('talos-chat-options-media')
+    await expect(mediaEntry).toBeVisible()
+    await mediaEntry.click()
+
+    const panel = page.getByTestId('talos-chat-media-panel')
+    await expect(panel).toBeVisible()
+    // It names the chat it belongs to — the owner's "che fa capire che sia
+    // relativo a quella chat".
+    await expect(page.getByTestId('talos-chat-media-scope')).toBeVisible()
+    await expect(page.getByTestId('talos-chat-media-empty')).toBeVisible()
+
+    // Escape closes it, like every other modal surface in the app.
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
 })
