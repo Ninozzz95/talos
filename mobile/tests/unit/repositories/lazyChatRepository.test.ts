@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createLazyChatRepository } from '@/repositories/lazyChatRepository'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
+import { exerciseChatRepositoryContract } from './chatRepository.contract'
 
 describe('createLazyChatRepository', () => {
     it('loads and initializes the concrete repository exactly once for concurrent callers', async () => {
@@ -61,5 +62,19 @@ describe('createLazyChatRepository', () => {
 
         expect(firstClose).toHaveBeenCalledTimes(1)
         expect(loader).toHaveBeenCalledTimes(2)
+    })
+})
+
+/**
+ * SF-CRITICAL (2026-07-26): this wrapper is what the app actually uses, and it
+ * dropped every paging argument — so the shipped build never paged, and
+ * scrolling up prepended the whole thread again, doubling it each time and
+ * sending the model each message twice. Running the SHARED contract against
+ * the wrapper is the only thing that can catch a delegation that forgets an
+ * argument, because the type system cannot.
+ */
+describe('lazy repository honours the full contract (not just the method names)', () => {
+    it('behaves exactly like the repository it wraps', async () => {
+        await exerciseChatRepositoryContract(createLazyChatRepository(async () => createMemoryChatRepository()))
     })
 })

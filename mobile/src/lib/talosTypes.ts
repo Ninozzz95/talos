@@ -1301,39 +1301,3 @@ export type TalosRestoreValidation = {
     compatible: boolean
 }
 
-export type TalosCommandId =
-    | 'new_session'
-    | 'send_message'
-    | 'open_browse'
-    | 'attach_file'
-    | 'open_context_vault'
-    | 'run_avm_compare'
-    | 'open_trace_replay'
-    | 'recover_failed_node'
-    | 'open_benchmark_workbench'
-    | 'open_model_center'
-    | 'open_doctor'
-    | 'open_audit_log'
-    | 'open_policy_panel'
-    | 'open_shell_policy_panel'
-    | 'open_backup_panel'
-    | 'validate_backup_restore'
-    | 'export_report'
-    | 'open_notes'
-    | 'open_tasks'
-    | 'open_calendar_drafts'
-    | 'open_email_triage'
-    | 'create_email_draft'
-    | 'send_email_draft'
-
-export type TalosCommandRisk = 'low' | 'medium' | 'high' | 'critical'
-
-export type TalosCommand = {
-    id: TalosCommandId
-    label: string
-    description: string
-    category: 'chat' | 'context' | 'run' | 'benchmark' | 'model' | 'system' | 'report' | 'productivity' | 'email'
-    risk: TalosCommandRisk
-    capability?: string
-    disabledReason?: string
-}

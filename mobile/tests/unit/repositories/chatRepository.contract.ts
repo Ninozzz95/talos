@@ -319,4 +319,38 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     await repository.deleteNote('note-2')
     expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-1'])
     await expect(repository.deleteNote('note-2')).rejects.toThrow('TALOS_NOTE_NOT_FOUND')
+
+    // SF-CRITICAL (2026-07-26): the LAZY wrapper — the one production uses —
+    // silently dropped the paging options, so the shipped app never paged and
+    // scrolling up re-prepended the whole thread, doubling it every time.
+    // TypeScript cannot catch that: a one-argument function satisfies a
+    // two-argument signature. Only the contract, run against every
+    // implementation including the wrapper, can.
+    const pagingSession = await repository.createSession({
+        id: 'session-paging',
+        title: 'Paging',
+        active_model_profile_id: null,
+        created_at: '2026-07-22T12:00:00.000Z',
+    })
+    for (let index = 0; index < 6; index += 1) {
+        await repository.appendMessage({
+            id: `paging-${index}`,
+            session_id: pagingSession.id,
+            role: index % 2 === 0 ? 'user' : 'assistant',
+            content: `paging ${index}`,
+            state: 'persisted',
+            created_at: `2026-07-22T12:00:0${index}.000Z`,
+        })
+    }
+    const newest = await repository.listMessages(pagingSession.id, { limit: 2 })
+    expect(newest.map((message) => message.content)).toEqual(['paging 4', 'paging 5'])
+    const older = await repository.listMessages(pagingSession.id, {
+        limit: 2,
+        before: { ordinal: newest[0]!.ordinal, id: newest[0]!.id },
+    })
+    expect(older.map((message) => message.content)).toEqual(['paging 2', 'paging 3'])
+    // No overlap between pages: an inclusive cursor would duplicate a message.
+    expect(older.some((message) => newest.some((row) => row.id === message.id))).toBe(false)
+    const everything = await repository.listMessages(pagingSession.id)
+    expect(everything).toHaveLength(6)
 }

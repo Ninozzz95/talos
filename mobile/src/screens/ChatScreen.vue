@@ -176,6 +176,8 @@ const motionSceneActive = computed(() =>
 // auto-scroll outright, ANY upward scroll detaches (no threshold race with
 // the stream), rejoining is explicit via the back-to-bottom pill.
 const chatScroll = ref<HTMLElement | null>(null)
+/** How close to the top counts as "about to need the previous page". */
+const OLDER_PAGE_TRIGGER_PX = 320
 const liveEdge = createTalosChatLiveEdge()
 
 function onChatScroll(): void {
@@ -185,7 +187,11 @@ function onChatScroll(): void {
     // Defect #4: older messages arrive as you approach the top. One screen of
     // margin, so the page is already there by the time you would have seen the
     // gap — and never while a page is in flight.
-    if (el.scrollTop <= el.clientHeight && chat.state.hasOlderMessages && !chat.state.loadingOlderMessages) {
+    // SF: `scrollTop <= clientHeight` is permanently TRUE whenever the thread
+    // is shorter than two screens, so a short page kept loading the next one
+    // until the whole history was back — the old behaviour, restored quietly.
+    // A fixed margin only fires when the user is actually near the top.
+    if (el.scrollTop < OLDER_PAGE_TRIGGER_PX && chat.state.hasOlderMessages && !chat.state.loadingOlderMessages) {
         void loadOlderPage()
     }
 }
@@ -693,6 +699,8 @@ onBeforeUnmount(() => {
                     :model-labels="modelLabels"
                     :message-style="settings.state.chat_layout.message_style"
                     :text-scale="settings.state.chat_layout.bubble_scale"
+                    :has-older-messages="chat.state.hasOlderMessages"
+                    :loading-older-messages="chat.state.loadingOlderMessages"
                     @reuse="reuseMessage"
                     @resend="resendMessage"
                     @retry="retryAssistantMessage"

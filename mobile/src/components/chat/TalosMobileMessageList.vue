@@ -18,6 +18,9 @@ const props = defineProps<{
     messageStyle?: 'sections' | 'bubbles'
     /** Owner 2026-07-25: real chat text size (was a dead preference). */
     textScale?: 'compact' | 'balanced' | 'expanded'
+    /** Defect #4: true while pages above the window remain unloaded. */
+    hasOlderMessages?: boolean
+    loadingOlderMessages?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -141,7 +144,11 @@ const hasPreviousUserById = computed(() => {
 })
 
 function hasPreviousUser(messageId: string): boolean {
-    return hasPreviousUserById.value.get(messageId) ?? false
+    if (hasPreviousUserById.value.get(messageId) === true) return true
+    // Defect #4: the window is paged. An assistant message that OPENS the
+    // loaded page usually has its prompt on the page above, so hiding Retry
+    // there would make the action blink in and out as you scroll.
+    return props.hasOlderMessages === true && props.messages[0]?.id === messageId
 }
 
 async function copyMessage(message: TalosMobileMessageView): Promise<void> {
@@ -168,6 +175,19 @@ function formatBytes(value: number): string {
         :data-text-scale="props.textScale ?? 'balanced'"
         :style="{ fontSize: `calc(${props.textScale === 'compact' ? '0.9375rem' : props.textScale === 'expanded' ? '1.1875rem' : '1.0625rem'} * var(--talos-ui-scale, 1))` }"
     >
+        <!-- Defect #4 (SF): paging had no visible state at all — no spinner and
+             no affordance, so on a thread whose first page did not overflow
+             there was no way to reach the older messages, and no sign the app
+             was working when it was. -->
+        <div
+            v-if="props.hasOlderMessages"
+            data-testid="talos-older-messages"
+            class="mb-2 flex items-center justify-center gap-2 text-2xs text-[var(--talos-muted)]"
+        >
+            <span v-if="props.loadingOlderMessages" class="talos-typing-pulse" aria-hidden="true"></span>
+            <span>{{ props.loadingOlderMessages ? 'Loading earlier messages…' : 'Scroll up for earlier messages' }}</span>
+        </div>
+
         <article
             v-for="(message, index) in messages"
             :key="message.id"
