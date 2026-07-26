@@ -8,6 +8,7 @@ import type {
 import { parseTalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'
 import { stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
+import type { TalosToolDefinition } from '@/lib/tools/registry'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 import type {
@@ -96,6 +97,8 @@ export interface ChatCompletionResult {
 export type ChatCompletion = (
     turns: ChatTurn[],
     stream?: TalosStreamHandlers,
+    /** Tools this turn may call; omitted by callers that have no suite. */
+    tools?: readonly TalosToolDefinition<never>[],
 ) => Promise<ChatCompletionResult>
 export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 
