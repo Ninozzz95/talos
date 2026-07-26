@@ -10,6 +10,8 @@ import type {
 } from '@/lib/chat/providerContracts'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
+import { talosToolsForOpenAi } from '@/lib/tools/registry'
+import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
 import {
     malformedProviderResponse,
     normalizeHttpEndpoint,
@@ -135,8 +137,29 @@ function compatibleCompletionData(
 ): Record<string, unknown> {
     const messages: Array<{ role: string; content: string | Array<Record<string, unknown>> }> = []
     if (input.system?.trim()) messages.push({ role: 'system', content: input.system })
-    messages.push(...input.turns.map((turn) => ({ role: turn.role, content: openAiTurnContent(turn) })))
+    for (const turn of input.turns) {
+        if (turn.role === 'tool') {
+            // A tool RESULT is its own role here, tied to the call it answers.
+            messages.push({ role: 'tool', content: turn.content, tool_call_id: turn.toolCallId ?? '' } as never)
+            continue
+        }
+        const message: Record<string, unknown> = { role: turn.role, content: openAiTurnContent(turn) }
+        if (turn.toolCalls?.length) {
+            // The assistant turn that REQUESTED tools has to carry the calls, or
+            // the provider rejects the tool results that follow it.
+            message.tool_calls = turn.toolCalls.map((call) => ({
+                id: call.id,
+                type: 'function',
+                function: { name: call.name, arguments: call.arguments },
+            }))
+        }
+        messages.push(message as never)
+    }
     const data: Record<string, unknown> = { model: input.model.id, messages, stream }
+    if (input.tools?.length) {
+        data.tools = talosToolsForOpenAi(input.tools)
+        data.tool_choice = 'auto'
+    }
     if (config.provider === 'openrouter' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning')) {
         data.reasoning = { effort: input.effort }
     }
@@ -183,12 +206,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete')
             const choice = parsed.data.choices[0]!
             const text = contentText(choice.message.content)
-            if (!text) throw malformedProviderResponse(config.provider, 'complete')
+            const toolCalls = parseOpenAiToolCalls(choice.message)
+            // A tool-calling turn legitimately has NO text: refusing it as
+            // malformed would break the loop before it started.
+            if (!text && toolCalls.length === 0) throw malformedProviderResponse(config.provider, 'complete')
             return {
                 text,
                 model: parsed.data.model ?? input.model.id,
                 finishReason: choice.finish_reason ?? null,
                 usage: numericUsage(parsed.data.usage),
+                ...(toolCalls.length ? { toolCalls } : {}),
             }
         },
         // F2-T4: native fetch SSE (`choices[0].delta.content`). OpenAI blocks
@@ -197,6 +224,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
         async streamComplete(input, credential, handlers) {
             const apiKey = requireProviderApiKey(config.provider, 'complete', credential)
             const baseUrl = compatibleBaseUrl(config, credential, 'complete')
+            const toolCalls = createOpenAiToolCallAccumulator()
             const stream = await talosStreamText({
                 url: `${baseUrl}/chat/completions`,
                 headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -205,6 +233,7 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 accumulator: createTalosSseAccumulator(),
                 extract: (payload) => {
                     const event = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string | null } }> }
+                    toolCalls.push(event)
                     return event.choices?.[0]?.delta?.content ?? ''
                 },
                 // Defect #5: DeepSeek streams `reasoning_content`, OpenRouter
@@ -223,8 +252,14 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                 onChunk: handlers.onChunk,
                 onReasoning: handlers.onReasoning,
             })
-            if (!stream.text) throw malformedProviderResponse(config.provider, 'complete')
-            return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
+            const calls = toolCalls.calls()
+            if (!stream.text && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete')
+            return {
+                text: stream.text,
+                model: input.model.id,
+                reasoning: stream.reasoning || undefined,
+                ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),
+            }
         },
     }
 }

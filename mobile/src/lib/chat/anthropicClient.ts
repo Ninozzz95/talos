@@ -26,11 +26,16 @@ const THINKING_BUDGET: Readonly<Record<string, number>> = Object.freeze({
 })
 
 export interface AnthropicChatTurn {
-    // Debt A1: the IR carries 'tool'; this adapter maps it onto a user turn until
-    // real tool blocks are wired (Anthropic expects tool_result content blocks).
+    // The IR carries 'tool'; Anthropic has no such role, so a result becomes a
+    // USER message of tool_result blocks and the call an ASSISTANT message of
+    // tool_use blocks. Those blocks are now really wired, not approximated.
     role: 'user' | 'assistant' | 'tool'
     content: string
     parts?: import('@/lib/chat/attachmentContracts').TalosMobileInputPart[]
+    /** Set on the assistant turn that requested tools. */
+    toolCalls?: Array<{ id: string; name: string; arguments: string }>
+    /** Set on a tool turn: which call this result answers. */
+    toolCallId?: string
 }
 
 export interface BuildAnthropicRequestInput {
@@ -40,6 +45,8 @@ export interface BuildAnthropicRequestInput {
     effort?: string
     thinking?: boolean
     maxTokens?: number
+    /** Already translated to Anthropic's `input_schema` shape. */
+    tools?: unknown[]
 }
 
 export interface AnthropicHttpRequest {
@@ -57,6 +64,15 @@ export class AnthropicChatError extends Error {
     }
 }
 
+/** Arguments travel as a JSON string internally; Anthropic wants the object. */
+function safeToolInput(argumentsJson: string): unknown {
+    try {
+        return JSON.parse(argumentsJson || '{}')
+    } catch {
+        return {}
+    }
+}
+
 export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicRequestInput): AnthropicHttpRequest {
     const budget = input.thinking === true && input.effort && input.effort !== 'off'
         ? THINKING_BUDGET[input.effort] ?? 0
@@ -68,8 +84,23 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
         model: input.model,
         max_tokens: maxTokens,
         messages: input.turns.map((turn) => ({
-            role: turn.role,
-            content: !turn.parts?.length
+            // Anthropic has no `tool` role: a result is a USER message carrying
+            // tool_result blocks, and the call itself is an ASSISTANT message
+            // carrying tool_use blocks. Getting this wrong is rejected outright.
+            role: turn.role === 'tool' ? 'user' : turn.role,
+            content: turn.role === 'tool'
+                ? [{ type: 'tool_result', tool_use_id: turn.toolCallId ?? '', content: turn.content }]
+                : turn.toolCalls?.length
+                    ? [
+                        ...(turn.content ? [{ type: 'text', text: turn.content }] : []),
+                        ...turn.toolCalls.map((call) => ({
+                            type: 'tool_use',
+                            id: call.id,
+                            name: call.name,
+                            input: safeToolInput(call.arguments),
+                        })),
+                    ]
+                    : !turn.parts?.length
                 ? turn.content
                 : [
                     ...(turn.content ? [{ type: 'text', text: turn.content }] : []),
@@ -97,6 +128,7 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
     if (typeof input.system === 'string' && input.system.trim() !== '') {
         body.system = input.system
     }
+    if (input.tools?.length) body.tools = input.tools
     if (useThinking) {
         // Anthropic requires the default temperature when extended thinking is on.
         body.thinking = { type: 'enabled', budget_tokens: budget }

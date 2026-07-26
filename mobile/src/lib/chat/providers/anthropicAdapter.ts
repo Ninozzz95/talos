@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { ANTHROPIC_VERSION, buildAnthropicRequest } from '@/lib/chat/anthropicClient'
+import { talosToolsForAnthropic } from '@/lib/tools/registry'
+import { createAnthropicToolCallAccumulator, parseAnthropicToolCalls } from '@/lib/tools/wire'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import type { TalosMobileProviderAdapter } from '@/lib/chat/providerContracts'
 import {
@@ -83,6 +85,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             system: input.system,
             effort: input.effort,
             thinking: input.thinking,
+            ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
         })
         const response = await transport.request({
             method: 'POST',
@@ -98,12 +101,16 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             .filter((part) => part.type === 'text')
             .map((part) => part.text ?? '')
             .join('')
-        if (!text) throw malformedProviderResponse('anthropic', 'complete')
+        const toolCalls = parseAnthropicToolCalls(parsed.data.content)
+        // A turn that only requests tools carries no text — refusing it as
+        // malformed would break the loop before it began.
+        if (!text && toolCalls.length === 0) throw malformedProviderResponse('anthropic', 'complete')
         return {
             text,
             model: parsed.data.model ?? input.model.id,
             finishReason: parsed.data.stop_reason ?? null,
             usage: parsed.data.usage ?? null,
+            ...(toolCalls.length ? { toolCalls } : {}),
         }
     },
     // F2-T4: native fetch SSE. Anthropic permits browser-origin calls only with
@@ -117,7 +124,9 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             system: input.system,
             effort: input.effort,
             thinking: input.thinking,
+            ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
         })
+        const toolCalls = createAnthropicToolCallAccumulator()
         const stream = await talosStreamText({
             url: request.url,
             headers: { ...request.headers, 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -126,6 +135,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             accumulator: createTalosSseAccumulator(),
             extract: (payload) => {
                 const event = JSON.parse(payload) as { type?: string; delta?: { type?: string; text?: string } }
+                toolCalls.push(event)
                 return event.type === 'content_block_delta' && event.delta?.type === 'text_delta'
                     ? event.delta.text ?? ''
                     : ''
@@ -141,7 +151,13 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
         })
-        if (!stream.text) throw malformedProviderResponse('anthropic', 'complete')
-        return { text: stream.text, model: input.model.id, reasoning: stream.reasoning || undefined }
+        const calls = toolCalls.calls()
+        if (!stream.text && calls.length === 0) throw malformedProviderResponse('anthropic', 'complete')
+        return {
+            text: stream.text,
+            model: input.model.id,
+            reasoning: stream.reasoning || undefined,
+            ...(calls.length ? { toolCalls: calls, finishReason: 'tool_use' } : {}),
+        }
     },
 }
