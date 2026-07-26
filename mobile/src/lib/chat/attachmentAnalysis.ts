@@ -31,6 +31,19 @@ const BINARY_TYPES: Record<string, { extensions: readonly string[]; mediaTypes: 
         extensions: ['docx'],
         mediaTypes: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
     },
+    // Owner testing 2026-07-26: F2 generated spreadsheets and decks that this
+    // very allowlist then refused, so the model reported a save that never
+    // happened. The list was written for USER UPLOADS, before TALOS could make
+    // documents of its own; docx was on it and its two siblings were not, which
+    // is why Word worked and Excel did not.
+    xlsx: {
+        extensions: ['xlsx'],
+        mediaTypes: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    },
+    pptx: {
+        extensions: ['pptx'],
+        mediaTypes: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+    },
 }
 
 function fileExtension(name: string): string {

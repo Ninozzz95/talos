@@ -132,21 +132,26 @@ function ensureTail(): HTMLElement | null {
         tailHost.className = 'talos-stream-tail'
         tailHost.setAttribute('data-testid', 'talos-stream-tail')
     }
-    if (!caretEl) {
+    // Owner 2026-07-26: "l'animazione smooth fade non funziona, c'è ancora il
+    // prompt cursore". It was still there because the caret is painted by the
+    // tail machinery regardless of mode — and a blinking cursor IS the
+    // typewriter. Fade means the text simply appears; nothing points at where
+    // the next letter will land.
+    if (!caretEl && !fadeMode.value) {
         caretEl = document.createElement('span')
         caretEl.className = 'talos-stream-caret'
         caretEl.setAttribute('data-testid', 'talos-stream-caret')
         caretEl.setAttribute('aria-hidden', 'true')
     }
     if (tailHost.parentElement !== target) target.append(tailHost)
-    if (caretEl.parentElement !== tailHost) tailHost.append(caretEl)
+    if (caretEl && caretEl.parentElement !== tailHost) tailHost.append(caretEl)
     return tailHost
 }
 
 function appendChars(host: HTMLElement, text: string): void {
     for (const char of text) {
         if (char === '\n' || char === ' ' || char === '\t') {
-            host.insertBefore(document.createTextNode(char), caretEl)
+            host.insertBefore(document.createTextNode(char), caretEl ?? null)
             continue
         }
         // One span per letter: the ONLY node that animates is the new one, so
@@ -154,7 +159,7 @@ function appendChars(host: HTMLElement, text: string): void {
         const span = document.createElement('span')
         span.className = fadeMode.value ? 'talos-stream-char talos-stream-char--fade' : 'talos-stream-char'
         span.textContent = char
-        host.insertBefore(span, caretEl)
+        host.insertBefore(span, caretEl ?? null)
     }
 }
 
