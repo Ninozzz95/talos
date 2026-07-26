@@ -60,6 +60,8 @@ export interface TalosMobileAttachmentsController {
     ): Promise<TalosLocalVaultFile>
     /** Object URL for a file's bytes (image thumbnail / open). Caller revokes it. */
     previewUrl(fileId: string): Promise<string | null>
+    /** The raw bytes, for handing a file to another app. */
+    previewBytes(fileId: string): Promise<Uint8Array | null>
     /** Full extracted text for one file (the list holds bounded previews). */
     hydrateText(fileId: string): Promise<string | null>
     attachExisting(file: TalosLocalVaultFile): Promise<boolean>
@@ -262,6 +264,11 @@ export function useTalosMobileAttachments(
         return result.file
     }
 
+    async function previewBytes(fileId: string): Promise<Uint8Array | null> {
+        const preview = await options.vault.readFilePreview(fileId)
+        return preview?.bytes ?? null
+    }
+
     async function previewUrl(fileId: string): Promise<string | null> {
         try {
             const preview = await options.vault.readFilePreview(fileId)
@@ -407,6 +414,7 @@ export function useTalosMobileAttachments(
         saveGenerated,
         saveGeneratedBinary,
         previewUrl,
+        previewBytes,
         hydrateText,
         attachExisting,
         remove,

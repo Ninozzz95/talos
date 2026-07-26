@@ -12,6 +12,7 @@ import {
     parseVaultOriginSession,
 } from '@/lib/vaultLibrary'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
+import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 
 /**
  * The media of ONE chat — owner's idea, 2026-07-26:
@@ -49,6 +50,8 @@ const props = defineProps<{
     previewUrl: (fileId: string) => Promise<string | null>
     /** Full extracted text for ONE document, hydrated when it is opened. */
     readText: (fileId: string) => Promise<string | null>
+    /** Raw bytes, for handing a binary file to another app. */
+    readBytes: (fileId: string) => Promise<Uint8Array | null>
     setShared: (fileId: string, shared: boolean) => Promise<void>
 }>()
 
@@ -158,6 +161,27 @@ const openedText = ref<string | null>(null)
 const openingFailed = ref(false)
 
 async function openFile(file: TalosLocalVaultFile): Promise<void> {
+    // An Office file or a PDF has nothing to show in a text viewer; hand it to
+    // the app that owns that format rather than previewing it wrongly.
+    if (talosNeedsExternalOpen(file.media_type)) {
+        const { openTalosVaultFileExternally } = await import('@/services/openVaultFile')
+        failure.value = null
+        const bytes = await props.readBytes(file.id).catch(() => null)
+        if (!bytes) {
+            failure.value = `“${file.display_name}” could not be read from this device.`
+            return
+        }
+        try {
+            await openTalosVaultFileExternally({
+                displayName: file.display_name,
+                mediaType: file.media_type,
+                bytes,
+            })
+        } catch {
+            failure.value = `No app on this phone offered to open “${file.display_name}”.`
+        }
+        return
+    }
     opened.value = file
     openedUrl.value = null
     openedText.value = null

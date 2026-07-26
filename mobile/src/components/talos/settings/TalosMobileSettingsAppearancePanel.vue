@@ -97,6 +97,11 @@ function setInterfaceCategory(key: keyof typeof settings.state.motion_v6.interfa
     void settings.setMotionPreferences({ interface: { categories: { [key]: (event.target as HTMLInputElement).checked } } })
 }
 
+const STREAMING_ANIMATIONS = [
+    { value: 'typewriter', label: 'Typewriter' },
+    { value: 'fade', label: 'Smooth fade' },
+]
+
 const sectionTabClass = 'min-h-11 shrink-0 rounded-md border border-transparent px-3 text-sm font-medium text-[var(--talos-muted)] outline-none data-[state=active]:border-[var(--talos-accent-border)] data-[state=active]:bg-[var(--talos-panel)] data-[state=active]:text-[var(--talos-text)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]'
 const selectLabelClass = 'text-xs font-semibold uppercase text-[var(--talos-muted)]'
 const switchRowClass = 'flex min-h-14 cursor-pointer items-start justify-between gap-3 border-t border-[var(--talos-border)] py-3'
@@ -241,6 +246,18 @@ function onSwipeEnd(event: PointerEvent): void {
                 </label>
                 <!-- Owner 2026-07-25: this one is GLOBAL — menus, settings,
                      header, sheets and chat all read the same scale. -->
+                <label class="block">
+                    <span :class="selectLabelClass">Answer animation</span>
+                    <TalosThemedSelect
+                        class="mt-1"
+                        data-testid="talos-streaming-animation-select"
+                        :model-value="settings.state.shell.streaming_animation"
+                        :items="STREAMING_ANIMATIONS"
+                        aria-label="Answer animation"
+                        @update:model-value="settings.setShell({ streaming_animation: $event as 'typewriter' | 'fade' })"
+                    />
+                </label>
+
                 <label class="block">
                     <span :class="selectLabelClass">Font size</span>
                     <TalosThemedSelect
