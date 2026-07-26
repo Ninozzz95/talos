@@ -17,6 +17,7 @@ interface FixtureOptions {
     eagerSlashCommandMenu?: boolean
     eagerModelCatalog?: boolean
     eagerModelAdvanced?: boolean
+    eagerToolset?: boolean
     syntheticSettingsEntry?: boolean
 }
 
@@ -32,6 +33,11 @@ function createFixture(options: FixtureOptions = {}): string {
     const slashCommandMenuKey = 'src/components/chat/TalosMobileSlashCommandMenu.vue'
     const modelCatalogKey = 'src/components/talos/models/TalosMobileModelCatalog.vue'
     const modelAdvancedKey = 'src/components/talos/models/TalosMobileModelAdvancedOptions.vue'
+    // The tool suite: loaded on the first send, never at boot.
+    const toolsetKey = 'src/lib/tools/toolset.ts'
+    const agentLoopKey = 'src/lib/tools/agentLoop.ts'
+    const toolConsentKey = 'src/components/chat/TalosMobileToolConsentSheet.vue'
+    const toolsetIsDynamic = options.eagerToolset !== true
     const sqliteIsDynamic = options.sqliteIsDynamic ?? true
     const messageRendererIsDynamic = options.eagerMessageRenderer !== true
     const messageOverflowMenuIsDynamic = options.eagerMessageOverflowMenu !== true
@@ -66,6 +72,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(messageOverflowMenuIsDynamic ? [] : [messageOverflowMenuKey]),
                 ...(promptEnhancerIsDynamic ? [] : [promptEnhancerKey]),
                 ...(slashCommandMenuIsDynamic ? [] : [slashCommandMenuKey]),
+                ...(toolsetIsDynamic ? [] : [toolsetKey]),
                 ...staticRouteKeys,
             ],
             dynamicImports: [
@@ -74,6 +81,9 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(messageOverflowMenuIsDynamic ? [messageOverflowMenuKey] : []),
                 ...(promptEnhancerIsDynamic ? [promptEnhancerKey] : []),
                 ...(slashCommandMenuIsDynamic ? [slashCommandMenuKey] : []),
+                ...(toolsetIsDynamic ? [toolsetKey] : []),
+                agentLoopKey,
+                toolConsentKey,
                 ...dynamicRouteKeys,
             ],
         },
@@ -104,6 +114,18 @@ function createFixture(options: FixtureOptions = {}): string {
         [modelAdvancedKey]: {
             file: 'assets/model-advanced.js',
             isDynamicEntry: modelAdvancedIsDynamic,
+        },
+        [toolsetKey]: {
+            file: 'assets/toolset.js',
+            isDynamicEntry: toolsetIsDynamic,
+        },
+        [agentLoopKey]: {
+            file: 'assets/agent-loop.js',
+            isDynamicEntry: true,
+        },
+        [toolConsentKey]: {
+            file: 'assets/tool-consent.js',
+            isDynamicEntry: true,
         },
     }
     for (const [index, sourceKey] of routeKeys.entries()) {
@@ -168,6 +190,15 @@ describe('initial JavaScript chunk contract', () => {
 
         expect(result.status).toBe(1)
         expect(result.stderr).toContain('TALOS_SQLITE_NOT_LAZY')
+    })
+
+    it('rejects the tool suite when it enters the static initial graph', () => {
+        // zod plus six tool bodies at boot is the same mistake the permission
+        // types made once already, and it cost 25KB of startup.
+        const result = verify(createFixture({ eagerToolset: true }))
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_TOOLSET_NOT_LAZY')
     })
 
     it('rejects an initial JavaScript graph over its byte budget', () => {

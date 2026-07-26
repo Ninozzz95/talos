@@ -502,6 +502,11 @@ export function useSettingsStore(): SettingsStore {
             state.shell = parsed.shell
             state.onboarding = parsed.onboarding
             state.security = parsed.security
+            // SF-MAJOR: this line was missing, so every tool-permission choice
+            // was discarded on the next launch and the gate silently reverted
+            // to its defaults. A user who set "never read my things" got
+            // "always allow" back after one restart — a silent escalation.
+            state.tools = parsed.tools
             state.tone = parsed.tone
         },
         async setShell(patch) {

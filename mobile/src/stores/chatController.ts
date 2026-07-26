@@ -222,6 +222,8 @@ export interface ChatController {
     readonly thinking: Ref<boolean>
     /** Tool names running right now, so the chat can say what TALOS is doing. */
     readonly toolActivity: Readonly<Ref<string[]>>
+    /** Deny whatever consent is open — the shell calls this when it re-locks. */
+    denyPendingToolConsent(): void
     /** A write waiting for the user's answer; null when nothing is pending. */
     readonly pendingToolConsent: Readonly<Ref<{
         title: string
@@ -377,15 +379,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     } | null>(null)
     let toolsetPromise: Promise<import('@/lib/tools/toolset').TalosToolset> | null = null
 
-    function askToolConsent(request: { tool: { title: string; description: string }; input: unknown }): Promise<boolean> {
+    /** SF-MAJOR: a pending request must die with the run it belongs to. */
+    function denyPendingToolConsent(): void {
+        pendingToolConsent.value?.deny()
+    }
+
+    function askToolConsent(
+        request: { tool: { title: string; description: string }; input: unknown },
+        signal?: AbortSignal,
+    ): Promise<boolean | 'busy'> {
         // Only one at a time: a second request while one is open would be a
-        // dialog the user cannot reason about, so it is refused.
-        if (pendingToolConsent.value) return Promise.resolve(false)
+        // dialog the user cannot reason about, so it is refused — and marked as
+        // a machine refusal, not attributed to the user.
+        if (pendingToolConsent.value) return Promise.resolve<'busy'>('busy')
+        // SF-MAJOR: Stop used to leave the sheet open and the send stuck with
+        // `sending` true. A cancelled request's honest answer is "deny".
+        if (signal?.aborted) return Promise.resolve(false)
         return new Promise<boolean>((resolve) => {
             const settle = (allowed: boolean): void => {
                 pendingToolConsent.value = null
                 resolve(allowed)
             }
+            signal?.addEventListener('abort', () => settle(false), { once: true })
             pendingToolConsent.value = {
                 title: request.tool.title,
                 description: request.tool.description,
@@ -623,10 +638,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const toolset = await (toolsetPromise ??= import('@/lib/tools/toolset')
                 .then(({ createTalosToolset }) => createTalosToolset({
                     repository: deps.chatRepository,
-                    readVaultFileText: (fileId) => deps.vaultService?.readFileText(fileId) ?? Promise.resolve(null),
+                    // Read through the SAME resolved service the rest of the
+                    // controller uses: reading the raw dep skipped the
+                    // unavailable-vault fallback, so library_search listed a
+                    // document that library_read then swore did not exist.
+                    readVaultFileText: (fileId) => vaultService.readFileText(fileId),
                     sessionTitles: async () => new Map(chat.sessions.map((session) => [session.id, session.title])),
-                    requestConsent: (request) => askToolConsent(request as never),
+                    // SF-MAJOR: with "let chats use your Library" OFF (the
+                    // default) the ambient injection reads nothing — but the
+                    // tools read everything, which is the same opt-out being
+                    // walked around one level up.
+                    libraryEnabled: () => deps.settings.state.shell?.library_context_enabled === true,
+                    requestConsent: (request) => askToolConsent(request as never, stream?.signal),
                 })))
+            // Evaluated now, from the live settings, so a permission changed a
+            // minute ago governs this message.
+            const offeredTools = toolset.offer(deps.settings.state.tools)
             const completeOnce = buildChatCompletion(
                 () => ({
                     profile,
@@ -645,9 +672,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const { runTalosAgentLoop } = await import('@/lib/tools/agentLoop')
             const { executeTalosTool } = await import('@/lib/tools/executor')
             const loop = await runTalosAgentLoop(payloadTurns, {
-                complete: (turns) => completeOnce(turns, stream, toolset.tools),
+                complete: (turns) => completeOnce(turns, stream, offeredTools),
                 execute: async (call) => {
-                    const tool = toolset.tools.find((entry: { name: string }) => entry.name === call.name)
+                    const tool = offeredTools.find((entry: { name: string }) => entry.name === call.name)
                     if (!tool) {
                         // A model can hallucinate a tool name. Saying so is more
                         // useful than failing the turn.
@@ -663,8 +690,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 },
                 onToolRound: (calls) => { toolActivity.value = calls.map((call) => call.name) },
             })
-            toolActivity.value = []
             const completion = loop
+            toolActivity.value = []
             const raw = completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
             // reply and surfaced as a toast — the user decides, never auto-applied.
@@ -685,7 +712,35 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const { text: finalText, blocks } = autosaveGenerated
                 ? extractLibrarySaveBlocks(text)
                 : { text, blocks: [] as ReturnType<typeof extractLibrarySaveBlocks>['blocks'] }
+            // SF-MAJOR: this write never touched the permission gate, while
+            // Settings told the user "create or change things: ask me every
+            // time". One setting must govern every write, whether it arrives as
+            // a tool call or as a marker in the reply.
+            const { decideTalosToolPermission } = await import('@/lib/tools/permissionTypes')
+            const writePermission = decideTalosToolPermission('write', deps.settings.state.tools)
             for (const block of blocks) {
+                if (writePermission === 'deny') {
+                    toasts.push({
+                        message: `“${block.name}” was not saved: your settings do not allow TALOS to create files.`,
+                        durationMs: 6000,
+                    })
+                    continue
+                }
+                if (writePermission === 'ask') {
+                    const allowed = await askToolConsent({
+                        tool: {
+                            title: `Save “${block.name}” to your Library`,
+                            description: 'The model produced a file and wants to store it on this device.',
+                        },
+                        input: { name: block.name, type: block.mediaType, characters: block.text.length },
+                    }, stream?.signal)
+                    // `busy` is truthy — treating it as consent would save the
+                    // file on a refusal. Only an explicit yes may pass.
+                    if (allowed !== true) {
+                        toasts.push({ message: `“${block.name}” was not saved.`, durationMs: 4000 })
+                        continue
+                    }
+                }
                 void attachments.saveGenerated(block)
                     .then((file) => toasts.push({
                         message: `Saved “${file.display_name}” to your Library.`,
@@ -718,6 +773,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 reasoning: completion.reasoning,
             }
         } catch (error) {
+            // SF-MINOR: cleared only on the success path, so a failed or aborted
+            // send left stale tool names for the start of the next one.
+            toolActivity.value = []
             // A user Stop must stay an AbortError all the way to the chat store, or
             // it gets persisted as a failed system message instead of a clean cancel.
             if (error instanceof Error && error.name === 'AbortError') throw error
@@ -1297,6 +1355,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         thinking,
         toolActivity,
         pendingToolConsent,
+        denyPendingToolConsent,
         canSend,
         browseMode,
         sendDisabledReason,

@@ -116,3 +116,73 @@ describe('sendAnthropicChat', () => {
             .rejects.toThrow(/overloaded/)
     })
 })
+
+describe('extended thinking alongside tools', () => {
+    const tools = [{ name: 'library_search', description: 'x', input_schema: { type: 'object' } }]
+
+    it('thinks freely on the first round, where there is no tool result yet', () => {
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-opus-4-8',
+            turns: [{ role: 'user', content: 'quanto devo?' }],
+            thinking: true,
+            effort: 'high',
+            tools,
+        })
+        expect(request.body.thinking).toMatchObject({ type: 'enabled' })
+    })
+
+    it('stops asking to think once a tool result is in the history, instead of 400ing', () => {
+        // Anthropic requires the COMPLETE, signed thinking blocks to be replayed
+        // on an assistant turn that precedes a tool_result. We do not capture the
+        // signature (the reasoning channel is a flat string), so replaying is
+        // impossible — and sending the turn without them is a documented 400.
+        // Every Anthropic model advertises `thinking`, and the composer toggle is
+        // one tap away, so this was a guaranteed failure on round two of any
+        // tool-using conversation.
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-opus-4-8',
+            turns: [
+                { role: 'user', content: 'quanto devo?' },
+                {
+                    role: 'assistant',
+                    content: 'Guardo.',
+                    toolCalls: [{ id: 'tu_1', name: 'library_search', arguments: '{"query":"f"}' }],
+                },
+                { role: 'tool', content: 'found', toolCallId: 'tu_1', toolName: 'library_search' },
+            ],
+            thinking: true,
+            effort: 'high',
+            tools,
+        })
+        expect(request.body.thinking).toBeUndefined()
+    })
+
+    it('batches a round of results into ONE user message, as the protocol describes', () => {
+        const request = buildAnthropicRequest('k', {
+            model: 'claude-opus-4-8',
+            turns: [
+                { role: 'user', content: 'q' },
+                {
+                    role: 'assistant',
+                    content: '',
+                    toolCalls: [
+                        { id: 'tu_1', name: 'a', arguments: '{}' },
+                        { id: 'tu_2', name: 'b', arguments: '{}' },
+                    ],
+                },
+                { role: 'tool', content: 'ra', toolCallId: 'tu_1', toolName: 'a' },
+                { role: 'tool', content: 'rb', toolCallId: 'tu_2', toolName: 'b' },
+            ],
+            tools,
+        })
+        const messages = request.body.messages as Array<{ role: string; content: unknown }>
+        expect(messages).toHaveLength(3)
+        expect(messages[2]).toMatchObject({
+            role: 'user',
+            content: [
+                { type: 'tool_result', tool_use_id: 'tu_1', content: 'ra' },
+                { type: 'tool_result', tool_use_id: 'tu_2', content: 'rb' },
+            ],
+        })
+    })
+})

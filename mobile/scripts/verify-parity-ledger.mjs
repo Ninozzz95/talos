@@ -174,6 +174,14 @@ function validateEntry(entry, index, snapshotRevision, errors) {
     if (entry.status === 'verified' && testIds.length === 0) {
         errors.push(`${where}: verified entries must reference at least one real test id in test_ids`)
     }
+    // Coherence audit 2026-07-26: `implemented` required NO evidence at all, and
+    // there are zero `verified` entries — so the strictest rule above was dead
+    // code and the gate reduced to a spell-check. On the day the tool suite
+    // shipped, this ledger still called it "planned" with an empty test list and
+    // `npm run build` stayed green. Claiming "implemented" now costs a test.
+    if (entry.status === 'implemented' && testIds.length === 0) {
+        errors.push(`${where}: implemented entries must cite at least one test in test_ids`)
+    }
 
     if (!isNonEmptyString(entry.desktop_revision)) {
         errors.push(`${where}: desktop_revision must be a bounded non-empty string`)

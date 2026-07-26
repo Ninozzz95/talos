@@ -1,8 +1,12 @@
 # TALOS mobile — open debt register
 
-**Verified at `8c0e596` (2026-07-26).** Progress: **A1, D1–D5, S2, S3, S1, P1,
-P2, P4, P7, T5 closed** — plus the owner's six-defect batch (`ae06e8b`…`a463c96`)
-and its cross-cutting re-review (`8c0e596` + this commit). 19 items remain. Every line below was confirmed against the
+**Verified at HEAD (2026-07-26), after the tool suite and its SF flattening
+round.** Progress: **A1, D1–D5, S2, S3, S1, P1, P2, P4, P7, T5 closed** — plus
+the owner's six-defect batch (`ae06e8b`…`a463c96`), its cross-cutting re-review
+(`8c0e596`), the tool suite (`5a1c276`…`8d72254`) and this flattening commit.
+**22 items remain** (S4–S11, A2–A7, T1–T4, P3, P5, P6, P8) — the previous line
+said 19 while the table below listed 22, and the register that exists to stop
+debt hiding must not be the thing hiding it. Every line below was confirmed against the
 code, not recited from a review. This file exists because the owner asked that no
 debt be left on the road: a debt that lives only in a review transcript or a
 commit message is a debt nobody will pay.
@@ -33,7 +37,7 @@ it. Closing an item by editing this file is forbidden.
 | # | Item | Evidence | Blocks |
 |---|---|---|---|
 | ~~A1~~ ✅ **CLOSED** `15988d7` | The completion contract is `Promise<string>` | `src/stores/chat.ts:38`; `ChatTurn.role` admits only user/assistant; `finishReason` is discarded | **Tool calling cannot be added without breaking it.** Must be widened FIRST or the work is done twice |
-| A2 | `chatController.ts` is a god-object | **1256 lines**, 52 public members, ~28 module deps, imported by 11 screens | Every feature edits one file; nothing can be unit-tested without building the world |
+| A2 | `chatController.ts` is a god-object | **1412 lines** (1256 when first measured; +156 from the tool suite alone), 55 public members, ~28 module deps, imported by 11 screens | Every feature edits one file; nothing can be unit-tested without building the world |
 | A3 | No `dispose()`/teardown anywhere | `repository.close()` has zero production callers | Re-lock leaves messages, sessions and document text live in memory; blocks DB re-key and device-wipe |
 | A4 | Memory and Library are near-duplicate injection pipelines | 4 mutable closure vars in `chatController.ts` + a composition flag | A third (semantic) tier makes it 6 vars and a 3-way rule |
 | A5 | Three error protocols; raw `TALOS_*` codes reach the UI | `MemoryScreen/NotesScreen/TasksScreen.describeError` return `cause.message` verbatim | A whitespace-only title shows the user `TALOS_TITLE_INVALID` |

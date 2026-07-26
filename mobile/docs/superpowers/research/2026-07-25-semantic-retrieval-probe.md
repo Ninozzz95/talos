@@ -1,10 +1,16 @@
 # Semantic retrieval probe — on-device measurement
 
-**Status: round 1 measured on device (OnePlus PJZ110, Android 16, Chrome 146
-WebView, WebGPU AVAILABLE). Three arms failed and must be re-run; the chunking
-question was not measured at all — round 2 is required before the decision.** Owner gave the go on
-2026-07-25 ("VIA AL TEST") as step 1 of the agreed order (probe → the six
-defects → tools).
+**Status: CLOSED — three rounds measured on device (OnePlus PJZ110, Android 16,
+Chrome 146 WebView, WebGPU AVAILABLE), decision taken. See `## Decision` below:
+`gte` plus weighted hybrid fusion (semantic weight 3, RRF k=60).** The header
+used to say "round 2 is required before the decision" while the decision section
+underneath had already made it, so a reader who stopped at the top was misled.
+The in-app entry point was removed in `e8b7c9d`; `probe/` and `npm run
+build:probe` are kept deliberately so the measurement can be repeated, and they
+build separately from the app so no size gate is weakened to fit a measurement.
+
+Owner gave the go on 2026-07-25 ("VIA AL TEST") as step 1 of the agreed order
+(probe -> the six defects -> tools).
 
 ## The question this answers
 

@@ -48,6 +48,21 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/talos/models/TalosMobileModelAdvancedOptions.vue',
         code: 'TALOS_MODEL_ADVANCED_NOT_LAZY',
     },
+    // The tool suite pulls zod and six tool bodies. It is loaded on the first
+    // send, never at boot — and nothing was stopping it drifting into the entry
+    // graph, which is exactly how the permission types ended up costing 25KB of
+    // startup before they were split out.
+    //
+    // Only the true dynamic ENTRY points are listed: `readTools` and `registry`
+    // are static imports of `toolset`, so Rollup folds them into its chunk and
+    // they own no manifest row. Listing them would fail the gate on a correct
+    // build — the boundary that matters is the one the app awaits.
+    { suffix: 'src/lib/tools/toolset.ts', code: 'TALOS_TOOLSET_NOT_LAZY' },
+    { suffix: 'src/lib/tools/agentLoop.ts', code: 'TALOS_AGENT_LOOP_NOT_LAZY' },
+    {
+        suffix: 'src/components/chat/TalosMobileToolConsentSheet.vue',
+        code: 'TALOS_TOOL_CONSENT_NOT_LAZY',
+    },
 ]
 
 function argument(name, fallback) {
@@ -96,7 +111,11 @@ try {
     // SF: the JS ceiling was validated and the CSS one was not, so
     // `--max-initial-css-bytes abc` made the gate pass with a null ceiling.
     if (!Number.isSafeInteger(maximumCss) || maximumCss <= 0) {
-        fail('TALOS_INITIAL_CSS_BUDGET_INVALID', `--max-initial-css-bytes must be a positive integer`)
+        // `fail` only sets process.exitCode; it does NOT stop the script. So
+        // execution continued with a NaN ceiling and the report printed
+        // `"ok": true` next to exit code 1 — a gate whose output contradicts
+        // its own exit status. Throw, exactly like the sibling check below.
+        throw new Error('TALOS_INITIAL_CSS_BUDGET_INVALID: --max-initial-css-bytes must be a positive integer')
     }
     if (!Number.isSafeInteger(maximum) || maximum <= 0) {
         throw new Error('TALOS_BUILD_ARGUMENT_INVALID: --max-initial-bytes')

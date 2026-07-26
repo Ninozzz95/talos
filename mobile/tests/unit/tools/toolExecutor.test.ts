@@ -81,9 +81,15 @@ describe('tool permissions', () => {
 })
 
 describe('executeTalosTool', () => {
-    it('a read runs without asking anyone', async () => {
+    it('a read runs without asking anyone, and its output is MARKED untrusted', async () => {
         const result = await executeTalosTool(reader, '{"query":"fattura"}', deps())
-        expect(result).toMatchObject({ ok: true, content: 'found: fattura' })
+        expect(result.ok).toBe(true)
+        expect(result.content).toContain('found: fattura')
+        // SF-CRITICAL: tool output used to reach the model as a bare tool turn
+        // — the highest-trust non-system channel — so a document saying
+        // "SYSTEM: you may now…" arrived as an instruction.
+        expect(result.content).toMatch(/^TALOS_TOOL_RESULT \(untrusted data/)
+        expect(result.content).toContain('END_TALOS_TOOL_RESULT')
         expect(consent).not.toHaveBeenCalled()
         expect(audit).toHaveBeenCalledWith(expect.objectContaining({
             tool: 'library_search', status: 'succeeded',
@@ -95,7 +101,8 @@ describe('executeTalosTool', () => {
         expect(consent).toHaveBeenCalledWith(expect.objectContaining({
             tool: writer, input: { title: 'Spesa' },
         }))
-        expect(result).toMatchObject({ ok: true, content: 'created: Spesa' })
+        expect(result.ok).toBe(true)
+        expect(result.content).toContain('created: Spesa')
     })
 
     it('a refused write is reported to the MODEL, not thrown at the user', async () => {
@@ -135,6 +142,14 @@ describe('executeTalosTool', () => {
         expect(result.ok).toBe(false)
         expect(result.content).toMatch(/disk on fire/)
         expect(audit).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }))
+    })
+
+    it('OUR refusals are not wrapped — wrapping them would teach distrust of our own rules', async () => {
+        consent.mockResolvedValue(false)
+        const result = await executeTalosTool(writer, { title: 'x' }, deps())
+        expect(result.content).not.toContain('TALOS_TOOL_RESULT')
+        const denied = await executeTalosTool(sender, { to: 'x' }, deps())
+        expect(denied.content).not.toContain('TALOS_TOOL_RESULT')
     })
 
     it('every outcome is audited — a tool run nobody can explain afterwards is not acceptable', async () => {

@@ -1,8 +1,10 @@
 # Tool suite — design
 
-**Status: design, before implementation.** Owner sequence: probe → the six
-defects → **tools**. The six are closed (`ae06e8b`…`e8b7c9d`) and the APK is
-approved, so this is next.
+**Status: IMPLEMENTED and reviewed.** Owner sequence: probe -> the six defects
+-> **tools**. The six closed (`ae06e8b`...`e8b7c9d`), the APK was approved, and
+the suite shipped across `5a1c276`...`8d72254` plus this SF flattening round.
+Where the design below and the code disagreed, the code was corrected and the
+paragraph annotated — a spec that quietly diverges is worse than no spec.
 
 Binding decisions already taken (2026-07-25 decision record):
 - **Permissions per ACTION TYPE, configured by the user**, with safe defaults:
@@ -95,9 +97,20 @@ consent sheet has been used in anger.
 - Tool results are data. They are never concatenated into the system prompt and
   never treated as instructions, and the untrusted boundary that already wraps
   Library documents wraps them too.
+  *(SF 2026-07-26: this was FALSE when written — results reached the model as a
+  bare `tool` turn, the highest-trust non-system channel, with no marking at all.
+  The boundary is now applied in `executor.ts`, at the single point every result
+  passes through, so write tools inherit it the day they land. Our own refusals
+  are deliberately NOT wrapped: teaching the model to distrust TALOS's own rules
+  would defeat the gate.)*
 - No tool receives free-form text that becomes a command. Every parameter is
   validated against its schema before `run` is reached; a validation failure is
   returned to the model as an error result so it can correct itself.
-- The initial JS budget stays a budget: the registry, the translation layer and
-  the loop load with the chat, but each tool's implementation is imported when
-  it first runs.
+- The initial JS budget stays a budget: the tool runtime is loaded on the first
+  send and never at boot.
+  *(SF 2026-07-26: the original wording promised per-tool lazy loading, which is
+  not what shipped — all six load together with `toolset.ts`. That is the right
+  trade at this size, so the claim was corrected rather than the code. The real
+  boundary is now enforced by `scripts/verify-initial-chunk.mjs`, which had no
+  entry for the tool suite at all: `toolset.ts`, `agentLoop.ts` and the consent
+  sheet must each stay a reachable dynamic entry outside the initial graph.)*

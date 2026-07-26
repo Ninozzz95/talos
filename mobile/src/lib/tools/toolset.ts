@@ -1,6 +1,7 @@
 import { createTalosReadTools, type TalosToolSources } from '@/lib/tools/readTools'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
+import { decideTalosToolPermission, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
 import type { TalosToolDefinition } from '@/lib/tools/registry'
 import type { LibraryDoc } from '@/lib/chat/libraryContext'
 import type { TalosChatRepository } from '@/repositories/chatRepository'
@@ -19,15 +20,32 @@ export interface TalosToolsetDeps {
     repository: TalosChatRepository
     readVaultFileText(fileId: string): Promise<string | null>
     /** Asks the human. Absent means: nothing can be confirmed, so writes fail closed. */
-    requestConsent?(request: TalosToolConsentRequest): Promise<boolean>
+    requestConsent?(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
     /** Session id → title, so a search result can say which chat it came from. */
     sessionTitles?(): Promise<Map<string, string>>
+    /**
+     * The user's "let chats use your Library" switch. When it is off the
+     * ambient injection reads nothing, so the Library tools must not exist
+     * either — otherwise the tools are a way around the opt-out.
+     */
+    libraryEnabled?(): boolean
     now?(): string
 }
 
 export interface TalosToolset {
+    /** Every tool that exists. Never advertise this list — see `offer`. */
     tools: TalosToolDefinition<never>[]
-    requestConsent(request: TalosToolConsentRequest): Promise<boolean>
+    /**
+     * What may be offered to the model RIGHT NOW. Evaluated per send, not at
+     * construction: the toolset is built once and memoised, so a permission
+     * or Library switch flipped in Settings must take effect on the next
+     * message rather than on the next launch.
+     *
+     * The same list is used to look a call up before running it, so a tool the
+     * user has withdrawn cannot be reached by replaying an older call either.
+     */
+    offer(permissions: Partial<TalosToolPermissions> | undefined): TalosToolDefinition<never>[]
+    requestConsent(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
     audit(row: TalosToolAuditRow, sessionId: string | null): Promise<void>
 }
 
@@ -106,8 +124,20 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
         now,
     }
 
+    const all = createTalosReadTools(sources)
     return {
-        tools: createTalosReadTools(sources),
+        tools: all,
+        offer(permissions) {
+            const libraryAllowed = deps.libraryEnabled ? deps.libraryEnabled() : true
+            return all
+                .filter((tool) => libraryAllowed || !tool.name.startsWith('library_'))
+                // SF-MAJOR: the gate refused at EXECUTION but the schemas were
+                // advertised anyway, so "never" meant the model called a tool,
+                // was refused, and tried again — up to five billed round trips
+                // for one message that could never succeed. A tool the policy
+                // always denies is not offered at all.
+                .filter((tool) => decideTalosToolPermission(tool.action, permissions) !== 'deny')
+        },
         // Fail CLOSED: with no consent surface wired, an "ask" permission is a
         // refusal, never an implicit yes.
         requestConsent: deps.requestConsent ?? (async () => false),

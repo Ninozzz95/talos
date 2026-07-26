@@ -183,10 +183,11 @@
                     "prefs.local.write"
                 ],
                 "evidence_contract": "M1 RED: payload preferenze invalidi/futuri falliscono chiusi ai default documentati senza cancellare i byte illeggibili",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
-                    "mobile/tests/unit/stores/preferences.test.ts"
+                    "tests/unit/settings/TalosMobileSettingsCenter.test.ts",
+                    "tests/unit/screens/settingsScreen.test.ts"
                 ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
@@ -203,10 +204,11 @@
                     "prefs.local.write"
                 ],
                 "evidence_contract": "contratto token condiviso: design-tokens.test.ts rifiuta campi renderer desktop (canvas/DOM/fps/dpr); visual matrix mobile in fase tema",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
-                    "mobile/packages/design-tokens/tests/design-tokens.test.ts"
+                    "tests/unit/theme/applyDesignTokens.test.ts",
+                    "tests/unit/settings/TalosMobileSettingsAppearancePanel.test.ts"
                 ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
@@ -223,9 +225,11 @@
                     "doctor.local.scan"
                 ],
                 "evidence_contract": "P2 gate: scan hardware + readiness report su dispositivo fisico senza rete; bundle supporto con redazione",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": [],
+                "test_ids": [
+                    "tests/unit/screens/standardScreens.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -242,9 +246,11 @@
                     "prefs.local.write"
                 ],
                 "evidence_contract": "design §8: task locali funzionanti in airplane mode; M6 gate: merge deterministico senza perdita silenziosa",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": [],
+                "test_ids": [
+                    "tests/unit/screens/standardScreens.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -261,9 +267,11 @@
                     "prefs.local.write"
                 ],
                 "evidence_contract": "design §8: note locali in airplane mode; conflitti visibili M6, nessun last-write-wins globale",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": [],
+                "test_ids": [
+                    "tests/unit/screens/standardScreens.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -299,9 +307,11 @@
                     "memory.local.write"
                 ],
                 "evidence_contract": "design §8: memoria locale in airplane mode; untrusted boundary identica al desktop",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": [],
+                "test_ids": [
+                    "tests/unit/screens/standardScreens.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
@@ -393,9 +403,15 @@
                     "tools.registry.read"
                 ],
                 "evidence_contract": "M7 gate: registry con health reale; nessuna azione probe/enable/run senza endpoint+capability+test",
-                "status": "planned",
+                "status": "implemented",
                 "blocking_reason": null,
-                "test_ids": [],
+                "test_ids": [
+                    "tests/unit/tools/toolExecutor.test.ts",
+                    "tests/unit/tools/agentLoop.test.ts",
+                    "tests/unit/tools/readTools.test.ts",
+                    "tests/unit/tools/toolWire.test.ts",
+                    "tests/unit/chat/geminiOllamaTools.test.ts"
+                ],
                 "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
             },
             {
