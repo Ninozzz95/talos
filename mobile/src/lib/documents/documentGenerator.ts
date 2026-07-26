@@ -17,7 +17,7 @@
  * chat's first paint must never carry them (D11).
  */
 
-import type { TalosReportBlock, TalosReportSpec } from './reportBuilder'
+import type { TalosReportBlock, TalosReportInput, TalosReportSpec } from './reportBuilder'
 
 export const TALOS_DOCUMENT_FORMATS = [
     'md', 'csv', 'html', 'docx', 'xlsx', 'pptx', 'pdf',
@@ -38,7 +38,7 @@ export interface TalosDocumentSpec {
      * The rich path for PDFs: a document DESCRIBED block by block, with the
      * look decided by the theme rather than restated by the caller.
      */
-    report?: TalosReportSpec
+    report?: TalosReportInput
 }
 
 /**
@@ -50,25 +50,41 @@ export interface TalosDocumentSpec {
  * instead of a wall of pipe characters.
  */
 function specToReport(spec: TalosDocumentSpec): TalosReportSpec {
-    const blocks: TalosReportBlock[] = []
+    // The title is DRAWN, not merely stored in the file metadata. The old
+    // branch opened every document with it at 18pt; losing it was a regression
+    // in the one thing every PDF has.
+    const blocks: TalosReportBlock[] = [{ t: 'h', lvl: 1, x: spec.title }]
     const body = (spec.body ?? '').replace(/\r\n/g, '\n')
 
-    for (const chunk of body.split(/\n{2,}/)) {
-        const text = chunk.trim()
-        if (text === '') continue
+    // Line by line, not chunk by chunk: `# Titolo` followed immediately by its
+    // paragraph used to render the hash literally, because the heading test was
+    // applied to the whole blank-line-delimited block.
+    let paragraph: string[] = []
+    let bullets: string[] = []
+    const flush = (): void => {
+        if (bullets.length) { blocks.push({ t: 'list', items: bullets }); bullets = [] }
+        if (paragraph.length) { blocks.push({ t: 'p', x: paragraph.join(' ') }); paragraph = [] }
+    }
+
+    for (const line of body.split('\n')) {
+        const text = line.trim()
+        if (text === '') { flush(); continue }
         const heading = /^(#{1,3})\s+(.*)$/.exec(text)
         if (heading) {
+            flush()
             blocks.push({ t: 'h', lvl: heading[1]!.length as 1 | 2 | 3, x: heading[2]!.trim() })
             continue
         }
-        const lines = text.split('\n')
-        const bullets = lines.filter((line) => /^\s*[-*]\s+/.test(line))
-        if (bullets.length > 0 && bullets.length === lines.length) {
-            blocks.push({ t: 'list', items: bullets.map((line) => line.replace(/^\s*[-*]\s+/, '')) })
+        const bullet = /^[-*]\s+(.*)$/.exec(text)
+        if (bullet) {
+            if (paragraph.length) { blocks.push({ t: 'p', x: paragraph.join(' ') }); paragraph = [] }
+            bullets.push(bullet[1]!)
             continue
         }
-        blocks.push({ t: 'p', x: lines.join(' ') })
+        if (bullets.length) { blocks.push({ t: 'list', items: bullets }); bullets = [] }
+        paragraph.push(text)
     }
+    flush()
 
     if (spec.rows?.length) {
         const [head, ...rest] = spec.rows
@@ -139,10 +155,21 @@ function rowsOf(spec: TalosDocumentSpec): string[][] {
 export async function generateTalosDocument(
     spec: TalosDocumentSpec,
 ): Promise<TalosGeneratedDocument> {
+    if (spec.report && spec.format !== 'pdf') {
+        // SF-critic 2026-07-26 (BLOCKER): `report` was accepted for any format
+        // but read only by the pdf branch, so a .docx came back holding nothing
+        // but its title — and the model was told it had been verified, which is
+        // the exact outcome this module exists to prevent.
+        throw new Error(
+            'TALOS_DOCUMENT_REPORT_PDF_ONLY: `report` describes a laid-out PDF.'
+            + ` For ${spec.format}, use \`body\` (prose) or \`rows\` (a table).`,
+        )
+    }
+
     const hasContent = (spec.body ?? '').trim() !== ''
         || (spec.rows?.length ?? 0) > 0
         || (spec.slides?.length ?? 0) > 0
-        || (spec.report?.blocks.length ?? 0) > 0
+        || (spec.format === 'pdf' && (spec.report?.blocks.length ?? 0) > 0)
     if (!hasContent) {
         // Refuse before a file exists. An empty document that opens is still a
         // failure, and it is one the user only discovers later.
@@ -223,7 +250,10 @@ export async function generateTalosDocument(
              * pdf-lib and nothing else — no tables, no charts, no colour, no
              * page furniture — so a request for a six-page branded report came
              * back as HTML. It also replaced every character outside WinAnsi
-             * with "?", which quietly mangled à è é ì ò ù and €.
+             * with "?". Precisely: the range was `[^ -ÿ]`, so the
+             * Italian accents survived — what it destroyed was €, the en and em
+             * dashes and every curly quote. Worth stating exactly, because an
+             * overstated bug is how the next reader stops trusting the comment.
              *
              * pdfmake is a flow engine: it breaks pages, repeats table headers
              * and gives the footer the page number. Loaded here, inside the
