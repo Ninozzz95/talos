@@ -262,19 +262,52 @@ una decisione esplicita dell'owner, per singolo connettore, con audit.
 
 ---
 
-### F7–F8 — Il dispositivo (Shizuku) ⏸ sospeso, richiede GO esplicito
+### F7–F8 — Il dispositivo ⏸ sospeso, richiede GO esplicito
 
-Copre §4.1–4.9 della visione: package, permessi/AppOps, impostazioni, automazione
-UI, comprensione schermo, notifiche, diagnostica, ottimizzazione.
+Copre §4.1–4.9 della visione. L'owner ha fissato il 2026-07-26 il traguardo in
+una frase che vale come definizione di fatto:
 
-| Blocco | Rischio | Perché è sospeso |
-|---|---|---|
-| lettura dispositivo (`dumpsys`, package list) | observe | serve Shizuku attivo; decisione owner era **read-only** |
-| modifica impostazioni | destructive | preview + rollback + conferma obbligatori |
-| automazione UI | execute/destructive | serve Accessibility + MediaProjection, consenso a parte |
-| root | root | **disabilitato per default**, biometrica + allowlist + audit completo |
+> **"una sorta di sistema operativo agentico sopra Android"** — un assistente che
+> non risponde soltanto, ma osserva il telefono, esegue comandi, modifica file,
+> controlla applicazioni, analizza notifiche, automatizza interfacce, fa
+> ricerca, genera documenti e coordina workflow locali e remoti.
 
-**Nessuna riga di questo blocco parte senza un GO scritto dell'owner.**
+#### La scala dei privilegi (owner, 2026-07-26)
+
+Ogni gradino sblocca tool diversi, e **non** è una scala che si sale per
+default: ognuno è una decisione a sé, con il proprio consenso.
+
+| Gradino | Identità | Cosa sblocca | Costo / rischio reale |
+|---|---|---|---|
+| App Android normale | uid app | API pubbliche, permessi concessi | dov'è TALOS oggi |
+| **Shizuku via ADB** | uid `2000` (`shell`) | package manager, AppOps, `settings`, `dumpsys`, diagnostica | Shizuku va riavviato a ogni reboot senza root; SELinux resta |
+| **+ Accessibility** | servizio dedicato | automazione UI: leggere l'albero, toccare, scrivere, scorrere | consenso separato e vistoso; Google lo tratta come permesso sensibile |
+| **+ Notification Listener** | servizio dedicato | leggere, classificare, riassumere e rispondere alle notifiche | dati altamente sensibili: elaborazione **locale**, oscuramento nei log |
+| **+ MediaProjection** | consenso per sessione | screenshot e comprensione schermo con modello vision | `FLAG_SECURE` e DRM restano invisibili — e TALOS stesso alza `FLAG_SECURE` |
+| **+ VpnService** | interfaccia TUN locale | vedere e filtrare il traffico di rete del dispositivo | **il TLS non si legge** senza installare una CA, che rompe il certificate pinning ed è una scelta grave a sé |
+| Device Owner / Profile Owner | policy enterprise | politiche profonde, restrizioni, gestione | richiede provisioning: di norma dispositivo azzerato |
+| **Shizuku/Sui con root** | uid `0` | controllo quasi completo del sistema e dei dati locali | Sui = variante Magisk (sopravvive al reboot); SELinux, Verified Boot e Play Integrity **restano** |
+
+#### Tool per gradino
+
+| Blocco | Rischio | Gradino minimo | Nota |
+|---|---|---|---|
+| lettura dispositivo (`dumpsys`, package list, batteria) | observe | Shizuku ADB | decisione owner esistente: **read-only** per primo |
+| permessi e AppOps in lettura | observe | Shizuku ADB | report privacy: quali app accedono a cosa |
+| modifica impostazioni / revoca permessi | destructive | Shizuku ADB | preview obbligatoria + rollback + conferma |
+| install / uninstall / force-stop / clear | destructive | Shizuku ADB | `pm clear` è perdita di dati: preview che lo dice |
+| automazione UI | execute → destructive | + Accessibility | verifica dello schermo risultante dopo ogni azione |
+| comprensione schermo | observe | + MediaProjection | consenso per sessione, mai persistente |
+| notifiche: digest, classificazione, task | observe → safe-write | + Notification Listener | locale; niente contenuti nei log |
+| ispezione/filtro di rete | observe → destructive | + VpnService | **il più delicato**: vedere il traffico è un potere che va motivato per singola funzione, non acceso in blocco |
+| policy enterprise | destructive | Device Owner | fuori ambito personale, salvo richiesta esplicita |
+| root | root | Sui/Magisk | **disabilitato di default**, biometrica + allowlist + audit completo |
+
+**Nessuna riga di questo blocco parte senza un GO scritto dell'owner, e i
+gradini si aprono uno alla volta.** Il §7 della visione resta valido come lista
+di ciò che nemmeno il root sblocca: `/data/data` altrui, chiavi hardware,
+bypass biometrico, Play Integrity, Verified Boot, DRM, permessi `signature`,
+microfono/camera senza consenso.
 
 ---
 
