@@ -655,6 +655,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             ? modelLabPreferences.value.provider_runtime[profile.provider]?.timeout_seconds
             : undefined
         const timeoutMs = timeoutSeconds ? timeoutSeconds * 1000 : undefined
+        /**
+         * R-1b — what keeps this alive if the user leaves the app.
+         *
+         * Owner 2026-07-26: switching apps mid-answer produced "network error".
+         * The streaming path is `fetch` inside the WebView and Android suspends
+         * a backgrounded WebView, so the request was not failing — it was being
+         * killed, and no retry logic fixes that.
+         *
+         * It arms itself only when the work is long: a tool round engages it at
+         * once, plain streaming after a few seconds. A short reply never starts
+         * anything, so no notification appears for a two-second answer.
+         */
+        const { createTalosRunKeeper } = await import('@/services/longRunKeeper')
+        const keeper = createTalosRunKeeper(chat.activeSession.value?.title || 'TALOS')
         try {
             const autosaveGenerated = deps.settings.state.shell?.library_autosave_generated === true
             const baseTonePrompt = buildTalosSystemPrompt(
@@ -862,6 +876,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     return { ok: result.ok, content: result.content }
                 },
                 onToolRound: (calls) => {
+                    // A tool round means pages, documents or searches: long by
+                    // definition, so the keeper starts now rather than waiting.
+                    keeper.engage(calls.map((call) => call.name).join(', '))
                     // The detail is what makes four `web_read` rows tell the
                     // user anything at all.
                     toolActivity.value = calls.map((call) => ({
@@ -871,6 +888,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 },
             })
             const completion = loop
+            keeper.release()
             toolActivity.value = []
             const raw = completion.text
             // F3-T4: a final-line tone suggestion is stripped from the durable
@@ -958,6 +976,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 ...(readSources.length ? { sources: readSources.slice() } : {}),
             }
         } catch (error) {
+            // Unconditional: a notification that outlives its work is worse than
+            // never having shown one.
+            keeper.release()
             // SF-MINOR: cleared only on the success path, so a failed or aborted
             // send left stale tool names for the start of the next one.
             toolActivity.value = []

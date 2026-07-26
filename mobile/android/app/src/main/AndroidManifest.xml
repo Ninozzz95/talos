@@ -230,11 +230,22 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
-    </application>
+            <service
+            android:name="ai.talos.TalosRunService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+</application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- R-1b: what keeps a long operation alive when the user leaves the app.
+         Android 14+ requires the type to be declared here AND at start, and
+         refuses the service outright if they disagree. POST_NOTIFICATIONS is
+         requested because the notification IS the service on Android 13+. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- F5.3: explicit — the mic permission dialog can never depend on manifest merging. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 </manifest>
