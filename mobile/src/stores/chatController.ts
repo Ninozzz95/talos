@@ -46,6 +46,7 @@ import type { TalosVaultService } from '@/services/talosVaultService'
 import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/chat'
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
 import { extractLibrarySaveBlocks, librarySaveInstruction, stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
+import { createTalosConsentQueue } from '@/lib/tools/consentQueue'
 import {
     planTalosSessionCleanup,
     type TalosSessionCleanupPlan,
@@ -438,23 +439,47 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         pendingToolConsent.value?.deny()
     }
 
+    /**
+     * One sheet at a time — but QUEUED, not refused.
+     *
+     * Two sheets at once is a question nobody can reason about, so the gate
+     * used to answer a second concurrent request 'busy'. That was safe while
+     * the loop ran one call at a time; running a round together (the 2026-07-26
+     * speed work) would have turned a legitimate ask into a machine refusal the
+     * user never saw. In practice the queue is one deep and then empty: the
+     * first "yes" grants the action type for the conversation (D12), so
+     * everything behind it is answered without a sheet at all.
+     */
+    const consentQueue = createTalosConsentQueue()
+
     function askToolConsent(
         request: { tool: { title: string; description: string }; input: unknown },
         signal?: AbortSignal,
     ): Promise<boolean | 'busy'> {
-        // Only one at a time: a second request while one is open would be a
-        // dialog the user cannot reason about, so it is refused — and marked as
-        // a machine refusal, not attributed to the user.
         // D12: already granted for this conversation, and this is not a
         // destructive action, so it does not ask again.
         if (writeConsentGrantedFor.value !== null
             && writeConsentGrantedFor.value === chat.activeSession.value?.id) {
             return Promise.resolve(true)
         }
-        if (pendingToolConsent.value) return Promise.resolve<'busy'>('busy')
         // SF-MAJOR: Stop used to leave the sheet open and the send stuck with
         // `sending` true. A cancelled request's honest answer is "deny".
         if (signal?.aborted) return Promise.resolve(false)
+        return consentQueue.run(() => {
+            // Re-checked on this caller's turn: the sheet ahead of it may have
+            // granted the whole conversation while it waited.
+            if (writeConsentGrantedFor.value !== null
+                && writeConsentGrantedFor.value === chat.activeSession.value?.id) {
+                return Promise.resolve(true)
+            }
+            return askOnce(request, signal)
+        }, signal)
+    }
+
+    function askOnce(
+        request: { tool: { title: string; description: string }; input: unknown },
+        signal?: AbortSignal,
+    ): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
             const settle = (allowed: boolean): void => {
                 pendingToolConsent.value = null
