@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { anthropicAdapter } from '@/lib/chat/providers/anthropicAdapter'
 import { deepSeekAdapter } from '@/lib/chat/providers/openAiCompatibleAdapter'
 import { geminiAdapter } from '@/lib/chat/providers/geminiAdapter'
@@ -212,5 +213,107 @@ describe('reasoning capture per provider family (defect #5)', () => {
         const result = await geminiAdapter.complete(input, { apiKey: 'secret' }, transport as never)
         expect(result.text).toBe('risposta')
         expect(result.reasoning).toBe('pensiero')
+    })
+})
+
+/**
+ * Tool calling on the wire. The two families here are the extremes: OpenAI
+ * splits one call across indexed deltas and wants a `tool` role for results;
+ * Anthropic streams `input_json_delta` fragments and has no tool role at all —
+ * a result is a USER message of tool_result blocks. If both work, the shape of
+ * the abstraction is right.
+ */
+describe('tool calls over the wire (tool block)', () => {
+    const searchTool = {
+        name: 'library_search',
+        title: 'Search the Library',
+        description: 'Find documents by meaning.',
+        action: 'read' as const,
+        input: z.object({ query: z.string() }),
+        async run() { return { ok: true, content: '' } },
+    }
+
+    it('deepseek: sends the schema and reassembles a call split across deltas', async () => {
+        const fetchMock = vi.fn(async () => streamResponse([
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"library_search","arguments":"{\\"qu"}}]}}]}\n\n',
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ery\\":\\"fattura\\"}"}}]}}]}\n\n',
+        ]))
+        vi.stubGlobal('fetch', fetchMock)
+        const result = await deepSeekAdapter.streamComplete!(
+            { ...inputFor('deepseek', 'deepseek-chat'), tools: [searchTool] as never },
+            { apiKey: 'secret' },
+            { onChunk: () => {} },
+        )
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+        const body = JSON.parse(String(init.body)) as { tools?: Array<{ function: { name: string } }>; tool_choice?: string }
+        expect(body.tools?.[0]?.function.name).toBe('library_search')
+        expect(body.tool_choice).toBe('auto')
+        expect(result.toolCalls).toEqual([
+            { id: 'call_1', name: 'library_search', arguments: '{"query":"fattura"}' },
+        ])
+        // A turn that only calls tools has no text, and that is not an error.
+        expect(result.text).toBe('')
+        expect(result.finishReason).toBe('tool_calls')
+    })
+
+    it('deepseek: a tool RESULT turn becomes the tool role, tied to its call', async () => {
+        const fetchMock = vi.fn(async () => streamResponse([
+            'data: {"choices":[{"delta":{"content":"Ecco."}}]}\n\n',
+        ]))
+        vi.stubGlobal('fetch', fetchMock)
+        await deepSeekAdapter.streamComplete!(
+            {
+                ...inputFor('deepseek', 'deepseek-chat'),
+                turns: [
+                    { role: 'user', content: 'cerca' },
+                    { role: 'assistant', content: '', toolCalls: [{ id: 'call_1', name: 'library_search', arguments: '{}' }] },
+                    { role: 'tool', content: 'found: fattura', toolCallId: 'call_1' },
+                ],
+            },
+            { apiKey: 'secret' },
+            { onChunk: () => {} },
+        )
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+        const body = JSON.parse(String(init.body)) as { messages: Array<Record<string, unknown>> }
+        expect(body.messages[1]).toMatchObject({ role: 'assistant', tool_calls: [{ id: 'call_1' }] })
+        expect(body.messages[2]).toMatchObject({ role: 'tool', tool_call_id: 'call_1', content: 'found: fattura' })
+    })
+
+    it('anthropic: reassembles input_json_delta fragments and maps results onto user blocks', async () => {
+        const fetchMock = vi.fn(async () => streamResponse([
+            'data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"library_search"}}\n\n',
+            'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"x\\"}"}}\n\n',
+        ]))
+        vi.stubGlobal('fetch', fetchMock)
+        const result = await anthropicAdapter.streamComplete!(
+            {
+                ...inputFor('anthropic', 'claude-opus-4-8'),
+                tools: [searchTool] as never,
+                turns: [
+                    { role: 'user', content: 'cerca' },
+                    { role: 'assistant', content: '', toolCalls: [{ id: 'toolu_0', name: 'library_search', arguments: '{"query":"y"}' }] },
+                    { role: 'tool', content: 'trovato', toolCallId: 'toolu_0' },
+                ],
+            },
+            { apiKey: 'secret' },
+            { onChunk: () => {} },
+        )
+        const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+        const body = JSON.parse(String(init.body)) as {
+            tools?: Array<{ name: string; input_schema: unknown }>
+            messages: Array<{ role: string; content: unknown }>
+        }
+        // Anthropic wants input_schema, and a result is a USER message.
+        expect(body.tools?.[0]).toMatchObject({ name: 'library_search' })
+        expect(body.tools?.[0]).toHaveProperty('input_schema')
+        expect(body.messages[1]).toMatchObject({ role: 'assistant' })
+        expect((body.messages[1]!.content as Array<{ type: string }>)[0]).toMatchObject({ type: 'tool_use' })
+        expect(body.messages[2]).toMatchObject({ role: 'user' })
+        expect((body.messages[2]!.content as Array<{ type: string; tool_use_id: string }>)[0])
+            .toMatchObject({ type: 'tool_result', tool_use_id: 'toolu_0' })
+
+        expect(result.toolCalls).toEqual([
+            { id: 'toolu_1', name: 'library_search', arguments: '{"query":"x"}' },
+        ])
     })
 })

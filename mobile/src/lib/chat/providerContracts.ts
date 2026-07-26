@@ -1,5 +1,6 @@
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
-import type { ChatTurn } from '@/stores/chat'
+import type { ChatTurn, TalosToolCall } from '@/stores/chat'
+import type { TalosToolDefinition } from '@/lib/tools/registry'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 
 export type TalosMobileChatCompatibility = 'supported' | 'unsupported' | 'unknown'
@@ -45,6 +46,12 @@ export interface TalosMobileCompletionInput {
     system?: string
     effort: string
     thinking: boolean
+    /**
+     * Tools the model may call this turn. Provider-agnostic on purpose: each
+     * adapter translates them into its own wire shape, so a tool is written
+     * once and every family sees the same schema.
+     */
+    tools?: readonly TalosToolDefinition<never>[]
 }
 
 export interface TalosMobileCompletionResult {
@@ -54,6 +61,8 @@ export interface TalosMobileCompletionResult {
     usage?: Record<string, number> | null
     /** Defect #5: the model's own reasoning, when the provider streams it. */
     reasoning?: string
+    /** Tools the model asked to run, in the shared representation. */
+    toolCalls?: TalosToolCall[]
 }
 
 /** F2-T4 — live streaming callbacks handed to a provider adapter. */
