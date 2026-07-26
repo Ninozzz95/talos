@@ -380,6 +380,15 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             grant.updated_at = now()
             grant.revoked_at = grant.updated_at
         },
+        async listSessionAttachmentFileIds(sessionId: string): Promise<string[]> {
+            const ids = new Set<string>()
+            for (const bindings of attachmentBindings.values()) {
+                for (const binding of bindings) {
+                    if (binding.session_id === sessionId) ids.add(binding.vault_file_id)
+                }
+            }
+            return [...ids]
+        },
         async listSessionAttachmentMessageIds(sessionId: string): Promise<string[]> {
             const ids: string[] = []
             for (const [messageId, bindings] of attachmentBindings) {

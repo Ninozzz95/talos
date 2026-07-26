@@ -316,6 +316,16 @@ export interface TalosChatRepository {
      * query that says which messages have any.
      */
     listSessionAttachmentMessageIds(sessionId: string): Promise<string[]>
+    /**
+     * The vault files ATTACHED anywhere in one chat.
+     *
+     * `talos_vault_files` has no session column — a document's origin lives in
+     * its metadata JSON — so "this chat's files" cannot be one query. This is
+     * the half the metadata cannot answer: documents picked out of the global
+     * Library and sent here, which carry another chat's origin. The per-chat
+     * gallery unions the two.
+     */
+    listSessionAttachmentFileIds(sessionId: string): Promise<string[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>

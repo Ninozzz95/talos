@@ -63,6 +63,12 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/chat/TalosMobileToolConsentSheet.vue',
         code: 'TALOS_TOOL_CONSENT_NOT_LAZY',
     },
+    // The per-chat media gallery: a grid with thumbnails, opened occasionally.
+    // The chat's first paint must never carry it.
+    {
+        suffix: 'src/components/chat/TalosMobileChatMediaPanel.vue',
+        code: 'TALOS_CHAT_MEDIA_NOT_LAZY',
+    },
 ]
 
 function argument(name, fallback) {

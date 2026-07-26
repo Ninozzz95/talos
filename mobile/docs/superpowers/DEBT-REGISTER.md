@@ -4,7 +4,7 @@
 round.** Progress: **A1, D1–D5, S2, S3, S1, P1, P2, P4, P7, T5 closed** — plus
 the owner's six-defect batch (`ae06e8b`…`a463c96`), its cross-cutting re-review
 (`8c0e596`), the tool suite (`5a1c276`…`8d72254`) and this flattening commit.
-**22 items remain** (S4–S11, A2–A7, T1–T4, P3, P5, P6, P8) — the previous line
+**21 items remain** (S4–S6, S8–S11, A2–A7, T1–T4, P3, P5, P6, P8) — S7 closed by the per-chat media gallery — the previous line
 said 19 while the table below listed 22, and the register that exists to stop
 debt hiding must not be the thing hiding it. Every line below was confirmed against the
 code, not recited from a review. This file exists because the owner asked that no
@@ -26,7 +26,7 @@ it. Closing an item by editing this file is forbidden.
 | S4 | Vault file bodies are stored unencrypted | `src/services/attachmentFileStore.ts` writes raw bytes to `Directory.Data` | The DB is SQLCipher-encrypted while the passport scan next to it is plaintext — asymmetric in the wrong direction |
 | S5 | Endpoint override ships the API key to any host, no confirmation, no allowlist | `src/lib/chat/providers/openAiCompatibleAdapter.ts` prefers `credential.endpoint`; `providerErrors.ts` validates only scheme/parse | One settings change (or one persuasive reply) sends a live paid key to a third party |
 | S6 | Model output still writes files with **no confirmation** | `src/stores/chatController.ts` → `attachments.saveGenerated(block)` fire-and-forget | An opt-out toggle + an Undo toast is *mitigation*, not the per-write consent the review demanded |
-| S7 | `metadata.library_shared` opt-out has no UI | read in `chatController.ts`, written nowhere | The per-document exclusion is honored in code and unreachable by the user |
+| ~~S7~~ ✅ **CLOSED** (2026-07-26) | `metadata.library_shared` opt-out has no UI | The switch now lives on every uploaded document in the per-chat media gallery, written through `vault.setFileShared`, which MERGES the flag — `updateVaultFile` replaces the metadata bag wholesale, so a naive write would have erased `origin` and `origin_session_id` and made a generated file look uploaded | — |
 | S8 | The untrusted-context boundary is forgeable | `src/lib/chat/libraryContext.ts` interpolates doc text verbatim; the `USER_TASK:` boundary is prose | A document body containing `USER_TASK:` terminates the untrusted region from the model's point of view |
 | S9 | Secret redaction is exact-match only | `safeProviderMessage` in `chatController.ts` | A provider echoing a transformed key (URL-encoded, truncated) leaks it into a persisted error |
 | S10 | Export writes plaintext to Cache and races the share target | `src/services/sessionExportDelivery.ts` | Unawaited delete can fire while the receiver is still reading; Cache is not excluded from backup |

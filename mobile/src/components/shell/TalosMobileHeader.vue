@@ -20,6 +20,8 @@ const emit = defineEmits<{
     rename: [title: string]
     delete: []
     export: []
+    /** Owner 2026-07-26: this chat's media gallery. */
+    media: []
 }>()
 </script>
 
@@ -44,13 +46,21 @@ const emit = defineEmits<{
         </Button>
         <span v-else class="min-w-11" aria-hidden="true" />
 
+        <!-- Owner 2026-07-26: the title opens this chat's media, the way a
+             messaging app opens chat info. It is a button now, not a <p>: an
+             invisible tap target on a paragraph is not an affordance, and the
+             same action lives in the ⋮ menu for anyone who never tries it. -->
         <div class="min-w-0 flex-1 text-center">
-            <p
+            <button
+                type="button"
                 data-testid="talos-mobile-header-title"
-                class="talos-title truncate text-md font-semibold leading-tight text-[var(--talos-text)]"
+                aria-haspopup="dialog"
+                :aria-label="`Media in ${title.trim() || 'this chat'}`"
+                class="talos-pressable talos-title min-h-11 max-w-full truncate rounded-lg px-2 text-md font-semibold leading-tight text-[var(--talos-text)]"
+                @click="emit('media')"
             >
                 {{ title.trim() || 'New chat' }}
-            </p>
+            </button>
         </div>
 
         <!-- 3-dot chat options (shared with the immersive chrome). New chat
@@ -64,6 +74,7 @@ const emit = defineEmits<{
             @rename="emit('rename', $event)"
             @delete="emit('delete')"
             @export="emit('export')"
+            @media="emit('media')"
         />
         <span v-else class="min-w-11" aria-hidden="true" />
     </header>

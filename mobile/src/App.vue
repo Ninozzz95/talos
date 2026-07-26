@@ -236,6 +236,34 @@ function sidebarDelete(sessionId: string): void {
 }
 
 const exportSheetOpen = ref(false)
+
+/**
+ * The per-chat media gallery (owner, 2026-07-26). Loaded on demand: it is a
+ * whole grid with thumbnails, opened occasionally, and the chat's first paint
+ * must not carry it.
+ *
+ * The attached-file ids are fetched when the panel opens rather than kept in
+ * sync — the gallery is a snapshot of a chat the user is looking at, and a
+ * standing subscription would cost a query on every send for a screen that is
+ * usually closed.
+ */
+const TalosMobileChatMediaPanel = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileChatMediaPanel.vue'),
+)
+const mediaPanelOpen = ref(false)
+const mediaAttachedFileIds = ref<string[]>([])
+
+async function openChatMedia(): Promise<void> {
+    const sessionId = chatController.chat.activeSession.value?.id
+    if (!sessionId) return
+    mediaPanelOpen.value = true
+    // Best effort: a gallery that opens empty because one query failed is worse
+    // than one that shows the files it can name from metadata alone.
+    mediaAttachedFileIds.value = await chatController
+        .listChatMediaFileIds(sessionId)
+        .catch(() => [])
+    await chatController.attachments.refreshVault().catch(() => {})
+}
 // The write-consent sheet: loaded only when a tool actually asks.
 const TalosMobileToolConsentSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolConsentSheet.vue'),
@@ -508,6 +536,19 @@ onBeforeUnmount(async () => {
         <template v-else>
             <TalosMobileSessionExportSheet v-if="exportSheetOpen" @close="exportSheetOpen = false" />
 
+            <TalosMobileChatMediaPanel
+                v-if="mediaPanelOpen && chatController.chat.activeSession.value"
+                :session-id="chatController.chat.activeSession.value.id"
+                :session-title="headerTitle"
+                :files="chatController.attachments.vaultFiles"
+                :attached-file-ids="mediaAttachedFileIds"
+                :library-context-enabled="settingsStore.state.shell.library_context_enabled === true"
+                :preview-url="chatController.attachments.previewUrl"
+                :set-shared="chatController.attachments.setVaultFileShared"
+                @close="mediaPanelOpen = false"
+                @open="mediaPanelOpen = false"
+            />
+
             <!-- Tool consent: dismissing it DENIES, which is why there is no
                  close affordance other than the two explicit answers. -->
             <TalosMobileToolConsentSheet
@@ -562,6 +603,7 @@ onBeforeUnmount(async () => {
                         @rename="immersiveRename"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
+                        @media="openChatMedia"
                     />
                     <TalosMobileImmersiveChrome
                         v-else
@@ -573,6 +615,7 @@ onBeforeUnmount(async () => {
                         @rename="immersiveRename"
                         @delete="immersiveDelete"
                         @export="exportSheetOpen = true"
+                        @media="openChatMedia"
                     />
 
                     <main class="relative flex-1 overflow-hidden">

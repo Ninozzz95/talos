@@ -16,9 +16,47 @@ export function parseVaultOrigin(metadata: Record<string, unknown> | null | unde
     return metadata && metadata.origin === 'generated' ? 'generated' : 'uploaded'
 }
 
+/**
+ * Which chat a document came from — the upload site, or the chat whose model
+ * generated it. Lives in the untyped metadata bag; this is its one reader.
+ */
+export function parseVaultOriginSession(
+    metadata: Record<string, unknown> | null | undefined,
+): string | null {
+    const value = metadata?.origin_session_id
+    return typeof value === 'string' && value !== '' ? value : null
+}
+
+/**
+ * The per-document opt-out from model context.
+ *
+ * The injection path gates on `library_shared !== false`, so an ABSENT flag
+ * means shared. Reading it as a plain boolean would silently withdraw every
+ * legacy document from the model the day a toggle shipped — this exists so the
+ * UI and the gate cannot drift on that point.
+ */
+export function isTalosLibraryFileShared(
+    metadata: Record<string, unknown> | null | undefined,
+): boolean {
+    return (metadata as { library_shared?: boolean } | null | undefined)?.library_shared !== false
+}
+
 export interface LibraryFilter {
     query: string
     origin: 'all' | TalosVaultOrigin
+    /**
+     * Owner 2026-07-26 — the per-chat gallery. Narrows to documents whose
+     * ORIGIN is this chat: uploaded here, or generated here by the model.
+     */
+    sessionId?: string | null
+    /**
+     * Extra ids to admit regardless of origin — the files actually ATTACHED in
+     * this chat, which may have been picked from the global Library and so
+     * carry a different origin. Origin alone would hide them; attachments alone
+     * would hide everything the model generated, since a generated document is
+     * never a message attachment. The gallery needs both.
+     */
+    alsoFileIds?: readonly string[]
 }
 
 export function filterLibraryFiles(
@@ -26,7 +64,11 @@ export function filterLibraryFiles(
     filter: LibraryFilter,
 ): TalosLocalVaultFile[] {
     const query = filter.query.trim().toLowerCase()
+    const admitted = new Set(filter.alsoFileIds ?? [])
     return files
+        .filter((file) => !filter.sessionId
+            || admitted.has(file.id)
+            || parseVaultOriginSession(file.metadata) === filter.sessionId)
         .filter((file) => filter.origin === 'all' || parseVaultOrigin(file.metadata) === filter.origin)
         .filter((file) => query === ''
             || file.display_name.toLowerCase().includes(query)

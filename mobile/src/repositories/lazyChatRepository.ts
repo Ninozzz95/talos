@@ -131,6 +131,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async listSessionAttachmentMessageIds(sessionId: string) {
             return (await ready()).listSessionAttachmentMessageIds(sessionId)
         },
+        async listSessionAttachmentFileIds(sessionId: string) {
+            return (await ready()).listSessionAttachmentFileIds(sessionId)
+        },
         async listMessageAttachments(messageId: string) {
             return (await ready()).listMessageAttachments(messageId)
         },

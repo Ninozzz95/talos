@@ -37,6 +37,7 @@ function createFixture(options: FixtureOptions = {}): string {
     const toolsetKey = 'src/lib/tools/toolset.ts'
     const agentLoopKey = 'src/lib/tools/agentLoop.ts'
     const toolConsentKey = 'src/components/chat/TalosMobileToolConsentSheet.vue'
+    const chatMediaKey = 'src/components/chat/TalosMobileChatMediaPanel.vue'
     const toolsetIsDynamic = options.eagerToolset !== true
     const sqliteIsDynamic = options.sqliteIsDynamic ?? true
     const messageRendererIsDynamic = options.eagerMessageRenderer !== true
@@ -84,6 +85,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(toolsetIsDynamic ? [toolsetKey] : []),
                 agentLoopKey,
                 toolConsentKey,
+                chatMediaKey,
                 ...dynamicRouteKeys,
             ],
         },
@@ -125,6 +127,10 @@ function createFixture(options: FixtureOptions = {}): string {
         },
         [toolConsentKey]: {
             file: 'assets/tool-consent.js',
+            isDynamicEntry: true,
+        },
+        [chatMediaKey]: {
+            file: 'assets/chat-media.js',
             isDynamicEntry: true,
         },
     }

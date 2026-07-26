@@ -55,6 +55,8 @@ export interface TalosMobileAttachmentsController {
     attachExisting(file: TalosLocalVaultFile): Promise<boolean>
     remove(itemId: string): Promise<void>
     deleteVaultFile(fileId: string): Promise<void>
+    /** Debt S7: withdraw a document from model context, or put it back. */
+    setVaultFileShared(fileId: string, shared: boolean): Promise<void>
     discardAll(): Promise<void>
     clearSent(): void
     clearError(): void
@@ -319,6 +321,17 @@ export function useTalosMobileAttachments(
         }
     }
 
+    async function setVaultFileShared(fileId: string, shared: boolean): Promise<void> {
+        vaultError.value = null
+        try {
+            await options.vault.setFileShared(fileId, shared)
+            await refreshVault()
+        } catch (cause) {
+            vaultError.value = attachmentErrorMessage(cause)
+            throw cause
+        }
+    }
+
     async function discardAll(): Promise<void> {
         const grants = items
             .filter((item): item is TalosMobileAttachmentDraft & { grantId: string } => item.grantId !== null)
@@ -361,6 +374,7 @@ export function useTalosMobileAttachments(
         attachExisting,
         remove,
         deleteVaultFile,
+        setVaultFileShared,
         discardAll,
         clearSent,
         clearError,

@@ -36,6 +36,12 @@ export interface TalosVaultService {
     listSummaries(): Promise<TalosLocalVaultFile[]>
     /** Full extracted text for ONE file (never list the corpus to read one). */
     readFileText(fileId: string): Promise<string | null>
+    /**
+     * Debt S7: the per-document opt-out from model context was honoured by the
+     * injection path and writable from nowhere. Merges the flag into the
+     * existing metadata — see the implementation for why that matters.
+     */
+    setFileShared(fileId: string, shared: boolean): Promise<void>
     deleteFile(fileId: string): Promise<void>
     reconcilePending(): Promise<void>
 }
@@ -224,6 +230,19 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             // Same shape as listFiles; the body is replaced by its bounded preview
             // (the Library hydrates the full text only when a doc is opened).
             return rows.map(({ text_preview: preview, ...rest }) => ({ ...rest, extracted_text: preview }))
+        },
+        async setFileShared(fileId, shared) {
+            const file = await options.repository.getVaultFile(fileId)
+            if (!file) throw new Error('TALOS_VAULT_FILE_NOT_FOUND')
+            // MERGE, never replace. `updateVaultFile` overwrites the metadata
+            // bag wholesale, and `origin` + `origin_session_id` live in that
+            // same bag — writing the flag alone would erase where the document
+            // came from, and `parseVaultOrigin` fails closed to 'uploaded', so
+            // a TALOS-generated file would start looking like one the user had
+            // uploaded and become eligible for injection.
+            await options.repository.updateVaultFile(fileId, {
+                metadata: { ...file.metadata, library_shared: shared },
+            })
         },
         async deleteFile(fileId) {
             const file = await options.repository.getVaultFile(fileId)
