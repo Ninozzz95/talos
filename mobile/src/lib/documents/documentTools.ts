@@ -39,12 +39,16 @@ export interface TalosDocumentToolSources {
 export function createTalosDocumentTools(
     sources: TalosDocumentToolSources,
 ): TalosToolDefinition<never>[] {
+    // Numbers and booleans are converted, never refused: see the note on `rows`.
+    const cell = z.union([z.string(), z.number(), z.boolean()]).transform(String)
+
     const create = defineTalosTool({
         name: 'document_create',
         title: 'Create a document',
         description: [
             'Create a real document file and save it to the user\'s Library.',
-            'Use `body` for prose formats (md, html, docx, pdf), `rows` for tables (csv, xlsx)',
+            'Use `report` for a laid-out PDF (cover, KPI cards, tables, bar and pie charts),',
+            '`body` for prose formats (md, html, docx, pdf), `rows` for tables (csv, xlsx)',
             'and `slides` for presentations (pptx). The file is written on this device and',
             'reopened to check it is valid before you are told it succeeded.',
         ].join(' '),
@@ -62,10 +66,65 @@ export function createTalosDocumentTools(
             // in the bin, the model rewrote the report as prose, and a request
             // for a PDF came back as HTML. A schema a model cannot satisfy on
             // the obvious first try is a defect in the schema.
-            rows: z.array(z.array(
-                z.union([z.string(), z.number(), z.boolean()]).transform(String),
-            )).optional()
+            rows: z.array(z.array(cell)).optional()
                 .describe('Table content. The first row is the header. Cells may be numbers.'),
+            /**
+             * The rich path for a real report. Semantic, never presentational:
+             * no coordinates, no font sizes, no colours. A theme is NAMED, and
+             * the look is decided by the generator.
+             *
+             * Owner's R37 trace is the reason the keys are one character long:
+             * the model spent sixty seconds emitting arguments for a six-page
+             * document, and every token it does not have to spend restating
+             * layout is a second it does not have to spend writing.
+             */
+            report: z.object({
+                theme: z.enum(['report', 'plain']).optional().describe('Named palette.'),
+                footer: z.object({
+                    text: z.string().optional(),
+                    pageNo: z.boolean().optional(),
+                }).optional().describe('Repeated on every page.'),
+                blocks: z.array(z.union([
+                    z.object({
+                        t: z.literal('cover'),
+                        title: z.string(),
+                        subtitle: z.string().optional(),
+                        date: z.string().optional(),
+                    }),
+                    z.object({ t: z.literal('h'), lvl: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), x: z.string() }),
+                    z.object({ t: z.literal('p'), x: z.string() }),
+                    z.object({ t: z.literal('note'), x: z.string() }),
+                    z.object({ t: z.literal('list'), items: z.array(z.string()), ordered: z.boolean().optional() }),
+                    z.object({
+                        t: z.literal('kpi'),
+                        items: z.array(z.object({
+                            l: z.string(), v: z.string(), d: z.string().optional(),
+                        })),
+                    }),
+                    z.object({
+                        t: z.literal('table'),
+                        head: z.array(z.string()).optional(),
+                        align: z.array(z.enum(['l', 'c', 'r'])).optional(),
+                        rows: z.array(z.array(cell)),
+                        total: z.array(cell).optional(),
+                    }),
+                    z.object({
+                        t: z.literal('chart'),
+                        kind: z.enum(['bar', 'pie']),
+                        labels: z.array(z.string()),
+                        series: z.array(z.object({
+                            name: z.string().optional(),
+                            data: z.array(z.number()),
+                        })),
+                        unit: z.string().optional(),
+                    }),
+                    z.object({ t: z.literal('spacer') }),
+                    z.object({ t: z.literal('pb') }),
+                ])).describe('The document, block by block, in order.'),
+            }).optional().describe(
+                'For pdf: a laid-out report — cover, headings, KPI cards, tables, bar and pie charts.'
+                + ' Prefer this over `body` when the user asks for a report, and never send both.',
+            ),
             slides: z.array(z.object({
                 title: z.string(),
                 bullets: z.array(z.string()),
