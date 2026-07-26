@@ -92,6 +92,18 @@ export interface TalosStreamHandlers {
     signal?: AbortSignal
 }
 
+/**
+ * Owner 2026-07-26: one page the answer rests on. Kept per ANSWER so the chat
+ * can show a "Sources" chip under that reply — a chip listing everything the
+ * conversation ever read would not be a citation.
+ */
+export interface TalosMobileWebSource {
+    url: string
+    title: string
+    site: string | null
+    publishedAt: string | null
+}
+
 /** Debt A1: the result, not a bare string — `finishReason` is what an agent loop
  *  dispatches on, and it used to be produced by every adapter and then discarded. */
 export interface ChatCompletionResult {
@@ -100,6 +112,12 @@ export interface ChatCompletionResult {
     toolCalls?: TalosToolCall[]
     /** Defect #5: kept beside the answer, never mixed into it. */
     reasoning?: string
+    /**
+     * Owner 2026-07-26: the pages this answer rests on, so the chat can show a
+     * "Sources" chip under it. Per ANSWER, never per chat — a chip listing
+     * everything the conversation ever read is not a citation.
+     */
+    sources?: readonly TalosMobileWebSource[]
 }
 
 export type ChatCompletion = (
@@ -838,6 +856,9 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 // Defect #5: persisted, so it survives the session and reaches
                 // the export — a reasoning trace you cannot revisit is a demo.
                 ...(thinking ? { reasoning: thinking } : {}),
+                // Persisted with the message: a citation that disappears on
+                // reload is not a citation.
+                ...(reply.sources?.length ? { sources: reply.sources } : {}),
             }
             await appendDurable(session.id, 'assistant', reply.text, 'persisted', modelProfileId,
                 Object.keys(assistantMetadata).length ? assistantMetadata : undefined)

@@ -7,6 +7,7 @@ import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
     filterLibraryFiles,
     isTalosLibraryFileShared,
+    parseVaultKind,
     parseVaultOrigin,
     parseVaultOriginSession,
 } from '@/lib/vaultLibrary'
@@ -56,7 +57,7 @@ const emit = defineEmits<{ close: []; open: [file: TalosLocalVaultFile] }>()
 const root = ref<HTMLElement | null>(null)
 const entered = ref(false)
 const failure = ref<string | null>(null)
-const tab = ref<'all' | 'images' | 'files'>('all')
+const tab = ref<'all' | 'images' | 'files' | 'sources'>('all')
 /**
  * SF-CRITICAL: this was ONE id, so tapping a second file's switch while the
  * first write was in flight dropped it silently — the control stayed where the
@@ -84,10 +85,20 @@ const mine = computed(() => filterLibraryFiles(props.files, {
 }).filter((file) => file.status === 'available'))
 
 const visible = computed(() => mine.value.filter((file) => {
+    const isSource = parseVaultKind(file.metadata) === 'web_source'
+    // Owner 2026-07-26: one research read fifteen pages and produced fifteen
+    // Library entries sitting next to his own invoice. The sources are still
+    // kept — that is the dossier surviving dead links — but they live in their
+    // own tab instead of burying everything the user actually made.
+    if (tab.value === 'sources') return isSource
+    if (isSource) return false
     if (tab.value === 'all') return true
     const image = file.media_type.startsWith('image/')
     return tab.value === 'images' ? image : !image
 }))
+
+const sourceCount = computed(() => mine.value
+    .filter((file) => parseVaultKind(file.metadata) === 'web_source').length)
 
 const { thumbs } = useTalosVaultThumbnails(visible, props.previewUrl)
 
@@ -178,11 +189,15 @@ function closeFile(): void {
 
 onBeforeUnmount(closeFile)
 
-const TABS: Array<{ value: typeof tab.value; label: string }> = [
+const TABS = computed<Array<{ value: typeof tab.value; label: string }>>(() => [
     { value: 'all', label: 'All' },
     { value: 'images', label: 'Images' },
     { value: 'files', label: 'Files' },
-]
+    // Only offered when there is something in it: an empty tab is furniture.
+    ...(sourceCount.value > 0
+        ? [{ value: 'sources' as const, label: `Sources (${sourceCount.value})` }]
+        : []),
+])
 </script>
 
 <template>
