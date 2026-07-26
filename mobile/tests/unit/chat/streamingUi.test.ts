@@ -11,7 +11,7 @@ import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTy
 // message list. The tests drive the store state the component really reads.
 const mockChatState = vi.hoisted(() => ({
     state: null as unknown as { sending: boolean; streamingText: string | null },
-    toolActivity: { value: [] as string[] },
+    toolActivity: { value: [] as Array<{ name: string; detail: string | null }> },
 }))
 vi.mock('@/stores/chatController', () => ({
     // The tool block: the streaming reply now also shows which tools are
@@ -32,7 +32,13 @@ const profiles: TalosMobileModelProfileView[] = [{
 
 const LF = String.fromCharCode(10)
 
-function mountStreaming(sending: boolean, streamingText: string | null, tools: string[] = []) {
+function mountStreaming(
+    sending: boolean,
+    streamingText: string | null,
+    // Owner testing 2026-07-26: the activity carries a DETAIL now, because four
+    // rows all reading `web_read` told the user nothing about which page.
+    tools: Array<{ name: string; detail: string | null }> = [],
+) {
     mockChatState.state = reactive({ sending, streamingText })
     mockChatState.toolActivity = reactive({ value: tools })
     return mount(TalosMobileStreamingReply)
@@ -140,7 +146,7 @@ describe('TalosMobileComposer stop control (F2-T4)', () => {
  */
 describe('tool activity in the streaming reply', () => {
     it('names the running tools in plain language, before any text exists', async () => {
-        const wrapper = mountStreaming(true, null, ['library_search'])
+        const wrapper = mountStreaming(true, null, [{ name: 'library_search', detail: null }])
         await flushPromises()
         const activity = wrapper.get('[data-testid="talos-tool-activity"]')
         expect(activity.text()).toContain('Searching your Library')
@@ -149,9 +155,21 @@ describe('tool activity in the streaming reply', () => {
     })
 
     it('shows an unknown tool by name rather than hiding it', async () => {
-        const wrapper = mountStreaming(true, null, ['some_future_tool'])
+        const wrapper = mountStreaming(true, null, [{ name: 'some_future_tool', detail: null }])
         await flushPromises()
         expect(wrapper.get('[data-testid="talos-tool-activity"]').text()).toContain('some_future_tool')
+    })
+
+    it('says WHICH page it is reading, so repeated rows are distinguishable', async () => {
+        const wrapper = mountStreaming(true, null, [
+            { name: 'web_read', detail: 'agenziaentrate.gov.it' },
+            { name: 'web_read', detail: 'fiscoetasse.com' },
+        ])
+        await flushPromises()
+        const activity = wrapper.get('[data-testid="talos-tool-activity"]')
+        expect(activity.text()).toContain('agenziaentrate.gov.it')
+        expect(activity.text()).toContain('fiscoetasse.com')
+        expect(activity.text()).not.toContain('web_read')
     })
 
     it('shows nothing when no tool is running', async () => {

@@ -8,6 +8,7 @@ import type {
     TalosMobileProviderId,
 } from '@/components/chat/mobileChatTypes'
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
+import { talosToolActivityDetail, type TalosToolActivity } from '@/lib/tools/toolLabels'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 import type {
@@ -228,7 +229,7 @@ export interface ChatController {
     readonly effortLadder: ComputedRef<TalosMobileEffortLevel[]>
     readonly thinking: Ref<boolean>
     /** Tool names running right now, so the chat can say what TALOS is doing. */
-    readonly toolActivity: Readonly<Ref<string[]>>
+    readonly toolActivity: Readonly<Ref<TalosToolActivity[]>>
     /** Deny whatever consent is open — the shell calls this when it re-locks. */
     denyPendingToolConsent(): void
     /**
@@ -377,7 +378,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     // Defect A2 discipline: the toolset is assembled in its OWN module and built
     // once per controller, not per message. `toolActivity` is what the chat
     // renders while a round of tools is running.
-    const toolActivity = ref<string[]>([])
+    const toolActivity = ref<TalosToolActivity[]>([])
     /**
      * The pending write the user has to answer. A promise resolver is parked
      * here and the sheet settles it: the executor is already written to fail
@@ -750,7 +751,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     })
                     return { ok: result.ok, content: result.content }
                 },
-                onToolRound: (calls) => { toolActivity.value = calls.map((call) => call.name) },
+                onToolRound: (calls) => {
+                    // The detail is what makes four `web_read` rows tell the
+                    // user anything at all.
+                    toolActivity.value = calls.map((call) => ({
+                        name: call.name,
+                        detail: talosToolActivityDetail(call.name, call.arguments),
+                    }))
+                },
             })
             const completion = loop
             toolActivity.value = []
