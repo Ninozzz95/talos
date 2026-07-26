@@ -99,14 +99,14 @@ export async function executeTalosTool(
         // it did not describe, and the model needs to be told what was wrong
         // or it simply repeats the same call.
         await record(deps, { tool: tool.name, action: tool.action, status: 'failed', input: rawArguments, error: parsed.error })
-        return { ok: false, content: parsed.error }
+        return { ok: false, content: parsed.error, code: 'TALOS_TOOL_ARGUMENTS_INVALID' }
     }
 
     const permission = decideTalosToolPermission(tool.action, deps.permissions)
     if (permission === 'deny') {
         const message = `Refused: "${tool.title}" is a ${tool.action} action and your policy denies it. Ask the user to change it in Settings if it is really needed.`
         await record(deps, { tool: tool.name, action: tool.action, status: 'denied', input: parsed.value })
-        return { ok: false, content: message }
+        return { ok: false, content: message, code: 'TALOS_TOOL_DENIED_BY_POLICY' }
     }
     if (permission === 'ask') {
         let answer: boolean | 'busy' = false
@@ -118,11 +118,11 @@ export async function executeTalosTool(
         }
         if (answer === 'busy') {
             await record(deps, { tool: tool.name, action: tool.action, status: 'refused_busy', input: parsed.value })
-            return { ok: false, content: `Not run: another confirmation is already open. Ask again after it is answered.` }
+            return { ok: false, content: `Not run: another confirmation is already open. Ask again after it is answered.`, code: 'TALOS_TOOL_CONSENT_BUSY' }
         }
         if (!answer) {
             await record(deps, { tool: tool.name, action: tool.action, status: 'denied', input: parsed.value })
-            return { ok: false, content: `Declined by the user: "${tool.title}" was not run.` }
+            return { ok: false, content: `Declined by the user: "${tool.title}" was not run.`, code: 'TALOS_TOOL_DECLINED' }
         }
     }
 
@@ -149,10 +149,14 @@ export async function executeTalosTool(
         const message = error instanceof Error ? error.message : String(error)
         if (message.includes('TALOS_DB_KEY_LOCKED')) {
             await record(deps, { tool: tool.name, action: tool.action, status: 'failed', input: parsed.value, error: 'locked' })
-            return { ok: false, content: 'Not available: the storage on this device is locked. Ask the user to unlock the app, then try again.' }
+            return { ok: false, content: 'Not available: the storage on this device is locked. Ask the user to unlock the app, then try again.', code: 'TALOS_DB_KEY_LOCKED' }
         }
         const detail = error instanceof Error && error.message ? error.message : String(error)
         await record(deps, { tool: tool.name, action: tool.action, status: 'failed', input: parsed.value, error: detail })
-        return { ok: false, content: `The tool failed: ${detail}` }
+        // A TALOS_* message IS the code; anything else is an unnamed throw and
+        // is reported as such rather than pasting a stranger's prose into the
+        // diagnostics payload.
+        const code = /^TALOS_[A-Z0-9_]+$/.test(message) ? message : 'TALOS_TOOL_THREW'
+        return { ok: false, content: `The tool failed: ${detail}`, code }
     }
 }
