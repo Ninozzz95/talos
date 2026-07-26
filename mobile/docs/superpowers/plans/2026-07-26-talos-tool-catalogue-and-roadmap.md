@@ -17,6 +17,88 @@ divario e definisce tutto ciò che viene dopo.
 
 ---
 
+## 0. Decisioni chiuse dall'owner (2026-07-26) — VINCOLANTI
+
+Ventuno decisioni prese in sei giri, su richiesta esplicita (*"vai con domande
+decisionali, non dobbiamo lasciare nulla al caso e prevedere tutto"*). Non si
+riaprono senza una decisione nuova; dove il resto del documento diverge, queste
+vincono.
+
+### Il fatto di programma che cambia tutto il resto
+
+**D0 — TALOS mobile sarà DISTRIBUITO** (store, amici, pubblico). Non è più
+un'app personale. Conseguenze dirette:
+
+- **Nessuna chiave dentro l'APK.** Una chiave in un pacchetto client è pubblica:
+  chiunque scompatti l'APK la legge. Sarebbe bruciata in poco tempo, a spese
+  dell'owner, e ogni query degli utenti passerebbe dal suo account.
+- Primo avvio: una schermata che spiega le tre sorgenti in due tocchi. Brave
+  regala $5/mese di credito **a ogni utente** con la propria chiave, quindi la
+  strada gratuita esiste comunque.
+- **F7/F8 vanno riesaminati prima di pubblicare su Play.** Google limita
+  pesantemente l'uso di Accessibility e delle app VPN, e un'app costruita su
+  Shizuku/root difficilmente supera la revisione. Sideload e store alternativi
+  restano possibili. Da decidere quando ci si arriva, non ora.
+
+### F1 — Ricerca web
+
+| # | Decisione |
+|---|---|
+| D1 | Tre sorgenti: **Brave BYOK** (prima), **SearXNG self-hosted** (libera, OSS, zero terzi), **endpoint custom** con mappatura configurabile. |
+| D2 | **SearXNG pubblico escluso**: il JSON è disattivato di default sulla maggior parte delle istanze e si romperebbe a caso, mandando intanto le query al server di uno sconosciuto. |
+| D3 | Senza sorgente configurata i tool **non vengono offerti al modello**, che così non può promettere una ricerca che non farà. Stessa regola già in vigore per la Libreria. |
+| D4 | Profondità **adattiva**: decide il modello. Domanda semplice = una ricerca; domanda complessa = cerca, legge, confronta finché basta. |
+| D5 | Le fonti lette finiscono **automaticamente** nella Libreria di quella chat, con url, titolo e data — quindi nella galleria media. |
+| D6 | Un link incollato **non viene mai scaricato in automatico**: se serve, il modello chiama `web_read` e passa dal cancello, lasciando traccia. È il vettore principale di prompt injection. |
+| D7 | Date: **etichetta sempre, non rifiuta mai**. Data della fonte quando c'è, "data sconosciuta" esplicito quando manca, e distinzione fra data dell'articolo e data dell'evento. |
+| D8 | Offline: il tool **fallisce dicendolo**, e il modello risponde con quello che sa e con le fonti già in Libreria. |
+
+### F2 — Documenti
+
+| # | Decisione |
+|---|---|
+| D9 | **Tutti i formati insieme**: md, csv, html, docx, xlsx, pptx, pdf. È la stessa pipeline; farne metà significherebbe rifarla. |
+| D10 | **Anteprima sempre, dentro la chat**: il documento vero renderizzato prima di salvarlo, non una descrizione di come sarà. |
+| D11 | Peso: **precarico in background dopo l'avvio**, opzionalmente solo su Wi-Fi. Boot invariato, zero attesa al primo uso. I pacchetti pesano 2,6–19,5 MB (pptxgenjs, docx, xlsx, pdf-lib): includerli all'avvio moltiplicherebbe per cinque un budget di 560 KB, per funzioni che molti non useranno mai. |
+
+### F3 — Scrittura locale
+
+| # | Decisione |
+|---|---|
+| D12 | Default: **chiede una volta per conversazione** (`allow_for_session` del §9.2). Il primo sì copre le scritture reversibili di quella chat. |
+| D13 | **Il distruttivo chiede SEMPRE**, indipendentemente dal sì di sessione, con la preview del §9.4: cosa sparisce, se è recuperabile, perché. Un consenso dato per "crea una nota" non può autorizzare "cancella i dati". |
+| D14 | Annullamento: **tutte le azioni reversibili della sessione**, in ordine, dal registro. |
+
+### F4 — Registro
+
+| # | Decisione |
+|---|---|
+| D15 | Vive **nel drawer sotto la risposta** — la riga muta già costruita: cosa ha letto, cosa ha scritto, cosa gli è stato negato e perché. |
+| D16 | Mostra anche **il costo**: ricerche fatte, pagine lette, token spesi. Con BYOK paga l'utente, e nessun assistente dice mai cosa è costata una risposta. |
+
+### Trasversali
+
+| # | Decisione |
+|---|---|
+| D17 | Budget per messaggio: **più largo per la ricerca** (~10 giri / 25 chiamate), invariato a 5/12 per tutto il resto. Al limite il modello viene **avvisato**, mai troncato. |
+| D18 | **Impronta obbligatoria** per: `destructive`, `external-write`, `root`. Possibile da R32 (legame hardware col Keystore). |
+| D19 | Impostazioni: **interruttore generale** che spegne tutto in un tocco, **più le categorie** (leggere / cercare / scrivere / documenti). Nessuna lista di venti interruttori. |
+| D20 | Tool offerti a **tutti i provider che li supportano** (tutti e sei sono wireati e testati). Se un modello non li supporta, TALOS **lo dice** invece di lasciar credere che stia cercando. |
+| D21 | Parità: **mobile prima**, e a ogni fase chiusa un ticket formale per Codex sul desktop. Il mobile fa da prototipo vero. |
+| D22 | Lingua dell'interfaccia: **inglese**, coerente col resto dell'app. Il modello risponde comunque nella lingua dell'utente. |
+
+### Conseguenza sui livelli di policy
+
+D12, D13 e D18 anticipano a **F3** tre decisioni del §9.2 che il piano
+collocava più avanti. L'insieme passa da tre a cinque:
+
+`allow` · `ask` · **`allow_for_session`** · **`require_biometric`** · `deny`
+
+`allow_with_preview` resta separato perché la preview è un requisito del
+`destructive`, non una decisione alternativa.
+
+---
+
 ## 1. Le tre fonti che questo piano deve rispettare
 
 | Fonte | Cosa impone |
@@ -62,7 +144,7 @@ niente container. Fingere il contrario produrrebbe una roadmap di fantasia.
 
 | Nel documento | Sul telefono, davvero | Nota |
 |---|---|---|
-| SearXNG | **API di ricerca BYOK** (Brave / Tavily / Exa) | stessa architettura delle chiavi provider già presenti |
+| SearXNG | **tre sorgenti** (D1): Brave BYOK · SearXNG **self-hosted** · endpoint custom | pubblico escluso (D2): JSON spento di default, si romperebbe a caso |
 | Playwright (fetch + render JS) | **`CapacitorHttp`** — nativo, **scavalca il CORS** | niente rendering JS: le pagine che richiedono JS si degradano onestamente |
 | Trafilatura (estrazione) | **`@mozilla/readability` + `DOMParser`**, on-device | l'estrazione avviene **sul telefono** |
 | `python-docx` / `openpyxl` / `python-pptx` | **`docx` · SheetJS · `pptxgenjs`** | JS puro, zero dipendenze native |
@@ -91,6 +173,7 @@ sarebbe cerimonia.
 | Livello | Significato | Default | Da quale fase |
 |---|---|---|---|
 | `observe` | sola lettura locale | consenti | F0 ✅ (oggi `read`) |
+| — | *(vedi §0: `allow_for_session` e `require_biometric` anticipati a F3)* | | |
 | `draft` | prepara senza applicare | consenti | F2 |
 | `safe-write` | scrittura reversibile | chiedi | F3 (oggi `write`) |
 | `execute` | esecuzione controllata | chiedi | F5 |
@@ -142,6 +225,7 @@ research` (tutti proprietari Anthropic).
 
 **Vincoli specifici**
 - BYOK: la chiave di ricerca vive dove vivono le chiavi provider, cifrata.
+  **Nessuna chiave nell'APK** (D0): un pacchetto client non tiene segreti.
 - Il contenuto estratto passa il confine untrusted **prima** di raggiungere il
   modello. Una pagina web è il vettore di prompt injection per eccellenza.
 - Nessun fetch automatico di URL trovati dentro il testo dell'utente senza che
