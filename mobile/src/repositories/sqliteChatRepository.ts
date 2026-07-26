@@ -903,6 +903,17 @@ export function createSqliteChatRepository(
                 .map((row) => (typeof row.message_id === 'string' ? row.message_id : null))
                 .filter((id): id is string => id !== null)
         },
+        async listSessionAttachmentFileIds(sessionId: string) {
+            // Served by talos_chat_attachments_session_idx (session_id, ...).
+            const rows = await (await db()).query(
+                `SELECT DISTINCT vault_file_id FROM talos_chat_attachments
+                 WHERE session_id = ?`,
+                [sessionId],
+            )
+            return rows
+                .map((row) => (typeof row.vault_file_id === 'string' ? row.vault_file_id : null))
+                .filter((id): id is string => id !== null)
+        },
         async listMessageAttachments(messageId: string) {
             const rows = await (await db()).query(
                 `SELECT attachment.id, attachment.session_id, attachment.message_id,

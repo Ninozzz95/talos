@@ -20,6 +20,8 @@ const emit = defineEmits<{
     rename: [title: string]
     delete: []
     export: []
+    /** Owner 2026-07-26: this chat's media gallery. */
+    media: []
 }>()
 </script>
 
@@ -52,6 +54,7 @@ const emit = defineEmits<{
                 @rename="emit('rename', $event)"
                 @delete="emit('delete')"
                 @export="emit('export')"
+                @media="emit('media')"
             />
         </div>
     </div>

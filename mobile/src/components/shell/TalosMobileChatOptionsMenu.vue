@@ -22,6 +22,8 @@ const emit = defineEmits<{
     rename: [title: string]
     delete: []
     export: []
+    /** Owner 2026-07-26: this chat's media gallery. */
+    media: []
 }>()
 
 const optionsOpen = ref(false)
@@ -103,6 +105,13 @@ function confirmDelete(): void {
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
                     <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Rename chat
+                </button>
+                <!-- Owner 2026-07-26: reachable from the menu in BOTH header
+                     modes. Tapping the title only works in the solid header —
+                     the immersive chrome renders no title at all, and it is the
+                     default, so the menu is the entry that always exists. -->
+                <button type="button" role="menuitem" data-testid="talos-chat-options-media" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('media')">
+                    <Images class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Media in this chat
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('export')">
                     <Download class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Export chat

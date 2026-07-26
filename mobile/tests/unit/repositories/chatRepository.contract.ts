@@ -98,6 +98,13 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
             grant_id: grant.id,
         }],
     })
+    // Owner 2026-07-26, per-chat media gallery: the files ATTACHED in one chat.
+    // Asserted against EVERY implementation on purpose — the lazy wrapper once
+    // dropped an argument the direct implementations honoured, and the broken
+    // one was the production path.
+    expect(await repository.listSessionAttachmentFileIds(alpha.id)).toEqual([vaultFile.id])
+    expect(await repository.listSessionAttachmentFileIds('session-that-does-not-exist')).toEqual([])
+
     expect((await repository.listMessageAttachments(messageWithFile.id))).toEqual([
         expect.objectContaining({
             id: 'binding-alpha',

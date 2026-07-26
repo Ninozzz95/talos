@@ -104,6 +104,7 @@ const productionVaultService: TalosVaultService = {
     listFiles: async () => (await loadProductionVaultService()).listFiles(),
     listSummaries: async () => (await loadProductionVaultService()).listSummaries(),
     readFileText: async (fileId) => (await loadProductionVaultService()).readFileText(fileId),
+    setFileShared: async (fileId, shared) => (await loadProductionVaultService()).setFileShared(fileId, shared),
     deleteFile: async (fileId) => (await loadProductionVaultService()).deleteFile(fileId),
     reconcilePending: async () => (await loadProductionVaultService()).reconcilePending(),
 }
@@ -120,6 +121,7 @@ const unavailableVaultService: TalosVaultService = {
     createGenerated: async (_input, _originSessionId) => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     createGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     readFilePreview: async () => null,
+    setFileShared: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     revokeGrant: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     resolveMessageParts: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
     listFiles: async () => [],
@@ -224,6 +226,12 @@ export interface ChatController {
     readonly toolActivity: Readonly<Ref<string[]>>
     /** Deny whatever consent is open — the shell calls this when it re-locks. */
     denyPendingToolConsent(): void
+    /**
+     * The vault ids attached anywhere in one chat — the half of "this chat's
+     * media" that metadata cannot answer, since a document picked out of the
+     * global Library keeps its original chat's origin.
+     */
+    listChatMediaFileIds(sessionId: string): Promise<string[]>
     /** A write waiting for the user's answer; null when nothing is pending. */
     readonly pendingToolConsent: Readonly<Ref<{
         title: string
@@ -1356,6 +1364,17 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         toolActivity,
         pendingToolConsent,
         denyPendingToolConsent,
+        /**
+         * The vault ids attached anywhere in one chat — the half of "this
+         * chat's media" that metadata cannot answer, since a document picked
+         * from the global Library keeps its original chat's origin.
+         *
+         * A thin pass-through so the shell does not reach into the repository
+         * itself: App.vue owning a query would put persistence knowledge in the
+         * one file that should only compose surfaces.
+         */
+        listChatMediaFileIds: (sessionId: string) =>
+            deps.chatRepository.listSessionAttachmentFileIds(sessionId),
         canSend,
         browseMode,
         sendDisabledReason,
