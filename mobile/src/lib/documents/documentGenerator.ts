@@ -17,6 +17,8 @@
  * chat's first paint must never carry them (D11).
  */
 
+import type { TalosReportBlock, TalosReportSpec } from './reportBuilder'
+
 export const TALOS_DOCUMENT_FORMATS = [
     'md', 'csv', 'html', 'docx', 'xlsx', 'pptx', 'pdf',
 ] as const
@@ -32,6 +34,48 @@ export interface TalosDocumentSpec {
     rows?: string[][]
     /** Slides, for the presentation format. */
     slides?: Array<{ title: string; bullets: string[] }>
+    /**
+     * The rich path for PDFs: a document DESCRIBED block by block, with the
+     * look decided by the theme rather than restated by the caller.
+     */
+    report?: TalosReportSpec
+}
+
+/**
+ * The simple `body`/`rows` spec, promoted to a laid-out document.
+ *
+ * Everything that already produced a PDF keeps working, and gets a cover-less
+ * but properly typeset one: markdown headings become headings, blank lines
+ * separate paragraphs, and `rows` becomes a real table with a repeating header
+ * instead of a wall of pipe characters.
+ */
+function specToReport(spec: TalosDocumentSpec): TalosReportSpec {
+    const blocks: TalosReportBlock[] = []
+    const body = (spec.body ?? '').replace(/\r\n/g, '\n')
+
+    for (const chunk of body.split(/\n{2,}/)) {
+        const text = chunk.trim()
+        if (text === '') continue
+        const heading = /^(#{1,3})\s+(.*)$/.exec(text)
+        if (heading) {
+            blocks.push({ t: 'h', lvl: heading[1]!.length as 1 | 2 | 3, x: heading[2]!.trim() })
+            continue
+        }
+        const lines = text.split('\n')
+        const bullets = lines.filter((line) => /^\s*[-*]\s+/.test(line))
+        if (bullets.length > 0 && bullets.length === lines.length) {
+            blocks.push({ t: 'list', items: bullets.map((line) => line.replace(/^\s*[-*]\s+/, '')) })
+            continue
+        }
+        blocks.push({ t: 'p', x: lines.join(' ') })
+    }
+
+    if (spec.rows?.length) {
+        const [head, ...rest] = spec.rows
+        blocks.push({ t: 'table', head, rows: rest })
+    }
+
+    return { meta: { title: spec.title }, theme: 'report', blocks }
 }
 
 export interface TalosGeneratedDocument {
@@ -98,6 +142,7 @@ export async function generateTalosDocument(
     const hasContent = (spec.body ?? '').trim() !== ''
         || (spec.rows?.length ?? 0) > 0
         || (spec.slides?.length ?? 0) > 0
+        || (spec.report?.blocks.length ?? 0) > 0
     if (!hasContent) {
         // Refuse before a file exists. An empty document that opens is still a
         // failure, and it is one the user only discovers later.
@@ -171,38 +216,53 @@ export async function generateTalosDocument(
         }
 
         case 'pdf': {
-            const { PDFDocument, StandardFonts } = await import('pdf-lib')
-            const pdf = await PDFDocument.create()
-            const font = await pdf.embedFont(StandardFonts.Helvetica)
-            const bold = await pdf.embedFont(StandardFonts.HelveticaBold)
-            let page = pdf.addPage()
-            const { width, height } = page.getSize()
-            const margin = 56
-            let y = height - margin
+            /**
+             * A laid-out document, not a wall of text.
+             *
+             * Owner 2026-07-26: this branch used to draw wrapped lines with
+             * pdf-lib and nothing else — no tables, no charts, no colour, no
+             * page furniture — so a request for a six-page branded report came
+             * back as HTML. It also replaced every character outside WinAnsi
+             * with "?", which quietly mangled à è é ì ò ù and €.
+             *
+             * pdfmake is a flow engine: it breaks pages, repeats table headers
+             * and gives the footer the page number. Loaded here, inside the
+             * branch, so an app that never makes a PDF never pays for it.
+             */
+            const [{ default: pdfMake }, { TALOS_PDF_VFS }, { buildTalosReportDefinition }] =
+                await Promise.all([
+                    import('pdfmake/build/pdfmake.min.js'),
+                    import('./pdfFonts'),
+                    import('./reportBuilder'),
+                ])
 
-            // pdf-lib's standard fonts are WinAnsi: a character outside it throws
-            // rather than degrading, so unrepresentable ones are replaced. An
-            // exception here would lose the whole document over one glyph.
-            const draw = (text: string, size: number, useBold: boolean): void => {
-                const safe = text.replace(/[^\x20-\xFF]/g, '?')
-                const usable = width - margin * 2
-                const chars = Math.max(1, Math.floor(usable / (size * 0.5)))
-                for (let index = 0; index < safe.length; index += chars) {
-                    if (y < margin) { page = pdf.addPage(); y = height - margin }
-                    page.drawText(safe.slice(index, index + chars), {
-                        x: margin, y, size, font: useBold ? bold : font,
-                    })
-                    y -= size * 1.4
-                }
-            }
+            // NEVER `pdfMake.vfs = ...`: that reassigns an ESM import, which is
+            // the single most reported pdfmake failure and shows up only in the
+            // production build ("Unknown font format").
+            pdfMake.addVirtualFileSystem(TALOS_PDF_VFS)
+            pdfMake.setFonts({
+                Roboto: {
+                    normal: 'Roboto-Regular.ttf',
+                    bold: 'Roboto-Medium.ttf',
+                    italics: 'Roboto-Italic.ttf',
+                    // No bold-italic weight is shipped; pointing it at medium
+                    // keeps pdfkit from throwing if a style ever asks for it.
+                    bolditalics: 'Roboto-Medium.ttf',
+                },
+            })
 
-            draw(spec.title, 18, true)
-            y -= 8
-            for (const line of (spec.body ?? '').split('\n')) {
-                if (line.trim() === '') { y -= 8; continue }
-                draw(line, 11, false)
-            }
-            return { ...common, bytes: await pdf.save() }
+            // The title lives at the top level of the tool call, so the report
+            // never has to repeat it — one fewer thing for the model to get
+            // subtly different between the file name and the cover.
+            const definition = buildTalosReportDefinition(
+                spec.report
+                    ? { ...spec.report, meta: { title: spec.title } }
+                    : specToReport(spec),
+            )
+            // 0.3 is promise-based. Passing a callback here is the documented
+            // way to get a silent hang that never resolves.
+            const buffer = await pdfMake.createPdf(definition).getBuffer()
+            return { ...common, bytes: new Uint8Array(buffer) }
         }
     }
 }
