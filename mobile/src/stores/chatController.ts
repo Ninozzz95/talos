@@ -174,6 +174,11 @@ export interface ChatControllerDeps {
                 readonly write?: 'allow' | 'ask' | 'deny'
                 readonly outbound?: 'allow' | 'ask' | 'deny'
             }
+            /** F1: which web-search source is configured, if any (D3). */
+            readonly search?: {
+                readonly source?: 'tavily' | 'brave' | 'searxng' | 'custom' | null
+                readonly endpoint?: string | null
+            }
         }
         hydrate(): Promise<void>
         setComposerDefaults(patch: Partial<TalosComposerDefaults>): Promise<void>
@@ -657,6 +662,55 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // tools read everything, which is the same opt-out being
                     // walked around one level up.
                     libraryEnabled: () => deps.settings.state.shell?.library_context_enabled === true,
+                    /**
+                     * F1 — the web tools exist only when a source is configured
+                     * (D3). Evaluated per send, so choosing a source in Settings
+                     * takes effect on the next message rather than the next
+                     * launch.
+                     */
+                    web: () => {
+                        const source = deps.settings.state.search?.source ?? null
+                        if (!source) return null
+                        return {
+                            async search(query: string, maxResults: number) {
+                                const [{ runTalosSearch }, { getProviderKey }] = await Promise.all([
+                                    import('@/services/webSearchRuntime'),
+                                    import('@/services/secureKeyStore'),
+                                ])
+                                const apiKey = await getProviderKey(`search.${source}`).catch(() => null)
+                                return runTalosSearch(source, {
+                                    apiKey: apiKey ?? undefined,
+                                    endpoint: deps.settings.state.search?.endpoint ?? undefined,
+                                }, query, maxResults)
+                            },
+                            async read(url: string) {
+                                const { readTalosPage } = await import('@/services/webSearchRuntime')
+                                return readTalosPage(url)
+                            },
+                            /**
+                             * D5 — every page read becomes a source of THIS chat:
+                             * it lands in the Library with its text, so six months
+                             * later the answer is still auditable even though the
+                             * page has changed or gone. Marked `generated` so it
+                             * is never re-injected as if the user had uploaded it.
+                             */
+                            async remember(page) {
+                                await attachments.saveGenerated({
+                                    name: `${page.title || new URL(page.url).hostname}.md`,
+                                    mediaType: 'text/markdown',
+                                    text: [
+                                        `# ${page.title}`,
+                                        '',
+                                        `Source: ${page.url}`,
+                                        `Published: ${page.publishedAt ?? 'date unknown'}`,
+                                        page.siteName ? `Site: ${page.siteName}` : '',
+                                        '',
+                                        page.text,
+                                    ].filter(Boolean).join('\n'),
+                                })
+                            },
+                        }
+                    },
                     requestConsent: (request) => askToolConsent(request as never, stream?.signal),
                 })))
             // Evaluated now, from the live settings, so a permission changed a

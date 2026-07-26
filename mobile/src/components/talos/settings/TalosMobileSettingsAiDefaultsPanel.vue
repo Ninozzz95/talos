@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import { useSettingsStore, type TalosUtilityModelMode } from '@/stores/settings'
+import TalosMobileSearchSourcePanel from '@/components/talos/settings/TalosMobileSearchSourcePanel.vue'
 import { TALOS_TONE_PRESETS, isTalosToneId } from '@/lib/tone'
 
 const settings = useSettingsStore()
@@ -137,6 +138,10 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
                 @change="setShellFlag('library_autosave_generated', $event)"
             >
         </label>
+
+        <!-- F1: the web tools exist only once a source is chosen (D3), so this
+             sits directly above the permissions that govern them. -->
+        <TalosMobileSearchSourcePanel />
 
         <!-- Owner 2026-07-25: what the model may do on its own. -->
         <section class="pt-4" data-testid="talos-tool-permissions">

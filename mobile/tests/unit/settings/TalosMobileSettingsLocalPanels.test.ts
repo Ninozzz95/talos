@@ -14,8 +14,13 @@ const settings = vi.hoisted(() => ({
         shell: { library_context_enabled: true, library_autosave_generated: true },
         // The tool block: what the model may do on its own, same panel.
         tools: { read: 'allow', write: 'ask', outbound: 'deny' },
+        // F1: the web-search source panel is mounted here too. Absent means the
+        // panel reads `search.source` off undefined and the whole page dies —
+        // which is why the mount test in searchSourcePanel.test.ts exists.
+        search: { source: null, endpoint: null },
     },
     setToolPermissions: vi.fn(async () => {}),
+    setSearchPreferences: vi.fn(async () => {}),
     setAiDefaults: vi.fn().mockResolvedValue(undefined),
     setShell: vi.fn().mockResolvedValue(undefined),
 }))
