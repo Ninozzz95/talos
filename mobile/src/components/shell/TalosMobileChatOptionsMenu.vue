@@ -3,6 +3,8 @@ import { nextTick, ref } from 'vue'
 import { Check, Download, EllipsisVertical, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
+import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 
 /**
  * The 3-dot chat-options menu (New / Rename / Export / Delete on the ACTIVE
@@ -21,12 +23,20 @@ const props = withDefaults(defineProps<{
      * render anyway and do nothing at all when tapped.
      */
     canOpenMedia?: boolean
-}>(), { pill: false, canOpenMedia: true })
+    /** What this chat would take from the Library (owner 2026-07-26). */
+    cleanupPlan?: TalosSessionCleanupPlan
+}>(), {
+    pill: false,
+    canOpenMedia: true,
+    // Empty means "nothing to offer": the checkbox stays hidden, which is the
+    // right behaviour for a surface that has not wired the plan yet.
+    cleanupPlan: () => ({ documents: [], sources: [] }),
+})
 
 const emit = defineEmits<{
     newChat: []
     rename: [title: string]
-    delete: []
+    delete: [{ deleteMedia: boolean }]
     export: []
     /** Owner 2026-07-26: this chat's media gallery. */
     media: []
@@ -62,10 +72,11 @@ function submitRename(): void {
     renameOpen.value = false
 }
 
-function confirmDelete(): void {
-    if (props.busy) return
-    emit('delete')
-    deleteOpen.value = false
+function confirmDelete(choice: { deleteMedia: boolean }): void {
+    // The dialog stays up and spins; it emits `close` once `busy` falls back,
+    // so the user sees the deletion happen instead of a list that has not
+    // changed yet.
+    emit('delete', choice)
 }
 </script>
 
@@ -149,18 +160,13 @@ function confirmDelete(): void {
             </template>
         </TalosMobileConfirmDialog>
 
-        <TalosMobileConfirmDialog
+        <TalosMobileDeleteChatDialog
             v-if="deleteOpen"
-            title="Delete chat?"
-            :description="`This permanently removes &quot;${props.activeTitle || 'New chat'}&quot; and its messages.`"
+            :title="props.activeTitle"
+            :plan="props.cleanupPlan"
+            :busy="props.busy"
             @close="deleteOpen = false"
-        >
-            <template #footer>
-                <Button type="button" variant="ghost" @click="deleteOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-                <Button type="button" variant="destructive" :disabled="props.busy" @click="confirmDelete">
-                    <Trash2 class="size-4" aria-hidden="true" /> Delete
-                </Button>
-            </template>
-        </TalosMobileConfirmDialog>
+            @confirm="confirmDelete"
+        />
     </div>
 </template>

@@ -46,6 +46,10 @@ function makeController() {
         selectSession: vi.fn().mockResolvedValue(undefined),
         renameSession: vi.fn().mockResolvedValue(undefined),
         deleteSession: vi.fn().mockResolvedValue(undefined),
+        // The delete confirmation names what the chat would take from the
+        // Library (owner 2026-07-26); nothing here produced files.
+        planSessionCleanup: vi.fn(() => ({ documents: [], sources: [] })),
+        deleteSessionMedia: vi.fn().mockResolvedValue([]),
     }
 }
 

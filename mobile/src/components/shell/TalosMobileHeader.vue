@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
@@ -14,13 +15,15 @@ defineProps<{
     hideMenu?: boolean
     /** False before a chat exists; the title then opens nothing, so it is inert. */
     canOpenMedia?: boolean
+    /** What the active chat would take from the Library, for the delete dialog. */
+    cleanupPlan?: TalosSessionCleanupPlan
 }>()
 
 const emit = defineEmits<{
     openMenu: []
     newChat: []
     rename: [title: string]
-    delete: []
+    delete: [{ deleteMedia: boolean }]
     export: []
     /** Owner 2026-07-26: this chat's media gallery. */
     media: []
@@ -75,12 +78,13 @@ const emit = defineEmits<{
              lives inside it, so the tablet-panel case just hides the whole
              menu (the panel owns those actions). -->
         <TalosMobileChatOptionsMenu
+            :cleanup-plan="cleanupPlan"
             v-if="!hideMenu"
             :active-title="title"
             :busy="creatingSession"
             @new-chat="emit('newChat')"
             @rename="emit('rename', $event)"
-            @delete="emit('delete')"
+            @delete="(choice) => emit('delete', choice)"
             :can-open-media="canOpenMedia"
             @export="emit('export')"
             @media="emit('media')"

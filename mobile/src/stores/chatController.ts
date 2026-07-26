@@ -47,6 +47,10 @@ import { createChatStore, type ChatCompletion, type ChatStore } from '@/stores/c
 import { TALOS_TONE_PRESETS, buildTalosSystemPrompt, extractToneSuggestion, type TalosToneId } from '@/lib/tone'
 import { extractLibrarySaveBlocks, librarySaveInstruction, stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
 import {
+    planTalosSessionCleanup,
+    type TalosSessionCleanupPlan,
+} from '@/lib/chat/sessionCleanup'
+import {
     buildTalosLibraryContextBlock,
     selectLibraryDocsForInjection,
     talosLibraryDisclosure,
@@ -285,6 +289,10 @@ export interface ChatController {
     selectSession(sessionId: string): Promise<void>
     renameSession(sessionId: string, title: string): Promise<void>
     deleteSession(sessionId: string): Promise<void>
+    /** Which Library files a chat would take with it (owner 2026-07-26). */
+    planSessionCleanup(sessionId: string): TalosSessionCleanupPlan
+    /** Remove those files. Returns the ids it could NOT delete. */
+    deleteSessionMedia(sessionId: string): Promise<string[]>
     /** R2-7 — single orchestration point for session actions (see impl). */
     sessionLifecycle: TalosSessionLifecycle
     tasks: {
@@ -1536,6 +1544,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (restoredModel) applyModelSelection(restoredModel)
     }
 
+    /**
+     * Which Library files a chat would take with it (owner 2026-07-26).
+     *
+     * Read straight off the vault list the Library already keeps loaded, so the
+     * confirmation can name a count without a query, and computed by the same
+     * function that does the deleting — a dialog that says "3 files" and then
+     * removes 5 is worse than one that says nothing.
+     */
+    function planSessionCleanup(sessionId: string): TalosSessionCleanupPlan {
+        return planTalosSessionCleanup(attachments.vaultFiles, sessionId)
+    }
+
+    /** Remove those files. Returns the ids it could NOT delete. */
+    async function deleteSessionMedia(sessionId: string): Promise<string[]> {
+        const plan = planSessionCleanup(sessionId)
+        const ids = [...plan.documents, ...plan.sources].map((file) => file.id)
+        return attachments.deleteVaultFiles(ids)
+    }
+
     // R2-7 — ONE orchestration point for session actions. The composer draft
     // controller lives in ChatScreen (the persistent base), which registers
     // its orchestrated actions (draft flush + attachment revocation + scope
@@ -1620,6 +1647,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         selectSession,
         renameSession,
         deleteSession,
+        planSessionCleanup,
+        deleteSessionMedia,
         memories,
         tasks,
         notes,

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import {
     Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquareText,
     Pencil, Trash2, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
+import { type TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { useTalosAccountStore } from '@/stores/account'
@@ -24,6 +26,13 @@ const props = defineProps<{
     activeSessionId: string | null
     busy: boolean
     creatingSession: boolean
+    /**
+     * What a given chat would take from the Library, asked for when the delete
+     * confirmation opens. A function rather than a map: the sidebar lists every
+     * conversation, and pre-computing a plan for all of them to show one is work
+     * nobody asked for.
+     */
+    cleanupPlanFor?: (sessionId: string) => TalosSessionCleanupPlan
 }>()
 
 const emit = defineEmits<{
@@ -31,7 +40,7 @@ const emit = defineEmits<{
     newChat: []
     select: [sessionId: string]
     rename: [sessionId: string, title: string]
-    delete: [sessionId: string]
+    delete: [sessionId: string, choice: { deleteMedia: boolean }]
     navigate: [route: TalosMobileRouteName]
     openModelLab: []
     openSettings: []
@@ -85,11 +94,24 @@ function openDelete(session: TalosLocalChatSession): void {
     deleteTarget.value = session
 }
 
-function confirmDelete(): void {
-    if (!deleteTarget.value || props.busy) return
-    emit('delete', deleteTarget.value.id)
-    deleteTarget.value = null
+function confirmDelete(choice: { deleteMedia: boolean }): void {
+    if (!deleteTarget.value) return
+    // The dialog keeps itself up and spinning until `busy` falls back — it
+    // closes by emitting, so the target is cleared there and not here.
+    emit('delete', deleteTarget.value.id, choice)
 }
+
+/**
+ * What the chat under the cursor would take from the Library.
+ *
+ * Owner 2026-07-26: deleting a chat left its documents behind. The sidebar can
+ * delete ANY chat, not just the open one, so the plan is asked for per target.
+ */
+const deletePlan = computed<TalosSessionCleanupPlan>(() => (
+    deleteTarget.value && props.cleanupPlanFor
+        ? props.cleanupPlanFor(deleteTarget.value.id)
+        : { documents: [], sources: [] }
+))
 </script>
 
 <template>
@@ -251,17 +273,12 @@ function confirmDelete(): void {
         </template>
     </TalosMobileConfirmDialog>
 
-    <TalosMobileConfirmDialog
+    <TalosMobileDeleteChatDialog
         v-if="deleteTarget !== null"
-        title="Delete chat?"
-        :description="`This permanently removes &quot;${deleteTarget ? sessionTitle(deleteTarget) : ''}&quot; and its messages.`"
+        :title="deleteTarget ? sessionTitle(deleteTarget) : ''"
+        :plan="deletePlan"
+        :busy="props.busy"
         @close="deleteTarget = null"
-    >
-        <template #footer>
-            <Button type="button" variant="ghost" @click="deleteTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
-            <Button type="button" variant="destructive" data-testid="talos-session-delete-confirm" :disabled="props.busy" @click="confirmDelete">
-                <Trash2 class="size-4" aria-hidden="true" /> Delete
-            </Button>
-        </template>
-    </TalosMobileConfirmDialog>
+        @confirm="confirmDelete"
+    />
 </template>

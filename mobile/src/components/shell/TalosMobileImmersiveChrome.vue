@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileChatOptionsMenu from '@/components/shell/TalosMobileChatOptionsMenu.vue'
@@ -14,13 +15,15 @@ defineProps<{
     hideMenu?: boolean
     /** False before a chat exists; the media entry then opens nothing. */
     canOpenMedia?: boolean
+    /** What the active chat would take from the Library, for the delete dialog. */
+    cleanupPlan?: TalosSessionCleanupPlan
 }>()
 
 const emit = defineEmits<{
     openMenu: []
     newChat: []
     rename: [title: string]
-    delete: []
+    delete: [{ deleteMedia: boolean }]
     export: []
     /** Owner 2026-07-26: this chat's media gallery. */
     media: []
@@ -49,12 +52,13 @@ const emit = defineEmits<{
             <span v-else aria-hidden="true" />
 
             <TalosMobileChatOptionsMenu
+            :cleanup-plan="cleanupPlan"
                 :active-title="activeTitle"
                 :busy="busy"
                 pill
                 @new-chat="emit('newChat')"
                 @rename="emit('rename', $event)"
-                @delete="emit('delete')"
+                @delete="(choice) => emit('delete', choice)"
                 :can-open-media="canOpenMedia"
                 @export="emit('export')"
                 @media="emit('media')"

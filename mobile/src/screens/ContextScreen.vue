@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
     AlertTriangle, CheckCircle2, Database, FileText, FolderPlus, Image as ImageIcon,
     EllipsisVertical, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
+    Check,
+    CheckSquare,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
@@ -180,6 +183,50 @@ async function attachFile(file: TalosLocalVaultFile): Promise<void> {
     } finally { actionBusy.value = false }
 }
 
+/**
+ * Mass selection (owner 2026-07-26: "un pulsante per selezionare massivamente
+ * media e chat per eliminazione"). The mode lives in a composable shared with
+ * the chat list, so "N selected" means the same thing on both screens.
+ */
+const bulk = useTalosBulkSelection()
+const bulkDeleteOpen = ref(false)
+
+const visibleIds = computed(() => filtered.value.map((file) => file.id))
+
+function tapFile(file: TalosLocalVaultFile): void {
+    // In selection mode a tap PICKS. Opening a file from here would be a
+    // different action wearing the same gesture.
+    if (bulk.active.value) bulk.toggle(file.id)
+    else void openFile(file)
+}
+
+async function confirmBulkDelete(): Promise<void> {
+    if (actionBusy.value) return
+    const ids = bulk.ids.value
+    actionBusy.value = true
+    feedback.value = ''
+    try {
+        const failed = await attachments.deleteVaultFiles(ids)
+        // Release the previews of everything that actually went; a revoked URL
+        // for a file still on screen would show a broken tile.
+        const next = { ...thumbs.value }
+        for (const id of ids) {
+            if (failed.includes(id)) continue
+            const url = next[id]
+            if (url) { URL.revokeObjectURL(url); delete next[id] }
+        }
+        thumbs.value = next
+        const gone = ids.length - failed.length
+        feedback.value = failed.length
+            ? gone + ' deleted, ' + failed.length + ' could not be removed.'
+            : gone + (gone === 1 ? ' file was deleted.' : ' files were deleted.')
+        bulkDeleteOpen.value = false
+        // Whatever survived stays selected; the rest must not linger as a count
+        // of rows the user can no longer see.
+        bulk.reconcile(attachments.vaultFiles.map((file) => file.id))
+    } finally { actionBusy.value = false }
+}
+
 function isSelected(fileId: string): boolean {
     return attachments.items.some((item) => item.vaultFileId === fileId && item.status === 'authorized')
 }
@@ -238,6 +285,7 @@ onMounted(async () => {
                 >
                 <div v-if="menuOpen" role="menu" data-testid="talos-library-menu" class="absolute right-0 top-full z-[60] mt-1 min-w-52 origin-top-right overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl">
                     <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Upload files</button>
+                    <button type="button" role="menuitem" data-testid="talos-library-select" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="menuOpen = false; bulk.enter()"><CheckSquare class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Select</button>
                     <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> New folder</button>
                     <div class="my-1 border-t border-[var(--talos-border)]" />
                     <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Grid <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
@@ -248,7 +296,31 @@ onMounted(async () => {
             </div>
         </div>
 
-        <label class="relative mb-3 block">
+        <!-- Selection bar: replaces the search row while the mode is on, so the
+             screen has ONE meaning at a time. -->
+        <div
+            v-if="bulk.active.value"
+            data-testid="talos-library-selection-bar"
+            class="mb-3 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
+        >
+            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" aria-label="Cancel selection" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
+            <span class="text-sm font-medium">{{ bulk.count.value }} selected</span>
+            <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(visibleIds)">
+                {{ bulk.allSelected(visibleIds) ? 'None' : 'All' }}
+            </Button>
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger)]"
+                data-testid="talos-library-bulk-delete"
+                aria-label="Delete selected files"
+                :disabled="bulk.count.value === 0 || actionBusy"
+                @click="bulkDeleteOpen = true"
+            ><Trash2 class="size-4" aria-hidden="true" /></Button>
+        </div>
+
+        <label v-else class="relative mb-3 block">
             <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
             <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" placeholder="Search the Library" aria-label="Search the Library" class="min-h-11 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
         </label>
@@ -281,7 +353,7 @@ onMounted(async () => {
                  the list — a hover-only control is invisible/untappable on touch). -->
             <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list" aria-label="Library files">
                 <div v-for="file in section.files" :key="file.id" role="listitem" :data-vault-file-id="file.id" class="relative aspect-square overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                    <button type="button" class="talos-pressable absolute inset-0 flex flex-col text-left" :aria-label="'Open ' + file.display_name" @click="openFile(file)">
+                    <button type="button" class="talos-pressable absolute inset-0 flex flex-col text-left" :aria-label="(bulk.active.value ? 'Select ' : 'Open ') + file.display_name" :aria-pressed="bulk.active.value ? bulk.isSelected(file.id) : undefined" @click="tapFile(file)">
                         <img v-if="isImage(file) && thumbs[file.id]" :src="thumbs[file.id]" :alt="file.display_name" class="absolute inset-0 h-full w-full object-cover" />
                         <template v-else>
                             <span class="line-clamp-3 px-3 pt-3 text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</span>
@@ -291,6 +363,10 @@ onMounted(async () => {
                             </span>
                         </template>
                     </button>
+                    <span v-if="bulk.active.value" class="pointer-events-none absolute right-1.5 top-1.5 flex size-6 items-center justify-center rounded-full border-2" :class="bulk.isSelected(file.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-on-accent,#000)]' : 'border-white/80 bg-black/35'">
+                        <Check v-if="bulk.isSelected(file.id)" class="size-4" aria-hidden="true" />
+                    </span>
+                    <span v-if="bulk.isSelected(file.id)" class="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-inset ring-[var(--talos-accent)]" aria-hidden="true" />
                     <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-3xs font-medium text-white"><Sparkles class="size-3" aria-hidden="true" /> Gen</span>
                 </div>
             </div>
@@ -298,12 +374,15 @@ onMounted(async () => {
             <!-- LIST -->
             <div v-else class="space-y-1" role="list" aria-label="Library files">
                 <div v-for="file in section.files" :key="file.id" :data-vault-file-id="file.id" role="listitem" class="flex min-w-0 items-center gap-3 rounded-xl px-1 py-2">
-                    <button type="button" class="talos-pressable flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]" :aria-label="'Open ' + file.display_name" @click="openFile(file)">
+                    <span v-if="bulk.active.value" class="flex size-6 shrink-0 items-center justify-center rounded-full border-2" :class="bulk.isSelected(file.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-on-accent,#000)]' : 'border-[var(--talos-border)]'" aria-hidden="true">
+                        <Check v-if="bulk.isSelected(file.id)" class="size-4" />
+                    </span>
+                    <button type="button" class="talos-pressable flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]" :aria-label="(bulk.active.value ? 'Select ' : 'Open ') + file.display_name" @click="tapFile(file)">
                         <img v-if="isImage(file) && thumbs[file.id]" :src="thumbs[file.id]" :alt="file.display_name" class="h-full w-full object-cover" />
                         <ImageIcon v-else-if="isImage(file)" class="size-5 text-[var(--talos-accent)]" aria-hidden="true" />
                         <FileText v-else class="size-5 text-[var(--talos-accent)]" aria-hidden="true" />
                     </button>
-                    <button type="button" class="min-w-0 flex-1 text-left" @click="openFile(file)">
+                    <button type="button" class="min-w-0 flex-1 text-left" @click="tapFile(file)">
                         <span class="line-clamp-2 text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</span>
                         <span class="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--talos-muted)]">
                             <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="text-[var(--talos-accent)]">Generated</span>
@@ -311,8 +390,8 @@ onMounted(async () => {
                             <span v-if="!groupByChat && originChat(file)" class="truncate">· {{ originChat(file) }}</span>
                         </span>
                     </button>
-                    <Button v-if="file.status === 'available'" type="button" size="icon" variant="ghost" class="min-h-11 min-w-11" :aria-label="'Attach ' + file.display_name + ' to message'" :disabled="actionBusy || isSelected(file.id)" @click="attachFile(file)"><Paperclip class="size-4" aria-hidden="true" /></Button>
-                    <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 text-[var(--talos-danger)]" :aria-label="'Delete ' + file.display_name" :disabled="actionBusy" @click="requestDelete(file)"><Trash2 class="size-4" aria-hidden="true" /></Button>
+                    <Button v-if="!bulk.active.value && file.status === 'available'" type="button" size="icon" variant="ghost" class="min-h-11 min-w-11" :aria-label="'Attach ' + file.display_name + ' to message'" :disabled="actionBusy || isSelected(file.id)" @click="attachFile(file)"><Paperclip class="size-4" aria-hidden="true" /></Button>
+                    <Button v-if="!bulk.active.value" type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 text-[var(--talos-danger)]" :aria-label="'Delete ' + file.display_name" :disabled="actionBusy" @click="requestDelete(file)"><Trash2 class="size-4" aria-hidden="true" /></Button>
                 </div>
             </div>
         </template>
@@ -360,6 +439,21 @@ onMounted(async () => {
         <template #footer>
             <Button type="button" variant="outline" :disabled="actionBusy" @click="deleteOpen = false">Cancel</Button>
             <Button type="button" :disabled="actionBusy" class="bg-[var(--talos-danger)] text-white" @click="confirmDelete">Delete file</Button>
+        </template>
+    </TalosMobileConfirmDialog>
+
+    <TalosMobileConfirmDialog
+        v-if="bulkDeleteOpen"
+        title="Delete selected files?"
+        :description="`${bulk.count.value} file${bulk.count.value === 1 ? '' : 's'} will be removed from this device. Existing chat history keeps only their safe file labels.`"
+        @close="actionBusy ? undefined : bulkDeleteOpen = false"
+    >
+        <template #footer>
+            <Button type="button" variant="outline" :disabled="actionBusy" @click="bulkDeleteOpen = false">Cancel</Button>
+            <Button type="button" data-testid="talos-library-bulk-delete-confirm" :disabled="actionBusy" class="bg-[var(--talos-danger)] text-white" @click="confirmBulkDelete">
+                <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+                {{ actionBusy ? 'Deleting…' : 'Delete' }}
+            </Button>
         </template>
     </TalosMobileConfirmDialog>
 </template>
