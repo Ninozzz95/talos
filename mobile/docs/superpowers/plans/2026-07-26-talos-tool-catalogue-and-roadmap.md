@@ -44,7 +44,8 @@ un'app personale. Conseguenze dirette:
 
 | # | Decisione |
 |---|---|
-| D1 | Tre sorgenti: **Brave BYOK** (prima), **SearXNG self-hosted** (libera, OSS, zero terzi), **endpoint custom** con mappatura configurabile. |
+| D1 | Tre sorgenti: **Tavily** (prima porta), **Brave** (opzione), **SearXNG self-hosted** (libera, OSS, zero terzi), più **endpoint custom** con mappatura configurabile. |
+| D1-rev | **Revisione 2026-07-26, verificata prima di far registrare l'owner.** Il piano diceva "Brave prima, ha $5/mese gratis per ogni utente": **non è più vero**. Brave ha chiuso il piano gratuito a febbraio 2026 — oggi serve una **carta di credito** anche per iniziare, i $5 di credito si tengono **solo attribuendo pubblicamente Brave**, e **non c'è tetto di spesa**. Su un'app distribuita (D0) chiedere una carta per provare la ricerca è una barriera pesante, e un ciclo agentico consuma più di quanto l'utente si aspetti. **Tavily** dà 1.000 crediti al mese **senza carta**, registrazione con email o OAuth, 1 credito per ricerca base. Cambia solo quale sorgente incontra per prima un utente nuovo: l'architettura a tre sorgenti resta identica. |
 | D2 | **SearXNG pubblico escluso**: il JSON è disattivato di default sulla maggior parte delle istanze e si romperebbe a caso, mandando intanto le query al server di uno sconosciuto. |
 | D3 | Senza sorgente configurata i tool **non vengono offerti al modello**, che così non può promettere una ricerca che non farà. Stessa regola già in vigore per la Libreria. |
 | D4 | Profondità **adattiva**: decide il modello. Domanda semplice = una ricerca; domanda complessa = cerca, legge, confronta finché basta. |
