@@ -342,7 +342,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                                         :key="toolIndex"
                                         class="font-mono text-2xs text-[var(--talos-muted)]"
                                     >
-                                        {{ tool.ok ? '+' : 'x' }} {{ tool.name }} · {{ millis(tool.durationMs) }}
+                                        {{ tool.ok ? '+' : 'x' }} {{ tool.name }} · {{ millis(tool.durationMs) }}<template v-if="tool.waitedForConsentMs"> (+{{ millis(tool.waitedForConsentMs) }} waiting for you)</template><template v-if="tool.errorCode"> · {{ tool.errorCode }}</template>
                                     </span>
                                     <!-- The diagnosis the owner is after: "one
                                          after another" means his provider asked

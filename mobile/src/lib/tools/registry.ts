@@ -23,6 +23,11 @@ export interface TalosToolResult {
     ok: boolean
     /** What the model receives back. Data, never instructions. */
     content: string
+    /**
+     * A stable code for WHY it failed — for the diagnostics trace, never for
+     * the model. Codes travel; sentences get rewritten.
+     */
+    code?: string | null
     /** Anything the audit row should keep that the model does not need. */
     evidence?: Record<string, unknown>
 }

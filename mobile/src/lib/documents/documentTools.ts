@@ -53,8 +53,19 @@ export function createTalosDocumentTools(
             format: z.enum(TALOS_DOCUMENT_FORMATS).describe('The file format to produce.'),
             title: z.string().min(1).describe('The document title; it also becomes the file name.'),
             body: z.string().optional().describe('Prose content, markdown-flavoured.'),
-            rows: z.array(z.array(z.string())).optional()
-                .describe('Table content. The first row is the header.'),
+            // Numbers and booleans are ACCEPTED and converted, not refused.
+            //
+            // Owner's R37 trace: the model spent sixty seconds writing a
+            // six-page financial report, emitted `["Milano", 520000, 4.7]` —
+            // the only natural way to express a table of figures — and zod
+            // rejected the whole call in milliseconds. All sixty seconds went
+            // in the bin, the model rewrote the report as prose, and a request
+            // for a PDF came back as HTML. A schema a model cannot satisfy on
+            // the obvious first try is a defect in the schema.
+            rows: z.array(z.array(
+                z.union([z.string(), z.number(), z.boolean()]).transform(String),
+            )).optional()
+                .describe('Table content. The first row is the header. Cells may be numbers.'),
             slides: z.array(z.object({
                 title: z.string(),
                 bullets: z.array(z.string()),
@@ -66,7 +77,11 @@ export function createTalosDocumentTools(
                 document = await sources.generate(input)
             } catch (error) {
                 const detail = error instanceof Error ? error.message : String(error)
-                return { ok: false, content: `The document was not created: ${detail}` }
+                // The owner's R37 trace: this branch fired after sixty seconds
+                // of the model writing the report, and `ok: false` was all the
+                // evidence there was.
+                const code = /^TALOS_[A-Z0-9_]+$/.test(detail) ? detail : 'TALOS_DOCUMENT_GENERATE_FAILED'
+                return { ok: false, content: `The document was not created: ${detail}`, code }
             }
 
             // The step everyone skips. It runs BEFORE the file reaches the
@@ -76,6 +91,7 @@ export function createTalosDocumentTools(
                 return {
                     ok: false,
                     content: `The file was written but failed its check (${check.detail}), so it was discarded. Tell the user, and try a simpler structure.`,
+                    code: 'TALOS_DOCUMENT_VERIFY_FAILED',
                 }
             }
 

@@ -974,7 +974,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     if (!tool) {
                         // A model can hallucinate a tool name. Saying so is more
                         // useful than failing the turn.
-                        timing?.finish(false, waitedForConsentMs)
+                        timing?.finish(false, waitedForConsentMs, 'TALOS_TOOL_UNKNOWN')
                         return { ok: false, content: `There is no tool called "${call.name}".` }
                     }
                     const result = await executeTalosTool(tool, call.arguments, {
@@ -990,7 +990,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         audit: (row) => toolset.audit(row, chat.activeSession.value?.id ?? null),
                         context: { sessionId: chat.activeSession.value?.id ?? null, signal: stream?.signal },
                     })
-                    timing?.finish(result.ok, waitedForConsentMs)
+                    timing?.finish(result.ok, waitedForConsentMs, result.code ?? null)
                     return { ok: result.ok, content: result.content }
                 },
                 onToolRound: (calls) => {

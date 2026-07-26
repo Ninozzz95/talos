@@ -177,6 +177,32 @@ describe('recording where a send spends its time', () => {
         expect(tool!.waitedForConsentMs).toBe(60_000)
     })
 
+    it('keeps the CODE of a tool that failed, so the next run is not guesswork', () => {
+        // Owner's R37 trace, 2026-07-26: `document_create` failed after sixty
+        // seconds of the model writing the document, and the whole thing was
+        // regenerated — forty per cent of the wall clock. The trace said
+        // `ok: false` and nothing else, so why it failed was unknowable.
+        //
+        // The CODE only. A failure message can quote a file name or a snippet
+        // of what the user asked for, and this payload gets pasted into a chat.
+        const recorder = createTalosTraceRecorder({ enabled: () => true, now: () => 0 })
+        const send = recorder.begin({ provider: 'deepseek', model: 'deepseek-v4-flash' })
+        const round = send.round()
+        round.tool('document_create').finish(false, 0, 'TALOS_DOCUMENT_VERIFY_FAILED')
+        send.finish('ok')
+
+        expect(recorder.sends()[0]!.rounds[0]!.tools[0]!.errorCode)
+            .toBe('TALOS_DOCUMENT_VERIFY_FAILED')
+    })
+
+    it('records no code at all when the tool worked', () => {
+        const recorder = createTalosTraceRecorder({ enabled: () => true, now: () => 0 })
+        const send = recorder.begin({ provider: 'openai', model: 'gpt-5' })
+        send.round().tool('web_search').finish(true)
+        send.finish('ok')
+        expect(recorder.sends()[0]!.rounds[0]!.tools[0]!.errorCode).toBeNull()
+    })
+
     it('never records a prompt, a file name, or a key', () => {
         // A diagnostics export is the most natural way for a secret to leave an
         // app. This recorder is not given anything to leak: the surface takes a
@@ -189,6 +215,6 @@ describe('recording where a send spends its time', () => {
         const serialised = JSON.stringify(recorder.sends())
         expect(serialised).not.toMatch(/sk-|tvly-|Bearer/)
         expect(Object.keys(recorder.sends()[0]!.rounds[0]!.tools[0]!).sort())
-            .toEqual(['durationMs', 'name', 'ok', 'startedAtMs', 'waitedForConsentMs'])
+            .toEqual(['durationMs', 'errorCode', 'name', 'ok', 'startedAtMs', 'waitedForConsentMs'])
     })
 })

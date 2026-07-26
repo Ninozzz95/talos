@@ -36,6 +36,17 @@ export interface TalosToolTrace {
      */
     waitedForConsentMs: number
     ok: boolean
+    /**
+     * WHY it failed, as a code and nothing else. Null when it worked.
+     *
+     * Owner's R37 trace: `document_create` failed after sixty seconds of the
+     * model writing the document, the whole thing was regenerated, and forty
+     * per cent of the wall clock went to that retry — with `ok: false` as the
+     * only evidence. The code, never the message: a failure message can quote a
+     * file name or a fragment of what the user asked for, and this payload is
+     * pasted into a chat.
+     */
+    errorCode: string | null
 }
 
 export interface TalosRoundTrace {
@@ -101,7 +112,7 @@ export interface TalosSendTrace {
 }
 
 export interface TalosToolTraceHandle {
-    finish(ok: boolean, waitedForConsentMs?: number): void
+    finish(ok: boolean, waitedForConsentMs?: number, errorCode?: string | null): void
 }
 
 export interface TalosRoundTraceHandle {
@@ -225,13 +236,14 @@ export function createTalosTraceRecorder(
                                 durationMs: 0,
                                 waitedForConsentMs: 0,
                                 ok: false,
+                                errorCode: null,
                             }
                             round.tools.push(tool)
                             inFlight += 1
                             if (inFlight > 1) round.parallel = true
                             let done = false
                             return {
-                                finish(ok, waitedForConsentMs = 0) {
+                                finish(ok, waitedForConsentMs = 0, errorCode = null) {
                                     if (done) return
                                     done = true
                                     inFlight -= 1
@@ -242,6 +254,7 @@ export function createTalosTraceRecorder(
                                         Math.round(options.now() - toolStart - waitedForConsentMs),
                                     )
                                     tool.ok = ok
+                                    tool.errorCode = ok ? null : errorCode
                                 },
                             }
                         },
