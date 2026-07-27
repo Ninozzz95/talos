@@ -32,8 +32,19 @@ describe('asking two different providers for the same picture', () => {
         )
         expect(plan.url).toBe('https://generativelanguage.googleapis.com/v1beta/interactions')
         expect(plan.headers['x-goog-api-key']).toBe('AIza-secret')
-        expect(plan.body).toMatchObject({ model: 'gemini-3.1-flash-image', input: 'un gatto' })
-        expect(JSON.stringify(plan.body)).toContain('3:4')
+        expect(plan.body).toMatchObject({
+            model: 'gemini-3.1-flash-image',
+            input: [{ type: 'text', text: 'un gatto' }],
+        })
+        // The owner's device answered `HTTP 400: The 'type' parameter is
+        // required at 'response_format'` — every request was rejected before a
+        // pixel was drawn, and three models called it a content refusal.
+        expect(plan.body.response_format).toEqual({
+            type: 'image',
+            mime_type: 'image/png',
+            aspect_ratio: '3:4',
+            image_size: '1K',
+        })
     })
 
     it('never puts the key in the url', () => {
