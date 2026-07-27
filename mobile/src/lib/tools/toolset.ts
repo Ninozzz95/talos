@@ -1,6 +1,7 @@
 import { createTalosReadTools, type TalosToolSources } from '@/lib/tools/readTools'
 import { createTalosWebTools, type TalosWebToolSources } from '@/lib/search/webTools'
 import { createTalosDocumentTools, type TalosDocumentToolSources } from '@/lib/documents/documentTools'
+import { createTalosImageTools, type TalosImageToolSources } from '@/lib/images/imageTools'
 import type { TalosToolAuditRow } from '@/lib/tools/executor'
 import type { TalosToolConsentRequest } from '@/lib/tools/executor'
 import { decideTalosToolPermission, type TalosToolPermissions } from '@/lib/tools/permissionTypes'
@@ -64,6 +65,13 @@ export interface TalosToolsetDeps {
      * D12's "ask once per conversation" applies.
      */
     documents?(): TalosDocumentToolSources | null
+    /**
+     * Drawing. A `write` like documents: it spends the user's money and puts a
+     * file on the device, so the permission gate governs it. Absent when no
+     * configured provider can draw, in which case the tool is never offered
+     * rather than offered and failing.
+     */
+    images?(): TalosImageToolSources | null
     now?(): string
 }
 
@@ -183,10 +191,12 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             // message rather than the next launch.
             const web = deps.web?.() ?? null
             const documents = deps.documents?.() ?? null
+            const images = deps.images?.() ?? null
             return [
                 ...all,
                 ...(web ? createTalosWebTools(web) : []),
                 ...(documents ? createTalosDocumentTools(documents) : []),
+                ...(images ? createTalosImageTools(images) : []),
             ]
                 .filter((tool) => libraryAllowed || !tool.name.startsWith('library_'))
                 // SF-MAJOR: the gate refused at EXECUTION but the schemas were

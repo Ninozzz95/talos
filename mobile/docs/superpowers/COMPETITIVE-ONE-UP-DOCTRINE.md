@@ -81,6 +81,67 @@ Run this **before** a phase designs anything. It is the concrete form of
 - **Hands-on beats reading** where the app is installable. A screenshot of the
   actual failure outranks a paragraph about it.
 
+### The technical bar — owner correction, 2026-07-27
+
+> *"la recon deve essere super in detch e ultrà tecnica, devi ispezionare repo e
+> documentazioni REALI dei competitor"*
+
+The first draft of this document carried rows marked HYPOTHESIS. That was
+honest labelling of a dishonest shortcut: a guess with a badge on it is still a
+guess, and a strategy built on guesses about how rivals work is a strategy that
+loses to the first competitor who actually read the code.
+
+**So: recon is a source-code and primary-documentation activity, not a reading
+of marketing pages.**
+
+- **READMEs are marketing. Source is truth.** A README says what they meant to
+  build. The code says what they shipped, including the `TODO`, the disabled
+  flag and the workaround. When both exist, the code wins and the README is
+  quoted only as a claim.
+- **Cite file paths and commit SHAs**, not project names. `src/foo/bar.ts:120 @
+  a1b2c3d` is a finding. "Jan does X" is a rumour with a citation shape.
+- **For closed products** (ChatGPT, Claude, Gemini, Perplexity, Msty), the
+  primary sources are: the official API/docs, the app itself on a device, the
+  network traffic it makes, and the platform manifest (what permissions the APK
+  declares). Absence of a feature must be demonstrated, not assumed — "it cannot
+  do X" requires having looked.
+- **Quantify.** "Their streaming is smoother" is not a finding. Frame timings,
+  token counts, bundle sizes, request bodies and cold-start numbers are.
+- **Record what you could NOT determine.** An unknown written down is a
+  direction for the next pass; an unknown quietly rounded to an assumption is
+  the failure this section exists to prevent.
+
+**The repos to actually read** (open source, so there is no excuse):
+
+| Ring | Project | Repo |
+|---|---|---|
+| 3 | Jan | `menloresearch/jan` |
+| 3 | Chatbox | `Bin-Huang/chatbox` |
+| 3 | LibreChat | `danny-avila/LibreChat` |
+| 3 | Enchanted | `gluonfield/enchanted` |
+| 2 | PocketPal AI | `a-ghorbani/pocketpal-ai` |
+| 2 | MLC LLM | `mlc-ai/mlc-llm` |
+| 2 | Ollama | `ollama/ollama` |
+| 2 | llama.cpp | `ggml-org/llama.cpp` |
+
+**What to extract from each, at code level** — these are the seams TALOS
+competes on, so these are the files to open:
+
+1. **Provider abstraction** — how many providers, how the adapter boundary is
+   drawn, what leaks through it.
+2. **Prompt caching** — do they send `cache_control` / `prompt_cache_key` at
+   all? (Ours does; this is a measurable, checkable one-up or the loss of one.)
+3. **Agent/tool loop** — bounded or unbounded, parallel or serial, what happens
+   to a refused schema.
+4. **Local runtime binding** — llama.cpp/MLC/executorch, quantisation, how the
+   model is downloaded and where it is kept.
+5. **Storage and encryption at rest** — is the database actually encrypted, and
+   what holds the key.
+6. **Memory** — a settings list, or something the conversation can change.
+7. **Streaming renderer** — how they avoid re-parsing the whole message per
+   chunk. (We now cache per block; find out what they do.)
+8. **Device permissions** — what the manifest declares and when it is asked.
+
 ---
 
 ## 3. The competitor map
