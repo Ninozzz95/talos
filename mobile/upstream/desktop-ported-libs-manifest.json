@@ -1,32 +1,32 @@
 {
-    "schema_version": 1,
-    "description": "R3-13 — libs ported from the desktop control-plane, pinned by content hash. A change to any of these files is a RED build until this manifest is consciously updated, forcing a deliberate re-sync decision against the recorded desktop source (checksum-in-versioned-manifest pattern; monorepo drift best practice). These files are INTENTIONALLY forked from desktop (mobile-specific: calm theme, censor removed, TS type syntax), so the gate pins the MOBILE hash and records provenance rather than asserting byte-equality with desktop.",
-    "desktop_repo": "control-plane/resources/js/lib",
-    "desktop_reconciled_revision": "76a0aa9",
-    "files": [
-        {
-            "mobile_path": "mobile/src/lib/talosChatLayout.ts",
-            "sha256": "37b64b546076e43a0c4b6a34724ae4142550d54bd7c23dc26481eeea406d692f",
-            "desktop_source": "talosChatLayout.ts",
-            "reconciliation": "DIVERGED from desktop on purpose (owner, 2026-07-26): mobile adds an \"Extra small\" chat text step below Small, and holds the four rem sizes in TALOS_CHAT_TEXT_SCALE_REM instead of a nested ternary in the message list. Note that the previous claim of whitespace-identity was already inaccurate before this change: mobile labels the steps Small/Default/Large where desktop says Compact/Balanced/Expanded, and desktop also carries advanced_rail_expanded, which has no mobile surface. Codex ticket KX-DESK-01 asks the desktop to take the fourth step."
-        },
-        {
-            "mobile_path": "mobile/src/lib/talosContrast.ts",
-            "sha256": "c243805017b28190940e4af32177f3b6a66aced3398ed1d81fff5c72b8fa21ef",
-            "desktop_source": "talosContrast.ts",
-            "reconciliation": "whitespace-identical to desktop at the reconciled revision (pure port)"
-        },
-        {
-            "mobile_path": "mobile/src/lib/talosMessageMarkdown.ts",
-            "sha256": "7d1fa92bebd59034c502a2fd7b99a77544b2e0adc9591b9c1e108516800ef9dd",
-            "desktop_source": "talosMessageMarkdown.ts",
-            "reconciliation": "ported; differs from desktop only in TS type syntax (verified F1-F6 review)"
-        },
-        {
-            "mobile_path": "mobile/src/lib/talosThemes.ts",
-            "sha256": "f58e241a1edb5cc5439c736cab70172c8dae92b2ae239b151987df22ba54891c",
-            "desktop_source": "talosThemes.ts",
-            "reconciliation": "ported; mobile-forked (calm preset is a mobile design-lead theme; R1 re-seeded it neutral grey)"
-        }
-    ]
+  "schema_version": 1,
+  "description": "R3-13 — libs ported from the desktop control-plane, pinned by content hash. A change to any of these files is a RED build until this manifest is consciously updated, forcing a deliberate re-sync decision against the recorded desktop source (checksum-in-versioned-manifest pattern; monorepo drift best practice). These files are INTENTIONALLY forked from desktop (mobile-specific: calm theme, censor removed, TS type syntax), so the gate pins the MOBILE hash and records provenance rather than asserting byte-equality with desktop.",
+  "desktop_repo": "control-plane/resources/js/lib",
+  "desktop_reconciled_revision": "76a0aa9",
+  "files": [
+    {
+      "mobile_path": "mobile/src/lib/talosChatLayout.ts",
+      "sha256": "37b64b546076e43a0c4b6a34724ae4142550d54bd7c23dc26481eeea406d692f",
+      "desktop_source": "talosChatLayout.ts",
+      "reconciliation": "DIVERGED from desktop on purpose (owner, 2026-07-26): mobile adds an \"Extra small\" chat text step below Small, and holds the four rem sizes in TALOS_CHAT_TEXT_SCALE_REM instead of a nested ternary in the message list. Note that the previous claim of whitespace-identity was already inaccurate before this change: mobile labels the steps Small/Default/Large where desktop says Compact/Balanced/Expanded, and desktop also carries advanced_rail_expanded, which has no mobile surface. Codex ticket KX-DESK-01 asks the desktop to take the fourth step."
+    },
+    {
+      "mobile_path": "mobile/src/lib/talosContrast.ts",
+      "sha256": "c243805017b28190940e4af32177f3b6a66aced3398ed1d81fff5c72b8fa21ef",
+      "desktop_source": "talosContrast.ts",
+      "reconciliation": "whitespace-identical to desktop at the reconciled revision (pure port)"
+    },
+    {
+      "mobile_path": "mobile/src/lib/talosMessageMarkdown.ts",
+      "sha256": "4755da75912ddd1524179c0080020f2996e3dcd83afa398da20a506855d5cdf5",
+      "desktop_source": "talosMessageMarkdown.ts",
+      "reconciliation": "ported; differs from desktop only in TS type syntax (verified F1-F6 review)"
+    },
+    {
+      "mobile_path": "mobile/src/lib/talosThemes.ts",
+      "sha256": "f58e241a1edb5cc5439c736cab70172c8dae92b2ae239b151987df22ba54891c",
+      "desktop_source": "talosThemes.ts",
+      "reconciliation": "ported; mobile-forked (calm preset is a mobile design-lead theme; R1 re-seeded it neutral grey)"
+    }
+  ]
 }
