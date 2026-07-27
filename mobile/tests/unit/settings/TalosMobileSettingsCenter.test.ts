@@ -33,11 +33,11 @@ afterEach(() => {
 })
 
 describe('TalosMobileSettingsCenter', () => {
-    it('renders one labelled tablist, eleven tabs, and the selected tabpanel', () => {
+    it('renders one labelled tablist, twelve tabs, and the selected tabpanel', () => {
         const wrapper = mountCenter()
         const tablist = wrapper.get('[role="tablist"]')
         expect(tablist.attributes('aria-label')).toBe('TALOS settings categories')
-        expect(wrapper.findAll('[role="tab"]')).toHaveLength(11)
+        expect(wrapper.findAll('[role="tab"]')).toHaveLength(12)
         expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Models')
         expect(wrapper.get('[role="tabpanel"]').attributes('data-settings-panel')).toBe('models')
     })
@@ -62,7 +62,7 @@ describe('TalosMobileSettingsCenter', () => {
         await nextTick()
         await new Promise((resolve) => setTimeout(resolve, 0))
         await nextTick()
-        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('System')
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toContain('Privacy and permissions')
 
         wrapper.get('[role="tab"][aria-selected="true"]').element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
         await nextTick()
