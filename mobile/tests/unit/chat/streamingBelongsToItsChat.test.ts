@@ -29,18 +29,26 @@ const controller = vi.hoisted(() => ({
 
 vi.mock('@/stores/chatController', () => ({ useChatController: () => controller }))
 vi.mock('@/stores/settings', () => ({
-    // Fade rather than typewriter: the typewriter reveals on a frame clock, so
-    // at mount there is nothing on screen yet and the assertion would be about
-    // pacing instead of ownership. The scoping under test is identical in both.
+    // BOTH modes are paced since 2026-07-27 — fade rendered at network cadence
+    // was the reason it never looked smooth — so this file waits a frame before
+    // asserting. What is under test is ownership, not pacing.
     useSettingsStore: () => ({ state: { shell: { streaming_animation: 'fade' } } }),
 }))
+
+/** One paced commit: the reveal is driven by the frame clock in both modes. */
+async function paint(wrapper: { vm: { $nextTick: () => Promise<void> } }): Promise<void> {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await wrapper.vm.$nextTick()
+}
 
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 
 describe('the in-flight reply belongs to one conversation', () => {
-    it('renders in the chat it was started from', () => {
+    it('renders in the chat it was started from', async () => {
         controller.chat.activeSession.value = { id: 'session-a', title: 'A' }
         const wrapper = mount(TalosMobileStreamingReply)
+        await paint(wrapper)
         expect(wrapper.find('[data-testid="talos-mobile-streaming"]').exists()).toBe(true)
     })
 

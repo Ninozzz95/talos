@@ -11,6 +11,7 @@ import {
 } from '@/lib/tools/toolLabels'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
 import { useTalosTypewriterReveal } from '@/composables/useTalosTypewriterReveal'
+import { useTalosSmoothReveal } from '@/composables/useTalosSmoothReveal'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -81,8 +82,32 @@ const sending = computed(() => state.sending
 const settings = useSettingsStore()
 const fadeMode = computed(() => settings.state.shell.streaming_animation === 'fade')
 
-const { revealed: paced } = useTalosTypewriterReveal(streamingText)
-const revealed = computed(() => (fadeMode.value ? streamingText.value : paced.value))
+/**
+ * BOTH modes are paced now.
+ *
+ * Owner 2026-07-26: fade "non è smooth". The cause was this line: fade mode
+ * rendered `streamingText` directly, at NETWORK cadence — and SSE chunks arrive
+ * in lumps, so the fade had lumps to dissolve. The research found that every
+ * credible implementation decouples the two cadences; the fade is the second
+ * half of the effect, never the first.
+ *
+ * Typewriter keeps its own reveal (it is a different intent: a mechanical
+ * clock). Fade gets the adaptive smoother, which follows the model's real speed
+ * instead of imposing one.
+ */
+const reducedMotion = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+const { revealed: typed } = useTalosTypewriterReveal(streamingText)
+const { revealed: smoothed } = useTalosSmoothReveal(streamingText, {
+    // Reduced motion kills BOTH the fade and the pacing: text marching across
+    // the screen is itself the animation, so removing only the fade is half a
+    // fix.
+    paced: () => !reducedMotion,
+    settled: () => !sending.value,
+})
+const revealed = computed(() => (fadeMode.value ? smoothed.value : typed.value))
 
 const PlainMessage = defineComponent({
     props: { content: { type: String, required: true } },
@@ -123,6 +148,7 @@ watch(revealed, (text) => {
 }, { immediate: true })
 
 const NEWLINE = String.fromCharCode(10)
+const TAB = String.fromCharCode(9)
 
 // ---- the smooth tail -------------------------------------------------------
 const contentHost = ref<HTMLElement | null>(null)
@@ -178,18 +204,41 @@ function ensureTail(): HTMLElement | null {
 }
 
 function appendChars(host: HTMLElement, text: string): void {
+    /**
+     * One span per WORD, with its trailing space inside it.
+     *
+     * It used to be one span per LETTER. A 3,000-character reply is then 3,000
+     * animated nodes in a single bubble — twice the size at which Lighthouse
+     * calls a DOM tree an error — on a phone whose main thread is also reading
+     * the network and re-parsing markdown. Word granularity is what every
+     * reference implementation chose: five and a half times fewer nodes, and
+     * nobody can see the difference.
+     *
+     * The trailing space goes INSIDE the span rather than beside it: a
+     * whitespace-only span fragments copied text and makes a link's underline
+     * appear before its words.
+     */
+    let word = ''
+    const flush = (): void => {
+        if (word === '') return
+        const span = document.createElement('span')
+        span.className = fadeMode.value ? 'talos-stream-char talos-stream-char--fade' : 'talos-stream-char'
+        span.textContent = word
+        host.insertBefore(span, caretEl ?? null)
+        word = ''
+    }
     for (const char of text) {
-        if (char === '\n' || char === ' ' || char === '\t') {
+        if (char === NEWLINE) {
+            // A newline is block structure, not part of a word: it must be a
+            // real text node or the line never breaks.
+            flush()
             host.insertBefore(document.createTextNode(char), caretEl ?? null)
             continue
         }
-        // One span per letter: the ONLY node that animates is the new one, so
-        // the text already on screen never re-lays-out or re-animates.
-        const span = document.createElement('span')
-        span.className = fadeMode.value ? 'talos-stream-char talos-stream-char--fade' : 'talos-stream-char'
-        span.textContent = char
-        host.insertBefore(span, caretEl ?? null)
+        word += char
+        if (char === ' ' || char === TAB) flush()
     }
+    flush()
 }
 
 function syncTail(): void {
