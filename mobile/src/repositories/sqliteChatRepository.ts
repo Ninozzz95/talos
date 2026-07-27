@@ -1,12 +1,6 @@
 import type { TalosSqlConnection, TalosSqlRow, TalosSqliteRuntime } from '@/persistence/sqliteTypes'
 import { talosWithTimeout } from '@/lib/talosDeviceLog'
 import {
-    assertTalosRunCheckpoint,
-    parseTalosRunState,
-    serializeTalosRunState,
-    type TalosRunState,
-} from '@/lib/runs/longRunState'
-import {
     cloneJsonObject,
     normalizeFileAuthorityPermissions,
     normalizeComposerDraft,
@@ -51,8 +45,6 @@ import {
 
 const ACTIVE_SESSION_KEY = 'active_session_id'
 const COMPOSER_DRAFT_KEY_PREFIX = 'composer_draft:'
-const RUN_COLUMNS = `id, contract, kind, session_id, title, status, engine,
-    state_json, started_at, updated_at`
 
 function invalidRow(): never {
     throw new Error('TALOS_CHAT_ROW_INVALID')
@@ -235,23 +227,6 @@ function parseToolActivity(row: TalosSqlRow): TalosLocalToolActivity {
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
-}
-
-function parseRun(row: TalosSqlRow): TalosRunState {
-    const state = parseTalosRunState(requiredString(row, 'state_json'))
-    if (!state) throw new Error('TALOS_RUN_ROW_INVALID')
-    if (state.id !== requiredString(row, 'id')
-        || state.contract !== requiredString(row, 'contract')
-        || state.kind !== requiredString(row, 'kind')
-        || state.sessionId !== requiredString(row, 'session_id')
-        || state.title !== requiredString(row, 'title')
-        || state.status !== requiredString(row, 'status')
-        || state.engine !== requiredString(row, 'engine')
-        || state.startedAt !== requiredString(row, 'started_at')
-        || state.updatedAt !== requiredString(row, 'updated_at')) {
-        throw new Error('TALOS_RUN_ROW_DIVERGENT')
-    }
-    return state
 }
 
 function encodeObject(value: Record<string, unknown> | undefined): string {
@@ -1148,91 +1123,6 @@ export function createSqliteChatRepository(
                      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
                     [key, JSON.stringify(value), now()],
                 )
-            })
-        },
-        async saveRun(state: TalosRunState) {
-            const encoded = serializeTalosRunState(state)
-            const canonical = parseTalosRunState(encoded)
-            if (!canonical) throw new Error('TALOS_RUN_STATE_INVALID')
-            return transaction(async (database) => {
-                const previousRows = await database.query(
-                    `SELECT ${RUN_COLUMNS} FROM talos_runs WHERE id = ? LIMIT 1`,
-                    [canonical.id],
-                )
-                if (previousRows.length > 1) throw new Error('TALOS_RUN_ROW_INVALID')
-                if (previousRows.length === 1) {
-                    assertTalosRunCheckpoint(parseRun(previousRows[0] as TalosSqlRow), canonical)
-                }
-                await database.run(
-                    `INSERT INTO talos_runs
-                        (id, contract, kind, session_id, title, status, engine,
-                         state_json, started_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON CONFLICT(id) DO UPDATE SET
-                        contract = excluded.contract,
-                        kind = excluded.kind,
-                        session_id = excluded.session_id,
-                        title = excluded.title,
-                        status = excluded.status,
-                        engine = excluded.engine,
-                        state_json = excluded.state_json,
-                        started_at = excluded.started_at,
-                        updated_at = excluded.updated_at`,
-                    [
-                        canonical.id,
-                        canonical.contract,
-                        canonical.kind,
-                        canonical.sessionId,
-                        canonical.title,
-                        canonical.status,
-                        canonical.engine,
-                        encoded,
-                        canonical.startedAt,
-                        canonical.updatedAt,
-                    ],
-                )
-                const savedRows = await database.query(
-                    `SELECT ${RUN_COLUMNS} FROM talos_runs WHERE id = ? LIMIT 1`,
-                    [canonical.id],
-                )
-                if (savedRows.length !== 1) throw new Error('TALOS_RUN_WRITE_UNVERIFIED')
-                const saved = parseRun(savedRows[0] as TalosSqlRow)
-                if (serializeTalosRunState(saved) !== encoded) {
-                    throw new Error('TALOS_RUN_WRITE_UNVERIFIED')
-                }
-                return saved
-            })
-        },
-        async getRun(runId: string) {
-            const rows = await (await db()).query(
-                `SELECT ${RUN_COLUMNS} FROM talos_runs WHERE id = ? LIMIT 1`,
-                [normalizeRepositoryId(runId)],
-            )
-            if (rows.length === 0) return null
-            if (rows.length !== 1) throw new Error('TALOS_RUN_ROW_INVALID')
-            return parseRun(rows[0] as TalosSqlRow)
-        },
-        async listRuns() {
-            const rows = await (await db()).query(
-                `SELECT ${RUN_COLUMNS} FROM talos_runs
-                 ORDER BY updated_at DESC, started_at DESC, id DESC`,
-            )
-            return rows.map((row) => parseRun(row as TalosSqlRow))
-        },
-        async deleteRun(runId: string) {
-            const id = normalizeRepositoryId(runId)
-            await transaction(async (database) => {
-                const rows = await database.query(
-                    'SELECT id FROM talos_runs WHERE id = ? LIMIT 1',
-                    [id],
-                )
-                if (rows.length !== 1) throw new Error('TALOS_RUN_NOT_FOUND')
-                await database.run('DELETE FROM talos_runs WHERE id = ?', [id])
-                const remaining = await database.query(
-                    'SELECT id FROM talos_runs WHERE id = ? LIMIT 1',
-                    [id],
-                )
-                if (remaining.length !== 0) throw new Error('TALOS_RUN_DELETE_UNVERIFIED')
             })
         },
         close: () => runtime.close(),

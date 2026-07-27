@@ -1,5 +1,3 @@
-import type { TalosRunState } from '@/lib/runs/longRunState'
-
 export type TalosLocalChatSurface = 'chat' | 'browse'
 export type TalosLocalChatMode = 'answer_only' | 'verified_execution'
 export type TalosLocalChatPersistenceMode = 'persistent' | 'temporary'
@@ -330,11 +328,6 @@ export interface TalosChatRepository {
     listSessionAttachmentFileIds(sessionId: string): Promise<string[]>
     loadComposerDraft(scopeId: string): Promise<string>
     saveComposerDraft(scopeId: string, draft: string): Promise<void>
-    /** R-1: complete immutable run checkpoints, never partial field patches. */
-    saveRun(state: TalosRunState): Promise<TalosRunState>
-    getRun(runId: string): Promise<TalosRunState | null>
-    listRuns(): Promise<TalosRunState[]>
-    deleteRun(runId: string): Promise<void>
     createTask(input: CreateTaskInput): Promise<TalosLocalTask>
     listTasks(): Promise<TalosLocalTask[]>
     setTaskStatus(taskId: string, status: TalosTaskStatus): Promise<TalosLocalTask>

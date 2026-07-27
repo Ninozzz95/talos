@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createSqliteChatRepository } from '@/repositories/sqliteChatRepository'
 import type { TalosSqlConnection, TalosSqlRow, TalosSqliteRuntime } from '@/persistence/sqliteTypes'
-import { createTalosRun, serializeTalosRunState } from '@/lib/runs/longRunState'
 
 function sessionRow(overrides: Partial<Record<string, unknown>> = {}): TalosSqlRow {
     return {
@@ -41,34 +40,6 @@ function harness(rows: TalosSqlRow[][] = []) {
 }
 
 describe('createSqliteChatRepository', () => {
-    it('parses canonical run rows and rejects divergent indexed columns', async () => {
-        const state = createTalosRun({
-            id: 'run-1',
-            kind: 'research',
-            sessionId: 'session-1',
-            title: 'Evidence',
-            now: '2026-07-27T10:00:00.000Z',
-        })
-        const row = {
-            id: state.id,
-            contract: state.contract,
-            kind: state.kind,
-            session_id: state.sessionId,
-            title: state.title,
-            status: state.status,
-            engine: state.engine,
-            state_json: serializeTalosRunState(state),
-            started_at: state.startedAt,
-            updated_at: state.updatedAt,
-        }
-        const good = harness([[row]])
-        await expect(createSqliteChatRepository(good.runtime).getRun(state.id)).resolves.toEqual(state)
-
-        const divergent = harness([[{ ...row, status: 'done' }]])
-        await expect(createSqliteChatRepository(divergent.runtime).getRun(state.id))
-            .rejects.toThrow('TALOS_RUN_ROW_DIVERGENT')
-    })
-
     it('BR-03 persists and parses tool activities through exact repository methods', async () => {
         const row = {
             id: 'activity-1',

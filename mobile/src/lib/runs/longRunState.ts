@@ -1,20 +1,24 @@
 /**
- * R-1: the canonical, process-safe state of a long TALOS operation.
+ * R-1a — the state of a long operation, written down.
  *
- * The persisted value is deliberately versioned and JSON-only. Android may
- * terminate the WebView at any point; each completed step must therefore be a
- * complete checkpoint rather than a live object or closure.
+ * This is the least interesting-looking part of Deep Research and the one that
+ * cannot be added afterwards, because it does three separate jobs with one
+ * property:
+ *
+ *  1. **Surviving the process.** Android kills a backgrounded app; a run whose
+ *     state lives only in memory dies with it. The owner hit this on a plain
+ *     chat send: switching apps mid-answer produced "network error".
+ *  2. **Not paying twice.** Tokens already spent are spent. A run that restarts
+ *     from the beginning bills the user for work that was already done.
+ *  3. **The cloud seam.** A run whose steps communicate through serialisable
+ *     values, not shared variables, is a run that can execute somewhere else.
+ *     That is the predisposition the owner asked for when the app is
+ *     distributed — and it costs nothing here, while retrofitting it later
+ *     would mean rewriting the planner, the verifier and the dossier.
+ *
+ * So: no closures in the state, no class instances, nothing that cannot survive
+ * `JSON.stringify`. That constraint is the feature.
  */
-
-export const TALOS_RUN_CONTRACT = 'talos.mobile.run.v1' as const
-
-export type TalosRunJsonValue =
-    | null
-    | boolean
-    | number
-    | string
-    | TalosRunJsonValue[]
-    | { [key: string]: TalosRunJsonValue }
 
 export type TalosRunKind = 'chat' | 'research' | 'document'
 
@@ -26,170 +30,31 @@ export type TalosRunStatus =
     | 'cancelled'
     | 'failed'
 
+/** One completed unit of work. Append-only: a step is never edited in place. */
 export interface TalosRunStep {
-    /** Contiguous and monotonic within the run. */
+    /** Monotonic within the run, so a resume knows exactly where it stopped. */
     index: number
     kind: string
-    output: TalosRunJsonValue
+    /** Everything needed to skip this step on resume — never a live object. */
+    output: unknown
     at: string
 }
 
 export interface TalosRunState {
-    contract: typeof TALOS_RUN_CONTRACT
     id: string
     kind: TalosRunKind
     sessionId: string
     title: string
     status: TalosRunStatus
     steps: TalosRunStep[]
+    /** What has been spent so far, so a resume does not double-count it. */
     spend: { tokens: number; searches: number; pages: number }
     startedAt: string
     updatedAt: string
+    /** Where it ran. `device` today; `cloud` is the seam, not a promise. */
     engine: 'device' | 'cloud'
+    /** Present only when `status` is `failed`, and never a raw stack. */
     failure?: string
-}
-
-const RUN_KINDS = new Set<TalosRunKind>(['chat', 'research', 'document'])
-const RUN_STATUSES = new Set<TalosRunStatus>([
-    'planning',
-    'awaiting_approval',
-    'running',
-    'done',
-    'cancelled',
-    'failed',
-])
-const RUN_ENGINES = new Set<TalosRunState['engine']>(['device', 'cloud'])
-const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/
-const STATE_KEYS = new Set([
-    'contract',
-    'id',
-    'kind',
-    'sessionId',
-    'title',
-    'status',
-    'steps',
-    'spend',
-    'startedAt',
-    'updatedAt',
-    'engine',
-    'failure',
-])
-const STEP_KEYS = new Set(['index', 'kind', 'output', 'at'])
-const SPEND_KEYS = new Set(['tokens', 'searches', 'pages'])
-
-const STATUS_TRANSITIONS: Readonly<Record<TalosRunStatus, ReadonlySet<TalosRunStatus>>> = {
-    planning: new Set(['planning', 'awaiting_approval', 'running', 'cancelled', 'failed']),
-    awaiting_approval: new Set(['awaiting_approval', 'running', 'cancelled', 'failed']),
-    running: new Set(['running', 'done', 'cancelled', 'failed']),
-    failed: new Set(['failed', 'running', 'cancelled']),
-    done: new Set(['done']),
-    cancelled: new Set(['cancelled']),
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function exactKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
-    return Object.keys(value).every((key) => allowed.has(key))
-}
-
-function validId(value: unknown): value is string {
-    return typeof value === 'string' && RUN_ID.test(value)
-}
-
-function validTitle(value: unknown): value is string {
-    return typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 255
-}
-
-function validIsoTimestamp(value: unknown): value is string {
-    if (typeof value !== 'string' || value.length === 0) return false
-    const timestamp = Date.parse(value)
-    return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
-}
-
-function validCounter(value: unknown): value is number {
-    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
-function isJsonValue(value: unknown, seen = new Set<object>()): value is TalosRunJsonValue {
-    if (value === null || typeof value === 'boolean' || typeof value === 'string') return true
-    if (typeof value === 'number') return Number.isFinite(value)
-    if (typeof value !== 'object') return false
-    if (seen.has(value)) return false
-    seen.add(value)
-    if (Array.isArray(value)) {
-        const valid = value.every((entry) => isJsonValue(entry, seen))
-        seen.delete(value)
-        return valid
-    }
-    const prototype = Object.getPrototypeOf(value)
-    if (prototype !== Object.prototype && prototype !== null) {
-        seen.delete(value)
-        return false
-    }
-    const valid = Object.values(value as Record<string, unknown>)
-        .every((entry) => isJsonValue(entry, seen))
-    seen.delete(value)
-    return valid
-}
-
-function canonicalRunState(value: unknown): TalosRunState | null {
-    if (!isRecord(value) || !exactKeys(value, STATE_KEYS)) return null
-    if (value.contract !== TALOS_RUN_CONTRACT) return null
-    if (!validId(value.id) || !validId(value.sessionId) || !validTitle(value.title)) return null
-    if (!RUN_KINDS.has(value.kind as TalosRunKind)) return null
-    if (!RUN_STATUSES.has(value.status as TalosRunStatus)) return null
-    if (!RUN_ENGINES.has(value.engine as TalosRunState['engine'])) return null
-    if (!validIsoTimestamp(value.startedAt) || !validIsoTimestamp(value.updatedAt)) return null
-    if (value.updatedAt < value.startedAt) return null
-    if (!Array.isArray(value.steps) || !isRecord(value.spend)) return null
-    if (!exactKeys(value.spend, SPEND_KEYS)) return null
-    if (!validCounter(value.spend.tokens)
-        || !validCounter(value.spend.searches)
-        || !validCounter(value.spend.pages)) return null
-    if (value.failure !== undefined
-        && (typeof value.failure !== 'string' || value.failure.length === 0 || value.failure.length > 2048)) return null
-    if (value.status === 'failed' && typeof value.failure !== 'string') return null
-    if (value.status !== 'failed' && value.failure !== undefined) return null
-
-    const steps: TalosRunStep[] = []
-    for (let index = 0; index < value.steps.length; index += 1) {
-        const step = value.steps[index]
-        if (!isRecord(step) || !exactKeys(step, STEP_KEYS)) return null
-        if (step.index !== index
-            || typeof step.kind !== 'string'
-            || step.kind.trim() !== step.kind
-            || step.kind.length === 0
-            || step.kind.length > 128
-            || !validIsoTimestamp(step.at)
-            || !isJsonValue(step.output)) return null
-        steps.push({
-            index,
-            kind: step.kind,
-            output: structuredClone(step.output),
-            at: step.at,
-        })
-    }
-
-    return {
-        contract: TALOS_RUN_CONTRACT,
-        id: value.id,
-        kind: value.kind as TalosRunKind,
-        sessionId: value.sessionId,
-        title: value.title,
-        status: value.status as TalosRunStatus,
-        steps,
-        spend: {
-            tokens: value.spend.tokens,
-            searches: value.spend.searches,
-            pages: value.spend.pages,
-        },
-        startedAt: value.startedAt,
-        updatedAt: value.updatedAt,
-        engine: value.engine as TalosRunState['engine'],
-        ...(typeof value.failure === 'string' ? { failure: value.failure } : {}),
-    }
 }
 
 export function createTalosRun(input: {
@@ -199,12 +64,11 @@ export function createTalosRun(input: {
     title: string
     now: string
 }): TalosRunState {
-    const candidate: TalosRunState = {
-        contract: TALOS_RUN_CONTRACT,
+    return {
         id: input.id,
         kind: input.kind,
         sessionId: input.sessionId,
-        title: input.title.trim(),
+        title: input.title,
         status: 'planning',
         steps: [],
         spend: { tokens: 0, searches: 0, pages: 0 },
@@ -212,30 +76,20 @@ export function createTalosRun(input: {
         updatedAt: input.now,
         engine: 'device',
     }
-    if (!canonicalRunState(candidate)) throw new Error('TALOS_RUN_STATE_INVALID')
-    return candidate
 }
 
+/**
+ * Append a completed step. Returns a NEW state rather than mutating: a run that
+ * is being written to disk while something else edits it in place is how a
+ * resume reads half a step.
+ */
 export function appendTalosRunStep(
     state: TalosRunState,
     step: Omit<TalosRunStep, 'index'>,
 ): TalosRunState {
-    if (typeof step.kind !== 'string'
-        || step.kind.trim() !== step.kind
-        || step.kind.length === 0
-        || step.kind.length > 128
-        || !validIsoTimestamp(step.at)
-        || !isJsonValue(step.output)) throw new Error('TALOS_RUN_STEP_INVALID')
     return {
         ...state,
-        steps: [
-            ...state.steps.map((entry) => ({ ...entry, output: structuredClone(entry.output) })),
-            {
-                ...step,
-                output: structuredClone(step.output),
-                index: state.steps.length,
-            },
-        ],
+        steps: [...state.steps, { ...step, index: state.steps.length }],
         updatedAt: step.at,
     }
 }
@@ -245,10 +99,6 @@ export function addTalosRunSpend(
     spend: Partial<TalosRunState['spend']>,
     now: string,
 ): TalosRunState {
-    for (const value of Object.values(spend)) {
-        if (value !== undefined && !validCounter(value)) throw new Error('TALOS_RUN_SPEND_INVALID')
-    }
-    if (!validIsoTimestamp(now)) throw new Error('TALOS_RUN_TIMESTAMP_INVALID')
     return {
         ...state,
         spend: {
@@ -266,76 +116,73 @@ export function setTalosRunStatus(
     now: string,
     failure?: string,
 ): TalosRunState {
-    if (!STATUS_TRANSITIONS[state.status].has(status)) {
-        throw new Error('TALOS_RUN_STATUS_TRANSITION_INVALID')
-    }
-    if (!validIsoTimestamp(now) || now < state.updatedAt) throw new Error('TALOS_RUN_TIMESTAMP_INVALID')
-    if (status === 'failed' && (!failure || failure.length > 2048)) {
-        throw new Error('TALOS_RUN_FAILURE_INVALID')
-    }
-    const { failure: _previousFailure, ...base } = state
     return {
-        ...base,
+        ...state,
         status,
         updatedAt: now,
-        ...(status === 'failed' ? { failure } : {}),
+        // A failure message is kept only while the run IS failed, so a run that
+        // recovers does not carry an explanation of something that no longer
+        // happened.
+        ...(status === 'failed' && failure ? { failure } : {}),
+        ...(status !== 'failed' ? { failure: undefined } : {}),
     }
 }
 
+/**
+ * A run that was interrupted rather than finished.
+ *
+ * `planning` and `running` are both resumable: the process died, the work did
+ * not. `awaiting_approval` is NOT — it is waiting for a person, and resuming it
+ * automatically would run a plan nobody approved.
+ */
 export function talosRunIsResumable(state: TalosRunState): boolean {
-    return state.status === 'planning' || state.status === 'running' || state.status === 'failed'
+    return state.status === 'planning' || state.status === 'running'
 }
 
+/** Where a resume picks up: the first index that has no step. */
 export function talosRunResumeIndex(state: TalosRunState): number {
     return state.steps.length
 }
 
+/**
+ * Read a run back from storage.
+ *
+ * Anything malformed reads as `null` rather than throwing: this runs at boot,
+ * and a corrupt record must not be able to stop the app from starting. Losing
+ * one run's progress is survivable; losing the app is not.
+ */
 export function parseTalosRunState(raw: unknown): TalosRunState | null {
-    if (typeof raw !== 'string' || raw.length === 0) return null
+    if (typeof raw !== 'string' || raw === '') return null
+    let value: unknown
     try {
-        return canonicalRunState(JSON.parse(raw))
+        value = JSON.parse(raw)
     } catch {
         return null
     }
-}
-
-export function serializeTalosRunState(state: TalosRunState): string {
-    const canonical = canonicalRunState(state)
-    if (!canonical) throw new Error('TALOS_RUN_STATE_INVALID')
-    return JSON.stringify(canonical)
-}
-
-/**
- * Verify that a persisted checkpoint can safely replace its predecessor.
- *
- * Completed work and spend may only grow. This is the repository boundary that
- * prevents a resume from silently re-running or re-billing prior work.
- */
-export function assertTalosRunCheckpoint(previous: TalosRunState, next: TalosRunState): void {
-    const before = canonicalRunState(previous)
-    const after = canonicalRunState(next)
-    if (!before || !after) throw new Error('TALOS_RUN_STATE_INVALID')
-    if (before.id !== after.id
-        || before.kind !== after.kind
-        || before.sessionId !== after.sessionId
-        || before.title !== after.title
-        || before.engine !== after.engine
-        || before.startedAt !== after.startedAt) {
-        throw new Error('TALOS_RUN_IDENTITY_CHANGED')
-    }
-    if (!STATUS_TRANSITIONS[before.status].has(after.status)) {
-        throw new Error('TALOS_RUN_STATUS_TRANSITION_INVALID')
-    }
-    if (after.updatedAt < before.updatedAt) throw new Error('TALOS_RUN_TIMESTAMP_ROLLBACK')
-    if (after.steps.length < before.steps.length) throw new Error('TALOS_RUN_CHECKPOINT_REWRITE')
-    for (let index = 0; index < before.steps.length; index += 1) {
-        if (JSON.stringify(before.steps[index]) !== JSON.stringify(after.steps[index])) {
-            throw new Error('TALOS_RUN_CHECKPOINT_REWRITE')
-        }
-    }
-    if (after.spend.tokens < before.spend.tokens
-        || after.spend.searches < before.spend.searches
-        || after.spend.pages < before.spend.pages) {
-        throw new Error('TALOS_RUN_SPEND_ROLLBACK')
+    if (!value || typeof value !== 'object') return null
+    const record = value as Partial<TalosRunState>
+    if (typeof record.id !== 'string' || typeof record.sessionId !== 'string') return null
+    if (!Array.isArray(record.steps)) return null
+    const statuses: TalosRunStatus[] = ['planning', 'awaiting_approval', 'running', 'done', 'cancelled', 'failed']
+    if (!statuses.includes(record.status as TalosRunStatus)) return null
+    return {
+        id: record.id,
+        kind: (['chat', 'research', 'document'] as TalosRunKind[]).includes(record.kind as TalosRunKind)
+            ? record.kind as TalosRunKind
+            : 'chat',
+        sessionId: record.sessionId,
+        title: typeof record.title === 'string' ? record.title : '',
+        status: record.status as TalosRunStatus,
+        steps: record.steps.filter((step): step is TalosRunStep =>
+            Boolean(step) && typeof step === 'object' && typeof (step as TalosRunStep).index === 'number'),
+        spend: {
+            tokens: Number(record.spend?.tokens) || 0,
+            searches: Number(record.spend?.searches) || 0,
+            pages: Number(record.spend?.pages) || 0,
+        },
+        startedAt: typeof record.startedAt === 'string' ? record.startedAt : '',
+        updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : '',
+        engine: record.engine === 'cloud' ? 'cloud' : 'device',
+        ...(typeof record.failure === 'string' ? { failure: record.failure } : {}),
     }
 }

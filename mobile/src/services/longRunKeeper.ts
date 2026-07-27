@@ -1,145 +1,89 @@
-import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+import { registerPlugin } from '@capacitor/core'
 
-export const TALOS_RUN_SERVICE_CONTRACT = 'talos.mobile.run-service.v1' as const
-
-export type TalosRunServiceStatus = 'running' | 'stopped' | 'cancelled' | 'timed_out'
-
-export interface TalosRunServiceState {
-    contract: typeof TALOS_RUN_SERVICE_CONTRACT
-    status: TalosRunServiceStatus
-    runId: string | null
-    updatedAt: number
-}
-
+/**
+ * R-1b, the JavaScript half: decides WHEN the keeper is worth starting.
+ *
+ * Owner 2026-07-26 confirmed the threshold: a foreground service for every
+ * message would flash a persistent notification for a two-second reply, which is
+ * worse than the problem it solves. So nothing starts until the work is
+ * genuinely long — a tool round begins, or plain streaming outlives the delay
+ * below.
+ *
+ * Everything here degrades to a no-op. A device that refuses the service, or a
+ * web build that has no such thing, must lose the PROTECTION and not the work:
+ * the failure mode is what happens today, an operation that dies if the user
+ * leaves the app, and turning that into an exception would make long answers
+ * impossible rather than merely fragile.
+ */
 interface TalosRunServicePlugin {
-    start(options: {
-        title: string
-        text: string
-        runId: string | null
-        cancelable: boolean
-    }): Promise<{ ok: boolean }>
-    update(options: {
-        title: string
-        text: string
-        runId: string | null
-        cancelable: boolean
-    }): Promise<{ ok: boolean }>
+    start(options: { title: string; text: string }): Promise<{ ok: boolean }>
+    update(options: { title: string; text: string }): Promise<{ ok: boolean }>
     stop(): Promise<{ ok: boolean }>
-    status(): Promise<unknown>
-    addListener(
-        event: 'stateChanged',
-        listener: (state: unknown) => void,
-    ): Promise<PluginListenerHandle>
 }
 
 const plugin = registerPlugin<TalosRunServicePlugin>('TalosRunService')
 
+/**
+ * How long a plain answer may run before it is treated as long work.
+ *
+ * Most replies finish well inside this, so most messages never see a
+ * notification at all. Anything past it is either a slow model or a big answer,
+ * and both are exactly the cases the owner lost by switching apps.
+ */
 export const TALOS_KEEPER_DELAY_MS = 4_000
 
-export interface TalosRunKeeperOptions {
-    runId?: string
-    /** Present only when pressing Cancel can actually abort the owned work. */
-    onCancel?: () => void
-    onTimeout?: () => void
-}
-
 export interface TalosRunKeeper {
+    /** Start now, because the work is already known to be long (a tool round). */
     engage(text: string): void
+    /** Update what the notification says. Cheap; safe before `engage`. */
     describe(text: string): void
+    /** Always call this, on every path including failure and cancellation. */
     release(): void
 }
 
-function parseRunServiceState(value: unknown): TalosRunServiceState | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-    const state = value as Partial<TalosRunServiceState>
-    if (state.contract !== TALOS_RUN_SERVICE_CONTRACT) return null
-    if (!['running', 'stopped', 'cancelled', 'timed_out'].includes(state.status ?? '')) return null
-    if (state.runId !== null && typeof state.runId !== 'string') return null
-    if (typeof state.updatedAt !== 'number' || !Number.isSafeInteger(state.updatedAt) || state.updatedAt < 0) return null
-    return {
-        contract: TALOS_RUN_SERVICE_CONTRACT,
-        status: state.status as TalosRunServiceStatus,
-        runId: state.runId ?? null,
-        updatedAt: state.updatedAt,
-    }
-}
-
-export async function readTalosRunServiceState(): Promise<TalosRunServiceState | null> {
-    return parseRunServiceState(await plugin.status())
-}
-
-export function createTalosRunKeeper(
-    title: string,
-    options: TalosRunKeeperOptions = {},
-): TalosRunKeeper {
+/**
+ * A keeper for ONE operation.
+ *
+ * `title` names the chat rather than the app, because a notification that says
+ * "TALOS" tells the user nothing they did not know, while one that says which
+ * conversation is working tells them whether to care.
+ */
+export function createTalosRunKeeper(title: string): TalosRunKeeper {
     let started = false
     let released = false
     let description = ''
     let timer: ReturnType<typeof setTimeout> | null = null
-    let listener: PluginListenerHandle | null = null
-    const runId = options.runId ?? null
-    const cancelable = runId !== null && typeof options.onCancel === 'function'
-
-    const listenerPromise = runId === null
-        ? null
-        : plugin.addListener('stateChanged', (raw) => {
-            if (released) return
-            const state = parseRunServiceState(raw)
-            if (!state || state.runId !== runId) return
-            if (state.status === 'cancelled') options.onCancel?.()
-            if (state.status === 'timed_out') options.onTimeout?.()
-        }).then((handle) => {
-            if (released) {
-                void handle.remove()
-                return
-            }
-            listener = handle
-        }).catch(() => {
-            // Losing observability cannot make the owned operation fail.
-        })
-
-    function payload(text: string) {
-        return { title, text, runId, cancelable }
-    }
 
     function begin(): void {
         if (started || released) return
         started = true
-        void plugin.start(payload(description)).catch(() => {
-            // The operation continues without native process protection.
+        void plugin.start({ title, text: description }).catch(() => {
+            // The work continues unprotected; see the note at the top.
         })
     }
 
+    // The delayed start: a reply that finishes first never starts anything.
     timer = setTimeout(begin, TALOS_KEEPER_DELAY_MS)
 
     return {
         engage(text: string) {
             description = text
-            if (timer !== null) {
-                clearTimeout(timer)
-                timer = null
-            }
+            if (timer !== null) { clearTimeout(timer); timer = null }
             begin()
         },
         describe(text: string) {
             description = text
             if (!started || released) return
-            void plugin.update(payload(text)).catch(() => {})
+            void plugin.update({ title, text }).catch(() => {})
         },
         release() {
             if (released) return
             released = true
-            if (timer !== null) {
-                clearTimeout(timer)
-                timer = null
-            }
+            if (timer !== null) { clearTimeout(timer); timer = null }
+            // Stop unconditionally, even if the start never happened or failed:
+            // a notification outliving its work is the one thing worse than not
+            // having one.
             if (started) void plugin.stop().catch(() => {})
-            if (listener) {
-                void listener.remove()
-                listener = null
-            } else {
-                void listenerPromise
-            }
         },
     }
 }

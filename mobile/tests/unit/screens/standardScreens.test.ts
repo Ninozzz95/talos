@@ -1,7 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { reactive, ref } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
-import { createTalosRun, setTalosRunStatus } from '@/lib/runs/longRunState'
+import { mount } from '@vue/test-utils'
 import ResearchScreen from '@/screens/ResearchScreen.vue'
 import RunsScreen from '@/screens/RunsScreen.vue'
 
@@ -33,9 +32,6 @@ function makeContextController() {
             clearSent: vi.fn(),
             clearError: vi.fn(),
         },
-        runs: {
-            list: vi.fn().mockResolvedValue([]),
-        },
     }
 }
 
@@ -52,30 +48,11 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
         expect(w.text()).toContain('Not in this build')
     })
 
-    it('runs renders real persisted runs and an honest repository empty state', async () => {
+    it('runs: Runtime cockpit header + Runtime eyebrow + real empty copy', () => {
         const w = mount(RunsScreen)
-        await flushPromises()
         expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Runtime cockpit')
         expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Runtime')
-        expect(w.text()).toContain('No runs stored on this device')
-        expect(w.text()).not.toContain('Not in this build')
-
-        const persisted = setTalosRunStatus(createTalosRun({
-            id: 'run-1',
-            kind: 'research',
-            sessionId: 'session-1',
-            title: 'Market evidence',
-            now: '2026-07-27T10:00:00.000Z',
-        }), 'running', '2026-07-27T10:01:00.000Z')
-        mockState.controller = {
-            ...makeContextController(),
-            runs: { list: vi.fn().mockResolvedValue([persisted]) },
-        }
-        const populated = mount(RunsScreen)
-        await flushPromises()
-        expect(populated.get('[data-testid="talos-run-row"]').text()).toContain('Market evidence')
-        expect(populated.get('[data-testid="talos-run-row"]').text()).toContain('running')
-        expect(populated.get('[data-testid="talos-run-row"]').text()).toContain('research')
+        expect(w.text()).toContain('Not in this build')
     })
 
     it('context: Library header + Context Vault section chrome + local-first empty state', () => {

@@ -37,12 +37,6 @@ import {
     type UpdateVaultFileInput,
     type UpdateToolActivityInput,
 } from '@/repositories/chatRepository'
-import {
-    assertTalosRunCheckpoint,
-    parseTalosRunState,
-    serializeTalosRunState,
-    type TalosRunState,
-} from '@/lib/runs/longRunState'
 
 function copySession(session: TalosLocalChatSession): TalosLocalChatSession {
     return { ...session, metadata: cloneJsonObject(session.metadata) }
@@ -72,12 +66,6 @@ function copyToolActivity(activity: TalosLocalToolActivity): TalosLocalToolActiv
     }
 }
 
-function copyRun(state: TalosRunState): TalosRunState {
-    const copy = parseTalosRunState(serializeTalosRunState(state))
-    if (!copy) throw new Error('TALOS_RUN_STATE_INVALID')
-    return copy
-}
-
 function byMostRecent(left: TalosLocalChatSession, right: TalosLocalChatSession): number {
     return right.updated_at.localeCompare(left.updated_at)
         || right.created_at.localeCompare(left.created_at)
@@ -101,7 +89,6 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
     const memories = new Map<string, TalosLocalMemory>()
     const tasks = new Map<string, TalosLocalTask>()
     const notes = new Map<string, TalosLocalNote>()
-    const runs = new Map<string, TalosRunState>()
     let activeSessionId: string | null = null
     const now = options.now ?? (() => new Date().toISOString())
 
@@ -202,9 +189,6 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             for (const message of removedMessages) attachmentBindings.delete(message.id)
             for (const [activityId, activity] of toolActivities) {
                 if (activity.session_id === sessionId) toolActivities.delete(activityId)
-            }
-            for (const [runId, run] of runs) {
-                if (run.sessionId === sessionId) runs.delete(runId)
             }
             composerDrafts.delete(sessionId)
             if (activeSessionId === sessionId) {
@@ -430,28 +414,6 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             const value = normalizeComposerDraft(draft)
             if (value === '') composerDrafts.delete(scope)
             else composerDrafts.set(scope, value)
-        },
-        async saveRun(state: TalosRunState) {
-            const canonical = copyRun(state)
-            requireSession(canonical.sessionId)
-            const previous = runs.get(canonical.id)
-            if (previous) assertTalosRunCheckpoint(previous, canonical)
-            runs.set(canonical.id, copyRun(canonical))
-            return copyRun(canonical)
-        },
-        async getRun(runId: string) {
-            const state = runs.get(normalizeRepositoryId(runId))
-            return state ? copyRun(state) : null
-        },
-        async listRuns() {
-            return [...runs.values()]
-                .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)
-                    || right.startedAt.localeCompare(left.startedAt)
-                    || right.id.localeCompare(left.id))
-                .map(copyRun)
-        },
-        async deleteRun(runId: string) {
-            if (!runs.delete(normalizeRepositoryId(runId))) throw new Error('TALOS_RUN_NOT_FOUND')
         },
         async updateSessionMetadata(sessionId: string, metadata: Record<string, unknown>) {
             const session = sessions.get(sessionId)
