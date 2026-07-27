@@ -156,6 +156,41 @@ function looksLikeImageBytes(value: string): boolean {
  * one with a key — and nothing at all when neither has one, in which case the
  * tool is not offered rather than offered and failing.
  */
+/**
+ * Which model draws — asked of the catalogue, never baked into the APK.
+ *
+ * Self-review 2026-07-27: the first cut hardcoded `gpt-image-1` and
+ * `gemini-3.1-flash-image`, which breaks the owner's binding rule that TALOS
+ * will be DISTRIBUTED and so no list that ages may be frozen into the build.
+ * The day OpenAI ships the next image model, a hardcoded app keeps paying for
+ * the old one until someone rebuilds it.
+ *
+ * TALOS already discovers each provider's models, so the catalogue answers.
+ * Newest first, and a `-mini` only if it is the only one — cheaper is not the
+ * right default for something the user explicitly asked to be drawn.
+ *
+ * The floor exists because a catalogue can be empty (offline, a listing that
+ * failed) and refusing to draw over that would be worse than trying the model
+ * that was current when this shipped. It is a floor, not a list.
+ */
+const IMAGE_MODEL_FLOOR: Record<TalosImageProvider, string> = {
+    openai: 'gpt-image-1',
+    gemini: 'gemini-3.1-flash-image',
+}
+
+export function pickTalosImageModel(
+    provider: TalosImageProvider,
+    models: ReadonlyArray<{ id: string }>,
+): string {
+    const pattern = provider === 'openai' ? /^gpt-image/i : /image/i
+    const candidates = models
+        .map((model) => model.id)
+        .filter((id) => pattern.test(id) && !/embed|vision|edit/i.test(id))
+    if (candidates.length === 0) return IMAGE_MODEL_FLOOR[provider]
+    const full = candidates.filter((id) => !/mini|lite|flash-lite/i.test(id))
+    return (full.length > 0 ? full : candidates).sort((left, right) => right.localeCompare(left))[0]!
+}
+
 export function chooseTalosImageProvider(
     available: Partial<Record<TalosImageProvider, boolean>>,
     preferred?: string | null,

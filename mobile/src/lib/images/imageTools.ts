@@ -23,7 +23,11 @@ import type { TalosGeneratedImage, TalosImageShape } from '@/lib/images/imageGat
 export interface TalosImageToolSources {
     /** Which provider will draw, for the sentence the model gets back. */
     provider(): string | null
-    generate(prompt: string, shape: TalosImageShape): Promise<TalosGeneratedImage[]>
+    generate(
+        prompt: string,
+        shape: TalosImageShape,
+        signal?: AbortSignal,
+    ): Promise<TalosGeneratedImage[]>
     /** Into the Library, with the chat it came from. Returns the stored name. */
     save(image: TalosGeneratedImage, prompt: string): Promise<{ id: string; name: string }>
 }
@@ -44,7 +48,7 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
             shape: z.enum(SHAPES).optional()
                 .describe('The proportions of the picture. Default square.'),
         }),
-        async run(input) {
+        async run(input, context) {
             const provider = sources.provider()
             if (!provider) {
                 // Said plainly, because the model can act on it: it can offer to
@@ -58,9 +62,15 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
 
             let images: TalosGeneratedImage[]
             try {
-                images = await sources.generate(input.prompt, input.shape ?? 'square')
+                images = await sources.generate(input.prompt, input.shape ?? 'square', context.signal)
             } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause)
+                if (context.signal?.aborted) {
+                    // Stopping must actually stop. Self-review 2026-07-27: the
+                    // first cut ignored the signal, so a stopped message kept
+                    // drawing and kept billing.
+                    return { ok: false, code: 'TALOS_IMAGE_STOPPED', content: 'The drawing was stopped.' }
+                }
                 return {
                     ok: false,
                     code: 'TALOS_IMAGE_FAILED',
