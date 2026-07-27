@@ -18,6 +18,7 @@ Nothing that governs the program may live only on one machine, and no phase is
 | `plans/` | roadmaps and phase plans (the program's sequence) |
 | `specs/` | design documents opened BEFORE a phase, closed when it ships |
 | `ledgers/` | per-phase execution records: what changed, why, and the gates |
+| `COMPETITIVE-ONE-UP-DOCTRINE.md` | **binding** — how competitors are studied and out-built. Run its protocol BEFORE a phase designs anything; add its ledger row before the phase closes. Owner directive 2026-07-27. |
 | `progress/` | milestone/handoff state |
 | `research/` | audits, competitor analysis, engineering research |
 | `references/` | owner-provided reference material |
