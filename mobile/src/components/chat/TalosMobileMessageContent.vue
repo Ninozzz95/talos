@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { renderTalosMarkdown, splitTalosMarkdownBlocks } from '@/lib/talosMessageMarkdown'
+import { renderTalosMarkdownBlock, splitTalosMarkdownBlocks } from '@/lib/talosMessageMarkdown'
 import { writeTalosClipboardText } from '@/services/clipboard'
 
 // R2-10 (owner obliteration directive): the sensitive-censor mechanism is
@@ -25,7 +25,15 @@ const copyStatus = ref('')
  * is the very churn this removes.
  */
 const blocks = computed(() => splitTalosMarkdownBlocks(props.content))
-const renderedBlocks = computed(() => blocks.value.map((block) => renderTalosMarkdown(block).html))
+/**
+ * Parsed once per block, not once per keystroke.
+ *
+ * `v-memo` stopped the DOM churn but every block still went through markdown-it
+ * on every update — a twenty-block answer at nine updates a second is a hundred
+ * and eighty parses a second on a phone, and all but one produce exactly the
+ * string already on screen. Only the last block changes while an answer streams.
+ */
+const renderedBlocks = computed(() => blocks.value.map(renderTalosMarkdownBlock))
 
 async function handleContentClick(event: MouseEvent): Promise<void> {
     const target = event.target instanceof Element
@@ -68,6 +76,31 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
 <style>
 /* Inherit the list-level chat text size (Small/Default/Large); nested rules
    use em so headings/code/tables scale with it. */
+/**
+ * A block does not appear, it arrives.
+ *
+ * Owner 2026-07-27, asked twice: "l'animazione di rendering della risposta non
+ * e smooth. Claude la fa in maniera fantastica". Pacing the characters was only
+ * half of it — there was no animation at all, so each finished paragraph
+ * snapped into place at full opacity.
+ *
+ * The animation runs on element CREATION, which is exactly the right trigger:
+ * a new block is a new element, while the block currently being written updates
+ * in place and so never re-runs it. Without that, the streaming block would
+ * restart its own fade on every character and strobe.
+ *
+ * Short and small on purpose. 260ms is long enough to read as motion and short
+ * enough not to lag behind the text; a 2px rise gives the sense of settling
+ * without moving the layout under a thumb.
+ */
+@keyframes talos-block-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: none; }
+}
+.talos-message-block { animation: talos-block-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+    .talos-message-block { animation: none; }
+}
 .talos-message-content { overflow-wrap: anywhere; font-size: 1em; line-height: 1.625; }
 .talos-message-content > :first-child { margin-top: 0; }
 .talos-message-content > :last-child { margin-bottom: 0; }

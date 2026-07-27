@@ -183,3 +183,41 @@ export function splitTalosMarkdownBlocks(source: string): string[] {
     }
     return blocks.length ? blocks : [source]
 }
+
+/**
+ * The same block, parsed once.
+ *
+ * Owner 2026-07-27, third round on "l'animazione di rendering non e smooth".
+ * Splitting the message into blocks and adding `v-memo` stopped the DOM being
+ * rebuilt, but not the PARSING: the component mapped every block through
+ * markdown-it on every content change. A twenty-block answer arriving at nine
+ * updates a second is a hundred and eighty parses a second on a phone, and all
+ * but one of them produce a string identical to the one already on screen.
+ *
+ * Only the last block actually changes while an answer streams, so every other
+ * block is served from here. Returning the SAME string reference also lets
+ * `v-memo` short-circuit on identity rather than on comparison.
+ *
+ * Bounded, because a long conversation would otherwise keep every block of
+ * every message alive for the life of the app. Oldest out first; the entries
+ * that matter are the ones on screen.
+ */
+const BLOCK_CACHE_LIMIT = 400
+const blockCache = new Map<string, string>()
+
+export function renderTalosMarkdownBlock(source: string): string {
+    const hit = blockCache.get(source)
+    if (hit !== undefined) {
+        // Refresh recency so the blocks being read are the ones that survive.
+        blockCache.delete(source)
+        blockCache.set(source, hit)
+        return hit
+    }
+    const html = renderTalosMarkdown(source).html
+    blockCache.set(source, html)
+    if (blockCache.size > BLOCK_CACHE_LIMIT) {
+        const oldest = blockCache.keys().next()
+        if (!oldest.done) blockCache.delete(oldest.value)
+    }
+    return html
+}
