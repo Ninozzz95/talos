@@ -91,8 +91,31 @@ export function planTalosImageRequest(
         },
         body: {
             model: config.model,
-            input: request.prompt,
-            response_format: { aspect_ratio: GEMINI_ASPECT[request.shape] },
+            // A list of content blocks, not a bare string. The docs' own example
+            // sends `[{type:'text', text:...}]`, and this is the shape that
+            // leaves room for the reference images the API also accepts.
+            input: [{ type: 'text', text: request.prompt }],
+            /**
+             * Owner's device, 2026-07-27, verbatim from the wire at last:
+             *   HTTP 400: The 'type' parameter is required at 'response_format'.
+             *
+             * Three paraphrases from three models had called this a content
+             * refusal and a temporary outage. It was neither: `response_format`
+             * was missing its required discriminator, so every request was
+             * rejected before a single pixel was drawn — which is also why each
+             * attempt came back in 150ms.
+             *
+             * `image_size` needs the uppercase K; the docs say lowercase is
+             * rejected. 1K is the default and the right one here: it is about
+             * 1.1k tokens when the model looks at what it drew, where 4K would
+             * be several times that for a picture on a phone screen.
+             */
+            response_format: {
+                type: 'image',
+                mime_type: 'image/png',
+                aspect_ratio: GEMINI_ASPECT[request.shape],
+                image_size: '1K',
+            },
         },
     }
 }
