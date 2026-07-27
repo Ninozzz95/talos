@@ -149,6 +149,45 @@ describe('ContextScreen Library gallery', () => {
         expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas')
     })
 
+    it('lists a source saved before the address was kept as a fact', async () => {
+        // Self-review 2026-07-27: the row builder learned to read the `Source:`
+        // header of an older transcript, but the screen filtered those rows out
+        // before it ever ran — the fallback was dead where it mattered, and the
+        // owner's existing Library would have opened empty.
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-legacy'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            extracted_text: ['# Il prezzo del gas', '', 'Source: https://www.corriere.it/gas'].join('\n'),
+            metadata: { origin: 'generated', kind: 'web_source' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.get('[data-testid="talos-library-links"]').text()).toContain('corriere.it')
+    })
+
+    it('says the Links section is empty rather than showing an empty list', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-sourceless'),
+            display_name: 'Senza indirizzo.md',
+            media_type: 'text/markdown',
+            extracted_text: 'nessun indirizzo qui',
+            metadata: { origin: 'generated', kind: 'web_source' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        expect(wrapper.find('[data-testid="talos-library-links"]').exists()).toBe(false)
+        expect(wrapper.text()).toContain('No links yet')
+    })
+
     it('keeps the saved transcript one tap away from its link', async () => {
         // The markdown copy is the half that survives the page going away; the
         // link section adds to it rather than replacing it.
