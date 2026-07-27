@@ -21,9 +21,13 @@ onMounted(() => {
     // full-screen overlay nobody could tap through. Removing ~285KB of
     // boot-blocking JS bought nothing while this timer dominated the perceived
     // cold start, and the native splash already covers the first frames.
-    const hold = reducedMotion ? 450 : 900
+    // Owner 2026-07-27: "un po' troppo veloce per i miei gusti". 900ms was a
+    // performance reaction that overshot -- the jank he also reported was never
+    // the duration, it was what the animation animated (see the keyframes).
+    // With that fixed the mark can be given time to actually be seen.
+    const hold = reducedMotion ? 450 : 1500
     fadeTimer = setTimeout(() => { leaving.value = true }, hold)
-    doneTimer = setTimeout(() => emit('done'), hold + 420)
+    doneTimer = setTimeout(() => emit('done'), hold + 500)
 })
 
 onBeforeUnmount(() => {
@@ -100,7 +104,13 @@ onBeforeUnmount(() => {
 }
 .node {
     stroke: var(--talos-accent, #f5a623);
-    fill: var(--talos-background, #0a0c10);
+    /* Lit by default and revealed by opacity. The old version was filled with
+       the BACKGROUND colour and animated `fill` to the accent, which is a paint
+       the compositor cannot do. The glow is set once here, so the layer is
+       rasterised a single time and afterwards only faded. */
+    fill: var(--talos-accent, #f5a623);
+    filter: drop-shadow(0 0 9px color-mix(in srgb, var(--talos-accent, #f5a623) 70%, transparent));
+    will-change: opacity;
 }
 /* Owner 2026-07-27: "la app si carica prima che la boot animation finisca."
    He was right, and the cause was arithmetic: this cascade was an INFINITE
@@ -113,11 +123,14 @@ onBeforeUnmount(() => {
    finishes at ~870ms — just inside the 900ms hold — and `forwards` so it rests
    lit rather than snapping back for the fade. The startup stays as fast as the
    perf review made it; only the animation stops pretending it has 3.5 seconds. */
-.node-root { animation: talosBootIgnite 0.55s ease-in-out both; }
-.edge-main { animation: talosBootFlow 0.55s ease-in-out 0.08s both; }
-.node-mid { animation: talosBootIgnite 0.55s ease-in-out 0.16s both; }
-.edge-branch { animation: talosBootFlow 0.55s ease-in-out 0.24s both; }
-.node-out { animation: talosBootIgnite 0.55s ease-in-out 0.32s both; }
+/* Re-timed for the 1500ms hold the owner asked for: the last node finishes at
+   ~1.28s, inside the hold, so the sequence still ENDS before the overlay
+   dissolves — the defect that was fixed here on 2026-07-27 morning. */
+.node-root { animation: talosBootIgnite 0.8s ease-in-out both; }
+.edge-main { animation: talosBootFlow 0.8s ease-in-out 0.12s both; }
+.node-mid { animation: talosBootIgnite 0.8s ease-in-out 0.24s both; }
+.edge-branch { animation: talosBootFlow 0.8s ease-in-out 0.36s both; }
+.node-out { animation: talosBootIgnite 0.8s ease-in-out 0.48s both; }
 .talos-boot-word {
     position: absolute;
     top: calc(50% + 78px);
@@ -139,10 +152,23 @@ onBeforeUnmount(() => {
     35%, 65% { stroke-dashoffset: 0; opacity: 1; }
     85%, 100% { stroke-dashoffset: -90; opacity: 0; }
 }
+/**
+ * Owner 2026-07-27: "l'animazione di boot lagga".
+ *
+ * This is why. It used to animate `fill`, `stroke-width` AND a `drop-shadow`
+ * filter whose blur radius and `color-mix` colour both changed per keyframe --
+ * three properties the compositor cannot touch, on five SVG elements at once.
+ * Every frame re-computed path geometry and re-rendered a filter. On a phone
+ * that is not a slow animation, it is a stalled one.
+ *
+ * Now only `opacity` moves, which the compositor owns. The glow is a static
+ * filter on a layer whose opacity animates -- the filtered layer is rasterised
+ * once and then just faded, instead of being rebuilt sixty times a second.
+ */
 @keyframes talosBootIgnite {
-    0%, 15% { fill: var(--talos-background, #0a0c10); stroke-width: 9; filter: drop-shadow(0 0 0 transparent); }
-    35%, 65% { fill: var(--talos-accent, #f5a623); stroke-width: 0; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--talos-accent, #f5a623) 75%, transparent)); }
-    85%, 100% { fill: var(--talos-background, #0a0c10); stroke-width: 9; filter: drop-shadow(0 0 0 transparent); }
+    0%, 15% { opacity: 0; }
+    35%, 65% { opacity: 1; }
+    85%, 100% { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
     .edge, .node {

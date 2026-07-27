@@ -200,13 +200,23 @@ export function createTalosInAppBrowserService(
  * and disposed at every call site, with a `catch` everyone had to remember —
  * and a leaked webview is invisible until the app is slow.
  *
- * Isolated: a page TALOS opens on the user's behalf is not the user's browser
- * and must not borrow its cookies.
+ * Isolated BY DEFAULT: a page TALOS opens on the user's behalf is not the
+ * user's browser and must not borrow its cookies.
+ *
+ * Owner 2026-07-27: "i link non si aprono bene, dalla libreria intendo". That
+ * default was wrong for HIS taps. An isolated webview carries no cookies and no
+ * logins, so a page revisited from the Library arrives logged out, behind a
+ * consent wall, or simply broken — while the same address in his own browser
+ * opens fine. The distinction that matters is WHO is opening it: TALOS reading
+ * a source stays isolated, the user going back to a page does not.
  */
-export async function openTalosLinkOnce(url: string): Promise<boolean> {
+export async function openTalosLinkOnce(
+    url: string,
+    presentation: TalosMobileBrowserPresentation = 'isolated_webview',
+): Promise<boolean> {
     const browser = createTalosInAppBrowserService({ onEvent: () => {} })
     try {
-        await browser.open(url, 'isolated_webview')
+        await browser.open(url, presentation)
         return true
     } catch {
         // A link that will not open reports by staying put rather than by a dead

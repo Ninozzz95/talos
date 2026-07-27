@@ -310,7 +310,16 @@ onBeforeUnmount(() => {
             </TalosMobileRunningToolRow>
         </div>
         <TalosMobileReasoningBlock v-if="streamingReasoning" :reasoning="streamingReasoning" live />
-        <TalosMobileMessageContent :content="parsedMarkdown" />
+        <!-- Owner 2026-07-27: "si compenetra con le parole già renderizzate".
+             The entrance animation is scoped HERE, to the streaming body, and
+             deliberately not to the finished message. Both render the same
+             component, so when a reply finalises the list creates fresh
+             elements — and every block would animate in at once, over text that
+             was already on screen. Fading while it arrives is the effect; fading
+             again once it has arrived is the bug. -->
+        <div class="talos-streaming-body">
+            <TalosMobileMessageContent :content="parsedMarkdown" />
+        </div>
         <span class="sr-only" role="status" aria-live="polite">Receiving response</span>
     </article>
     <!-- Owner 2026-07-25: while waiting there is NO container — just the mark.

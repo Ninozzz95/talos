@@ -191,6 +191,62 @@ export function pickTalosImageModel(
     return (full.length > 0 ? full : candidates).sort((left, right) => right.localeCompare(left))[0]!
 }
 
+/**
+ * What the provider said went wrong, in its own words.
+ *
+ * Owner 2026-07-27, from a real trace: `generate_image` failed in 140-389ms on
+ * every attempt — far too fast to be a drawing — and the model was told
+ * "usually a content refusal", so it went on to tell the owner his innocent cat
+ * prompts had been rejected. Twice, on two providers, retrying three to five
+ * times.
+ *
+ * The cause was mine twice over. The http transport does NOT throw on a non-2xx
+ * response, it returns `{status, data}` — so a 400 arrived looking like a
+ * successful call with no picture in it — and my copy then guessed the reason.
+ * A tool that guesses why it failed teaches the model to lie to the user.
+ */
+export function readTalosImageError(status: number, payload: unknown): string | null {
+    if (status >= 200 && status < 300) return null
+    const message = findMessage(payload, 0)
+    const detail = message ? `: ${message}` : ''
+    return `HTTP ${status}${detail}`
+}
+
+function findMessage(node: unknown, depth: number): string | null {
+    if (depth > 6 || node === null) return null
+    if (typeof node === 'string') return node.length > 0 && node.length < 400 ? node : null
+    if (typeof node !== 'object') return null
+    if (Array.isArray(node)) {
+        for (const item of node) {
+            const found = findMessage(item, depth + 1)
+            if (found) return found
+        }
+        return null
+    }
+    const record = node as Record<string, unknown>
+    for (const key of ['message', 'error_description', 'detail', 'reason']) {
+        const value = record[key]
+        if (typeof value === 'string' && value !== '') return value.slice(0, 400)
+    }
+    for (const key of ['error', 'errors', 'status', 'data']) {
+        const found = findMessage(record[key], depth + 1)
+        if (found) return found
+    }
+    return null
+}
+
+/**
+ * Whether asking again could possibly help.
+ *
+ * A 400 means the request shape is wrong and will be wrong the next four times
+ * too. The owner's trace shows the model retrying five times against the same
+ * 400 — that is billed thinking spent on something that cannot succeed, and the
+ * tool has to say so plainly enough that the model stops.
+ */
+export function talosImageErrorIsPermanent(status: number): boolean {
+    return status >= 400 && status < 500 && status !== 408 && status !== 429
+}
+
 export function chooseTalosImageProvider(
     available: Partial<Record<TalosImageProvider, boolean>>,
     preferred?: string | null,

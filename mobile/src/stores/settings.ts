@@ -135,7 +135,17 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     plus_dropdown: false,
     launcher_icon_follows_theme: false,
     library_context_enabled: false,
-    library_autosave_generated: false,
+    /**
+     * Owner 2026-07-27: on by default. A document the model made and did not
+     * save is simply lost — the chat scrolls away and the bytes go with it,
+     * which is not a preference so much as a bug with a switch on it.
+     *
+     * Its sibling `library_context_enabled` deliberately stays OFF: that one
+     * injects the Library into EVERY message, spending tokens when it is not
+     * wanted and carrying unrelated documents into conversations. The model
+     * already has `library_search` and can ask when it actually needs to.
+     */
+    library_autosave_generated: true,
     library_view: 'list',
     ui_font_scale: TALOS_DEFAULT_FONT_SCALE,
     streaming_animation: 'typewriter',

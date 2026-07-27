@@ -95,9 +95,14 @@ const linkRows = computed(() => talosSavedLinkRows(filtered.value))
 async function openLink(url: string): Promise<void> {
     openError.value = null
     const { openTalosLinkOnce } = await import('@/services/inAppBrowserService')
+    // The user's own browser, with the user's own cookies. This is him going
+    // back to a page, not TALOS reading one on his behalf — the isolated
+    // webview was why these opened logged-out and looking broken.
     // The address stays on screen either way, so a refusal is a sentence rather
     // than a tap that quietly did nothing.
-    if (!await openTalosLinkOnce(url)) openError.value = `${url} could not be opened on this device.`
+    if (!await openTalosLinkOnce(url, 'system_browser')) {
+        openError.value = `${url} could not be opened on this device.`
+    }
 }
 
 /** The copy TALOS kept, which is the half of this the owner already had. */

@@ -178,6 +178,27 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
         })
         const toolCalls = createAnthropicToolCallAccumulator()
+        /**
+         * Token accounting off the stream, which is the only path a chat uses.
+         *
+         * Owner's diagnostics 2026-07-27 came back with `cache: null` on every
+         * round of every send. That did NOT mean caching was off — it meant the
+         * instrument was blind: only the buffered path ever reported `usage`,
+         * and nothing in a real conversation goes through it. An unreadable
+         * measurement is worse than none, because it reads as a negative result.
+         *
+         * Anthropic sends the input side (including the two cache counters) on
+         * `message_start` and the output side on `message_delta`, so both are
+         * harvested from the events already being parsed here.
+         */
+        const usage: Record<string, number> = {}
+        const harvest = (event: { type?: string; message?: { usage?: unknown }; usage?: unknown }): void => {
+            const reported = event.type === 'message_start' ? event.message?.usage : event.usage
+            if (!reported || typeof reported !== 'object') return
+            for (const [key, value] of Object.entries(reported as Record<string, unknown>)) {
+                if (typeof value === 'number' && Number.isFinite(value)) usage[key] = value
+            }
+        }
         const stream = await talosStreamText({
             url: request.url,
             headers: { ...request.headers, 'anthropic-dangerous-direct-browser-access': 'true' },
@@ -185,8 +206,14 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             signal: handlers.signal,
             accumulator: createTalosSseAccumulator(),
             extract: (payload) => {
-                const event = JSON.parse(payload) as { type?: string; delta?: { type?: string; text?: string } }
+                const event = JSON.parse(payload) as {
+                    type?: string
+                    delta?: { type?: string; text?: string }
+                    message?: { usage?: unknown }
+                    usage?: unknown
+                }
                 toolCalls.push(event)
+                harvest(event)
                 return event.type === 'content_block_delta' && event.delta?.type === 'text_delta'
                     ? event.delta.text ?? ''
                     : ''
@@ -202,7 +229,7 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
         })
-            return { stream, toolCalls }
+            return { stream, toolCalls, usage }
         }
 
         let result
@@ -219,12 +246,14 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             learnTalosThinkingMode(input.model.id, other)
             result = await attempt(other)
         }
-        const { stream, toolCalls } = result
+        const { stream, toolCalls, usage: streamedUsage } = result
         const calls = toolCalls.calls()
         if (!stream.text && calls.length === 0) throw malformedProviderResponse('anthropic', 'complete')
         return {
             text: stream.text,
             model: input.model.id,
+            // What the cache actually did this round, from the wire.
+            usage: Object.keys(streamedUsage).length > 0 ? streamedUsage : null,
             reasoning: stream.reasoning || undefined,
             ...(calls.length ? { toolCalls: calls, finishReason: 'tool_use' } : {}),
         }
