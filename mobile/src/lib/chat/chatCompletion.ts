@@ -117,6 +117,7 @@ export function buildChatCompletion(
                     finishReason: streamed.finishReason ?? null,
                     reasoning: streamed.reasoning,
                     toolCalls: streamed.toolCalls,
+                    usage: streamed.usage ?? null,
                 }
             } catch (error) {
                 const aborted = error instanceof Error && error.name === 'AbortError'
@@ -149,6 +150,7 @@ export function buildChatCompletion(
             finishReason: result.finishReason ?? null,
             reasoning: result.reasoning,
             toolCalls: result.toolCalls,
+            usage: result.usage ?? null,
         }
     }
 }

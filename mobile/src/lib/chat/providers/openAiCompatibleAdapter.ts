@@ -10,6 +10,7 @@ import type {
 } from '@/lib/chat/providerContracts'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
+import { talosPromptCacheKey } from '@/lib/chat/promptCache'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
 import {
@@ -169,6 +170,23 @@ function compatibleCompletionData(
     }
     if (config.provider === 'openai' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning_effort')) {
         data.reasoning_effort = input.effort
+    }
+    /**
+     * OpenAI caches prefixes over 1,024 tokens on its own; this only tells it
+     * WHICH cache to look in, which the docs say raises the hit rate for
+     * requests sharing a long prefix. Ours is ~2,099 tokens, almost all of it
+     * tool schemas.
+     *
+     * OpenAI only. DeepSeek and OpenRouter cache without being asked, and this
+     * codebase has been bitten three times by sending a parameter a provider
+     * did not declare — `temperature`, `thinking.type`, `const` — each time as
+     * an HTTP 400 in the owner's face.
+     */
+    if (config.provider === 'openai') {
+        const key = talosPromptCacheKey(
+            `${input.system ?? ''}|${(input.tools ?? []).map((tool) => tool.name).join(',')}`,
+        )
+        if (key) data.prompt_cache_key = key
     }
     return data
 }
