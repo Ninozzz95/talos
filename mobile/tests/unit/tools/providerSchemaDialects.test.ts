@@ -108,7 +108,9 @@ describe('what Anthropic is asked for', () => {
             effort: 'high',
             thinking: true,
         })
-        expect(request.body.thinking).toEqual({ type: 'enabled', budget_tokens: 24576 })
+        // Adaptive is the default now: `enabled` is a 400 on this very model.
+        expect(request.body.thinking).toEqual({ type: 'adaptive' })
+        expect(request.body.output_config).toEqual({ effort: 'high' })
         expect(request.body).not.toHaveProperty('temperature')
     })
 })

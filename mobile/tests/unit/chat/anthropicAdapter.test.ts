@@ -83,7 +83,10 @@ describe('Anthropic mobile adapter', () => {
 
         expect(result).toMatchObject({ text: 'Hello world', model: 'claude-a', finishReason: 'end_turn' })
         expect(request.mock.calls[0][0].data.messages).toHaveLength(3)
-        expect(request.mock.calls[0][0].data.thinking).toMatchObject({ type: 'enabled' })
+        // Adaptive is what an unknown model is asked for first: it is where
+        // Anthropic is going, and the models that refuse it are the ones being
+        // retired. The adapter learns the older shape from the provider's 400.
+        expect(request.mock.calls[0][0].data.thinking).toMatchObject({ type: 'adaptive' })
         expect(request.mock.calls[0][0]).toMatchObject({
             connectTimeout: 65_000,
             readTimeout: 65_000,

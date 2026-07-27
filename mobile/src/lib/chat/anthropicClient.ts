@@ -44,6 +44,16 @@ export interface BuildAnthropicRequestInput {
     system?: string
     effort?: string
     thinking?: boolean
+    /**
+     * Which of the two thinking shapes this model takes.
+     *
+     * There is no single answer. `enabled` + `budget_tokens` is a 400 on Opus
+     * 4.7 and later; `adaptive` is a 400 on Sonnet 4.5, Opus 4.5, Haiku 4.5 and
+     * earlier. A distributed app cannot ship the list of which is which — it
+     * would be wrong the day a model appears that the APK has never heard of —
+     * so the caller learns it from the provider and passes it back in.
+     */
+    thinkingMode?: 'enabled' | 'adaptive'
     maxTokens?: number
     /** Already translated to Anthropic's `input_schema` shape. */
     tools?: unknown[]
@@ -101,6 +111,35 @@ function mergeToolRuns(turns: BuildAnthropicRequestInput['turns']): MergedTurn[]
     return merged
 }
 
+/**
+ * TALOS's effort levels in the words `output_config.effort` accepts.
+ *
+ * `high` is the API default, so an unknown level lands there rather than
+ * inventing a value the provider would refuse.
+ */
+function adaptiveEffort(effort: string | undefined): string {
+    return effort === 'low' || effort === 'medium' ? effort : 'high'
+}
+
+/**
+ * The provider naming the shape it wants, read out of its own 400.
+ *
+ * Anthropic's message is explicit and stable — `"thinking.type.enabled" is not
+ * supported for this model. Use "thinking.type.adaptive"` — so the adapter can
+ * learn which shape a model takes instead of carrying a list that goes stale.
+ * Null for anything unrelated: retrying an unrelated 400 spends the owner's
+ * tokens twice to earn the same refusal, and buries the real cause under a
+ * second one.
+ */
+export function talosAnthropicThinkingFallback(
+    message: string,
+): 'enabled' | 'adaptive' | null {
+    if (!message.includes('thinking.type')) return null
+    if (message.includes('thinking.type.enabled')) return 'adaptive'
+    if (message.includes('thinking.type.adaptive')) return 'enabled'
+    return null
+}
+
 export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicRequestInput): AnthropicHttpRequest {
     const budget = input.thinking === true && input.effort && input.effort !== 'off'
         ? THINKING_BUDGET[input.effort] ?? 0
@@ -122,7 +161,11 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
      */
     const carriesToolResult = input.turns.some((turn) => turn.role === 'tool')
     const useThinking = budget > 0 && !carriesToolResult
-    const maxTokens = Math.max(input.maxTokens ?? DEFAULT_MAX_TOKENS, useThinking ? budget + 2048 : 0)
+    // Only the budgeted shape needs headroom reserved: in adaptive mode there
+    // is no budget to leave room for, and inflating max_tokens would quietly
+    // raise the ceiling on every answer.
+    const budgeted = useThinking && (input.thinkingMode ?? 'adaptive') === 'enabled'
+    const maxTokens = Math.max(input.maxTokens ?? DEFAULT_MAX_TOKENS, budgeted ? budget + 2048 : 0)
 
     const body: Record<string, unknown> = {
         model: input.model,
@@ -178,7 +221,16 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
         body.system = input.system
     }
     if (input.tools?.length) body.tools = input.tools
-    if (useThinking) body.thinking = { type: 'enabled', budget_tokens: budget }
+    if (useThinking) {
+        if ((input.thinkingMode ?? 'adaptive') === 'adaptive') {
+            // The newer shape: the model decides how much to think, and depth
+            // is steered by effort rather than by a token budget.
+            body.thinking = { type: 'adaptive' }
+            body.output_config = { effort: adaptiveEffort(input.effort) }
+        } else {
+            body.thinking = { type: 'enabled', budget_tokens: budget }
+        }
+    }
     /**
      * No `temperature`, ever.
      *

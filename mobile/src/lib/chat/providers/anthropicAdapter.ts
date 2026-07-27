@@ -1,5 +1,13 @@
 import { z } from 'zod'
-import { ANTHROPIC_VERSION, buildAnthropicRequest } from '@/lib/chat/anthropicClient'
+import {
+    ANTHROPIC_VERSION,
+    buildAnthropicRequest,
+    talosAnthropicThinkingFallback,
+} from '@/lib/chat/anthropicClient'
+import {
+    learnTalosThinkingMode,
+    talosThinkingModeFor,
+} from '@/lib/chat/anthropicThinkingMemory'
 import { talosToolsForAnthropic } from '@/lib/tools/registry'
 import { createAnthropicToolCallAccumulator, parseAnthropicToolCalls } from '@/lib/tools/wire'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
@@ -9,6 +17,20 @@ import {
     requireHttpSuccess,
     requireProviderApiKey,
 } from '@/lib/chat/providerErrors'
+
+/**
+ * The provider's own words out of an error body, and nothing else.
+ *
+ * Only used to ask "did you name the other thinking shape" — never shown to the
+ * user, who gets the mapped message the error layer already produces.
+ */
+function anthropicErrorText(data: unknown): string {
+    if (data && typeof data === 'object') {
+        const error = (data as { error?: { message?: unknown } }).error
+        if (error && typeof error.message === 'string') return error.message
+    }
+    return typeof data === 'string' ? data : ''
+}
 
 const modelSchema = z.object({
     id: z.string().min(1),
@@ -79,21 +101,41 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
     },
     async complete(input, credential, transport) {
         const apiKey = requireProviderApiKey('anthropic', 'complete', credential)
-        const request = buildAnthropicRequest(apiKey, {
-            model: input.model.id,
-            turns: input.turns,
-            system: input.system,
-            effort: input.effort,
-            thinking: input.thinking,
-            ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
-        })
-        const response = await transport.request({
-            method: 'POST',
-            url: request.url,
-            headers: request.headers,
-            data: request.body,
-            ...requestTimeouts(credential.timeoutMs),
-        })
+        /**
+         * Ask in the shape this model is known to take, and learn if wrong.
+         *
+         * There is no single thinking shape that works across the range —
+         * `enabled` is a 400 on the newest models, `adaptive` on the oldest —
+         * and a distributed app cannot carry the list. So the provider's own
+         * 400 is the source of truth, read once per model and remembered.
+         */
+        const send = async (thinkingMode: 'enabled' | 'adaptive') => {
+            const request = buildAnthropicRequest(apiKey, {
+                model: input.model.id,
+                turns: input.turns,
+                system: input.system,
+                effort: input.effort,
+                thinking: input.thinking,
+                thinkingMode,
+                ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
+            })
+            return transport.request({
+                method: 'POST',
+                url: request.url,
+                headers: request.headers,
+                data: request.body,
+                ...requestTimeouts(credential.timeoutMs),
+            })
+        }
+
+        let response = await send(talosThinkingModeFor(input.model.id))
+        if (response.status === 400) {
+            const other = talosAnthropicThinkingFallback(anthropicErrorText(response.data))
+            if (other !== null) {
+                learnTalosThinkingMode(input.model.id, other)
+                response = await send(other)
+            }
+        }
         requireHttpSuccess({ provider: 'anthropic', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('anthropic', 'complete')
@@ -118,12 +160,21 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
     // router falls back to the buffered CapacitorHttp path.
     async streamComplete(input, credential, handlers) {
         const apiKey = requireProviderApiKey('anthropic', 'complete', credential)
+        /**
+         * The streaming path learns the same lesson as the buffered one.
+         *
+         * This is the path a chat actually uses, so leaving it out would have
+         * left the fix invisible: the owner would still meet the 400 on every
+         * message and only the retry logic he never sees would be correct.
+         */
+        const attempt = async (thinkingMode: 'enabled' | 'adaptive') => {
         const request = buildAnthropicRequest(apiKey, {
             model: input.model.id,
             turns: input.turns,
             system: input.system,
             effort: input.effort,
             thinking: input.thinking,
+            thinkingMode,
             ...(input.tools?.length ? { tools: talosToolsForAnthropic(input.tools) } : {}),
         })
         const toolCalls = createAnthropicToolCallAccumulator()
@@ -151,6 +202,24 @@ export const anthropicAdapter: TalosMobileProviderAdapter = {
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
         })
+            return { stream, toolCalls }
+        }
+
+        let result
+        try {
+            result = await attempt(talosThinkingModeFor(input.model.id))
+        } catch (error) {
+            // Only when the provider named the other shape, and only before any
+            // text has been shown: retrying after the user has watched half an
+            // answer arrive would replay it from the top.
+            const other = talosAnthropicThinkingFallback(
+                error instanceof Error ? error.message : String(error),
+            )
+            if (other === null) throw error
+            learnTalosThinkingMode(input.model.id, other)
+            result = await attempt(other)
+        }
+        const { stream, toolCalls } = result
         const calls = toolCalls.calls()
         if (!stream.text && calls.length === 0) throw malformedProviderResponse('anthropic', 'complete')
         return {
