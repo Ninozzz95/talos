@@ -97,9 +97,14 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
     from { opacity: 0; transform: translateY(2px); }
     to { opacity: 1; transform: none; }
 }
-.talos-message-block { animation: talos-block-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+/* Only while the answer is arriving — see TalosMobileStreamingReply. A block
+   that has finished must never animate again, or it plays over itself when the
+   finished message replaces the streaming one. */
+.talos-streaming-body .talos-message-block {
+    animation: talos-block-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
 @media (prefers-reduced-motion: reduce) {
-    .talos-message-block { animation: none; }
+    .talos-streaming-body .talos-message-block { animation: none; }
 }
 .talos-message-content { overflow-wrap: anywhere; font-size: 1em; line-height: 1.625; }
 .talos-message-content > :first-child { margin-top: 0; }

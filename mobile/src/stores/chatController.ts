@@ -844,6 +844,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             async generate(prompt, shape, signal) {
                                 const {
                                     planTalosImageRequest, parseTalosGeneratedImages,
+                                    readTalosImageError, talosImageErrorIsPermanent,
                                 } = await import('@/lib/images/imageGateway')
                                 const apiKey = await deps.getKey(drawer)
                                 if (!apiKey) throw new Error('the key for this provider is no longer on this device')
@@ -893,7 +894,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                         }),
                                     ])
                                     : await drawing
-                                return parseTalosGeneratedImages(response.data)
+                                /**
+                                 * The transport does NOT throw on a non-2xx, it
+                                 * returns the body. Owner's trace 2026-07-27:
+                                 * every attempt failed in 140-389ms — an error
+                                 * page, not a drawing — and because nobody read
+                                 * the status, the model was handed "no image"
+                                 * and told the user his cat prompt had been
+                                 * refused. The status is read now, and the
+                                 * provider's own words travel.
+                                 */
+                                const failure = readTalosImageError(response.status, response.data)
+                                return {
+                                    images: failure ? [] : parseTalosGeneratedImages(response.data),
+                                    error: failure,
+                                    permanent: failure !== null && talosImageErrorIsPermanent(response.status),
+                                }
                             },
                             async save(image, prompt) {
                                 // Decoded by the platform, not by a JS loop.

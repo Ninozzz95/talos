@@ -27,7 +27,7 @@ export interface TalosImageToolSources {
         prompt: string,
         shape: TalosImageShape,
         signal?: AbortSignal,
-    ): Promise<TalosGeneratedImage[]>
+    ): Promise<{ images: TalosGeneratedImage[]; error: string | null; permanent: boolean }>
     /** Into the Library, with the chat it came from. Returns the stored name. */
     save(image: TalosGeneratedImage, prompt: string): Promise<{ id: string; name: string }>
 }
@@ -60,9 +60,9 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 }
             }
 
-            let images: TalosGeneratedImage[]
+            let drawn: { images: TalosGeneratedImage[]; error: string | null; permanent: boolean }
             try {
-                images = await sources.generate(input.prompt, input.shape ?? 'square', context.signal)
+                drawn = await sources.generate(input.prompt, input.shape ?? 'square', context.signal)
             } catch (cause) {
                 const message = cause instanceof Error ? cause.message : String(cause)
                 if (context.signal?.aborted) {
@@ -78,15 +78,29 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 }
             }
 
-            const image = images[0]
+            if (drawn.error) {
+                // The provider's own words, never a guess. Saying "usually a
+                // content refusal" over an HTTP 400 is how a model ends up
+                // telling the user his cat prompt was rejected.
+                return {
+                    ok: false,
+                    code: drawn.permanent ? 'TALOS_IMAGE_REJECTED' : 'TALOS_IMAGE_FAILED',
+                    content: drawn.permanent
+                        ? `${provider} refused the request — ${drawn.error}. `
+                            + 'This will fail the same way if you ask again: do NOT retry. '
+                            + 'Tell the user what happened and stop.'
+                        : `${provider} could not draw it right now — ${drawn.error}. Retrying once may work.`,
+                }
+            }
+
+            const image = drawn.images[0]
             if (!image) {
-                // A refusal upstream is not a crash, and telling the model the
-                // truth lets it say so rather than retrying the same prompt.
                 return {
                     ok: false,
                     code: 'TALOS_IMAGE_EMPTY',
-                    content: `${provider} accepted the request but returned no image. `
-                        + 'This is usually a content refusal; a different description may work.',
+                    content: `${provider} answered successfully but the response carried no image. `
+                        + 'Do NOT retry with a different description: the request succeeded, so this is not a content refusal. '
+                        + 'Tell the user the provider returned an empty result.',
                 }
             }
 

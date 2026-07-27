@@ -146,7 +146,10 @@ describe('ContextScreen Library gallery', () => {
 
         await wrapper.get('[data-testid="talos-library-link-open"]').trigger('click')
         await flushPromises()
-        expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas')
+        // The user's OWN browser, with his cookies: this is him going back to a
+        // page, not TALOS reading one on his behalf. The isolated webview was
+        // why these opened logged-out and looking broken.
+        expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas', 'system_browser')
     })
 
     it('lists a source saved before the address was kept as a fact', async () => {
