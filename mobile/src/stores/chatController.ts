@@ -148,6 +148,11 @@ const unavailableFilePicker: TalosNativeFilePicker = {
     pickFiles: async () => { throw new Error('TALOS_ATTACHMENT_RUNTIME_UNAVAILABLE') },
 }
 
+import * as imageGateway from '@/lib/images/imageGateway'
+
+/** Characters a file name may not carry on Android, Windows or a zip. */
+const TALOS_UNSAFE_FILE_CHARS = new RegExp('[\\\\/:*?"<>|\\r\\n]+', 'g')
+
 export type ProviderCatalogStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 
 export interface ProviderCatalogState {
@@ -816,6 +821,71 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * needs no third party and no key, because the generators
                      * run on the device.
                      */
+                    /**
+                     * Drawing, owner's own gateway sketch: chat -> model ->
+                     * gateway -> provider adapter -> the Library -> the image
+                     * in the conversation.
+                     *
+                     * Only the providers whose keys are already on this device
+                     * are offered, so nobody is asked to sign up for anything to
+                     * draw. Null when neither has a key: the tool is then not
+                     * advertised at all, which is what stops a model calling it
+                     * five times and being refused five times.
+                     */
+                    images: () => {
+                        const { chooseTalosImageProvider } = imageGateway
+                        const drawer = chooseTalosImageProvider(
+                            { openai: secrets.openai === true, gemini: secrets.gemini === true },
+                            selectedProfile.value?.provider ?? null,
+                        )
+                        if (!drawer) return null
+                        return {
+                            provider: () => drawer,
+                            async generate(prompt, shape) {
+                                const {
+                                    planTalosImageRequest, parseTalosGeneratedImages,
+                                } = await import('@/lib/images/imageGateway')
+                                const apiKey = await deps.getKey(drawer)
+                                if (!apiKey) throw new Error('the key for this provider is no longer on this device')
+                                const plan = planTalosImageRequest(drawer, { prompt, shape }, {
+                                    apiKey,
+                                    model: drawer === 'openai' ? 'gpt-image-1' : 'gemini-3.1-flash-image',
+                                    endpoint: endpoints[drawer] ?? null,
+                                })
+                                const response = await deps.transport.request({
+                                    url: plan.url,
+                                    method: 'POST',
+                                    headers: plan.headers,
+                                    data: plan.body,
+                                    // Drawing is slower than answering; the chat
+                                    // timeout would cut a picture that is coming.
+                                    connectTimeout: 120_000,
+                                    readTimeout: 120_000,
+                                })
+                                return parseTalosGeneratedImages(response.data)
+                            },
+                            async save(image, prompt) {
+                                const binary = atob(image.base64)
+                                const bytes = new Uint8Array(binary.length)
+                                for (let index = 0; index < binary.length; index += 1) {
+                                    bytes[index] = binary.charCodeAt(index)
+                                }
+                                // Named after what it shows, so the Library is
+                                // browsable later; a timestamped blob is not.
+                                const stem = prompt.trim().slice(0, 48)
+                                    .replace(TALOS_UNSAFE_FILE_CHARS, ' ')
+                                    .replace(/\s+/g, ' ')
+                                    .trim()
+                                const extension = image.mediaType === 'image/jpeg' ? 'jpg' : 'png'
+                                const saved = await attachments.saveGeneratedBinary({
+                                    name: `${stem || 'image'}.${extension}`,
+                                    mediaType: image.mediaType,
+                                    bytes,
+                                })
+                                return { id: saved.id, name: saved.display_name }
+                            },
+                        }
+                    },
                     documents: () => ({
                         diagnostics: () => deps.settings.state.shell?.debug_diagnostics === true,
                         async generate(spec) {
