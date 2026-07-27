@@ -57,7 +57,7 @@ const SHELL_CHUNKS: Array<() => Promise<unknown>> = [
     () => import('@/components/shell/TalosMobileImmersiveChrome.vue'),
     () => import('@/components/chat/TalosMobileComposerDrawer.vue'),
     () => import('@/components/security/TalosMobileLockScreen.vue'),
-    () => import('@/components/intro/TalosMobileIntroModal.vue'),
+    () => import('@/components/intro/TalosMobileSetupIntro.vue'),
 ]
 
 export function preloadTalosMobileRoutes(): Promise<void> {

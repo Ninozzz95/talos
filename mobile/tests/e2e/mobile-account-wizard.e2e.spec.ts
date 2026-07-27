@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 
-// N1 — guided account-creation wizard. First-run gate opens AFTER the intro is
-// resolved (intro_version:1) and only once per wizard version (wizard_version:0
-// on a fresh install). Local-first, no fake auth. File-local storageState.
+// N1 — guided account-creation wizard. Owner 2026-07-27: it no longer opens by
+// itself on a fresh install — first run is the two-step setup, and this wizard's
+// `protect` step asked for the PIN setup had already armed. It is reached from
+// Settings, which is what these journeys drive. Local-first, no fake auth.
 const WIZARD = '[data-testid="talos-account-wizard"]'
 const PRIMARY = '[data-testid="talos-wizard-primary"]'
 const MENU = '[aria-label="Open menu"]'
@@ -25,19 +26,39 @@ function stateWith(onboarding: Record<string, unknown>) {
         }],
     }
 }
-// Fresh install: intro resolved, wizard never run → the wizard opens.
+// Fresh install: setup resolved, wizard never run → nothing may intercept.
 const FRESH = stateWith({ intro_version: 1, intro_outcome: 'completed', setup_dismissed: true })
 // Returning user: both resolved → nothing intercepts.
 const RETURNING = stateWith({ intro_version: 1, intro_outcome: 'completed', setup_dismissed: true, wizard_version: 1, wizard_outcome: 'completed' })
 
 async function next(page: Page): Promise<void> { await page.locator(PRIMARY).click() }
 
-test.describe('account wizard — first run', () => {
+/** The only way in now: Settings → Account → Replay. */
+async function openWizard(page: Page): Promise<void> {
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
+    await expect(page.locator(SHEET)).toBeVisible()
+    await page.locator('[data-settings-tab="account"]').click()
+    await page.locator('[data-testid="talos-wizard-replay"]').click()
+    await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+}
+
+test.describe('account wizard — never intercepts a fresh install', () => {
+    test.use({ storageState: FRESH })
+
+    test('stays out of the way once setup is done', async ({ page }) => {
+        await page.goto('/')
+        await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
+        await expect(page.locator(WIZARD)).toHaveCount(0)
+    })
+})
+
+test.describe('account wizard — opened from Settings', () => {
     test.use({ storageState: FRESH })
 
     test('walks the flow, persists the name, and never reopens', async ({ page }) => {
         await page.goto('/')
-        await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+        await openWizard(page)
         await expect(page.locator(PRIMARY)).toHaveText('Get started')
 
         await next(page) // → identity
@@ -66,7 +87,7 @@ test.describe('account wizard — first run', () => {
 
     test('skipping from welcome completes with defaults and does not reopen', async ({ page }) => {
         await page.goto('/')
-        await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+        await openWizard(page)
         await page.locator('[data-testid="wizard-skip-all"]').click()
         await expect(page.locator(WIZARD)).toHaveCount(0)
         await page.reload()
@@ -75,7 +96,7 @@ test.describe('account wizard — first run', () => {
 
     test('OAuth is predisposed but honestly gated — a tap surfaces the gate, no session', async ({ page }) => {
         await page.goto('/')
-        await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+        await openWizard(page)
         await next(page); await next(page); await next(page); await next(page) // → signin
         await expect(page.locator('[data-testid="wizard-step-signin"]')).toBeVisible()
         await page.locator('[data-testid="wizard-oauth-google"]').click()
@@ -88,7 +109,7 @@ test.describe('account wizard — first run', () => {
 
     test('the protect step opens the device app-lock setup modal', async ({ page }) => {
         await page.goto('/')
-        await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+        await openWizard(page)
         await next(page); await next(page); await next(page) // → protect
         await expect(page.locator('[data-testid="wizard-step-protect"]')).toBeVisible()
         await page.locator('[data-testid="wizard-setup-pin"]').click()
@@ -97,7 +118,7 @@ test.describe('account wizard — first run', () => {
 
     test('Back walks one step up (welcome → identity → back to welcome)', async ({ page }) => {
         await page.goto('/')
-        await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
+        await openWizard(page)
         await next(page) // → identity
         await expect(page.locator('[data-testid="wizard-step-identity"]')).toBeVisible()
         await page.locator('[data-testid="talos-wizard-back"]').click()

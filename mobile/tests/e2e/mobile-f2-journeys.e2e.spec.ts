@@ -11,12 +11,11 @@ const LOCK = '[data-testid="talos-lock-screen"]'
 const EMPTY_STATE = { cookies: [], origins: [] }
 const WIZARD = '[data-testid="talos-account-wizard"]'
 
-// N1: the guided account wizard follows the intro on a fresh install. The
-// fresh-install journeys dismiss it (skip) so they can assert the shell beneath;
-// skipping persists wizard_version so it never re-offers on reload.
-async function dismissWizard(page: Page): Promise<void> {
-    await expect(page.locator(WIZARD)).toBeVisible({ timeout: 15000 })
-    await page.locator('[data-testid="talos-wizard-close"]').click()
+// Owner 2026-07-27: the account wizard no longer follows setup on a fresh
+// install — it opens only on an explicit replay from Settings. A fresh install
+// must land in the shell with nothing else in the way, which is what this
+// asserts rather than dismisses.
+async function expectNoWizard(page: Page): Promise<void> {
     await expect(page.locator(WIZARD)).toHaveCount(0)
 }
 
@@ -28,9 +27,8 @@ test.describe('fresh-install defaults (owner #15)', () => {
         await page.goto('/')
         const intro = page.locator(INTRO)
         await expect(intro).toBeVisible({ timeout: 15000 })
-        await intro.getByRole('button', { name: 'Skip introduction' }).click()
-        // N1: the account wizard now follows the intro on a fresh install.
-        await dismissWizard(page)
+        await page.locator('[data-testid="talos-setup-skip"]').click()
+        await expectNoWizard(page)
         await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
         await expect(page.locator(HEADER)).toHaveCount(0)
         await expect(page.locator('[aria-label="Add to chat"]')).toBeVisible()
@@ -57,28 +55,23 @@ const SEEN_NOT_DISMISSED = {
 test.describe('intro first-run (fresh install)', () => {
     test.use({ storageState: EMPTY_STATE })
 
-    test('opens once, walks six mobile-truth slides, completes and never reopens', async ({ page }) => {
+    test('asks for the two things TALOS needs, completes and never reopens', async ({ page }) => {
         await page.goto('/')
         const intro = page.locator(INTRO)
         await expect(intro).toBeVisible({ timeout: 15000 })
-        await expect(intro).toContainText('Step 1 of 6')
-        await expect(intro).toContainText('Meet TALOS')
-        // Walk to the AVM slide: on mobile it must carry the ROADMAP truth chip.
-        await intro.getByRole('button', { name: 'Next' }).click()
-        await intro.getByRole('button', { name: 'Next' }).click()
-        await expect(intro).toContainText('Step 3 of 6')
-        await expect(intro).toContainText('ROADMAP')
-        // Models slide keeps the Keystore truth (never a server-side claim).
-        await intro.getByRole('button', { name: 'Next' }).click()
+        // Two steps, named after what the person controls.
+        await expect(intro.locator('[data-testid="talos-setup-step"]')).toHaveCount(2)
+        // Step 1 leads with the consequence, because the PIN really is the key.
+        await expect(intro).toContainText('no recovery')
+        // Nothing that does not exist on this device is promised anywhere.
+        await expect(intro).not.toContainText('ROADMAP')
+        await page.locator('[data-testid="talos-setup-next"]').click()
+        // Step 2 keeps the Keystore truth (never a server-side claim).
         await expect(intro).toContainText('Keystore')
-        await intro.getByRole('button', { name: 'Next' }).click()
-        await intro.getByRole('button', { name: 'Next' }).click()
-        await expect(intro).toContainText('Step 6 of 6')
         await page.locator('[data-testid="talos-intro-cta"]').click()
         await expect(intro).toHaveCount(0)
-        // N1: the account wizard follows the intro; skip it so the fresh install
-        // lands in the shell and the reload assertion is clean.
-        await dismissWizard(page)
+        // The wizard must NOT appear behind it any more.
+        await expectNoWizard(page)
         // The completed version persists — a reload must NOT re-offer the
         // intro; fresh installs land in the immersive default shell (#15).
         await page.reload()
@@ -90,10 +83,9 @@ test.describe('intro first-run (fresh install)', () => {
         await page.goto('/')
         const intro = page.locator(INTRO)
         await expect(intro).toBeVisible({ timeout: 15000 })
-        await intro.getByRole('button', { name: 'Skip introduction' }).click()
+        await page.locator('[data-testid="talos-setup-skip"]').click()
         await expect(intro).toHaveCount(0)
-        // N1: skip the wizard that follows the intro (persists so no re-offer).
-        await dismissWizard(page)
+        await expectNoWizard(page)
         await page.reload()
         await expect(page.locator('[data-testid="talos-mobile-immersive-chrome"]')).toBeVisible({ timeout: 15000 })
         await expect(page.locator(INTRO)).toHaveCount(0)
@@ -136,7 +128,7 @@ test('immersive header toggle swaps the header bar for floating pills', async ({
     await expect(page.locator('[data-testid="talos-chat-options-menu"]')).toContainText('New chat')
 })
 
-test('Account panel replays the introduction from Settings', async ({ page }) => {
+test('Account panel replays first-run setup from Settings', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator(HEADER)).toBeVisible({ timeout: 15000 })
     await page.locator('[aria-label="Open menu"]').click()
@@ -144,7 +136,8 @@ test('Account panel replays the introduction from Settings', async ({ page }) =>
     await page.locator('[data-settings-tab="account"]').click()
     await page.locator('[data-testid="talos-replay-intro"]').click()
     await expect(page.locator(INTRO)).toBeVisible({ timeout: 15000 })
-    await expect(page.locator(INTRO)).toContainText('Meet TALOS')
+    await expect(page.locator(INTRO)).toContainText('Your PIN is the key')
+    await expect(page.locator(INTRO).locator('[data-testid="talos-setup-step"]')).toHaveCount(2)
 })
 
 test('app lock arms with a PIN, gates the cold start, and only a real PIN unlocks', async ({ page }) => {

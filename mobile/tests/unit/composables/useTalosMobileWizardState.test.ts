@@ -5,9 +5,12 @@ import {
 } from '@/composables/useTalosMobileWizardState'
 import type { TalosMobileOnboardingState } from '@/stores/settings'
 
-// N1 — first-run gate for the account wizard, mirroring the intro-modal
-// contract: opens once per wizard version, AFTER the intro is resolved, only
-// while hydrated and unblocked; any close latches + persists idempotently.
+// N1 — gate for the account wizard. Owner 2026-07-27: it opens on an explicit
+// replay from Settings and no longer follows first-run setup, which used to put
+// eight screens between installing TALOS and the first message — and asked for
+// the same PIN twice, since the wizard's `protect` step and setup step 1 arm the
+// same lock. It still waits for hydration, still yields to a blocking surface,
+// and any close still latches + persists idempotently.
 function onboarding(patch: Partial<TalosMobileOnboardingState> = {}): TalosMobileOnboardingState {
     return {
         intro_version: 1, intro_outcome: 'completed', setup_dismissed: false,
@@ -30,23 +33,26 @@ function make(overrides: {
 }
 
 describe('useTalosMobileWizardState', () => {
-    it('stays closed until settings are hydrated', () => {
-        expect(make({ hydrated: false }).state.wizardOpen.value).toBe(false)
+    it('stays closed until settings are hydrated, even on a replay', () => {
+        const { state } = make({ hydrated: false })
+        state.replayWizard()
+        expect(state.wizardOpen.value).toBe(false)
     })
 
-    it('stays closed while a blocking surface is up (boot/lock/intro)', () => {
-        expect(make({ blocked: true }).state.wizardOpen.value).toBe(false)
+    it('stays closed while a blocking surface is up (boot/lock/setup)', () => {
+        const { state } = make({ blocked: true })
+        state.replayWizard()
+        expect(state.wizardOpen.value).toBe(false)
     })
 
-    it('stays closed until the intro has been resolved', () => {
+    it('never greets a fresh install by itself', () => {
+        // The two-step setup is the whole of first run. This wizard used to open
+        // straight after it and ask for the PIN setup had just armed.
+        expect(make().state.wizardOpen.value).toBe(false)
         expect(make({ ob: { intro_version: 0 } }).state.wizardOpen.value).toBe(false)
     })
 
-    it('opens once the intro is resolved and the wizard has never run', () => {
-        expect(make().state.wizardOpen.value).toBe(true)
-    })
-
-    it('does not reopen once the wizard version is current', () => {
+    it('does not open once the wizard version is current', () => {
         expect(make({ ob: { wizard_version: TALOS_MOBILE_WIZARD_VERSION } }).state.wizardOpen.value).toBe(false)
     })
 
