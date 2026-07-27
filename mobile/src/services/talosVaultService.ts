@@ -36,6 +36,11 @@ export interface TalosVaultService {
              * burying everything else.
              */
             kind?: 'document' | 'web_source'
+            /**
+             * The address a read page came from, so the Library can show it as
+             * a link you can open rather than a sentence buried in markdown.
+             */
+            sourceUrl?: string | null
         },
         originSessionId?: string | null,
     ): Promise<TalosVaultTrayItem>
@@ -156,6 +161,15 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
         origin: 'uploaded' | 'generated',
         originSessionId: string | null,
         kind: 'document' | 'web_source' = 'document',
+        /**
+         * Where a saved page came from.
+         *
+         * Owner 2026-07-27 wants sources to appear in the Library as openable
+         * links. The address used to live only inside the markdown prose, which
+         * meant reading every file to find it — slow, and a guess. Here it is a
+         * fact the Library can render.
+         */
+        sourceUrl: string | null = null,
     ): Promise<TalosVaultTrayItem> {
         const fileId = idFactory()
         await options.repository.createVaultFile({
@@ -193,6 +207,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 metadata: {
                     extension: analysis.extension, page_count: analysis.pageCount,
                     origin, origin_session_id: originSessionId, kind,
+                    ...(sourceUrl ? { source_url: sourceUrl } : {}),
                 },
             })
             const grant = await createGrant(file.id)
@@ -243,7 +258,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
 
     return {
         ingest: (pickedFile, originSessionId = null) => ingestFile(pickedFile, 'uploaded', originSessionId),
-        async createGenerated({ name, mediaType, text, kind }, originSessionId = null) {
+        async createGenerated({ name, mediaType, text, kind, sourceUrl }, originSessionId = null) {
             // A chat-generated document flows through the SAME ingestion pipeline
             // (private copy + analysis → searchable extracted text + sha256), only
             // marked origin='generated'. Built from a web-blob so it needs no picker.
@@ -253,7 +268,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 declaredMediaType: mediaType,
                 sizeBytes: bytes.byteLength,
                 source: { kind: 'web-blob', blob: new Blob([bytes], { type: mediaType }) },
-            }, 'generated', originSessionId, kind)
+            }, 'generated', originSessionId, kind, sourceUrl ?? null)
         },
         async createGeneratedBinary({ name, mediaType, bytes }, originSessionId = null) {
             // The same ingestion pipeline: private copy, analysis, sha256. Only

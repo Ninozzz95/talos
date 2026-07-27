@@ -191,3 +191,28 @@ export function createTalosInAppBrowserService(
 
     return { open, close, dispose }
 }
+
+/**
+ * Open one link and be done with it — a citation, a Library row, a source.
+ *
+ * The screens that do this have no browser session to keep: they want a page
+ * shown and nothing left behind. Doing it by hand meant a service built, used
+ * and disposed at every call site, with a `catch` everyone had to remember —
+ * and a leaked webview is invisible until the app is slow.
+ *
+ * Isolated: a page TALOS opens on the user's behalf is not the user's browser
+ * and must not borrow its cookies.
+ */
+export async function openTalosLinkOnce(url: string): Promise<boolean> {
+    const browser = createTalosInAppBrowserService({ onEvent: () => {} })
+    try {
+        await browser.open(url, 'isolated_webview')
+        return true
+    } catch {
+        // A link that will not open reports by staying put rather than by a dead
+        // tap: the address is on screen and can be copied.
+        return false
+    } finally {
+        await browser.dispose?.()
+    }
+}

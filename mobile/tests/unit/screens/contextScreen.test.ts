@@ -7,6 +7,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 const mockState = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('@/stores/chatController', () => ({ useChatController: () => mockState.controller }))
 
+const browserMock = vi.hoisted(() => ({ open: vi.fn().mockResolvedValue(true) }))
+vi.mock('@/services/inAppBrowserService', () => ({ openTalosLinkOnce: browserMock.open }))
+
 import ContextScreen from '@/screens/ContextScreen.vue'
 
 function file(id: string, status: 'available' | 'failed' = 'available') {
@@ -113,6 +116,63 @@ describe('ContextScreen Library gallery', () => {
             .find((button) => button.textContent?.trim() === 'Delete file') as HTMLButtonElement
         confirm.click()
         await vi.waitFor(() => expect(mockState.controller.attachments.deleteVaultFile).toHaveBeenCalledWith('vault-ready'))
+    })
+
+    /**
+     * Owner 2026-07-27: "nuova sezione link in libreria, tutti i link salvati
+     * nella ricerca devono essere stampati nella libreria sottoforma di link
+     * oltre all'attuale transcript MD … magari nella visualizzazione mettere un
+     * pulsante open in browser".
+     */
+    it('lists a page read while searching as a link that opens in the browser', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://www.corriere.it/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        const links = wrapper.get('[data-testid="talos-library-links"]')
+        expect(links.text()).toContain('Il prezzo del gas')
+        // The host, not the filename it happened to be stored under.
+        expect(links.text()).toContain('corriere.it')
+        // The user's own documents are not addresses and stay out.
+        expect(links.text()).not.toContain('architecture.pdf')
+
+        await wrapper.get('[data-testid="talos-library-link-open"]').trigger('click')
+        await flushPromises()
+        expect(browserMock.open).toHaveBeenCalledWith('https://www.corriere.it/gas')
+    })
+
+    it('keeps the saved transcript one tap away from its link', async () => {
+        // The markdown copy is the half that survives the page going away; the
+        // link section adds to it rather than replacing it.
+        const controller = makeController()
+        controller.attachments.hydrateText = vi.fn().mockResolvedValue('# Il prezzo del gas')
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Il prezzo del gas.md',
+            media_type: 'text/markdown',
+            extracted_text: 'il prezzo',
+            metadata: { origin: 'generated', kind: 'web_source', source_url: 'https://example.com/gas' },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen, { attachTo: document.body })
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-type-links"]').trigger('click')
+        await wrapper.get('[aria-label="Open the saved copy of Il prezzo del gas"]').trigger('click')
+        await flushPromises()
+        const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
+        expect(viewer).not.toBeNull()
+        expect(viewer!.textContent).toContain('Il prezzo del gas')
+        // And from the transcript, the original page is still reachable.
+        expect(viewer!.querySelector('[data-testid="talos-library-doc-open-source"]')).not.toBeNull()
     })
 
     it('shows a compact empty state and a recoverable load error', async () => {
