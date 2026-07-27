@@ -178,12 +178,18 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
         body.system = input.system
     }
     if (input.tools?.length) body.tools = input.tools
-    if (useThinking) {
-        // Anthropic requires the default temperature when extended thinking is on.
-        body.thinking = { type: 'enabled', budget_tokens: budget }
-    } else {
-        body.temperature = 0.7
-    }
+    if (useThinking) body.thinking = { type: 'enabled', budget_tokens: budget }
+    /**
+     * No `temperature`, ever.
+     *
+     * Owner 2026-07-27 on claude-opus-5: HTTP 400, "`temperature` is deprecated
+     * for this model." The 0.7 that used to be sent here was not his setting —
+     * TALOS has no temperature control anywhere — it was a number I picked. The
+     * parameter is optional and defaults to 1.0, so omitting it lets every
+     * model apply its own default and stops the newest ones refusing the call
+     * outright. Keeping a list of models that still accept it would be exactly
+     * the static catalogue a distributed app must never ship.
+     */
 
     return {
         url: ANTHROPIC_MESSAGES_URL,
