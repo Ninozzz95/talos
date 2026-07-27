@@ -18,7 +18,7 @@
         },
         {
             "mobile_path": "mobile/src/lib/talosMessageMarkdown.ts",
-            "sha256": "7f7aac0914684a994bd55fd5e3ba6faf9e93bfdf8e2435fcf241848be510cb84",
+            "sha256": "7d1fa92bebd59034c502a2fd7b99a77544b2e0adc9591b9c1e108516800ef9dd",
             "desktop_source": "talosMessageMarkdown.ts",
             "reconciliation": "ported; differs from desktop only in TS type syntax (verified F1-F6 review)"
         },

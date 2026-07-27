@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { renderTalosMarkdown } from '@/lib/talosMessageMarkdown'
+import { renderTalosMarkdown, splitTalosMarkdownBlocks } from '@/lib/talosMessageMarkdown'
 import { writeTalosClipboardText } from '@/services/clipboard'
 
 // R2-10 (owner obliteration directive): the sensitive-censor mechanism is
@@ -10,7 +10,22 @@ const props = defineProps<{
 }>()
 
 const copyStatus = ref('')
-const rendered = computed(() => renderTalosMarkdown(props.content))
+/**
+ * Rendered BLOCK BY BLOCK, not as one document.
+ *
+ * Owner 2026-07-27: the streaming reveal was already paced and the fade still
+ * was not smooth. This was why — a single `v-html` for the whole message, so
+ * every re-parse while an answer streams destroyed and rebuilt the entire body
+ * nine times a second, snapping anything mid-fade.
+ *
+ * With `v-memo` keyed on the block's own source, a block whose text has not
+ * changed is not re-rendered at all: while an answer streams that is every
+ * block except the last. Keys are the INDEX, deliberately — keying by content
+ * would unmount and remount a block the moment a character landed in it, which
+ * is the very churn this removes.
+ */
+const blocks = computed(() => splitTalosMarkdownBlocks(props.content))
+const renderedBlocks = computed(() => blocks.value.map((block) => renderTalosMarkdown(block).html))
 
 async function handleContentClick(event: MouseEvent): Promise<void> {
     const target = event.target instanceof Element
@@ -38,8 +53,15 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
         data-testid="talos-mobile-message-content"
         class="talos-message-content min-w-0 max-w-full"
         @click="handleContentClick"
-        v-html="rendered.html"
-    />
+    >
+        <div
+            v-for="(html, index) in renderedBlocks"
+            :key="index"
+            v-memo="[blocks[index]]"
+            class="talos-message-block"
+            v-html="html"
+        />
+    </div>
     <span class="sr-only" role="status" aria-live="polite">{{ copyStatus }}</span>
 </template>
 

@@ -145,3 +145,41 @@ export function renderTalosMarkdown(
 
     return { html: String(clean), truncated, sourceLength }
 }
+
+/**
+ * The message, cut into blocks that can be rendered — and left alone — apart.
+ *
+ * Owner 2026-07-27: the reveal was already paced and the fade still was not
+ * smooth. The cause was downstream: the whole body is one `v-html`, re-rendered
+ * every 110ms as the markdown is re-parsed, so nine times a second the entire
+ * paragraph was destroyed and rebuilt. That snaps whatever is mid-fade and
+ * repaints text that had settled. No smoothing upstream survives it.
+ *
+ * Cut on markdown-it's OWN block tokens rather than on blank lines: a fenced
+ * code block contains blank lines and must stay whole, and an ordered list that
+ * gets split restarts its numbering. The parser already knows where the seams
+ * are — asking it is both correct and cheaper than guessing.
+ *
+ * The value of this is that earlier blocks come back BYTE-IDENTICAL as the
+ * answer grows, which is what lets the renderer skip them entirely.
+ */
+export function splitTalosMarkdownBlocks(source: string): string[] {
+    if (source.trim() === '') return []
+    const lines = source.split('\n')
+    const blocks: string[] = []
+    try {
+        for (const token of markdown.parse(source, {})) {
+            // Top level only, and only tokens that carry a source range: nested
+            // tokens would cut a list into its items.
+            if (token.level !== 0 || !token.map) continue
+            const [from, to] = token.map
+            const text = lines.slice(from, to).join('\n').replace(/\s+$/, '')
+            if (text !== '') blocks.push(text)
+        }
+    } catch {
+        // A parser that throws must not cost the message: one block is exactly
+        // the behaviour this replaced, so the failure mode is the old one.
+        return [source]
+    }
+    return blocks.length ? blocks : [source]
+}
