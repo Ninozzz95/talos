@@ -59,7 +59,11 @@ test.describe('intro first-run (fresh install)', () => {
         await page.goto('/')
         const intro = page.locator(INTRO)
         await expect(intro).toBeVisible({ timeout: 15000 })
-        // Two steps, named after what the person controls.
+        // It opens by saying what TALOS is, with the claim made against itself.
+        await expect(intro).toContainText('no us to reach')
+        await expect(intro).toContainText('Zethos')
+        await page.locator('[data-testid="talos-setup-begin"]').click()
+        // Then two steps, named after what the person controls.
         await expect(intro.locator('[data-testid="talos-setup-step"]')).toHaveCount(2)
         // Step 1 leads with the consequence, because the PIN really is the key.
         await expect(intro).toContainText('no recovery')
@@ -136,6 +140,7 @@ test('Account panel replays first-run setup from Settings', async ({ page }) => 
     await page.locator('[data-settings-tab="account"]').click()
     await page.locator('[data-testid="talos-replay-intro"]').click()
     await expect(page.locator(INTRO)).toBeVisible({ timeout: 15000 })
+    await page.locator('[data-testid="talos-setup-begin"]').click()
     await expect(page.locator(INTRO)).toContainText('Your PIN is the key')
     await expect(page.locator(INTRO).locator('[data-testid="talos-setup-step"]')).toHaveCount(2)
 })

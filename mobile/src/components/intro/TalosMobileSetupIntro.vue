@@ -56,10 +56,26 @@ const progress = computed(() => talosSetupProgress({ pinSet: pinSet.value, model
 // Where the flow opens is read from reality once, then the person steers. A
 // step that re-decides itself while you are standing on it moves under you.
 const index = ref(0)
+
+/**
+ * Owner 2026-07-27: setup alone said nothing about what TALOS IS. The six
+ * slides it replaced said too much and promised things this device cannot do;
+ * one screen, before the work, says the part that is both true and unusual.
+ *
+ * NN/g allows onboarding when the features are genuinely unlike the standard
+ * ones, which is the case here and is not the case for most apps that show a
+ * carousel. It stays one screen, and Skip is on it.
+ */
+const stage = ref<'story' | 'setup'>('story')
+
 onMounted(() => {
     index.value = progress.value.startIndex
     root.value?.focus()
 })
+
+function beginSetup(): void {
+    stage.value = 'setup'
+}
 
 const step = computed(() => TALOS_SETUP_STEPS[index.value]!)
 const onLastStep = computed(() => index.value === TALOS_SETUP_STEPS.length - 1)
@@ -102,6 +118,38 @@ async function onPinArmed(pin?: string): Promise<void> {
 function onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape' && !pinModalOpen.value) emit('close', 'skipped')
 }
+
+/**
+ * What TALOS refuses to do, which is the only honest way to say what it is.
+ *
+ * The competitors that sell this promise well do not list features. Obsidian
+ * writes "Your thoughts are yours" and then "No one else can read them, not
+ * even us"; LM Studio writes "never leaves your device". The force is in the
+ * claim made AGAINST themselves, and TALOS can make a stronger one truthfully:
+ * there is no server of ours, so there is no "us" for anything to reach.
+ *
+ * Everything below is something this build already does. What is not built yet
+ * is on its own line, named as such — the modal this replaces mixed the two,
+ * and the owner rightly called the result fake.
+ */
+const TRAITS: ReadonlyArray<{ title: string; body: string }> = [
+    {
+        title: 'No account, and no server of ours',
+        body: 'Your chats and files are encrypted on this phone. Nothing reaches us, because there is no us to reach — TALOS has no backend.',
+    },
+    {
+        title: 'Models on this device',
+        body: 'Download a model and run it here, offline. Or bring a key you already pay for: it stays in this phone and is sent only to that provider.',
+    },
+    {
+        title: 'A memory you can argue with',
+        body: 'TALOS remembers what you tell it to. You can read it, correct it or throw it away from inside the conversation.',
+    },
+    {
+        title: 'Two models at once',
+        body: 'Put a second model on the same question when one is not enough, and keep both answers.',
+    },
+]
 </script>
 
 <template>
@@ -125,6 +173,44 @@ function onKeydown(event: KeyboardEvent): void {
             >Skip for now</button>
         </header>
 
+        <!-- STORY: one screen, before any work is asked of anyone. -->
+        <template v-if="stage === 'story'">
+            <section data-testid="talos-setup-story" class="flex min-h-0 flex-1 flex-col overflow-y-auto px-5">
+                <h1 id="talos-setup-title" class="talos-title text-3xl font-semibold leading-[1.15]">
+                    An AI that runs on your phone,<br>
+                    <span class="text-[var(--talos-muted)]">not on someone else's computer.</span>
+                </h1>
+
+                <ul class="mt-8 flex flex-col gap-6">
+                    <li v-for="trait in TRAITS" :key="trait.title" class="border-l-2 border-[var(--talos-accent)] pl-4">
+                        <p class="text-md font-medium leading-6">{{ trait.title }}</p>
+                        <p class="mt-1.5 text-sm leading-6 text-[var(--talos-muted)]">{{ trait.body }}</p>
+                    </li>
+                </ul>
+
+                <!-- Named as not-yet, on purpose. The modal this replaces mixed
+                     what works with what is planned, which is what made it read
+                     as a brochure rather than as a description. -->
+                <p class="mt-8 text-sm leading-6 text-[var(--talos-muted)]">
+                    <span class="mr-2 font-mono text-3xs uppercase tracking-[0.2em] text-[var(--talos-accent)]">Next</span>
+                    Zethos, the runtime being built to put ten-billion-parameter models on a phone.
+                </p>
+                <p class="mt-3 text-sm leading-6 text-[var(--talos-muted)]">
+                    Built by one engineer, and free: you pay only the providers you choose to use.
+                </p>
+            </section>
+
+            <footer class="flex items-center gap-2 px-5 pt-4">
+                <Button
+                    type="button"
+                    data-testid="talos-setup-begin"
+                    class="talos-pressable min-h-12 flex-1 rounded-full bg-[var(--talos-accent)] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
+                    @click="beginSetup"
+                >Set up TALOS</Button>
+            </footer>
+        </template>
+
+        <template v-else>
         <!-- The rail: two named segments rather than anonymous dots, so the whole
              cost of setup is legible at a glance — two things, and which two.
              The accent means "done" here and nowhere else on this screen. -->
@@ -244,6 +330,7 @@ function onKeydown(event: KeyboardEvent): void {
                 @click="emit('close', 'completed')"
             >Start using TALOS</Button>
         </footer>
+        </template>
 
         <TalosMobileAppLockModal
             v-if="pinModalOpen"
