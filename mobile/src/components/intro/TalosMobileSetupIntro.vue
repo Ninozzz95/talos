@@ -149,6 +149,26 @@ const TRAITS: ReadonlyArray<{ title: string; body: string }> = [
         title: 'Two models at once',
         body: 'Put a second model on the same question when one is not enough, and keep both answers.',
     },
+    {
+        title: 'Your files stay your files',
+        body: 'Give TALOS a document from this phone and it is copied into a private, encrypted Library — searchable inside the text, and never uploaded to anyone.',
+    },
+]
+
+/**
+ * What is being built, kept separate from what works.
+ *
+ * Owner 2026-07-27 asked for Shizuku device control and optional cloud sync to
+ * appear here. Neither is built: the Shizuku agent is an approved VISION
+ * document that has not been opened, and the cloud service is a predisposition
+ * for after distribution. Writing them in the present tense is precisely what
+ * made him call the old modal fake, so they sit here, in the future tense,
+ * where they read as ambition rather than as a claim.
+ */
+const COMING: readonly string[] = [
+    'Zethos, the runtime being built to put ten-billion-parameter models on a phone.',
+    'Acting on the phone itself through Shizuku — with every action typed, previewed and reversible, never a blind shell.',
+    'Optional encrypted sync, if you ever want a second device. Off by default, and local-first stays the point.',
 ]
 </script>
 
@@ -191,12 +211,16 @@ const TRAITS: ReadonlyArray<{ title: string; body: string }> = [
                 <!-- Named as not-yet, on purpose. The modal this replaces mixed
                      what works with what is planned, which is what made it read
                      as a brochure rather than as a description. -->
-                <p class="mt-8 text-sm leading-6 text-[var(--talos-muted)]">
-                    <span class="mr-2 font-mono text-3xs uppercase tracking-[0.2em] text-[var(--talos-accent)]">Next</span>
-                    Zethos, the runtime being built to put ten-billion-parameter models on a phone.
-                </p>
-                <p class="mt-3 text-sm leading-6 text-[var(--talos-muted)]">
-                    Built by one engineer, and free: you pay only the providers you choose to use.
+                <div class="mt-9 border-t border-[var(--talos-border)] pt-5">
+                    <p class="font-mono text-3xs uppercase tracking-[0.25em] text-[var(--talos-accent)]">Next</p>
+                    <ul class="mt-3 flex flex-col gap-2.5">
+                        <li v-for="line in COMING" :key="line" class="text-sm leading-6 text-[var(--talos-muted)]">
+                            {{ line }}
+                        </li>
+                    </ul>
+                </div>
+                <p class="mt-6 text-sm leading-6 text-[var(--talos-muted)]">
+                    Free to use: you pay only the providers you choose, and only what you use.
                 </p>
             </section>
 
