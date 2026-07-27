@@ -85,13 +85,54 @@ export function talosToolsForAnthropic(tools: ReadonlyArray<TalosToolDefinition<
     }))
 }
 
+/**
+ * Gemini reads an OpenAPI SUBSET, and `const` is not in it.
+ *
+ * Owner 2026-07-27, verbatim from the wire: `Unknown name "const" at
+ * 'tools[0].function_declarations[8].parameters…one_of[0].properties[0].value'`
+ * — the whole call refused. `const` arrives from every `z.literal()`, which is
+ * how a discriminated union names its discriminator, so the first tool with one
+ * broke Gemini for the entire suite.
+ *
+ * Rewritten, not dropped: a one-value `enum` says exactly what `const` said,
+ * and Gemini accepts it. Dropping the discriminator would trade a 400 for a
+ * schema that no longer tells the model which block is which.
+ */
+function forGeminiDialect(node: unknown): unknown {
+    if (Array.isArray(node)) return node.map(forGeminiDialect)
+    if (node === null || typeof node !== 'object') return node
+    const out: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(node)) {
+        if (key === 'const') {
+            out.enum = [value]
+            continue
+        }
+        if (key === 'oneOf') {
+            /**
+             * `anyOf` is the one Gemini documents; `oneOf` is a maybe.
+             *
+             * The 400 the owner hit walked THROUGH `one_of` to complain about
+             * `const`, which suggests it parsed — but "suggests" is not a thing
+             * to ship to a distributed app. For a discriminated union the two
+             * are interchangeable in practice: the branches are distinguished
+             * by their discriminator enum, not by the exclusivity rule. So this
+             * costs nothing and removes the doubt.
+             */
+            out.anyOf = forGeminiDialect(value)
+            continue
+        }
+        out[key] = forGeminiDialect(value)
+    }
+    return out
+}
+
 export function talosToolsForGemini(tools: ReadonlyArray<TalosToolDefinition<never>>): unknown[] {
     if (tools.length === 0) return []
     return [{
         functionDeclarations: tools.map((tool) => ({
             name: tool.name,
             description: tool.description,
-            parameters: schemaOf(tool),
+            parameters: forGeminiDialect(schemaOf(tool)),
         })),
     }]
 }

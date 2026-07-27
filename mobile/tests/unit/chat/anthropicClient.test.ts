@@ -21,7 +21,7 @@ describe('buildAnthropicRequest', () => {
         expect(req.headers['content-type']).toBe('application/json')
     })
 
-    it('maps turns + system into the body and defaults temperature when not thinking', () => {
+    it('maps turns + system into the body, and imposes no temperature', () => {
         const req = buildAnthropicRequest('k', {
             model: 'claude-sonnet-5',
             system: 'You are TALOS.',
@@ -39,7 +39,10 @@ describe('buildAnthropicRequest', () => {
             { role: 'user', content: 'c' },
         ])
         expect(req.body.max_tokens).toBeGreaterThan(0)
-        expect(req.body).toHaveProperty('temperature')
+        // Owner 2026-07-27: claude-opus-5 answers HTTP 400 to `temperature`.
+        // It is optional, TALOS has no control for it, and the value sent was
+        // one I invented — so it is not sent at all.
+        expect(req.body).not.toHaveProperty('temperature')
         expect(req.body).not.toHaveProperty('thinking')
     })
 
@@ -48,7 +51,7 @@ describe('buildAnthropicRequest', () => {
         expect(req.body).not.toHaveProperty('system')
     })
 
-    it('enables extended thinking with a budget below max_tokens and drops temperature', () => {
+    it('enables extended thinking with a budget below max_tokens', () => {
         const req = buildAnthropicRequest('k', {
             model: 'claude-opus-4-8',
             turns: [{ role: 'user', content: 'hard' }],
