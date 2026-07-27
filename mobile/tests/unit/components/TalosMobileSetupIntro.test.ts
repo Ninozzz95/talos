@@ -67,10 +67,65 @@ function mountIntro() {
     return mount(TalosMobileSetupIntro, { attachTo: document.body })
 }
 
-describe('first-run setup', () => {
-    it('is two steps, named after what the person controls', async () => {
+/** Past the story screen and into the work. */
+async function mountSetup() {
+    const wrapper = mountIntro()
+    await flushPromises()
+    await wrapper.get('[data-testid="talos-setup-begin"]').trigger('click')
+    return wrapper
+}
+
+describe('what TALOS says it is, before asking for anything', () => {
+    it('opens on the story, not on a form', async () => {
         const wrapper = mountIntro()
         await flushPromises()
+        expect(wrapper.find('[data-testid="talos-setup-story"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-setup-step"]').exists()).toBe(false)
+    })
+
+    it('makes the claim against itself, which is the only one worth making', () => {
+        // Obsidian sells this with "No one else can read them, not even us".
+        // TALOS can say something stronger and still true: there is no server
+        // of ours, so there is no "us" for anything to reach.
+        const wrapper = mountIntro()
+        expect(wrapper.text()).toMatch(/no us to reach/i)
+        expect(wrapper.text()).toMatch(/no backend/i)
+        wrapper.unmount()
+    })
+
+    it('names every thing the owner asked to be named', async () => {
+        const wrapper = mountIntro()
+        await flushPromises()
+        const text = wrapper.text()
+        expect(text).toMatch(/encrypted on this phone/i) // privacy, local-first
+        expect(text).toMatch(/download a model/i) // models on the device
+        expect(text).toMatch(/memory/i) // a memory you can argue with
+        expect(text).toMatch(/from inside the conversation/i) // changed from chat
+        expect(text).toMatch(/two models at once/i)
+        expect(text).toMatch(/zethos/i)
+        wrapper.unmount()
+    })
+
+    it('keeps what is built apart from what is coming', async () => {
+        // The modal this replaces mixed them, and the owner called it fake.
+        const wrapper = mountIntro()
+        await flushPromises()
+        expect(wrapper.text()).toMatch(/Next\s+Zethos/i)
+        wrapper.unmount()
+    })
+
+    it('can be left from the story too', async () => {
+        const wrapper = mountIntro()
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-setup-skip"]').trigger('click')
+        expect(wrapper.emitted('close')).toEqual([['skipped']])
+        wrapper.unmount()
+    })
+})
+
+describe('first-run setup', () => {
+    it('is two steps, named after what the person controls', async () => {
+        const wrapper = await mountSetup()
         const steps = wrapper.findAll('[data-testid="talos-setup-step"]')
         expect(steps).toHaveLength(2)
         expect(steps.map((step) => step.text())).toEqual(['PIN', 'Model'])
@@ -82,15 +137,13 @@ describe('first-run setup', () => {
         // The PIN is not a lock over the app: `enableTalosDatabaseProtection`
         // makes it the database key. Softening that would be the one lie this
         // screen cannot afford.
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         expect(wrapper.text()).toMatch(/no recovery/i)
         wrapper.unmount()
     })
 
     it('goes forward and back between the two steps', async () => {
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         expect(wrapper.findAll('[data-testid="talos-setup-step"]')[1]!.attributes('aria-current')).toBe('step')
         await flushPromises()
@@ -104,24 +157,21 @@ describe('first-run setup', () => {
         // Killed between the two steps, or the PIN was set earlier in Settings.
         // Asking again would be the app not looking at its own state.
         state.security.app_lock_enabled = true
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         const steps = wrapper.findAll('[data-testid="talos-setup-step"]')
         expect(steps[1]!.attributes('aria-current')).toBe('step')
         wrapper.unmount()
     })
 
     it('keeps a visible way out on every step, and reports it as skipped', async () => {
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         await wrapper.get('[data-testid="talos-setup-skip"]').trigger('click')
         expect(wrapper.emitted('close')).toEqual([['skipped']])
         wrapper.unmount()
     })
 
     it('finishes as completed from the last step', async () => {
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         await wrapper.get('[data-testid="talos-intro-cta"]').trigger('click')
         expect(wrapper.emitted('close')).toEqual([['completed']])
@@ -134,8 +184,7 @@ describe('first-run setup', () => {
         const permissions = await import('@/services/devicePermissions')
         const spy = vi.spyOn(permissions, 'requestTalosNotifications')
         const mic = vi.spyOn(permissions, 'requestTalosMicrophone')
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         expect(spy).not.toHaveBeenCalled()
         expect(mic).not.toHaveBeenCalled()
@@ -143,8 +192,7 @@ describe('first-run setup', () => {
     })
 
     it('does not carry a single slide of marketing', async () => {
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountSetup()
         // What the owner called "molto fake": promises about things that do not
         // exist on this device yet.
         expect(wrapper.text()).not.toMatch(/roadmap/i)
