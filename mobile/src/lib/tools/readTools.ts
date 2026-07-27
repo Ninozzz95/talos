@@ -17,7 +17,12 @@ import { rankLibraryDocs, type LibraryDoc } from '@/lib/chat/libraryContext'
  */
 export interface TalosToolSources {
     listLibraryDocs(): Promise<LibraryDoc[]>
-    readLibraryDoc(id: string): Promise<{ name: string; text: string } | null>
+    readLibraryDoc(id: string): Promise<{
+        name: string
+        text: string
+        /** Present for a file there is nothing to READ in, only to look at. */
+        image?: { base64: string; mediaType: string }
+    } | null>
     listNotes(): Promise<Array<{ title: string; content: string; updated_at: string }>>
     listTasks(): Promise<Array<{ title: string; status: string; priority: string }>>
     searchMemories(query: string): Promise<Array<{ title: string; content: string }>>
@@ -64,12 +69,34 @@ export function createTalosReadTools(sources: TalosToolSources): TalosToolDefini
     const libraryRead = defineTalosTool({
         name: 'library_read',
         title: 'Read a Library document',
-        description: 'Read the full text of one Library document by its id, as returned by library_search.',
+        description: 'Read one Library item by its id, as returned by library_search. Documents come back as text; an image comes back as an image for you to look at.',
         action: 'read',
         input: z.object({ id: z.string().min(1).describe('The document id from library_search.') }),
         async run(input) {
             const doc = await sources.readLibraryDoc(input.id)
             if (!doc) return { ok: false, content: `No Library document has the id "${input.id}".` }
+
+            if (doc.image) {
+                // Handed over as a part on the next user turn, which is the one
+                // shape every provider accepts — and it puts the picture in the
+                // conversation, so the user can see what the model was given.
+                const mediaType = doc.image.mediaType === 'image/png'
+                    || doc.image.mediaType === 'image/webp' ? doc.image.mediaType : 'image/jpeg'
+                return {
+                    ok: true,
+                    content: `name: ${doc.name} — this is an image; it follows for you to look at.`,
+                    images: [{
+                        type: 'image' as const,
+                        attachmentId: input.id,
+                        name: doc.name,
+                        mediaType,
+                        base64: doc.image.base64,
+                        sha256: '',
+                    }],
+                    evidence: { id: input.id },
+                }
+            }
+
             return { ok: true, content: clip(`name: ${doc.name}\n\n${doc.text}`), evidence: { id: input.id } }
         },
     })

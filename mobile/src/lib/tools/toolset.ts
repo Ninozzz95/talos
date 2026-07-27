@@ -18,9 +18,29 @@ import { newTalosMobileId } from '@/lib/mobileIds'
  * not feed), and so the audit row — which is the record a run can be explained
  * from afterwards — is written in exactly one place.
  */
+/** Bytes to base64, in chunks: one huge spread argument blows the stack. */
+function base64FromBytes(bytes: Uint8Array): string {
+    let binary = ''
+    const CHUNK = 0x8000
+    for (let index = 0; index < bytes.length; index += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK))
+    }
+    return btoa(binary)
+}
+
 export interface TalosToolsetDeps {
     repository: TalosChatRepository
     readVaultFileText(fileId: string): Promise<string | null>
+    /**
+     * The bytes of a Library file, for the ones there is nothing to read in.
+     *
+     * Owner 2026-07-27: TALOS could find an image in the Library and not look
+     * at it — "per questa immagine non c'è nessun estratto testuale" — while
+     * knowing perfectly well how to see one attached to a message. Absent means
+     * this build cannot fetch bytes, and the tool says so instead of pretending
+     * the file is empty.
+     */
+    readVaultFileBytes?(fileId: string): Promise<{ bytes: Uint8Array; mediaType: string } | null>
     /** Asks the human. Absent means: nothing can be confirmed, so writes fail closed. */
     requestConsent?(request: TalosToolConsentRequest): Promise<boolean | 'busy'>
     /** Session id → title, so a search result can say which chat it came from. */
@@ -105,6 +125,20 @@ export async function createTalosToolset(deps: TalosToolsetDeps): Promise<TalosT
             const summaries = await librarySummaries()
             const summary = summaries.find((entry) => entry.id === id)
             if (!summary) return null
+
+            // An image has no extracted text, and returning null for it is what
+            // made the Library able to FIND a photo and not look at it.
+            if (summary.media_type.startsWith('image/') && deps.readVaultFileBytes) {
+                const file = await deps.readVaultFileBytes(id)
+                if (file) {
+                    return {
+                        name: summary.display_name,
+                        text: '',
+                        image: { base64: base64FromBytes(file.bytes), mediaType: file.mediaType },
+                    }
+                }
+            }
+
             const text = await deps.readVaultFileText(id)
             return text === null ? null : { name: summary.display_name, text }
         },

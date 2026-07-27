@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "package": {
+    "name": "xlsx",
+    "version": "0.20.3",
+    "license": "Apache-2.0",
+    "repository": "https://git.sheetjs.com/SheetJS/sheetjs",
+    "source_url": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "artifact": {
+    "path": "mobile/upstream/sheetjs/xlsx-0.20.3.tgz",
+    "size": 2409319,
+    "sha256": "8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8",
+    "integrity": "sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA=="
+  }
+}

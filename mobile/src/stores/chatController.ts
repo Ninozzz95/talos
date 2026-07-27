@@ -335,6 +335,12 @@ export interface ChatController {
         ): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
         remove(memoryId: string): Promise<void>
     }
+    runs: {
+        list(): Promise<import('@/lib/runs/longRunState').TalosRunState[]>
+        get(runId: string): Promise<import('@/lib/runs/longRunState').TalosRunState | null>
+        save(state: import('@/lib/runs/longRunState').TalosRunState): Promise<import('@/lib/runs/longRunState').TalosRunState>
+        remove(runId: string): Promise<void>
+    }
     resendMessage(messageId: string): Promise<void>
     retryAssistantMessage(messageId: string): Promise<void>
     send(text: string): Promise<boolean>
@@ -801,6 +807,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     // unavailable-vault fallback, so library_search listed a
                     // document that library_read then swore did not exist.
                     readVaultFileText: (fileId) => vaultService.readFileText(fileId),
+                    // Owner 2026-07-27: the Library could FIND an image and not
+                    // look at it. The bytes path already existed for message
+                    // attachments; it just was not wired to the tool.
+                    readVaultFileBytes: (fileId) => vaultService.readFilePreview(fileId),
                     sessionTitles: async () => new Map(chat.sessions.map((session) => [session.id, session.title])),
                     // SF-MAJOR: with "let chats use your Library" OFF (the
                     // default) the ambient injection reads nothing — but the
@@ -1581,7 +1591,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     // R2-8 — station facades live in stores/stationFacades.ts (the controller
     // was a 1000+ line god-facade); same public surface, same guarantees.
-    const { memories, tasks, notes } = createStationFacades({
+    const { memories, tasks, notes, runs } = createStationFacades({
         repository: deps.chatRepository,
         activeSessionId: () => chat.activeSession.value?.id ?? null,
     })
@@ -1774,6 +1784,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         memories,
         tasks,
         notes,
+        runs,
         resendMessage,
         retryAssistantMessage,
         send,

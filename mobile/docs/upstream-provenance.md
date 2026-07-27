@@ -136,6 +136,26 @@ entries outside the initial bundle.
 The native Clipboard plugin is not considered registered until a separately
 inventoried `npx cap sync android` gate is complete.
 
+## SheetJS CE document generation (2026-07-27)
+
+- **ADOPT `xlsx@0.20.3`** (Apache-2.0) from the authoritative SheetJS CDN:
+  `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`.
+- The public npm registry is rejected because its latest `xlsx` package is the
+  stale `0.18.5` release. SheetJS advisories require `0.19.3+` for prototype
+  pollution and `0.20.2+` for ReDoS.
+- The exact upstream tarball is vendored at
+  `upstream/sheetjs/xlsx-0.20.3.tgz` and installed through a `file:` spec, as
+  recommended by the upstream installation guide for build stability.
+- Frozen artifact: 2409319 bytes; SHA-256
+  `8dc73fc3b00203e72d176e85b50938627c7b086e607c682e8d3c22c02bb99fe8`;
+  integrity
+  `sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==`.
+- `tests/unit/upstream/sheetJsConformance.test.ts` fails closed on dependency,
+  lockfile, version, license, size or hash drift. Existing document tests prove
+  real XLSX generation, reopen and Library ingestion.
+- Rollback never restores `0.18.5`: XLSX generation is disabled and CSV remains
+  available until a reviewed replacement is selected.
+
 ## Compatibilita host (ultimo gate 2026-07-22)
 
 - Node 24.18.0 e npm 11.16.0 presenti; runtime M1 pinnato a
