@@ -1,5 +1,4 @@
 import type { TalosChatRepository } from '@/repositories/chatRepository'
-import type { TalosRunState } from '@/lib/runs/longRunState'
 import { newTalosMobileId } from '@/lib/mobileIds'
 
 /**
@@ -73,12 +72,5 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
         remove: (noteId: string) => deps.repository.deleteNote(noteId),
     }
 
-    const runs = {
-        list: () => deps.repository.listRuns(),
-        get: (runId: string) => deps.repository.getRun(runId),
-        save: (state: TalosRunState) => deps.repository.saveRun(state),
-        remove: (runId: string) => deps.repository.deleteRun(runId),
-    }
-
-    return { memories, tasks, notes, runs }
+    return { memories, tasks, notes }
 }

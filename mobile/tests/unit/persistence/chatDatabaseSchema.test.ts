@@ -12,13 +12,12 @@ import {
 describe('TALOS chat database schema', () => {
     it('AV-02 preserves version one and adds the independent Vault and authority schema in version two', () => {
         expect(TALOS_CHAT_DATABASE_NAME).toBe('talos_mobile')
-        expect(TALOS_CHAT_DATABASE_VERSION).toBe(5)
-        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(5)
+        expect(TALOS_CHAT_DATABASE_VERSION).toBe(4)
+        expect(TALOS_CHAT_DATABASE_UPGRADES).toHaveLength(4)
         expect(TALOS_CHAT_DATABASE_UPGRADES[0]?.toVersion).toBe(1)
         expect(TALOS_CHAT_DATABASE_UPGRADES[1]?.toVersion).toBe(2)
         expect(TALOS_CHAT_DATABASE_UPGRADES[2]?.toVersion).toBe(3)
         expect(TALOS_CHAT_DATABASE_UPGRADES[3]?.toVersion).toBe(4)
-        expect(TALOS_CHAT_DATABASE_UPGRADES[4]?.toVersion).toBe(5)
 
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         for (const table of [
@@ -32,7 +31,6 @@ describe('TALOS chat database schema', () => {
             'talos_memories',
             'talos_tasks',
             'talos_notes',
-            'talos_runs',
         ]) {
             expect(sql).toContain(`CREATE TABLE IF NOT EXISTS ${table}`)
         }
@@ -69,21 +67,11 @@ describe('TALOS chat database schema', () => {
         expect(v4).toContain("CHECK (priority IN ('low', 'normal', 'high'))")
         expect(v4).toContain('CREATE TABLE IF NOT EXISTS talos_notes')
         expect(v4).toContain("trust_level TEXT NOT NULL DEFAULT 'untrusted'")
-
-        // R-1: one durable canonical run snapshot per row, tied to its chat.
-        const v5 = TALOS_CHAT_DATABASE_UPGRADES[4]?.statements.join('\n') ?? ''
-        expect(v5).toContain('CREATE TABLE IF NOT EXISTS talos_runs')
-        expect(v5).toContain("CHECK (contract = 'talos.mobile.run.v1')")
-        expect(v5).toContain("CHECK (kind IN ('chat', 'research', 'document'))")
-        expect(v5).toContain("CHECK (status IN ('planning', 'awaiting_approval', 'running', 'done', 'cancelled', 'failed'))")
-        expect(v5).toContain("CHECK (engine IN ('device', 'cloud'))")
-        expect(v5).toContain('FOREIGN KEY (session_id) REFERENCES talos_chat_sessions(id) ON DELETE CASCADE')
-        expect(v5).toContain('talos_runs_status_updated_idx')
     })
 
     it('keeps upgrades incremental and free of destructive database deletion', () => {
         const versions = TALOS_CHAT_DATABASE_UPGRADES.map((upgrade) => upgrade.toVersion)
-        expect(versions).toEqual([1, 2, 3, 4, 5])
+        expect(versions).toEqual([1, 2, 3, 4])
         const sql = TALOS_CHAT_DATABASE_UPGRADES.flatMap((upgrade) => upgrade.statements).join('\n')
         expect(sql).not.toMatch(/DROP\s+DATABASE/i)
         expect(sql).not.toMatch(/DELETE\s+FROM\s+talos_chat_sessions/i)

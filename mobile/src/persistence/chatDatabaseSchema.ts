@@ -1,7 +1,7 @@
 import type { capSQLiteVersionUpgrade } from '@capacitor-community/sqlite'
 
 export const TALOS_CHAT_DATABASE_NAME = 'talos_mobile'
-export const TALOS_CHAT_DATABASE_VERSION = 5
+export const TALOS_CHAT_DATABASE_VERSION = 4
 
 const VERSION_1_STATEMENTS = [
     `CREATE TABLE IF NOT EXISTS talos_chat_sessions (
@@ -202,28 +202,6 @@ const VERSION_4_STATEMENTS = [
         ON talos_notes(updated_at DESC, id);`,
 ] as const
 
-// R-1: one canonical, versioned snapshot per long-running operation.
-// The indexed columns are duplicated from state_json intentionally: SQLite can
-// list/filter the cockpit without parsing every checkpoint, while repository
-// read-back rejects any divergence between the index and canonical payload.
-const VERSION_5_STATEMENTS = [
-    `CREATE TABLE IF NOT EXISTS talos_runs (
-        id TEXT PRIMARY KEY NOT NULL,
-        contract TEXT NOT NULL CHECK (contract = 'talos.mobile.run.v1'),
-        kind TEXT NOT NULL CHECK (kind IN ('chat', 'research', 'document')),
-        session_id TEXT NOT NULL,
-        title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 255),
-        status TEXT NOT NULL CHECK (status IN ('planning', 'awaiting_approval', 'running', 'done', 'cancelled', 'failed')),
-        engine TEXT NOT NULL CHECK (engine IN ('device', 'cloud')),
-        state_json TEXT NOT NULL,
-        started_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (session_id) REFERENCES talos_chat_sessions(id) ON DELETE CASCADE
-    );`,
-    `CREATE INDEX IF NOT EXISTS talos_runs_status_updated_idx
-        ON talos_runs(status, updated_at DESC, started_at DESC, id DESC);`,
-] as const
-
 export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = Object.freeze([
     Object.freeze({
         toVersion: 1,
@@ -240,9 +218,5 @@ export const TALOS_CHAT_DATABASE_UPGRADES: readonly capSQLiteVersionUpgrade[] = 
     Object.freeze({
         toVersion: 4,
         statements: [...VERSION_4_STATEMENTS],
-    }),
-    Object.freeze({
-        toVersion: 5,
-        statements: [...VERSION_5_STATEMENTS],
     }),
 ])

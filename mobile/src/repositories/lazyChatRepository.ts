@@ -14,7 +14,6 @@ import type {
     UpdateVaultFileInput,
     UpdateToolActivityInput,
 } from '@/repositories/chatRepository'
-import type { TalosRunState } from '@/lib/runs/longRunState'
 
 export type ChatRepositoryLoader = () => Promise<TalosChatRepository>
 
@@ -182,18 +181,6 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         },
         async saveComposerDraft(scopeId: string, draft: string) {
             return (await ready()).saveComposerDraft(scopeId, draft)
-        },
-        async saveRun(state: TalosRunState) {
-            return (await ready()).saveRun(state)
-        },
-        async getRun(runId: string) {
-            return (await ready()).getRun(runId)
-        },
-        async listRuns() {
-            return (await ready()).listRuns()
-        },
-        async deleteRun(runId: string) {
-            return (await ready()).deleteRun(runId)
         },
         async close() {
             if (initialization) {
