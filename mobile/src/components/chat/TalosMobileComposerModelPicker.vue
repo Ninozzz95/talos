@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Check, FlaskConical, RefreshCw, WandSparkles } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+import { ChevronDown, Search } from '@lucide/vue'
+import {
+    groupTalosModelsByProvider,
+    talosModelGroupsOpenByDefault,
+} from '@/lib/chat/modelPickerGrouping'
 import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
@@ -35,6 +40,43 @@ const emit = defineEmits<{
 
 const listbox = ref<HTMLElement | null>(null)
 const visibleProfiles = computed(() => props.modelProfiles.filter((profile) => profile.show_in_composer))
+
+/**
+ * Owner 2026-07-27: with a provider like OpenRouter the list became "una lista
+ * infinita". Past a couple of dozen entries a flat list stops being a list and
+ * becomes a scroll, and the model you want is never the one on screen.
+ */
+const modelQuery = ref('')
+const searching = computed(() => modelQuery.value.trim() !== '')
+const modelGroups = computed(() => groupTalosModelsByProvider(
+    visibleProfiles.value,
+    modelQuery.value,
+))
+
+/**
+ * Which groups are open. Seeded from the arrangement, then owned by the user.
+ *
+ * `null` means "not yet touched", so the defaults keep applying while the
+ * search narrows — once a header is tapped, that choice stands.
+ */
+const openedGroups = ref<string[] | null>(null)
+const openGroups = computed(() => openedGroups.value
+    ?? talosModelGroupsOpenByDefault(
+        modelGroups.value,
+        props.selectedModelProfileId ?? null,
+        searching.value,
+    ))
+
+function toggleGroup(provider: string): void {
+    const current = openGroups.value
+    openedGroups.value = current.includes(provider)
+        ? current.filter((entry) => entry !== provider)
+        : [...current, provider]
+}
+
+// A new search is a new question: the user's collapse choices were about the
+// previous set of results and should not survive it.
+watch(modelQuery, () => { openedGroups.value = null })
 
 function capabilityValue(profile: TalosMobileModelProfileView, key: string): unknown {
     return profile.capabilities?.[key]
@@ -208,8 +250,48 @@ function onListKeydown(event: KeyboardEvent): void {
                 >
                     No composer models yet - open Model Lab to add one.
                 </p>
+                <label v-if="visibleProfiles.length > 6" class="relative mb-1 block px-1">
+                    <Search class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--talos-muted,var(--muted-foreground))]" aria-hidden="true" />
+                    <input
+                        v-model="modelQuery"
+                        type="search"
+                        inputmode="search"
+                        data-testid="talos-model-search"
+                        aria-label="Search models"
+                        placeholder="Search models"
+                        class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-8 pr-2 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                    >
+                </label>
+
+                <p
+                    v-if="searching && !modelGroups.length"
+                    class="px-2 py-2 text-xs text-[var(--talos-muted,var(--muted-foreground))]"
+                >
+                    No model matches “{{ modelQuery.trim() }}”.
+                </p>
+
+                <div v-for="group in modelGroups" :key="group.provider" :data-model-group="group.provider">
+                    <button
+                        type="button"
+                        :data-testid="`talos-model-group-${group.provider}`"
+                        :aria-expanded="openGroups.includes(group.provider)"
+                        class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left"
+                        @click="toggleGroup(group.provider)"
+                    >
+                        <TalosMobileProviderIcon :provider="group.provider" class="size-5" />
+                        <span class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted,var(--muted-foreground))]">
+                            {{ group.provider }}
+                        </span>
+                        <span class="text-2xs text-[var(--talos-muted,var(--muted-foreground))]">{{ group.profiles.length }}</span>
+                        <ChevronDown
+                            class="ml-auto size-4 transition-transform"
+                            :class="openGroups.includes(group.provider) ? '' : '-rotate-90'"
+                            aria-hidden="true"
+                        />
+                    </button>
+                    <div v-show="openGroups.includes(group.provider)" class="space-y-1 pl-1">
                 <button
-                    v-for="profile in visibleProfiles"
+                    v-for="profile in group.profiles"
                     :key="profile.id"
                     type="button"
                     role="option"
@@ -240,6 +322,8 @@ function onListKeydown(event: KeyboardEvent): void {
                         aria-hidden="true"
                     />
                 </button>
+                    </div>
+                </div>
             </section>
         </div>
         <footer class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">

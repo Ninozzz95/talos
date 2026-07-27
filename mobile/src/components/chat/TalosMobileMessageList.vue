@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
-import { BookMarked, FileText, Image } from '@lucide/vue'
+import { BookMarked, FileText } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
+import TalosMobileMessageImage from '@/components/chat/TalosMobileMessageImage.vue'
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
@@ -163,6 +164,20 @@ async function copyMessage(message: TalosMobileMessageView): Promise<void> {
     }
 }
 
+/**
+ * Images render as images; everything else keeps the chip.
+ *
+ * Split here rather than branched inside one loop so the two have different
+ * markup entirely — a thumbnail is not a chip with a different icon.
+ */
+function imageAttachments(message: TalosMobileMessageView) {
+    return (message.attachments ?? []).filter((entry) => entry.media_type.startsWith('image/'))
+}
+
+function fileAttachments(message: TalosMobileMessageView) {
+    return (message.attachments ?? []).filter((entry) => !entry.media_type.startsWith('image/'))
+}
+
 function formatBytes(value: number): string {
     if (value < 1024) return `${value} B`
     if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
@@ -262,20 +277,26 @@ function formatBytes(value: number): string {
                         role="list"
                         aria-label="Attached files"
                     >
+                        <!-- An image is SHOWN. Owner 2026-07-27: a photo
+                             rendered as a chip with its filename is the one
+                             thing a photo is not. -->
+                        <TalosMobileMessageImage
+                            v-for="attachment in imageAttachments(message)"
+                            :key="attachment.id"
+                            :file-id="attachment.vault_file_id ?? attachment.id"
+                            :name="attachment.display_name"
+                            role="listitem"
+                            :data-message-attachment-id="attachment.id"
+                        />
                         <span
-                            v-for="attachment in message.attachments"
+                            v-for="attachment in fileAttachments(message)"
                             :key="attachment.id"
                             :data-message-attachment-id="attachment.id"
                             :title="attachment.media_type"
                             role="listitem"
                             class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
                         >
-                            <Image
-                                v-if="attachment.media_type.startsWith('image/')"
-                                class="size-3.5 shrink-0"
-                                aria-hidden="true"
-                            />
-                            <FileText v-else class="size-3.5 shrink-0" aria-hidden="true" />
+                            <FileText class="size-3.5 shrink-0" aria-hidden="true" />
                             <span class="max-w-[180px] truncate">{{ attachment.display_name }}</span>
                             <span class="shrink-0 opacity-75">{{ formatBytes(attachment.size_bytes) }}</span>
                             <span v-if="attachment.grant_status === 'revoked'" class="shrink-0">Access revoked</span>

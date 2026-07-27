@@ -110,7 +110,11 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
 
     const attachedFiles = page.getByRole('list', { name: 'Attached files' })
     await expect(attachedFiles).toContainText('release-brief.txt')
-    await expect(attachedFiles).toContainText('reference.png')
+    // Owner 2026-07-27: an image is SHOWN, so its name lives in the alt text
+    // rather than in the bubble's prose — a photo rendered as a chip with a
+    // filename is the one thing a photo is not.
+    await expect(attachedFiles.locator('img[alt="reference.png"], [data-testid="talos-message-image-fallback"]'))
+        .toHaveCount(1)
 
     await page.reload()
     await expect(page.getByText('I received the release brief and the reference image.', { exact: true })).toBeVisible({ timeout: 15_000 })
@@ -151,7 +155,12 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
     const historicalAttachments = page.getByRole('list', { name: 'Attached files' })
     await expect(historicalAttachments).toContainText('release-brief.txt')
     await expect(historicalAttachments).toContainText('Access revoked')
-    await expect(historicalAttachments).toContainText('reference.png')
+    // Same after a reload: the image is an image, so its name is in the alt.
+    // The fallback is accepted too — a vault file that has genuinely gone must
+    // still say WHICH image was attached rather than leave a hole.
+    await expect(historicalAttachments
+        .locator('img[alt="reference.png"], [data-testid="talos-message-image-fallback"]'))
+        .toHaveCount(1)
 
     await page.setViewportSize({ width: 320, height: 568 })
     await expectNoDocumentOverflow(page)
