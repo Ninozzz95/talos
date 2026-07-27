@@ -103,6 +103,18 @@ describe('what TALOS says it is, before asking for anything', () => {
         expect(text).toMatch(/from inside the conversation/i) // changed from chat
         expect(text).toMatch(/two models at once/i)
         expect(text).toMatch(/zethos/i)
+        expect(text).toMatch(/shizuku/i) // acting on the phone itself
+        expect(text).toMatch(/encrypted sync/i) // cloud, optional, off by default
+        expect(text).toMatch(/encrypted Library/i) // the phone's own files
+        wrapper.unmount()
+    })
+
+    it('does not make the project about the person who built it', async () => {
+        // Owner 2026-07-27: "non voglio che metti che e' stato fatto da una sola
+        // persona, penso sia troppo egocentrica come cosa".
+        const wrapper = mountIntro()
+        await flushPromises()
+        expect(wrapper.text()).not.toMatch(/one engineer|single builder|one-person/i)
         wrapper.unmount()
     })
 
@@ -110,7 +122,18 @@ describe('what TALOS says it is, before asking for anything', () => {
         // The modal this replaces mixed them, and the owner called it fake.
         const wrapper = mountIntro()
         await flushPromises()
-        expect(wrapper.text()).toMatch(/Next\s+Zethos/i)
+        // The invariant that matters: nothing unbuilt is described in the
+        // present tense. Shizuku and cloud sync exist only in the future list,
+        // so the four things TALOS says it DOES must not mention them.
+        const built = wrapper.findAll('li').map((node) => node.text())
+            .filter((text) => /encrypted on this phone|download a model|remembers what you tell|second model|Library/i.test(text))
+        expect(built.length).toBeGreaterThanOrEqual(4)
+        expect(built.join(' ')).not.toMatch(/shizuku|sync/i)
+        // And the future list says all three, in the future tense.
+        const coming = wrapper.findAll('li').map((node) => node.text()).join(' ')
+        expect(coming).toMatch(/zethos/i)
+        expect(coming).toMatch(/shizuku/i)
+        expect(coming).toMatch(/encrypted sync/i)
         wrapper.unmount()
     })
 
