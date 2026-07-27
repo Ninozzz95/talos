@@ -841,18 +841,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         if (!drawer) return null
                         return {
                             provider: () => drawer,
-                            async generate(prompt, shape) {
+                            async generate(prompt, shape, signal) {
                                 const {
                                     planTalosImageRequest, parseTalosGeneratedImages,
                                 } = await import('@/lib/images/imageGateway')
                                 const apiKey = await deps.getKey(drawer)
                                 if (!apiKey) throw new Error('the key for this provider is no longer on this device')
+                                // From the catalogue TALOS already discovered,
+                                // never from a constant in the APK: this app
+                                // ships and a frozen model id ages in the field.
+                                const { pickTalosImageModel } = imageGateway
                                 const plan = planTalosImageRequest(drawer, { prompt, shape }, {
                                     apiKey,
-                                    model: drawer === 'openai' ? 'gpt-image-1' : 'gemini-3.1-flash-image',
+                                    model: pickTalosImageModel(drawer, catalogs[drawer].models),
                                     endpoint: endpoints[drawer] ?? null,
                                 })
-                                const response = await deps.transport.request({
+                                const drawing = deps.transport.request({
                                     url: plan.url,
                                     method: 'POST',
                                     headers: plan.headers,
@@ -862,14 +866,44 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                     connectTimeout: 120_000,
                                     readTimeout: 120_000,
                                 })
+                                /**
+                                 * Stop means stop waiting.
+                                 *
+                                 * HONEST LIMIT: the http transport contract has
+                                 * no abort, and adding one is a contract change
+                                 * that is not mine to make unilaterally. So a
+                                 * stopped message stops the WAIT and reports it,
+                                 * but the request already in flight may still
+                                 * complete upstream and still be billed. Racing
+                                 * it is strictly better than ignoring the signal
+                                 * — which is what the first cut did — and the
+                                 * remaining gap is written down rather than
+                                 * quietly tolerated.
+                                 */
+                                const response = signal
+                                    ? await Promise.race([
+                                        drawing,
+                                        new Promise<never>((_resolve, reject) => {
+                                            if (signal.aborted) reject(new Error('TALOS_IMAGE_STOPPED'))
+                                            signal.addEventListener(
+                                                'abort',
+                                                () => reject(new Error('TALOS_IMAGE_STOPPED')),
+                                                { once: true },
+                                            )
+                                        }),
+                                    ])
+                                    : await drawing
                                 return parseTalosGeneratedImages(response.data)
                             },
                             async save(image, prompt) {
-                                const binary = atob(image.base64)
-                                const bytes = new Uint8Array(binary.length)
-                                for (let index = 0; index < binary.length; index += 1) {
-                                    bytes[index] = binary.charCodeAt(index)
-                                }
+                                // Decoded by the platform, not by a JS loop.
+                                // Self-review 2026-07-27: `atob` plus a
+                                // char-by-char loop over a multi-megabyte image
+                                // runs on the UI thread and freezes the app for
+                                // the length of the picture. `fetch` on a data
+                                // URL does the same work natively.
+                                const decoded = await fetch(`data:${image.mediaType};base64,${image.base64}`)
+                                const bytes = new Uint8Array(await decoded.arrayBuffer())
                                 // Named after what it shows, so the Library is
                                 // browsable later; a timestamped blob is not.
                                 const stem = prompt.trim().slice(0, 48)

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     chooseTalosImageProvider,
     parseTalosGeneratedImages,
+    pickTalosImageModel,
     planTalosImageRequest,
 } from '@/lib/images/imageGateway'
 
@@ -100,5 +101,42 @@ describe('choosing who draws', () => {
     it('says no when nobody can, so the tool is never offered', () => {
         expect(chooseTalosImageProvider({}, 'openai')).toBeNull()
         expect(chooseTalosImageProvider({ openai: false, gemini: false }, null)).toBeNull()
+    })
+})
+
+describe('which model draws', () => {
+    // Self-review 2026-07-27: the first cut hardcoded `gpt-image-1` and
+    // `gemini-3.1-flash-image` into the build. TALOS ships, so a frozen model
+    // id ages in the field — the owner's "niente statico" rule exists for
+    // exactly this.
+    it('takes the newest image model the catalogue actually offers', () => {
+        expect(pickTalosImageModel('openai', [
+            { id: 'gpt-4o' }, { id: 'gpt-image-1' }, { id: 'gpt-image-1.5' },
+        ])).toBe('gpt-image-1.5')
+    })
+
+    it('prefers the full model over the cheap one', () => {
+        // The user asked for a picture; cheaper is not the right default.
+        expect(pickTalosImageModel('openai', [
+            { id: 'gpt-image-1-mini' }, { id: 'gpt-image-1' },
+        ])).toBe('gpt-image-1')
+    })
+
+    it('takes the mini when it is the only one there is', () => {
+        expect(pickTalosImageModel('openai', [{ id: 'gpt-image-1-mini' }])).toBe('gpt-image-1-mini')
+    })
+
+    it('never picks a model that cannot draw', () => {
+        expect(pickTalosImageModel('gemini', [
+            { id: 'text-embedding-004' }, { id: 'gemini-3.1-flash-image' },
+        ])).toBe('gemini-3.1-flash-image')
+        expect(pickTalosImageModel('openai', [{ id: 'gpt-4o' }])).not.toBe('gpt-4o')
+    })
+
+    it('falls back to a floor rather than refusing when the catalogue is empty', () => {
+        // Offline, or a listing that failed. Refusing to draw over that would
+        // be worse than trying what was current when this shipped.
+        expect(pickTalosImageModel('openai', [])).toBe('gpt-image-1')
+        expect(pickTalosImageModel('gemini', [])).toBe('gemini-3.1-flash-image')
     })
 })
