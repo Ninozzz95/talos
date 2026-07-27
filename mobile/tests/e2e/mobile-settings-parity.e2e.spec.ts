@@ -10,12 +10,15 @@ async function openSettings(page: import('@playwright/test').Page): Promise<void
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]').getByText('Settings Center').first()).toBeVisible()
 }
 
-test('Settings exposes all eleven desktop categories, real Browser controls, and honest remaining gates', async ({ page }) => {
+test('Settings exposes all eleven desktop categories plus mobile-only Privacy, real Browser controls, and honest remaining gates', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await openSettings(page)
 
     const settingsTabs = page.getByRole('tablist', { name: 'TALOS settings categories' })
-    await expect(settingsTabs.getByRole('tab')).toHaveCount(11)
+    // Eleven from the desktop, plus Privacy and permissions — mobile-only,
+    // because Android runtime permissions have no desktop counterpart.
+    await expect(settingsTabs.getByRole('tab')).toHaveCount(12)
+    await expect(settingsTabs.getByRole('tab', { name: /Privacy and permissions/ })).toBeVisible()
 
     await settingsTabs.getByRole('tab', { name: 'Browser' }).click()
     await expect(page.getByTestId('talos-mobile-browser-settings')).toBeVisible()

@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(TalosBiometricKeyPlugin.class);
         // R-1b: keeps long operations alive when the app is backgrounded.
         registerPlugin(TalosRunServicePlugin.class);
+        registerPlugin(TalosDevicePermissionsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
