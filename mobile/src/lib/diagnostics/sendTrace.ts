@@ -19,6 +19,8 @@ import { shallowRef } from 'vue'
  *    pass can forget one. A diagnostics export is the most natural way for a
  *    secret to leave an app, and the defence belongs at the boundary.
  */
+import { readTalosCacheUsage } from '@/lib/chat/promptCache'
+
 export interface TalosToolTrace {
     name: string
     /** Milliseconds from the start of the send, so rows can be compared. */
@@ -52,6 +54,14 @@ export interface TalosToolTrace {
 export interface TalosRoundTrace {
     startedAtMs: number
     durationMs: number
+    /**
+     * Prefix tokens this round read from, or wrote to, the provider's cache.
+     *
+     * `null` means the provider said nothing about a cache, which is a
+     * different fact from "the cache saved nothing" and must not be shown as a
+     * zero. This is what makes the caching work checkable rather than a claim.
+     */
+    cache: import('@/lib/chat/promptCache').TalosCacheUsage | null
     /**
      * How long until the first bytes of the response arrived this round.
      *
@@ -119,6 +129,14 @@ export interface TalosRoundTraceHandle {
     /** The model said its first word. Ignored if called twice. */
     firstChunk(): void
     tool(name: string): TalosToolTraceHandle
+    /**
+     * What the provider said its cache did this round.
+     *
+     * Optional so nothing that builds a handle by hand has to change. Called
+     * with whatever `usage` the provider returned; the dialects are reconciled
+     * in `readTalosCacheUsage`.
+     */
+    cache?(usage: Record<string, number> | null | undefined): void
     finish(): void
 }
 
@@ -215,6 +233,7 @@ export function createTalosTraceRecorder(
                         timeToFirstChunkMs: null,
                         tools: [],
                         parallel: false,
+                        cache: null,
                     }
                     trace.rounds.push(round)
                     // How many calls are in flight right now. Overlap is
@@ -227,6 +246,9 @@ export function createTalosTraceRecorder(
                         firstChunk() {
                             if (round.timeToFirstChunkMs !== null) return
                             round.timeToFirstChunkMs = Math.round(options.now() - roundStart)
+                        },
+                        cache(usage) {
+                            round.cache = readTalosCacheUsage(usage)
                         },
                         tool(name) {
                             const toolStart = options.now()

@@ -577,7 +577,13 @@ describe('chatController', () => {
             .find((call) => call.url.includes('anthropic.com/v1/messages'))
         expect(completion?.data.messages[0].content).toEqual([
             { type: 'text', text: 'Summarize this file' },
-            { type: 'text', text: '[Untrusted attachment: brief.txt]\nVerified attachment body' },
+            // Rolling cache breakpoint on the last cacheable block — the whole
+            // point of it is that it rides the real send path.
+            {
+                type: 'text',
+                text: '[Untrusted attachment: brief.txt]\nVerified attachment body',
+                cache_control: { type: 'ephemeral' },
+            },
         ])
         expect(controller.attachments.items).toHaveLength(0)
     })

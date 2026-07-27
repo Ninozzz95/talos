@@ -40,7 +40,15 @@ describe('Anthropic mobile adapter', () => {
             content: [
                 { type: 'text', text: 'Inspect.' },
                 { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } },
-                { type: 'text', text: '[Untrusted attachment: notes.txt]\nUntrusted notes' },
+                // The last cacheable block of the last message carries the
+                // rolling cache breakpoint, so the next round of the agent loop
+                // reads this prefix back instead of paying for it again.
+                // Asserted on a real request, not only on the pure builder.
+                {
+                    type: 'text',
+                    text: '[Untrusted attachment: notes.txt]\nUntrusted notes',
+                    cache_control: { type: 'ephemeral' },
+                },
             ],
         })
     })

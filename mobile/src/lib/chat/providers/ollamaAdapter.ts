@@ -85,6 +85,21 @@ function ollamaCompletionData(input: TalosMobileCompletionInput, stream: boolean
         model: input.model.id,
         messages,
         stream,
+        /**
+         * Keep the model resident between messages.
+         *
+         * Owner 2026-07-27 asked whether the caching work helps every provider.
+         * It does not help this one at all: Ollama runs the model, so there is
+         * no prefix to buy back. What costs time here is the model being
+         * unloaded — Ollama's default is five minutes of idle — and reloading
+         * several gigabytes of weights on the next message, which is the whole
+         * wait before the first token.
+         *
+         * Fifteen minutes covers a normal back-and-forth. The endpoint is
+         * typically a machine on the LAN rather than the phone, so this spends
+         * that machine's RAM, not the phone's.
+         */
+        keep_alive: '15m',
         // Ollama speaks the OpenAI tool shape.
         ...(input.tools?.length ? { tools: talosToolsForOpenAi(input.tools as never) } : {}),
         ...(input.thinking ? { think: input.effort === 'off' ? true : input.effort } : {}),

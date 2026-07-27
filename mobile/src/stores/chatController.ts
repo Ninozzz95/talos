@@ -335,12 +335,6 @@ export interface ChatController {
         ): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
         remove(memoryId: string): Promise<void>
     }
-    runs: {
-        list(): Promise<import('@/lib/runs/longRunState').TalosRunState[]>
-        get(runId: string): Promise<import('@/lib/runs/longRunState').TalosRunState | null>
-        save(state: import('@/lib/runs/longRunState').TalosRunState): Promise<import('@/lib/runs/longRunState').TalosRunState>
-        remove(runId: string): Promise<void>
-    }
     resendMessage(messageId: string): Promise<void>
     retryAssistantMessage(messageId: string): Promise<void>
     send(text: string): Promise<boolean>
@@ -978,7 +972,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                             stream.onReasoning?.(text)
                         },
                     }
-                    return completeOnce(turns, timed ?? stream, offeredTools)
+                    return completeOnce(turns, timed ?? stream, offeredTools).then((result) => {
+                        // What the cache actually did, straight from the wire.
+                        round.open?.cache?.(result.usage)
+                        return result
+                    })
                 },
                 execute: async (call) => {
                     const timing = round.open?.tool(call.name)
@@ -1596,7 +1594,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     // R2-8 — station facades live in stores/stationFacades.ts (the controller
     // was a 1000+ line god-facade); same public surface, same guarantees.
-    const { memories, tasks, notes, runs } = createStationFacades({
+    const { memories, tasks, notes } = createStationFacades({
         repository: deps.chatRepository,
         activeSessionId: () => chat.activeSession.value?.id ?? null,
     })
@@ -1789,7 +1787,6 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         memories,
         tasks,
         notes,
-        runs,
         resendMessage,
         retryAssistantMessage,
         send,

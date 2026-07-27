@@ -25,6 +25,8 @@ const THINKING_BUDGET: Readonly<Record<string, number>> = Object.freeze({
     max: 48000,
 })
 
+import { withTalosAnthropicMessageCache, withTalosAnthropicToolCache } from '@/lib/chat/promptCache'
+
 export interface AnthropicChatTurn {
     // The IR carries 'tool'; Anthropic has no such role, so a result becomes a
     // USER message of tool_result blocks and the call an ASSISTANT message of
@@ -220,7 +222,10 @@ export function buildAnthropicRequest(apiKey: string, input: BuildAnthropicReque
     if (typeof input.system === 'string' && input.system.trim() !== '') {
         body.system = input.system
     }
-    if (input.tools?.length) body.tools = input.tools
+    if (input.tools?.length) body.tools = withTalosAnthropicToolCache(input.tools)
+    // Rolling breakpoint at the end of the conversation: the next round of the
+    // agent loop reads everything up to here at 0.1x instead of re-sending it.
+    body.messages = withTalosAnthropicMessageCache(body.messages as unknown[])
     if (useThinking) {
         if ((input.thinkingMode ?? 'adaptive') === 'adaptive') {
             // The newer shape: the model decides how much to think, and depth

@@ -109,6 +109,15 @@ export interface TalosMobileWebSource {
 export interface ChatCompletionResult {
     text: string
     finishReason?: string | null
+    /**
+     * Token accounting exactly as the provider reported it.
+     *
+     * Every adapter already produced this and nothing consumed it. The Doctor
+     * reads it now to show what prompt caching actually did — otherwise
+     * "caching is on" is a claim the owner would have to take on faith.
+     * Optional and untouched by anything that ignores it.
+     */
+    usage?: Record<string, number> | null
     toolCalls?: TalosToolCall[]
     /** Defect #5: kept beside the answer, never mixed into it. */
     reasoning?: string
