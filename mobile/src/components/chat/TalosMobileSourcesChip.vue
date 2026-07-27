@@ -46,16 +46,8 @@ const extra = computed(() => Math.max(0, props.sources.length - marks.value.leng
  * whatever browser happens to be default.
  */
 async function openSource(source: TalosMobileWebSource): Promise<void> {
-    const { createTalosInAppBrowserService } = await import('@/services/inAppBrowserService')
-    const browser = createTalosInAppBrowserService({ onEvent: () => {} })
-    try {
-        await browser.open(source.url, 'isolated_webview')
-    } catch {
-        // A source that will not open is reported by staying put rather than by
-        // a dead tap: the url is on screen and can be copied.
-    } finally {
-        await browser.dispose?.()
-    }
+    const { openTalosLinkOnce } = await import('@/services/inAppBrowserService')
+    await openTalosLinkOnce(source.url)
 }
 </script>
 

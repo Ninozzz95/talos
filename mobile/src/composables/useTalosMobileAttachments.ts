@@ -53,6 +53,8 @@ export interface TalosMobileAttachmentsController {
         text: string
         /** `web_source` keeps read pages out of the user's own document list. */
         kind?: 'document' | 'web_source'
+        /** The address it came from, so the Library can offer to open it. */
+        sourceUrl?: string | null
     }): Promise<TalosLocalVaultFile>
     /** F2: a generated file that is bytes (xlsx, pdf, docx, pptx). */
     saveGeneratedBinary(
@@ -244,6 +246,7 @@ export function useTalosMobileAttachments(
             mediaType: string
             text: string
             kind?: 'document' | 'web_source'
+            sourceUrl?: string | null
         },
     ): Promise<TalosLocalVaultFile> {
         vaultError.value = null

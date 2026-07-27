@@ -4,7 +4,7 @@ import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
     AlertTriangle, CheckCircle2, Database, FileText, FolderPlus, Image as ImageIcon,
-    EllipsisVertical, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
+    EllipsisVertical, ExternalLink, Globe, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
     Check,
     CheckSquare,
 } from '@lucide/vue'
@@ -16,7 +16,7 @@ import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
-import { parseVaultOrigin } from '@/lib/vaultLibrary'
+import { parseVaultKind, parseVaultOrigin, parseVaultSourceUrl, talosSavedLinkRows } from '@/lib/vaultLibrary'
 
 const controller = useChatController()
 const settings = useSettingsStore()
@@ -33,7 +33,7 @@ const viewMode = computed({
     get: () => settings.state.shell.library_view,
     set: (value) => { void settings.setShell({ library_view: value }) },
 })
-const typeFilter = ref<'all' | 'images' | 'files'>('all')
+const typeFilter = ref<'all' | 'images' | 'files' | 'links'>('all')
 const groupByChat = ref(true) // owner 2026-07-25: grouped by origin chat by default
 const query = ref('')
 const menuOpen = ref(false)
@@ -41,6 +41,10 @@ const TYPE_TABS: Array<{ value: typeof typeFilter.value; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'images', label: 'Images' },
     { value: 'files', label: 'Files' },
+    // Owner 2026-07-27: the pages a search read are kept as markdown, which is
+    // right for an answer that must still be auditable in six months — but it
+    // meant the ADDRESS was prose. Here they are links again.
+    { value: 'links', label: 'Links' },
 ]
 
 function isImage(file: TalosLocalVaultFile): boolean {
@@ -52,6 +56,10 @@ const filtered = computed(() => {
     return attachments.vaultFiles
         .filter((file) => {
             if (typeFilter.value === 'all') return true
+            if (typeFilter.value === 'links') {
+                return parseVaultKind(file.metadata) === 'web_source'
+                    && parseVaultSourceUrl(file.metadata) !== null
+            }
             return typeFilter.value === 'images' ? isImage(file) : !isImage(file)
         })
         .filter((file) => q === ''
@@ -76,6 +84,30 @@ const grouped = computed(() => {
     }
     return [...groups.entries()].map(([title, files]) => ({ title, files }))
 })
+
+/**
+ * The same files as one address each: a page read three times is one row, and
+ * the row points at the most recent copy. Built from `filtered`, so the search
+ * box and the chip mean what they say here too.
+ */
+const linkRows = computed(() => talosSavedLinkRows(filtered.value))
+
+async function openLink(url: string): Promise<void> {
+    openError.value = null
+    const { openTalosLinkOnce } = await import('@/services/inAppBrowserService')
+    // The address stays on screen either way, so a refusal is a sentence rather
+    // than a tap that quietly did nothing.
+    if (!await openTalosLinkOnce(url)) openError.value = `${url} could not be opened on this device.`
+}
+
+/** The copy TALOS kept, which is the half of this the owner already had. */
+function openSavedCopy(fileId: string): void {
+    const file = attachments.vaultFiles.find((entry) => entry.id === fileId)
+    if (file) tapFile(file)
+}
+
+/** Present while the open document is a page that came from somewhere. */
+const docSourceUrl = computed(() => (docView.value ? parseVaultSourceUrl(docView.value.metadata) : null))
 
 // Thumbnails: one implementation, shared with the per-chat gallery. This screen
 // held the original; leaving a second copy here was how the in-flight leak
@@ -204,6 +236,16 @@ const visibleIds = computed(() => filtered.value.map((file) => file.id))
  */
 watch(visibleIds, (ids) => {
     if (bulk.active.value) bulk.reconcile(ids)
+})
+
+/**
+ * Links are addresses, not tiles, so they carry no checkbox. Leaving selection
+ * mode running over them would put "3 selected" above rows that show no sign of
+ * being selected, with a Delete that acts on files the user cannot see — the
+ * same lie the type chips used to tell before they were reconciled.
+ */
+watch(typeFilter, (value) => {
+    if (value === 'links' && bulk.active.value) bulk.exit()
 })
 
 function tapFile(file: TalosLocalVaultFile): void {
@@ -356,8 +398,41 @@ onMounted(async () => {
             No files yet. Anything you upload or save from a chat lives here, ready to reuse in any conversation.
         </div>
         <div v-else-if="filtered.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
-            {{ query.trim() ? `No files match “${query}”.` : 'No files of this type yet.' }}
+            <template v-if="query.trim()">No files match “{{ query }}”.</template>
+            <template v-else-if="typeFilter === 'links'">No links yet. Every page TALOS reads while searching is saved here, with the address you can go back to.</template>
+            <template v-else>No files of this type yet.</template>
         </div>
+
+        <!-- LINKS: one row per address, the saved transcript one tap away. -->
+        <ul v-else-if="typeFilter === 'links'" data-testid="talos-library-links" class="flex flex-col gap-2" aria-label="Saved links">
+            <li v-for="row in linkRows" :key="row.url" class="flex items-center gap-1 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pr-1">
+                <button
+                    type="button"
+                    class="talos-pressable flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 text-left"
+                    :aria-label="'Open the saved copy of ' + row.title"
+                    @click="openSavedCopy(row.fileId)"
+                >
+                    <Globe class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <span class="min-w-0 flex-1">
+                        <span class="line-clamp-2 block text-sm font-medium text-[var(--talos-text)]">{{ row.title }}</span>
+                        <span class="mt-0.5 flex items-center gap-1.5 text-2xs text-[var(--talos-muted)]">
+                            <span class="truncate">{{ row.host }}</span>
+                            <span aria-hidden="true">·</span>
+                            <span class="shrink-0">{{ formatModified(row.savedAt) }}</span>
+                        </span>
+                    </span>
+                </button>
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    class="min-h-11 min-w-11 shrink-0 rounded-full"
+                    data-testid="talos-library-link-open"
+                    :aria-label="'Open ' + row.host + ' in the browser'"
+                    @click="openLink(row.url)"
+                ><ExternalLink class="size-4" aria-hidden="true" /></Button>
+            </li>
+        </ul>
 
         <!-- Grouped-by-chat wraps whichever view is active. -->
         <template v-else v-for="section in (groupByChat ? grouped : [{ title: '', files: filtered }])" :key="section.title || 'all'">
@@ -433,6 +508,7 @@ onMounted(async () => {
             <header class="flex items-center gap-1 border-b border-[var(--talos-border)] px-3 pb-2">
                 <FileText class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                 <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ docView.display_name }}</span>
+                <button v-if="docSourceUrl" type="button" data-testid="talos-library-doc-open-source" :aria-label="'Open the original page in the browser'" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="openLink(docSourceUrl)"><ExternalLink class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                 <button v-if="docView.status === 'available' && !isSelected(docView.id)" type="button" :aria-label="'Attach ' + docView.display_name + ' to message'" :disabled="actionBusy" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="attachFromOverlay(docView)"><Paperclip class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                 <button type="button" :aria-label="'Delete ' + docView.display_name" class="talos-pressable flex size-11 items-center justify-center rounded-full text-[var(--talos-danger)]" @click="deleteFromDoc"><Trash2 class="size-5" aria-hidden="true" /></button>
                 <button type="button" aria-label="Close" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="docView = null"><X class="size-5" aria-hidden="true" /></button>

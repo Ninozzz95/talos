@@ -896,6 +896,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                 await attachments.saveGenerated({
                                     // A source, not a document the user made.
                                     kind: 'web_source',
+                                    // Owner 2026-07-27: the address must survive as
+                                    // an address, not only as a line of prose inside
+                                    // the transcript — that is what lets the Library
+                                    // list it as a link you can open.
+                                    sourceUrl: page.url,
                                     name: `${page.title || new URL(page.url).hostname}.md`,
                                     mediaType: 'text/markdown',
                                     text: [

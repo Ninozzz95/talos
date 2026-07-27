@@ -52,6 +52,72 @@ export function parseVaultKind(
     return metadata?.kind === 'web_source' ? 'web_source' : 'document'
 }
 
+/**
+ * Where a saved page came from, as an address rather than a sentence.
+ *
+ * Owner 2026-07-27: sources read during a search should appear in the Library
+ * as LINKS you can open, not only as a markdown transcript with `Source: …`
+ * buried in the prose. Rummaging through the text of every file to find a URL
+ * is both slow and a guess; the address belongs in the metadata, where it is a
+ * fact.
+ *
+ * Only http(s) comes back. A Library row becomes something a thumb can tap, so
+ * this decides what a tap can reach — `javascript:`, `file:` and `data:` are
+ * not addresses, they are attacks.
+ */
+export function parseVaultSourceUrl(
+    metadata: Record<string, unknown> | null | undefined,
+): string | null {
+    const value = metadata?.source_url
+    if (typeof value !== 'string' || value === '') return null
+    try {
+        const url = new URL(value)
+        return url.protocol === 'https:' || url.protocol === 'http:' ? value : null
+    } catch {
+        return null
+    }
+}
+
+/** One saved page, as something you can tap rather than something to read. */
+export interface TalosSavedLinkRow {
+    /** The Library file holding the transcript — the copy that outlives the page. */
+    fileId: string
+    url: string
+    /** The page's own title, not the filename it happens to be stored under. */
+    title: string
+    /** `corriere.it`, not `www.corriere.it` — the row is one line on a phone. */
+    host: string
+    savedAt: string
+}
+
+/**
+ * The links a search left behind.
+ *
+ * Owner 2026-07-27 asked for these to be PRINTED as links, next to (not instead
+ * of) the markdown transcript TALOS keeps. Reading the same page three times in
+ * one session is normal, and three identical rows would be noise, so a URL
+ * appears once — pointing at the most recent copy, which is the one whose text
+ * matches the page as it is now.
+ */
+export function talosSavedLinkRows(files: readonly TalosLocalVaultFile[]): TalosSavedLinkRow[] {
+    const byUrl = new Map<string, TalosSavedLinkRow>()
+    for (const file of files) {
+        if (parseVaultKind(file.metadata) !== 'web_source') continue
+        const url = parseVaultSourceUrl(file.metadata)
+        if (!url) continue
+        const previous = byUrl.get(url)
+        if (previous && previous.savedAt >= file.created_at) continue
+        byUrl.set(url, {
+            fileId: file.id,
+            url,
+            title: file.display_name.replace(/\.md$/i, ''),
+            host: new URL(url).hostname.replace(/^www\./, ''),
+            savedAt: file.created_at,
+        })
+    }
+    return [...byUrl.values()].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+}
+
 export interface LibraryFilter {
     query: string
     origin: 'all' | TalosVaultOrigin
