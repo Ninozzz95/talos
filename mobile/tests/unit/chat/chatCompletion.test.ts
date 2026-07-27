@@ -70,7 +70,8 @@ describe('buildChatCompletion', () => {
         const arg = request.mock.calls[0][0]
         expect(arg.headers['x-api-key']).toBe('sk-ant')
         expect(arg.data.model).toBe('claude-opus-4-8')
-        expect(arg.data.thinking).toEqual({ type: 'enabled', budget_tokens: 24576 })
+        expect(arg.data.thinking).toEqual({ type: 'adaptive' })
+        expect(arg.data.output_config).toEqual({ effort: 'high' })
         expect(arg.connectTimeout).toBe(47_000)
         expect(arg.readTimeout).toBe(47_000)
     })

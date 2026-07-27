@@ -57,6 +57,9 @@ describe('buildAnthropicRequest', () => {
             turns: [{ role: 'user', content: 'hard' }],
             effort: 'high',
             thinking: true,
+            // Named, because there are two shapes now and only this one
+            // reserves headroom for a budget.
+            thinkingMode: 'enabled',
         })
         expect(req.body.thinking).toEqual({ type: 'enabled', budget_tokens: 24576 })
         expect(req.body.max_tokens as number).toBeGreaterThan(24576)
@@ -129,6 +132,7 @@ describe('extended thinking alongside tools', () => {
             turns: [{ role: 'user', content: 'quanto devo?' }],
             thinking: true,
             effort: 'high',
+            thinkingMode: 'enabled',
             tools,
         })
         expect(request.body.thinking).toMatchObject({ type: 'enabled' })

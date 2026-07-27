@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { createTalosSendGate } from '@/lib/chat/sendGate'
 import { Loader2, ArrowUp,
     BrainCircuit,
     Database,
@@ -292,9 +293,23 @@ function updatePrompt(event: Event): void {
     resizePrompt()
 }
 
+/**
+ * One tap, one message.
+ *
+ * Owner 2026-07-27 caught the same prompt sent twice. `props.sending` was the
+ * only guard, and the parent raises it AFTER the emit — so between the two
+ * there is a window where a second event (a blur that produces an extra click,
+ * a fast double tap) passes untouched. The gate closes on this very tick and
+ * reopens when the answer ends, or after a grace period if the send never
+ * started at all.
+ */
+const sendGate = createTalosSendGate()
+watch(() => props.sending, (sending) => sendGate.observeSending(sending))
+
 function requestSend(value = promptField.value?.value ?? props.prompt): void {
     if (!props.canSend || props.sending || attachmentBlocked.value
         || (!value.trim() && !hasAuthorizedAttachment.value)) return
+    if (!sendGate.claim(performance.now())) return
     emit('send')
 }
 
