@@ -147,10 +147,14 @@ onBeforeUnmount(() => {
     from { opacity: 0; transform: translateX(-50%) translateY(6px); }
     to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+/* Owner 2026-07-27: "le linee e i nodi devono persistere, non devono scomparire
+   quando la linea è attraversata". They used to draw, then un-draw and fade —
+   the mark assembled itself and then dismantled itself, so what you were left
+   looking at was an empty screen. It builds and STAYS built; the overlay's own
+   fade is what removes it. */
 @keyframes talosBootFlow {
-    0%, 15% { stroke-dashoffset: 90; opacity: 0; }
-    35%, 65% { stroke-dashoffset: 0; opacity: 1; }
-    85%, 100% { stroke-dashoffset: -90; opacity: 0; }
+    0%, 10% { stroke-dashoffset: 90; opacity: 0; }
+    60%, 100% { stroke-dashoffset: 0; opacity: 1; }
 }
 /**
  * Owner 2026-07-27: "l'animazione di boot lagga".
@@ -166,9 +170,8 @@ onBeforeUnmount(() => {
  * once and then just faded, instead of being rebuilt sixty times a second.
  */
 @keyframes talosBootIgnite {
-    0%, 15% { opacity: 0; }
-    35%, 65% { opacity: 1; }
-    85%, 100% { opacity: 0; }
+    0%, 10% { opacity: 0; }
+    55%, 100% { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
     .edge, .node {

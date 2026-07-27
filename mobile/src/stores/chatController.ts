@@ -905,6 +905,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                                  * provider's own words travel.
                                  */
                                 const failure = readTalosImageError(response.status, response.data)
+                                if (failure) {
+                                    /**
+                                     * Into the Doctor, verbatim.
+                                     *
+                                     * Owner 2026-07-27: asked three times for the
+                                     * exact provider error and got three
+                                     * paraphrases, because the only thing that
+                                     * ever sees it is the model — and a model
+                                     * summarising an error is a model editing it.
+                                     * The diagnostics export redacts secrets at
+                                     * its own boundary, so the raw sentence can
+                                     * travel there and be read by someone who can
+                                     * act on it.
+                                     */
+                                    const { talosLogDeviceIssue } = await import('@/lib/talosDeviceLog')
+                                    talosLogDeviceIssue(
+                                        'TALOS_IMAGE',
+                                        `${drawer} ${plan.url} model=${plan.body.model as string} → ${failure}`,
+                                    )
+                                }
                                 return {
                                     images: failure ? [] : parseTalosGeneratedImages(response.data),
                                     error: failure,
