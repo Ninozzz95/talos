@@ -175,27 +175,28 @@ describe('TalosMobileComposer', () => {
         expect(disabled.get<HTMLButtonElement>('[aria-label="Stop response"]').element.disabled).toBe(false)
     })
 
-    it('opens both selectors, forwards selection, closes and restores trigger focus', async () => {
+    it('forwards model and effort choices WITHOUT dismissing the drawer', async () => {
+        // Owner 2026-07-27: "fai in modo che il drawer modello non si chiuda
+        // ogni volta che clicco su una cosa dentro". It is a sheet titled
+        // "Model & reasoning" — a configuration surface, not a menu — and
+        // closing on every pick meant opening it twice to set two things.
         const view = mountComposer()
         const modelTrigger = view.get<HTMLButtonElement>('[aria-label="Choose model profile"]')
-        const effortTrigger = view.get<HTMLButtonElement>('[aria-label="Choose reasoning effort"]')
 
         await modelTrigger.trigger('click')
         // F4-#26: model + effort live in one dedicated bottom drawer.
         expect(view.get('[data-testid="talos-model-drawer"]').exists()).toBe(true)
         expect(view.get('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
         expect(view.get('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+
         await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
         expect(view.emitted('selectModelProfile')).toEqual([['profile-deepseek']])
-        expect(view.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(false)
-        expect(document.activeElement).toBe(modelTrigger.element)
+        expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
 
-        await effortTrigger.trigger('click')
-        expect(view.get('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        // And a second choice, in the same visit, which is the whole point.
         await view.get('[data-effort-level="high"]').trigger('click')
         expect(view.emitted('selectEffort')).toEqual([['high']])
-        expect(view.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(false)
-        expect(document.activeElement).toBe(effortTrigger.element)
+        expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
     })
 
     it('opens the native attachment bridge while keeping unavailable Context explicit', async () => {

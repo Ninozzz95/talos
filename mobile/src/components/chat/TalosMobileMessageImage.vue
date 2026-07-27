@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
-import { Image as ImageIcon } from '@lucide/vue'
+import { Image as ImageIcon, X } from '@lucide/vue'
 import { useChatController } from '@/stores/chatController'
 
 /**
@@ -49,19 +49,41 @@ watch(() => props.fileId, async (fileId) => {
     }
 }, { immediate: true })
 
+/**
+ * Tap to see it properly.
+ *
+ * Owner 2026-07-27: "fai in modo di aprire le immagini inviate o ricevute in
+ * una galleria o lightbox". A VIEWER, deliberately not the Library's overlay:
+ * that one carries attach and delete, which are the jobs of a file manager. The
+ * two look alike and mean different things, and merging them would put a delete
+ * button on a photo inside a conversation.
+ */
+const opened = ref(false)
+
+function open(): void {
+    if (source.value) opened.value = true
+}
+
 onBeforeUnmount(release)
 </script>
 
 <template>
-    <img
+    <button
         v-if="source"
-        :src="source"
-        :alt="name"
-        data-testid="talos-message-image"
-        loading="lazy"
-        decoding="async"
-        class="max-h-56 w-auto max-w-full rounded-xl border border-current/15 object-contain"
+        type="button"
+        :aria-label="`Open ${name}`"
+        class="talos-pressable max-w-full"
+        @click="open"
     >
+        <img
+            :src="source"
+            :alt="name"
+            data-testid="talos-message-image"
+            loading="lazy"
+            decoding="async"
+            class="max-h-56 w-auto max-w-full rounded-xl border border-current/15 object-contain"
+        >
+    </button>
     <!-- The honest fallback: it says an image was sent, and which one, rather
          than leaving a hole where a picture should be. -->
     <span
@@ -73,4 +95,31 @@ onBeforeUnmount(release)
         <span class="max-w-[180px] truncate">{{ name }}</span>
         <span v-if="failed" class="shrink-0 opacity-75">not available</span>
     </span>
+
+    <Teleport to="body">
+        <div
+            v-if="opened && source"
+            data-testid="talos-message-lightbox"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="name"
+            tabindex="-1"
+            class="fixed inset-0 z-[95] flex flex-col bg-black/90 outline-none"
+            @keydown.escape="opened = false"
+        >
+            <div class="flex justify-end p-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white">
+                <button
+                    type="button"
+                    aria-label="Close preview"
+                    class="talos-pressable flex size-11 items-center justify-center rounded-full bg-white/15"
+                    @click="opened = false"
+                >
+                    <X class="size-5" aria-hidden="true" />
+                </button>
+            </div>
+            <div class="flex min-h-0 flex-1 items-center justify-center p-4" @click="opened = false">
+                <img :src="source" :alt="name" class="max-h-full max-w-full object-contain">
+            </div>
+        </div>
+    </Teleport>
 </template>

@@ -393,19 +393,27 @@ async function closeModelPicker(): Promise<void> {
     focusTrigger(modelDrawerTrigger === 'effort' ? effortTrigger.value : modelTrigger.value)
 }
 
-async function selectModelProfile(profileId: string): Promise<void> {
+/**
+ * Choosing something inside the drawer does NOT dismiss it.
+ *
+ * Owner 2026-07-27: "fai in modo che il drawer modello non si chiuda ogni volta
+ * che clicco su una cosa dentro". Every selection used to close it — model,
+ * routing profile AND effort — which makes a sheet titled "Model & reasoning"
+ * unusable: it is a configuration surface, not a menu, and picking a model then
+ * wanting a different effort meant opening it twice. The sheet already has a
+ * close affordance; leaving is the user's decision, not a side effect of
+ * adjusting something.
+ */
+function selectModelProfile(profileId: string): void {
     emit('selectModelProfile', profileId)
-    await closeModelPicker()
 }
 
-async function selectRoutingProfile(profileId: string): Promise<void> {
+function selectRoutingProfile(profileId: string): void {
     emit('selectModelRoutingProfile', profileId)
-    await closeModelPicker()
 }
 
-async function selectEffort(level: TalosMobileEffortLevel): Promise<void> {
+function selectEffort(level: TalosMobileEffortLevel): void {
     emit('selectEffort', level)
-    await closeModelPicker()
 }
 
 watch(
