@@ -227,18 +227,86 @@ still marked HYPOTHESIS.
 - Status: **shipped** `251780a`
 - Verified: 2026-07-27
 
-### Prompt cost on repeated context — **VERIFIED**
-- Best in class: the providers themselves document caching; most clients never
-  ask for it. [Anthropic, OpenAI, Gemini, DeepSeek docs, 2026-07-27]
-- Their weakness: a client that does not send `cache_control` pays full price
-  and full prefill on every agent-loop round.
-- Why it exists: it takes measuring your own prefix to know it is worth it.
-- TALOS counter: measured prefix (2,099 tokens, 87% tool schemas), two Anthropic
-  breakpoints, OpenAI key on the prefix, Ollama `keep_alive`, and the result
-  shown in the Doctor so the claim is checkable.
-- Level: **L2**
-- Status: **shipped** `fec60c8`
+### Prompt cost on repeated context — **VERIFIED against source**
+
+**My first draft of this row was wrong, and the source proved it.** It said
+"most clients never ask for it". Chatbox asks. This is exactly the failure the
+technical bar exists to catch, and the corrected row is narrower and far more
+useful than the flattering one.
+
+- Best in class: **Chatbox**, `src/shared/models/anthropic-cache.ts` with a real
+  test beside it, read 2026-07-27. Three breakpoints, and their own docstring
+  states the strategy: *"1. System message (constant prefix, always cache-hit)
+  2. Second-to-last user message (previous turn's breakpoint, cache-hit on this
+  turn) 3. Last message (creates new cache prefix for the next turn)"*. Rolling,
+  and written to work on both the direct API and Bedrock.
+- Their weaknesses, all three checked in the file:
+  1. **They do not cache the `tools` array at all.** Breakpoints land on system
+     and messages only, so for a tool-carrying client the largest repeated block
+     stays at full price — for TALOS that is 1,823 of 2,099 tokens, 87%.
+  2. **No per-model minimum-token handling.** No threshold logic anywhere, so on
+     the 4,096-minimum models the breakpoints never hit and nothing says so.
+  3. **They never read the result back.** No `cache_read_input_tokens` or
+     `cache_creation_input_tokens`, so the feature cannot be observed: it either
+     works or silently does not, and nobody can tell which.
+- On the OpenAI side they do nothing: `src/shared/models/openai-compatible.ts`
+  has no `prompt_cache_key`, no `cached_tokens`, no `prompt_tokens_details`;
+  `getCallSettings()` sends only temperature, topP and maxOutputTokens.
+- Why it exists: caching is easy to send and hard to verify, so implementations
+  stop at sending it.
+- TALOS counter (`fec60c8`): a breakpoint on the **last tool** — the block they
+  leave uncached and the one that dominates; a rolling breakpoint on the
+  conversation (parity); `prompt_cache_key` on OpenAI keyed to the prefix;
+  `keep_alive` on Ollama, which caching does not touch at all; and
+  `readTalosCacheUsage` reconciling four dialects into the Doctor, so the claim
+  is checkable rather than believed.
+- Level: **L2** — better on their axis, not structural. They could add a tools
+  breakpoint in an afternoon.
+- **Open against us, found by this recon:** we do not enforce the per-model
+  minimums either. Our 2,099-token prefix sits BELOW the 4,096 floor of Opus
+  4.5/4.6, Haiku 4.5 and Gemini 3.x, so on those models the tool breakpoint pays
+  a write and never reads. Neither competitor handles it; that makes it an
+  opportunity, not an excuse. **TODO.**
 - Verified: 2026-07-27
+
+### No backend at all — **VERIFIED against source**
+- Closest on-device competitor: **PocketPal AI** (`a-ghorbani/pocketpal-ai`),
+  tree read 2026-07-27. Real on-device inference via `llama.rn`
+  (`ios/PocketPal/AppIntents/LlamaInferenceEngine.swift`, `LlamaContextWrapper.mm`),
+  a native Kotlin download stack (`android/app/src/main/java/com/pocketpalai/
+  download/DownloadWorker.kt`, `DownloadModule.kt`, `DownloadDatabase.kt`),
+  credentials in `react-native-keychain`.
+- Their weakness: **they have a server.** `services/palshub/` carries
+  `AuthService`, `SyncService` and `supabase.js` — the nearest thing to us in the
+  field runs models on the phone AND ships a Supabase backend with accounts and
+  sync.
+- Why it exists: PalsHub is the product built around the app.
+- TALOS counter: there is no backend to reach, which is why that sentence can be
+  the thesis of first run rather than a slogan.
+- Level: **L3** — now verified against the nearest competitor, not assumed.
+- Verified: 2026-07-27
+
+### Tools on a phone-local assistant — **VERIFIED against source**
+- PocketPal: no tool- or function-calling files anywhere in the tree, and no
+  memory or RAG implementation (the only `memory/` path is an e2e performance
+  baseline). An excellent runner, not a worker.
+- Chatbox: has tool calling (`src/main/sandbox/manager.ts`,
+  `src/renderer/components/message-parts/ToolCallPartUI.tsx`) — and **no mobile
+  or native app directory at all** in the repo; it is Electron.
+- The field splits cleanly: **on-device but no tools**, or **tools but not on the
+  phone**. TALOS is trying to be the intersection.
+- Level: **L3** while that split holds. Re-check in 90 days — it is one release
+  from closing.
+- Verified: 2026-07-27
+
+### Where LibreChat's provider clients went — **UNRESOLVED, and left that way**
+- `api/app/clients` now holds only `BaseClient.js` (51,616 bytes),
+  `OllamaClient.js`, `TextStream.js`, `index.js`. The classic
+  `AnthropicClient.js` path 404s, so the provider clients moved somewhere this
+  pass did not find.
+- **Not concluded either way.** Whether LibreChat sends `cache_control` is
+  unknown, and saying otherwise would be the exact failure this document forbids.
+  Next pass: find the new location before quoting anything.
 
 ### Onboarding — **VERIFIED**
 - Best in class: nobody. NN/g finds carousels actively harmful and tutorials
