@@ -102,11 +102,22 @@ onBeforeUnmount(() => {
     stroke: var(--talos-accent, #f5a623);
     fill: var(--talos-background, #0a0c10);
 }
-.node-root { animation: talosBootIgnite 2.5s ease-in-out infinite; }
-.edge-main { animation: talosBootFlow 2.5s ease-in-out infinite; animation-delay: 0.2s; }
-.node-mid { animation: talosBootIgnite 2.5s ease-in-out infinite; animation-delay: 0.5s; }
-.edge-branch { animation: talosBootFlow 2.5s ease-in-out infinite; animation-delay: 0.7s; }
-.node-out { animation: talosBootIgnite 2.5s ease-in-out infinite; animation-delay: 1s; }
+/* Owner 2026-07-27: "la app si carica prima che la boot animation finisca."
+   He was right, and the cause was arithmetic: this cascade was an INFINITE
+   2.5s loop with delays out to 1s, so its first pass ended around 3.5s — while
+   the overlay starts dissolving at 900ms. The mark was cut off a third of the
+   way through, with the app showing through underneath.
+
+   A boot sequence is not an idle loop: it has to END, and it has to end before
+   the thing it is covering appears. One pass, compressed so the last node
+   finishes at ~870ms — just inside the 900ms hold — and `forwards` so it rests
+   lit rather than snapping back for the fade. The startup stays as fast as the
+   perf review made it; only the animation stops pretending it has 3.5 seconds. */
+.node-root { animation: talosBootIgnite 0.55s ease-in-out both; }
+.edge-main { animation: talosBootFlow 0.55s ease-in-out 0.08s both; }
+.node-mid { animation: talosBootIgnite 0.55s ease-in-out 0.16s both; }
+.edge-branch { animation: talosBootFlow 0.55s ease-in-out 0.24s both; }
+.node-out { animation: talosBootIgnite 0.55s ease-in-out 0.32s both; }
 .talos-boot-word {
     position: absolute;
     top: calc(50% + 78px);

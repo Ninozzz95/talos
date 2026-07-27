@@ -351,6 +351,23 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     class="min-h-11 w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
             </div>
+            <!-- Owner 2026-07-27, asked twice: entering selection only by
+                 holding a row meant nobody found it. Top right of the header,
+                 where a select control is looked for, and hidden while the mode
+                 is on because the bar below already owns the exit. -->
+            <Button
+                v-if="!bulk.active.value && (filtered.length || archived.length)"
+                type="button"
+                size="icon"
+                variant="ghost"
+                data-testid="talos-chats-select-header"
+                aria-label="Select chats"
+                class="min-h-11 min-w-11 shrink-0 rounded-xl"
+                @click="bulk.enter()"
+            >
+                <CheckSquare class="size-5" aria-hidden="true" />
+            </Button>
+
             <!-- Embedded (tablet panel): compact inline New keeps the narrow
                  panel tidy. Full-page uses the floating FAB (owner Claude-style). -->
             <Button

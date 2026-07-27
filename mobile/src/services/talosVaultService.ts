@@ -7,6 +7,7 @@ import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
 import type {
     TalosAttachmentAnalysisClient,
 } from '@/services/attachmentAnalysisClient'
+import { talosLogDeviceIssue } from '@/lib/talosDeviceLog'
 import type { TalosAttachmentFileStore } from '@/services/attachmentFileStore'
 import type { TalosPickedFile } from '@/services/nativeFilePicker'
 
@@ -87,6 +88,16 @@ function failureCode(error: unknown): string {
     return 'TALOS_ATTACHMENT_ANALYSIS_FAILED'
 }
 
+/** The fingerprint still gets computed when the analysis that used to do it fails. */
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer)
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function extensionOf(name: string): string {
+    return name.split('.').at(-1)?.trim().toLowerCase() ?? ''
+}
+
 function base64FromBytes(bytes: Uint8Array): string {
     let binary = ''
     const chunkSize = 32_768
@@ -161,9 +172,13 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             created_at: now(),
         })
         let privateUri = ''
+        // Held outside the try: the degraded path below still has to fingerprint
+        // exactly the bytes that were written.
+        let copiedBytes: Uint8Array | null = null
         try {
             const copy = await options.fileStore.copyToPrivate(pickedFile, fileId)
             privateUri = copy.privateUri
+            copiedBytes = copy.bytes
             const analysis = await options.analysisClient.analyze({
                 bytes: copy.bytes,
                 name: pickedFile.name,
@@ -183,6 +198,45 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
             const grant = await createGrant(file.id)
             return { file, grant }
         } catch (error) {
+            if (origin === 'generated' && privateUri !== '' && copiedBytes !== null) {
+                /**
+                 * A document TALOS made, and already verified by REOPENING it,
+                 * is not lost because we could not read it back a second time.
+                 *
+                 * Owner's R39 trace named this at last:
+                 * `TALOS_ATTACHMENT_ANALYSIS_FAILED`. The analysis exists to
+                 * inspect what a USER brings in — refusing the unintelligible
+                 * is right for those. Applying the same rule to our own output
+                 * threw away a correct PDF sitting on disk, three times, and
+                 * sent the model off offering DOCX instead. What is actually
+                 * lost when extraction fails is the searchable text, and that
+                 * is a feature, not the file.
+                 */
+                talosLogDeviceIssue(
+                    'TALOS_VAULT_GENERATED_ANALYSIS',
+                    `${pickedFile.name}: ${error instanceof Error ? error.message : String(error)}`,
+                )
+                const file = await options.repository.updateVaultFile(fileId, {
+                    private_uri: privateUri,
+                    status: 'available',
+                    sha256: await sha256Hex(copiedBytes),
+                    extracted_text: '',
+                    failure_code: null,
+                    metadata: {
+                        extension: extensionOf(pickedFile.name),
+                        page_count: null,
+                        origin,
+                        origin_session_id: originSessionId,
+                        kind,
+                        // Recorded, so the Library can say the document is not
+                        // searchable rather than returning nothing for every
+                        // query and looking broken.
+                        analysis_failed: failureCode(error),
+                    },
+                })
+                const grant = await createGrant(file.id)
+                return { file, grant }
+            }
             return failPendingFile(fileId, privateUri, error)
         }
     }
