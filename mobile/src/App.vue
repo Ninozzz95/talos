@@ -58,13 +58,14 @@ const showBoot = ref(true)
 // R2-SF-M2 — shell-level session-action guard (re-entrancy + busy indicator).
 const shellActionBusy = ref(false)
 
-// F2-T6 intro modal — versioned gating (opens after settings hydration, never
-// over the boot logo); the chunk loads ONLY when gating opens it.
-const TalosMobileIntroModal = defineAsyncComponent(
-    () => import('@/components/intro/TalosMobileIntroModal.vue'),
+// First-run setup — versioned gating (opens after settings hydration, never
+// over the boot logo); the chunk loads ONLY when gating opens it. Owner
+// 2026-07-27: two steps, replacing the six-slide carousel.
+const TalosMobileSetupIntro = defineAsyncComponent(
+    () => import('@/components/intro/TalosMobileSetupIntro.vue'),
 )
-// N1 — the guided account wizard chunk loads only when its gate opens it
-// (first run after the intro, or an explicit replay from Settings).
+// N1 — the guided account wizard chunk loads only on an explicit replay from
+// Settings; it no longer follows first-run setup.
 const TalosMobileAccountWizard = defineAsyncComponent(
     () => import('@/components/onboarding/TalosMobileAccountWizard.vue'),
 )
@@ -114,15 +115,18 @@ const accountWizard = useTalosMobileWizardState({
 })
 provide(TALOS_MOBILE_WIZARD_KEY, accountWizard)
 
-// F4-#18: ask for the mic permission at a MEANINGFUL moment — completing the
-// intro (the user just read what TALOS does), never at cold start. Skippers
-// get asked at the first mic tap instead.
+/**
+ * Owner 2026-07-27, from Android's own guidance: "Wait for the user to invoke
+ * the task or action in your app that requires access to specific private user
+ * data." Finishing setup used to fire the microphone prompt, which is a cold
+ * ask — the person has not touched the mic and cannot tell why Android is
+ * asking, which is exactly how a permission gets denied for good.
+ *
+ * The first mic tap asks instead. That path already existed for anyone who
+ * skipped; now it is the only one.
+ */
 function onIntroClose(outcome: 'completed' | 'skipped'): void {
     void intro.closeIntro(outcome)
-    if (outcome === 'completed') {
-        void import('@/services/dictation').then(({ requestTalosDictationPermission }) =>
-            requestTalosDictationPermission())
-    }
 }
 
 // F1-T4 animation mandate: theme-tuned interaction-motion CSS vars from the
@@ -533,11 +537,11 @@ onBeforeUnmount(async () => {
             @unlocked="onUnlocked"
         />
 
-        <!-- F2-T6 intro modal: mounts only when the versioned gating opens it.
+        <!-- First-run setup: mounts only when the versioned gating opens it.
              Owner 2026-07-24: a leave transition so closing FADES out instead of
              snapping (v-if unmounts instantly on its own). -->
         <Transition leave-active-class="transition-opacity duration-200 ease-in motion-reduce:transition-none" leave-to-class="opacity-0">
-            <TalosMobileIntroModal
+            <TalosMobileSetupIntro
                 v-if="intro.introOpen.value"
                 @close="onIntroClose($event)"
             />
