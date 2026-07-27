@@ -91,6 +91,28 @@ export interface TalosSavedLinkRow {
 }
 
 /**
+ * The address of a page saved before the address was kept as a fact.
+ *
+ * Self-review 2026-07-27: every source already in the owner's Library predates
+ * the metadata, so shipping the Links section without this would have shown him
+ * an empty screen on the one Library that matters — the feature would read as
+ * broken rather than new. The transcript has always opened with a `Source:`
+ * header, so only a header LINE counts: a url quoted further down is something
+ * the page mentioned, not where the page lives.
+ *
+ * New saves never reach here — the stored value wins — so this shrinks to
+ * nothing on its own as the old rows are replaced.
+ */
+function sourceUrlFromTranscript(text: string | null | undefined): string | null {
+    if (!text) return null
+    for (const line of text.slice(0, 600).split('\n')) {
+        const match = /^Source:\s*(\S+)\s*$/.exec(line)
+        if (match) return parseVaultSourceUrl({ source_url: match[1] })
+    }
+    return null
+}
+
+/**
  * The links a search left behind.
  *
  * Owner 2026-07-27 asked for these to be PRINTED as links, next to (not instead
@@ -103,7 +125,7 @@ export function talosSavedLinkRows(files: readonly TalosLocalVaultFile[]): Talos
     const byUrl = new Map<string, TalosSavedLinkRow>()
     for (const file of files) {
         if (parseVaultKind(file.metadata) !== 'web_source') continue
-        const url = parseVaultSourceUrl(file.metadata)
+        const url = parseVaultSourceUrl(file.metadata) ?? sourceUrlFromTranscript(file.extracted_text)
         if (!url) continue
         const previous = byUrl.get(url)
         if (previous && previous.savedAt >= file.created_at) continue

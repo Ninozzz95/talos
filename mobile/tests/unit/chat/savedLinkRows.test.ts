@@ -72,6 +72,46 @@ describe('the links a search left behind', () => {
         expect(rows.map((row) => row.fileId)).toEqual(['new', 'old'])
     })
 
+    it('finds the address of a page saved before the address was kept', () => {
+        // Self-review 2026-07-27: the owner has been searching with TALOS for
+        // days. Every source already in his Library predates the metadata, so
+        // shipping this without a fallback means opening Links and finding it
+        // empty — the feature would read as broken on the only Library that
+        // matters. The transcript has always begun with a `Source:` line.
+        const rows = talosSavedLinkRows([
+            {
+                ...sourceFile({ id: 'legacy', url: undefined }),
+                display_name: 'Il prezzo del gas.md',
+                extracted_text: ['# Il prezzo del gas', '', 'Source: https://www.corriere.it/gas', 'Published: 2026-07-01'].join('\n'),
+            } as TalosLocalVaultFile,
+        ])
+        expect(rows).toHaveLength(1)
+        expect(rows[0]!.url).toBe('https://www.corriere.it/gas')
+        expect(rows[0]!.host).toBe('corriere.it')
+    })
+
+    it('does not mistake a link inside a page for the page it came from', () => {
+        // Only the header line counts. A quoted url further down is something
+        // the page mentioned, not where the page lives.
+        const rows = talosSavedLinkRows([
+            {
+                ...sourceFile({ id: 'legacy', url: undefined }),
+                extracted_text: ['# Una pagina', '', 'leggi anche Source: https://altrove.example/x'].join('\n'),
+            } as TalosLocalVaultFile,
+        ])
+        expect(rows).toEqual([])
+    })
+
+    it('prefers the stored address over the one written in the prose', () => {
+        const rows = talosSavedLinkRows([
+            {
+                ...sourceFile({ url: 'https://truth.example/a' }),
+                extracted_text: 'Source: https://stale.example/b',
+            } as TalosLocalVaultFile,
+        ])
+        expect(rows[0]!.url).toBe('https://truth.example/a')
+    })
+
     it('refuses an address a tap must never reach', () => {
         // The row is a button that opens a browser. Whatever a page put in the
         // metadata gets to decide where that goes, so it is checked here too.

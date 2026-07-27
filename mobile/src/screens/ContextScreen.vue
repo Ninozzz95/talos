@@ -56,10 +56,10 @@ const filtered = computed(() => {
     return attachments.vaultFiles
         .filter((file) => {
             if (typeFilter.value === 'all') return true
-            if (typeFilter.value === 'links') {
-                return parseVaultKind(file.metadata) === 'web_source'
-                    && parseVaultSourceUrl(file.metadata) !== null
-            }
+            // Kind only: whether an address can be recovered is the row
+            // builder's business, and deciding it in two places is how the
+            // fallback for older sources ended up dead before it could run.
+            if (typeFilter.value === 'links') return parseVaultKind(file.metadata) === 'web_source'
             return typeFilter.value === 'images' ? isImage(file) : !isImage(file)
         })
         .filter((file) => q === ''
@@ -397,7 +397,7 @@ onMounted(async () => {
         <div v-else-if="attachments.vaultFiles.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
             No files yet. Anything you upload or save from a chat lives here, ready to reuse in any conversation.
         </div>
-        <div v-else-if="filtered.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
+        <div v-else-if="typeFilter === 'links' ? linkRows.length === 0 : filtered.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
             <template v-if="query.trim()">No files match “{{ query }}”.</template>
             <template v-else-if="typeFilter === 'links'">No links yet. Every page TALOS reads while searching is saved here, with the address you can go back to.</template>
             <template v-else>No files of this type yet.</template>
