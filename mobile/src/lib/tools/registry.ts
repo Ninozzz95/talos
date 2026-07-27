@@ -28,6 +28,16 @@ export interface TalosToolResult {
      * the model. Codes travel; sentences get rewritten.
      */
     code?: string | null
+    /**
+     * Something for the model to LOOK at, not read.
+     *
+     * Not inside the tool result: Anthropic accepts image blocks there, OpenAI
+     * only in the Responses API (which is not the one TALOS speaks), Gemini and
+     * Ollama not at all. Every provider does accept an image on a USER turn —
+     * the path attachments already use — so the loop hands these over as parts
+     * after the results, and all four adapters translate them unchanged.
+     */
+    images?: import('@/lib/chat/attachmentContracts').TalosMobileImageInputPart[]
     /** Anything the audit row should keep that the model does not need. */
     evidence?: Record<string, unknown>
 }

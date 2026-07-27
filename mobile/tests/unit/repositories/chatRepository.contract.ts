@@ -1,5 +1,11 @@
 import { expect } from 'vitest'
 import type { TalosChatRepository } from '@/repositories/chatRepository'
+import {
+    addTalosRunSpend,
+    appendTalosRunStep,
+    createTalosRun,
+    setTalosRunStatus,
+} from '@/lib/runs/longRunState'
 
 export async function exerciseChatRepositoryContract(repository: TalosChatRepository): Promise<void> {
     await repository.initialize()
@@ -64,6 +70,33 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     expect(await repository.listSessionToolActivities(alpha.id)).toEqual([
         expect.objectContaining({ id: browserActivity.id }),
     ])
+
+    // R-1: durable, append-only run checkpoints through EVERY implementation,
+    // including the lazy production wrapper.
+    const run = createTalosRun({
+        id: 'run-alpha',
+        kind: 'research',
+        sessionId: alpha.id,
+        title: 'Evidence run',
+        now: '2026-07-22T10:00:02.750Z',
+    })
+    expect(await repository.saveRun(run)).toEqual(run)
+    const running = setTalosRunStatus(run, 'running', '2026-07-22T10:00:02.800Z')
+    const checkpoint = appendTalosRunStep(
+        addTalosRunSpend(running, { searches: 1, pages: 2, tokens: 300 }, '2026-07-22T10:00:02.900Z'),
+        {
+            kind: 'search',
+            output: { urls: ['https://example.com'] },
+            at: '2026-07-22T10:00:02.900Z',
+        },
+    )
+    expect(await repository.saveRun(checkpoint)).toEqual(checkpoint)
+    expect(await repository.getRun(run.id)).toEqual(checkpoint)
+    expect(await repository.listRuns()).toEqual([checkpoint])
+    await expect(repository.saveRun({
+        ...checkpoint,
+        steps: [{ ...checkpoint.steps[0]!, output: { urls: [] } }],
+    })).rejects.toThrow('TALOS_RUN_CHECKPOINT_REWRITE')
 
     const vaultFile = await repository.createVaultFile({
         id: 'vault-alpha',
@@ -228,6 +261,7 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     expect(await repository.getVaultFile(vaultFile.id)).toMatchObject({ id: vaultFile.id })
     expect(await repository.listMessageAttachments(messageWithFile.id)).toEqual([])
     expect(await repository.listSessionToolActivities(alpha.id)).toEqual([])
+    expect(await repository.getRun(run.id)).toBeNull()
     await repository.deleteVaultFile(otherFile.id)
     expect(await repository.getVaultFile(otherFile.id)).toBeNull()
     await repository.deleteSession(beta.id)
@@ -344,6 +378,24 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     await repository.deleteNote('note-2')
     expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-1'])
     await expect(repository.deleteNote('note-2')).rejects.toThrow('TALOS_NOTE_NOT_FOUND')
+
+    const runDeleteSession = await repository.createSession({
+        id: 'session-run-delete',
+        title: 'Run deletion',
+        active_model_profile_id: null,
+        created_at: '2026-07-23T09:10:59.000Z',
+    })
+    const taskRun = createTalosRun({
+        id: 'run-task',
+        kind: 'document',
+        sessionId: runDeleteSession.id,
+        title: 'Disposable run',
+        now: '2026-07-23T09:11:00.000Z',
+    })
+    await repository.saveRun(taskRun)
+    await repository.deleteRun(taskRun.id)
+    expect(await repository.getRun(taskRun.id)).toBeNull()
+    await repository.deleteSession(runDeleteSession.id)
 
     // SF-CRITICAL (2026-07-26): the LAZY wrapper — the one production uses —
     // silently dropped the paging options, so the shipped app never paged and

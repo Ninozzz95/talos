@@ -1,4 +1,5 @@
 import type { ChatTurn, TalosToolCall } from '@/stores/chat'
+import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
 
 /**
  * The agent loop: ask, run what the model asked for, tell it what happened,
@@ -45,7 +46,12 @@ export interface TalosAgentLoopDeps {
     /** One provider round trip. */
     complete(turns: ChatTurn[]): Promise<TalosAgentCompletion>
     /** Runs one call through the permission gate and the audit trail. */
-    execute(call: TalosToolCall): Promise<{ content: string; ok: boolean }>
+    execute(call: TalosToolCall): Promise<{
+        content: string
+        ok: boolean
+        /** Anything the model should LOOK at, handed over on a user turn. */
+        images?: TalosMobileInputPart[]
+    }>
     /** Fired when a round of calls starts, so the UI can show what is running. */
     onToolRound?(calls: TalosToolCall[]): void
     maxRounds?: number
@@ -73,8 +79,8 @@ async function runCallsTogether(
     calls: readonly TalosToolCall[],
     execute: TalosAgentLoopDeps['execute'],
     limit: number,
-): Promise<Array<{ content: string; ok: boolean }>> {
-    const outcomes = new Array<{ content: string; ok: boolean }>(calls.length)
+): Promise<Array<Awaited<ReturnType<TalosAgentLoopDeps['execute']>>>> {
+    const outcomes = new Array<Awaited<ReturnType<TalosAgentLoopDeps['execute']>>>(calls.length)
     let next = 0
     async function worker(): Promise<void> {
         for (;;) {
@@ -177,14 +183,32 @@ export async function runTalosAgentLoop(
             return { role: 'tool', content: outcome.content, toolCallId: call.id, toolName: call.name }
         })
         // In the order the model asked, never the order the network answered.
+        const seen: TalosMobileInputPart[] = []
         runnable.forEach((call, index) => {
-            executed.push({ call, ok: outcomes[index]!.ok })
+            const outcome = outcomes[index]!
+            executed.push({ call, ok: outcome.ok })
+            if (outcome.images?.length) seen.push(...outcome.images)
         })
 
         turns = [
             ...turns,
             { role: 'assistant', content: completion.text, toolCalls: requested },
             ...results,
+            /**
+             * Anything a tool handed back to LOOK at, on a user turn.
+             *
+             * After the results, never before: the model has to be told what the
+             * picture is before it is shown one. Only when there is something —
+             * an empty turn is one more thing for the model to account for, and
+             * on some providers empty content is a 400.
+             */
+            ...(seen.length
+                ? [{
+                    role: 'user' as const,
+                    content: 'The images the tools returned, for you to look at.',
+                    parts: seen,
+                }]
+                : []),
         ]
         completion = await deps.complete(turns)
     }

@@ -2,9 +2,9 @@
     "schema_version": 1,
     "contract": "talos.mobile.feature-parity/v1",
     "payload": {
-        "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed",
-        "generated_at": "2026-07-22",
-        "generated_by": "Codex mobile parity lane, P1.7 Browser and evidence checkpoint",
+        "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7",
+        "generated_at": "2026-07-27",
+        "generated_by": "Codex mobile parity lane, post-201d8ac promotion audit",
         "expected_desktop_feature_ids": [
             "chat",
             "files_ingestion",
@@ -43,15 +43,18 @@
                     "model.profile.selected",
                     "avm.turn.execute"
                 ],
-                "evidence_contract": "Persistent multi-turn provider chat, drafts, reload, contextual follow-up, safe error recovery and attachment bindings pass the complete mobile browser corpus; APK/device promotion remains open",
+                "evidence_contract": "Persistent multi-turn provider chat, drafts, reasoning/tool rows, dictation, prompt enhancement, export, reload, contextual follow-up, attachment bindings and safe error recovery pass the complete 69-journey mobile browser corpus; physical-device promotion remains open",
                 "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
                     "mobile/tests/e2e/mobile-chat-persistence.e2e.spec.ts",
                     "mobile/tests/e2e/mobile-provider-model-refresh.e2e.spec.ts",
-                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"
+                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts",
+                    "mobile/tests/e2e/mobile-composer-state.e2e.spec.ts",
+                    "mobile/tests/e2e/mobile-f4-regressions.e2e.spec.ts",
+                    "mobile/tests/e2e/mobile-f5-regressions.e2e.spec.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "files_ingestion",
@@ -75,7 +78,7 @@
                     "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts",
                     "mobile/tests/unit/chat/TalosMobileAttachmentTray.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "context_vault",
@@ -97,7 +100,7 @@
                 "test_ids": [
                     "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "browser_p0",
@@ -114,15 +117,15 @@
                     "browser.hmi.approve",
                     "browser.evidence.read"
                 ],
-                "evidence_contract": "Local manual Browse, durable lifecycle and screenshot evidence, reload and responsive Chromium journeys are green; trusted-node HMI automation and physical Android open/close evidence remain promotion gates; no AccessibilityService or ADB Playwright in production",
+                "evidence_contract": "Local manual Browse, durable lifecycle and screenshot evidence, reload and responsive Chromium journeys are green; trusted-node HMI automation and physical Android open/close evidence remain promotion gates; official ADB 37.0.1 now runs on this Windows Server host",
                 "status": "blocked",
-                "blocking_reason": "Trusted-node Playwright/HMI parity and physical-device install/launch remain open; the host adb exits with Windows status 0xC0000135 before device enumeration",
+                "blocking_reason": "Trusted-node Playwright/HMI parity remains open and adb devices reports no connected physical device, so install/launch/logcat and native browser open/close evidence are not promoted",
                 "test_ids": [
                     "mobile/tests/e2e/mobile-browser-evidence.e2e.spec.ts",
                     "mobile/tests/unit/services/inAppBrowserService.test.ts",
                     "mobile/tests/unit/build/androidBrowserNativeContract.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "models_runtime",
@@ -142,9 +145,9 @@
                 ],
                 "evidence_contract": "M3 gate: install/run/benchmark/remove modello locale in airplane mode su tier fisici; 7-10B validation lane, 20/30B moonshot report onesto",
                 "status": "blocked",
-                "blocking_reason": "selezione runtime Android (llama.cpp/MLC/ExecuTorch) richiede benchmark fisico Z10/P3.A non eseguito; toolchain Rust/NDK assente sull'host (K0)",
+                "blocking_reason": "No Android-native inference runtime has been selected, integrated and benchmarked on physical hardware; the APK build toolchain alone does not satisfy the Zethos runtime gate",
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "model_profiles",
@@ -167,7 +170,7 @@
                     "mobile/tests/integration/providerUpstream.integration.test.ts",
                     "mobile/tests/unit/chat/chatController.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "settings",
@@ -182,14 +185,15 @@
                 "required_capabilities": [
                     "prefs.local.write"
                 ],
-                "evidence_contract": "M1 RED: payload preferenze invalidi/futuri falliscono chiusi ai default documentati senza cancellare i byte illeggibili",
+                "evidence_contract": "Twelve-category local Settings, secure provider keys, appearance/motion, Browser policy, diagnostics, model defaults and reload-safe preferences pass focused unit and complete Chromium journeys; optional desktop sync remains separate",
                 "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
                     "tests/unit/settings/TalosMobileSettingsCenter.test.ts",
-                    "tests/unit/screens/settingsScreen.test.ts"
+                    "tests/unit/screens/settingsScreen.test.ts",
+                    "mobile/tests/e2e/mobile-settings-parity.e2e.spec.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "theme_engine",
@@ -203,14 +207,15 @@
                 "required_capabilities": [
                     "prefs.local.write"
                 ],
-                "evidence_contract": "contratto token condiviso: design-tokens.test.ts rifiuta campi renderer desktop (canvas/DOM/fps/dpr); visual matrix mobile in fase tema",
+                "evidence_contract": "The shared V6 identity, thirteen preset families, light/dark/system variants, mobile motion renderer, font scale and persisted appearance controls pass token, contrast, reduced-motion and complete Chromium gates; physical-device visual acceptance remains open",
                 "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
                     "tests/unit/theme/applyDesignTokens.test.ts",
-                    "tests/unit/settings/TalosMobileSettingsAppearancePanel.test.ts"
+                    "tests/unit/settings/TalosMobileSettingsAppearancePanel.test.ts",
+                    "mobile/tests/e2e/mobile-settings-parity.e2e.spec.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "doctor",
@@ -224,13 +229,15 @@
                 "required_capabilities": [
                     "doctor.local.scan"
                 ],
-                "evidence_contract": "P2 gate: scan hardware + readiness report su dispositivo fisico senza rete; bundle supporto con redazione",
+                "evidence_contract": "Doctor reports real platform, encrypted persistence, build, speech, biometric, share and network probes; bounded redacted diagnostics export and timing traces pass focused tests",
                 "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
-                    "tests/unit/screens/standardScreens.test.ts"
+                    "tests/unit/screens/doctorSections.test.ts",
+                    "tests/unit/diagnostics/diagnosticsReport.test.ts",
+                    "tests/unit/diagnostics/sendTrace.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "tasks",
@@ -251,7 +258,7 @@
                 "test_ids": [
                     "tests/unit/screens/standardScreens.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "notes",
@@ -272,7 +279,7 @@
                 "test_ids": [
                     "tests/unit/screens/standardScreens.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "calendar",
@@ -291,7 +298,7 @@
                 "status": "planned",
                 "blocking_reason": null,
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "memory",
@@ -312,7 +319,7 @@
                 "test_ids": [
                     "tests/unit/screens/standardScreens.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "skills",
@@ -330,14 +337,14 @@
                 "status": "planned",
                 "blocking_reason": null,
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "research",
                 "desktop_contract": "Research: talos_research_reports con sources/claims verificati, run events + artifact, draft steps marcati SKIPPED mai fake-success",
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
-                "mobile_surface": "superficie Research mobile non ancora assegnata a una fase M",
+                "mobile_surface": "ResearchScreen honest unavailable state plus local search/read primitives; full Deep Research queue/worker not installed",
                 "execution_location": [
                     "trusted_node",
                     "remote_provider"
@@ -345,11 +352,15 @@
                 "required_capabilities": [
                     "research.remote.run"
                 ],
-                "evidence_contract": "delta decision MREG-010 pendente: nessuna fase M0-M8 riserva file Research; da assegnare con ledger amendment prima della superficie",
+                "evidence_contract": "Search source adapters, page extraction and read tools are tested locally, while the dedicated Research surface explicitly reports that no research worker is installed and never claims queued work",
                 "status": "blocked",
-                "blocking_reason": "nessuna assegnazione di fase nel ledger 2026-07-15; serve delta decision (MREG-010) prima di qualsiasi superficie mobile",
-                "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "blocking_reason": "The dedicated local research worker, durable queue, source/claim graph and artifact pipeline are not integrated; search/read primitives alone do not equal Deep Research parity",
+                "test_ids": [
+                    "mobile/tests/unit/search/webTools.test.ts",
+                    "mobile/tests/unit/search/searchSources.test.ts",
+                    "mobile/tests/unit/screens/standardScreens.test.ts"
+                ],
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "google_workspace",
@@ -368,7 +379,7 @@
                 "status": "blocked",
                 "blocking_reason": "fase P6/M7 non autorizzata; richiede decisione AppAuth e verifica client Google, pin OAuth freschi",
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "email_triage",
@@ -387,7 +398,7 @@
                 "status": "blocked",
                 "blocking_reason": "connettore email P6 non autorizzato; policy send disabilitata anche su desktop",
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "tools_registry",
@@ -402,7 +413,7 @@
                 "required_capabilities": [
                     "tools.registry.read"
                 ],
-                "evidence_contract": "M7 gate: registry con health reale; nessuna azione probe/enable/run senza endpoint+capability+test",
+                "evidence_contract": "The local registry, typed read/document tools, consent queue, bounded agent loop, provider tool-wire adapters and failure taxonomy pass focused tests; a full desktop connector-health administration surface remains a later refinement",
                 "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
@@ -412,7 +423,7 @@
                     "tests/unit/tools/toolWire.test.ts",
                     "tests/unit/chat/geminiOllamaTools.test.ts"
                 ],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "benchmarks",
@@ -431,7 +442,7 @@
                 "status": "blocked",
                 "blocking_reason": "harness benchmark Z14 non avviato e superficie mobile non assegnata a una fase M (MREG-010)",
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },
             {
                 "feature_id": "kadmos_cli",
@@ -448,7 +459,7 @@
                 "status": "blocked",
                 "blocking_reason": "AVM Kernel Specification (P1) non avviata; toolchain Rust assente sull'host (K0); superficie CLI phone fuori scope",
                 "test_ids": [],
-                "desktop_revision": "5dd0c0be57f08183d0ab9eb832e808b2c7f1c9ed"
+                "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             }
         ]
     }

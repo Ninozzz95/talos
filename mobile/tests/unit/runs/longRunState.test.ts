@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
     addTalosRunSpend,
     appendTalosRunStep,
+    assertTalosRunCheckpoint,
     createTalosRun,
     parseTalosRunState,
+    serializeTalosRunState,
     setTalosRunStatus,
+    TALOS_RUN_CONTRACT,
     talosRunIsResumable,
     talosRunResumeIndex,
 } from '@/lib/runs/longRunState'
@@ -28,8 +31,9 @@ function run() {
 describe('long run state', () => {
     it('survives a round trip through storage', () => {
         const state = appendTalosRunStep(run(), { kind: 'search', output: { hits: 3 }, at: NOW })
-        const parsed = parseTalosRunState(JSON.stringify(state))
+        const parsed = parseTalosRunState(serializeTalosRunState(state))
         expect(parsed).toEqual(state)
+        expect(parsed?.contract).toBe(TALOS_RUN_CONTRACT)
     })
 
     it('holds nothing that cannot be written down', () => {
@@ -62,7 +66,7 @@ describe('long run state', () => {
         const snapshot = JSON.stringify(before)
         appendTalosRunStep(before, { kind: 'x', output: null, at: NOW })
         addTalosRunSpend(before, { tokens: 5 }, NOW)
-        setTalosRunStatus(before, 'done', NOW)
+        setTalosRunStatus(before, 'cancelled', NOW)
         expect(JSON.stringify(before)).toBe(snapshot)
     })
 
@@ -71,7 +75,9 @@ describe('long run state', () => {
         expect(talosRunIsResumable(setTalosRunStatus(run(), 'planning', NOW))).toBe(true)
         // Resuming this automatically would execute a plan nobody approved.
         expect(talosRunIsResumable(setTalosRunStatus(run(), 'awaiting_approval', NOW))).toBe(false)
-        expect(talosRunIsResumable(setTalosRunStatus(run(), 'done', NOW))).toBe(false)
+        expect(talosRunIsResumable(
+            setTalosRunStatus(setTalosRunStatus(run(), 'running', NOW), 'done', NOW),
+        )).toBe(false)
         expect(talosRunIsResumable(setTalosRunStatus(run(), 'cancelled', NOW))).toBe(false)
     })
 
@@ -92,10 +98,38 @@ describe('long run state', () => {
         }
     })
 
-    it('an unknown engine or kind reads as the safe local default', () => {
-        const raw = JSON.stringify({ ...run(), engine: 'martian', kind: 'nonsense' })
-        const parsed = parseTalosRunState(raw)!
-        expect(parsed.engine).toBe('device')
-        expect(parsed.kind).toBe('chat')
+    it('rejects an unknown contract and malformed or non-contiguous checkpoints', () => {
+        const base = run()
+        const values = [
+            { ...base, contract: 'talos.mobile.run.v2' },
+            { ...base, engine: 'martian' },
+            { ...base, kind: 'nonsense' },
+            { ...base, spend: { tokens: -1, searches: 0, pages: 0 } },
+            { ...base, steps: [{ index: 1, kind: 'search', output: null, at: NOW }] },
+            { ...base, steps: [{ index: 0, kind: '', output: null, at: NOW }] },
+            { ...base, startedAt: 'not-a-date' },
+        ]
+        for (const value of values) {
+            expect(parseTalosRunState(JSON.stringify(value))).toBeNull()
+        }
+    })
+
+    it('rejects checkpoint rewrites spend rollback and terminal resurrection', () => {
+        const first = appendTalosRunStep(
+            addTalosRunSpend(setTalosRunStatus(run(), 'running', NOW), { searches: 1 }, NOW),
+            { kind: 'search', output: { hits: 3 }, at: NOW },
+        )
+        expect(() => assertTalosRunCheckpoint(first, {
+            ...first,
+            steps: [{ ...first.steps[0]!, output: { hits: 4 } }],
+        })).toThrow('TALOS_RUN_CHECKPOINT_REWRITE')
+        expect(() => assertTalosRunCheckpoint(first, {
+            ...first,
+            spend: { ...first.spend, searches: 0 },
+        })).toThrow('TALOS_RUN_SPEND_ROLLBACK')
+
+        const done = setTalosRunStatus(first, 'done', NOW)
+        expect(() => assertTalosRunCheckpoint(done, setTalosRunStatus(done, 'running', NOW)))
+            .toThrow('TALOS_RUN_STATUS_TRANSITION_INVALID')
     })
 })

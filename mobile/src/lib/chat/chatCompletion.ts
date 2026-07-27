@@ -1,3 +1,4 @@
+import { adaptTurnsForTextOnlyModel } from '@/lib/chat/visionFallback'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
 import { talosMobileHttpTransport, type TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
@@ -52,20 +53,37 @@ export function buildChatCompletion(
         const model = context.providerModel.id === context.profile.model
             ? context.providerModel
             : { ...context.providerModel, id: context.profile.model }
-        const hasImageInput = turns.some((turn) =>
-            turn.parts?.some((part) => part.type === 'image') === true,
-        )
         const supportsImageInput = model.inputModalities.some((modality) =>
             ['image', 'images'].includes(modality.toLowerCase()),
         )
-        if (hasImageInput && !supportsImageInput) {
-            throw new ChatConfigError(
-                `${context.profile.display_name} does not declare image input support. Select a vision-capable model.`,
-            )
+        /**
+         * WHERE the image is decides what happens to it.
+         *
+         * Owner 2026-07-27: switching a live conversation from Opus 5 to
+         * DeepSeek killed every further message, because the guard fired on any
+         * image anywhere in the history. One photo sent an hour earlier
+         * poisoned the chat for good.
+         *
+         * In the message being sent NOW, refusing is right: the user just
+         * attached something this model cannot see and deserves to know before
+         * paying for a reply about nothing. Further back, the image is dropped
+         * with a line in its place — you cannot un-send a photo, and a model
+         * handed a conversation with a silent hole in it answers as though it
+         * had seen something.
+         */
+        let outbound = turns
+        if (!supportsImageInput) {
+            const last = turns[turns.length - 1]
+            if (last?.parts?.some((part) => part.type === 'image')) {
+                throw new ChatConfigError(
+                    `${context.profile.display_name} does not declare image input support. Select a vision-capable model.`,
+                )
+            }
+            outbound = adaptTurnsForTextOnlyModel(turns).turns
         }
         const input = {
             model,
-            turns,
+            turns: outbound,
             system: context.system,
             effort: context.effort,
             thinking: context.thinking,
