@@ -3676,6 +3676,65 @@ describe('chatController', () => {
         expect(JSON.stringify(providerCalls[0]?.data)).not.toContain('TOCTOU_SENTINEL')
     }, 20_000)
 
+    /**
+     * I-03, end to end. `text_preview` is the first 600 characters of a
+     * document. Candidate selection scored that preview, so a file whose match
+     * sat further in was dropped before its full text was ever read — and the
+     * user was told TALOS could not find something the file plainly says.
+     *
+     * The owner would meet this the moment a document had any preamble.
+     */
+    it('I-03 finds a file whose match sits past the preview window', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: {
+                    schema_version: 1,
+                    revision: 1,
+                    enabled: true,
+                    // Smart mode is where it shows: broad injects everything that
+                    // fits regardless of score, so it hides the recall defect.
+                    mode: 'smart_relevant_v1',
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: '2026-07-29T10:00:00.000Z',
+                },
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'deep-preview-file',
+            display_name: 'notes.md',
+            media_type: 'text/markdown',
+            size_bytes: 4_000,
+            private_uri: 'talos-vault/files/deep-preview-file.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '4'.repeat(64),
+            // Nothing identifying in the first 600 characters. The name is
+            // generic too, so the filename cannot rescue the match.
+            extracted_text: `${'Preamble and boilerplate. '.repeat(60)}OMNIROUTE renewal is March 2027.`,
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        request.mockClear()
+
+        await controller.send('When is OMNIROUTE renewed?')
+
+        const providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(providerCalls).toHaveLength(1)
+        expect(JSON.stringify(providerCalls[0]?.data)).toContain('OMNIROUTE renewal is March 2027')
+    }, 20_000)
+
     it('P1-CTX-ASK-03 honors persistent consent, revocation, and denial without body drift', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('anthropic', 'sk-ant')

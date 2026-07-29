@@ -302,6 +302,27 @@ export interface TalosChatRepository {
     listSessionToolActivities(sessionId: string): Promise<TalosLocalToolActivity[]>
     listVaultFiles(): Promise<TalosLocalVaultFile[]>
     listVaultFileSummaries(): Promise<TalosLocalVaultFileSummary[]>
+    /**
+     * I-03: which files contain these terms ANYWHERE in their text, and how
+     * many of them — answered where the text already lives.
+     *
+     * Candidate selection used to score on `text_preview`, the first 600
+     * characters, so a word further in was invisible: the file was dropped
+     * before its full text was ever read, and the user was told their document
+     * does not mention something it plainly does.
+     *
+     * A longer preview only moves the cliff. This asks the question in SQL and
+     * returns ids and small integers, so recall stops depending on position
+     * without loading the corpus into memory to achieve it.
+     *
+     * Only files with at least one hit appear. No terms, or only blank ones,
+     * means no hits — never "everything".
+     *
+     * Case folding is ASCII-only in the SQL implementation, so an accented
+     * capital matches case-sensitively. A unicode61 FTS index would fix that,
+     * and is the reason to want one.
+     */
+    matchVaultFileTerms(terms: readonly string[]): Promise<Record<string, number>>
     getVaultFile(fileId: string): Promise<TalosLocalVaultFile | null>
     createVaultFile(input: CreateVaultFileInput): Promise<TalosLocalVaultFile>
     updateVaultFile(fileId: string, input: UpdateVaultFileInput): Promise<TalosLocalVaultFile>

@@ -304,6 +304,22 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                     return { ...rest, text_preview: text === null ? null : text.slice(0, 600) }
                 })
         },
+        /** I-03: the same contract as SQL, over the whole text rather than a preview. */
+        async matchVaultFileTerms(terms: readonly string[]) {
+            const cleaned = [...new Set(
+                terms.map((term) => term.trim().toLowerCase()).filter((term) => term.length > 0),
+            )].slice(0, 12)
+            if (cleaned.length === 0) return {}
+            const matched: Record<string, number> = {}
+            for (const file of vaultFiles.values()) {
+                if (file.status === 'revoked') continue
+                const text = (file.extracted_text ?? '').toLowerCase()
+                if (text === '') continue
+                const hits = cleaned.filter((term) => text.includes(term)).length
+                if (hits > 0) matched[file.id] = hits
+            }
+            return matched
+        },
         async getVaultFile(fileId: string) {
             const file = vaultFiles.get(fileId)
             return !file || file.status === 'revoked' ? null : copyVaultFile(file)
