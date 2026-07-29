@@ -1,0 +1,11 @@
+# Commits that changed formatting only. `git blame` skips these so it keeps
+# pointing at whoever last changed the CODE, instead of at the sweep.
+#
+# Enable it once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub, GitLab and IntelliJ read this file automatically.
+
+# style(mobile): normalise line endings to LF, which .gitattributes already
+# required. 183 files, zero content change (verified with --ignore-cr-at-eol).
+ff9330d12585182e0fd8c662e473e62a0e27495e
