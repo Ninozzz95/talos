@@ -1449,6 +1449,8 @@ export const TALOS_IT_MESSAGES = {
         storageConnectionClosed: ' · connessione chiusa; sblocca e riprova',
         storageUnlockRequired: ' · sblocco richiesto',
         storageRetry: ' · riprova archivio locale',
+        lock: 'Blocco del database',
+        lockRecoveryRequired: 'La chiave salvata non è stata rimossa — riblocca l\'app per riprovare',
         unknown: 'sconosciuto',
         speechValue: 'plugin {plugin} · riconoscimento {recognizer}{error}',
         loaded: 'caricato',

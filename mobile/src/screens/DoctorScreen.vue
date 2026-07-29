@@ -14,12 +14,14 @@ import { Capacitor } from '@capacitor/core'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { talosDictationDiagnostics } from '@/services/dictation'
+import { talosDatabaseLockFailure, talosDatabaseLockState } from '@/services/databaseProtection'
 import { talosDeviceIssues, talosWithTimeout, type TalosDeviceIssue } from '@/lib/talosDeviceLog'
 import { biometricUnlockAvailable } from '@/services/appLock'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import {
     TALOS_DOCTOR_SECTIONS,
     splitTalosDoctorRows,
+    talosLockDoctorRow,
     talosStorageDoctorRow,
 } from '@/lib/diagnostics/doctorSections'
 import { buildTalosDiagnosticsReport } from '@/lib/diagnostics/diagnosticsReport'
@@ -159,6 +161,11 @@ async function scan(): Promise<void> {
         status: controller.chat.state.persistenceStatus,
         error: controller.chat.state.persistenceError,
     })
+    // I-09: only shown when the lock did NOT fully engage. A healthy lock is
+    // already implied by the rest of the screen, and this row exists to be
+    // noticed — carrying it permanently would teach people to skip it.
+    const lock = talosLockDoctorRow(talosDatabaseLockState(), talosDatabaseLockFailure())
+    if (!lock.ok) collected.push({ ...lock, label: t('doctor.lock'), value: t('doctor.lockRecoveryRequired') })
     const storageStatus = controller.chat.state.persistenceStatus
     const storageError = controller.chat.state.persistenceError
     const storageHint = storageStatus !== 'error'

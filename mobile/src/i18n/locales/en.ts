@@ -1446,6 +1446,8 @@ export const TALOS_EN_MESSAGES = {
         storageConnectionClosed: ' · connection closed; unlock and retry',
         storageUnlockRequired: ' · unlock required',
         storageRetry: ' · retry local storage',
+        lock: 'Database lock',
+        lockRecoveryRequired: 'The stored key was not cleared — lock the app again to retry',
         unknown: 'unknown',
         speechValue: 'plugin {plugin} · recognizer {recognizer}{error}',
         loaded: 'loaded',
