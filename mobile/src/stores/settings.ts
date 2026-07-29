@@ -575,17 +575,18 @@ let singleton: SettingsStore | null = null
 export function useSettingsStore(): SettingsStore {
     if (singleton) return singleton
     const state = reactive<TalosMobileSettingsState>(parseTalosMobileSettings(null))
-    let agentToolMutationTail: Promise<void> = Promise.resolve()
-    let toolAuthorizationMutationTail: Promise<void> = Promise.resolve()
-    let libraryPolicyMutationTail: Promise<void> = Promise.resolve()
+    /**
+     * I-08: ONE queue, not one per domain. Every setter writes the same stored
+     * document, so two domains persisting at once each serialise the other's
+     * unpublished value and whichever native write lands last silently reverts
+     * the other. Separate lanes cannot order writes that share a document.
+     */
+    let settingsMutationTail: Promise<void> = Promise.resolve()
 
     async function persist(
-        overrides: {
-            agent_tools?: TalosAgentToolEnabled
-            tool_authorizations?: TalosToolAuthorizationGrantsV1
-            shell?: TalosMobileShellPreferences
-        } = {},
+        overrides: Partial<TalosMobileSettingsState> = {},
     ): Promise<void> {
+        const next = { ...state, ...overrides } as TalosMobileSettingsState
         // R1-6: fenced — a hung Preferences bridge must reject, not freeze.
         await talosBridgeCall('TALOS_SETTINGS_PERSIST', () => Preferences.set({
             key: TALOS_MOBILE_SETTINGS_KEY,
@@ -594,24 +595,90 @@ export function useSettingsStore(): SettingsStore {
                 defaults_v3: true,
                 library_defaults_v1: true,
                 type_defaults_v1: true,
-                shell: overrides.shell ?? state.shell,
-                onboarding: state.onboarding,
-                security: state.security,
-                tools: state.tools,
-                agent_tools: overrides.agent_tools ?? state.agent_tools,
-                tool_authorizations: overrides.tool_authorizations ?? state.tool_authorizations,
-                search: state.search,
-                tone: state.tone,
-                chat_layout: state.chat_layout,
-                ai_defaults: state.ai_defaults,
-                composer_defaults: state.composer_defaults,
-                motion_v6: state.motion_v6,
-                model_lab: state.model_lab,
-                browser: state.browser,
-                voice: state.voice,
+                shell: next.shell,
+                onboarding: next.onboarding,
+                security: next.security,
+                tools: next.tools,
+                agent_tools: next.agent_tools,
+                tool_authorizations: next.tool_authorizations,
+                search: next.search,
+                tone: next.tone,
+                chat_layout: next.chat_layout,
+                ai_defaults: next.ai_defaults,
+                composer_defaults: next.composer_defaults,
+                motion_v6: next.motion_v6,
+                model_lab: next.model_lab,
+                browser: next.browser,
+                voice: next.voice,
             }),
         }))
     }
+
+    /**
+     * I-08. The shape `setAgentToolEnabled` already had, made the only way to
+     * change a setting.
+     *
+     * `build` runs INSIDE the queue, so it always reads the latest committed
+     * state rather than whatever was on screen when the user tapped. The write
+     * happens first and the live state is published only once it has landed:
+     * a capability that is live but not durable authorises the action now and
+     * denies ever having done so after a restart, which is the worst of both.
+     *
+     * A rejected write must not poison the lane — the next setting still saves.
+     */
+    function commit<T = void>(
+        build: () => { overrides: Partial<TalosMobileSettingsState>; result?: T } | null,
+        { optimistic = false } = {},
+    ): Promise<T> {
+        if (optimistic) {
+            // Presentation answers the tap on the SAME tick, exactly as it did
+            // before any of this existed. Deferring it even by a microtask is
+            // visible: the surface redraws after the gesture instead of with
+            // it, and tears down whatever that redraw races.
+            const plan = build()
+            if (!plan) return Promise.resolve(undefined as T)
+            const previous = Object.fromEntries(
+                Object.keys(plan.overrides).map((key) => [key, state[key as keyof TalosMobileSettingsState]]),
+            )
+            Object.assign(state, plan.overrides)
+            const snapshot = { ...plan.overrides }
+            // The WRITE still goes through the shared queue — that is what
+            // stops two domains clobbering one another inside the stored
+            // document. Only the publish is early.
+            const write = settingsMutationTail.then(async () => {
+                try {
+                    await persist(snapshot)
+                } catch (error) {
+                    Object.assign(state, previous)
+                    throw error
+                }
+            })
+            settingsMutationTail = write.then(() => undefined, () => undefined)
+            return write.then(() => plan.result as T)
+        }
+        const operation = settingsMutationTail.then(async () => {
+            const plan = build()
+            // `null` means the candidate matched what is already committed.
+            if (!plan) return undefined as T
+            await persist(plan.overrides)
+            Object.assign(state, plan.overrides)
+            return plan.result as T
+        })
+        settingsMutationTail = operation.then(() => undefined, () => undefined)
+        return operation
+    }
+
+    /**
+     * `shell` mixes a capability with presentation: `library_context_enabled`
+     * decides whether documents reach a provider, while `library_view` decides
+     * whether they are drawn as a list. Debt worth naming — the blob should be
+     * split — but until then the distinction is made here rather than pretended
+     * away, because the two need opposite publish rules.
+     */
+    const SHELL_CAPABILITY_KEYS: ReadonlyArray<keyof TalosMobileShellPreferences> = [
+        'library_context_enabled',
+        'library_context_policy',
+    ]
 
     singleton = {
         state: readonly(state) as Readonly<TalosMobileSettingsState>,
@@ -642,12 +709,16 @@ export function useSettingsStore(): SettingsStore {
             state.search = parsed.search
             state.tone = parsed.tone
         },
-        async setShell(patch) {
-            state.shell = parseShellPreferences({ ...state.shell, ...patch })
-            await persist()
+        setShell(patch) {
+            // A patch that can widen what leaves the device is never optimistic.
+            const touchesCapability = SHELL_CAPABILITY_KEYS.some((key) => key in patch)
+            return commit(
+                () => ({ overrides: { shell: parseShellPreferences({ ...state.shell, ...patch }) } }),
+                { optimistic: !touchesCapability },
+            )
         },
-        async setLibraryContextPolicy(patch, expectedRevision) {
-            const operation = libraryPolicyMutationTail.then(async () => {
+        setLibraryContextPolicy(patch, expectedRevision) {
+            return commit(() => {
                 const current = state.shell.library_context_policy ?? {
                     schema_version: 1 as const,
                     revision: 0,
@@ -663,144 +734,148 @@ export function useSettingsStore(): SettingsStore {
                     expectedRevision,
                     new Date().toISOString(),
                 )
-                const shell = parseShellPreferences({
-                    ...state.shell,
-                    library_context_enabled: candidate.enabled,
-                    library_context_policy: candidate,
-                })
-                await persist({ shell })
-                state.shell = shell
-                return candidate
+                return {
+                    overrides: {
+                        shell: parseShellPreferences({
+                            ...state.shell,
+                            library_context_enabled: candidate.enabled,
+                            library_context_policy: candidate,
+                        }),
+                    },
+                    result: candidate,
+                }
             })
-            libraryPolicyMutationTail = operation.then(() => undefined, () => undefined)
-            return operation
         },
-        async setOnboarding(patch) {
-            state.onboarding = parseOnboarding({ ...state.onboarding, ...patch })
-            await persist()
+        setOnboarding(patch) {
+            return commit(() => ({
+                overrides: { onboarding: parseOnboarding({ ...state.onboarding, ...patch }) },
+            }))
         },
-        async setSecurity(patch) {
-            state.security = parseSecurityPreferences({ ...state.security, ...patch })
-            await persist()
+        setSecurity(patch) {
+            return commit(() => ({
+                overrides: { security: parseSecurityPreferences({ ...state.security, ...patch }) },
+            }))
         },
-        async setToolPermissions(patch) {
-            state.tools = parseToolPermissions({ ...state.tools, ...patch })
-            await persist()
+        setToolPermissions(patch) {
+            return commit(() => ({
+                overrides: { tools: parseToolPermissions({ ...state.tools, ...patch }) },
+            }))
         },
         async setAgentToolEnabled(tool, enabled) {
             if (!isTalosAgentToolId(tool) || typeof enabled !== 'boolean') return
-            // Preferences stores the whole settings snapshot. Compute from the
-            // latest COMMITTED state and serialize these capability changes so
-            // two quick switches cannot overwrite one another. Publish only
-            // after the native write succeeds: the live registry must never
-            // observe a permission that will disappear on restart.
-            const operation = agentToolMutationTail.then(async () => {
+            await commit(() => {
                 const candidate = parseTalosAgentToolEnabled({
                     ...state.agent_tools,
                     [tool]: enabled,
                 })
-                if (candidate[tool] === state.agent_tools[tool]) return
-                await persist({ agent_tools: candidate })
-                state.agent_tools = candidate
+                if (candidate[tool] === state.agent_tools[tool]) return null
+                return { overrides: { agent_tools: candidate } }
             })
-            // One rejected write must not poison the ordered mutation lane.
-            agentToolMutationTail = operation.catch(() => undefined)
-            await operation
         },
         async grantToolAuthorization(tool, actions) {
-            const operation = toolAuthorizationMutationTail.then(async () => {
+            await commit(() => {
                 const current = state.tool_authorizations
-                const candidate = applyTalosToolAuthorizationGrant(
-                    current,
-                    tool,
-                    actions,
-                    current.revision,
-                    new Date().toISOString(),
-                )
-                await persist({ tool_authorizations: candidate })
-                state.tool_authorizations = candidate
+                return {
+                    overrides: {
+                        tool_authorizations: applyTalosToolAuthorizationGrant(
+                            current,
+                            tool,
+                            actions,
+                            current.revision,
+                            new Date().toISOString(),
+                        ),
+                    },
+                }
             })
-            toolAuthorizationMutationTail = operation.then(
-                () => undefined,
-                () => undefined,
-            )
-            await operation
         },
         async revokeToolAuthorization(tool) {
-            const operation = toolAuthorizationMutationTail.then(async () => {
+            await commit(() => {
                 const current = state.tool_authorizations
-                const candidate = revokeTalosToolAuthorizationGrant(
-                    current,
-                    tool,
-                    current.revision,
-                )
-                if (candidate === current) return
-                await persist({ tool_authorizations: candidate })
-                state.tool_authorizations = candidate
+                const candidate = revokeTalosToolAuthorizationGrant(current, tool, current.revision)
+                if (candidate === current) return null
+                return { overrides: { tool_authorizations: candidate } }
             })
-            toolAuthorizationMutationTail = operation.then(
-                () => undefined,
-                () => undefined,
+        },
+        setSearchPreferences(patch) {
+            return commit(() => ({
+                overrides: { search: parseSearchPreferences({ ...state.search, ...patch }) },
+            }))
+        },
+        setTone(preset) {
+            return commit(
+                () => ({ overrides: { tone: parseTonePreferences({ preset }) } }),
+                { optimistic: true },
             )
-            await operation
         },
-        async setSearchPreferences(patch) {
-            state.search = parseSearchPreferences({ ...state.search, ...patch })
-            await persist()
+        setChatLayout(patch) {
+            return commit(
+                () => ({
+                    overrides: { chat_layout: sanitizeTalosChatLayout({ ...state.chat_layout, ...patch }) },
+                }),
+                { optimistic: true },
+            )
         },
-        async setTone(preset) {
-            state.tone = parseTonePreferences({ preset })
-            await persist()
+        setAiDefaults(patch) {
+            return commit(() => ({
+                overrides: { ai_defaults: parseAiDefaults({ ...state.ai_defaults, ...patch }) },
+            }))
         },
-        async setChatLayout(patch) {
-            state.chat_layout = sanitizeTalosChatLayout({ ...state.chat_layout, ...patch })
-            await persist()
+        setComposerDefaults(patch) {
+            return commit(
+                () => ({
+                    overrides: {
+                        composer_defaults: parseComposerDefaults({ ...state.composer_defaults, ...patch }),
+                    },
+                }),
+                { optimistic: true },
+            )
         },
-        async setAiDefaults(patch) {
-            state.ai_defaults = parseAiDefaults({ ...state.ai_defaults, ...patch })
-            await persist()
+        setModelLabPreferences(value) {
+            return commit(
+                () => ({ overrides: { model_lab: parseTalosMobileModelLabPreferences(value) } }),
+                { optimistic: true },
+            )
         },
-        async setComposerDefaults(patch) {
-            state.composer_defaults = parseComposerDefaults({ ...state.composer_defaults, ...patch })
-            await persist()
+        setBrowserPreferences(value) {
+            return commit(() => ({
+                overrides: {
+                    browser: parseTalosMobileBrowserPreferences({
+                        ...state.browser,
+                        ...value,
+                        schema_version: 1,
+                    }),
+                },
+            }))
         },
-        async setModelLabPreferences(value) {
-            state.model_lab = parseTalosMobileModelLabPreferences(value)
-            await persist()
-        },
-        async setBrowserPreferences(value) {
-            state.browser = parseTalosMobileBrowserPreferences({
-                ...state.browser,
-                ...value,
-                schema_version: 1,
-            })
-            await persist()
-        },
-        async setVoicePreferences(patch) {
-            state.voice = parseVoicePreferences({ ...state.voice, ...patch })
-            await persist()
+        setVoicePreferences(patch) {
+            return commit(() => ({
+                overrides: { voice: parseVoicePreferences({ ...state.voice, ...patch }) },
+            }))
         },
         async setMotionPreferences(patch) {
-            const candidate: TalosMotionV6Preferences = {
-                ...state.motion_v6,
-                ...patch,
-                interface: {
-                    ...state.motion_v6.interface,
-                    ...patch.interface,
-                    categories: {
-                        ...state.motion_v6.interface.categories,
-                        ...patch.interface?.categories,
+            await commit(() => {
+                const candidate: TalosMotionV6Preferences = {
+                    ...state.motion_v6,
+                    ...patch,
+                    interface: {
+                        ...state.motion_v6.interface,
+                        ...patch.interface,
+                        categories: {
+                            ...state.motion_v6.interface.categories,
+                            ...patch.interface?.categories,
+                        },
                     },
-                },
-            }
-            const parsed = parseTalosMotionV6Preferences(candidate)
-            if (!parsed.success) return
-            state.motion_v6 = parsed.value
-            await persist()
+                }
+                const parsed = parseTalosMotionV6Preferences(candidate)
+                if (!parsed.success) return null
+                return { overrides: { motion_v6: parsed.value } }
+            }, { optimistic: true })
         },
-        async resetMotionPreferences() {
-            state.motion_v6 = createMobileDefaultMotionPreferences()
-            await persist()
+        resetMotionPreferences() {
+            return commit(
+                () => ({ overrides: { motion_v6: createMobileDefaultMotionPreferences() } }),
+                { optimistic: true },
+            )
         },
     }
     return singleton
