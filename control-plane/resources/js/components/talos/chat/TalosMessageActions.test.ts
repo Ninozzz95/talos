@@ -73,11 +73,13 @@ function mountActions() {
                 message: assistantMessage,
                 canRetry: true,
                 hasEvidence: true,
+                hasMedia: true,
                 evidenceOpen: false,
                 hasBenchmark: true,
                 benchmarking: false,
                 onCopy: () => events.value.push('copy'),
                 onRetry: () => events.value.push('retry'),
+                onOpenMedia: () => events.value.push('media'),
                 onToggleEvidence: () => events.value.push('evidence'),
                 onBenchmark: () => events.value.push('benchmark'),
             })
@@ -161,11 +163,26 @@ describe('TalosMessageActions', () => {
         const menu = portalMenu()
         expect(menu?.getAttribute('aria-label')).toBe('More message actions')
         expect(Array.from(menu?.querySelectorAll('[role="menuitem"]') ?? []).map((item) => item.getAttribute('aria-label'))).toEqual([
+            'Open media',
             'Open evidence',
             'Compare AVM ON/OFF',
         ])
         expect(document.activeElement?.getAttribute('role')).toBe('menuitem')
         expect(more.getAttribute('aria-expanded')).toBe('true')
+    })
+
+    it('opens message media through the same accessible capability menu', async () => {
+        const { container, events } = mountActions()
+        const more = await resolveMoreButton(container)
+
+        openMenuByKeyboard(more)
+        await settleUntil(() => portalMenu() !== null)
+        const media = document.querySelector<HTMLElement>('[role="menuitem"][aria-label="Open media"]')
+        media?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        await settle()
+
+        expect(events.value).toEqual(['media'])
+        expect(document.activeElement).toBe(more)
     })
 
     it('closes on Escape and restores focus to More', async () => {

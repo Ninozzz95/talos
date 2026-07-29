@@ -94,10 +94,10 @@ function platform() {
 describe('TALOS V6 Complex scene library', () => {
     it('contains exactly one scene for every preset and registry-ready factory', () => {
         expect(TALOS_COMPLEX_SCENE_DEFINITIONS.map((scene) => scene.id)).toEqual(TALOS_MOTION_SCENE_IDS)
-        expect(new Set(TALOS_COMPLEX_SCENE_DEFINITIONS.map((scene) => scene.draw)).size).toBe(13)
+        expect(new Set(TALOS_COMPLEX_SCENE_DEFINITIONS.map((scene) => scene.draw)).size).toBe(14)
         const registrations = createTalosComplexSceneRegistrations(platform())
         expect(registrations.map((entry) => `${entry.kind}:${entry.id}`)).toEqual(TALOS_MOTION_SCENE_IDS.map((id) => `complex:${id}`))
-        expect(createSceneRegistry(registrations).snapshot()).toHaveLength(13)
+        expect(createSceneRegistry(registrations).snapshot()).toHaveLength(14)
     })
 
     it.each(TALOS_COMPLEX_SCENE_DEFINITIONS)('$id produces deterministic seed/state and static frame output', (scene) => {
@@ -142,6 +142,6 @@ describe('TALOS V6 Complex scene library', () => {
 
     it('distinguishes all scenes by rendered operation fingerprint', () => {
         const fingerprints = TALOS_COMPLEX_SCENE_DEFINITIONS.map((scene) => draw(scene).map((call) => call.split(':')[0]).join('|'))
-        expect(new Set(fingerprints).size).toBe(13)
+        expect(new Set(fingerprints).size).toBe(14)
     })
 })

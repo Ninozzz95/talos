@@ -22,15 +22,19 @@ export type RunStatus =
 export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosSessionSurface = 'chat' | 'browse'
 export type TalosChatBubbleScale = 'compact' | 'balanced' | 'expanded'
+export type TalosMessageScale = number
 export type TalosComposerMode = 'full' | 'minimal'
 export type TalosMessageStyle = 'sections' | 'bubbles'
 export type TalosMobileWindowPresentation = 'drawer' | 'fullscreen'
 export type TalosChatLayoutPreferences = {
-    bubble_scale: TalosChatBubbleScale
+    message_scale: TalosMessageScale
     composer_mode: TalosComposerMode
     message_style: TalosMessageStyle
     advanced_rail_expanded: boolean
     mobile_window_presentation: TalosMobileWindowPresentation
+}
+export type TalosChatLayoutInput = Partial<TalosChatLayoutPreferences> & {
+    bubble_scale?: TalosChatBubbleScale
 }
 export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'recovery_required' | 'stopped' | 'failed'
 export type TalosBrowserMode = {
@@ -227,6 +231,27 @@ export const TALOS_EFFORT_ORDER: readonly TalosEffortLevel[] = [
     'max',
 ] as const
 
+export type TalosPromptCacheMode = 'provider_default' | 'automatic' | 'explicit' | 'disabled'
+
+export type TalosPromptCachePreferences = {
+    mode: TalosPromptCacheMode
+    ttl: '5m' | '30m' | '1h' | null
+}
+
+export type TalosPromptCacheCapability = {
+    contract: 'talos.prompt_cache.capability.v1'
+    supported: boolean
+    minimum_input_tokens: number | null
+    modes: TalosPromptCacheMode[]
+    ttls: Array<Exclude<TalosPromptCachePreferences['ttl'], null>>
+    breakpoints: string[]
+    usage_metrics: {
+        read: boolean
+        write: boolean
+        miss: boolean
+    }
+}
+
 export type TalosModelProfile = {
     id: string
     user_id?: number | null
@@ -242,6 +267,7 @@ export type TalosModelProfile = {
     effort_levels: string[]
     supports_thinking: boolean
     show_in_composer: boolean
+    prompt_cache_capability?: TalosPromptCacheCapability
     created_at: string
     updated_at: string
 }

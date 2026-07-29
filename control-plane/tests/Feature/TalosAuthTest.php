@@ -149,6 +149,29 @@ final class TalosAuthTest extends TestCase
             ->assertDontSee('style="--talos-boot-accent: #63f08e"', false);
     }
 
+    public function test_boot_loader_first_frame_uses_calm_only_when_the_user_has_no_settings_record(): void
+    {
+        $this->withoutVite();
+        $freshUser = User::factory()->create();
+
+        $this->actingAs($freshUser)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('style="--talos-boot-accent: #c08b3c"', false);
+
+        $existingEmptyUser = User::factory()->create();
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($existingEmptyUser->id),
+            'user_id' => $existingEmptyUser->id,
+            'preferences' => [],
+        ]);
+
+        $this->actingAs($existingEmptyUser)
+            ->get('/')
+            ->assertOk()
+            ->assertDontSee('style="--talos-boot-accent: #c08b3c"', false);
+    }
+
     public function test_boot_loader_first_frame_falls_back_to_the_users_preset_and_never_another_users_settings(): void
     {
         $this->withoutVite();

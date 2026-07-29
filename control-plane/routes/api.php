@@ -16,17 +16,22 @@ use App\Http\Controllers\TalosBrowserController;
 use App\Http\Controllers\TalosBrowserHmiController;
 use App\Http\Controllers\TalosBrowserTaskController;
 use App\Http\Controllers\TalosCalendarDraftController;
+use App\Http\Controllers\TalosCapabilityController;
+use App\Http\Controllers\TalosChatCancelController;
 use App\Http\Controllers\TalosChatController;
+use App\Http\Controllers\TalosChatStreamController;
 use App\Http\Controllers\TalosConnectorController;
 use App\Http\Controllers\TalosContextSetController;
 use App\Http\Controllers\TalosCookbookController;
 use App\Http\Controllers\TalosDocumentController;
 use App\Http\Controllers\TalosEmailController;
 use App\Http\Controllers\TalosFileController;
+use App\Http\Controllers\TalosFileContentController;
 use App\Http\Controllers\TalosFileAuthorityController;
 use App\Http\Controllers\TalosGoogleCalendarController;
 use App\Http\Controllers\TalosGoogleDriveController;
 use App\Http\Controllers\TalosGoogleOAuthController;
+use App\Http\Controllers\TalosLibraryController;
 use App\Http\Controllers\TalosMemoryController;
 use App\Http\Controllers\TalosMessageController;
 use App\Http\Controllers\TalosModelComparisonController;
@@ -41,6 +46,7 @@ use App\Http\Controllers\TalosRunBenchmarkController;
 use App\Http\Controllers\TalosRunController;
 use App\Http\Controllers\TalosSessionController;
 use App\Http\Controllers\TalosSessionExportController;
+use App\Http\Controllers\TalosSessionMediaController;
 use App\Http\Controllers\TalosSettingsController;
 use App\Http\Controllers\TalosSkillController;
 use App\Http\Controllers\TalosTaskController;
@@ -71,7 +77,9 @@ Route::bind('browserArtifact', function (string $value): TalosBrowserArtifact {
 
 Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (): void {
     Route::post('/talos/chat', TalosChatController::class);
+    Route::post('/talos/chat/stream', TalosChatStreamController::class);
     Route::prefix('/talos')->group(function (): void {
+        Route::get('/capabilities', TalosCapabilityController::class);
         Route::get('/browser/sessions', [TalosBrowserController::class, 'index']);
         Route::post('/browser/sessions', [TalosBrowserController::class, 'store']);
         Route::get('/browser/sessions/{browserSession}', [TalosBrowserController::class, 'show']);
@@ -144,9 +152,14 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::patch('/sessions/{session}', [TalosSessionController::class, 'update']);
         Route::delete('/sessions/{session}', [TalosSessionController::class, 'destroy']);
         Route::get('/sessions/{session}/messages', [TalosMessageController::class, 'index']);
+        Route::get('/sessions/{session}/media', TalosSessionMediaController::class);
         Route::post('/sessions/{session}/messages', [TalosMessageController::class, 'store']);
         Route::get('/sessions/{session}/pending-tool-approvals', [TalosChatController::class, 'pendingToolApprovals']);
         Route::get('/files', [TalosFileController::class, 'index']);
+        Route::get('/library', [TalosLibraryController::class, 'index']);
+        Route::delete('/library', [TalosLibraryController::class, 'destroyMany']);
+        Route::get('/files/{file}/content', TalosFileContentController::class)
+            ->name('talos.files.content');
         Route::get('/files/{file}', [TalosFileController::class, 'show']);
         Route::get('/file-authority/grants', [TalosFileAuthorityController::class, 'index']);
         Route::post('/file-authority/grants', [TalosFileAuthorityController::class, 'store']);
@@ -163,6 +176,7 @@ Route::middleware(['web', EnsureTalosApiAuthenticated::class])->group(function (
         Route::get('/runs/{run}/artifacts', [TalosRunController::class, 'artifacts']);
         Route::post('/runs/{run}/artifacts', [TalosRunController::class, 'storeArtifact']);
         Route::post('/runs/{run}/recover', TalosRecoveryController::class);
+        Route::post('/runs/{run}/cancel', TalosChatCancelController::class);
         Route::get('/runs/{run}/replay', [TalosRunController::class, 'replay']);
         Route::post('/runs/{run}/benchmark', TalosRunBenchmarkController::class);
         Route::get('/benchmark-groups', [TalosBenchmarkGroupController::class, 'index']);

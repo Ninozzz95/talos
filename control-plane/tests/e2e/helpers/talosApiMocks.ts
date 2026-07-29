@@ -4,7 +4,13 @@ import { deflateSync } from 'node:zlib'
 const TALOS_E2E_UUID_PREFIX = '018f47a2-7f42-7d10-9b37-'
 
 export const TALOS_E2E_FILE_ID = `${TALOS_E2E_UUID_PREFIX}000000000101`
+export const TALOS_E2E_IMAGE_FILE_ID = `${TALOS_E2E_UUID_PREFIX}000000000102`
 export const TALOS_E2E_FIRST_FILE_AUTHORITY_GRANT_ID = `${TALOS_E2E_UUID_PREFIX}000000000201`
+export const TALOS_E2E_LIBRARY_FILE_ITEM_ID = `${TALOS_E2E_UUID_PREFIX}000000000401`
+export const TALOS_E2E_LIBRARY_IMAGE_ITEM_ID = `${TALOS_E2E_UUID_PREFIX}000000000402`
+export const TALOS_E2E_LIBRARY_BROWSER_ITEM_ID = `${TALOS_E2E_UUID_PREFIX}000000000403`
+export const TALOS_E2E_LIBRARY_SOURCE_ITEM_ID = `${TALOS_E2E_UUID_PREFIX}000000000404`
+export const TALOS_E2E_LIBRARY_BROWSER_ARTIFACT_ID = 'browser-screenshot-library-e2e'
 
 type Json = Record<string, unknown> | unknown[]
 type PersistenceMode = 'persistent' | 'temporary'
@@ -729,6 +735,107 @@ function fileDetailsPayload() {
                 updated_at: now,
             },
         ],
+    }
+}
+
+function libraryBacklink(
+    sessionId: string,
+    title: string,
+    relation: 'origin' | 'attachment',
+) {
+    return {
+        session_id: sessionId,
+        title,
+        relation,
+        occurred_at: now,
+    }
+}
+
+function libraryImagePayload() {
+    return {
+        id: TALOS_E2E_LIBRARY_IMAGE_ITEM_ID,
+        source_type: 'file',
+        source_id: TALOS_E2E_IMAGE_FILE_ID,
+        kind: 'image',
+        origin: 'uploaded',
+        title: 'verified-evidence.png',
+        mime_type: 'image/png',
+        byte_size: 256,
+        checksum: 'imagehash-e2e',
+        source_url: null,
+        content_url: `/api/talos/files/${TALOS_E2E_IMAGE_FILE_ID}/content`,
+        trust_boundary: 'trusted_owned_file',
+        occurred_at: now,
+        metadata: { source: 'e2e' },
+        chat_count: 1,
+        backlinks: [libraryBacklink('session-e2e', 'Rich persisted chat', 'attachment')],
+        can_attach: true,
+    }
+}
+
+function libraryBrowserScreenshotPayload() {
+    return {
+        id: TALOS_E2E_LIBRARY_BROWSER_ITEM_ID,
+        source_type: 'browser_artifact',
+        source_id: TALOS_E2E_LIBRARY_BROWSER_ARTIFACT_ID,
+        kind: 'image',
+        origin: 'browser',
+        title: 'Browser screenshot evidence',
+        mime_type: 'image/png',
+        byte_size: null,
+        checksum: 'browser-screenshot-hash-e2e',
+        source_url: 'https://fixture.example.test/evidence',
+        content_url: `/api/talos/browser/artifacts/${TALOS_E2E_LIBRARY_BROWSER_ARTIFACT_ID}/preview?talos_session_id=session-e2e`,
+        trust_boundary: 'untrusted_browser_evidence',
+        occurred_at: now,
+        metadata: { artifact_kind: 'screenshot', source: 'e2e' },
+        chat_count: 1,
+        backlinks: [libraryBacklink('session-e2e', 'E2E verified workflow', 'origin')],
+        can_attach: false,
+    }
+}
+
+function librarySourcePayload() {
+    return {
+        id: TALOS_E2E_LIBRARY_SOURCE_ITEM_ID,
+        source_type: 'document',
+        source_id: 'document-source-e2e',
+        kind: 'link',
+        origin: 'search',
+        title: 'Verified deployment source',
+        mime_type: 'text/html',
+        byte_size: null,
+        checksum: null,
+        source_url: 'https://fixture.example.test/deployment',
+        content_url: '/api/talos/documents/document-source-e2e',
+        trust_boundary: 'untrusted_external_source',
+        occurred_at: now,
+        metadata: { source: 'e2e' },
+        chat_count: 1,
+        backlinks: [libraryBacklink('session-e2e', 'E2E verified workflow', 'origin')],
+        can_attach: false,
+    }
+}
+
+function libraryUploadedFilePayload(backlinks: Record<string, unknown>[]) {
+    return {
+        id: TALOS_E2E_LIBRARY_FILE_ITEM_ID,
+        source_type: 'file',
+        source_id: TALOS_E2E_FILE_ID,
+        kind: 'file',
+        origin: 'uploaded',
+        title: 'workflow.md',
+        mime_type: 'text/markdown',
+        byte_size: 42,
+        checksum: 'filehash-e2e',
+        source_url: null,
+        content_url: `/api/talos/files/${TALOS_E2E_FILE_ID}/content`,
+        trust_boundary: 'trusted_owned_file',
+        occurred_at: now,
+        metadata: { source: 'e2e' },
+        chat_count: backlinks.length,
+        backlinks,
+        can_attach: true,
     }
 }
 
@@ -1611,6 +1718,8 @@ export type InstallTalosApiMocksOptions = {
 export async function installTalosApiMocks(page: Page, options: InstallTalosApiMocksOptions = {}): Promise<TalosSettingsRequestLedger> {
     let messageSequence = 0
     let fileUploaded = false
+    const hiddenLibraryItemIds = new Set<string>()
+    const uploadedFileSessionIds = new Set<string>()
     let fileAuthorityGrantSequence = 0
     let fileAuthorityGrants: Record<string, unknown>[] = []
     let contextSetCreated = false
@@ -1658,6 +1767,49 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
 
             return messagePayload(message, messageSequence, session.id)
         }))
+    }
+
+    function sessionTitle(sessionId: string): string {
+        const session = sessions.find((candidate) => candidate.id === sessionId)
+        return typeof session?.title === 'string' && session.title.trim() !== ''
+            ? session.title
+            : 'Chat'
+    }
+
+    function currentLibraryItems(): Record<string, unknown>[] {
+        const uploadedFileBacklinks = [...uploadedFileSessionIds].map((sessionId) => (
+            libraryBacklink(sessionId, sessionTitle(sessionId), 'attachment')
+        ))
+        const items: Record<string, unknown>[] = [
+            libraryImagePayload(),
+            libraryBrowserScreenshotPayload(),
+            librarySourcePayload(),
+            ...(fileUploaded ? [libraryUploadedFilePayload(uploadedFileBacklinks)] : []),
+        ]
+
+        return items.filter((item) => (
+            typeof item.id === 'string' && !hiddenLibraryItemIds.has(item.id)
+        ))
+    }
+
+    function filteredLibraryItems(url: URL): Record<string, unknown>[] {
+        const kind = url.searchParams.get('kind')
+        const origin = url.searchParams.get('origin')
+        const search = url.searchParams.get('search')?.trim().toLocaleLowerCase() ?? ''
+        const requestedLimit = Number(url.searchParams.get('limit') ?? 40)
+        const limit = Number.isSafeInteger(requestedLimit)
+            ? Math.max(1, Math.min(100, requestedLimit))
+            : 40
+
+        return currentLibraryItems()
+            .filter((item) => !kind || item.kind === kind)
+            .filter((item) => !origin || item.origin === origin)
+            .filter((item) => (
+                !search
+                || String(item.title ?? '').toLocaleLowerCase().includes(search)
+                || String(item.mime_type ?? '').toLocaleLowerCase().includes(search)
+            ))
+            .slice(0, limit)
     }
     let activeSessionPersistenceMode: PersistenceMode = 'persistent'
     let workspaceSettings: {
@@ -1832,6 +1984,18 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         const browserArtifactMatch = path.match(/^\/api\/talos\/browser\/artifacts\/([^/]+)\/preview$/)
         if (browserArtifactMatch && method === 'GET') {
             const artifactId = decodeURIComponent(browserArtifactMatch[1])
+            if (artifactId === TALOS_E2E_LIBRARY_BROWSER_ARTIFACT_ID
+                && url.searchParams.get('talos_session_id') === 'session-e2e') {
+                return route.fulfill({
+                    status: 200,
+                    contentType: 'image/png',
+                    headers: {
+                        'Cache-Control': 'private, no-store',
+                        'X-Content-Type-Options': 'nosniff',
+                    },
+                    body: browserScreenshotFixture(),
+                })
+            }
             const browserState = [...browserStatesByTalosSession.values()].flat().find((state) => (
                 state.session.last_screenshot_artifact_id === artifactId || state.session.last_snapshot_artifact_id === artifactId
             ))
@@ -2132,8 +2296,11 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
         if (path === '/api/talos/sessions' && method === 'POST') {
             const body = request.postDataJSON() as Record<string, unknown>
             activeSessionPersistenceMode = body.persistence_mode === 'temporary' ? 'temporary' : 'persistent'
-            createdSessionCount += 1
-            const sessionId = createdSessionCount === 1 ? 'session-e2e' : `session-e2e-${createdSessionCount}`
+            let sessionId: string
+            do {
+                createdSessionCount += 1
+                sessionId = createdSessionCount === 1 ? 'session-e2e' : `session-e2e-${createdSessionCount}`
+            } while (sessions.some((item) => item.id === sessionId))
             const session = {
                 ...sessionPayload(
                     String(body.title ?? 'E2E verified workflow'),
@@ -2145,6 +2312,28 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             }
             sessions = [session, ...sessions.filter((item) => item.id !== session.id)]
             return json(route, { data: session }, 201)
+        }
+
+        const sessionMediaMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)\/media$/)
+        if (sessionMediaMatch && method === 'GET') {
+            const sessionId = decodeURIComponent(sessionMediaMatch[1])
+            const kind = url.searchParams.get('kind')
+            const data = currentLibraryItems().filter((item) => {
+                if (kind && item.kind !== kind) return false
+                if (!Array.isArray(item.backlinks)) return false
+
+                return item.backlinks.some((backlink) => (
+                    isPlainRecord(backlink) && backlink.session_id === sessionId
+                ))
+            })
+
+            return json(route, {
+                data,
+                meta: {
+                    count: data.length,
+                    has_more: false,
+                },
+            })
         }
 
         const sessionPatchMatch = path.match(/^\/api\/talos\/sessions\/([^/]+)$/)
@@ -2278,6 +2467,12 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             const talosSessionId = typeof body.session_id === 'string'
                 ? body.session_id
                 : String(browserState?.session.talos_session_id ?? 'session-e2e')
+            const attachmentFileIds = Array.isArray(body.attachment_file_ids)
+                ? body.attachment_file_ids.filter((value): value is string => typeof value === 'string')
+                : []
+            if (attachmentFileIds.includes(TALOS_E2E_FILE_ID)) {
+                uploadedFileSessionIds.add(talosSessionId)
+            }
             const browserToken = browserState?.token ?? null
             const browserScreenshotArtifactId = browserToken ? `browser-screenshot-${browserToken}` : null
             const browserSnapshotArtifactId = browserToken ? `browser-snapshot-${browserToken}` : null
@@ -2502,12 +2697,57 @@ export async function installTalosApiMocks(page: Page, options: InstallTalosApiM
             }, 201)
         }
 
+        if (path === '/api/talos/library' && method === 'GET') {
+            const data = filteredLibraryItems(url)
+
+            return json(route, {
+                data,
+                meta: {
+                    count: data.length,
+                    has_more: false,
+                    next_cursor: null,
+                },
+            })
+        }
+
+        if (path === '/api/talos/library' && method === 'DELETE') {
+            const body = request.postDataJSON() as Record<string, unknown>
+            const rawIds = body.ids
+            const ids = Array.isArray(rawIds)
+                ? rawIds.filter((value): value is string => typeof value === 'string')
+                : []
+            if (!Array.isArray(rawIds) || ids.length === 0 || ids.length !== rawIds.length) {
+                return json(route, { message: 'Library removal requires distinct item ids.' }, 422)
+            }
+            const visibleIds = new Set(currentLibraryItems().map((item) => String(item.id ?? '')))
+            const removedIds = [...new Set(ids)].filter((id) => visibleIds.has(id))
+            removedIds.forEach((id) => hiddenLibraryItemIds.add(id))
+
+            return json(route, {
+                data: {
+                    removed_count: removedIds.length,
+                },
+            })
+        }
+
         if (path === '/api/talos/files' && method === 'GET') {
             return json(route, { data: fileUploaded ? [filePayload(), ...importedDriveFiles] : importedDriveFiles })
         }
 
         if (path === `/api/talos/files/${TALOS_E2E_FILE_ID}` && method === 'GET') {
             return json(route, { data: fileDetailsPayload() })
+        }
+
+        if (path === `/api/talos/files/${TALOS_E2E_IMAGE_FILE_ID}/content` && method === 'GET') {
+            return route.fulfill({
+                status: 200,
+                contentType: 'image/png',
+                headers: {
+                    'Cache-Control': 'private, no-store',
+                    'X-Content-Type-Options': 'nosniff',
+                },
+                body: browserScreenshotFixture(),
+            })
         }
 
         if (path === '/api/talos/file-authority/grants' && method === 'GET') {

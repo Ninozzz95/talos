@@ -121,9 +121,12 @@ final class TalosChatVisionAttachmentTest extends TestCase
         return $ids;
     }
 
-    private function bindRecordingRunner(string $answer = 'This image shows a red square.'): RecordingVisionTurnAdapter
+    private function bindRecordingRunner(
+        string $answer = 'This image shows a red square.',
+        ?string $visibleReasoning = null,
+    ): RecordingVisionTurnAdapter
     {
-        $adapter = new RecordingVisionTurnAdapter($answer);
+        $adapter = new RecordingVisionTurnAdapter($answer, $visibleReasoning);
         $this->app->instance(
             ProviderMultimodalTurnRunner::class,
             new ProviderMultimodalTurnRunner(new RecordingVisionResolver($adapter)),
@@ -169,6 +172,38 @@ final class TalosChatVisionAttachmentTest extends TestCase
         self::assertSame([$image->id], data_get($run->metadata, 'vision.file_ids'));
         self::assertSame('openai', data_get($run->metadata, 'vision.provider'));
         self::assertSame('gpt-4o', data_get($run->metadata, 'vision.model'));
+    }
+
+    public function test_vision_reasoning_is_persisted_server_side_and_returned_as_the_assistant_message(): void
+    {
+        Http::fake(['validator.test/chat' => Http::response(['text' => 'should not be called'])]);
+        $this->bindRecordingRunner(
+            'This image shows a red square.',
+            'I inspected the image geometry.',
+        );
+        $profile = $this->profile('openai', 'gpt-4o');
+        $image = $this->imageFile();
+        $session = $this->postJson('/api/talos/sessions', ['title' => 'Vision reasoning'])->json('data');
+        $grants = $this->grantFor($image);
+
+        $this->postJson('/api/talos/chat', [
+            'message' => 'What is in this image?',
+            'model_profile_id' => $profile->id,
+            'session_id' => $session['id'],
+            'attachment_file_ids' => [$image->id],
+            'attachment_grant_ids' => $grants,
+            'thinking' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('assistant_message.content', 'This image shows a red square.')
+            ->assertJsonPath('assistant_message.metadata.visible_reasoning.text', 'I inspected the image geometry.')
+            ->assertJsonMissingPath('assistant_message.metadata.provider_state');
+
+        $message = TalosMessage::query()
+            ->where('session_id', $session['id'])
+            ->where('role', 'assistant')
+            ->sole();
+        self::assertSame('I inspected the image geometry.', data_get($message->metadata, 'visible_reasoning.text'));
     }
 
     public function test_non_vision_model_with_image_fails_closed_422_without_a_provider_call(): void
@@ -343,7 +378,10 @@ final class RecordingVisionTurnAdapter implements ProviderTurnAdapter
 {
     public ?ProviderTurnRequest $lastRequest = null;
 
-    public function __construct(private readonly string $answer) {}
+    public function __construct(
+        private readonly string $answer,
+        private readonly ?string $visibleReasoning = null,
+    ) {}
 
     public function capabilities(): ProviderCapabilities
     {
@@ -365,13 +403,25 @@ final class RecordingVisionTurnAdapter implements ProviderTurnAdapter
     {
         $this->lastRequest = $request;
 
-        return ProviderTurnResponse::final($this->answer, 'resp_rec', 'stop', new TokenUsage(10, 5, 15));
+        return ProviderTurnResponse::final(
+            $this->answer,
+            'resp_rec',
+            'stop',
+            new TokenUsage(10, 5, 15),
+            $this->visibleReasoning,
+        );
     }
 
     /** @param list<ToolResult> $toolResults */
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
     {
-        return ProviderTurnResponse::final($this->answer, 'resp_rec', 'stop', new TokenUsage(0, 0, 0));
+        return ProviderTurnResponse::final(
+            $this->answer,
+            'resp_rec',
+            'stop',
+            new TokenUsage(0, 0, 0),
+            $this->visibleReasoning,
+        );
     }
 }
 

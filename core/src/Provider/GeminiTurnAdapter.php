@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kadmos\Provider;
 
+use Closure;
 use InvalidArgumentException;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ProviderTurnResponse;
@@ -15,7 +16,7 @@ use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
 use Throwable;
 
-final class GeminiTurnAdapter implements ProviderTurnAdapter
+final class GeminiTurnAdapter implements StreamingProviderTurnAdapter
 {
     public const ADAPTER_VERSION = 'gemini_generate_content_v1beta';
 
@@ -63,8 +64,34 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
 
     public function start(ProviderTurnRequest $request): ProviderTurnResponse
     {
+        [$payload, $hasResources] = $this->startPayload($request);
+
+        return $this->withoutResourceContinuation($this->perform($payload), $hasResources);
+    }
+
+    public function streamStart(ProviderTurnRequest $request, Closure $isCancelled): ProviderStream
+    {
+        [$payload, $hasResources] = $this->startPayload($request);
+
+        return $this->performStream(
+            $payload,
+            $isCancelled,
+            fn (array $response): ProviderTurnResponse => $this->withoutResourceContinuation(
+                $this->normalize($response, $payload),
+                $hasResources,
+            ),
+        );
+    }
+
+    /** @return array{array<string, mixed>, bool} */
+    private function startPayload(ProviderTurnRequest $request): array
+    {
         if (strtolower($request->provider) !== 'gemini') {
             throw new InvalidArgumentException('Gemini request requires the gemini provider.');
+        }
+        if ($request->promptCachePlan !== null
+            && $request->promptCachePlan->mode !== PromptCachePlan::MODE_PROVIDER_DEFAULT) {
+            throw new InvalidArgumentException('Gemini generateContent only supports provider-default implicit prompt caching.');
         }
         $contents = array_map(
             static fn (array $message): array => [
@@ -105,7 +132,7 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
             $payload['toolConfig'] = ['functionCallingConfig' => ['mode' => 'AUTO']];
         }
 
-        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+        return [$payload, $request->resources !== []];
     }
 
     /**
@@ -151,6 +178,29 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
     {
+        return $this->perform($this->continuationPayload($state, $toolResults));
+    }
+
+    public function streamContinue(
+        ProviderTurnState $state,
+        array $toolResults,
+        Closure $isCancelled,
+    ): ProviderStream {
+        $payload = $this->continuationPayload($state, $toolResults);
+
+        return $this->performStream(
+            $payload,
+            $isCancelled,
+            fn (array $response): ProviderTurnResponse => $this->normalize($response, $payload),
+        );
+    }
+
+    /**
+     * @param list<ToolResult> $toolResults
+     * @return array<string, mixed>
+     */
+    private function continuationPayload(ProviderTurnState $state, array $toolResults): array
+    {
         if ($state->provider !== 'gemini') {
             throw new InvalidArgumentException('Gemini state belongs to another provider.');
         }
@@ -183,7 +233,7 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
             }
         }
 
-        return $this->perform($payload);
+        return $payload;
     }
 
     /** @param array<string, mixed> $payload */
@@ -219,6 +269,42 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
         }
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param Closure(array<string, mixed>): ProviderTurnResponse $finalizer
+     */
+    private function performStream(array $payload, Closure $isCancelled, Closure $finalizer): ProviderStream
+    {
+        if (! $this->transport instanceof StreamingProviderTransport) {
+            throw new InvalidArgumentException('Configured Gemini transport does not support streaming.');
+        }
+
+        return new ProviderStream(
+            $this->transport->stream(
+                $this->streamEndpoint(),
+                $payload,
+                [
+                    'Content-Type: application/json',
+                    'Accept: text/event-stream',
+                    'x-goog-api-key: '.$this->apiKey,
+                ],
+                $this->timeoutMs,
+                $isCancelled,
+            ),
+            new GeminiStreamDecoder($finalizer),
+        );
+    }
+
+    private function streamEndpoint(): string
+    {
+        if (! str_ends_with($this->endpoint, ':generateContent')) {
+            throw new InvalidArgumentException('Gemini streaming requires a generateContent endpoint.');
+        }
+
+        return substr($this->endpoint, 0, -strlen(':generateContent'))
+            .':streamGenerateContent?alt=sse';
+    }
+
     /** @param array<string, mixed> $response @param array<string, mixed> $requestPayload */
     private function normalize(array $response, array $requestPayload): ProviderTurnResponse
     {
@@ -237,12 +323,17 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
         $content = ToolContractGuard::objectArray($candidate['content'] ?? null, 'Gemini candidate content');
         $parts = ToolContractGuard::listArray($content['parts'] ?? null, 'Gemini candidate parts');
         $texts = [];
+        $thoughts = [];
         $toolCalls = [];
         $callNames = [];
         foreach ($parts as $index => $part) {
             $part = ToolContractGuard::objectArray($part, sprintf('Gemini candidate part %d', $index));
             if (is_string($part['text'] ?? null)) {
-                $texts[] = trim($part['text']);
+                if (($part['thought'] ?? null) === true) {
+                    $thoughts[] = trim($part['text']);
+                } else {
+                    $texts[] = trim($part['text']);
+                }
             }
             if (! array_key_exists('functionCall', $part)) {
                 continue;
@@ -268,6 +359,7 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
             $callNames[$callId] = $name;
         }
         $text = trim(implode("\n", array_filter($texts, static fn (string $value): bool => $value !== '')));
+        $visibleReasoning = trim(implode("\n", array_filter($thoughts, static fn (string $value): bool => $value !== '')));
         if (in_array($finishReason, ['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII'], true)) {
             return ProviderTurnResponse::refusal($text !== '' ? $text : 'The provider blocked this response.', $responseId, $finishReason, $usage);
         }
@@ -312,7 +404,13 @@ final class GeminiTurnAdapter implements ProviderTurnAdapter
             ), $responseId, $finishReason, $usage);
         }
 
-        return ProviderTurnResponse::final($text, $responseId, $finishReason, $usage);
+        return ProviderTurnResponse::final(
+            $text,
+            $responseId,
+            $finishReason,
+            $usage,
+            $visibleReasoning !== '' ? $visibleReasoning : null,
+        );
     }
 
     /** @param list<ToolResult> $toolResults @return array<string, ToolResult> */

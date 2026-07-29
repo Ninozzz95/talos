@@ -13,26 +13,30 @@ import Tabs from '../../ui/Tabs.vue'
 import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import type { TalosAppearanceGroup, TalosAppearanceVisibility } from '../../../lib/talosAppearancePreferences'
 import {
-    TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_COMPOSER_MODE_OPTIONS,
     TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
 } from '../../../lib/talosChatLayout'
+import {
+    TALOS_MESSAGE_SCALE_CONSTRAINT,
+    TALOS_UI_SCALE_CONSTRAINT,
+} from '../../../lib/talosUiScale'
 import { TALOS_DICTATION_MODE_OPTIONS, type TalosDictationMode } from '../../../lib/talosDictationModes'
 import { useTalosDictationMode } from '../../../composables/useTalosDictation'
 import type {
-    TalosChatBubbleScale,
     TalosChatLayoutPreferences,
     TalosComposerMode,
     TalosMessageStyle,
     TalosMobileWindowPresentation,
 } from '../../../lib/talosTypes'
+import TalosScaleControl from './TalosScaleControl.vue'
 
 const emit = defineEmits<{
     updateTheme: [theme: TalosThemeId]
     updateThemeMode: [mode: TalosThemeMode]
     openThemeEngine: []
-    updateChatBubbleScale: [scale: TalosChatBubbleScale]
+    updateUiScale: [scale: number]
+    updateMessageScale: [scale: number]
     updateChatComposerMode: [mode: TalosComposerMode]
     updateChatMessageStyle: [style: TalosMessageStyle]
     updateAdvancedRailExpanded: [expanded: boolean]
@@ -51,6 +55,7 @@ const panes = [
 const props = defineProps<{
     theme: TalosThemeId
     themeMode: TalosThemeMode
+    uiScale: number
     chatLayout: TalosChatLayoutPreferences
     themePolicyLocked: boolean
     appearanceVisibility: TalosAppearanceVisibility
@@ -95,17 +100,30 @@ function selectThemeMode(value: unknown) {
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Theme preset</span>
             <TalosThemedSelect :model-value="theme" class="mt-2" :items="themePresetOptions" aria-label="Theme preset" @update:model-value="selectTheme" />
         </label>
-        <label class="block">
-            <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat message size</span>
-            <TalosThemedSelect
-                :model-value="chatLayout.bubble_scale"
-                class="mt-2"
-                :items="TALOS_CHAT_BUBBLE_SCALE_OPTIONS"
-                aria-label="Chat message size"
-                :disabled="themePolicyLocked"
-                @update:model-value="(value) => emit('updateChatBubbleScale', value as TalosChatBubbleScale)"
-            />
-        </label>
+        <TalosScaleControl
+            control-id="interface-scale"
+            label="Interface scale"
+            description="Adjust navigation, controls and workspace chrome without browser zoom."
+            :model-value="uiScale"
+            :min="TALOS_UI_SCALE_CONSTRAINT.min"
+            :max="TALOS_UI_SCALE_CONSTRAINT.max"
+            :step="TALOS_UI_SCALE_CONSTRAINT.step"
+            :default-value="TALOS_UI_SCALE_CONSTRAINT.default"
+            :disabled="themePolicyLocked"
+            @update:model-value="(value) => emit('updateUiScale', value)"
+        />
+        <TalosScaleControl
+            control-id="message-scale"
+            label="Message scale"
+            description="Adjust chat width, spacing and type independently from the interface."
+            :model-value="chatLayout.message_scale"
+            :min="TALOS_MESSAGE_SCALE_CONSTRAINT.min"
+            :max="TALOS_MESSAGE_SCALE_CONSTRAINT.max"
+            :step="TALOS_MESSAGE_SCALE_CONSTRAINT.step"
+            :default-value="TALOS_MESSAGE_SCALE_CONSTRAINT.default"
+            :disabled="themePolicyLocked"
+            @update:model-value="(value) => emit('updateMessageScale', value)"
+        />
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Chat composer</span>
             <TalosThemedSelect

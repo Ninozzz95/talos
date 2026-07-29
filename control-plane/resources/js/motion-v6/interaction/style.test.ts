@@ -91,5 +91,13 @@ describe('talosInteractionMotionStyleV6', () => {
             '--talos-motion-feedback-style': 'pulse',
             '--talos-motion-hover-style': 'node-glow',
         })
+
+        const calm = talosInteractionMotionStyleV6({ themeId: 'calm', preferences, reducedMotion: false, paused: false })
+        expect(calm).toMatchObject({
+            '--talos-motion-open-style': 'soft-fade',
+            '--talos-motion-surface-style': 'fade',
+            '--talos-motion-feedback-style': 'pulse',
+            '--talos-motion-hover-style': 'lift',
+        })
     })
 })

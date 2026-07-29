@@ -3,6 +3,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick, reactive } from 'vue'
 import TalosIntroModal from './TalosIntroModal.vue'
+import {
+    TALOS_CAPABILITY_CONTRACT,
+    parseTalosCapabilityManifest,
+    type TalosCapabilityManifest,
+} from '../../../lib/talosCapabilities'
 import type { TalosPublicLinks } from '../../../lib/talosPublicLinks'
 
 let app: ReturnType<typeof createApp> | undefined
@@ -16,11 +21,12 @@ afterEach(() => {
 type MountState = {
     open: boolean
     links: TalosPublicLinks
+    capabilities: TalosCapabilityManifest | null
     outcomes: string[]
 }
 
-function mountModal(links: TalosPublicLinks = {}) {
-    const state = reactive<MountState>({ open: true, links, outcomes: [] })
+function mountModal(links: TalosPublicLinks = {}, capabilities: TalosCapabilityManifest | null = null) {
+    const state = reactive<MountState>({ open: true, links, capabilities, outcomes: [] })
     const shell = document.createElement('div')
     shell.className = 'talos-shell'
     const portalRoot = document.createElement('div')
@@ -34,6 +40,7 @@ function mountModal(links: TalosPublicLinks = {}) {
             return () => h(TalosIntroModal, {
                 open: state.open,
                 links: state.links,
+                capabilities: state.capabilities,
                 onClose: (outcome: string) => {
                     state.outcomes.push(outcome)
                     state.open = false
@@ -43,6 +50,81 @@ function mountModal(links: TalosPublicLinks = {}) {
     }))
     app.mount(mountPoint)
     return state
+}
+
+function capabilityManifest(): TalosCapabilityManifest {
+    return parseTalosCapabilityManifest({
+        contract: TALOS_CAPABILITY_CONTRACT,
+        revision: '2026-07-28.1',
+        capabilities: [
+            {
+                id: 'chat.provider',
+                state: 'available',
+                reason: null,
+                evidence: ['api:POST /api/talos/chat'],
+            },
+            {
+                id: 'browser.hmi',
+                state: 'blocked',
+                reason: 'Browser worker is not configured.',
+                evidence: ['config:TALOS_BROWSER_WORKER_URL'],
+            },
+            {
+                id: 'benchmarks.avm',
+                state: 'available',
+                reason: null,
+                evidence: ['api:GET /api/talos/benchmark-groups'],
+            },
+            {
+                id: 'files.ingestion',
+                state: 'available',
+                reason: null,
+                evidence: ['api:POST /api/talos/files'],
+            },
+            {
+                id: 'models.profiles',
+                state: 'available',
+                reason: null,
+                evidence: ['api:GET /api/talos/model-profiles'],
+            },
+            {
+                id: 'runs.replay',
+                state: 'available',
+                reason: null,
+                evidence: ['api:GET /api/talos/runs/{id}/replay'],
+            },
+            {
+                id: 'settings.workspace',
+                state: 'available',
+                reason: null,
+                evidence: ['api:GET /api/talos/settings'],
+            },
+            {
+                id: 'models.local_runtime',
+                state: 'planned',
+                reason: 'Local runtime is not promoted yet.',
+                evidence: ['roadmap:P6-local-runtime'],
+            },
+            {
+                id: 'models.multi_model_orchestration',
+                state: 'planned',
+                reason: 'Multi-model execution is not promoted yet.',
+                evidence: ['roadmap:P6-multi-model-orchestration'],
+            },
+            {
+                id: 'integrations.google_workspace',
+                state: 'degraded',
+                reason: 'Drive and Calendar are available while the complete acceptance gate remains open.',
+                evidence: ['api:GET /api/talos/google/accounts'],
+            },
+            {
+                id: 'memory.supermemory',
+                state: 'planned',
+                reason: 'Supermemory is not integrated yet.',
+                evidence: ['roadmap:P8-supermemory'],
+            },
+        ],
+    })
 }
 
 function dialog() {
@@ -179,7 +261,7 @@ describe('TalosIntroModal', () => {
     })
 
     it('roadmap chips mark local models, Zethos, orchestration, Workspace and Supermemory; links render only when valid with safe rel', async () => {
-        mountModal({ patreon: 'https://patreon.com/talos' })
+        mountModal({ patreon: 'https://patreon.com/talos' }, capabilityManifest())
         await settle()
         const surface = dialog()
 
@@ -211,6 +293,39 @@ describe('TalosIntroModal', () => {
         expect(patreon.getAttribute('rel')).toBe('noopener noreferrer')
         expect(surface?.textContent).toContain('Ko-fi')
         expect(surface?.querySelectorAll('a').length).toBe(1)
+    })
+
+    it('renders capability truth from the manifest and stays fail closed before verification', async () => {
+        mountModal()
+        await settle()
+        const unverified = dialog()
+
+        expect(unverified?.textContent).toContain('Capability status is still being verified')
+        expect(unverified?.textContent).not.toContain('TALOS browses the real web for you')
+        app?.unmount()
+        document.body.replaceChildren()
+
+        mountModal({}, capabilityManifest())
+        await settle()
+        const verified = dialog()
+        const dots = [...document.querySelectorAll('[data-testid="talos-intro-dot"]')]
+
+        expect(verified?.querySelector('[data-capability-id="chat.provider"]')?.textContent).toContain('Available')
+        ;(dots[3] as HTMLButtonElement).click()
+        await settle()
+        expect(verified?.querySelector('[data-capability-id="models.profiles"]')?.textContent).toContain('Available')
+        expect(verified?.querySelector('[data-capability-id="models.local_runtime"]')?.textContent).toContain('Roadmap')
+        expect(verified?.textContent).toContain('Local runtime is not promoted yet.')
+
+        ;(dots[4] as HTMLButtonElement).click()
+        await settle()
+        expect(verified?.querySelector('[data-capability-id="browser.hmi"]')?.textContent).toContain('Blocked')
+        expect(verified?.textContent).toContain('Browser worker is not configured.')
+
+        ;(dots[5] as HTMLButtonElement).click()
+        await settle()
+        expect(verified?.querySelector('[data-capability-id="integrations.google_workspace"]')?.textContent).toContain('Degraded')
+        expect(verified?.querySelector('[data-capability-id="memory.supermemory"]')?.textContent).toContain('Roadmap')
     })
 
     it('reduced motion renders slides without transition frames and content scrolls inside max-height', async () => {

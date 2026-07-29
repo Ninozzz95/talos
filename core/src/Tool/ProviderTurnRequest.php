@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Kadmos\Tool;
 
 use InvalidArgumentException;
+use Kadmos\Provider\PromptCachePlan;
 
 final readonly class ProviderTurnRequest
 {
@@ -28,6 +29,7 @@ final readonly class ProviderTurnRequest
         public ?string $reasoningEffort = null,
         public ?bool $reasoningVisible = null,
         public ?string $responseMimeType = null,
+        public ?PromptCachePlan $promptCachePlan = null,
     ) {
         ToolContractGuard::nonEmptyString($provider, 'Provider turn provider', 64);
         ToolContractGuard::nonEmptyString($model, 'Provider turn model', 256);
@@ -106,6 +108,7 @@ final readonly class ProviderTurnRequest
             'reasoning_effort' => $this->reasoningEffort,
             'reasoning_visible' => $this->reasoningVisible,
             'response_mime_type' => $this->responseMimeType,
+            'prompt_cache_plan' => $this->promptCachePlan?->toAuditArray(),
         ]);
     }
 }

@@ -10,8 +10,10 @@ import {
     TALOS_THEME_RADIUS_OPTIONS,
     type TalosThemePreset,
 } from '../../../../lib/talosThemes'
-import { TALOS_CHAT_BUBBLE_SCALE_OPTIONS, TALOS_CHAT_COMPOSER_MODE_OPTIONS } from '../../../../lib/talosChatLayout'
+import { TALOS_CHAT_COMPOSER_MODE_OPTIONS } from '../../../../lib/talosChatLayout'
+import { TALOS_MESSAGE_SCALE_CONSTRAINT } from '../../../../lib/talosUiScale'
 import type { TalosChatLayoutPreferences } from '../../../../lib/talosTypes'
+import TalosScaleControl from '../TalosScaleControl.vue'
 import TalosThemeProductPreview from './TalosThemeProductPreview.vue'
 import type { ThemeCustomizationForm } from './themeEngineTypes'
 
@@ -211,10 +213,18 @@ function updateChatLayout(key: keyof TalosChatLayoutPreferences, value: unknown)
                 <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Uses the same persisted preference as Appearance settings.</p>
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
-                <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
-                    <span>Message size</span>
-                    <TalosThemedSelect :model-value="chatLayout.bubble_scale" :items="TALOS_CHAT_BUBBLE_SCALE_OPTIONS" aria-label="Theme chat message size" :disabled="disabled" @update:model-value="updateChatLayout('bubble_scale', $event)" />
-                </label>
+                <TalosScaleControl
+                    control-id="theme-chat-message-scale"
+                    label="Message scale"
+                    description="Stored with this theme as a numeric chat geometry preference."
+                    :model-value="chatLayout.message_scale"
+                    :min="TALOS_MESSAGE_SCALE_CONSTRAINT.min"
+                    :max="TALOS_MESSAGE_SCALE_CONSTRAINT.max"
+                    :step="TALOS_MESSAGE_SCALE_CONSTRAINT.step"
+                    :default-value="TALOS_MESSAGE_SCALE_CONSTRAINT.default"
+                    :disabled="disabled"
+                    @update:model-value="updateChatLayout('message_scale', $event)"
+                />
                 <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                     <span>Composer mode</span>
                     <TalosThemedSelect :model-value="chatLayout.composer_mode" :items="TALOS_CHAT_COMPOSER_MODE_OPTIONS" aria-label="Theme chat composer mode" :disabled="disabled" @update:model-value="updateChatLayout('composer_mode', $event)" />

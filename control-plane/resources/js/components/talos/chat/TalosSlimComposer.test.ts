@@ -79,6 +79,34 @@ describe('TalosSlimComposer', () => {
         expect(send).not.toHaveBeenCalled()
     })
 
+    it('replaces Send with a real Stop command while a cancellable stream is active', () => {
+        const send = vi.fn()
+        const cancelStream = vi.fn()
+        const container = mountComposer('full', false, {
+            sending: true,
+            streamingActive: true,
+            onSend: send,
+            onCancelStream: cancelStream,
+        })
+        const stop = container.querySelector<HTMLButtonElement>('[aria-label="Stop response"]')
+        const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+
+        expect(stop).not.toBeNull()
+        expect(stop?.disabled).toBe(false)
+        expect(container.querySelector('[aria-label="Send"]')).toBeNull()
+        expect(composer?.disabled).toBe(true)
+
+        stop?.click()
+        composer?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }))
+
+        expect(cancelStream).toHaveBeenCalledOnce()
+        expect(send).not.toHaveBeenCalled()
+    })
+
     it('grows a long prompt up to a viewport-safe composer limit', () => {
         const container = mountComposer('full')
         const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')

@@ -134,6 +134,35 @@ final class TalosProviderGatewayTest extends TestCase
         self::assertSame('completed', $turn->refresh()->provider_operation_status);
     }
 
+    public function test_completed_provider_checkpoint_replays_expanded_nullable_cache_usage(): void
+    {
+        $user = User::factory()->create();
+        [$turn, $profile] = $this->turnContext($user, 'fake_v1');
+        $usage = new TokenUsage(
+            inputTokens: 120,
+            outputTokens: 10,
+            totalTokens: 130,
+            cachedTokens: 80,
+            cacheReadTokens: 80,
+            cacheWriteTokens: 30,
+            cacheMissTokens: 10,
+            cacheWrite5mTokens: 20,
+            cacheWrite1hTokens: 10,
+        );
+        $adapter = new FakeProviderTurnAdapter(
+            terminalKind: ProviderTurnResponse::FINAL,
+            responseUsage: $usage,
+        );
+        $gateway = new TalosProviderGateway(new FakeProviderAdapterResolver($adapter));
+
+        $first = $gateway->start($user->id, $turn, $profile, $this->request());
+        $replayed = $gateway->start($user->id, $turn->refresh(), $profile, $this->request());
+
+        self::assertSame($usage->toArray(), $first->usage?->toArray());
+        self::assertSame($usage->toArray(), $replayed->usage?->toArray());
+        self::assertSame(1, $adapter->startCalls);
+    }
+
     public function test_malformed_completed_tool_call_checkpoint_fails_as_controlled_recovery_without_reexecution(): void
     {
         $user = User::factory()->create();
@@ -158,6 +187,44 @@ final class TalosProviderGatewayTest extends TestCase
         try {
             $gateway->start($user->id, $turn->refresh(), $profile, $this->request());
             self::fail('Malformed completed provider tool calls escaped controlled recovery.');
+        } catch (TalosProviderRecoveryRequiredException $exception) {
+            self::assertSame('TALOS_PROVIDER_RECOVERY_REQUIRED', $exception->faultCode);
+        }
+
+        self::assertSame(1, $adapter->startCalls);
+    }
+
+    public function test_malformed_completed_usage_checkpoint_fails_as_controlled_recovery_without_reexecution(): void
+    {
+        $user = User::factory()->create();
+        [$turn, $profile] = $this->turnContext($user, 'fake_v1');
+        $adapter = new FakeProviderTurnAdapter(ProviderTurnResponse::FINAL);
+        $gateway = new TalosProviderGateway(new FakeProviderAdapterResolver($adapter));
+        $gateway->start($user->id, $turn, $profile, $this->request());
+        $malformed = TalosDagCheckpointCodec::encode([
+            'kind' => ProviderTurnResponse::FINAL,
+            'text' => 'Final.',
+            'tool_calls' => [],
+            'response_id' => 'response-final',
+            'stop_reason' => 'stop',
+            'usage' => [
+                'input_tokens' => 10,
+                'output_tokens' => 2,
+                'total_tokens' => 12,
+                'cached_tokens' => 0,
+                'cache_read_tokens' => 'not-an-integer',
+            ],
+            'failure' => null,
+            'visible_reasoning' => null,
+        ]);
+        $turn->forceFill([
+            'provider_outcome' => $malformed,
+            'provider_outcome_sha256' => 'sha256:'.hash('sha256', $malformed),
+        ])->save();
+
+        try {
+            $gateway->start($user->id, $turn->refresh(), $profile, $this->request());
+            self::fail('Malformed provider usage escaped controlled recovery.');
         } catch (TalosProviderRecoveryRequiredException $exception) {
             self::assertSame('TALOS_PROVIDER_RECOVERY_REQUIRED', $exception->faultCode);
         }
@@ -445,6 +512,7 @@ final class FakeProviderTurnAdapter implements ProviderTurnAdapter
         private readonly string $terminalKind = ProviderTurnResponse::TOOL_CALLS,
         private readonly bool $throwOnStart = false,
         private readonly bool $throwOnContinue = false,
+        private readonly ?TokenUsage $responseUsage = null,
     ) {}
 
     public function capabilities(): ProviderCapabilities
@@ -469,7 +537,7 @@ final class FakeProviderTurnAdapter implements ProviderTurnAdapter
             throw new \RuntimeException('Provider transport ended without a correlated response.');
         }
         if ($this->terminalKind === ProviderTurnResponse::REFUSAL) {
-            return ProviderTurnResponse::refusal('Refused.', 'response-refusal', 'refusal', new TokenUsage(0, 0, 0));
+            return ProviderTurnResponse::refusal('Refused.', 'response-refusal', 'refusal', $this->responseUsage ?? new TokenUsage(0, 0, 0));
         }
         if ($this->terminalKind === ProviderTurnResponse::FAILURE) {
             return ProviderTurnResponse::failure(new \Kadmos\Provider\ProviderFailure(
@@ -479,7 +547,7 @@ final class FakeProviderTurnAdapter implements ProviderTurnAdapter
             ), 'response-failure');
         }
         if ($this->terminalKind === ProviderTurnResponse::FINAL) {
-            return ProviderTurnResponse::final('Final.', 'response-final', 'stop', new TokenUsage(0, 0, 0));
+            return ProviderTurnResponse::final('Final.', 'response-final', 'stop', $this->responseUsage ?? new TokenUsage(0, 0, 0));
         }
 
         return ProviderTurnResponse::toolCalls(
@@ -502,7 +570,7 @@ final class FakeProviderTurnAdapter implements ProviderTurnAdapter
             ),
             'response-1',
             'tool_calls',
-            new TokenUsage(0, 0, 0),
+            $this->responseUsage ?? new TokenUsage(0, 0, 0),
         );
     }
 

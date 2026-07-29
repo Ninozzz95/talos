@@ -68,6 +68,20 @@ describe('useTalosWorkspaceCommandActions', () => {
         section.remove()
     })
 
+    it('publishes only the latest window-section request with a monotonic revision', async () => {
+        const actions = useTalosWorkspaceCommandActions(baseDeps())
+
+        await actions.focusCommandRoute({ windowId: 'library', windowSection: 'sources' })
+
+        expect(actions.requestedWindowSections.value).toEqual({ library: 'sources' })
+        expect(actions.requestedWindowSectionRevision.value).toBe(1)
+
+        await actions.focusCommandRoute({ windowId: 'doctor', windowSection: 'audit' })
+
+        expect(actions.requestedWindowSections.value).toEqual({ doctor: 'audit' })
+        expect(actions.requestedWindowSectionRevision.value).toBe(2)
+    })
+
     it('keeps model and context popovers mutually exclusive', () => {
         const actions = useTalosWorkspaceCommandActions({
             workspaceCommands: commands,

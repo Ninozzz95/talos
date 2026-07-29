@@ -33,7 +33,7 @@ describe('Theme Engine persistence contract', () => {
             tokens: {},
             motion_v6: motionV6,
             chat_layout: {
-                bubble_scale: 'expanded' as const,
+                message_scale: 1.25,
                 composer_mode: 'full' as const,
                 advanced_rail_expanded: true,
             },
@@ -154,7 +154,9 @@ describe('Theme Engine persistence contract', () => {
         }
 
         expect(parseStrictTalosThemeImport(validExport)?.chat_layout).toEqual({
-            ...validExport.theme.chat_layout,
+            message_scale: 1.15,
+            composer_mode: 'minimal',
+            advanced_rail_expanded: true,
             message_style: 'sections',
             mobile_window_presentation: 'drawer',
         })
@@ -170,7 +172,9 @@ describe('Theme Engine persistence contract', () => {
             theme: {
                 ...validExport.theme,
                 chat_layout: {
-                    ...validExport.theme.chat_layout,
+                    message_scale: 1.3,
+                    composer_mode: 'minimal',
+                    advanced_rail_expanded: true,
                     mobile_window_presentation: 'fullscreen',
                 },
                 motion_v6: motionV6,
@@ -308,8 +312,49 @@ describe('Theme Engine persistence contract', () => {
         expect(result.theme).toMatchObject({
             id: 'imported-lifecycle-theme',
             motion_v6: { schema_version: 1 },
-            chat_layout: { bubble_scale: 'compact', composer_mode: 'minimal' },
+            chat_layout: { message_scale: 0.875, composer_mode: 'minimal' },
         })
+    })
+
+    it('requires canonical numeric message scale in V2 while keeping V1 legacy imports readable', () => {
+        const motionV6 = createDefaultTalosMotionV6Preferences()
+        const base = {
+            exported_at: '2026-07-10T12:00:00.000Z',
+            theme: {
+                id: 'strict-scale',
+                name: 'Strict Scale',
+                base_theme: 'calm',
+                tokens: {},
+            },
+        }
+
+        expect(parseStrictTalosThemeImport({
+            ...base,
+            schema: 'talos_theme_export_v2',
+            theme: {
+                ...base.theme,
+                motion_v6: motionV6,
+                chat_layout: { message_scale: 1.2 },
+            },
+        })?.chat_layout?.message_scale).toBe(1.2)
+        expect(parseStrictTalosThemeImport({
+            ...base,
+            schema: 'talos_theme_export_v2',
+            theme: {
+                ...base.theme,
+                motion_v6: motionV6,
+                chat_layout: { bubble_scale: 'expanded' },
+            },
+        })).toBeNull()
+        expect(parseStrictTalosThemeImport({
+            ...base,
+            schema: 'talos_theme_export_v2',
+            theme: {
+                ...base.theme,
+                motion_v6: motionV6,
+                chat_layout: { message_scale: 1.23 },
+            },
+        })).toBeNull()
     })
 
     it.each([
@@ -322,6 +367,8 @@ describe('Theme Engine persistence contract', () => {
         ['invalid animation profile', { ui_animation_profile: 'warp' }],
         ['invalid animation customization', { ui_animation_customization: { intensity: 999 } }],
         ['invalid chat layout', { chat_layout: { bubble_scale: 'giant' } }],
+        ['invalid numeric message scale', { chat_layout: { message_scale: 1.23 } }],
+        ['ambiguous legacy and numeric message scale', { chat_layout: { bubble_scale: 'expanded', message_scale: 1.2 } }],
         ['invalid mobile window presentation', { chat_layout: { mobile_window_presentation: 'side-sheet' } }],
     ])('rejects strict import nested %s instead of sanitizing it', (_label, invalidFields) => {
         const imported = {

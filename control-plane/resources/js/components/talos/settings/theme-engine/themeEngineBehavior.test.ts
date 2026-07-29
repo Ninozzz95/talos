@@ -450,7 +450,7 @@ describe('Theme Engine behavior', () => {
         expect(container.querySelector('[data-testid="talos-theme-preview-code"]')).toBeTruthy()
         expect(container.querySelector('[data-testid="talos-theme-preview-input"]')).toBeTruthy()
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('inter')
-        expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('balanced messages, minimal composer')
+        expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('100% messages, full composer')
         expect(container.querySelector('[data-testid="talos-theme-product-preview"]')?.textContent).toContain('#c98b32')
     })
 
@@ -670,9 +670,38 @@ describe('Theme Engine behavior', () => {
         expect(payload.preferences?.theme_customization).toEqual({ font: 'manrope' })
     })
 
+    it('edits and persists the canonical numeric message scale from Customize', async () => {
+        const container = mountTheme({
+            chat_layout: {
+                message_scale: 1.1,
+                composer_mode: 'full',
+                message_style: 'sections',
+                advanced_rail_expanded: false,
+                mobile_window_presentation: 'drawer',
+            },
+        })
+        await nextTick()
+        await clickByText(container, 'Customize')
+        const range = container.querySelector<HTMLInputElement>('#theme-chat-message-scale-range')
+        expect(range?.value).toBe('1.1')
+
+        if (range) {
+            range.value = '1.25'
+            range.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        await nextTick()
+        await clickByText(container, 'Save customization')
+
+        const payload = settingsHarness.updateSettings.mock.calls[0]?.[0] as {
+            preferences?: { chat_layout?: Record<string, unknown> }
+        }
+        expect(payload.preferences?.chat_layout?.message_scale).toBe(1.25)
+        expect(payload.preferences?.chat_layout).not.toHaveProperty('bubble_scale')
+    })
+
     it('keeps motion, areas, and chat layout when Reset customization is used', async () => {
         const areaTokens = { composer: { background: '#111827' } }
-        const chatLayout = { bubble_scale: 'expanded', composer_mode: 'minimal', advanced_rail_expanded: true }
+        const chatLayout = { message_scale: 1.15, composer_mode: 'minimal', advanced_rail_expanded: true }
         const container = mountTheme({
             theme: 'claudius',
             theme_customization: { font: 'manrope' },

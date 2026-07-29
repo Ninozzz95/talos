@@ -38,7 +38,7 @@ final class ProviderMultimodalTurnRunner
     public function __construct(private readonly ?TalosProviderAdapterResolver $resolver = null) {}
 
     /**
-     * @return array{text: string, provider: string, model: string}
+     * @return array{text: string, provider: string, model: string, visible_reasoning: string|null}
      *
      * @throws TalosVisionException on a provider failure or a non-final outcome
      */
@@ -58,6 +58,7 @@ final class ProviderMultimodalTurnRunner
             'text' => $this->normalizeText($response),
             'provider' => (string) $profile->provider,
             'model' => (string) $profile->model,
+            'visible_reasoning' => $response->visibleReasoning,
         ];
     }
 

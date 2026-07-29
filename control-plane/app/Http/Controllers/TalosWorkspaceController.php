@@ -45,7 +45,12 @@ final class TalosWorkspaceController extends Controller
         $setting = TalosWorkspaceSetting::query()
             ->where('user_id', (int) Auth::id())
             ->first();
-        $preferences = TalosWorkspaceSetting::sanitizePreferences($setting?->preferences ?? []);
+        $preferences = $setting === null
+            ? TalosWorkspaceSetting::freshPreferences()
+            : TalosWorkspaceSetting::sanitizePreferences(
+                $setting->preferences ?? [],
+                $setting->getRawOriginal('preferences'),
+            );
 
         return response()->view('workspace', [
             'surface' => $surface,

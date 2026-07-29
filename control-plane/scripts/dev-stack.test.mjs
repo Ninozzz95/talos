@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import path from 'node:path'
 import test from 'node:test'
-import { createDevStackConfig, runDevStack } from './dev-stack.mjs'
+import { createDevStackConfig, readGitCommonDirectory, runDevStack } from './dev-stack.mjs'
 import {
     assertBrowserWorkerCanStart,
     evaluateBrowserWorkerOwnership,
@@ -27,6 +27,8 @@ test('development stack routes ephemeral browser credentials only to their ownin
             TALOS_BROWSER_ACTION_PRIVATE_KEY_B64: 'stale-private-key',
             TALOS_BROWSER_ACTION_PUBLIC_KEY_B64: 'stale-public-key',
         },
+        fileExists: () => true,
+        readGitCommonDirectory: () => null,
     })
 
     assert.deepEqual(config.commands.map((command) => command.name), [
@@ -103,6 +105,62 @@ test('development stack falls back to PATH runtimes when repo-local tools are ab
     assert.equal(validator.env.PHP_BIN, 'php')
     assert.equal(validator.env.TALOS_PHP_ROOT, undefined)
     assert.equal(validator.env.CURL_CA_BUNDLE, undefined)
+})
+
+test('development stack reuses the primary checkout toolchain from a linked worktree', () => {
+    const workspaceRoot = 'C:\\worktrees\\desktop-parity'
+    const primaryRoot = 'C:\\primary'
+    const primaryTools = path.win32.join(primaryRoot, '.tools')
+    const existingPaths = new Set([
+        path.win32.join(primaryTools, 'bin', 'php.cmd'),
+        path.win32.join(primaryTools, 'bin', 'npm.cmd'),
+        path.win32.join(primaryTools, 'php', 'php.exe'),
+        path.win32.join(primaryTools, 'php', 'extras', 'ssl', 'cacert.pem'),
+    ])
+    const config = createDevStackConfig({
+        token: 'd'.repeat(64),
+        inheritedEnv: {},
+        platform: 'win32',
+        workspaceRoot,
+        fileExists: (candidate) => existingPaths.has(path.win32.normalize(candidate)),
+        readGitCommonDirectory: () => path.win32.join(primaryRoot, '.git'),
+    })
+
+    const server = config.commands.find((command) => command.name === 'server')
+    const vite = config.commands.find((command) => command.name === 'vite')
+    const validator = config.commands.find((command) => command.name === 'validator')
+    const browser = config.commands.find((command) => command.name === 'browser')
+
+    assert.match(server.command, /^"C:\\primary\\\.tools\\bin\\php\.cmd" artisan serve/u)
+    assert.match(vite.command, /^"C:\\primary\\\.tools\\bin\\npm\.cmd" run dev/u)
+    assert.equal(validator.env.PHP_BIN, path.win32.join(primaryTools, 'php', 'php.exe'))
+    assert.equal(validator.env.TALOS_PHP_ROOT, path.win32.join(primaryTools, 'php'))
+    assert.match(validator.command, /C:\\worktrees\\desktop-parity\\validator/u)
+    assert.match(browser.command, /C:\\worktrees\\desktop-parity\\browser-worker/u)
+    assert.equal(config.workspaceRoot, workspaceRoot)
+})
+
+test('git common-directory lookup remains compatible with Git 2.28 output', () => {
+    const calls = []
+    const commonDirectory = readGitCommonDirectory(
+        'C:\\worktrees\\desktop-parity',
+        {
+            platform: 'win32',
+            runGit: (file, args, options) => {
+                calls.push({ file, args, options })
+
+                return '..\\primary\\.git\n'
+            },
+        },
+    )
+
+    assert.equal(commonDirectory, 'C:\\worktrees\\primary\\.git')
+    assert.deepEqual(calls.map(({ file, args }) => ({ file, args })), [{
+        file: 'git',
+        args: ['rev-parse', '--git-common-dir'],
+    }])
+    assert.equal(calls[0].options.cwd, 'C:\\worktrees\\desktop-parity')
+    assert.equal(calls[0].options.windowsHide, true)
 })
 
 test('browser worker ownership distinguishes managed, stale, orphaned, and conflicting endpoints', () => {

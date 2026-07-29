@@ -24,6 +24,7 @@ export const TALOS_THEME_IDS = [
     'claudius',
     'basicus',
     'telemetry',
+    'calm',
 ] as const
 
 export type TalosThemeId = typeof TALOS_THEME_IDS[number]
@@ -467,6 +468,23 @@ export const TALOS_THEME_PRESETS: TalosThemePreset[] = [
         poster: themePoster('telemetry'),
         defaultEffect: 'signal-mesh',
     },
+    {
+        id: 'calm',
+        label: 'Calm',
+        shortLabel: 'Calm',
+        description: 'Quiet grey surfaces, typography-led hierarchy, gold kept as a sparing signature.',
+        mood: 'Grey paper, graphite, refined bronze',
+        motion: 'Subtle micro-motion',
+        defaultDensity: 'comfortable',
+        defaultRadius: 'soft',
+        defaultMotion: 'subtle',
+        isLight: false,
+        fontUi: 'Instrument Sans',
+        fontMono: 'JetBrains Mono',
+        preview: { background: '#1e1f22', accent: '#c08b3c', secondary: '#8e9095', line: '#36373b' },
+        poster: themePoster('calm'),
+        defaultEffect: 'none',
+    },
 ]
 
 const THEME_BY_ID = new Map(TALOS_THEME_PRESETS.map((theme) => [theme.id, theme]))
@@ -630,7 +648,11 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
     const line = preset.preview.line
 
     if (mode === 'light') {
-        const background = preset.isLight ? preset.preview.background : mixColor(accent, 5, '#f8fafc')
+        const background = theme === 'calm'
+            ? '#f1f2f4'
+            : preset.isLight
+                ? preset.preview.background
+                : mixColor(accent, 5, '#f8fafc')
         const panel = mixColor(background, 92, '#ffffff')
         const text = '#111827'
         const muted = mixColor(text, 68, background)

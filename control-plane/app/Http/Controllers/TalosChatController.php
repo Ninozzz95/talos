@@ -43,11 +43,14 @@ use App\Services\Talos\Browser\TalosBrowserFollowUpResolver;
 use App\Services\Talos\Browser\TalosBrowserFileUploadService;
 use App\Services\Talos\Browser\TalosBrowserRedactor;
 use App\Services\Talos\Browser\TalosBrowserSemanticClickService;
+use App\Services\Talos\Chat\TalosSendTrace;
+use App\Services\Talos\Chat\TalosStreamEventProjector;
 use App\Services\Talos\FileAuthority\TalosFileAuthorityException;
 use App\Services\Talos\FileAuthority\TalosFileAuthorityService;
 use App\Services\Talos\Vision\ProviderMultimodalTurnRunner;
 use App\Services\Talos\Vision\TalosVisionAttachmentBuilder;
 use App\Services\Tools\TalosToolPlanningContextService;
+use App\Support\TalosMessageMetadata;
 use Kadmos\Provider\ReasoningEffortMap;
 use Kadmos\Tool\ProviderTurnRequest;
 use Illuminate\Http\Client\ConnectionException;
@@ -58,10 +61,13 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 final class TalosChatController extends Controller
 {
+    public const STREAM_ATTRIBUTE = 'talos.chat.stream_requested';
+
     private const MAX_CONTEXT_CHARS = 12000;
 
     private const MAX_HISTORY_CHARS = 9000;
@@ -93,6 +99,8 @@ PROMPT;
     public function __construct(
         private readonly TalosBrowserActivityProjector $browserActivityProjector,
         private readonly TalosUserMessageRunBinder $userMessageRunBinder,
+        private readonly TalosStreamEventProjector $streamProjector,
+        private readonly TalosSendTrace $sendTrace,
     ) {}
 
     public function __invoke(
@@ -111,7 +119,7 @@ PROMPT;
         TalosBrowserFileUploadService $browserUploads,
         TalosFileAuthorityService $fileAuthority,
         ProviderMultimodalTurnRunner $multimodalRunner,
-    ): JsonResponse {
+    ): JsonResponse|StreamedResponse {
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:20000'],
             'api_key' => ['sometimes', 'nullable', 'string', 'max:4096'],
@@ -544,11 +552,27 @@ PROMPT;
 
         if (is_array($browserMode)
             && $run instanceof TalosRun
+            && $session instanceof TalosSession
             && $profile instanceof TalosModelProfile
             && $browserSession instanceof TalosBrowserSession
             && ! $directScreenshotRequested) {
             $user = $request->user();
             abort_unless($user instanceof User, 401);
+
+            if ($request->attributes->get(self::STREAM_ATTRIBUTE) === true) {
+                return $this->streamAgentTurn(
+                    (int) $user->id,
+                    $run,
+                    $session,
+                    $profile,
+                    $agentTurns,
+                    $proceduralCurrentMessage,
+                    $reasoningEffort,
+                    $reasoningVisible,
+                    $browserSession,
+                    $usedAttachments,
+                );
+            }
 
             $outcome = $agentTurns->execute(
                 (int) $user->id,
@@ -629,6 +653,28 @@ PROMPT;
                 $usedAttachments,
                 $skillPlan,
                 $routingContext,
+            );
+        }
+
+        if ($request->attributes->get(self::STREAM_ATTRIBUTE) === true
+            && ! is_array($browserMode)
+            && $run instanceof TalosRun
+            && $session instanceof TalosSession
+            && $profile instanceof TalosModelProfile) {
+            $user = $request->user();
+            abort_unless($user instanceof User, 401);
+
+            return $this->streamAgentTurn(
+                (int) $user->id,
+                $run,
+                $session,
+                $profile,
+                $agentTurns,
+                $proceduralCurrentMessage,
+                $reasoningEffort,
+                $reasoningVisible,
+                null,
+                $usedAttachments,
             );
         }
 
@@ -1440,7 +1486,7 @@ PROMPT;
     }
 
     /**
-     * @param  array{text: string, provider: string, model: string}  $visionResult
+     * @param  array{text: string, provider: string, model: string, visible_reasoning: string|null}  $visionResult
      * @param  list<string>  $imageFileIds
      * @param  list<array<string, mixed>>  $usedMemories
      * @param  list<array<string, mixed>>  $usedContext
@@ -1509,8 +1555,236 @@ PROMPT;
         if (is_array($routingContext)) {
             $payload['model_routing'] = $routingContext;
         }
+        if ($run instanceof TalosRun && $session instanceof TalosSession) {
+            $messageMetadata = [
+                'source' => 'talos_vision',
+                'grounded' => true,
+                'used_attachments' => $usedAttachments,
+            ];
+            if (is_string($visionResult['visible_reasoning'] ?? null)
+                && trim($visionResult['visible_reasoning']) !== '') {
+                $messageMetadata['visible_reasoning'] = [
+                    'source' => 'provider',
+                    'provider' => (string) $profile->provider,
+                    'text' => $visionResult['visible_reasoning'],
+                    'duration_ms' => null,
+                ];
+            }
+            $assistantMessage = TalosMessage::query()->firstOrNew([
+                'session_id' => $session->id,
+                'run_id' => $run->id,
+                'role' => 'assistant',
+            ]);
+            $assistantMessage->forceFill([
+                'content' => $text,
+                'model_profile_id' => $profile->id,
+                'metadata' => TalosMessageMetadata::fromStorage($messageMetadata)->toStorageArray(),
+            ])->save();
+            $payload['assistant_message'] = $this->assistantMessagePayload($assistantMessage->refresh());
+        }
 
         return response()->json($payload);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $usedAttachments
+     */
+    private function streamAgentTurn(
+        int $ownerUserId,
+        TalosRun $run,
+        TalosSession $session,
+        TalosModelProfile $profile,
+        TalosAgentTurnService $agentTurns,
+        string $currentUserMessage,
+        ?string $reasoningEffort,
+        ?bool $reasoningVisible,
+        ?TalosBrowserSession $browserSession,
+        array $usedAttachments,
+    ): StreamedResponse {
+        return response()->stream(function () use (
+            $ownerUserId,
+            $run,
+            $session,
+            $profile,
+            $agentTurns,
+            $currentUserMessage,
+            $reasoningEffort,
+            $reasoningVisible,
+            $browserSession,
+            $usedAttachments,
+        ): void {
+            ignore_user_abort(true);
+            $startedAt = hrtime(true);
+            $firstProviderEventAt = null;
+            $emittedEventCount = 0;
+
+            $emit = static function (array $envelope) use (&$emittedEventCount): void {
+                $emittedEventCount++;
+                if (! connection_aborted()) {
+                    TalosChatStreamController::writeEvent($envelope);
+                }
+            };
+
+            $emit($this->streamProjector->projectLifecycle(
+                $ownerUserId,
+                $run,
+                'run.started',
+            ));
+
+            $outcome = $agentTurns->execute(
+                $ownerUserId,
+                $run,
+                $profile,
+                $browserSession,
+                $currentUserMessage,
+                $reasoningEffort,
+                $reasoningVisible,
+                onProviderEvent: function ($event) use (
+                    $ownerUserId,
+                    $run,
+                    $startedAt,
+                    &$firstProviderEventAt,
+                    $emit,
+                ): void {
+                    $envelope = $this->streamProjector->projectProviderEvent(
+                        $ownerUserId,
+                        $run,
+                        $event,
+                    );
+                    if (! is_array($envelope)) {
+                        return;
+                    }
+                    if ($firstProviderEventAt === null
+                        && in_array($envelope['kind'], [
+                            'text.delta',
+                            'reasoning.delta',
+                            'tool.started',
+                        ], true)) {
+                        $firstProviderEventAt = hrtime(true) - $startedAt;
+                    }
+                    $emit($envelope);
+                },
+                onLifecycleEvent: function (string $kind, array $payload) use (
+                    $ownerUserId,
+                    $run,
+                    $emit,
+                ): void {
+                    $emit($this->streamProjector->projectLifecycle(
+                        $ownerUserId,
+                        $run,
+                        $kind,
+                        $payload,
+                    ));
+                },
+                isCancelled: static fn (): bool => TalosRun::query()
+                    ->whereKey($run->id)
+                    ->where('user_id', $ownerUserId)
+                    ->value('status') === 'cancelled',
+            );
+
+            $assistantMessage = TalosMessage::query()
+                ->where('session_id', $session->id)
+                ->where('run_id', $run->id)
+                ->where('role', 'assistant')
+                ->first();
+            if ($outcome->status === 'completed' && $assistantMessage instanceof TalosMessage) {
+                $metadata = is_array($assistantMessage->metadata) ? $assistantMessage->metadata : [];
+                if ($usedAttachments !== []) {
+                    $metadata['used_attachments'] = $usedAttachments;
+                }
+                if ($browserSession instanceof TalosBrowserSession) {
+                    $projection = $this->browserActivityProjector->projectionForRun($run->refresh());
+                    $metadata['used_browser_context'] = $projection['context'];
+                    $metadata['browser_activities'] = $projection['activities'];
+                }
+                $assistantMessage->forceFill([
+                    'metadata' => TalosMessageMetadata::fromStorage($metadata)->toStorageArray(),
+                ])->save();
+                $assistantMessage->refresh();
+
+                $emit($this->streamProjector->projectLifecycle(
+                    $ownerUserId,
+                    $run,
+                    'message.completed',
+                    [
+                        'message_id' => (string) $assistantMessage->id,
+                        'request_key' => $assistantMessage->request_key,
+                        'message' => $this->assistantMessagePayload($assistantMessage),
+                    ],
+                ));
+            } elseif ($outcome->status === 'cancelled') {
+                $cancelledEvent = $run->events()
+                    ->where('event_type', 'run.cancelled')
+                    ->oldest('sequence')
+                    ->first();
+                $emit($cancelledEvent instanceof \App\Models\TalosRunEvent
+                    ? $this->streamProjector->envelope($cancelledEvent)
+                    : $this->streamProjector->projectLifecycle(
+                        $ownerUserId,
+                        $run,
+                        'run.cancelled',
+                        ['reason' => 'user_requested'],
+                    ));
+            } elseif (in_array($outcome->status, ['failed', 'recovery_required'], true)) {
+                $emit($this->streamProjector->projectLifecycle(
+                    $ownerUserId,
+                    $run,
+                    'run.failed',
+                    [
+                        'status' => $outcome->status,
+                        'code' => $outcome->failureCode ?? 'TALOS_AGENT_TURN_FAILED',
+                        'retryable' => $outcome->providerFailure?->retryable ?? false,
+                    ],
+                ));
+            }
+
+            $turn = TalosToolTurn::query()->where('run_id', $run->id)->first();
+            $usage = $turn instanceof TalosToolTurn && is_array($turn->budget_usage)
+                ? $turn->budget_usage
+                : [];
+            $metrics = [
+                'elapsed_ms' => min(
+                    2_147_483_647,
+                    max(0, (int) round((hrtime(true) - $startedAt) / 1_000_000)),
+                ),
+                'event_count' => $emittedEventCount,
+                'tool_call_count' => $turn instanceof TalosToolTurn
+                    ? $turn->calls()->count()
+                    : 0,
+            ];
+            foreach (['input_tokens', 'output_tokens', 'cached_tokens'] as $usageMetric) {
+                if (is_int($usage[$usageMetric] ?? null) && $usage[$usageMetric] >= 0) {
+                    $metrics[$usageMetric] = $usage[$usageMetric];
+                }
+            }
+            foreach ([
+                'cache_read_tokens',
+                'cache_write_tokens',
+                'cache_miss_tokens',
+                'cache_write_5m_tokens',
+                'cache_write_1h_tokens',
+            ] as $usageMetric) {
+                if (array_key_exists($usageMetric, $usage)
+                    && ($usage[$usageMetric] === null
+                        || (is_int($usage[$usageMetric]) && $usage[$usageMetric] >= 0))) {
+                    $metrics[$usageMetric] = $usage[$usageMetric];
+                }
+            }
+            if (is_int($firstProviderEventAt)) {
+                $metrics['time_to_first_event_ms'] = min(
+                    2_147_483_647,
+                    max(0, (int) round($firstProviderEventAt / 1_000_000)),
+                );
+            }
+
+            $phase = match ($outcome->status) {
+                'completed' => 'completed',
+                'cancelled' => 'cancelled',
+                'failed', 'recovery_required' => 'failed',
+                default => 'tool',
+            };
+            $this->sendTrace->record($ownerUserId, $run, $phase, true, $metrics);
+        }, 200, TalosChatStreamController::headers((string) $run->id));
     }
 
     private function assistantMessagePayload(TalosMessage $message): array
@@ -1522,7 +1796,8 @@ PROMPT;
             'content' => $message->content,
             'model_profile_id' => $message->model_profile_id,
             'run_id' => $message->run_id,
-            'metadata' => $message->metadata,
+            'request_key' => $message->request_key,
+            'metadata' => TalosMessageMetadata::fromStorage($message->metadata)->toApiArray(),
             'created_at' => $message->created_at?->toJSON(),
             'updated_at' => $message->updated_at?->toJSON(),
         ];

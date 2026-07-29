@@ -3,7 +3,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import type { TalosThemeCustomization, TalosThemeId } from '../lib/talosThemes'
-import type { TalosChatBubbleScale } from '../lib/talosTypes'
 import type { TalosWorkspaceSettings } from './useTalosSettings'
 import { useTalosWorkspaceTheme } from './useTalosWorkspaceTheme'
 import { createDefaultTalosMotionV6Preferences } from '../motion-v6/defaults'
@@ -43,6 +42,7 @@ async function mountWorkspaceTheme(
     themeMotion: 'system' | 'normal' | 'cinematic',
     preferences: Record<string, unknown> = {},
     themeId: TalosThemeId = 'forge',
+    scales: { ui: number; message: number } = { ui: 1, message: 1 },
 ) {
     const container = document.createElement('div')
     container.className = 'talos-shell'
@@ -68,7 +68,8 @@ async function mountWorkspaceTheme(
                 workspaceRoot,
                 railCollapsed: ref(false),
                 railWidth: ref(272),
-                bubbleScale: ref<TalosChatBubbleScale>('balanced'),
+                uiScale: ref(scales.ui),
+                messageScale: ref(scales.message),
             })
 
             return () => h('div')
@@ -83,6 +84,24 @@ async function mountWorkspaceTheme(
 }
 
 describe('useTalosWorkspaceTheme motion precedence', () => {
+    it('emits independent numeric UI and message geometry without zoom or transform scaling', async () => {
+        installMotionPreference(false)
+
+        const theme = await mountWorkspaceTheme('system', {}, 'calm', { ui: 1.2, message: 1.25 })
+
+        expect(theme.workspaceStyle.value).toMatchObject({
+            '--talos-ui-scale': '1.2',
+            '--talos-message-scale': '1.25',
+            '--talos-message-max-width': '880px',
+            '--talos-message-padding-inline': '1.25rem',
+            '--talos-message-padding-block': '0.9375rem',
+            '--talos-message-font-size': '1.05rem',
+            '--talos-message-line-height': '1.68rem',
+        })
+        expect(theme.workspaceStyle.value).not.toHaveProperty('zoom')
+        expect(theme.workspaceStyle.value).not.toHaveProperty('transform')
+    })
+
     it('makes canonical V6 settings authoritative over legacy renderer preferences', async () => {
         installMotionPreference(false)
         const v6 = createDefaultTalosMotionV6Preferences()

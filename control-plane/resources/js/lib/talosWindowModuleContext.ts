@@ -5,6 +5,8 @@ import type { TalosWindowId } from './talosWindowRegistry'
 export type TalosWindowModuleContext = {
     id: TalosWindowId
     activeSection: string
+    requestedWindowSection: string | null
+    requestedWindowSectionRevision: number
     runtimeRequestedTab: 'timeline' | 'dag' | 'replay' | 'recovery' | 'artifacts'
     runtimeRequestedTabRevision: number
     selectedBenchmarkGroupId: string | null
@@ -16,6 +18,7 @@ export type TalosWindowModuleContext = {
     settingsRequestedTab: 'models' | 'account'
     settingsRequestedTabRevision: number
     authenticated: boolean
+    settingsOwnerKey: string | null
     authUserName: string
     logoutUrl: string
     csrfToken: string
@@ -32,5 +35,6 @@ export type TalosWindowModuleContext = {
     settingsSaved: () => void
     themeCustomizationChanged: (settings?: { preferences?: Record<string, unknown> }) => void
     themeDraftChanged: (customization: TalosThemeCustomization | null) => void
+    attachLibraryFile: (fileId: string) => void
     replayIntro: () => void
 }

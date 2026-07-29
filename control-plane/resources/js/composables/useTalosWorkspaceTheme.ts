@@ -18,7 +18,10 @@ import {
     type TalosThemeCustomization,
     type TalosThemeId,
 } from '../lib/talosThemes'
-import type { TalosChatBubbleScale } from '../lib/talosTypes'
+import {
+    TALOS_MESSAGE_SCALE_CONSTRAINT,
+    TALOS_UI_SCALE_CONSTRAINT,
+} from '../lib/talosUiScale'
 import { useTalosMotionEnvironment } from './useTalosMotionEnvironment'
 import type { TalosWorkspaceSettings } from './useTalosSettings'
 import { resolveTalosWorkspaceMotionV6 } from '../motion-v6/workspaceRuntime'
@@ -31,6 +34,14 @@ import {
 import type { ComplexRendererFrameMetric } from '../motion-v6/renderers/complexRenderer'
 import type { TalosMotionRuntimeEnvironment } from '../motion-v6/runtimePolicy'
 
+function boundedScale(value: number, min: number, max: number, fallback: number): number {
+    return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+}
+
+function cssNumber(value: number): string {
+    return String(Number(value.toFixed(4)))
+}
+
 export function useTalosWorkspaceTheme(options: {
     theme: Ref<TalosThemeId>
     themeDraftCustomization: Ref<TalosThemeCustomization | null>
@@ -38,7 +49,8 @@ export function useTalosWorkspaceTheme(options: {
     workspaceRoot: Ref<HTMLElement | null>
     railCollapsed: Ref<boolean>
     railWidth: Ref<number>
-    bubbleScale: Ref<TalosChatBubbleScale>
+    uiScale: Ref<number>
+    messageScale: Ref<number>
 }) {
     const browserPrefersDark = ref<boolean | null>(null)
     let colorSchemeQuery: MediaQueryList | null = null
@@ -143,23 +155,42 @@ export function useTalosWorkspaceTheme(options: {
         backgroundDisabled.value ? 'talos-background-disabled' : '',
         ...Object.keys(areaTokens.value).map((area) => `talos-area-${area}-customized`),
     ])
-    const workspaceStyle = computed(() => ({
-        '--talos-rail-width': `${currentRailWidth.value}px`,
-        '--talos-message-max-width': options.bubbleScale.value === 'compact' ? '640px' : options.bubbleScale.value === 'expanded' ? '880px' : '760px',
-        '--talos-message-padding-inline': options.bubbleScale.value === 'compact' ? '0.75rem' : options.bubbleScale.value === 'expanded' ? '1.25rem' : '1rem',
-        '--talos-message-padding-block': options.bubbleScale.value === 'compact' ? '0.625rem' : options.bubbleScale.value === 'expanded' ? '1rem' : '0.75rem',
-        '--talos-message-font-size': options.bubbleScale.value === 'compact' ? '0.8125rem' : options.bubbleScale.value === 'expanded' ? '0.9375rem' : '0.875rem',
-        '--talos-message-line-height': options.bubbleScale.value === 'compact' ? '1.35rem' : options.bubbleScale.value === 'expanded' ? '1.65rem' : '1.5rem',
-        ...talosInteractionMotionStyleV6({
-            themeId: options.theme.value,
-            preferences: motionV6Preferences.value,
-            reducedMotion: motionV6Decision.value.reducedMotionApplied,
-            paused: !motionV6Decision.value.uiMotionEnabled,
-        }),
-        ...talosThemeModeVariantStyle(options.theme.value, resolvedThemeMode.value),
-        ...talosThemeCustomizationStyle(effectiveCustomization.value),
-        ...talosThemeAreaTokenStyle(areaTokens.value),
-    }))
+    const effectiveUiScale = computed(() => boundedScale(
+        options.uiScale.value,
+        TALOS_UI_SCALE_CONSTRAINT.min,
+        TALOS_UI_SCALE_CONSTRAINT.max,
+        TALOS_UI_SCALE_CONSTRAINT.default,
+    ))
+    const effectiveMessageScale = computed(() => boundedScale(
+        options.messageScale.value,
+        TALOS_MESSAGE_SCALE_CONSTRAINT.min,
+        TALOS_MESSAGE_SCALE_CONSTRAINT.max,
+        TALOS_MESSAGE_SCALE_CONSTRAINT.default,
+    ))
+    const workspaceStyle = computed(() => {
+        const messageScale = effectiveMessageScale.value
+        const messageFontSize = Math.min(1.05, Math.max(0.75, 0.875 * messageScale))
+
+        return {
+            '--talos-rail-width': `${currentRailWidth.value}px`,
+            '--talos-ui-scale': cssNumber(effectiveUiScale.value),
+            '--talos-message-scale': cssNumber(messageScale),
+            '--talos-message-max-width': `${cssNumber(Math.min(880, Math.max(640, 760 + ((messageScale - 1) * 480))))}px`,
+            '--talos-message-padding-inline': `${cssNumber(messageScale)}rem`,
+            '--talos-message-padding-block': `${cssNumber(0.75 * messageScale)}rem`,
+            '--talos-message-font-size': `${cssNumber(messageFontSize)}rem`,
+            '--talos-message-line-height': `${cssNumber(messageFontSize * 1.6)}rem`,
+            ...talosInteractionMotionStyleV6({
+                themeId: options.theme.value,
+                preferences: motionV6Preferences.value,
+                reducedMotion: motionV6Decision.value.reducedMotionApplied,
+                paused: !motionV6Decision.value.uiMotionEnabled,
+            }),
+            ...talosThemeModeVariantStyle(options.theme.value, resolvedThemeMode.value),
+            ...talosThemeCustomizationStyle(effectiveCustomization.value),
+            ...talosThemeAreaTokenStyle(areaTokens.value),
+        }
+    })
 
     async function refreshFavicon() {
         await nextTick()

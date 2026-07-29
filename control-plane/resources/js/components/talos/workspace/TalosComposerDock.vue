@@ -33,6 +33,7 @@ const props = withDefaults(defineProps<{
     commands: TalosCommand[]
     canSend: boolean
     sending: boolean
+    streamingActive?: boolean
     statusText: string
     modelLabel: string
     modelProvider?: string | null
@@ -81,11 +82,13 @@ const props = withDefaults(defineProps<{
     dictationResolvedMode: null,
     dictationSupported: false,
     autoBrowseUrl: null,
+    streamingActive: false,
 })
 
 const emit = defineEmits<{
     updatePrompt: [prompt: string]
     send: []
+    cancelStream: []
     openModel: []
     openContext: []
     openSettings: []
@@ -318,6 +321,7 @@ onBeforeUnmount(() => {
                 :commands="commands"
                 :can-send="canSend"
                 :sending="sending"
+                :streaming-active="streamingActive"
                 :status-text="statusText"
                 :model-label="modelLabel"
                 :model-provider="modelProvider"
@@ -347,6 +351,7 @@ onBeforeUnmount(() => {
                 :enhancer-disabled-reason="enhancerDisabledReason"
                 :visibility="visibility"
                 @send="emit('send')"
+                @cancel-stream="emit('cancelStream')"
                 @open-model="emit('openModel')"
                 @select-effort="emit('selectEffort', $event)"
                 @select-thinking="emit('selectThinking', $event)"

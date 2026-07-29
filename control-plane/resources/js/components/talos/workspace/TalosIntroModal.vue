@@ -7,12 +7,22 @@ import Dialog from '../../ui/dialog/Dialog.vue'
 import DialogContent from '../../ui/dialog/DialogContent.vue'
 import DialogDescription from '../../ui/dialog/DialogDescription.vue'
 import DialogTitle from '../../ui/dialog/DialogTitle.vue'
+import {
+    TALOS_CAPABILITY_LABELS,
+    type TalosCapabilityId,
+    type TalosCapabilityManifest,
+    type TalosCapabilityRecord,
+    type TalosCapabilityState,
+} from '../../../lib/talosCapabilities'
 import type { TalosPublicLinks } from '../../../lib/talosPublicLinks'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     open: boolean
     links: TalosPublicLinks
-}>()
+    capabilities?: TalosCapabilityManifest | null
+}>(), {
+    capabilities: null,
+})
 
 const emit = defineEmits<{
     close: [outcome: 'completed' | 'skipped']
@@ -27,6 +37,22 @@ const SLIDES = [
     { station: 'CONNECTED', title: 'Plugged into your world' },
 ] as const
 
+const SLIDE_CAPABILITIES: Readonly<Record<number, readonly TalosCapabilityId[]>> = Object.freeze({
+    0: ['chat.provider', 'files.ingestion', 'browser.hmi', 'runs.replay'],
+    1: ['runs.replay', 'files.ingestion', 'browser.hmi'],
+    2: ['benchmarks.avm', 'runs.replay'],
+    3: ['models.profiles', 'models.local_runtime', 'models.multi_model_orchestration'],
+    4: ['browser.hmi'],
+    5: ['integrations.google_workspace', 'memory.supermemory', 'settings.workspace'],
+})
+
+const CAPABILITY_STATE_LABELS: Readonly<Record<TalosCapabilityState, string>> = Object.freeze({
+    available: 'Available',
+    degraded: 'Degraded',
+    blocked: 'Blocked',
+    planned: 'Roadmap',
+})
+
 const slideIndex = ref(0)
 const announcement = ref('')
 const outcomeEmitted = ref(false)
@@ -35,6 +61,23 @@ const nextButton = ref<{ $el?: HTMLElement } | HTMLElement | null>(null)
 const slide = computed(() => SLIDES[slideIndex.value])
 const isLastSlide = computed(() => slideIndex.value === SLIDES.length - 1)
 const stepText = computed(() => `Step ${slideIndex.value + 1} of ${SLIDES.length}`)
+const capabilitiesVerified = computed(() => props.capabilities !== null)
+const slideCapabilities = computed(() => (
+    (SLIDE_CAPABILITIES[slideIndex.value] ?? []).map(capabilityRecord)
+))
+
+function capabilityRecord(id: TalosCapabilityId): TalosCapabilityRecord {
+    return props.capabilities?.capabilities.find((record) => record.id === id) ?? {
+        id,
+        state: 'blocked',
+        reason: 'Capability status is absent from the verified manifest.',
+        evidence: ['client:capability-record-absent'],
+    }
+}
+
+function capabilityStateLabel(state: TalosCapabilityState): string {
+    return CAPABILITY_STATE_LABELS[state]
+}
 
 watch(() => props.open, (open) => {
     if (open) {
@@ -126,10 +169,12 @@ function preventOutsideDismiss(event: Event) {
                         <DialogDescription class="sr-only">A short introduction to TALOS and what it can do.</DialogDescription>
 
                         <template v-if="slideIndex === 0">
-                            <p class="text-sm leading-6 text-[var(--talos-muted)]">
-                                Your AI workspace with a working memory, a toolbox, and a conscience.
-                                TALOS doesn't just answer — it works: it reads your files, browses the
-                                web, runs your models, and keeps a verifiable record of the work it does.
+                            <p v-if="!capabilitiesVerified" class="text-sm leading-6 text-[var(--talos-muted)]" role="status">
+                                Capability status is still being verified for this workspace.
+                            </p>
+                            <p v-else class="text-sm leading-6 text-[var(--talos-muted)]">
+                                Your AI workspace brings provider-backed chat, files, browser work and
+                                replayable runs together according to the readiness shown below.
                             </p>
                         </template>
 
@@ -176,9 +221,8 @@ function preventOutsideDismiss(event: Event) {
 
                         <template v-else-if="slideIndex === 4">
                             <p class="text-sm leading-6 text-[var(--talos-muted)]">
-                                TALOS browses the real web for you: it reads pages, captures what it
-                                sees, and asks before doing anything consequential. Clicks and
-                                screenshots become evidence you can inspect.
+                                When the Browser worker is ready, TALOS can read pages, capture what it
+                                sees and preserve clicks or screenshots as evidence you can inspect.
                             </p>
                         </template>
 
@@ -193,8 +237,8 @@ function preventOutsideDismiss(event: Event) {
                             </p>
                             <p class="text-sm leading-6 text-[var(--talos-muted)]">
                                 <Chip code="ROADMAP" data-testid="talos-intro-roadmap-chip" class="mr-2 align-middle opacity-90" aria-hidden="true" />
-                                On the roadmap: Calendar, Drive and Gmail through Google Workspace, and
-                                long-term recall through Supermemory.
+                                On the roadmap: long-term recall through Supermemory. Google Workspace
+                                has an existing integration whose current readiness appears below.
                             </p>
                             <p class="talos-type-caption border-t border-[var(--talos-border)] pt-3 leading-5 text-[var(--talos-muted)]">
                                 One more thing: TALOS is a one-person project — crafted end to end by a
@@ -210,6 +254,29 @@ function preventOutsideDismiss(event: Event) {
                                 Thanks for being here at the start.
                             </p>
                         </template>
+
+                        <div
+                            v-if="capabilitiesVerified"
+                            class="divide-y divide-[var(--talos-border)] border-y border-[var(--talos-border)]"
+                            aria-label="Capability status"
+                        >
+                            <div
+                                v-for="capability in slideCapabilities"
+                                :key="capability.id"
+                                :data-capability-id="capability.id"
+                                class="flex items-start justify-between gap-3 py-2"
+                            >
+                                <div class="min-w-0">
+                                    <div class="text-sm font-medium text-[var(--talos-text)]">
+                                        {{ TALOS_CAPABILITY_LABELS[capability.id] }}
+                                    </div>
+                                    <p v-if="capability.reason" class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">
+                                        {{ capability.reason }}
+                                    </p>
+                                </div>
+                                <Chip :code="capabilityStateLabel(capability.state)" class="shrink-0" />
+                            </div>
+                        </div>
                     </section>
                 </Transition>
             </div>

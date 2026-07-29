@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Tool\ProviderTurnRequest;
+use Kadmos\Provider\PromptCachePlan;
 
 function assertProviderTurnRequest(bool $condition, string $message): void
 {
@@ -120,10 +121,54 @@ function testResponseMimeTypeRejectsUnsupportedValues(): void
     );
 }
 
+function testPromptCachePlanDefaultsToNullAndParticipatesInAuditIdentity(): void
+{
+    $default = new ProviderTurnRequest('openai', 'gpt-5.6', 'sys', durableUserMessage(), []);
+
+    assertProviderTurnRequest($default->promptCachePlan === null, 'promptCachePlan defaults to null');
+    assertProviderTurnRequest(
+        array_key_exists('prompt_cache_plan', $default->toRedactedArray()),
+        'toRedactedArray exposes prompt_cache_plan',
+    );
+    assertProviderTurnRequest(
+        $default->toRedactedArray()['prompt_cache_plan'] === null,
+        'default prompt_cache_plan is null',
+    );
+
+    $plan = PromptCachePlan::forStablePrefix(
+        mode: PromptCachePlan::MODE_EXPLICIT,
+        provider: 'openai',
+        model: 'gpt-5.6',
+        stableSystemIdentity: hash('sha256', 'system'),
+        stableToolSchemaIdentity: hash('sha256', 'tools'),
+        stablePrefixIdentity: hash('sha256', 'prefix'),
+        breakpoints: [PromptCachePlan::BREAKPOINT_SYSTEM],
+        ttl: PromptCachePlan::TTL_30_MINUTES,
+        minimumInputTokens: 1024,
+    );
+    $request = new ProviderTurnRequest(
+        provider: 'openai',
+        model: 'gpt-5.6',
+        systemPrompt: 'private system prompt',
+        messages: [['role' => 'user', 'content' => 'private user prompt']],
+        tools: [],
+        promptCachePlan: $plan,
+    );
+
+    assertProviderTurnRequest($request->promptCachePlan === $plan, 'promptCachePlan is stored unchanged');
+    assertProviderTurnRequest(
+        $request->toRedactedArray()['prompt_cache_plan'] === $plan->toAuditArray(),
+        'prompt cache identity participates in the audited idempotency payload',
+    );
+    $audit = json_encode($request->toRedactedArray()['prompt_cache_plan'], JSON_THROW_ON_ERROR);
+    assertProviderTurnRequest(! str_contains($audit, 'private'), 'prompt cache audit cannot expose prompt content');
+}
+
 testReasoningFieldsDefaultToNull();
 testReasoningFieldsCarryThroughRedactedArray();
 testReasoningEffortRejectsEmptyAndOverlong();
 testResponseMimeTypeDefaultsToNullAndIsAudited();
 testResponseMimeTypeRejectsUnsupportedValues();
+testPromptCachePlanDefaultsToNullAndParticipatesInAuditIdentity();
 
 echo "ProviderTurnRequestTest passed\n";

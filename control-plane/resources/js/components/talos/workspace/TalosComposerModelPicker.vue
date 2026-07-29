@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Check, WandSparkles } from '@lucide/vue'
-import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
+import { computed, ref } from 'vue'
+import { Check, Search, WandSparkles } from '@lucide/vue'
+import { talosModelProfileIsCallable, talosProviderById } from '../../../lib/talosProviders'
 import type { TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
 const props = withDefaults(defineProps<{
@@ -22,6 +22,40 @@ const emit = defineEmits<{
 }>()
 
 const listbox = ref<HTMLElement | null>(null)
+const searchQuery = ref('')
+const filteredModelProfiles = computed(() => {
+    const query = searchQuery.value.trim().toLocaleLowerCase()
+    if (!query) return props.modelProfiles
+
+    return props.modelProfiles.filter((profile) => {
+        const provider = talosProviderById(profile.provider)
+        return [
+            profile.display_name,
+            profile.model,
+            profile.provider,
+            provider.label,
+            provider.shortLabel,
+        ].some((value) => value.toLocaleLowerCase().includes(query))
+    })
+})
+const modelGroups = computed(() => {
+    const groups = new Map<TalosModelProfile['provider'], TalosModelProfile[]>()
+    for (const profile of filteredModelProfiles.value) {
+        const profiles = groups.get(profile.provider) ?? []
+        profiles.push(profile)
+        groups.set(profile.provider, profiles)
+    }
+
+    return Array.from(groups, ([provider, profiles]) => ({
+        provider,
+        label: talosProviderById(provider).label,
+        profiles,
+    }))
+})
+const hasListboxOptions = computed(() => (
+    props.modelRoutingProfiles.length > 0
+    || filteredModelProfiles.value.length > 0
+))
 
 // A themed listbox — never a native <select> — so the option list honours
 // --talos-* tokens on the dark surface instead of the OS' white popup.
@@ -68,15 +102,30 @@ function onListKeydown(event: KeyboardEvent) {
 
 <template>
     <div class="talos-composer-model-picker" data-testid="talos-composer-model-picker">
+        <label class="mb-3 flex min-h-10 items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2 text-[var(--talos-muted)] focus-within:border-[var(--talos-accent)] focus-within:ring-2 focus-within:ring-[var(--talos-ring)]">
+            <Search class="h-4 w-4 shrink-0" aria-hidden="true" />
+            <input
+                v-model="searchQuery"
+                type="search"
+                aria-label="Search models"
+                aria-controls="talos-composer-model-listbox"
+                autocomplete="off"
+                placeholder="Search models or providers"
+                class="h-10 min-w-0 flex-1 bg-transparent text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)]"
+            >
+        </label>
         <div
+            id="talos-composer-model-listbox"
             ref="listbox"
-            role="listbox"
-            aria-label="Model for this conversation"
+            :role="hasListboxOptions ? 'listbox' : undefined"
+            :aria-label="hasListboxOptions ? 'Model for this conversation' : undefined"
+            :aria-busy="loadingModelProfiles || loadingModelRoutingProfiles ? 'true' : undefined"
             class="max-h-[min(48vh,320px)] space-y-3 overflow-y-auto pr-1"
             @keydown="onListKeydown"
         >
             <section
                 v-if="modelRoutingProfiles.length || loadingModelRoutingProfiles"
+                role="group"
                 aria-labelledby="talos-model-picker-auto-heading"
                 class="space-y-1"
             >
@@ -114,21 +163,22 @@ function onListKeydown(event: KeyboardEvent) {
                 </button>
             </section>
 
-            <section aria-labelledby="talos-model-picker-models-heading" class="space-y-1">
+            <section
+                v-for="group in modelGroups"
+                :key="group.provider"
+                role="group"
+                :aria-labelledby="`talos-model-picker-provider-${group.provider}`"
+                class="space-y-1"
+            >
                 <header
-                    id="talos-model-picker-models-heading"
-                    class="px-1 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
+                    :id="`talos-model-picker-provider-${group.provider}`"
+                    data-testid="talos-model-picker-provider-heading"
+                    class="px-1 pt-1 text-[11px] font-semibold text-[var(--talos-muted)]"
                 >
-                    Models
+                    {{ group.label }}
                 </header>
-                <p v-if="loadingModelProfiles" class="px-2 py-1.5 text-xs text-[var(--talos-muted)]">
-                    Loading profiles…
-                </p>
-                <p v-else-if="!modelProfiles.length" class="px-2 py-1.5 text-xs leading-5 text-[var(--talos-muted)]">
-                    No composer models yet — open Model Lab to add one.
-                </p>
                 <button
-                    v-for="profile in modelProfiles"
+                    v-for="profile in group.profiles"
                     :key="profile.id"
                     type="button"
                     role="option"
@@ -148,5 +198,15 @@ function onListKeydown(event: KeyboardEvent) {
                 </button>
             </section>
         </div>
+        <p v-if="loadingModelProfiles" class="px-2 py-1.5 text-xs text-[var(--talos-muted)]">
+            Loading profiles…
+        </p>
+        <p v-else-if="!modelProfiles.length" class="px-2 py-1.5 text-xs leading-5 text-[var(--talos-muted)]">
+            No composer models yet — open Model Lab to add one.
+        </p>
+        <p v-if="modelProfiles.length && !filteredModelProfiles.length" role="status" class="px-2 py-1.5 text-xs leading-5 text-[var(--talos-muted)]">
+            No models match this search.
+        </p>
+        <span class="sr-only" aria-live="polite">{{ filteredModelProfiles.length }} models shown.</span>
     </div>
 </template>

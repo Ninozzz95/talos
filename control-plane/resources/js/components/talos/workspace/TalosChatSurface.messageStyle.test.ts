@@ -23,11 +23,23 @@ describe('TalosChatSurface message style (sections vs bubbles)', () => {
         expect(source).toMatch(/bg-\[var\(--talos-assistant\)\]/)
     })
 
+    it('carries the canonical numeric message scale through rendered message diagnostics', () => {
+        expect(source).toContain('messageScale: number')
+        expect(source).toContain(':data-message-scale="messageScale"')
+        expect(source).not.toContain('TalosChatBubbleScale')
+        expect(source).not.toContain('data-bubble-scale')
+    })
+
     it('collapses long user messages behind an Expand/Reduce control without truncating', () => {
         expect(source).toContain('function userMessageIsLong(message')
         expect(source).toContain('function userMessageCollapsed(message')
         expect(source).toContain('toggleUserMessageExpanded')
         expect(source).toContain('data-testid="talos-user-message-toggle"')
         expect(source).toMatch(/userMessageCollapsed\(message\) \? 'Expand' : 'Reduce'/)
+    })
+
+    it('uses a semantic contrast-safe color for message metadata without composited opacity', () => {
+        expect(source).toContain('talos-message-meta mt-1 flex max-w-full flex-wrap items-center gap-2 px-1 text-[var(--talos-muted)]')
+        expect(source).not.toContain('talos-message-meta mt-1 flex max-w-full flex-wrap items-center gap-2 px-1 opacity-80')
     })
 })

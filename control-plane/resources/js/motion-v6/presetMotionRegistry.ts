@@ -119,6 +119,7 @@ const PROFILE_RENDERING_DEFAULTS: Record<
     claudius: { default_mode: 'simple', default_quality: 'low', fps_cap: 24, dpr_cap: 1 },
     basicus: { default_mode: 'adaptive', default_quality: 'balanced', fps_cap: 30, dpr_cap: 1.25 },
     telemetry: { default_mode: 'adaptive', default_quality: 'balanced', fps_cap: 30, dpr_cap: 1.25 },
+    calm: { default_mode: 'simple', default_quality: 'low', fps_cap: 24, dpr_cap: 1 },
 }
 
 function strictProfileRecord(value: unknown, expectedKeys: readonly string[]): ProfileRecord | null {

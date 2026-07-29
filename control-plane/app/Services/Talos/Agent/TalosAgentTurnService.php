@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Talos\Agent;
 
+use Closure;
 use App\Models\TalosBrowserArtifact;
 use App\Models\TalosBrowserSession;
 use App\Models\TalosMessage;
@@ -13,10 +14,12 @@ use App\Models\TalosSession;
 use App\Models\TalosToolCall;
 use App\Models\TalosToolCall as PersistedToolCall;
 use App\Models\TalosToolTurn;
+use App\Models\TalosWorkspaceSetting;
 use App\Services\Runs\TalosRunEventRecorder;
 use App\Services\Talos\Browser\TalosBrowserArtifactReader;
 use App\Services\Talos\Browser\TalosBrowserFollowUpResolver;
 use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
+use App\Support\TalosMessageMetadata;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Kadmos\Browser\Contract\BrowserTaskStatus;
@@ -56,6 +59,7 @@ PROMPT;
         private readonly TalosBrowserArtifactReader $artifactReader,
         private readonly TalosBrowserFollowUpResolver $browserFollowUps,
         private readonly TalosBrowserTaskRuntime $browserTasks,
+        private readonly TalosPromptCachePlanner $promptCachePlanner,
     ) {}
 
     public function execute(
@@ -66,6 +70,9 @@ PROMPT;
         ?string $currentUserMessage = null,
         ?string $reasoningEffort = null,
         ?bool $reasoningVisible = null,
+        ?Closure $onProviderEvent = null,
+        ?Closure $onLifecycleEvent = null,
+        ?Closure $isCancelled = null,
     ): TalosAgentTurnOutcome {
         [$run, $session, $profile] = $this->ownedContext($ownerUserId, $run, $profile);
         $this->assertBrowserOwnership($ownerUserId, $session, $browserSession);
@@ -115,7 +122,14 @@ PROMPT;
                     failureCode: $this->storedRecoveryCode($turn),
                 );
             }
-            if (in_array($turn->status, ['failed', 'cancelled'], true)) {
+            if ($turn->status === 'cancelled') {
+                return new TalosAgentTurnOutcome(
+                    'cancelled',
+                    (string) $turn->id,
+                    (string) $run->id,
+                );
+            }
+            if ($turn->status === 'failed') {
                 return new TalosAgentTurnOutcome(
                     'failed',
                     (string) $turn->id,
@@ -136,35 +150,71 @@ PROMPT;
 
         try {
             if (! $turn->wasRecentlyCreated) {
-                return $this->resume($ownerUserId, $run, $profile, $turn->refresh(), $browserSession, $leaseToken);
+                return $this->resume(
+                    $ownerUserId,
+                    $run,
+                    $profile,
+                    $turn->refresh(),
+                    $browserSession,
+                    $leaseToken,
+                    $onProviderEvent,
+                    $onLifecycleEvent,
+                    $isCancelled,
+                );
             }
 
             $this->requireLease($ownerUserId, $turn, $leaseToken, 'provider_start');
-            $response = $this->providers->start(
-                $ownerUserId,
-                $turn,
+            $systemPrompt = $this->systemPrompt($session, $run, $browserSession);
+            $messages = $this->durableMessages($session, $run, $currentUserMessage);
+            $tools = array_values(TalosProceduralToolRegistry::definitions());
+            $workspaceSettings = TalosWorkspaceSetting::query()
+                ->where('user_id', $ownerUserId)
+                ->first(['preferences']);
+            $promptCachePlan = $this->promptCachePlanner->plan(
                 $profile,
-                new ProviderTurnRequest(
-                    provider: (string) $profile->provider,
-                    model: (string) $profile->model,
-                    systemPrompt: $this->systemPrompt($session, $run, $browserSession),
-                    messages: $this->durableMessages($session, $run, $currentUserMessage),
-                    tools: array_values(TalosProceduralToolRegistry::definitions()),
-                    reasoningEffort: $reasoningEffort,
-                    reasoningVisible: $reasoningVisible,
-                    responseMimeType: $this->machineOutputContract(
-                        (string) $profile->provider,
-                        (string) $run->prompt,
-                    )?->responseMimeType(),
-                ),
-                $leaseToken,
+                $workspaceSettings?->preferences,
+                $systemPrompt,
+                $messages,
+                $tools,
             );
+            $request = new ProviderTurnRequest(
+                provider: (string) $profile->provider,
+                model: (string) $profile->model,
+                systemPrompt: $systemPrompt,
+                messages: $messages,
+                tools: $tools,
+                reasoningEffort: $reasoningEffort,
+                reasoningVisible: $reasoningVisible,
+                responseMimeType: $this->machineOutputContract(
+                    (string) $profile->provider,
+                    (string) $run->prompt,
+                )?->responseMimeType(),
+                promptCachePlan: $promptCachePlan,
+            );
+            $response = $onProviderEvent instanceof Closure
+                ? $this->providers->startStreaming(
+                    $ownerUserId,
+                    $turn,
+                    $profile,
+                    $request,
+                    $onProviderEvent,
+                    $isCancelled ?? static fn (): bool => false,
+                    $leaseToken,
+                )
+                : $this->providers->start(
+                    $ownerUserId,
+                    $turn,
+                    $profile,
+                    $request,
+                    $leaseToken,
+                );
             $this->accumulateUsage($ownerUserId, $turn->refresh(), $response->usage, $profile, $leaseToken);
             $this->record($ownerUserId, $turn, $leaseToken, 'provider.turn.started', [
                 'provider' => $profile->provider,
                 'model' => $profile->model,
                 'response_kind' => $response->kind,
                 'response_id' => $response->responseId,
+                'prompt_cache_plan' => $promptCachePlan?->toAuditArray(),
             ]);
 
             return $this->advance(
@@ -176,6 +226,17 @@ PROMPT;
                 $response,
                 $leaseToken,
                 $this->guardCheckpoints->load($turn->refresh()),
+                onProviderEvent: $onProviderEvent,
+                onLifecycleEvent: $onLifecycleEvent,
+                isCancelled: $isCancelled,
+            );
+        } catch (TalosProviderStreamCancelledException $exception) {
+            return $this->cancelled(
+                $ownerUserId,
+                $run,
+                $turn->refresh(),
+                $exception->reason,
+                $leaseToken,
             );
         } catch (TalosProviderRecoveryRequiredException $exception) {
             return $this->recoveryRequired($run, $turn->refresh(), $exception->faultCode, $leaseToken);
@@ -203,6 +264,9 @@ PROMPT;
         TalosToolTurn $turn,
         ?TalosBrowserSession $browserSession,
         string $leaseToken,
+        ?Closure $onProviderEvent = null,
+        ?Closure $onLifecycleEvent = null,
+        ?Closure $isCancelled = null,
     ): TalosAgentTurnOutcome {
         if ((string) $turn->model_profile_id !== (string) $profile->id
             || (string) $turn->browser_session_id !== (string) ($browserSession?->id ?? '')) {
@@ -220,6 +284,7 @@ PROMPT;
                 is_string($outcome['response_id'] ?? null) ? $outcome['response_id'] : null,
                 is_string($outcome['stop_reason'] ?? null) ? $outcome['stop_reason'] : null,
                 $this->tokenUsage($outcome['usage'] ?? null),
+                is_string($outcome['visible_reasoning'] ?? null) ? $outcome['visible_reasoning'] : null,
             );
 
             return $this->finalize($ownerUserId, $run, $turn, $response, $leaseToken);
@@ -254,6 +319,9 @@ PROMPT;
             $calls,
             $checkpoint,
             (int) $turn->provider_round,
+            onProviderEvent: $onProviderEvent,
+            onLifecycleEvent: $onLifecycleEvent,
+            isCancelled: $isCancelled,
         );
     }
 
@@ -268,6 +336,9 @@ PROMPT;
         ?TalosProceduralGuardCheckpoint $checkpoint = null,
         int $round = 0,
         array $repairSourceProviderCallIds = [],
+        ?Closure $onProviderEvent = null,
+        ?Closure $onLifecycleEvent = null,
+        ?Closure $isCancelled = null,
     ): TalosAgentTurnOutcome {
         if ($response->kind === ProviderTurnResponse::FINAL) {
             return $this->finalize($ownerUserId, $run, $turn, $response, $leaseToken);
@@ -291,6 +362,9 @@ PROMPT;
             $response->toolCalls,
             $checkpoint,
             $round,
+            onProviderEvent: $onProviderEvent,
+            onLifecycleEvent: $onLifecycleEvent,
+            isCancelled: $isCancelled,
         );
     }
 
@@ -305,6 +379,9 @@ PROMPT;
         array $calls,
         TalosProceduralGuardCheckpoint $checkpoint,
         int $round,
+        ?Closure $onProviderEvent = null,
+        ?Closure $onLifecycleEvent = null,
+        ?Closure $isCancelled = null,
     ): TalosAgentTurnOutcome {
         if ($round >= self::MAX_PROVIDER_ROUNDS) {
             return $this->fail($ownerUserId, $run, $turn, 'TALOS_PROVIDER_ROUND_BUDGET_EXHAUSTED', $leaseToken);
@@ -329,6 +406,9 @@ PROMPT;
                 $checkpoint,
                 $round,
                 $this->resultProviderCallIds($validationResults),
+                $onProviderEvent,
+                $onLifecycleEvent,
+                $isCancelled,
             );
         }
 
@@ -367,6 +447,9 @@ PROMPT;
         $browserTask = $browserSession instanceof TalosBrowserSession
             ? $this->browserTasks->begin($ownerUserId, $run, $browserSession)
             : null;
+        foreach ($calls as $call) {
+            $this->emitToolLifecycle($onLifecycleEvent, 'tool.started', $call, 'running');
+        }
         $report = $this->dispatcher->dispatch(
             $ownerUserId,
             $turn,
@@ -383,6 +466,9 @@ PROMPT;
         );
         $turn->refresh();
         if ($report->status === 'awaiting_approval') {
+            foreach ($calls as $call) {
+                $this->emitToolLifecycle($onLifecycleEvent, 'tool.progress', $call, 'awaiting_approval');
+            }
             $turn = $this->updateTurnStatusUnderLease(
                 $ownerUserId,
                 $turn,
@@ -394,6 +480,20 @@ PROMPT;
         }
         if ($report->results === []) {
             return $this->fail($ownerUserId, $run, $turn, 'TALOS_TOOL_RESULTS_MISSING', $leaseToken);
+        }
+
+        $callsById = [];
+        foreach ($calls as $call) {
+            $callsById[$call->providerCallId] = $call;
+        }
+        foreach ($report->results as $result) {
+            $call = $callsById[$result->toolUseId] ?? null;
+            if (! $call instanceof ToolCall) {
+                continue;
+            }
+            $status = $result->isError ? 'failed' : 'succeeded';
+            $this->emitToolLifecycle($onLifecycleEvent, 'tool.progress', $call, $status);
+            $this->emitToolLifecycle($onLifecycleEvent, 'tool.completed', $call, $status);
         }
 
         $errors = array_values(array_filter($report->results, static fn (ToolResult $result): bool => $result->isError));
@@ -418,6 +518,9 @@ PROMPT;
             $checkpoint,
             $round,
             $this->resultProviderCallIds($errors),
+            $onProviderEvent,
+            $onLifecycleEvent,
+            $isCancelled,
         );
     }
 
@@ -433,6 +536,9 @@ PROMPT;
         TalosProceduralGuardCheckpoint $checkpoint,
         int $round,
         array $repairSourceProviderCallIds,
+        ?Closure $onProviderEvent = null,
+        ?Closure $onLifecycleEvent = null,
+        ?Closure $isCancelled = null,
     ): TalosAgentTurnOutcome {
         $nextRound = $round + 1;
         $this->requireLease($ownerUserId, $turn, $leaseToken, 'provider_continue');
@@ -451,7 +557,16 @@ PROMPT;
 
             return $lockedTurn;
         }, 3);
-        $response = $this->providers->continue($ownerUserId, (string) $turn->id, $results, $leaseToken);
+        $response = $onProviderEvent instanceof Closure
+            ? $this->providers->continueStreaming(
+                $ownerUserId,
+                (string) $turn->id,
+                $results,
+                $onProviderEvent,
+                $isCancelled ?? static fn (): bool => false,
+                $leaseToken,
+            )
+            : $this->providers->continue($ownerUserId, (string) $turn->id, $results, $leaseToken);
         $this->accumulateUsage($ownerUserId, $turn->refresh(), $response->usage, $profile, $leaseToken);
         $this->record($ownerUserId, $turn, $leaseToken, 'provider.turn.continued', [
             'response_kind' => $response->kind,
@@ -470,7 +585,27 @@ PROMPT;
             $checkpoint,
             $nextRound,
             $repairSourceProviderCallIds,
+            $onProviderEvent,
+            $onLifecycleEvent,
+            $isCancelled,
         );
+    }
+
+    private function emitToolLifecycle(
+        ?Closure $observer,
+        string $kind,
+        ToolCall $call,
+        string $status,
+    ): void {
+        if (! $observer instanceof Closure) {
+            return;
+        }
+
+        $observer($kind, [
+            'provider_call_id' => $call->providerCallId,
+            'tool_name' => $call->name,
+            'status' => $status,
+        ]);
     }
 
     /** @param list<ToolCall> $calls @return list<ToolResult> */
@@ -680,6 +815,7 @@ PROMPT;
                     $response->responseId,
                     $response->stopReason,
                     $response->usage,
+                    $response->visibleReasoning,
                 );
             } catch (InvalidArgumentException) {
                 return $this->fail($ownerUserId, $run, $turn, 'TALOS_MACHINE_OUTPUT_INVALID', $leaseToken);
@@ -692,7 +828,23 @@ PROMPT;
             return $this->fail($ownerUserId, $run, $turn, $exception->faultCode, $leaseToken);
         }
 
-        $message = DB::transaction(function () use ($ownerUserId, $run, $turn, $leaseToken, $text): ?TalosMessage {
+        $metadata = [
+            'source' => 'talos_agent_turn',
+            'tool_turn_id' => $turn->id,
+            'grounded' => true,
+        ];
+        if ($response->visibleReasoning !== null) {
+            $metadata['visible_reasoning'] = [
+                'source' => 'provider',
+                'provider' => (string) $turn->provider,
+                'text' => $response->visibleReasoning,
+                'duration_ms' => null,
+            ];
+        }
+        $messageMetadata = TalosMessageMetadata::fromStorage($metadata)->toStorageArray();
+        $requestKey = $this->assistantRequestKey($run);
+
+        $message = DB::transaction(function () use ($ownerUserId, $run, $turn, $leaseToken, $text, $messageMetadata, $requestKey): ?TalosMessage {
             $lockedTurn = $this->findLiveTurnForUpdate($ownerUserId, (string) $turn->id, $leaseToken);
             if (! $lockedTurn instanceof TalosToolTurn) {
                 return null;
@@ -706,10 +858,15 @@ PROMPT;
                 return null;
             }
             $existing = TalosMessage::query()
-                ->where('session_id', $lockedRun->session_id)
-                ->where('run_id', $lockedRun->id)
-                ->where('role', 'assistant')
+                ->where('request_key', $requestKey)
                 ->first();
+            if (! $existing instanceof TalosMessage) {
+                $existing = TalosMessage::query()
+                    ->where('session_id', $lockedRun->session_id)
+                    ->where('run_id', $lockedRun->id)
+                    ->where('role', 'assistant')
+                    ->first();
+            }
             $message = $existing instanceof TalosMessage
                 ? $existing
                 : TalosMessage::query()->create([
@@ -718,8 +875,12 @@ PROMPT;
                     'content' => $text,
                     'model_profile_id' => $lockedRun->model_profile_id,
                     'run_id' => $lockedRun->id,
-                    'metadata' => ['source' => 'talos_agent_turn', 'tool_turn_id' => $lockedTurn->id, 'grounded' => true],
+                    'request_key' => $requestKey,
+                    'metadata' => $messageMetadata,
                 ]);
+            if ($message->request_key === null) {
+                $message->forceFill(['request_key' => $requestKey])->save();
+            }
             $lockedRun->forceFill(['status' => 'succeeded', 'completed_at' => now()])->save();
             $lockedTurn->forceFill([
                 'status' => 'completed',
@@ -739,6 +900,11 @@ PROMPT;
         }
 
         return new TalosAgentTurnOutcome('completed', (string) $turn->id, (string) $run->id, (string) $message->content);
+    }
+
+    private function assistantRequestKey(TalosRun $run): string
+    {
+        return 'talos.chat.stream.v1:'.$run->id.':assistant';
     }
 
     private function fail(
@@ -796,6 +962,77 @@ PROMPT;
             (string) $run->id,
             failureCode: $code,
             providerFailure: $providerFailure,
+        );
+    }
+
+    private function cancelled(
+        int $ownerUserId,
+        TalosRun $run,
+        TalosToolTurn $turn,
+        string $reason,
+        string $leaseToken,
+    ): TalosAgentTurnOutcome {
+        $committed = DB::transaction(function () use ($ownerUserId, $run, $turn, $reason, $leaseToken): bool {
+            $lockedTurn = TalosToolTurn::query()
+                ->ownedBy($ownerUserId)
+                ->whereKey($turn->id)
+                ->lockForUpdate()
+                ->first();
+            $lockedRun = TalosRun::query()
+                ->whereKey($run->id)
+                ->where('user_id', $ownerUserId)
+                ->lockForUpdate()
+                ->first();
+            if (! $lockedTurn instanceof TalosToolTurn
+                || ! $lockedRun instanceof TalosRun
+                || $lockedRun->status === 'succeeded'
+                || $lockedTurn->status === 'completed') {
+                return false;
+            }
+            if (is_string($lockedTurn->execution_lease_token)
+                && ! hash_equals($lockedTurn->execution_lease_token, $leaseToken)) {
+                return false;
+            }
+
+            $wasCancelled = $lockedRun->status === 'cancelled'
+                && $lockedTurn->status === 'cancelled';
+            $cancelledAt = $lockedTurn->cancel_requested_at ?? now();
+            $lockedTurn->forceFill([
+                'status' => 'cancelled',
+                'provider_operation_status' => $lockedTurn->provider_operation_status === 'in_flight'
+                    ? 'cancelled'
+                    : $lockedTurn->provider_operation_status,
+                'pending_tool_call_ids' => [],
+                'cancel_requested_at' => $cancelledAt,
+                'completed_at' => $lockedTurn->completed_at ?? $cancelledAt,
+                'revision' => ((int) $lockedTurn->revision) + 1,
+            ])->save();
+            $lockedRun->forceFill([
+                'status' => 'cancelled',
+                'completed_at' => $lockedRun->completed_at ?? $cancelledAt,
+            ])->save();
+            $this->browserTasks->settle($ownerUserId, $lockedRun, BrowserTaskStatus::Cancelled);
+
+            if (! $wasCancelled) {
+                $this->events->record(
+                    ['run_id' => (string) $lockedRun->id, 'user_id' => $ownerUserId],
+                    [
+                        'event_type' => 'agent.turn.cancelled',
+                        'payload' => ['reason' => $reason],
+                    ],
+                );
+            }
+
+            return true;
+        }, 3);
+        if (! $committed) {
+            return $this->outcomeAfterFence($run, $turn);
+        }
+
+        return new TalosAgentTurnOutcome(
+            'cancelled',
+            (string) $turn->id,
+            (string) $run->id,
         );
     }
 
@@ -980,10 +1217,26 @@ PROMPT;
         ];
     }
 
-    /** @return array<string, int> */
+    /** @return array<string, int|null> */
     private function emptyUsage(): array
     {
-        return ['calls' => 0, 'navigations' => 0, 'screenshots' => 0, 'evidence_nodes' => 0, 'evidence_bytes' => 0, 'elapsed_ms' => 0, 'input_tokens' => 0, 'output_tokens' => 0, 'cost_micros' => 0];
+        return [
+            'calls' => 0,
+            'navigations' => 0,
+            'screenshots' => 0,
+            'evidence_nodes' => 0,
+            'evidence_bytes' => 0,
+            'elapsed_ms' => 0,
+            'input_tokens' => 0,
+            'output_tokens' => 0,
+            'cached_tokens' => 0,
+            'cache_read_tokens' => null,
+            'cache_write_tokens' => null,
+            'cache_miss_tokens' => null,
+            'cache_write_5m_tokens' => null,
+            'cache_write_1h_tokens' => null,
+            'cost_micros' => 0,
+        ];
     }
 
     private function usage(TalosToolTurn $turn): ProceduralUsage
@@ -1035,6 +1288,20 @@ PROMPT;
             $usage = is_array($lockedTurn->budget_usage) ? $lockedTurn->budget_usage : $this->emptyUsage();
             $usage['input_tokens'] = (int) ($usage['input_tokens'] ?? 0) + $providerUsage->inputTokens;
             $usage['output_tokens'] = (int) ($usage['output_tokens'] ?? 0) + $providerUsage->outputTokens;
+            $usage['cached_tokens'] = (int) ($usage['cached_tokens'] ?? 0) + $providerUsage->cachedTokens;
+            foreach ([
+                'cache_read_tokens' => $providerUsage->cacheReadTokens,
+                'cache_write_tokens' => $providerUsage->cacheWriteTokens,
+                'cache_miss_tokens' => $providerUsage->cacheMissTokens,
+                'cache_write_5m_tokens' => $providerUsage->cacheWrite5mTokens,
+                'cache_write_1h_tokens' => $providerUsage->cacheWrite1hTokens,
+            ] as $field => $reported) {
+                if ($reported !== null) {
+                    $usage[$field] = (is_int($usage[$field] ?? null) ? $usage[$field] : 0) + $reported;
+                } elseif (! array_key_exists($field, $usage)) {
+                    $usage[$field] = null;
+                }
+            }
             $usage['cost_micros'] = (int) ($usage['cost_micros'] ?? 0)
                 + $this->providerCostMicros($profile, $providerUsage);
             $lockedTurn->forceFill([
@@ -1221,14 +1488,7 @@ PROMPT;
 
     private function tokenUsage(mixed $usage): TokenUsage
     {
-        $usage = is_array($usage) ? $usage : [];
-
-        return new TokenUsage(
-            (int) ($usage['input_tokens'] ?? 0),
-            (int) ($usage['output_tokens'] ?? 0),
-            (int) ($usage['total_tokens'] ?? 0),
-            (int) ($usage['cached_tokens'] ?? 0),
-        );
+        return TokenUsage::fromArray(is_array($usage) ? $usage : []);
     }
 
     private function assistantMessage(TalosRun $run): ?TalosMessage
@@ -1383,8 +1643,14 @@ PROMPT;
                 failureCode: $this->storedRecoveryCode($currentTurn),
             );
         }
-        if ($currentTurn instanceof TalosToolTurn
-            && in_array($currentTurn->status, ['failed', 'cancelled'], true)) {
+        if ($currentTurn?->status === 'cancelled' || $currentRun?->status === 'cancelled') {
+            return new TalosAgentTurnOutcome(
+                'cancelled',
+                (string) $turn->id,
+                (string) $run->id,
+            );
+        }
+        if ($currentTurn?->status === 'failed') {
             return new TalosAgentTurnOutcome(
                 'failed',
                 (string) $turn->id,

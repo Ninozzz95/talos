@@ -82,6 +82,11 @@ describe('useTalosWorkspaceChatActions', () => {
             effort: 'high',
             thinking: false,
         }))
+        expect(deps.centerMessage).toHaveBeenCalledOnce()
+        expect(deps.centerMessage).toHaveBeenCalledWith(userMessage.id)
+        expect(deps.centerMessage.mock.invocationCallOrder[0]).toBeLessThan(
+            deps.sendPersistentChat.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+        )
         expect(actions.prompt.value).toBe('')
         expect(actions.sending.value).toBe(false)
     })

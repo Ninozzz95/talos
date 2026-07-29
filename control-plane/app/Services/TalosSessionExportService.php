@@ -16,6 +16,7 @@ use App\Models\TalosRunArtifact;
 use App\Models\TalosRunEvent;
 use App\Models\TalosSession;
 use App\Services\Talos\Browser\TalosBrowserLegacyV1Adapter;
+use App\Support\TalosMessageMetadata;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -185,6 +186,7 @@ final class TalosSessionExportService
     {
         $metadata = is_array($message->metadata) ? $message->metadata : [];
         $exportMetadata = $this->legacyBrowser->annotateMessageMetadata($metadata);
+        $exportMetadata = TalosMessageMetadata::fromStorage($exportMetadata)->toExportArray();
 
         return [
             'id' => $message->id,
@@ -193,9 +195,9 @@ final class TalosSessionExportService
             'model_profile_id' => $message->model_profile_id,
             'model_profile' => $message->model_profile_id ? ($modelProfiles[$message->model_profile_id] ?? null) : null,
             'run_id' => $message->run_id,
-            'used_context' => $this->listFromMetadata($metadata, 'used_context'),
-            'used_memories' => $this->listFromMetadata($metadata, 'used_memories'),
-            'metadata' => $this->redactArray($exportMetadata),
+            'used_context' => $this->listFromMetadata($exportMetadata, 'used_context'),
+            'used_memories' => $this->listFromMetadata($exportMetadata, 'used_memories'),
+            'metadata' => $exportMetadata,
             'created_at' => $message->created_at?->toJSON(),
             'updated_at' => $message->updated_at?->toJSON(),
         ];

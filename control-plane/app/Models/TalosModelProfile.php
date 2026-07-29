@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Models\ProviderPromptCacheCapabilityTable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
@@ -69,6 +70,10 @@ final class TalosModelProfile extends Model
             'effort_levels' => $this->effort_levels ?? [],
             'supports_thinking' => (bool) $this->supports_thinking,
             'show_in_composer' => (bool) $this->show_in_composer,
+            'prompt_cache_capability' => ProviderPromptCacheCapabilityTable::resolve(
+                (string) $this->provider,
+                (string) $this->model,
+            ),
             'has_secret' => filled($this->encrypted_secret),
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),

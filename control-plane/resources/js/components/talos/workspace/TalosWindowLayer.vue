@@ -58,6 +58,7 @@ const props = defineProps<{
     settingsRequestedTab: 'models' | 'account'
     settingsRequestedTabRevision: number
     authenticated: boolean
+    settingsOwnerKey: string | null
     authUserName: string
     logoutUrl: string
     csrfToken: string
@@ -100,6 +101,7 @@ const emit = defineEmits<{
     settingsSaved: []
     themeCustomizationChanged: [settings?: { preferences?: Record<string, unknown> }]
     themeDraftChanged: [customization: TalosThemeCustomization | null]
+    attachLibraryFile: [fileId: string]
     replayIntro: []
 }>()
 
@@ -177,6 +179,10 @@ function moduleContextFor(id: TalosWindowId): TalosWindowModuleContext {
     return {
         id,
         activeSection: activeSectionFor(id),
+        requestedWindowSection: props.requestedWindowSections?.[id] ?? null,
+        requestedWindowSectionRevision: props.requestedWindowSections?.[id]
+            ? props.requestedWindowSectionRevision ?? 0
+            : 0,
         runtimeRequestedTab: props.runtimeRequestedTab,
         runtimeRequestedTabRevision: props.runtimeRequestedTabRevision,
         selectedBenchmarkGroupId: props.selectedBenchmarkGroupId,
@@ -188,6 +194,7 @@ function moduleContextFor(id: TalosWindowId): TalosWindowModuleContext {
         settingsRequestedTab: props.settingsRequestedTab,
         settingsRequestedTabRevision: props.settingsRequestedTabRevision,
         authenticated: props.authenticated,
+        settingsOwnerKey: props.settingsOwnerKey,
         authUserName: props.authUserName,
         logoutUrl: props.logoutUrl,
         csrfToken: props.csrfToken,
@@ -207,6 +214,7 @@ function moduleContextFor(id: TalosWindowId): TalosWindowModuleContext {
         settingsSaved: () => emit('settingsSaved'),
         themeCustomizationChanged: (settings) => emit('themeCustomizationChanged', settings),
         themeDraftChanged: (customization) => emit('themeDraftChanged', customization),
+        attachLibraryFile: (fileId) => emit('attachLibraryFile', fileId),
         replayIntro: () => emit('replayIntro'),
     }
 }

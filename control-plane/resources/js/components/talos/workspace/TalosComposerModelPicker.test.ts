@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { createApp, defineComponent, h, nextTick } from 'vue'
+import { createApp, defineComponent, h, nextTick, ref } from 'vue'
 import TalosComposerModelPicker from './TalosComposerModelPicker.vue'
 import type { TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
 
@@ -86,6 +86,32 @@ describe('TalosComposerModelPicker', () => {
         expect(document.querySelectorAll('option')).toHaveLength(0)
     })
 
+    it('owns provider groups directly from the listbox and options directly from their groups', () => {
+        mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-openai', provider: 'openai' }),
+                profile({ id: 'profile-anthropic', provider: 'anthropic' }),
+            ],
+            modelRoutingProfiles: [routing()],
+        })
+
+        const listbox = document.querySelector<HTMLElement>('[role="listbox"]')!
+        const groups = Array.from(listbox.querySelectorAll<HTMLElement>(':scope > [role="group"]'))
+        const options = Array.from(listbox.querySelectorAll<HTMLElement>('[role="option"]'))
+
+        expect(groups).toHaveLength(3)
+        expect(options).toHaveLength(3)
+        expect(options.every((option) => option.parentElement?.getAttribute('role') === 'group')).toBe(true)
+        expect(groups.every((group) => group.parentElement === listbox)).toBe(true)
+    })
+
+    it('does not expose an empty or loading option container as a listbox', () => {
+        mountPicker({ loadingModelProfiles: true })
+
+        expect(document.querySelector('[role="listbox"]')).toBeNull()
+        expect(document.querySelector('#talos-composer-model-listbox')).not.toBeNull()
+    })
+
     it('emits selectModelProfile with the row id when a callable model is chosen', async () => {
         const emitted = mountPicker({ modelProfiles: [profile({ id: 'profile-x' })] })
 
@@ -125,5 +151,77 @@ describe('TalosComposerModelPicker', () => {
 
         const row = document.querySelector('[data-model-profile-id="profile-sel"]')
         expect(row?.getAttribute('aria-selected')).toBe('true')
+    })
+
+    it('groups models by provider and filters by provider, display name or model id', async () => {
+        mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-openai', provider: 'openai', display_name: 'Fast GPT', model: 'gpt-5-mini' }),
+                profile({ id: 'profile-anthropic', provider: 'anthropic', display_name: 'Careful Claude', model: 'claude-sonnet-4-6' }),
+                profile({ id: 'profile-deepseek', provider: 'deepseek', display_name: 'Code lane', model: 'deepseek-v4-flash' }),
+            ],
+        })
+
+        expect(Array.from(document.querySelectorAll('[data-testid="talos-model-picker-provider-heading"]')).map((heading) => heading.textContent?.trim())).toEqual([
+            'OpenAI',
+            'Anthropic',
+            'DeepSeek',
+        ])
+
+        const search = document.querySelector<HTMLInputElement>('[aria-label="Search models"]')!
+        search.value = 'anthropic'
+        search.dispatchEvent(new Event('input', { bubbles: true }))
+        await nextTick()
+
+        expect(Array.from(document.querySelectorAll('[data-testid="talos-model-picker-option"]')).map((row) => row.getAttribute('data-model-profile-id'))).toEqual([
+            'profile-anthropic',
+        ])
+
+        search.value = 'deepseek-v4'
+        search.dispatchEvent(new Event('input', { bubbles: true }))
+        await nextTick()
+        expect(document.querySelector('[data-model-profile-id="profile-deepseek"]')).not.toBeNull()
+    })
+
+    it('moves arrow focus only across currently rendered selectable options', async () => {
+        mountPicker({
+            modelProfiles: [
+                profile({ id: 'profile-a' }),
+                profile({ id: 'profile-b', provider: 'anthropic' }),
+            ],
+            modelRoutingProfiles: [routing({ id: 'routing-a' })],
+        })
+
+        const route = document.querySelector<HTMLButtonElement>('[data-routing-profile-id="routing-a"]')!
+        route.focus()
+        route.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+        await nextTick()
+
+        expect(document.activeElement?.getAttribute('data-model-profile-id')).toBe('profile-a')
+    })
+
+    it('renders a newly added shared profile without remounting or reloading the page', async () => {
+        const profiles = ref<TalosModelProfile[]>([profile({ id: 'profile-before' })])
+        const mountPoint = document.createElement('div')
+        document.body.append(mountPoint)
+        app = createApp(defineComponent({
+            setup() {
+                return () => h(TalosComposerModelPicker, {
+                    modelProfiles: profiles.value,
+                    modelRoutingProfiles: [],
+                    selectedModelProfileId: '',
+                    selectedModelRoutingProfileId: '',
+                })
+            },
+        }))
+        app.mount(mountPoint)
+
+        profiles.value = [
+            profile({ id: 'profile-new', provider: 'anthropic', display_name: 'New Claude' }),
+            ...profiles.value,
+        ]
+        await nextTick()
+
+        expect(document.querySelector('[data-model-profile-id="profile-new"]')?.textContent).toContain('New Claude')
     })
 })
