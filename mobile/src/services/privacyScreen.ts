@@ -13,6 +13,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
  */
 interface TalosPrivacyBridge {
     setSecure(options: { enabled: boolean }): Promise<{ secure: boolean }>
+    isDeviceLocked(): Promise<{ locked: boolean; available: boolean }>
 }
 
 let bridge: TalosPrivacyBridge | null = null
@@ -29,5 +30,25 @@ export async function setTalosScreenSecure(enabled: boolean): Promise<void> {
         await plugin().setSecure({ enabled })
     } catch {
         // A missing/failed plugin must not brick the app; the lock still works.
+    }
+}
+
+/**
+ * Owner 2026-07-29: locking the phone must lock TALOS at once, while switching
+ * apps for a moment must not. `appStateChange` reports only that the app went
+ * away, never why, so the reason is asked of Android here.
+ *
+ * False on web and on any failure. That direction is deliberate: treating an
+ * unavailable answer as "the device is locked" would demand a PIN every time
+ * the user glanced at a notification, and a lock people turn off protects
+ * nothing. The grace window remains the safety net underneath.
+ */
+export async function talosDeviceIsLocked(): Promise<boolean> {
+    if (!Capacitor.isNativePlatform()) return false
+    try {
+        const result = await plugin().isDeviceLocked()
+        return result.available === true && result.locked === true
+    } catch {
+        return false
     }
 }
