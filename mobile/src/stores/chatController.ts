@@ -909,7 +909,15 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     function showToolAuthorization(): void {
-        if (pendingToolAuthorizations.value.length > 0) {
+        // I-02: recoveries count too. The shell offers the reopen control when
+        // EITHER collection is non-empty, so checking only pending requests
+        // made that button do nothing for a recovery-only card — an uncertain
+        // side effect dismissed with "Later" was then unreachable until a
+        // reload. "Later" is not a denial; what it hides has to come back.
+        if (
+            pendingToolAuthorizations.value.length > 0
+            || toolAuthorizationRecoveries.value.length > 0
+        ) {
             toolAuthorizationPromptVisible.value = true
         }
     }
