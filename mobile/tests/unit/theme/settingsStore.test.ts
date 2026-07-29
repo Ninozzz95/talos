@@ -525,4 +525,103 @@ describe('useSettingsStore', () => {
         expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).motion_v6.mode).toBe('complex')
     })
 
+    /**
+     * I-08. `setAgentToolEnabled` already got this right — candidate, queue,
+     * persist, publish. Its neighbours did not: `setToolPermissions`,
+     * `setShell` and `setSecurity` mutated the live state and persisted
+     * afterwards, so a rejected native write left a permission switched on in
+     * a registry the executor reads, and gone again on the next launch.
+     *
+     * A capability that is live but not durable is the worst of both: it
+     * authorises the action now and denies ever having done so later.
+     */
+    it('P1-CAP-PERSIST-01 a rejected write never publishes a tool permission', async () => {
+        const set = vi.spyOn(Preferences, 'set')
+            .mockRejectedValueOnce(new Error('native Preferences write failed'))
+        const store = useSettingsStore()
+        const before = store.state.tools.write
+
+        try {
+            await expect(store.setToolPermissions({ write: 'allow' }))
+                .rejects.toThrow('native Preferences write failed')
+            // The executor reads this. It must not see a grant that did not survive.
+            expect(store.state.tools.write).toBe(before)
+            expect(prefs.has(TALOS_MOBILE_SETTINGS_KEY)).toBe(false)
+
+            await store.setToolPermissions({ write: 'allow' })
+
+            expect(store.state.tools.write).toBe('allow')
+            expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).tools.write).toBe('allow')
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('P1-CAP-PERSIST-02 a rejected write never publishes the Library master switch', async () => {
+        const set = vi.spyOn(Preferences, 'set')
+            .mockRejectedValueOnce(new Error('native Preferences write failed'))
+        const store = useSettingsStore()
+        const before = store.state.shell.library_context_enabled
+
+        try {
+            await expect(store.setShell({ library_context_enabled: !before }))
+                .rejects.toThrow('native Preferences write failed')
+            expect(store.state.shell.library_context_enabled).toBe(before)
+            expect(prefs.has(TALOS_MOBILE_SETTINGS_KEY)).toBe(false)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('P1-CAP-PERSIST-03 a rejected write never publishes an app-lock change', async () => {
+        const set = vi.spyOn(Preferences, 'set')
+            .mockRejectedValueOnce(new Error('native Preferences write failed'))
+        const store = useSettingsStore()
+        const before = store.state.security.app_lock_enabled
+
+        try {
+            await expect(store.setSecurity({ app_lock_enabled: !before }))
+                .rejects.toThrow('native Preferences write failed')
+            expect(store.state.security.app_lock_enabled).toBe(before)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    /**
+     * Beyond the ticket. `persist()` serialises the WHOLE state, and the
+     * capability domains each had their own queue. Two domains writing at once
+     * therefore each snapshot the other's *unpublished* value — whichever
+     * write lands last silently reverts the other. Separate queues do not
+     * order writes that share a single stored document.
+     */
+    it('P1-CAP-PERSIST-04 concurrent writes across settings domains cannot lose an update', async () => {
+        let releaseFirst!: () => void
+        let callCount = 0
+        const set = vi.spyOn(Preferences, 'set').mockImplementation(async ({ key, value }) => {
+            callCount += 1
+            if (callCount === 1) await new Promise<void>((resolve) => { releaseFirst = resolve })
+            prefs.set(key, value)
+        })
+        const store = useSettingsStore()
+
+        try {
+            const first = store.setToolPermissions({ write: 'allow' })
+            const second = store.setAgentToolEnabled('library_search', false)
+            await Promise.resolve()
+
+            releaseFirst()
+            await Promise.all([first, second])
+
+            const persisted = JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!)
+            // Both survive, whatever order the native writes settled in.
+            expect(persisted.tools.write).toBe('allow')
+            expect(persisted.agent_tools.library_search).toBe(false)
+            expect(store.state.tools.write).toBe('allow')
+            expect(store.state.agent_tools.library_search).toBe(false)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
 })
