@@ -3573,6 +3573,109 @@ describe('chatController', () => {
         expect(second?.runtime?.libraryConsentGranted).toBe(true)
     }, 20_000)
 
+    /**
+     * I-04. Revoking the saved Library permission takes effect on the NEXT send
+     * — that is already covered. What was not covered is revoking it DURING one.
+     *
+     * The consent is resolved once, near the start of the send. The document
+     * bodies leave much later, after several awaits on encrypted storage. The
+     * live re-check before egress looks at the master switch and at each file's
+     * own sharing flag, but never back at the grant that authorised the read in
+     * the first place. So a user who opens Settings and revokes while an answer
+     * is in flight watches the document go out anyway.
+     *
+     * The resolver already carries the right intent — its own comment says
+     * "Removing the Settings grant must take effect even while a continuation is
+     * queued." It just was not consulted a second time.
+     *
+     * A one-time "allow" is deliberately NOT revoked this way: it is bound to
+     * that exact call and the user made it seconds ago. Only the standing
+     * permission is re-read, because that is the one they just withdrew.
+     */
+    it('I-04 revoking the saved permission mid-send stops the document body', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: {
+                    schema_version: 1,
+                    revision: 1,
+                    enabled: true,
+                    mode: 'ask_before_use_v1',
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: '2026-07-29T10:00:00.000Z',
+                },
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'toctou-omniroute',
+            display_name: 'OmniRoute toctou.md',
+            media_type: 'text/markdown',
+            size_bytes: 48,
+            private_uri: 'talos-vault/files/toctou-omniroute.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '9'.repeat(64),
+            extracted_text: 'TOCTOU_SENTINEL renewal is March 2027.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+
+        // Earn the standing permission the honest way.
+        await controller.send('When is OmniRoute renewed?')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'always_allow',
+        )
+        expect(settings.state.tool_authorizations.grants.library_read)
+            .toMatchObject({ actions: ['read'] })
+        request.mockClear()
+
+        // Hold the send open inside the encrypted read that precedes egress.
+        const realGetVaultFile = chatRepository.getVaultFile.bind(chatRepository)
+        let holding!: () => void
+        const held = new Promise<void>((resolve) => { holding = resolve })
+        let reachedRead!: () => void
+        const atRead = new Promise<void>((resolve) => { reachedRead = resolve })
+        // Read 1 is the selection pass; read 2 is the live re-check immediately
+        // before the bodies egress. Only the second one is the window that
+        // matters — blocking the first would merely re-run the consent question
+        // and prove nothing.
+        let reads = 0
+        chatRepository.getVaultFile = (async (id: string) => {
+            reads += 1
+            if (reads === 2) {
+                reachedRead()
+                await held
+            }
+            return realGetVaultFile(id)
+        }) as typeof chatRepository.getVaultFile
+
+        const sending = controller.send('Verify OmniRoute once more')
+        await atRead
+
+        // The user withdraws the permission while the answer is in flight.
+        await settings.revokeToolAuthorization('library_read')
+        holding()
+        await sending
+
+        const providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(providerCalls).toHaveLength(1)
+        // Not one byte of the document may have left after the revocation.
+        expect(JSON.stringify(providerCalls[0]?.data)).not.toContain('TOCTOU_SENTINEL')
+    }, 20_000)
+
     it('P1-CTX-ASK-03 honors persistent consent, revocation, and denial without body drift', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('anthropic', 'sk-ant')

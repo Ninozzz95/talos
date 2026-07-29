@@ -21,6 +21,7 @@ import type { TalosAgentToolEnabled, TalosAgentToolId } from '@/lib/tools/toolCo
 import {
     TALOS_EMPTY_TOOL_AUTHORIZATIONS,
     digestTalosToolAuthorizationInput,
+    parseTalosToolAuthorizationGrants,
     resolveTalosToolAuthorization,
     type TalosToolAuthorizationDecision,
     type TalosToolAuthorizationGrantsV1,
@@ -1287,9 +1288,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     }
 
+    /**
+     * I-04: is the STANDING Library permission still there?
+     *
+     * Read live, at the moment of asking. The resolver's own contract says a
+     * saved grant is "a pointer to the revocable Settings grant, not a second
+     * immortal grant" — this is that pointer being followed one last time.
+     */
+    function libraryStandingConsentLive(): boolean {
+        const grants = parseTalosToolAuthorizationGrants(
+            deps.settings.state.tool_authorizations ?? TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+        )
+        const grant = grants.grants.library_read
+        return !!grant && grant.actions.includes('read')
+    }
+
     async function revalidateLibraryForEgress(
         runtime: TalosChatControllerSendRuntime,
         signal?: AbortSignal,
+        consentSource?: 'allow_once' | 'standing' | null,
     ): Promise<{
         documents: LibraryDoc[]
         receipt: TalosLibraryPolicyReceipt | null
@@ -1297,9 +1314,24 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         const decision = runtime.libraryDecision
         if (!decision) return { documents: [], receipt: null }
         let documents: LibraryDoc[] = []
+        // I-04: the consent was resolved near the start of the send and the
+        // bodies leave here, several encrypted reads later. Revoking the saved
+        // permission in Settings during that window used to change nothing —
+        // the master switch and each file's own sharing flag were re-read, but
+        // never the grant that authorised the read in the first place.
+        //
+        // A one-time allow is exempt: it is bound to this exact call and the
+        // user granted it moments ago, so withdrawing the STANDING permission
+        // afterwards is not a statement about it.
+        const standingConsentRevoked = (): boolean =>
+            runtime.libraryPolicy.mode === 'ask_before_use_v1'
+            && runtime.libraryConsentGranted
+            && consentSource !== 'allow_once'
+            && !libraryStandingConsentLive()
         if (
             runtime.libraryPolicy.enabled
             && deps.settings.state.shell?.library_context_enabled === true
+            && !standingConsentRevoked()
             && !signal?.aborted
         ) {
             const checked = await Promise.all(decision.transmitted.map(async (document) => {
@@ -1325,6 +1357,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 documents = checked.filter((doc): doc is LibraryDoc => doc !== null)
             }
         }
+        // I-04: the LAST possible moment, and it has to be here rather than
+        // above. Those encrypted reads are awaits, and the whole point of this
+        // check is a user revoking DURING them — asking before they start reads
+        // the permission from before the window it is meant to cover. My first
+        // attempt did exactly that and the document still went out.
+        if (standingConsentRevoked()) documents = []
         const receipt: TalosLibraryPolicyReceipt = {
             ...decision.receipt,
             candidate_file_ids: [...decision.receipt.candidate_file_ids],
@@ -1843,6 +1881,21 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 }
             }
             let libraryConsentAllowed = sendRuntime.libraryConsentGranted
+            /**
+             * I-04: WHY the Library read is allowed, not just whether.
+             *
+             * A one-time "allow" is bound to this exact call and the user made
+             * it seconds ago, so revoking the STANDING permission afterwards
+             * must not retroactively cancel it. A standing permission is
+             * different: revoking it is the user withdrawing the thing that
+             * authorised the read, and it has to take effect before the bodies
+             * leave — including mid-send.
+             *
+             * Null means the consent came from a resumed checkpoint whose basis
+             * we did not observe; treated as standing, which is the cautious
+             * reading.
+             */
+            let libraryConsentSource: 'allow_once' | 'standing' | null = null
             if (libraryConsentLoop && authorizationCheckpoint) {
                 const { request, input } = requestForLibraryContextConsent(
                     authorizationCheckpoint,
@@ -1863,6 +1916,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     throw new Error('TALOS_TOOL_AUTHORIZATION_DECISION_PENDING')
                 }
                 libraryConsentAllowed = resolution.status === 'allowed'
+                libraryConsentSource = resolution.status === 'allowed'
+                    && resolution.source === 'allow_once'
+                    ? 'allow_once'
+                    : 'standing'
             } else if (!libraryConsentAllowed) {
                 const consentInput = libraryContextConsentInput(sendRuntime)
                 if (consentInput) {
@@ -1901,6 +1958,9 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         }
                     }
                     libraryConsentAllowed = resolution.status === 'allowed'
+                    // No explicit request was answered on this path, so any
+                    // allow here rests on a standing permission or the baseline.
+                    libraryConsentSource = 'standing'
                 }
             }
             const currentGlobalPolicy = (): TalosLibraryContextPolicySnapshot => {
@@ -2436,6 +2496,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             let liveLibrary = await revalidateLibraryForEgress(
                 effectiveLibraryRuntime,
                 stream?.signal,
+                libraryConsentSource,
             )
             if (liveLibrary.documents.length > 0) {
                 const block = buildTalosLibraryContextBlock(
@@ -2496,6 +2557,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 liveLibrary = await revalidateLibraryForEgress(
                     effectiveLibraryRuntime,
                     stream?.signal,
+                    libraryConsentSource,
                 )
                 if (liveLibrary.documents.length === 0) return resultContent
                 const contextBlock = buildTalosLibraryContextBlock(
