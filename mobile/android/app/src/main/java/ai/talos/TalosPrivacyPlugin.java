@@ -1,6 +1,9 @@
 package ai.talos;
 
 import android.app.Activity;
+import android.app.KeyguardManager;
+import android.content.Context;
+import android.os.PowerManager;
 import android.view.Window;
 import android.view.WindowManager;
 
@@ -49,5 +52,46 @@ public class TalosPrivacyPlugin extends Plugin {
             result.put("secure", secure);
             call.resolve(result);
         });
+    }
+
+    /**
+     * Did the DEVICE take the app away, or did the user just switch apps?
+     *
+     * Owner 2026-07-29: locking the phone has to lock TALOS immediately. The web
+     * layer only sees "went to background" and cannot tell the two apart, so the
+     * answer has to come from here. The decision itself lives in
+     * TalosDeviceLockPolicy so it can be tested without an emulator.
+     *
+     * This resolves rather than rejects when a service is missing: the caller
+     * treats an unavailable answer as "not a device lock" and falls back to the
+     * grace window, because failing closed here would mean a PIN prompt every
+     * time the user glanced at a notification.
+     */
+    @PluginMethod
+    public void isDeviceLocked(PluginCall call) {
+        final Context context = getContext();
+        final JSObject result = new JSObject();
+        if (context == null) {
+            result.put("locked", false);
+            result.put("available", false);
+            call.resolve(result);
+            return;
+        }
+        final KeyguardManager keyguard =
+            (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        final PowerManager power =
+            (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        if (keyguard == null || power == null) {
+            result.put("locked", false);
+            result.put("available", false);
+            call.resolve(result);
+            return;
+        }
+        result.put(
+            "locked",
+            TalosDeviceLockPolicy.tookAppAway(keyguard.isKeyguardLocked(), power.isInteractive())
+        );
+        result.put("available", true);
+        call.resolve(result);
     }
 }

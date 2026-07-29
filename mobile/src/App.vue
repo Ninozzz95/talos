@@ -517,6 +517,14 @@ onMounted(async () => {
                 const { hasAppLockPin } = await import('@/services/appLock')
                 return hasAppLockPin().catch(() => false)
             },
+            // Owner 2026-07-29: the phone's own lock has to take TALOS with it —
+            // immediately, not on the next resume and not after the grace
+            // window. Asking Android WHY the app went away is what keeps a quick
+            // app switch cheap while making a screen lock absolute.
+            isDeviceLocked: async () => {
+                const { talosDeviceIsLocked } = await import('@/services/privacyScreen')
+                return talosDeviceIsLocked()
+            },
             onRelock: () => {
                 // R1-SF-B2: an open vaul drawer sets body pointer-events:none
                 // — the lock screen would be dead to taps over it.

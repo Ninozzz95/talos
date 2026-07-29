@@ -16,6 +16,19 @@ export interface TalosResumeRelockOptions {
     graceMs?: number
     /** The lock applies only when the flag AND a real PIN record exist. */
     isEnabled(): Promise<boolean> | boolean
+    /**
+     * True when the DEVICE took the app away — screen off or keyguard engaged —
+     * rather than the user switching to another app.
+     *
+     * Owner 2026-07-29: locking the phone has to lock TALOS, immediately. The
+     * grace window below exists so that glancing at a notification does not
+     * cost a PIN, and that is worth keeping; but locking the screen is the user
+     * securing the device, and it deserves no window at all.
+     *
+     * Optional, and absent on web: without it the grace window is the only
+     * behaviour, exactly as before.
+     */
+    isDeviceLocked?(): Promise<boolean> | boolean
     onRelock(): void
     /** Test seam. */
     now?(): number
@@ -36,6 +49,14 @@ export function registerTalosResumeRelock(options: TalosResumeRelockOptions): Ta
     let hiddenAt: number | null = null
     let handle: PluginListenerHandle | null = null
     let disposed = false
+    /**
+     * Which background episode we are in. The device-lock probe is async, so a
+     * screen locked and unlocked quickly can have it answer "locked" AFTER the
+     * app is back in the user's hands — a PIN pad for a lock that is already
+     * over. The token makes a late answer belong to an episode that has ended,
+     * and an episode that has ended cannot lock anything.
+     */
+    let episode = 0
 
     const registration = App.addListener('appStateChange', (state: { isActive: boolean }) => {
         if (disposed) return
@@ -44,6 +65,34 @@ export function registerTalosResumeRelock(options: TalosResumeRelockOptions): Ta
             // is taken — a JS-side curtain here would be theatre. The snapshot
             // is closed by FLAG_SECURE (see services/privacyScreen.ts).
             hiddenAt = now()
+            // Owner 2026-07-29: if the DEVICE was locked, lock now — do not wait
+            // for a resume and do not wait out the grace window. The old path
+            // left TALOS unlocked in memory with the chats still on screen
+            // behind the keyguard, so whoever opened the phone within the window
+            // walked straight into them. Locking here means the PIN screen is
+            // already painted underneath, and the content never reappears even
+            // for a frame.
+            //
+            // A failed probe deliberately does NOT lock: making it fail-closed
+            // would turn every glance at a notification into a PIN prompt on any
+            // device where the check is unavailable. The grace window below
+            // remains the safety net, and the failure is logged.
+            const token = ++episode
+            const stillHidden = () => !disposed && token === episode && hiddenAt !== null
+            void Promise.resolve()
+                .then(() => options.isDeviceLocked?.() ?? false)
+                .then((deviceLocked) => {
+                    if (!deviceLocked || !stillHidden()) return undefined
+                    return Promise.resolve(options.isEnabled()).then((enabled) => {
+                        if (!enabled || !stillHidden()) return
+                        // Consume the stay so the resume path cannot lock twice.
+                        hiddenAt = null
+                        options.onRelock()
+                    })
+                })
+                .catch((error) => {
+                    talosLogDeviceIssue('TALOS_SCREEN_LOCK_RELOCK', String(error))
+                })
             return
         }
         // Resume: relock only after a REAL background stay beyond the grace
