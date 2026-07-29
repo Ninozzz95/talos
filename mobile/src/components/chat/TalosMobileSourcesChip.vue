@@ -57,11 +57,11 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
             type="button"
             data-testid="talos-sources-chip"
             aria-haspopup="dialog"
-            :aria-label="`${sources.length} sources for this answer`"
+            :aria-label="$t('chat.sourceCount', { count: sources.length })"
             class="talos-pressable inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--talos-border)] px-3 text-xs text-[var(--talos-muted)] transition-colors duration-150 hover:text-[var(--talos-text)]"
             @click="open = true"
         >
-            <span>Sources</span>
+            <span>{{ $t('chat.sources') }}</span>
             <span class="flex items-center -space-x-1.5" aria-hidden="true">
                 <span
                     v-for="mark in marks"
@@ -77,7 +77,7 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
 
         <TalosMobileComposerSheet
             v-if="open"
-            title="Sources"
+            :title="$t('chat.sources')"
             testid="talos-sources-drawer"
             @close="open = false"
         >
@@ -87,7 +87,7 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
                         type="button"
                         class="talos-pressable block w-full rounded-xl border border-[var(--talos-border)] px-3 py-2 text-left"
                         :data-testid="`talos-source-open`"
-                        :aria-label="`Open ${source.title || siteOf(source)}`"
+                        :aria-label="$t('chat.openSource', { title: source.title || siteOf(source) })"
                         @click="openSource(source)"
                     >
                     <p class="truncate text-xs text-[var(--talos-text)]">{{ source.title || siteOf(source) }}</p>
@@ -96,7 +96,7 @@ async function openSource(source: TalosMobileWebSource): Promise<void> {
                          date says so, rather than leaving a blank the reader
                          fills in with "recent". -->
                     <p class="mt-0.5 text-3xs text-[var(--talos-muted)]">
-                        {{ source.publishedAt ?? 'date unknown' }}
+                        {{ source.publishedAt ?? $t('chat.dateUnknown') }}
                     </p>
                     <p class="mt-1 truncate text-3xs text-[var(--talos-muted)] opacity-80">{{ source.url }}</p>
                     </button>

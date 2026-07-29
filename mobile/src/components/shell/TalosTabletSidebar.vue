@@ -22,7 +22,7 @@ const emit = defineEmits<{
     <!-- SF6-F6: honor a left cutout/notch in landscape via safe-area-left. -->
     <aside
         data-testid="talos-tablet-sidebar"
-        aria-label="Chats panel"
+        :aria-label="$t('accessibility.chatsPanel')"
         class="relative z-20 flex min-h-0 shrink-0 flex-col border-r border-transparent bg-[var(--talos-sidebar)]/60 pl-[env(safe-area-inset-left)] backdrop-blur-sm"
         :style="{ width: `${width}px` }"
     >
@@ -33,7 +33,7 @@ const emit = defineEmits<{
                 variant="ghost"
                 data-testid="talos-tablet-menu"
                 class="min-h-11 min-w-11"
-                aria-label="Open menu"
+                :aria-label="$t('navigation.openMenu')"
                 @click="emit('openMenu')"
             >
                 <Menu aria-hidden="true" />

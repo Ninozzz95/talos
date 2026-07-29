@@ -71,7 +71,7 @@ onBeforeUnmount(release)
     <button
         v-if="source"
         type="button"
-        :aria-label="`Open ${name}`"
+        :aria-label="$t('library.openNamed', { name })"
         class="talos-pressable max-w-full"
         @click="open"
     >
@@ -93,7 +93,7 @@ onBeforeUnmount(release)
     >
         <ImageIcon class="size-3.5 shrink-0" aria-hidden="true" />
         <span class="max-w-[180px] truncate">{{ name }}</span>
-        <span v-if="failed" class="shrink-0 opacity-75">not available</span>
+        <span v-if="failed" class="shrink-0 opacity-75">{{ $t('chat.imageUnavailable') }}</span>
     </span>
 
     <Teleport to="body">
@@ -110,7 +110,7 @@ onBeforeUnmount(release)
             <div class="flex justify-end p-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white">
                 <button
                     type="button"
-                    aria-label="Close preview"
+                    :aria-label="$t('chat.closePreview')"
                     class="talos-pressable flex size-11 items-center justify-center rounded-full bg-white/15"
                     @click="opened = false"
                 >

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { talosThemePreset } from '@/lib/talosThemes'
+import finalFrame from '@/assets/talosBootFinalFrame.json'
 
 /**
  * Owner 2026-07-24 — consent prompt for the per-theme launcher icon. Switching
@@ -12,8 +14,15 @@ import { talosThemePreset } from '@/lib/talosThemes'
  * accent over its background) so the choice is concrete.
  */
 const controller = useLauncherIconController()
+const { t } = useTalosI18n()
 const pending = computed(() => controller.state.pending)
 const preset = computed(() => (pending.value ? talosThemePreset(pending.value.target) : null))
+const adaptiveTransform = [
+    `translate(${finalFrame.adaptive.pivotX} ${finalFrame.adaptive.pivotY})`,
+    `scale(${finalFrame.adaptive.scale})`,
+    `translate(${-finalFrame.adaptive.pivotX} ${-finalFrame.adaptive.pivotY})`,
+].join(' ')
+const markTransform = `translate(${finalFrame.mark.translateX} ${finalFrame.mark.translateY})`
 </script>
 
 <template>
@@ -38,31 +47,76 @@ const preset = computed(() => (pending.value ? talosThemePreset(pending.value.ta
                         :style="{ backgroundColor: preset.preview.background, color: preset.preview.accent }"
                         aria-hidden="true"
                     >
-                        <svg viewBox="0 0 500 500" class="size-14" fill="none" stroke="currentColor"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5" />
-                            <g stroke-width="9">
-                                <circle cx="250" cy="105" r="22" />
-                                <circle cx="250" cy="225" r="18" />
-                                <circle cx="250" cy="338" r="14" />
-                                <path d="M 250 140 L 250 195" />
-                                <path d="M 250 255 L 250 315" />
-                                <g transform="translate(250, 225) rotate(45)">
-                                    <path d="M 0 32 L 0 95" />
-                                    <circle cx="0" cy="118" r="14" />
-                                </g>
-                                <g transform="translate(250, 225) rotate(-45)">
-                                    <path d="M 0 32 L 0 95" />
-                                    <circle cx="0" cy="118" r="14" />
+                        <svg
+                            data-testid="talos-launcher-icon-final-frame"
+                            :viewBox="finalFrame.viewBox"
+                            class="size-20"
+                            aria-hidden="true"
+                        >
+                            <g :transform="adaptiveTransform">
+                                <g
+                                    :transform="markTransform"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path
+                                        class="talos-launcher-hex"
+                                        :d="finalFrame.mark.hex.path"
+                                        fill="none"
+                                        :stroke="preset.preview.accent"
+                                        :stroke-width="finalFrame.mark.hex.strokeWidth"
+                                        :stroke-opacity="finalFrame.mark.hex.strokeOpacity"
+                                    />
+                                    <path
+                                        v-for="edge in finalFrame.mark.edges"
+                                        :key="edge.path"
+                                        class="talos-launcher-edge"
+                                        :d="edge.path"
+                                        fill="none"
+                                        :stroke="preset.preview.accent"
+                                        :stroke-width="finalFrame.mark.edgeStrokeWidth"
+                                    />
+                                    <circle
+                                        v-for="node in finalFrame.mark.nodes"
+                                        :key="`${node.cx}:${node.cy}:${node.r}`"
+                                        class="talos-launcher-node"
+                                        :cx="node.cx"
+                                        :cy="node.cy"
+                                        :r="node.r"
+                                        :fill="preset.preview.accent"
+                                        :stroke="preset.preview.accent"
+                                        :stroke-width="finalFrame.mark.nodeStrokeWidth"
+                                    />
+                                    <g
+                                        v-for="branch in finalFrame.mark.branches"
+                                        :key="branch.rotation"
+                                        :transform="`translate(250 225) rotate(${branch.rotation})`"
+                                    >
+                                        <path
+                                            class="talos-launcher-edge"
+                                            :d="branch.edgePath"
+                                            fill="none"
+                                            :stroke="preset.preview.accent"
+                                            :stroke-width="finalFrame.mark.edgeStrokeWidth"
+                                        />
+                                        <circle
+                                            class="talos-launcher-node"
+                                            :cx="branch.node.cx"
+                                            :cy="branch.node.cy"
+                                            :r="branch.node.r"
+                                            :fill="preset.preview.accent"
+                                            :stroke="preset.preview.accent"
+                                            :stroke-width="finalFrame.mark.nodeStrokeWidth"
+                                        />
+                                    </g>
                                 </g>
                             </g>
                         </svg>
                     </span>
 
-                    <h2 id="talos-launcher-icon-title" class="mt-4 text-lg font-semibold">Update the app icon?</h2>
+                    <h2 id="talos-launcher-icon-title" class="mt-4 text-lg font-semibold">{{ t('launcher.updateTitle') }}</h2>
                     <p class="mt-1 text-sm leading-5 text-[var(--talos-muted)]">
-                        TALOS needs to restart to switch its home-screen icon to the
-                        <span class="font-medium text-[var(--talos-text)]">{{ preset.shortLabel }}</span> theme.
+                        {{ t('launcher.restartDetail', { theme: preset.shortLabel }) }}
                     </p>
                 </div>
 
@@ -73,7 +127,7 @@ const preset = computed(() => (pending.value ? talosThemePreset(pending.value.ta
                         class="talos-pressable min-h-11 w-full rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                         @click="controller.confirmNow()"
                     >
-                        Restart now
+                        {{ t('launcher.restartNow') }}
                     </Button>
                     <Button
                         type="button"
@@ -82,7 +136,7 @@ const preset = computed(() => (pending.value ? talosThemePreset(pending.value.ta
                         class="talos-pressable min-h-11 w-full rounded-full text-sm"
                         @click="controller.later()"
                     >
-                        Later — change on next close
+                        {{ t('launcher.later') }}
                     </Button>
                     <button
                         type="button"
@@ -90,7 +144,7 @@ const preset = computed(() => (pending.value ? talosThemePreset(pending.value.ta
                         class="talos-pressable mt-1 min-h-9 text-xs text-[var(--talos-muted)]"
                         @click="controller.dismiss()"
                     >
-                        Keep the current icon
+                        {{ t('launcher.keepCurrent') }}
                     </button>
                 </div>
             </div>

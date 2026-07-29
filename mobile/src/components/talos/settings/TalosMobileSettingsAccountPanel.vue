@@ -1,20 +1,21 @@
 <script setup lang="ts">
 /**
  * F2-T6 — Account panel: honest local-first identity (no fake sign-in),
- * the "Replay introduction" row (desktop Account-tab parity) and the App
+ * the unified setup replay and the App
  * lock opt-in: PIN derivation in the OS Keystore, policy flags in
  * Preferences, biometrics offered only when the device really has them.
  */
 import { inject, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Check, RotateCcw, Wand2 } from '@lucide/vue'
+import { useTalosI18n } from '@/i18n'
+import { Check, RotateCcw } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileAppLockModal from '@/components/talos/settings/TalosMobileAppLockModal.vue'
 import TalosAccountAvatar from '@/components/talos/TalosAccountAvatar.vue'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
-import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosAccountStore } from '@/stores/account'
+import { useChatController } from '@/stores/chatController'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { appLockPinIsWeak, biometricUnlockAvailable, clearAppLock } from '@/services/appLock'
 import {
@@ -24,10 +25,11 @@ import {
 import { talosDictationDiagnostics, type TalosDictationDiagnostics } from '@/services/dictation'
 
 const router = useRouter()
+const { t } = useTalosI18n()
 const intro = inject(TALOS_MOBILE_INTRO_KEY, null)
-const wizard = inject(TALOS_MOBILE_WIZARD_KEY, null)
 const settings = useSettingsStore()
 const account = useTalosAccountStore()
+const controller = useChatController()
 const toasts = useTalosMobileToasts()
 
 // Owner 2026-07-24: local account identity + PREDISPOSED OAuth (honestly gated,
@@ -35,14 +37,32 @@ const toasts = useTalosMobileToasts()
 const nameDraft = ref(account.state.display_name)
 const nameSaved = ref(false)
 async function saveName(): Promise<void> {
-    await account.setDisplayName(nameDraft.value)
-    nameDraft.value = account.state.display_name
-    nameSaved.value = true
-    window.setTimeout(() => { nameSaved.value = false }, 1600)
+    try {
+        await account.setDisplayName(nameDraft.value)
+        await controller.memories.upsertDisplayName(account.state.display_name)
+        nameDraft.value = account.state.display_name
+        nameSaved.value = true
+        window.setTimeout(() => { nameSaved.value = false }, 1600)
+    } catch {
+        toasts.push({
+            message: t('account.displayNameSyncError'),
+            durationMs: 6000,
+        })
+    }
 }
-function tryOAuth(provider: { label: string; gateReason: string }): void {
+const OAUTH_LABEL_KEYS: Record<string, string> = {
+    google: 'account.continueWithGoogle',
+    apple: 'account.continueWithApple',
+}
+function oauthProviderLabel(provider: { id: string }): string {
+    const key = OAUTH_LABEL_KEYS[provider.id]
+    return key
+        ? t(key)
+        : t('account.continueWithProvider', { provider: provider.id })
+}
+function tryOAuth(): void {
     // No fake session: surface the honest gate.
-    toasts.push({ message: provider.gateReason, durationMs: 6000 })
+    toasts.push({ message: t('account.oauthGateReason'), durationMs: 6000 })
 }
 
 // F5-#32 (owner) — the whole PIN journey lives in a dedicated FULLSCREEN
@@ -65,23 +85,15 @@ onMounted(async () => {
     weakPin.value = await appLockPinIsWeak().catch(() => false)
     dictationDiag.value = await talosDictationDiagnostics().catch((error) => ({
         buildId: 'unknown', native: false, registered: false, pluginLoaded: false,
-        methods: [], permissionsRaw: null, availableRaw: null, available: null, error: String(error),
+        methods: [], permissionsRaw: null, availableRaw: null, available: null,
+        trace: String(error), error: String(error),
     }))
 })
 
-function replayIntroduction(): void {
-    // Mirror of the desktop replay chain: leave Settings FIRST so the modal
-    // never opens behind the settings surface, then replay exactly once.
-    void router.push({ name: 'chat' })
-    intro?.replayIntro()
-}
-
-async function replayWizardSetup(): Promise<void> {
-    // Same rule as the intro replay, but AWAIT the route change first (SF M1):
-    // the fullscreen wizard must not mount behind the settings sheet while its
-    // leave transition is still painting.
+async function replayIntroduction(): Promise<void> {
+    // Leave Settings before the single fullscreen setup surface opens.
     await router.push({ name: 'chat' })
-    wizard?.replayWizard()
+    intro?.replayIntro()
 }
 
 function toggleAppLock(): void {
@@ -104,8 +116,8 @@ async function onLockModalCompleted(pin?: string): Promise<void> {
                 protecting.value = false
                 lockModal.value = null
                 protectionError.value = cause instanceof Error
-                    ? `The lock was not armed: ${cause.message}`
-                    : 'The lock was not armed.'
+                    ? t('account.lockArmFailed', { detail: cause.message })
+                    : t('account.lockArmFailedUnknown')
                 return
             }
             protecting.value = false
@@ -119,8 +131,8 @@ async function onLockModalCompleted(pin?: string): Promise<void> {
             // SF: this threw into an unhandled rejection and the toggle simply
             // did nothing — the user could not turn the lock off at all.
             protectionError.value = cause instanceof Error
-                ? `The lock could not be removed: ${cause.message}`
-                : 'The lock could not be removed.'
+                ? t('account.lockRemoveFailed', { detail: cause.message })
+                : t('account.lockRemoveFailedUnknown')
             lockModal.value = null
             return
         }
@@ -158,7 +170,7 @@ async function toggleBiometric(): Promise<void> {
             <div class="flex items-center gap-3">
                 <TalosAccountAvatar size="lg" />
                 <div class="min-w-0 flex-1">
-                    <label for="talos-account-name" class="block text-xs font-medium text-[var(--talos-muted)]">Display name</label>
+                    <label for="talos-account-name" class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('account.displayName') }}</label>
                     <div class="mt-1 flex gap-2">
                         <input
                             id="talos-account-name"
@@ -167,13 +179,13 @@ async function toggleBiometric(): Promise<void> {
                             type="text"
                             maxlength="60"
                             autocomplete="name"
-                            placeholder="Your name"
-                            aria-label="Display name"
+                            :placeholder="t('account.yourName')"
+                            :aria-label="t('account.displayName')"
                             class="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                             @keydown.enter.prevent="saveName"
                         >
-                        <Button type="button" data-testid="talos-account-name-save" class="min-h-11 gap-1.5 rounded-xl" :disabled="nameDraft.trim() === account.state.display_name" @click="saveName">
-                            <Check class="size-4" aria-hidden="true" /> {{ nameSaved ? 'Saved' : 'Save' }}
+                        <Button type="button" data-testid="talos-account-name-save" class="min-h-11 gap-1.5 rounded-xl" :disabled="!nameDraft.trim() || nameDraft.trim() === account.state.display_name" @click="saveName">
+                            <Check class="size-4" aria-hidden="true" /> {{ nameSaved ? t('common.saved') : t('common.save') }}
                         </Button>
                     </div>
                 </div>
@@ -182,10 +194,9 @@ async function toggleBiometric(): Promise<void> {
 
         <!-- Predisposed OAuth — present but honestly gated (local-first). -->
         <section>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Sign in</h4>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('account.signIn') }}</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                TALOS runs fully local — no account is required. Sign-in is predisposed for the
-                optional encrypted sync arriving with the sovereign core.
+                {{ t('account.signInBody') }}
             </p>
             <div class="mt-2 flex flex-col gap-2">
                 <Button
@@ -195,47 +206,41 @@ async function toggleBiometric(): Promise<void> {
                     variant="outline"
                     :data-testid="`talos-oauth-${provider.id}`"
                     class="talos-pressable min-h-12 w-full justify-center gap-2 rounded-xl border-[var(--talos-border)] text-[var(--talos-text)]"
-                    @click="tryOAuth(provider)"
+                    @click="tryOAuth"
                 >
-                    {{ provider.label }}
-                    <span class="text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Soon</span>
+                    {{ oauthProviderLabel(provider) }}
+                    <span class="text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('account.soon') }}</span>
                 </Button>
             </div>
         </section>
 
         <section>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Local workspace</h4>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('account.localWorkspace') }}</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                This installation is local-first: your sessions, drafts and preferences live on
-                this device, and provider keys stay in the device Keystore. No account is
-                required; optional desktop sync is on the roadmap.
+                {{ t('account.localWorkspaceBody') }}
             </p>
         </section>
 
         <section>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">App lock</h4>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('account.appLock') }}</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                Require a PIN when TALOS starts. With the lock on, the PIN <b>is</b> the key that
-                encrypts your chats and documents on this device: nobody can open them without it —
-                and <b>if you forget it, the data is lost for good</b>. There is no recovery, not
-                even for us. The PIN never leaves this device.
+                {{ t('account.appLockBody') }}
             </p>
             <p
                 v-if="!settings.state.security.app_lock_enabled"
                 data-testid="talos-applock-off-warning"
                 class="mt-2 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs leading-5 text-[var(--talos-muted)]"
             >
-                The lock is off: your chats and documents on this phone can be read by anyone with
-                access to the device.
+                {{ t('account.appLockOffWarning') }}
             </p>
             <div class="mt-1 flex items-center justify-between gap-3">
-                <span class="text-sm text-[var(--talos-text)]">Require PIN on start</span>
+                <span class="text-sm text-[var(--talos-text)]">{{ t('account.requirePin') }}</span>
                 <button
                     type="button"
                     role="switch"
                     data-testid="talos-applock-toggle"
                     :aria-checked="settings.state.security.app_lock_enabled"
-                    aria-label="Require PIN on start"
+                    :aria-label="t('account.requirePin')"
                     class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
                     @click="toggleAppLock"
                 >
@@ -266,7 +271,7 @@ async function toggleBiometric(): Promise<void> {
                 role="status"
                 class="mt-3 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2 text-xs leading-5 text-[var(--talos-text)]"
             >
-                Locking your data with the new key. Keep the app open — this happens once.
+                {{ t('account.protecting') }}
             </p>
             <p
                 v-if="protectionError"
@@ -284,15 +289,13 @@ async function toggleBiometric(): Promise<void> {
                 role="status"
                 class="mt-3 rounded-lg border border-[var(--talos-danger)]/40 bg-[var(--talos-danger)]/10 px-3 py-2 text-xs leading-5 text-[var(--talos-text)]"
             >
-                Your PIN is shorter than the current 6-digit minimum. Turn the lock off and on
-                again to set a longer one.
+                {{ t('account.weakPin') }}
             </p>
             <div class="mt-3 flex items-center justify-between gap-3">
                 <span class="min-w-0 flex-1 text-sm text-[var(--talos-text)]">
-                    Hide in app switcher &amp; block screenshots
+                    {{ t('account.screenSecure') }}
                     <span class="mt-0.5 block text-xs leading-5 text-[var(--talos-muted)]">
-                        Android stops capturing this window — no screenshots, no screen
-                        recording, and a blank card in recents.
+                        {{ t('account.screenSecureBody') }}
                     </span>
                 </span>
                 <button
@@ -300,7 +303,7 @@ async function toggleBiometric(): Promise<void> {
                     role="switch"
                     data-testid="talos-screen-secure-toggle"
                     :aria-checked="settings.state.security.screen_secure"
-                    aria-label="Hide in app switcher and block screenshots"
+                    :aria-label="t('account.screenSecure')"
                     class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
                     @click="toggleScreenSecure"
                 >
@@ -322,13 +325,13 @@ async function toggleBiometric(): Promise<void> {
                 v-if="settings.state.security.app_lock_enabled && biometricAvailable"
                 class="mt-3 flex items-center justify-between gap-3"
             >
-                <span class="text-sm text-[var(--talos-text)]">Unlock with biometrics</span>
+                <span class="text-sm text-[var(--talos-text)]">{{ t('account.biometrics') }}</span>
                 <button
                     type="button"
                     role="switch"
                     data-testid="talos-applock-biometric"
                     :aria-checked="settings.state.security.app_lock_biometric"
-                    aria-label="Unlock with biometrics"
+                    :aria-label="t('account.biometrics')"
                     class="talos-pressable -mr-1 flex min-h-11 min-w-11 items-center justify-center"
                     @click="toggleBiometric"
                 >
@@ -349,49 +352,33 @@ async function toggleBiometric(): Promise<void> {
         </section>
 
         <section>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Dictation diagnostics</h4>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('account.dictationDiagnostics') }}</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]" data-testid="talos-dictation-diagnostics">
                 <template v-if="dictationDiag">
-                    platform: {{ dictationDiag.native ? 'native' : 'web' }} ·
-                    plugin: {{ dictationDiag.pluginLoaded ? 'loaded' : 'NOT LOADED' }} ·
-                    recognizer: {{ dictationDiag.available === null ? 'unknown' : (dictationDiag.available ? 'available' : 'unavailable') }}
-                    <template v-if="dictationDiag.error"> · error: {{ dictationDiag.error }}</template>
+                    {{ t('account.diagnosticsPlatform') }} {{ dictationDiag.native ? t('account.diagnosticsNative') : t('account.diagnosticsWeb') }} ·
+                    {{ t('account.diagnosticsPlugin') }} {{ dictationDiag.pluginLoaded ? t('account.diagnosticsLoaded') : t('account.diagnosticsNotLoaded') }} ·
+                    {{ t('account.diagnosticsRecognizer') }} {{ dictationDiag.available === null ? t('account.diagnosticsUnknown') : (dictationDiag.available ? t('account.diagnosticsAvailable') : t('account.diagnosticsUnavailable')) }}
+                    <template v-if="dictationDiag.error"> · {{ t('account.diagnosticsError') }} {{ dictationDiag.error }}</template>
+                    <template v-else-if="dictationDiag.trace"> · {{ t('account.diagnosticsDetails') }} {{ dictationDiag.trace }}</template>
                 </template>
-                <template v-else>Probing…</template>
+                <template v-else>{{ t('account.diagnosticsProbing') }}</template>
             </p>
         </section>
 
         <section>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Workspace setup</h4>
+            <h4 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('onboarding.replayTitle') }}</h4>
             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                Re-run the guided setup — identity, appearance, app lock and sign-in.
+                {{ t('onboarding.replayBody') }}
             </p>
             <Button
                 type="button"
                 variant="outline"
-                data-testid="talos-wizard-replay"
-                class="talos-pressable mt-2 min-h-11 gap-2"
-                @click="replayWizardSetup"
-            >
-                <Wand2 class="size-4" aria-hidden="true" />
-                Set up workspace
-            </Button>
-        </section>
-
-        <section>
-            <h4 class="text-sm font-semibold text-[var(--talos-text)]">Introduction</h4>
-            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-                Watch the TALOS introduction again at any time.
-            </p>
-            <Button
-                type="button"
-                variant="outline"
-                data-testid="talos-replay-intro"
+                data-testid="talos-setup-replay"
                 class="talos-pressable mt-2 min-h-11 gap-2"
                 @click="replayIntroduction"
             >
                 <RotateCcw class="size-4" aria-hidden="true" />
-                Replay introduction
+                {{ t('onboarding.replayAction') }}
             </Button>
         </section>
     </div>

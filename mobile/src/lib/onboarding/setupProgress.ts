@@ -6,14 +6,14 @@
  * wrong: NN/g finds deck-of-cards tutorials "make the interface appear more
  * complicated than it actually is", that tutorials do not improve task
  * performance, and that onboarding earns its place only when the app truly
- * needs something before it can work. TALOS needs a PIN and a model. That is
- * the whole flow.
+ * needs something before it can work. The unified flow owns the local
+ * workspace name, PIN and model in one place.
  *
  * Nothing here is persisted. A step is done when the thing it asks for EXISTS,
  * so resuming is read from reality rather than from a cursor that can go stale
  * and then quietly send someone back through a step they already finished.
  */
-export type TalosSetupStepId = 'pin' | 'model'
+export type TalosSetupStepId = 'identity' | 'pin' | 'model'
 
 export interface TalosSetupStepDefinition {
     id: TalosSetupStepId
@@ -22,11 +22,14 @@ export interface TalosSetupStepDefinition {
 }
 
 export const TALOS_SETUP_STEPS: readonly TalosSetupStepDefinition[] = Object.freeze([
+    { id: 'identity', label: 'Name' },
     { id: 'pin', label: 'PIN' },
     { id: 'model', label: 'Model' },
 ])
 
 export interface TalosSetupState {
+    /** A non-empty local workspace name exists. */
+    identitySet: boolean
     /** A PIN exists, which on this app means the database key is wrapped by it. */
     pinSet: boolean
     /** Somewhere to think: a provider key on this device, or a local model. */
@@ -45,7 +48,11 @@ export interface TalosSetupProgress {
 }
 
 export function talosSetupProgress(state: TalosSetupState): TalosSetupProgress {
-    const done: Record<TalosSetupStepId, boolean> = { pin: state.pinSet, model: state.modelReady }
+    const done: Record<TalosSetupStepId, boolean> = {
+        identity: state.identitySet,
+        pin: state.pinSet,
+        model: state.modelReady,
+    }
     const steps = TALOS_SETUP_STEPS.map((step) => ({ ...step, done: done[step.id] }))
     const first = steps.findIndex((step) => !step.done)
     return {

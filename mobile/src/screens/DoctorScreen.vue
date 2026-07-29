@@ -5,6 +5,7 @@
  * state, speech recognizer, biometrics, share bridge, network reachability.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import {
     Activity, ChevronDown, CircleCheck, CircleX, ClipboardCopy, Stethoscope, Timer,
@@ -19,7 +20,7 @@ import { writeTalosClipboardText } from '@/services/clipboard'
 import {
     TALOS_DOCTOR_SECTIONS,
     splitTalosDoctorRows,
-    talosDoctorVerdict,
+    talosStorageDoctorRow,
 } from '@/lib/diagnostics/doctorSections'
 import { buildTalosDiagnosticsReport } from '@/lib/diagnostics/diagnosticsReport'
 
@@ -32,6 +33,7 @@ interface DoctorRow {
 
 const controller = useChatController()
 const settings = useSettingsStore()
+const { t } = useTalosI18n()
 
 /**
  * Owner 2026-07-26: technical codes belong to whoever is debugging, not to
@@ -69,10 +71,31 @@ const copied = ref(false)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 const copyError = ref<string | null>(null)
 
-const verdict = computed(() => talosDoctorVerdict(rows.value))
+const doctorSections = computed(() => TALOS_DOCTOR_SECTIONS.map((section) => ({
+    ...section,
+    label: t(`doctor.sections.${section.id}`),
+})))
+const verdict = computed(() => {
+    if (rows.value.length === 0) return { ok: true, message: '' }
+    const problems = rows.value.filter((row) => !row.ok).length
+    if (problems === 0) {
+        return {
+            ok: true,
+            message: t(rows.value.length === 1 ? 'doctor.checksPassedOne' : 'doctor.checksPassedMany', {
+                count: rows.value.length,
+            }),
+        }
+    }
+    return {
+        ok: false,
+        message: t(problems === 1 ? 'doctor.problemsFoundOne' : 'doctor.problemsFoundMany', {
+            count: problems,
+        }),
+    }
+})
 const split = computed(() => splitTalosDoctorRows(rows.value))
 const traces = computed(() => controller.traces())
-const buildId = computed(() => rows.value.find((row) => row.id === 'build')?.value ?? 'unknown')
+const buildId = computed(() => rows.value.find((row) => row.id === 'build')?.value ?? t('doctor.unknown'))
 
 /**
  * Always the WHOLE report, never just the open tab.
@@ -101,7 +124,7 @@ async function copyReport(): Promise<void> {
     // report lands in single-digit KB, so this ceiling should never be met; if
     // it is, that is the bug worth knowing about.
     if (payload.length > 64_000) {
-        copyError.value = 'The report is too large to copy safely. Clear timings and try again.'
+        copyError.value = t('doctor.reportTooLarge')
         return
     }
     try {
@@ -112,7 +135,7 @@ async function copyReport(): Promise<void> {
         if (copyTimer !== null) clearTimeout(copyTimer)
         copyTimer = setTimeout(() => { copied.value = false }, 2_000)
     } catch {
-        copyError.value = 'TALOS could not reach the clipboard on this device.'
+        copyError.value = t('doctor.clipboardFailed')
     }
 }
 
@@ -126,17 +149,33 @@ async function scan(): Promise<void> {
     const native = Capacitor.isNativePlatform()
     collected.push({
         id: 'platform',
-        label: 'Platform',
-        value: native ? `native (${Capacitor.getPlatform()})` : 'web preview',
+        label: t('doctor.platform'),
+        value: native ? t('doctor.nativePlatform', { platform: Capacitor.getPlatform() }) : t('doctor.webPreview'),
         ok: true,
     })
 
-    const persistence = controller.chat.state.persistenceStatus
+    const storage = talosStorageDoctorRow({
+        native,
+        status: controller.chat.state.persistenceStatus,
+        error: controller.chat.state.persistenceError,
+    })
+    const storageStatus = controller.chat.state.persistenceStatus
+    const storageError = controller.chat.state.persistenceError
+    const storageHint = storageStatus !== 'error'
+        ? ''
+        : /No available connection for database/i.test(storageError ?? '')
+            ? t('doctor.storageConnectionClosed')
+            : /TALOS_(?:CHAT_)?DB_KEY_LOCKED/i.test(storageError ?? '')
+                ? t('doctor.storageUnlockRequired')
+                : t('doctor.storageRetry')
     collected.push({
-        id: 'storage',
-        label: 'Encrypted local storage',
-        value: `${native ? 'SQLCipher native' : 'sql.js web store'} — ${persistence}`,
-        ok: persistence === 'ready',
+        ...storage,
+        label: t('doctor.storage'),
+        value: t('doctor.storageValue', {
+            engine: t(native ? 'doctor.storageNative' : 'doctor.storageWeb'),
+            status: t(`doctor.storage${storageStatus.charAt(0).toUpperCase()}${storageStatus.slice(1)}`),
+            hint: storageHint,
+        }),
     })
 
     const dictation = await talosWithTimeout(talosDictationDiagnostics(), 12000, 'TALOS_DOCTOR_SPEECH').catch(() => null)
@@ -144,24 +183,32 @@ async function scan(): Promise<void> {
     // tells us which APK is running (a stale build was the whole "bug in R2").
     collected.push({
         id: 'build',
-        label: 'Build',
-        value: dictation?.buildId ?? 'unknown',
+        label: t('doctor.build'),
+        value: dictation?.buildId ?? t('doctor.unknown'),
         ok: true,
     })
     collected.push({
         id: 'speech',
-        label: 'Speech recognizer',
+        label: t('doctor.speech'),
         value: dictation
-            ? `plugin ${dictation.pluginLoaded ? 'loaded' : 'MISSING'} · recognizer ${dictation.available === null ? 'unknown' : dictation.available ? 'available' : 'unavailable'}${dictation.error ? ` · ${dictation.error}` : ''}`
-            : 'probe failed',
-        ok: Boolean(dictation?.pluginLoaded && dictation.available !== false),
+            ? t('doctor.speechValue', {
+                plugin: t(dictation.pluginLoaded ? 'doctor.loaded' : 'doctor.missing'),
+                recognizer: t(dictation.available === null
+                    ? 'doctor.unknown'
+                    : dictation.available ? 'doctor.available' : 'doctor.unavailable'),
+                error: dictation.error
+                    ? ` · ${dictation.error}`
+                    : settings.state.shell.debug_diagnostics ? ` · ${dictation.trace}` : '',
+            })
+            : t('doctor.probeFailed'),
+        ok: Boolean(dictation?.pluginLoaded && dictation.available !== false && !dictation.error),
     })
 
     const biometric = await talosWithTimeout(biometricUnlockAvailable(), 5000, 'TALOS_DOCTOR_BIOMETRIC').catch(() => false)
     collected.push({
         id: 'biometrics',
-        label: 'Biometric unlock',
-        value: biometric ? 'available' : 'not available on this device',
+        label: t('doctor.biometrics'),
+        value: biometric ? t('doctor.available') : t('doctor.unavailableDevice'),
         ok: true,
     })
 
@@ -172,15 +219,15 @@ async function scan(): Promise<void> {
     } catch { shareOk = false }
     collected.push({
         id: 'share',
-        label: 'System share bridge',
-        value: shareOk ? 'available' : 'not available (web download fallback)',
+        label: t('doctor.share'),
+        value: shareOk ? t('doctor.available') : t('doctor.unavailableShare'),
         ok: true,
     })
 
     collected.push({
         id: 'network',
-        label: 'Network',
-        value: navigator.onLine ? 'online' : 'offline — TALOS stays fully local',
+        label: t('doctor.network'),
+        value: navigator.onLine ? t('doctor.online') : t('doctor.offlineLocal'),
         ok: true,
     })
 
@@ -209,12 +256,12 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
     <div class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3" data-testid="talos-doctor-screen">
         <p class="flex items-center gap-2 text-xs leading-5 text-[var(--talos-muted)]">
             <Stethoscope class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-            Honest readiness report — every row is a real probe, run on this device, offline.
+            {{ t('doctor.intro') }}
         </p>
 
         <p v-if="scanning" role="status" class="flex items-center gap-2 py-6 text-sm text-[var(--talos-muted)]">
             <Activity class="size-4 animate-pulse text-[var(--talos-accent)]" aria-hidden="true" />
-            Scanning device capabilities…
+            {{ t('doctor.scanning') }}
         </p>
 
         <!-- The one line that lets a healthy user leave without reading. -->
@@ -235,11 +282,11 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
         <TabsRoot v-if="!scanning" v-model="activeSection" class="flex min-w-0 flex-col gap-3">
             <!-- Fixed, never scrollable; min-h-11 keeps every target over 48dp. -->
             <TabsList
-                aria-label="Diagnostics sections"
+                :aria-label="t('doctor.diagnosticsSections')"
                 class="grid grid-cols-3 gap-1 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-1"
             >
                 <TabsTrigger
-                    v-for="section in TALOS_DOCTOR_SECTIONS"
+                    v-for="section in doctorSections"
                     :key="section.id"
                     :value="section.id"
                     :data-doctor-tab="section.id"
@@ -278,7 +325,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                             @click="showPassing = !showPassing"
                         >
                             <CircleCheck class="size-4 shrink-0 text-[var(--talos-success,#3f9d6b)]" aria-hidden="true" />
-                            {{ split.passing.length }} check{{ split.passing.length === 1 ? '' : 's' }} passed
+                            {{ t(split.passing.length === 1 ? 'doctor.checksPassedOne' : 'doctor.checksPassedMany', { count: split.passing.length }) }}
                             <ChevronDown class="ml-auto size-4 transition-transform" :class="showPassing ? '' : '-rotate-90'" aria-hidden="true" />
                         </button>
                     </h3>
@@ -301,11 +348,10 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             <!-- DATA -->
             <TabsContent value="data" class="flex flex-col gap-2 outline-none">
                 <p v-if="!settings.state.shell.debug_diagnostics" data-testid="talos-doctor-timings-off" class="rounded-2xl border border-dashed border-[var(--talos-border)] px-3 py-6 text-center text-sm text-[var(--talos-muted)]">
-                    Timings are recorded only while <strong>Show technical detail</strong> is on, under
-                    Advanced. Nothing is measured — and nothing is paid for — while it is off.
+                    {{ t('doctor.timingsOff') }}
                 </p>
                 <p v-else-if="!traces.length" class="rounded-2xl border border-dashed border-[var(--talos-border)] px-3 py-6 text-center text-sm text-[var(--talos-muted)]">
-                    No sends recorded yet. Ask TALOS something, then come back.
+                    {{ t('doctor.noSends') }}
                 </p>
                 <template v-else>
                     <div
@@ -324,16 +370,14 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                              duration is not a measurement. Saying so beats a
                              confident wrong number. -->
                         <p v-if="trace.clockSuspect" class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
-                            The two clocks disagree on this send, so the total shown is the wall
-                            clock (the one that survives a device sleep). Per-round and per-tool
-                            timings come from the monotonic clock and are unaffected.
+                            {{ t('doctor.clocksDisagree') }}
                         </p>
                         <ul class="mt-2 flex flex-col gap-1">
                             <li v-for="(round, roundIndex) in trace.rounds" :key="roundIndex" class="rounded-xl bg-[var(--talos-active)] px-2 py-1.5">
                                 <div class="flex flex-wrap items-center gap-x-2 text-xs text-[var(--talos-text)]">
-                                    <span>Round {{ roundIndex + 1 }} · {{ millis(round.durationMs) }}</span>
+                                    <span>{{ t('doctor.round', { count: roundIndex + 1, duration: millis(round.durationMs) }) }}</span>
                                     <span v-if="round.timeToFirstChunkMs !== null" class="text-[var(--talos-muted)]">
-                                        first word {{ millis(round.timeToFirstChunkMs) }}
+                                        {{ t('doctor.firstWord', { duration: millis(round.timeToFirstChunkMs) }) }}
                                     </span>
                                 </div>
                                 <div v-if="round.tools.length" class="mt-1 flex flex-col gap-0.5">
@@ -342,14 +386,14 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                                         :key="toolIndex"
                                         class="font-mono text-2xs text-[var(--talos-muted)]"
                                     >
-                                        {{ tool.ok ? '+' : 'x' }} {{ tool.name }} · {{ millis(tool.durationMs) }}<template v-if="tool.waitedForConsentMs"> (+{{ millis(tool.waitedForConsentMs) }} waiting for you)</template><template v-if="tool.errorCode"> · {{ tool.errorCode }}</template>
+                                        {{ tool.ok ? '+' : 'x' }} {{ tool.name }} · {{ millis(tool.durationMs) }}<template v-if="tool.waitedForConsentMs">{{ t('doctor.waitingForYou', { duration: millis(tool.waitedForConsentMs) }) }}</template><template v-if="tool.errorCode"> · {{ tool.errorCode }}</template>
                                     </span>
                                     <!-- The diagnosis the owner is after: "one
                                          after another" means his provider asked
                                          for one tool per turn, so the
                                          concurrency has nothing to work with. -->
                                     <span class="text-2xs" :class="round.parallel ? 'text-[var(--talos-success,#3f9d6b)]' : 'text-[var(--talos-muted)]'">
-                                        {{ round.tools.length }} call{{ round.tools.length === 1 ? '' : 's' }}<template v-if="round.tools.length > 1">, {{ round.parallel ? 'run together' : 'one after another' }}</template>
+                                        {{ t(round.tools.length === 1 ? 'doctor.callCountOne' : 'doctor.callCountMany', { count: round.tools.length }) }}<template v-if="round.tools.length > 1">, {{ t(round.parallel ? 'doctor.runTogether' : 'doctor.oneAfterAnother') }}</template>
                                     </span>
                                 </div>
                             </li>
@@ -360,7 +404,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                         class="talos-pressable min-h-11 rounded-xl border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-muted)]"
                         @click="controller.clearTraces()"
                     >
-                        Clear timings
+                        {{ t('doctor.clearTimings') }}
                     </button>
                 </template>
             </TabsContent>
@@ -369,18 +413,16 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             <TabsContent value="advanced" class="flex flex-col gap-2 outline-none">
                 <label class="flex items-start justify-between gap-3 rounded-xl border border-[var(--talos-border)] px-3 py-2.5">
                     <span class="min-w-0">
-                        <span class="block text-sm text-[var(--talos-text)]">Show technical detail</span>
+                        <span class="block text-sm text-[var(--talos-text)]">{{ t('doctor.showTechnicalDetail') }}</span>
                         <span class="mt-1 block text-2xs leading-4 text-[var(--talos-muted)]">
-                            Adds the internal code beside the message when something fails, and records
-                            how long each send took. Useful when reporting a problem, noise otherwise.
-                            What TALOS tells you happened does not change either way.
+                            {{ t('doctor.technicalDetailBody') }}
                         </span>
                     </span>
                     <input
                         type="checkbox"
                         role="switch"
                         data-testid="talos-debug-diagnostics"
-                        aria-label="Show technical detail in errors"
+                        :aria-label="t('doctor.showTechnicalDetailAria')"
                         :checked="settings.state.shell.debug_diagnostics"
                         class="mt-1 h-5 w-9 shrink-0 accent-[var(--talos-accent)]"
                         @change="toggleDiagnostics"
@@ -390,7 +432,7 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                 <!-- F5.1: recent device issues (fenced timeouts, swallowed native
                      errors) — the evidence channel for device-only failures. -->
                 <section v-if="issues.length">
-                    <h3 class="px-1 pb-1 text-xs font-semibold text-[var(--talos-muted)]">Recent issues</h3>
+                    <h3 class="px-1 pb-1 text-xs font-semibold text-[var(--talos-muted)]">{{ t('doctor.recentIssues') }}</h3>
                     <ul class="flex flex-col gap-1">
                         <li
                             v-for="(issue, index) in issues"
@@ -403,14 +445,12 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
                     </ul>
                 </section>
 
-                <p class="px-1 font-mono text-2xs text-[var(--talos-muted)]">build {{ buildId }}</p>
+                <p class="px-1 font-mono text-2xs text-[var(--talos-muted)]">{{ t('doctor.buildLabel', { build: buildId }) }}</p>
             </TabsContent>
         </TabsRoot>
 
         <p class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
-            The report carries timings, check results, provider and model names and the
-            build stamp. It is never given your keys, your messages or your documents — and
-            anything key-shaped that reached the device log is scrubbed on the way out.
+            {{ t('doctor.reportPrivacy') }}
         </p>
         <button
             type="button"
@@ -419,9 +459,9 @@ onBeforeUnmount(() => { if (copyTimer !== null) clearTimeout(copyTimer) })
             @click="copyReport"
         >
             <ClipboardCopy class="size-4" aria-hidden="true" />
-            {{ copied ? 'Copied' : 'Copy diagnostics' }}
+            {{ copied ? t('common.copied') : t('doctor.copyDiagnostics') }}
         </button>
-        <p aria-live="polite" class="sr-only">{{ copied ? 'Diagnostics copied to the clipboard' : '' }}</p>
+        <p aria-live="polite" class="sr-only">{{ copied ? t('doctor.diagnosticsCopied') : '' }}</p>
         <p v-if="copyError" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ copyError }}</p>
 
 

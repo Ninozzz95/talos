@@ -1,4 +1,5 @@
 import { computed, reactive, readonly, ref, type ComputedRef, type Ref } from 'vue'
+import type { TalosTranslate } from '@/i18n/contracts'
 import { TALOS_MOBILE_ATTACHMENT_LIMITS } from '@/lib/chat/attachmentContracts'
 import type {
     AppendChatAttachmentInput,
@@ -6,7 +7,11 @@ import type {
     TalosLocalVaultFile,
 } from '@/repositories/chatRepository'
 import type { TalosNativeFilePicker } from '@/services/nativeFilePicker'
-import type { TalosVaultService } from '@/services/talosVaultService'
+import type {
+    TalosGeneratedTextInput,
+    TalosVaultService,
+    TalosVaultTrayItem,
+} from '@/services/talosVaultService'
 
 export type TalosMobileAttachmentDraftStatus = 'ingesting' | 'authorized' | 'failed'
 export type TalosMobileAttachmentDraftSource = 'picker' | 'vault'
@@ -28,6 +33,7 @@ export interface TalosMobileAttachmentDraft {
 export interface TalosMobileAttachmentsOptions {
     picker: TalosNativeFilePicker
     vault: TalosVaultService
+    translate: TalosTranslate
     idFactory?: () => string
     /** The active chat, stamped as a file's origin (provenance + grouping). */
     currentSessionId?: () => string | null
@@ -47,19 +53,21 @@ export interface TalosMobileAttachmentsController {
     refreshVault(): Promise<void>
     selectFiles(): Promise<void>
     /** Save a chat-generated artifact into the Library (origin='generated'). */
-    saveGenerated(input: {
-        name: string
-        mediaType: string
-        text: string
-        /** `web_source` keeps read pages out of the user's own document list. */
-        kind?: 'document' | 'web_source'
-        /** The address it came from, so the Library can offer to open it. */
-        sourceUrl?: string | null
-    }): Promise<TalosLocalVaultFile>
+    saveGenerated(
+        input: TalosGeneratedTextInput,
+        originSessionId?: string | null,
+    ): Promise<TalosLocalVaultFile>
     /** F2: a generated file that is bytes (xlsx, pdf, docx, pptx). */
     saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
+        forMessage?: false,
+        originSessionId?: string | null,
     ): Promise<TalosLocalVaultFile>
+    saveGeneratedBinary(
+        input: { name: string; mediaType: string; bytes: Uint8Array },
+        forMessage: true,
+        originSessionId?: string | null,
+    ): Promise<{ file: TalosLocalVaultFile; attachment: AppendChatAttachmentInput }>
     /** Object URL for a file's bytes (image thumbnail / open). Caller revokes it. */
     previewUrl(fileId: string): Promise<string | null>
     /** The raw bytes, for handing a file to another app. */
@@ -88,21 +96,22 @@ export interface TalosMobileAttachmentsController {
     clearError(): void
 }
 
-function attachmentErrorMessage(error: unknown): string {
+function attachmentErrorMessage(error: unknown, translate: TalosTranslate): string {
     const code = error instanceof Error ? error.message : ''
     const messages: Record<string, string> = {
-        TALOS_ATTACHMENT_TOO_MANY_FILES: 'Attach no more than 6 files to one message.',
-        TALOS_ATTACHMENT_MESSAGE_TOO_LARGE: 'Attachments for one message cannot exceed 20 MB.',
-        TALOS_ATTACHMENT_FILE_TOO_LARGE: 'Each attachment must be 10 MB or smaller.',
-        TALOS_ATTACHMENT_SIGNATURE_MISMATCH: 'The file contents do not match the declared file type.',
-        TALOS_ATTACHMENT_EXTENSION_UNSUPPORTED: 'This file type is not supported.',
-        TALOS_ATTACHMENT_ANALYSIS_TIMEOUT: 'TALOS could not inspect the file before the safety timeout.',
-        TALOS_ATTACHMENT_ANALYSIS_FAILED: 'TALOS could not inspect this file.',
-        TALOS_VAULT_FILE_UNAVAILABLE: 'This Vault file is not ready to attach.',
+        TALOS_ATTACHMENT_TOO_MANY_FILES: 'chat.attachmentErrors.tooMany',
+        TALOS_ATTACHMENT_MESSAGE_TOO_LARGE: 'chat.attachmentErrors.messageTooLarge',
+        TALOS_ATTACHMENT_FILE_TOO_LARGE: 'chat.attachmentErrors.fileTooLarge',
+        TALOS_ATTACHMENT_SIGNATURE_MISMATCH: 'chat.attachmentErrors.typeMismatch',
+        TALOS_ATTACHMENT_TYPE_MISMATCH: 'chat.attachmentErrors.typeMismatch',
+        TALOS_ATTACHMENT_EXTENSION_UNSUPPORTED: 'chat.attachmentErrors.unsupported',
+        TALOS_ATTACHMENT_ANALYSIS_TIMEOUT: 'chat.attachmentErrors.analysisTimeout',
+        TALOS_ATTACHMENT_ANALYSIS_FAILED: 'chat.attachmentErrors.analysisFailed',
+        TALOS_VAULT_FILE_UNAVAILABLE: 'chat.attachmentErrors.vaultUnavailable',
     }
     // Never surface a raw TALOS_* code to the UI — an unmapped code falls back
     // to the friendly generic, same as any other unexpected error.
-    return messages[code] ?? 'TALOS could not add this file.'
+    return translate(messages[code] ?? 'chat.attachmentErrors.generic')
 }
 
 export function useTalosMobileAttachments(
@@ -142,12 +151,12 @@ export function useTalosMobileAttachments(
     function validateAddition(files: readonly { sizeBytes: number }[]): boolean {
         const selectedCount = items.filter((item) => item.status !== 'failed').length
         if (selectedCount + files.length > TALOS_MOBILE_ATTACHMENT_LIMITS.maxFilesPerMessage) {
-            error.value = attachmentErrorMessage(new Error('TALOS_ATTACHMENT_TOO_MANY_FILES'))
+            error.value = attachmentErrorMessage(new Error('TALOS_ATTACHMENT_TOO_MANY_FILES'), options.translate)
             return false
         }
         const total = files.reduce((sum, file) => sum + file.sizeBytes, selectedSize())
         if (total > TALOS_MOBILE_ATTACHMENT_LIMITS.maxBytesPerMessage) {
-            error.value = attachmentErrorMessage(new Error('TALOS_ATTACHMENT_MESSAGE_TOO_LARGE'))
+            error.value = attachmentErrorMessage(new Error('TALOS_ATTACHMENT_MESSAGE_TOO_LARGE'), options.translate)
             return false
         }
         return true
@@ -165,7 +174,7 @@ export function useTalosMobileAttachments(
             vaultFiles.splice(0, vaultFiles.length, ...files)
         } catch (cause) {
             if (revision !== vaultRevision) return
-            vaultError.value = attachmentErrorMessage(cause)
+            vaultError.value = attachmentErrorMessage(cause, options.translate)
         } finally {
             if (revision === vaultRevision) vaultLoading.value = false
         }
@@ -175,7 +184,7 @@ export function useTalosMobileAttachments(
         try {
             await options.vault.reconcilePending()
         } catch (cause) {
-            vaultError.value = attachmentErrorMessage(cause)
+            vaultError.value = attachmentErrorMessage(cause, options.translate)
         }
         await refreshVault()
     }
@@ -200,8 +209,8 @@ export function useTalosMobileAttachments(
             const current = items.find((item) => item.id === draft.id)
             if (!current) return
             current.status = 'failed'
-            current.error = attachmentErrorMessage(cause)
-            error.value = 'One or more files need attention before this message can be sent.'
+            current.error = attachmentErrorMessage(cause, options.translate)
+            error.value = options.translate('chat.attachmentErrors.needsAttention')
         }
     }
 
@@ -234,27 +243,32 @@ export function useTalosMobileAttachments(
             }
             await refreshVault()
         } catch (cause) {
-            error.value = attachmentErrorMessage(cause)
+            error.value = attachmentErrorMessage(cause, options.translate)
         } finally {
             selecting.value = false
         }
     }
 
+    async function settleGenerated(result: TalosVaultTrayItem, retainGrant = false): Promise<TalosVaultTrayItem> {
+        if (!retainGrant) await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
+        await refreshVault()
+        return result
+    }
+
+    function generatedOriginSessionId(explicit: string | null | undefined): string | null {
+        return explicit === undefined ? (options.currentSessionId?.() ?? null) : explicit
+    }
+
     async function saveGenerated(
-        input: {
-            name: string
-            mediaType: string
-            text: string
-            kind?: 'document' | 'web_source'
-            sourceUrl?: string | null
-        },
+        input: TalosGeneratedTextInput,
+        originSessionId?: string | null,
     ): Promise<TalosLocalVaultFile> {
         vaultError.value = null
-        const result = await options.vault.createGenerated(input, options.currentSessionId?.() ?? null)
+        const result = await settleGenerated(
+            await options.vault.createGenerated(input, generatedOriginSessionId(originSessionId)),
+        )
         // Saved to the Library, not attached to a message → drop the pre-minted
         // grant; attaching it later from the Library mints its own.
-        await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
-        await refreshVault()
         return result.file
     }
 
@@ -266,17 +280,40 @@ export function useTalosMobileAttachments(
      * making valid documents and this sink was discarding them. Nothing in the
      * Library opened, because there was nothing in it to open.
      */
+    function saveGeneratedBinary(
+        input: { name: string; mediaType: string; bytes: Uint8Array },
+        forMessage?: false,
+        originSessionId?: string | null,
+    ): Promise<TalosLocalVaultFile>
+    function saveGeneratedBinary(
+        input: { name: string; mediaType: string; bytes: Uint8Array },
+        forMessage: true,
+        originSessionId?: string | null,
+    ): Promise<{ file: TalosLocalVaultFile; attachment: AppendChatAttachmentInput }>
     async function saveGeneratedBinary(
         input: { name: string; mediaType: string; bytes: Uint8Array },
-    ): Promise<TalosLocalVaultFile> {
+        forMessage = false,
+        originSessionId?: string | null,
+    ): Promise<TalosLocalVaultFile | {
+        file: TalosLocalVaultFile
+        attachment: AppendChatAttachmentInput
+    }> {
         vaultError.value = null
-        const result = await options.vault.createGeneratedBinary(
-            input,
-            options.currentSessionId?.() ?? null,
+        const result = await settleGenerated(
+            await options.vault.createGeneratedBinary(
+                input,
+                generatedOriginSessionId(originSessionId),
+            ),
+            forMessage,
         )
-        await options.vault.revokeGrant(result.grant.id).catch(() => undefined)
-        await refreshVault()
-        return result.file
+        return forMessage ? {
+            file: result.file,
+            attachment: {
+                id: result.grant.id,
+                vault_file_id: result.file.id,
+                grant_id: result.grant.id,
+            },
+        } : result.file
     }
 
     async function previewBytes(fileId: string): Promise<Uint8Array | null> {
@@ -306,11 +343,13 @@ export function useTalosMobileAttachments(
     async function attachExisting(file: TalosLocalVaultFile): Promise<boolean> {
         error.value = null
         if (items.some((item) => item.vaultFileId === file.id)) {
-            error.value = `${file.display_name} is already attached.`
+            error.value = options.translate('chat.attachmentErrors.alreadyAttached', {
+                name: file.display_name,
+            })
             return false
         }
         if (file.status !== 'available') {
-            error.value = attachmentErrorMessage(new Error('TALOS_VAULT_FILE_UNAVAILABLE'))
+            error.value = attachmentErrorMessage(new Error('TALOS_VAULT_FILE_UNAVAILABLE'), options.translate)
             return false
         }
         if (!validateAddition([{ sizeBytes: file.size_bytes }])) return false
@@ -343,8 +382,8 @@ export function useTalosMobileAttachments(
             return true
         } catch (cause) {
             draft.status = 'failed'
-            draft.error = attachmentErrorMessage(cause)
-            error.value = 'This Vault file could not be authorized for the current message.'
+            draft.error = attachmentErrorMessage(cause, options.translate)
+            error.value = options.translate('chat.attachmentErrors.authorizationFailed')
             return false
         }
     }
@@ -356,7 +395,7 @@ export function useTalosMobileAttachments(
             try {
                 await options.vault.revokeGrant(item.grantId)
             } catch (cause) {
-                error.value = attachmentErrorMessage(cause)
+                error.value = attachmentErrorMessage(cause, options.translate)
                 return
             }
         }
@@ -374,7 +413,7 @@ export function useTalosMobileAttachments(
             }
             await refreshVault()
         } catch (cause) {
-            vaultError.value = attachmentErrorMessage(cause)
+            vaultError.value = attachmentErrorMessage(cause, options.translate)
             throw cause
         }
     }
@@ -395,7 +434,9 @@ export function useTalosMobileAttachments(
                     // Keep the FIRST real cause: a permission error, a locked
                     // file and a database fault are different problems, and a
                     // generic summary makes them indistinguishable.
-                    if (deleteFailure === null) deleteFailure = attachmentErrorMessage(cause)
+                    if (deleteFailure === null) {
+                        deleteFailure = attachmentErrorMessage(cause, options.translate)
+                    }
                     continue
                 }
             }
@@ -426,7 +467,7 @@ export function useTalosMobileAttachments(
             await options.vault.setFileShared(fileId, shared)
             await refreshVault()
         } catch (cause) {
-            vaultError.value = attachmentErrorMessage(cause)
+            vaultError.value = attachmentErrorMessage(cause, options.translate)
             throw cause
         }
     }
@@ -438,7 +479,7 @@ export function useTalosMobileAttachments(
         try {
             for (const grantId of grants) await options.vault.revokeGrant(grantId)
         } catch (cause) {
-            error.value = attachmentErrorMessage(cause)
+            error.value = attachmentErrorMessage(cause, options.translate)
             throw cause
         }
         items.splice(0, items.length)

@@ -76,6 +76,39 @@ const DYNAMIC_BOUNDARIES = [
         suffix: 'src/components/chat/TalosMobileChatMediaPanel.vue',
         code: 'TALOS_CHAT_MEDIA_NOT_LAZY',
     },
+    // Theme-linked launcher icon confirmation is a post-boot modal. Its SVG
+    // preview and dialog chrome must load only when a real choice is pending.
+    {
+        suffix: 'src/components/talos/settings/TalosLauncherIconDialog.vue',
+        code: 'TALOS_LAUNCHER_ICON_DIALOG_NOT_LAZY',
+    },
+    {
+        suffix: 'src/lib/welcome/catalogs/en.json',
+        code: 'TALOS_WELCOME_CATALOG_NOT_LAZY',
+    },
+    {
+        suffix: 'src/lib/welcome/catalogs/it.json',
+        code: 'TALOS_WELCOME_CATALOG_NOT_LAZY',
+    },
+    {
+        suffix: 'src/lib/welcome/runtime.ts',
+        code: 'TALOS_WELCOME_RUNTIME_NOT_LAZY',
+    },
+    {
+        suffix: 'src/components/chat/TalosWelcomeEasterEgg.vue',
+        code: 'TALOS_WELCOME_EASTER_EGG_NOT_LAZY',
+    },
+    {
+        suffix: 'src/components/chat/TalosWelcomeTitle.vue',
+        code: 'TALOS_WELCOME_TITLE_NOT_LAZY',
+    },
+    // The procedural canvas and its scene registry are optional visual
+    // enhancement. The static themed background paints immediately; loading
+    // every renderer and scene before first chat paint is unnecessary.
+    {
+        suffix: 'src/components/talos/workspace/TalosMobileBackground.vue',
+        code: 'TALOS_WORKSPACE_BACKGROUND_NOT_LAZY',
+    },
 ]
 
 function argument(name, fallback) {
@@ -109,7 +142,7 @@ function matchesBoundary(manifest, key, suffix) {
     if (normalizedKey.endsWith(suffix) || normalizedSource.endsWith(suffix)) return true
 
     const sourceFile = suffix.split('/').at(-1)
-    const sourceStem = sourceFile?.replace(/\.(?:vue|ts)$/, '')
+    const sourceStem = sourceFile?.replace(/\.(?:json|vue|ts)$/, '')
     if (!sourceStem || typeof row.file !== 'string') return false
     const generatedFile = row.file.replaceAll('\\', '/').split('/').at(-1) ?? ''
     const stem = escapeRegularExpression(sourceStem)
@@ -252,6 +285,13 @@ try {
                 station_dynamic_entries: dynamicEntries.slice(5, 9),
                 model_catalog_dynamic_entry: dynamicEntries[9],
                 model_advanced_dynamic_entry: dynamicEntries[10],
+                launcher_icon_dialog_dynamic_entry: dynamicEntries[16],
+                welcome_en_dynamic_entry: dynamicEntries[17],
+                welcome_it_dynamic_entry: dynamicEntries[18],
+                welcome_runtime_dynamic_entry: dynamicEntries[19],
+                welcome_easter_egg_dynamic_entry: dynamicEntries[20],
+                welcome_title_dynamic_entry: dynamicEntries[21],
+                workspace_background_dynamic_entry: dynamicEntries[22],
             })}\n`)
         }
     }

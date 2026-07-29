@@ -40,7 +40,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <TalosMobileComposerSheet title="Model & reasoning" testid="talos-model-drawer" @close="emit('close')">
+    <TalosMobileComposerSheet :title="$t('chat.modelAndReasoning')" testid="talos-model-drawer" @close="emit('close')">
         <TalosMobileComposerModelPicker
             :model-profiles="modelProfiles"
             :routing-profiles="routingProfiles"
@@ -57,7 +57,7 @@ const emit = defineEmits<{
         />
 
         <div v-if="effortLevels.length || supportsThinking" class="border-t border-[var(--talos-border)] pt-3">
-            <h3 class="px-1 pb-2 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Reasoning</h3>
+            <h3 class="px-1 pb-2 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('chat.reasoning') }}</h3>
             <TalosMobileEffortPicker
                 :effort-levels="effortLevels"
                 :selected-effort="selectedEffort"

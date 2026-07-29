@@ -249,6 +249,20 @@
     height: 4.5rem;
 }
 
+.talos-welcome-title {
+    margin-top: 1.5rem;
+    color: var(--talos-text);
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    line-height: var(--text-2xl--line-height);
+}
+
+[data-composer-expanded="true"] > .talos-welcome-title {
+    margin-top: 0.75rem;
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -322,23 +336,10 @@
     letter-spacing: 0.01em;
 }
 
-/* F2-T2: 3-dot typing indicator (refinement-brief), engine-calm, reduced-motion safe. */
-/* Owner 2026-07-25 — typewriter reveal. The three bouncing dots are GONE while
-   text is printing: the caret IS the activity indicator, sitting exactly where
-   the next letter lands. One span per freshly revealed letter, so only the new
-   glyph animates — text already on screen is never re-animated or re-laid-out. */
-/* Defect #4: the "earlier messages" indicator — a quiet pulse, not a spinner
-   that competes with the reply being written below it. */
-.talos-stream-char--fade {
-    /* The calm alternative to the ink stamp: opacity only, slower, and no
-       transform — nothing moves, so a long paragraph does not shimmer while it
-       fills in. */
-    animation: talosStreamFade calc(var(--talos-motion-duration-control, 160ms) * 2.5) ease-out both;
-}
-@keyframes talosStreamFade {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
+/* F2-T2: streaming reveal, engine-calm and reduced-motion safe.
+   Owner 2026-07-25: the three bouncing dots are gone while text is printing;
+   the caret is the typewriter activity indicator. Only freshly revealed inline
+   fragments animate, so settled text is never re-laid-out or re-animated. */
 .talos-trace-live {
     /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
        that rule sets width/height/border-radius/background, and being unlayered
@@ -357,26 +358,6 @@
     0%, 100% { opacity: 0.25; transform: scale(0.8); }
     50% { opacity: 1; transform: scale(1); }
 }
-@media (prefers-reduced-motion: reduce) {
-    .talos-stream-char--fade {
-    /* The calm alternative to the ink stamp: opacity only, slower, and no
-       transform — nothing moves, so a long paragraph does not shimmer while it
-       fills in. */
-    animation: talosStreamFade calc(var(--talos-motion-duration-control, 160ms) * 2.5) ease-out both;
-}
-@keyframes talosStreamFade {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-.talos-trace-live {
-    /* The trace row's own liveness hint. Deliberately NOT `.talos-typing-pulse`:
-       that rule sets width/height/border-radius/background, and being unlayered
-       it overrides Tailwind utilities on whatever element carries it. Animating
-       opacity alone cannot reshape its host. */
-    animation: talosPulse 1.1s ease-in-out infinite;
-}
-.talos-typing-pulse { animation: none; opacity: 0.7; }
-}
 
 .talos-stream-tail { white-space: pre-wrap; }
 .talos-stream-char {
@@ -385,8 +366,19 @@
         var(--talos-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
 }
 @keyframes talosStreamInk {
-    from { opacity: 0; filter: blur(1.6px); }
-    to { opacity: 1; filter: blur(0); }
+    /* Opacity is compositor-friendly. Animated blur repainted adjacent glyphs
+       and produced the owner's visible halo/overlap on Android WebView. */
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+/* This modifier deliberately follows the equal-specificity base rule. Fade
+   mode must win the cascade instead of accidentally replaying the ink effect. */
+.talos-stream-char--fade {
+    animation: talosStreamFade calc(var(--talos-motion-duration-control, 160ms) * 2.5) ease-out both;
+}
+@keyframes talosStreamFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 /* The retro-futuristic prompt: a solid accent block with a faint bloom. */
 .talos-stream-caret {
@@ -405,7 +397,16 @@
     56%, 100% { opacity: 0.12; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .talos-stream-char { animation: none; }
+    .talos-stream-char,
+    .talos-stream-char--fade {
+        animation: none;
+        opacity: 1;
+    }
+    .talos-trace-live,
+    .talos-typing-pulse {
+        animation: none;
+    }
+    .talos-typing-pulse { opacity: 0.7; }
     .talos-stream-caret { animation: none; opacity: 0.85; }
 }
 

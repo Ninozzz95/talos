@@ -31,6 +31,17 @@ function mountBlock(props: Record<string, unknown> = {}) {
 }
 
 describe('reasoning is a muted line that opens a drawer', () => {
+    it('REASONING-ICON-01 uses one decorative Brain icon and never Sparkles', () => {
+        for (const live of [false, true]) {
+            const row = mountBlock({ live }).get('[data-testid="talos-reasoning-toggle"]')
+            expect(row.findAll('svg.lucide-brain')).toHaveLength(1)
+            expect(row.findAll('svg.lucide-sparkles')).toHaveLength(0)
+
+            const icon = row.get('svg.lucide-brain')
+            expect(icon.element.parentElement?.getAttribute('aria-hidden')).toBe('true')
+        }
+    })
+
     it('renders a plain row with no card around it', () => {
         const row = mountBlock().get('[data-testid="talos-reasoning-toggle"]')
         const classes = row.attributes('class') ?? ''

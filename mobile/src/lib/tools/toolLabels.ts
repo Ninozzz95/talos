@@ -1,3 +1,5 @@
+import type { TalosTranslate } from '@/i18n/contracts'
+
 /**
  * What a running tool is called, in the user's words.
  *
@@ -12,6 +14,7 @@
  * when someone remembers to look.
  */
 export const TALOS_TOOL_LABELS: Record<string, string> = {
+    library_list: 'Browsing your Library',
     library_search: 'Searching your Library',
     library_read: 'Reading a document',
     notes_list: 'Looking at your notes',
@@ -21,6 +24,102 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
     web_search: 'Searching the web',
     web_read: 'Reading a web page',
     document_create: 'Making a document',
+    generate_image: 'Generating an image',
+    library_export: 'Saving a file to your device',
+    library_context_policy_update: 'Changing Library context policy',
+}
+
+export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
+    library_list: 'toolActivity.libraryList',
+    library_search: 'toolActivity.librarySearch',
+    library_read: 'toolActivity.libraryRead',
+    notes_list: 'toolActivity.notesList',
+    tasks_list: 'toolActivity.tasksList',
+    memory_search: 'toolActivity.memorySearch',
+    time_now: 'toolActivity.timeNow',
+    web_search: 'toolActivity.webSearch',
+    web_read: 'toolActivity.webRead',
+    document_create: 'toolActivity.documentCreate',
+    generate_image: 'toolActivity.generateImage',
+    library_export: 'toolActivity.libraryExport',
+    library_context_policy_update: 'toolActivity.libraryContextPolicyUpdate',
+}
+
+export interface TalosToolConsentCopy {
+    title: string
+    description: string
+}
+
+export const TALOS_TOOL_CONSENT_KEYS: Record<string, TalosToolConsentCopy> = {
+    library_list: {
+        title: 'toolConsent.libraryList.title',
+        description: 'toolConsent.libraryList.description',
+    },
+    library_search: {
+        title: 'toolConsent.librarySearch.title',
+        description: 'toolConsent.librarySearch.description',
+    },
+    library_read: {
+        title: 'toolConsent.libraryRead.title',
+        description: 'toolConsent.libraryRead.description',
+    },
+    notes_list: {
+        title: 'toolConsent.notesList.title',
+        description: 'toolConsent.notesList.description',
+    },
+    tasks_list: {
+        title: 'toolConsent.tasksList.title',
+        description: 'toolConsent.tasksList.description',
+    },
+    memory_search: {
+        title: 'toolConsent.memorySearch.title',
+        description: 'toolConsent.memorySearch.description',
+    },
+    time_now: {
+        title: 'toolConsent.timeNow.title',
+        description: 'toolConsent.timeNow.description',
+    },
+    web_search: {
+        title: 'toolConsent.webSearch.title',
+        description: 'toolConsent.webSearch.description',
+    },
+    web_read: {
+        title: 'toolConsent.webRead.title',
+        description: 'toolConsent.webRead.description',
+    },
+    document_create: {
+        title: 'toolConsent.documentCreate.title',
+        description: 'toolConsent.documentCreate.description',
+    },
+    generate_image: {
+        title: 'toolConsent.generateImage.title',
+        description: 'toolConsent.generateImage.description',
+    },
+    library_export: {
+        title: 'toolConsent.libraryExport.title',
+        description: 'toolConsent.libraryExport.description',
+    },
+    library_context_policy_update: {
+        title: 'toolConsent.libraryContextPolicyUpdate.title',
+        description: 'toolConsent.libraryContextPolicyUpdate.description',
+    },
+}
+
+/**
+ * Provider schemas stay stable and English; only the human authorization
+ * surface receives localized presentation copy. Custom prompts, such as the
+ * generated-file save marker, arrive localized already and keep their copy.
+ */
+export function talosToolConsentCopy(
+    tool: { name?: string; title: string; description: string },
+    translate: TalosTranslate,
+): TalosToolConsentCopy {
+    const keys = tool.name ? TALOS_TOOL_CONSENT_KEYS[tool.name] : undefined
+    if (!keys) return { title: tool.title, description: tool.description }
+    return {
+        title: translate(keys.title),
+        description: translate(keys.description),
+    }
 }
 
 /**
@@ -35,9 +134,20 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
  * Names, not components: this module is pure, and pulling icon components into
  * it would drag the view layer into every place that reads a tool label.
  */
-export type TalosToolIconName = 'library' | 'note' | 'task' | 'memory' | 'clock' | 'web' | 'document' | 'tool'
+export type TalosToolIconName =
+    | 'library'
+    | 'note'
+    | 'task'
+    | 'memory'
+    | 'clock'
+    | 'web'
+    | 'document'
+    | 'image'
+    | 'download'
+    | 'tool'
 
 export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
+    library_list: 'library',
     library_search: 'library',
     library_read: 'library',
     notes_list: 'note',
@@ -47,6 +157,9 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     web_search: 'web',
     web_read: 'web',
     document_create: 'document',
+    generate_image: 'image',
+    library_export: 'download',
+    library_context_policy_update: 'library',
 }
 
 /** An unknown tool gets the generic mark rather than another tool's. */
@@ -64,8 +177,11 @@ export interface TalosToolActivity {
  * The line shown to the user. An unknown tool falls back to its own name rather
  * than to nothing: a mystery row is worse than a technical one.
  */
-export function talosToolActivityLabel(activity: TalosToolActivity): string {
-    const label = TALOS_TOOL_LABELS[activity.name] ?? activity.name
+export function talosToolActivityLabel(
+    activity: TalosToolActivity,
+    localizedLabel?: string,
+): string {
+    const label = localizedLabel ?? TALOS_TOOL_LABELS[activity.name] ?? activity.name
     return activity.detail ? `${label}: ${activity.detail}` : label
 }
 
@@ -86,6 +202,17 @@ export function talosToolActivityDetail(name: string, argumentsJson: string): st
     if (!parsed || typeof parsed !== 'object') return null
     const input = parsed as Record<string, unknown>
 
+    if (name === 'library_export') {
+        const reference = input.reference
+        if (typeof reference !== 'string' || reference.trim() === '') return null
+        const value = reference.trim()
+        return value.length > 48 ? `${value.slice(0, 48)}…` : value
+    }
+    if (name === 'library_context_policy_update') {
+        const action = typeof input.action === 'string' ? input.action : null
+        const scope = typeof input.scope === 'string' ? input.scope : null
+        return action && scope ? `${scope}: ${action}`.slice(0, 48) : null
+    }
     if (name === 'web_read' || name === 'library_read') {
         const value = input.url ?? input.id
         if (typeof value !== 'string' || value === '') return null

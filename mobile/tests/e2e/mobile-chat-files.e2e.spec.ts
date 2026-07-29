@@ -1,4 +1,5 @@
-import { expect, test, type FileChooser, type Page } from '@playwright/test'
+import { expect, test, type FileChooser, type Locator, type Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import { openAiCompletionFulfill } from './completionMock'
 
 const MENU = '[aria-label="Open menu"]'
@@ -68,7 +69,21 @@ async function expectNoDocumentOverflow(page: Page): Promise<void> {
     expect(overflow).toBeLessThanOrEqual(0)
 }
 
-test('sends text and image evidence, persists safe labels, reuses Vault files and revokes deleted access', async ({ page }) => {
+async function expectAndroidTouchTarget(control: Locator): Promise<void> {
+    await expect.poll(
+        async () => (await control.boundingBox())?.width ?? 0,
+        { message: 'Android touch target width' },
+    ).toBeGreaterThanOrEqual(48)
+    await expect.poll(
+        async () => (await control.boundingBox())?.height ?? 0,
+        { message: 'Android touch target height' },
+    ).toBeGreaterThanOrEqual(48)
+}
+
+test('sends text and image evidence, downloads device copies, reuses Vault files and revokes deleted access', async ({ page }) => {
+    // This is a deliberate end-to-end lifecycle with two persistence reloads,
+    // two exports, model delivery, attach, and confirmed delete.
+    test.setTimeout(120_000)
     const pageErrors: string[] = []
     page.on('pageerror', (error) => pageErrors.push(error.message))
     await page.setViewportSize({ width: 390, height: 844 })
@@ -120,18 +135,174 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
     await expect(page.getByText('I received the release brief and the reference image.', { exact: true })).toBeVisible({ timeout: 15_000 })
     await expect(page.getByRole('list', { name: 'Attached files' })).toContainText('release-brief.txt')
 
+    // P1-CTX-UI-01/02: enabling the global master is not itself an implicit
+    // mode choice. Select broad compatibility explicitly, then exercise the
+    // narrower chat and one-turn layers against the same persisted files.
+    await page.locator(MENU).click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
+    await expect(page.locator(SHEET)).toBeVisible()
+    await page.locator('[data-settings-tab="ai_defaults"]').click()
+    await page.getByRole('switch', { name: 'Let chats use your Library' }).check()
+    await expect(page.getByTestId('talos-library-mode-chooser')).toHaveAttribute('data-policy-source', 'pending')
+    await page.getByLabel('Library context mode').click()
+    await page.locator('[data-testid="talos-themed-select-item"][data-value="broad_compat_v1"]').click()
+    await expect(page.getByTestId('talos-library-mode-chooser')).toHaveAttribute('data-policy-source', 'global')
+    if (await page.locator(SHEET).count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    if (await page.locator(SHEET).count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
+    await expect(page.locator(SHEET)).toHaveCount(0)
+
+    // Owner 2026-07-28: the scoped media Library and the global Library are one
+    // product language. Compare the same persisted file in both real surfaces.
+    await page.getByLabel('Chat options').click()
+    await page.getByTestId('talos-chat-options-media').click()
+    const chatMedia = page.getByTestId('talos-chat-media-panel')
+    await expect(chatMedia).toBeVisible()
+    const chatContextPolicy = chatMedia.getByTestId('talos-chat-media-context-policy')
+    await expect(chatContextPolicy).toHaveAttribute('data-source', 'inherited')
+    await expect(chatContextPolicy).toHaveAttribute('data-mode', 'broad_compat_v1')
+    await expect(chatContextPolicy).toHaveAttribute('data-enabled', 'true')
+    await chatMedia.getByLabel('Library context mode for this chat').click()
+    await page.locator('[data-testid="talos-themed-select-item"][data-value="smart_relevant_v1"]').click()
+    await expect(chatContextPolicy).toHaveAttribute('data-source', 'chat')
+    await expect(chatContextPolicy).toHaveAttribute('data-mode', 'smart_relevant_v1')
+    await expect(chatContextPolicy).toHaveAttribute('data-enabled', 'true')
+    const chatThumbnail = chatMedia.locator(
+        '[data-talos-library-thumbnail][aria-label="Open release-brief.txt"]',
+    )
+    const chatThumbnailBox = await chatThumbnail.boundingBox()
+    const chatFilterBox = await chatMedia.getByRole('button', { name: 'Show All', exact: true }).boundingBox()
+    const chatNameSize = await chatMedia.getByText('release-brief.txt', { exact: true })
+        .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
+    const chatFileGlyph = chatThumbnail.locator('[data-talos-library-file-glyph]')
+    const chatIconKind = await chatFileGlyph.locator('[data-talos-library-icon-kind]')
+        .getAttribute('data-talos-library-icon-kind')
+    const chatExtension = await chatFileGlyph.locator('[data-talos-library-extension]').textContent()
+    expect(chatThumbnailBox).not.toBeNull()
+    expect(chatFilterBox).not.toBeNull()
+    expect(chatIconKind).toBe('text')
+    expect(chatExtension).toBe('TXT')
+    await expectAndroidTouchTarget(chatMedia.getByTestId('talos-chat-media-close'))
+    await expectAndroidTouchTarget(chatMedia.getByRole('button', { name: 'Show All', exact: true }))
+    const chatReleaseRow = chatMedia.locator('[data-talos-library-row]')
+        .filter({ hasText: 'release-brief.txt' })
+    const chatActions = chatReleaseRow.locator('[data-talos-library-actions-trigger]')
+    await expectAndroidTouchTarget(chatActions)
+    await expectAndroidTouchTarget(
+        chatMedia.locator('[data-talos-library-name]').filter({ hasText: 'release-brief.txt' }).locator('..'),
+    )
+
+    // LIB-MENU-12: the real Reka menu follows keyboard focus semantics, and
+    // the security state remains visible even while the control is closed.
+    await expect(chatReleaseRow.getByText('Available to every chat', { exact: true })).toBeVisible()
+    await chatActions.focus()
+    await chatActions.press('Enter')
+    await expect(page.getByRole('menu', { name: 'Actions for release-brief.txt' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(chatActions).toBeFocused()
+
+    await chatActions.click()
+    await page.getByRole('menuitemcheckbox', { name: 'Let the model read release-brief.txt' }).click()
+    await expect(chatReleaseRow.getByText('Only available where explicitly attached', { exact: true })).toBeVisible()
+
+    // Persistence is part of the user-visible permission contract.
+    await chatMedia.getByTestId('talos-chat-media-close').click()
+    await page.reload()
+    await page.getByLabel('Chat options').click()
+    await page.getByTestId('talos-chat-options-media').click()
+    await expect(chatReleaseRow.getByText('Only available where explicitly attached', { exact: true })).toBeVisible()
+    await chatActions.click()
+    await page.getByRole('menuitemcheckbox', { name: 'Let the model read release-brief.txt' }).click()
+    await expect(chatReleaseRow.getByText('Available to every chat', { exact: true })).toBeVisible()
+
+    const chatDownloadEvent = page.waitForEvent('download')
+    await chatActions.click()
+    await page.getByRole('menuitem', { name: 'Save release-brief.txt to device' }).click()
+    const chatDownload = await chatDownloadEvent
+    expect(chatDownload.suggestedFilename()).toBe('release-brief.txt')
+    expect(await readFile((await chatDownload.path())!))
+        .toEqual(Buffer.from('Release marker AVM-P1.6 must remain untrusted evidence.', 'utf8'))
+    await chatMedia.getByTestId('talos-chat-media-close').click()
+    await expect(chatMedia).toHaveCount(0)
+
+    // P1-CTX-UI-04: the turn layer is visibly independent from the persisted
+    // chat policy, supports file-level decisions, and can return to inheritance.
+    const libraryChip = page.getByTestId('talos-composer-library-chip')
+    await expect(libraryChip).toBeVisible()
+    await expect(libraryChip).toContainText('Relevant sources only')
+    await libraryChip.click()
+    const turnSheet = page.getByTestId('talos-library-context-sheet')
+    await expect(turnSheet).toBeVisible()
+    await turnSheet.getByTestId('talos-library-turn-mode-agentic_on_demand_v1').click()
+    await expect(turnSheet.getByTestId('talos-library-turn-mode-agentic_on_demand_v1')).toHaveAttribute('aria-pressed', 'true')
+    await turnSheet.getByLabel('Include release-brief.txt in the next message').click()
+    await expect(turnSheet.getByLabel('Include release-brief.txt in the next message')).toHaveAttribute('aria-pressed', 'true')
+    await expect(turnSheet.getByTestId('talos-library-turn-reset')).toBeVisible()
+    await turnSheet.getByTestId('talos-library-turn-reset').click()
+    await expect(turnSheet.getByTestId('talos-library-turn-mode-inherit')).toHaveAttribute('aria-pressed', 'true')
+    await expect(turnSheet.getByTestId('talos-library-turn-reset')).toHaveCount(0)
+    await turnSheet.getByRole('button', { name: 'Close' }).click()
+    await expect(turnSheet).toHaveCount(0)
+    await expect(libraryChip).toContainText('Relevant sources only')
+
     await page.getByLabel('Choose grounding context').click()
     await expect(page).toHaveURL(/\/context$/)
-    // The gallery defaults to a grid (image tiles show no name text, tap-to-open);
-    // switch to the list view (remembered across visits) where names + per-file
-    // attach/delete actions live.
+    // The gallery defaults to a grid; switch to the remembered list view to
+    // compare the same canonical filename/glyph row used by chat media.
+    await expectAndroidTouchTarget(page.getByLabel('Library options'))
     await page.getByLabel('Library options').click()
+    await expectAndroidTouchTarget(page.getByTestId('talos-library-view-list'))
     await page.getByTestId('talos-library-view-list').click()
     const vault = page.getByRole('list', { name: 'Library files' })
     await expect(vault).toContainText('release-brief.txt')
     await expect(vault).toContainText('reference.png')
+    const globalThumbnail = vault.locator(
+        '[data-talos-library-thumbnail][aria-label="Open release-brief.txt"]',
+    )
+    const globalThumbnailBox = await globalThumbnail.boundingBox()
+    const globalFilterBox = await page.getByTestId('talos-library-type-all').boundingBox()
+    const globalNameSize = await vault.getByText('release-brief.txt', { exact: true })
+        .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
+    const globalFileGlyph = globalThumbnail.locator('[data-talos-library-file-glyph]')
+    const globalIconKind = await globalFileGlyph.locator('[data-talos-library-icon-kind]')
+        .getAttribute('data-talos-library-icon-kind')
+    const globalExtension = await globalFileGlyph.locator('[data-talos-library-extension]').textContent()
+    expect(globalThumbnailBox).not.toBeNull()
+    expect(globalFilterBox).not.toBeNull()
+    expect(chatThumbnailBox!.width).toBe(globalThumbnailBox!.width)
+    expect(chatThumbnailBox!.height).toBe(globalThumbnailBox!.height)
+    expect(chatFilterBox!.height).toBe(globalFilterBox!.height)
+    expect(chatNameSize).toBe(globalNameSize)
+    expect(chatIconKind).toBe(globalIconKind)
+    expect(chatExtension).toBe(globalExtension)
+    await expectAndroidTouchTarget(page.getByTestId('talos-library-type-all'))
+    const releaseRow = vault.locator('[data-talos-library-row]').filter({ hasText: 'release-brief.txt' })
+    const globalActions = releaseRow.locator('[data-talos-library-actions-trigger]')
+    await expectAndroidTouchTarget(globalActions)
+    await expectAndroidTouchTarget(
+        vault.locator('[data-talos-library-name]').filter({ hasText: 'release-brief.txt' }).locator('..'),
+    )
 
-    await page.getByLabel('Attach release-brief.txt to message').click()
+    const globalDownloadEvent = page.waitForEvent('download')
+    await globalActions.click()
+    await page.getByRole('menuitem', { name: 'Save release-brief.txt to device' }).click()
+    const globalDownload = await globalDownloadEvent
+    expect(globalDownload.suggestedFilename()).toBe('release-brief.txt')
+    expect(await readFile((await globalDownload.path())!))
+        .toEqual(Buffer.from('Release marker AVM-P1.6 must remain untrusted evidence.', 'utf8'))
+    await page.setViewportSize({ width: 320, height: 568 })
+    await expect(globalActions).toBeVisible()
+    await globalActions.click()
+    const narrowMenu = page.getByRole('menu', { name: 'Actions for release-brief.txt' })
+    const narrowMenuBox = await narrowMenu.boundingBox()
+    expect(narrowMenuBox).not.toBeNull()
+    expect(narrowMenuBox!.x).toBeGreaterThanOrEqual(0)
+    expect(narrowMenuBox!.x + narrowMenuBox!.width).toBeLessThanOrEqual(320)
+    await page.keyboard.press('Escape')
+    await expectNoDocumentOverflow(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    await globalActions.click()
+    await page.getByRole('menuitem', { name: 'Attach release-brief.txt to message' }).click()
     if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
     await expect(page.locator(SHEET)).toHaveCount(0)
@@ -142,7 +313,8 @@ test('sends text and image evidence, persists safe labels, reuses Vault files an
     await page.getByLabel('Choose grounding context').click()
     await page.getByLabel('Library options').click()
     await page.getByTestId('talos-library-view-list').click()
-    await page.getByLabel('Delete release-brief.txt').click()
+    await globalActions.click()
+    await page.getByRole('menuitem', { name: 'Delete release-brief.txt' }).click()
     await expect(page.getByRole('heading', { name: 'Delete file?' })).toBeVisible()
     await page.getByRole('button', { name: 'Delete file', exact: true }).click()
     await expect(vault).not.toContainText('release-brief.txt')

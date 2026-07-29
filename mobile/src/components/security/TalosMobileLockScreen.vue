@@ -5,6 +5,7 @@
  * session). Loaded as an async chunk by App.vue only when the lock is armed.
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Fingerprint, Loader2, LockKeyhole } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { appLockThrottleRemainingMs, requestBiometricUnlock, verifyAppLockPin } from '@/services/appLock'
@@ -28,6 +29,7 @@ const emit = defineEmits<{
     unlocked: []
 }>()
 
+const { t } = useTalosI18n()
 const pin = ref('')
 const error = ref<string | null>(null)
 const verifying = ref(false)
@@ -52,9 +54,13 @@ const throttleLabel = computed(() => {
     const seconds = Math.ceil(throttleMs.value / 1000)
     if (seconds >= 60) {
         const minutes = Math.ceil(seconds / 60)
-        return `Too many attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`
+        return minutes === 1
+            ? t('lock.tooManyMinutesOne')
+            : t('lock.tooManyMinutesMany', { count: minutes })
     }
-    return `Too many attempts. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`
+    return seconds === 1
+        ? t('lock.tooManySecondsOne')
+        : t('lock.tooManySecondsMany', { count: seconds })
 })
 
 let countdown: ReturnType<typeof setInterval> | null = null
@@ -113,11 +119,11 @@ async function submitPin(): Promise<void> {
                 }
                 unlock()
             } else {
-                error.value = 'PIN accepted but the data could not be opened. Try again.'
+                error.value = t('lock.acceptedDataFailed')
                 pin.value = ''
             }
         } else {
-            error.value = 'Wrong PIN. Try again.'
+            error.value = t('lock.wrongPinRetry')
             pin.value = ''
             await refreshThrottle()
         }
@@ -131,12 +137,12 @@ async function tryBiometric(): Promise<void> {
     if (!protectedKey) {
         // No managed key: the screen is the only thing locked, so the OS prompt
         // alone is a truthful gate.
-        if (await requestBiometricUnlock('Unlock TALOS')) unlock()
+        if (await requestBiometricUnlock(t('lock.title'))) unlock()
         return
     }
     if (!await talosBiometricUnlockIsArmed().catch(() => false)) {
         keyNeedsPin.value = true
-        error.value = 'Your data is encrypted with the PIN — enter it once, and the fingerprint will work from then on.'
+        error.value = t('lock.biometricNeedsPin')
         pinField.value?.focus()
         return
     }
@@ -151,7 +157,7 @@ async function tryBiometric(): Promise<void> {
         // A cancel is the user choosing the PIN, not a fault worth an alarm.
         error.value = talosBiometricKeyWasCancelled(failure)
             ? null
-            : 'Fingerprint unlock is no longer available on this device — enter your PIN.'
+            : t('lock.biometricUnavailable')
         pinField.value?.focus()
     }
 }
@@ -177,7 +183,7 @@ onMounted(() => {
         data-testid="talos-lock-screen"
         role="dialog"
         aria-modal="true"
-        aria-label="TALOS is locked"
+        :aria-label="$t('lock.lockedLabel')"
         tabindex="-1"
         class="pointer-events-auto fixed inset-0 z-[120] flex flex-col items-center justify-center gap-6 bg-[var(--talos-background)] px-8 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
         @keydown="trapTab"
@@ -185,9 +191,9 @@ onMounted(() => {
         <LockKeyhole class="size-10 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
         <div class="text-center">
             <h1 class="text-xl font-semibold text-[var(--talos-text,var(--foreground))]">
-                <span class="talos-orbitron-brand">TALOS</span> is locked
+                <span class="talos-orbitron-brand">TALOS</span> {{ $t('lock.isLocked') }}
             </h1>
-            <p class="mt-1 text-sm text-[var(--talos-muted,var(--muted-foreground))]">Enter your PIN to continue.</p>
+            <p class="mt-1 text-sm text-[var(--talos-muted,var(--muted-foreground))]">{{ $t('lock.enterToContinue') }}</p>
         </div>
 
         <form class="flex w-full max-w-[280px] flex-col gap-3" @submit.prevent="submitPin">
@@ -201,7 +207,7 @@ onMounted(() => {
                 pattern="[0-9]*"
                 enterkeyhint="done"
                 autocomplete="off"
-                aria-label="PIN"
+                :aria-label="$t('lock.pin')"
                 class="min-h-12 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))] px-4 text-center text-lg tracking-[0.5em] text-[var(--talos-text,var(--foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <p v-if="throttled" role="alert" data-testid="talos-lock-throttle" class="text-center text-sm text-[var(--talos-danger)]">{{ throttleLabel }}</p>
@@ -214,7 +220,7 @@ onMounted(() => {
                 class="talos-pressable min-h-12 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm font-medium text-[var(--talos-accent-contrast,var(--primary-foreground))]"
             >
                 <Loader2 v-if="verifying" class="size-4 animate-spin" aria-hidden="true" />
-                <span v-else>Unlock</span>
+                <span v-else>{{ $t('lock.unlock') }}</span>
             </Button>
         </form>
 
@@ -227,7 +233,7 @@ onMounted(() => {
             @click="tryBiometric"
         >
             <Fingerprint class="size-4" aria-hidden="true" />
-            Use biometrics
+            {{ $t('lock.useBiometrics') }}
         </Button>
     </div>
     </Teleport>

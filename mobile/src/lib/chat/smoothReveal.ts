@@ -1,3 +1,5 @@
+import { splitGraphemes } from 'unicode-segmenter/grapheme'
+
 /**
  * What the answer should LOOK like right now, as opposed to what has arrived.
  *
@@ -63,21 +65,22 @@ const DEFAULTS = {
     backlogHardFlush: 1_500,
 }
 
-/** Graphemes, so a cursor never lands inside an emoji or a combining mark. */
-function graphemeBoundary(text: string, target: number): number {
-    if (target >= text.length) return text.length
-    if (target <= 0) return 0
-    let index = target
-    // A low surrogate means we are mid pair; step back one unit.
-    const code = text.charCodeAt(index)
-    if (code >= 0xdc00 && code <= 0xdfff) index -= 1
-    // Zero-width joiner sequences: never cut on or immediately after a joiner.
-    while (index > 0 && (text.charCodeAt(index) === 0x200d || text.charCodeAt(index - 1) === 0x200d)) {
-        index -= 1
+/**
+ * UAX #29 extended grapheme boundary at or before a UTF-16 pacing target.
+ *
+ * `unicode-segmenter` is the project's pinned Unicode 17 implementation. A
+ * hand-written surrogate/ZWJ check cannot cover flags, keycaps, combining
+ * sequences, Indic conjuncts, or future table changes.
+ */
+function graphemeBoundary(text: string, target: number, start = 0): number {
+    if (target <= start) return start
+    let boundary = start
+    for (const grapheme of splitGraphemes(text.slice(start))) {
+        const next = boundary + grapheme.length
+        if (next > target) break
+        boundary = next
     }
-    // A variation selector belongs to the glyph before it.
-    while (index > 0 && text.charCodeAt(index) === 0xfe0f) index -= 1
-    return index
+    return boundary
 }
 
 /**
@@ -88,11 +91,56 @@ function graphemeBoundary(text: string, target: number): number {
  * space belongs to the word it follows, so copied text keeps its spacing.
  */
 function wordBoundary(text: string, target: number): number {
-    if (target >= text.length) return text.length
     for (let index = target; index > 0; index -= 1) {
         if (/\s/.test(text[index - 1]!)) return index
     }
     return 0
+}
+
+// UAX #29 explicitly requires dictionary/tailored word breaking for these
+// scripts. Animation cadence must not make them wait for whitespace they
+// conventionally do not provide, so TALOS advances them by whole EGCs.
+const CONTINUOUS_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u
+const INDEPENDENT_CLUSTER = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Punctuation}\p{Symbol}\u20E3]/u
+const SPACED_WORD_CONTENT = /[\p{Letter}\p{Number}]/u
+
+/**
+ * Appending text can extend the final EGC (a combining mark or ZWJ continuation
+ * may arrive in the next provider chunk). Keep that one trailing cluster
+ * provisional unless another cluster or a whitespace boundary follows it.
+ */
+function stableStreamingBoundary(text: string, start: number, target: number): number {
+    if (target < text.length) return target
+    let previous = start
+    for (const grapheme of splitGraphemes(text.slice(start, target))) {
+        const next = previous + grapheme.length
+        if (next >= target) return previous
+        previous = next
+    }
+    return start
+}
+
+/**
+ * TALOS UAX29-C2-2 reveal profile for scripts without whitespace word
+ * separators. Latin/digit runs remain buffered; punctuation surrounding an
+ * eligible script or standalone emoji stays attached to that safe unit.
+ */
+function continuousScriptBoundary(text: string, start: number, target: number): number {
+    if (target <= start) return start
+    let boundary = start
+    let eligible = false
+
+    for (const grapheme of splitGraphemes(text.slice(start, target))) {
+        if (CONTINUOUS_SCRIPT.test(grapheme) || INDEPENDENT_CLUSTER.test(grapheme)) {
+            eligible = true
+            boundary += grapheme.length
+            continue
+        }
+        if (SPACED_WORD_CONTENT.test(grapheme)) break
+        boundary += grapheme.length
+    }
+
+    return eligible ? boundary : start
 }
 
 export function createTalosSmoothReveal(
@@ -107,6 +155,9 @@ export function createTalosSmoothReveal(
 
     let arrived = ''
     let cursor = 0
+    // Pacing must keep moving while a word is buffered. Reusing the visible
+    // cursor for both jobs either leaks partial letters or stalls forever.
+    let progress = 0
     let charsPerMs = initial / 1_000
     let lastTickAt: number | null = null
     let lastArrivalAt: number | null = null
@@ -114,32 +165,30 @@ export function createTalosSmoothReveal(
     let done = false
 
     function commit(target: number): string {
-        const grapheme = graphemeBoundary(arrived, Math.floor(target))
-        // Only snap to a word while more is still coming: at the end, the last
-        // word has no trailing space and snapping back would drop it forever —
-        // the exact bug in the published smoother.
-        if (done || grapheme >= arrived.length) {
-            cursor = grapheme
-            return arrived.slice(0, cursor)
+        if (done) {
+            cursor = arrived.length
+            return arrived
         }
-        const snapped = wordBoundary(arrived, grapheme)
-        // Snapping back to a word boundary yields ZERO while the first word is
-        // longer than one step — which showed an empty bubble until a whole
-        // word fit. A few letters of the opening word beat nothing at all; from
-        // the second word on, a step is wider than the average word and the
-        // boundary rule takes over.
-        cursor = snapped > 0 ? snapped : grapheme
+
+        const grapheme = graphemeBoundary(arrived, Math.floor(target), cursor)
+        const word = Math.max(cursor, wordBoundary(arrived, grapheme))
+        const stable = stableStreamingBoundary(arrived, word, grapheme)
+        const continuous = continuousScriptBoundary(arrived, word, stable)
+        cursor = Math.max(cursor, word, continuous)
         return arrived.slice(0, cursor)
     }
 
     return {
         arrive(full, at) {
+            if (full === arrived) return
             if (full.length < arrived.length) {
                 // A shorter text is a different answer, not a correction.
                 cursor = 0
+                progress = 0
                 lastArrivedLength = 0
             }
             arrived = full
+            progress = Math.min(progress, arrived.length)
             if (lastArrivalAt !== null && at > lastArrivalAt) {
                 const elapsed = at - lastArrivalAt
                 const latest = (arrived.length - lastArrivedLength) / elapsed
@@ -156,7 +205,11 @@ export function createTalosSmoothReveal(
         },
 
         tick(at) {
-            if (!paced || done) { cursor = arrived.length; return arrived }
+            if (!paced || done) {
+                progress = arrived.length
+                cursor = arrived.length
+                return arrived
+            }
             // The FIRST tick measures from the first arrival, not from itself:
             // seeding it at `at` meant the opening frame revealed nothing and
             // the answer began with a stutter.
@@ -167,21 +220,27 @@ export function createTalosSmoothReveal(
                 ? Math.max(firstStepMs, at - (lastArrivalAt ?? at))
                 : Math.max(0, at - lastTickAt)
             lastTickAt = at
-            if (arrived.length - cursor > hardFlush) return commit(arrived.length)
+            if (arrived.length - cursor > hardFlush) {
+                progress = arrived.length
+                return commit(progress)
+            }
             if (since === 0) return arrived.slice(0, cursor)
-            return commit(cursor + charsPerMs * since)
+            progress = Math.min(arrived.length, progress + charsPerMs * since)
+            return commit(progress)
         },
 
         visible: () => arrived.slice(0, cursor),
 
         finish() {
             done = true
+            progress = arrived.length
             cursor = arrived.length
             return arrived
         },
 
         abort() {
             done = true
+            progress = arrived.length
             cursor = arrived.length
             return arrived
         },
@@ -189,6 +248,7 @@ export function createTalosSmoothReveal(
         reset() {
             arrived = ''
             cursor = 0
+            progress = 0
             charsPerMs = initial / 1_000
             lastTickAt = null
             lastArrivalAt = null

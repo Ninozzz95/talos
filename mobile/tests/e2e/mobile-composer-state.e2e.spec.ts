@@ -58,7 +58,7 @@ async function verifyDurableComposerState(page: Page, viewport: { width: number;
 
     await expect(composer).toHaveValue('Keep this unsent mobile draft exactly.', { timeout: 15_000 })
     await expect(page.getByLabel('Choose model profile')).toHaveAttribute('title', 'GPT E2E Reasoner')
-    await expect(page.getByLabel('Choose reasoning effort')).toHaveAttribute('title', 'Effort: medium')
+    await expect(page.getByLabel('Choose reasoning effort')).toHaveAttribute('title', 'Effort: Medium')
     await expect(page.locator(SHEET)).toHaveCount(0)
 
     await page.getByLabel('Choose reasoning effort').click()

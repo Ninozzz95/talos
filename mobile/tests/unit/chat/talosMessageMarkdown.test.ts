@@ -110,4 +110,36 @@ echo "<safe>";
         expect(container.querySelectorAll('input, button:not([data-talos-copy-code])')).toHaveLength(0)
         expect(container.querySelectorAll('.talos-task-marker')).toHaveLength(2)
     })
+
+    it('I18N-06 renders generated semantics with the supplied locale contract', () => {
+        const result = renderTalosMarkdown(`- [x] fatto
+
+| Stato |
+| --- |
+| ok |
+
+![Schermata](https://example.com/image.png)
+
+\`\`\`
+echo ok
+\`\`\``, {
+            labels: {
+                completedTask: 'Attività completata',
+                openTask: 'Attività aperta',
+                scrollableTable: 'Tabella del messaggio scorrevole',
+                image: 'Immagine',
+                externalImageOmitted: 'Immagine esterna omessa:',
+                code: 'codice',
+                copyCode: 'Copia codice',
+                copy: 'Copia',
+                truncatedMessage: 'Messaggio troncato per una visualizzazione sicura.',
+            },
+        })
+
+        expect(result.html).toContain('aria-label="Attività completata"')
+        expect(result.html).toContain('aria-label="Tabella del messaggio scorrevole"')
+        expect(result.html).toContain('Immagine esterna omessa: Schermata')
+        expect(result.html).toContain('aria-label="Copia codice"')
+        expect(result.html).toContain('>Copia</button>')
+    })
 })

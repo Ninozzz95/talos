@@ -1,30 +1,67 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
 import {
-    AlertTriangle, CheckCircle2, Database, FileText, FolderPlus, Image as ImageIcon,
-    EllipsisVertical, ExternalLink, Globe, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
+    AlertTriangle, CheckCircle2, Database, FileText, FolderPlus,
+    Download, EllipsisVertical, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Sparkles, Trash2, Upload, X,
     Check,
     CheckSquare,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
+import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
+import TalosMobileLibraryActionsMenu from '@/components/talos/library/TalosMobileLibraryActionsMenu.vue'
+import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
+import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import { talosNeedsExternalOpen } from '@/lib/documents/openable'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
-import { parseVaultKind, parseVaultOrigin, parseVaultSourceUrl, talosSavedLinkRows } from '@/lib/vaultLibrary'
+import {
+    filterTalosSavedLinkRows,
+    filterLibraryFiles,
+    isTalosLibraryFileShared,
+    matchesTalosLibrarySurfaceTab,
+    parseVaultOrigin,
+    parseVaultSourceUrl,
+    talosLibraryFileType,
+    talosSavedLinkRows,
+    type TalosLibrarySurfaceTab,
+} from '@/lib/vaultLibrary'
+import { useTalosMobileToasts } from '@/stores/toasts'
+import type { TalosLibraryContextMode } from '@/lib/chat/libraryPolicy'
 
 const controller = useChatController()
+const { t, locale } = useTalosI18n()
 const settings = useSettingsStore()
+const toasts = useTalosMobileToasts()
 const attachments = controller.attachments
 const actionBusy = ref(false)
+const savingFileId = ref<string | null>(null)
 const feedback = ref('')
 const deleteOpen = ref(false)
 const deleteTarget = ref<TalosLocalVaultFile | null>(null)
+const contextPolicySavingFileId = ref<string | null>(null)
+
+const globalLibraryPolicy = computed(() => settings.state.shell.library_context_policy)
+const globalLibraryEnabled = computed(
+    () => globalLibraryPolicy.value?.enabled ?? settings.state.shell.library_context_enabled,
+)
+const globalLibraryMode = computed<TalosLibraryContextMode>(
+    () => globalLibraryPolicy.value?.mode ?? 'broad_compat_v1',
+)
+const globalLibraryModeLabel = computed(() => {
+    if (!globalLibraryEnabled.value) return t('library.contextModeOff')
+    if (globalLibraryMode.value === 'smart_relevant_v1') return t('aiDefaults.libraryModes.smart')
+    if (globalLibraryMode.value === 'ask_before_use_v1') return t('aiDefaults.libraryModes.ask')
+    if (globalLibraryMode.value === 'agentic_on_demand_v1') return t('aiDefaults.libraryModes.onDemand')
+    return t('aiDefaults.libraryModes.broad')
+})
 
 // Google/OPPO-Files-style Library: grid (default) / list, type chips, a bottom
 // search, per-file thumbnails, tap-to-open, and an overflow menu.
@@ -33,40 +70,31 @@ const viewMode = computed({
     get: () => settings.state.shell.library_view,
     set: (value) => { void settings.setShell({ library_view: value }) },
 })
-const typeFilter = ref<'all' | 'images' | 'files' | 'links'>('all')
+const typeFilter = ref<TalosLibrarySurfaceTab>('all')
 const groupByChat = ref(true) // owner 2026-07-25: grouped by origin chat by default
 const query = ref('')
 const menuOpen = ref(false)
-const TYPE_TABS: Array<{ value: typeof typeFilter.value; label: string }> = [
-    { value: 'all', label: 'All' },
-    { value: 'images', label: 'Images' },
-    { value: 'files', label: 'Files' },
+const typeTabs = computed<Array<{ value: typeof typeFilter.value; label: string }>>(() => [
+    { value: 'all', label: t('library.all') },
+    { value: 'images', label: t('library.images') },
+    { value: 'files', label: t('library.files') },
     // Owner 2026-07-27: the pages a search read are kept as markdown, which is
     // right for an answer that must still be auditable in six months — but it
     // meant the ADDRESS was prose. Here they are links again.
-    { value: 'links', label: 'Links' },
-]
+    { value: 'links', label: t('library.links') },
+])
 
 function isImage(file: TalosLocalVaultFile): boolean {
-    return file.media_type.startsWith('image/')
+    return talosLibraryFileType(file) === 'image'
 }
 
-const filtered = computed(() => {
-    const q = query.value.trim().toLowerCase()
-    return attachments.vaultFiles
-        .filter((file) => {
-            if (typeFilter.value === 'all') return true
-            // Kind only: whether an address can be recovered is the row
-            // builder's business, and deciding it in two places is how the
-            // fallback for older sources ended up dead before it could run.
-            if (typeFilter.value === 'links') return parseVaultKind(file.metadata) === 'web_source'
-            return typeFilter.value === 'images' ? isImage(file) : !isImage(file)
-        })
-        .filter((file) => q === ''
-            || file.display_name.toLowerCase().includes(q)
-            || (file.extracted_text?.toLowerCase().includes(q) ?? false))
-        .slice()
-        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+const filteredFiles = computed(() => {
+    const typeMatched = attachments.vaultFiles
+        .filter((file) => matchesTalosLibrarySurfaceTab(file, typeFilter.value))
+    return filterLibraryFiles(typeMatched, {
+        query: query.value,
+        origin: 'all',
+    })
 })
 
 // Provenance: resolve the origin chat title for grouping + the per-file subtitle.
@@ -78,19 +106,29 @@ function originChat(file: TalosLocalVaultFile): string | null {
 
 const grouped = computed(() => {
     const groups = new Map<string, TalosLocalVaultFile[]>()
-    for (const file of filtered.value) {
-        const key = originChat(file) ?? 'Not from a chat'
+    for (const file of filteredFiles.value) {
+        const key = originChat(file) ?? t('library.notFromChat')
         ;(groups.get(key) ?? groups.set(key, []).get(key)!).push(file)
     }
     return [...groups.entries()].map(([title, files]) => ({ title, files }))
 })
 
 /**
- * The same files as one address each: a page read three times is one row, and
- * the row points at the most recent copy. Built from `filtered`, so the search
- * box and the chip mean what they say here too.
+ * The same source dossiers as one address each: a page read three times is one
+ * row, and the row points at the most recent copy. The global `All` surface
+ * aggregates these logical rows with ordinary files without exposing the
+ * backing Markdown as a duplicate tile.
  */
-const linkRows = computed(() => talosSavedLinkRows(filtered.value))
+const allLinkRows = computed(() => talosSavedLinkRows(attachments.vaultFiles))
+const linkRows = computed(() => (
+    typeFilter.value === 'all' || typeFilter.value === 'links'
+        ? filterTalosSavedLinkRows(attachments.vaultFiles, query.value)
+        : []
+))
+const logicalLibraryItemCount = computed(() => (
+    attachments.vaultFiles.filter((file) => matchesTalosLibrarySurfaceTab(file, 'all')).length
+    + allLinkRows.value.length
+))
 
 async function openLink(url: string): Promise<void> {
     openError.value = null
@@ -101,7 +139,7 @@ async function openLink(url: string): Promise<void> {
     // The address stays on screen either way, so a refusal is a sentence rather
     // than a tap that quietly did nothing.
     if (!await openTalosLinkOnce(url, 'system_browser')) {
-        openError.value = `${url} could not be opened on this device.`
+        openError.value = t('library.linkOpenFailed', { url })
     }
 }
 
@@ -117,7 +155,7 @@ const docSourceUrl = computed(() => (docView.value ? parseVaultSourceUrl(docView
 // Thumbnails: one implementation, shared with the per-chat gallery. This screen
 // held the original; leaving a second copy here was how the in-flight leak
 // stayed fixed in one place and open in the other.
-const { thumbs } = useTalosVaultThumbnails(filtered, attachments.previewUrl)
+const { thumbs } = useTalosVaultThumbnails(filteredFiles, attachments.previewUrl)
 onBeforeUnmount(closeLightbox)
 
 // Open: images in a lightbox, documents in a text viewer (both in-app).
@@ -141,7 +179,7 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
         openError.value = null
         const preview = await attachments.previewBytes(file.id).catch(() => null)
         if (!preview) {
-            openError.value = `“${file.display_name}” could not be read from this device.`
+            openError.value = t('library.deviceReadFailed', { name: file.display_name })
             return
         }
         try {
@@ -151,7 +189,7 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
                 bytes: preview,
             })
         } catch {
-            openError.value = `No app on this phone offered to open “${file.display_name}”.`
+            openError.value = t('library.noOpenApp', { name: file.display_name })
         }
         return
     }
@@ -198,9 +236,9 @@ function formatModified(iso: string): string {
     const now = new Date()
     const day = 86_400_000
     const diff = Math.floor((now.setHours(0, 0, 0, 0) - new Date(iso).setHours(0, 0, 0, 0)) / day)
-    if (diff <= 0) return 'today'
-    if (diff === 1) return 'yesterday'
-    return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+    if (diff <= 0) return t('library.today')
+    if (diff === 1) return t('library.yesterday')
+    return date.toLocaleDateString(locale.value === 'it' ? 'it-IT' : 'en-US', { month: 'long', day: 'numeric' })
 }
 
 async function addFiles(): Promise<void> {
@@ -216,8 +254,178 @@ async function attachFile(file: TalosLocalVaultFile): Promise<void> {
     feedback.value = ''
     actionBusy.value = true
     try {
-        if (await attachments.attachExisting(file)) feedback.value = file.display_name + ' is ready in the composer.'
+        if (await attachments.attachExisting(file)) {
+            feedback.value = t('library.attachReady', { name: file.display_name })
+        }
     } finally { actionBusy.value = false }
+}
+
+async function saveFileToDevice(file: TalosLocalVaultFile): Promise<void> {
+    if (savingFileId.value !== null || file.status !== 'available') return
+    openError.value = null
+    savingFileId.value = file.id
+    try {
+        const bytes = await attachments.previewBytes(file.id).catch(() => null)
+        if (!bytes) {
+            openError.value = t('library.deviceReadFailedNoCopy', { name: file.display_name })
+            return
+        }
+        const { saveTalosVaultFileToDevice } = await import('@/services/saveVaultFileToDevice')
+        const result = await saveTalosVaultFileToDevice({
+            displayName: file.display_name,
+            mediaType: file.media_type,
+            bytes,
+        })
+        if (result.status === 'cancelled') {
+            toasts.push({ message: t('library.noCopySaved', { name: file.display_name }), durationMs: 3000 })
+        } else if (result.status === 'started') {
+            toasts.push({ message: t('library.downloadStarted', { name: result.displayName }), durationMs: 3500 })
+        } else {
+            toasts.push({ message: t('library.savedToChosenLocation', { name: result.displayName }), durationMs: 4000 })
+        }
+    } catch {
+        openError.value = t('library.externalSaveFailed', { name: file.display_name })
+    } finally {
+        savingFileId.value = null
+    }
+}
+
+type GlobalFileContextOverride = 'automatic' | 'included' | 'excluded'
+
+function globalFileContextOverride(fileId: string): GlobalFileContextOverride {
+    if (globalLibraryPolicy.value?.excluded_file_ids.includes(fileId)) return 'excluded'
+    if (globalLibraryPolicy.value?.included_file_ids.includes(fileId)) return 'included'
+    return 'automatic'
+}
+
+function globalFileContextLabel(file: TalosLocalVaultFile): string {
+    if (parseVaultOrigin(file.metadata) !== 'uploaded') {
+        return t('library.contextExplicitToolsOnly')
+    }
+    const override = globalFileContextOverride(file.id)
+    const label = override === 'included'
+        ? t('library.contextIncluded')
+        : override === 'excluded'
+            ? t('library.contextExcluded')
+            : t('library.contextAutomatic')
+    return isTalosLibraryFileShared(file.metadata)
+        ? label
+        : t('library.contextPrivateWithOverride', { state: label })
+}
+
+async function setGlobalFileContext(
+    file: TalosLocalVaultFile,
+    next: GlobalFileContextOverride,
+): Promise<void> {
+    if (
+        contextPolicySavingFileId.value !== null
+        || parseVaultOrigin(file.metadata) !== 'uploaded'
+    ) return
+    const policy = globalLibraryPolicy.value
+    const included = [...(policy?.included_file_ids ?? [])]
+        .filter((id) => id !== file.id)
+    const excluded = [...(policy?.excluded_file_ids ?? [])]
+        .filter((id) => id !== file.id)
+    if (next === 'included') included.push(file.id)
+    if (next === 'excluded') excluded.push(file.id)
+    contextPolicySavingFileId.value = file.id
+    openError.value = null
+    try {
+        await settings.setLibraryContextPolicy({
+            included_file_ids: included,
+            excluded_file_ids: excluded,
+        }, policy?.revision ?? 0)
+    } catch {
+        openError.value = t('library.contextPolicyChangeFailed', { name: file.display_name })
+    } finally {
+        contextPolicySavingFileId.value = null
+    }
+}
+
+interface GlobalLibraryAction {
+    id: 'attach' | 'save' | 'delete' | 'context-include' | 'context-exclude'
+    label: string
+    ariaLabel: string
+    icon: Component
+    disabled?: boolean
+    tone?: 'danger'
+    kind?: 'action' | 'checkbox'
+    checked?: boolean
+    testId: string
+}
+
+function fileActions(file: TalosLocalVaultFile): GlobalLibraryAction[] {
+    const available = file.status === 'available'
+    const actions: GlobalLibraryAction[] = [
+        {
+            id: 'attach',
+            label: t('library.attachToMessage'),
+            ariaLabel: t('library.attachNamedToMessage', { name: file.display_name }),
+            icon: Paperclip,
+            disabled: !available || actionBusy.value || isSelected(file.id),
+            testId: `talos-library-action-attach-${file.id}`,
+        },
+        {
+            id: 'save',
+            label: t('library.saveToPhone'),
+            ariaLabel: t('library.saveNamedToDevice', { name: file.display_name }),
+            icon: Download,
+            disabled: !available || actionBusy.value || savingFileId.value !== null,
+            testId: `talos-library-action-save-${file.id}`,
+        },
+    ]
+    if (parseVaultOrigin(file.metadata) === 'uploaded') {
+        const override = globalFileContextOverride(file.id)
+        const contextDisabled = contextPolicySavingFileId.value !== null
+        actions.push(
+            {
+                id: 'context-include',
+                label: t('library.includeInContext'),
+                ariaLabel: t('library.includeNamedInContext', { name: file.display_name }),
+                icon: Check,
+                disabled: contextDisabled,
+                kind: 'checkbox',
+                checked: override === 'included',
+                testId: `talos-library-action-context-include-${file.id}`,
+            },
+            {
+                id: 'context-exclude',
+                label: t('library.excludeFromContext'),
+                ariaLabel: t('library.excludeNamedFromContext', { name: file.display_name }),
+                icon: X,
+                disabled: contextDisabled,
+                kind: 'checkbox',
+                checked: override === 'excluded',
+                testId: `talos-library-action-context-exclude-${file.id}`,
+            },
+        )
+    }
+    actions.push(
+        {
+            id: 'delete',
+            label: t('library.deleteFile'),
+            ariaLabel: t('library.deleteNamed', { name: file.display_name }),
+            icon: Trash2,
+            disabled: actionBusy.value,
+            tone: 'danger',
+            testId: `talos-library-action-delete-${file.id}`,
+        },
+    )
+    return actions
+}
+
+function onFileAction(file: TalosLocalVaultFile, action: string, checked?: boolean): void {
+    if (action === 'attach') {
+        void attachFile(file)
+    } else if (action === 'save') {
+        void saveFileToDevice(file)
+    } else if (action === 'context-include') {
+        void setGlobalFileContext(file, checked === false ? 'automatic' : 'included')
+    } else if (action === 'context-exclude') {
+        void setGlobalFileContext(file, checked === false ? 'automatic' : 'excluded')
+    } else if (action === 'delete') {
+        requestDelete(file)
+    }
 }
 
 /**
@@ -227,8 +435,20 @@ async function attachFile(file: TalosLocalVaultFile): Promise<void> {
  */
 const bulk = useTalosBulkSelection()
 const bulkDeleteOpen = ref(false)
+function bulkDeleteDescription(): string {
+    const count = bulk.count.value
+    return t(
+        count === 1 ? 'library.deleteSelectedDescriptionOne' : 'library.deleteSelectedDescriptionMany',
+        { count },
+    )
+}
 
-const visibleIds = computed(() => filtered.value.map((file) => file.id))
+const visibleIds = computed(() => filteredFiles.value.map((file) => file.id))
+const renderedLinkRows = computed(() => (bulk.active.value ? [] : linkRows.value))
+const hasVisibleLibraryItems = computed(() => (
+    (typeFilter.value !== 'links' && filteredFiles.value.length > 0)
+    || renderedLinkRows.value.length > 0
+))
 
 /**
  * The selection can only ever mean what is on screen.
@@ -279,8 +499,8 @@ async function confirmBulkDelete(): Promise<void> {
         const gone = ids.length - failed.length
         const why = attachments.takeDeleteFailure()
         feedback.value = failed.length
-            ? gone + ' deleted, ' + failed.length + ' could not be removed. ' + (why ?? '')
-            : gone + (gone === 1 ? ' file was deleted.' : ' files were deleted.')
+            ? t('library.partialDelete', { deleted: gone, failed: failed.length, detail: why ?? '' })
+            : t(gone === 1 ? 'library.deletedOne' : 'library.deletedMany', { count: gone })
         bulkDeleteOpen.value = false
         // Whatever survived stays selected; the rest must not linger as a count
         // of rows the user can no longer see.
@@ -304,7 +524,7 @@ async function confirmDelete(): Promise<void> {
         await attachments.deleteVaultFile(file.id)
         const url = thumbs.value[file.id]
         if (url) { URL.revokeObjectURL(url); const next = { ...thumbs.value }; delete next[file.id]; thumbs.value = next }
-        feedback.value = file.display_name + ' was deleted.'
+        feedback.value = t('library.fileDeleted', { name: file.display_name })
         deleteOpen.value = false
         deleteTarget.value = null
     } finally { actionBusy.value = false }
@@ -317,7 +537,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <TalosMobileScreen title="Library" eyebrow="Context Vault">
+    <TalosMobileScreen :title="t('library.title')" :eyebrow="t('library.contextVault')">
         <p
             v-if="openError"
             role="alert"
@@ -329,9 +549,9 @@ onMounted(async () => {
         </template>
 
         <div class="mb-3 flex items-center justify-between gap-3">
-            <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ attachments.vaultFiles.length }} across every chat</p>
+            <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ t('library.acrossEveryChat', { count: logicalLibraryItemCount }) }}</p>
             <div class="relative">
-                <Button type="button" size="icon" variant="ghost" aria-label="Library options" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-11 min-w-11 rounded-full" @click="menuOpen = !menuOpen">
+                <Button type="button" size="icon" variant="ghost" :aria-label="t('library.options')" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-12 min-w-12 rounded-full" @click="menuOpen = !menuOpen">
                     <EllipsisVertical class="size-5" aria-hidden="true" />
                 </Button>
                 <div v-if="menuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="menuOpen = false" />
@@ -345,17 +565,31 @@ onMounted(async () => {
                     leave-to-class="opacity-0 scale-95"
                 >
                 <div v-if="menuOpen" role="menu" data-testid="talos-library-menu" class="absolute right-0 top-full z-[60] mt-1 min-w-52 origin-top-right overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl">
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Upload files</button>
-                    <button type="button" role="menuitem" data-testid="talos-library-select" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="menuOpen = false; bulk.enter()"><CheckSquare class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Select</button>
-                    <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> New folder</button>
+                    <button type="button" role="menuitem" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.uploadFiles') }}</button>
+                    <button type="button" role="menuitem" data-testid="talos-library-select" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="menuOpen = false; bulk.enter()"><CheckSquare class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.select') }}</button>
+                    <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> {{ t('library.newFolder') }}</button>
                     <div class="my-1 border-t border-[var(--talos-border)]" />
-                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Grid <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'list'" data-testid="talos-library-view-list" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'list'; menuOpen = false"><List class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> List <CheckCircle2 v-if="viewMode === 'list'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                    <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Group by chat <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.grid') }} <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'list'" data-testid="talos-library-view-list" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'list'; menuOpen = false"><List class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.list') }} <CheckCircle2 v-if="viewMode === 'list'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                    <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.groupByChat') }} <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                 </div>
                 </Transition>
             </div>
         </div>
+
+        <section
+            data-testid="talos-library-global-policy"
+            :data-mode="globalLibraryMode"
+            :data-enabled="globalLibraryEnabled"
+            class="mb-3 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2"
+        >
+            <p class="text-xs font-semibold text-[var(--talos-text)]">
+                {{ t('library.globalContextMode') }}
+            </p>
+            <p class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">
+                {{ globalLibraryModeLabel }}
+            </p>
+        </section>
 
         <!-- Selection bar: replaces the search row while the mode is on, so the
              screen has ONE meaning at a time. -->
@@ -364,18 +598,18 @@ onMounted(async () => {
             data-testid="talos-library-selection-bar"
             class="mb-3 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
-            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" aria-label="Cancel selection" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
-            <span class="text-sm font-medium">{{ bulk.count.value }} selected</span>
-            <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(visibleIds)">
-                {{ bulk.allSelected(visibleIds) ? 'None' : 'All' }}
+            <Button type="button" size="icon" variant="ghost" class="min-h-12 min-w-12 rounded-full" :aria-label="t('library.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
+            <span class="text-sm font-medium">{{ t('library.selected', { count: bulk.count.value }) }}</span>
+            <Button type="button" variant="ghost" size="sm" class="ml-auto min-h-12" @click="bulk.selectAll(visibleIds)">
+                {{ bulk.allSelected(visibleIds) ? t('common.none') : t('library.all') }}
             </Button>
             <Button
                 type="button"
                 size="icon"
                 variant="ghost"
-                class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger)]"
+                class="min-h-12 min-w-12 rounded-full text-[var(--talos-danger)]"
                 data-testid="talos-library-bulk-delete"
-                aria-label="Delete selected files"
+                :aria-label="t('library.deleteSelectedFiles')"
                 :disabled="bulk.count.value === 0 || actionBusy"
                 @click="bulkDeleteOpen = true"
             ><Trash2 class="size-4" aria-hidden="true" /></Button>
@@ -383,77 +617,83 @@ onMounted(async () => {
 
         <label v-else class="relative mb-3 block">
             <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
-            <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" placeholder="Search the Library" aria-label="Search the Library" class="min-h-11 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
+            <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" :placeholder="t('library.searchLibrary')" :aria-label="t('library.searchLibrary')" class="min-h-12 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
         </label>
 
-        <div class="mb-4 flex gap-1" role="group" aria-label="Filter by type">
-            <button v-for="tab in TYPE_TABS" :key="tab.value" type="button" :aria-pressed="typeFilter === tab.value" :data-testid="`talos-library-type-${tab.value}`" class="talos-pressable min-h-11 rounded-full px-3 text-sm transition-colors" :class="typeFilter === tab.value ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]' : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'" @click="typeFilter = tab.value">{{ tab.label }}</button>
+        <div class="mb-4 flex gap-1" role="group" :aria-label="t('library.filterByType')">
+            <button v-for="tab in typeTabs" :key="tab.value" type="button" :aria-pressed="typeFilter === tab.value" :data-testid="`talos-library-type-${tab.value}`" class="talos-pressable min-h-12 min-w-12 rounded-full px-3 text-sm transition-colors" :class="typeFilter === tab.value ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]' : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'" @click="typeFilter = tab.value">{{ tab.label }}</button>
         </div>
 
         <div v-if="attachments.vaultError.value" role="alert" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
             <AlertTriangle class="size-4 shrink-0" aria-hidden="true" />
             <span class="min-w-0 flex-1">{{ attachments.vaultError.value }}</span>
-            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11" aria-label="Retry Library" @click="attachments.refreshVault()"><RefreshCw class="size-4" aria-hidden="true" /></Button>
+            <Button type="button" size="icon" variant="ghost" class="min-h-12 min-w-12" :aria-label="t('library.retryLibrary')" @click="attachments.refreshVault()"><RefreshCw class="size-4" aria-hidden="true" /></Button>
         </div>
+
+        <!-- `All` is an aggregate surface: semantic links remain rows and the
+             existing file branch below remains tiles/list items. -->
+        <ul
+            v-if="typeFilter === 'all' && renderedLinkRows.length > 0"
+            data-testid="talos-library-links"
+            class="flex flex-col gap-2"
+            :class="{ 'mb-4': filteredFiles.length > 0 }"
+            :aria-label="t('library.savedLinks')"
+        >
+            <TalosMobileSavedLinkRow
+                v-for="row in renderedLinkRows"
+                :key="row.url"
+                :row="row"
+                :saved-at-label="formatModified(row.savedAt)"
+                browser-test-id="talos-library-link-open"
+                @open-copy="openSavedCopy(row.fileId)"
+                @open-browser="openLink(row.url)"
+            />
+        </ul>
 
         <div v-if="attachments.vaultLoading.value && attachments.vaultFiles.length === 0" role="status" class="flex items-center gap-2 py-8 text-sm text-[var(--talos-muted)]">
-            <LoaderCircle class="size-4 motion-safe:animate-spin" aria-hidden="true" /> Loading Library
+            <LoaderCircle class="size-4 motion-safe:animate-spin" aria-hidden="true" /> {{ t('library.loadingLibrary') }}
         </div>
         <div v-else-if="attachments.vaultFiles.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
-            No files yet. Anything you upload or save from a chat lives here, ready to reuse in any conversation.
+            {{ t('library.emptyLong') }}
         </div>
-        <div v-else-if="typeFilter === 'links' ? linkRows.length === 0 : filtered.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
-            <template v-if="query.trim()">No files match “{{ query }}”.</template>
-            <template v-else-if="typeFilter === 'links'">No links yet. Every page TALOS reads while searching is saved here, with the address you can go back to.</template>
-            <template v-else>No files of this type yet.</template>
+        <div v-else-if="!hasVisibleLibraryItems" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
+            <template v-if="query.trim()">{{ t('library.noMatchQuery', { query }) }}</template>
+            <template v-else-if="typeFilter === 'links'">{{ t('library.noLinks') }}</template>
+            <template v-else>{{ t('library.noType') }}</template>
         </div>
 
-        <!-- LINKS: one row per address, the saved transcript one tap away. -->
-        <ul v-else-if="typeFilter === 'links'" data-testid="talos-library-links" class="flex flex-col gap-2" aria-label="Saved links">
-            <li v-for="row in linkRows" :key="row.url" class="flex items-center gap-1 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pr-1">
-                <button
-                    type="button"
-                    class="talos-pressable flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 text-left"
-                    :aria-label="'Open the saved copy of ' + row.title"
-                    @click="openSavedCopy(row.fileId)"
-                >
-                    <Globe class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <span class="min-w-0 flex-1">
-                        <span class="line-clamp-2 block text-sm font-medium text-[var(--talos-text)]">{{ row.title }}</span>
-                        <span class="mt-0.5 flex items-center gap-1.5 text-2xs text-[var(--talos-muted)]">
-                            <span class="truncate">{{ row.host }}</span>
-                            <span aria-hidden="true">·</span>
-                            <span class="shrink-0">{{ formatModified(row.savedAt) }}</span>
-                        </span>
-                    </span>
-                </button>
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    class="min-h-11 min-w-11 shrink-0 rounded-full"
-                    data-testid="talos-library-link-open"
-                    :aria-label="'Open ' + row.host + ' in the browser'"
-                    @click="openLink(row.url)"
-                ><ExternalLink class="size-4" aria-hidden="true" /></Button>
-            </li>
+        <!-- LINKS: one row per saved result/page address, its dossier one tap away. -->
+        <ul v-else-if="typeFilter === 'links'" data-testid="talos-library-links" class="flex flex-col gap-2" :aria-label="t('library.savedLinks')">
+            <TalosMobileSavedLinkRow
+                v-for="row in renderedLinkRows"
+                :key="row.url"
+                :row="row"
+                :saved-at-label="formatModified(row.savedAt)"
+                browser-test-id="talos-library-link-open"
+                @open-copy="openSavedCopy(row.fileId)"
+                @open-browser="openLink(row.url)"
+            />
         </ul>
 
         <!-- Grouped-by-chat wraps whichever view is active. -->
-        <template v-else v-for="section in (groupByChat ? grouped : [{ title: '', files: filtered }])" :key="section.title || 'all'">
+        <template v-else v-for="section in (groupByChat ? grouped : [{ title: '', files: filteredFiles }])" :key="section.title || 'all'">
             <h2 v-if="groupByChat" class="mb-2 mt-4 truncate text-xs font-semibold text-[var(--talos-muted)]">{{ section.title }}</h2>
 
-            <!-- GRID (tap a tile to open; attach/delete live in the open view or
-                 the list — a hover-only control is invisible/untappable on touch). -->
-            <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list" aria-label="Library files">
+            <!-- GRID: the tile opens; the same explicit More contract as list
+                 carries attach/save/delete without hover-only behavior. -->
+            <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3" role="list" :aria-label="t('library.libraryFiles')">
                 <div v-for="file in section.files" :key="file.id" role="listitem" :data-vault-file-id="file.id" class="relative aspect-square overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                    <button type="button" class="talos-pressable absolute inset-0 flex flex-col text-left" :aria-label="(bulk.active.value ? 'Select ' : 'Open ') + file.display_name" :aria-pressed="bulk.active.value ? bulk.isSelected(file.id) : undefined" @click="tapFile(file)">
-                        <img v-if="isImage(file) && thumbs[file.id]" :src="thumbs[file.id]" :alt="file.display_name" class="absolute inset-0 h-full w-full object-cover" />
+                    <button type="button" class="talos-pressable absolute inset-0 flex flex-col text-left" :aria-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: file.display_name })" :aria-pressed="bulk.active.value ? bulk.isSelected(file.id) : undefined" @click="tapFile(file)">
+                        <TalosMobileLibraryFileGlyph
+                            v-if="isImage(file)"
+                            :file="file"
+                            :thumbnail-url="thumbs[file.id] ?? null"
+                            variant="grid"
+                        />
                         <template v-else>
                             <span class="line-clamp-3 px-3 pt-3 text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</span>
-                            <span class="mt-auto p-3">
-                                <ImageIcon v-if="isImage(file)" class="size-7 text-[var(--talos-accent)]" aria-hidden="true" />
-                                <FileText v-else class="size-7 text-[var(--talos-accent)]" aria-hidden="true" />
+                            <span class="mt-auto size-16 p-3">
+                                <TalosMobileLibraryFileGlyph :file="file" variant="grid" />
                             </span>
                         </template>
                     </button>
@@ -461,32 +701,63 @@ onMounted(async () => {
                         <Check v-if="bulk.isSelected(file.id)" class="size-4" aria-hidden="true" />
                     </span>
                     <span v-if="bulk.isSelected(file.id)" class="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-inset ring-[var(--talos-accent)]" aria-hidden="true" />
-                    <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-3xs font-medium text-white"><Sparkles class="size-3" aria-hidden="true" /> Gen</span>
+                    <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-3xs font-medium text-white"><Sparkles class="size-3" aria-hidden="true" /> {{ t('library.generatedShort') }}</span>
+                    <div
+                        v-if="!bulk.active.value"
+                        class="absolute bottom-1 right-1 z-[2] [&_[data-talos-library-actions-trigger]]:bg-black/60 [&_[data-talos-library-actions-trigger]]:text-white"
+                    >
+                        <TalosMobileLibraryActionsMenu
+                            :label="t('library.fileActionsFor', { name: file.display_name })"
+                            :test-id="`talos-library-actions-${file.id}`"
+                            :items="fileActions(file)"
+                            @select="(action, checked) => onFileAction(file, action, checked)"
+                        />
+                    </div>
+                    <span
+                        :data-testid="`talos-library-context-state-${file.id}`"
+                        class="pointer-events-none absolute bottom-1 left-1 z-[2] max-w-[calc(100%-3.5rem)] truncate rounded-full bg-black/60 px-2 py-1 text-3xs font-medium text-white"
+                    >
+                        {{ globalFileContextLabel(file) }}
+                    </span>
                 </div>
             </div>
 
             <!-- LIST -->
-            <div v-else class="space-y-1" role="list" aria-label="Library files">
-                <div v-for="file in section.files" :key="file.id" :data-vault-file-id="file.id" role="listitem" class="flex min-w-0 items-center gap-3 rounded-xl px-1 py-2">
-                    <span v-if="bulk.active.value" class="flex size-6 shrink-0 items-center justify-center rounded-full border-2" :class="bulk.isSelected(file.id) ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-on-accent,#000)]' : 'border-[var(--talos-border)]'" aria-hidden="true">
-                        <Check v-if="bulk.isSelected(file.id)" class="size-4" />
-                    </span>
-                    <button type="button" class="talos-pressable flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]" :aria-label="(bulk.active.value ? 'Select ' : 'Open ') + file.display_name" @click="tapFile(file)">
-                        <img v-if="isImage(file) && thumbs[file.id]" :src="thumbs[file.id]" :alt="file.display_name" class="h-full w-full object-cover" />
-                        <ImageIcon v-else-if="isImage(file)" class="size-5 text-[var(--talos-accent)]" aria-hidden="true" />
-                        <FileText v-else class="size-5 text-[var(--talos-accent)]" aria-hidden="true" />
-                    </button>
-                    <button type="button" class="min-w-0 flex-1 text-left" @click="tapFile(file)">
-                        <span class="line-clamp-2 text-sm font-medium text-[var(--talos-text)]">{{ file.display_name }}</span>
-                        <span class="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--talos-muted)]">
-                            <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="text-[var(--talos-accent)]">Generated</span>
-                            <span v-else> Modified {{ formatModified(file.updated_at) }}</span>
+            <div v-else class="space-y-1" role="list" :aria-label="t('library.libraryFiles')">
+                <TalosMobileLibraryFileRow
+                    v-for="file in section.files"
+                    :key="file.id"
+                    :data-vault-file-id="file.id"
+                    :file="file"
+                    :thumbnail-url="thumbs[file.id] ?? null"
+                    :selection-mode="bulk.active.value"
+                    :selected="bulk.isSelected(file.id)"
+                    :open-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: file.display_name })"
+                    @open="tapFile(file)"
+                >
+                    <template #meta>
+                            <span v-if="parseVaultOrigin(file.metadata) === 'generated'" class="text-[var(--talos-accent)]">{{ t('library.generated') }}</span>
+                            <span v-else>{{ t('library.modified', { date: formatModified(file.updated_at) }) }}</span>
                             <span v-if="!groupByChat && originChat(file)" class="truncate">· {{ originChat(file) }}</span>
+                    </template>
+                    <template #details>
+                        <span
+                            :data-testid="`talos-library-context-state-${file.id}`"
+                            class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]"
+                        >
+                            {{ t('library.contextState', { state: globalFileContextLabel(file) }) }}
                         </span>
-                    </button>
-                    <Button v-if="!bulk.active.value && file.status === 'available'" type="button" size="icon" variant="ghost" class="min-h-11 min-w-11" :aria-label="'Attach ' + file.display_name + ' to message'" :disabled="actionBusy || isSelected(file.id)" @click="attachFile(file)"><Paperclip class="size-4" aria-hidden="true" /></Button>
-                    <Button v-if="!bulk.active.value" type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 text-[var(--talos-danger)]" :aria-label="'Delete ' + file.display_name" :disabled="actionBusy" @click="requestDelete(file)"><Trash2 class="size-4" aria-hidden="true" /></Button>
-                </div>
+                    </template>
+                    <template #actions>
+                        <TalosMobileLibraryActionsMenu
+                            v-if="!bulk.active.value"
+                            :label="t('library.fileActionsFor', { name: file.display_name })"
+                            :test-id="`talos-library-actions-${file.id}`"
+                            :items="fileActions(file)"
+                            @select="(action, checked) => onFileAction(file, action, checked)"
+                        />
+                    </template>
+                </TalosMobileLibraryFileRow>
             </div>
         </template>
 
@@ -495,14 +766,23 @@ onMounted(async () => {
 
     <!-- Image lightbox -->
     <Teleport to="body">
-        <div v-if="lightboxUrl" data-testid="talos-library-lightbox" role="dialog" aria-modal="true" aria-label="Image preview" tabindex="-1" class="fixed inset-0 z-[95] flex flex-col bg-black/90 outline-none" @keydown.escape="closeLightbox">
+        <div v-if="lightboxUrl" data-testid="talos-library-lightbox" role="dialog" aria-modal="true" :aria-label="t('library.imagePreview')" tabindex="-1" class="fixed inset-0 z-[95] flex flex-col bg-black/90 outline-none" @keydown.escape="closeLightbox">
             <div class="flex items-center justify-end gap-1 p-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-white">
-                <button v-if="lightboxFile && !isSelected(lightboxFile.id)" type="button" :aria-label="'Attach ' + lightboxFile.display_name + ' to message'" :disabled="actionBusy" class="talos-pressable flex size-11 items-center justify-center rounded-full bg-white/15" @click="attachFromOverlay(lightboxFile)"><Paperclip class="size-5" aria-hidden="true" /></button>
-                <button v-if="lightboxFile" type="button" :aria-label="'Delete ' + lightboxFile.display_name" class="talos-pressable flex size-11 items-center justify-center rounded-full bg-white/15" @click="deleteFromLightbox"><Trash2 class="size-5" aria-hidden="true" /></button>
-                <button type="button" aria-label="Close preview" class="talos-pressable flex size-11 items-center justify-center rounded-full bg-white/15" @click="closeLightbox"><X class="size-5" aria-hidden="true" /></button>
+                <button v-if="lightboxFile && !isSelected(lightboxFile.id)" type="button" :aria-label="t('library.attachNamedToMessage', { name: lightboxFile.display_name })" :disabled="actionBusy" class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15" @click="attachFromOverlay(lightboxFile)"><Paperclip class="size-5" aria-hidden="true" /></button>
+                <button
+                    v-if="lightboxFile && lightboxFile.status === 'available'"
+                    type="button"
+                    :data-testid="`talos-library-save-overlay-${lightboxFile.id}`"
+                    :aria-label="t('library.saveNamedToDevice', { name: lightboxFile.display_name })"
+                    :disabled="savingFileId !== null"
+                    class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15 disabled:opacity-50"
+                    @click="saveFileToDevice(lightboxFile)"
+                ><Download class="size-5" aria-hidden="true" /></button>
+                <button v-if="lightboxFile" type="button" :aria-label="t('library.deleteNamed', { name: lightboxFile.display_name })" class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15" @click="deleteFromLightbox"><Trash2 class="size-5" aria-hidden="true" /></button>
+                <button type="button" :aria-label="t('chat.closePreview')" class="talos-pressable flex size-12 items-center justify-center rounded-full bg-white/15" @click="closeLightbox"><X class="size-5" aria-hidden="true" /></button>
             </div>
             <div class="flex min-h-0 flex-1 items-center justify-center p-4" @click="closeLightbox">
-                <img :src="lightboxUrl" alt="Preview" class="max-h-full max-w-full object-contain" />
+                <img :src="lightboxUrl" :alt="t('library.previewAlt')" class="max-h-full max-w-full object-contain" />
             </div>
         </div>
     </Teleport>
@@ -513,41 +793,50 @@ onMounted(async () => {
             <header class="flex items-center gap-1 border-b border-[var(--talos-border)] px-3 pb-2">
                 <FileText class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                 <span class="min-w-0 flex-1 truncate text-sm font-semibold">{{ docView.display_name }}</span>
-                <button v-if="docSourceUrl" type="button" data-testid="talos-library-doc-open-source" :aria-label="'Open the original page in the browser'" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="openLink(docSourceUrl)"><ExternalLink class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                <button v-if="docView.status === 'available' && !isSelected(docView.id)" type="button" :aria-label="'Attach ' + docView.display_name + ' to message'" :disabled="actionBusy" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="attachFromOverlay(docView)"><Paperclip class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                <button type="button" :aria-label="'Delete ' + docView.display_name" class="talos-pressable flex size-11 items-center justify-center rounded-full text-[var(--talos-danger)]" @click="deleteFromDoc"><Trash2 class="size-5" aria-hidden="true" /></button>
-                <button type="button" aria-label="Close" class="talos-pressable flex size-11 items-center justify-center rounded-full" @click="docView = null"><X class="size-5" aria-hidden="true" /></button>
+                <button v-if="docSourceUrl" type="button" data-testid="talos-library-doc-open-source" :aria-label="t('library.openOriginalPage')" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="openLink(docSourceUrl)"><ExternalLink class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                <button v-if="docView.status === 'available' && !isSelected(docView.id)" type="button" :aria-label="t('library.attachNamedToMessage', { name: docView.display_name })" :disabled="actionBusy" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="attachFromOverlay(docView)"><Paperclip class="size-5 text-[var(--talos-accent)]" aria-hidden="true" /></button>
+                <button
+                    v-if="docView.status === 'available'"
+                    type="button"
+                    :data-testid="`talos-library-save-overlay-${docView.id}`"
+                    :aria-label="t('library.saveNamedToDevice', { name: docView.display_name })"
+                    :disabled="savingFileId !== null"
+                    class="talos-pressable flex size-12 items-center justify-center rounded-full text-[var(--talos-accent)] disabled:opacity-50"
+                    @click="saveFileToDevice(docView)"
+                ><Download class="size-5" aria-hidden="true" /></button>
+                <button type="button" :aria-label="t('library.deleteNamed', { name: docView.display_name })" class="talos-pressable flex size-12 items-center justify-center rounded-full text-[var(--talos-danger)]" @click="deleteFromDoc"><Trash2 class="size-5" aria-hidden="true" /></button>
+                <button type="button" :aria-label="t('common.close')" class="talos-pressable flex size-12 items-center justify-center rounded-full" @click="docView = null"><X class="size-5" aria-hidden="true" /></button>
             </header>
             <div class="min-h-0 flex-1 overflow-auto p-4">
                 <pre v-if="docText" class="whitespace-pre-wrap break-words font-sans text-sm leading-6">{{ docText }}</pre>
-                <p v-else class="text-sm text-[var(--talos-muted)]">No preview text is available for this file.</p>
+                <p v-else class="text-sm text-[var(--talos-muted)]">{{ t('library.noPreviewText') }}</p>
             </div>
         </div>
     </Teleport>
 
     <TalosMobileConfirmDialog
         v-if="deleteOpen"
-        title="Delete file?"
-        :description="`${deleteTarget?.display_name} will be removed from this device. Existing chat history keeps only its safe file label.`"
+        :title="t('library.deleteFileTitle')"
+        :description="t('library.deleteFileDescription', { name: deleteTarget?.display_name ?? '' })"
         @close="actionBusy ? undefined : deleteOpen = false"
     >
         <template #footer>
-            <Button type="button" variant="outline" :disabled="actionBusy" @click="deleteOpen = false">Cancel</Button>
-            <Button type="button" :disabled="actionBusy" class="bg-[var(--talos-danger)] text-white" @click="confirmDelete">Delete file</Button>
+            <Button type="button" variant="outline" :disabled="actionBusy" class="min-h-12" @click="deleteOpen = false">{{ t('common.cancel') }}</Button>
+            <Button type="button" :disabled="actionBusy" class="min-h-12 bg-[var(--talos-danger)] text-white" @click="confirmDelete">{{ t('library.deleteFile') }}</Button>
         </template>
     </TalosMobileConfirmDialog>
 
     <TalosMobileConfirmDialog
         v-if="bulkDeleteOpen"
-        title="Delete selected files?"
-        :description="`${bulk.count.value} file${bulk.count.value === 1 ? '' : 's'} will be removed from this device. Existing chat history keeps only their safe file labels.`"
+        :title="t('library.deleteSelectedTitle')"
+        :description="bulkDeleteDescription()"
         @close="actionBusy ? undefined : bulkDeleteOpen = false"
     >
         <template #footer>
-            <Button type="button" variant="outline" :disabled="actionBusy" @click="bulkDeleteOpen = false">Cancel</Button>
-            <Button type="button" data-testid="talos-library-bulk-delete-confirm" :disabled="actionBusy" class="bg-[var(--talos-danger)] text-white" @click="confirmBulkDelete">
+            <Button type="button" variant="outline" :disabled="actionBusy" class="min-h-12" @click="bulkDeleteOpen = false">{{ t('common.cancel') }}</Button>
+            <Button type="button" data-testid="talos-library-bulk-delete-confirm" :disabled="actionBusy" class="min-h-12 bg-[var(--talos-danger)] text-white" @click="confirmBulkDelete">
                 <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
-                {{ actionBusy ? 'Deleting…' : 'Delete' }}
+                {{ actionBusy ? t('chat.deleting') : t('common.delete') }}
             </Button>
         </template>
     </TalosMobileConfirmDialog>

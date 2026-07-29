@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { SpeechRecognition } from '@capgo/capacitor-speech-recognition'
 import { talosLogDeviceIssue, talosWithTimeout } from '@/lib/talosDeviceLog'
+import type { TalosDictationErrorCode } from '@/lib/dictationPolicy'
 
 /**
  * F2-T5 — guarded dictation engine. Native path uses the capgo speech plugin
@@ -14,13 +15,17 @@ export interface TalosDictationEvents {
     onStart?: () => void
     onPartial: (text: string) => void
     onEnd: () => void
-    onError: (message: string) => void
+    onError: (code: TalosDictationErrorCode) => void
+}
+
+export interface TalosDictationStartOptions {
+    language?: string
 }
 
 export interface TalosDictationEngine {
     supported(): Promise<boolean>
     requestPermission(): Promise<boolean>
-    start(events: TalosDictationEvents): Promise<void>
+    start(events: TalosDictationEvents, options?: TalosDictationStartOptions): Promise<void>
     stop(): Promise<void>
 }
 
@@ -75,7 +80,7 @@ function nativeEngine(): TalosDictationEngine {
                 return false
             }
         },
-        async start(events) {
+        async start(events, options = {}) {
             const plugin = loadPlugin()
             active = true
             await plugin.removeAllListeners()
@@ -97,13 +102,18 @@ function nativeEngine(): TalosDictationEngine {
                 if (!active) return
                 active = false
                 talosLogDeviceIssue('TALOS_SPEECH_ERROR', `${data.code ?? ''} ${data.message ?? ''}`)
-                events.onError(data.message
-                    ? `Speech recognition error: ${data.message}`
-                    : 'Speech recognition failed. Try again.')
+                const detail = `${data.code ?? ''} ${data.message ?? ''}`
+                events.onError(/permission|not.?allowed|denied/i.test(detail)
+                    ? 'permissionDenied'
+                    : 'recognitionFailed')
             })
             try {
                 await talosWithTimeout(
-                    plugin.start({ partialResults: true, popup: false }),
+                    plugin.start({
+                        partialResults: true,
+                        popup: false,
+                        ...(options.language ? { language: options.language } : {}),
+                    }),
                     10000,
                     'TALOS_SPEECH_START',
                 )
@@ -113,7 +123,8 @@ function nativeEngine(): TalosDictationEngine {
                 if (!active) return
                 active = false
                 await plugin.removeAllListeners().catch(() => undefined)
-                events.onError(error instanceof Error ? error.message : 'Speech recognition could not start.')
+                talosLogDeviceIssue('TALOS_SPEECH_START', String(error))
+                events.onError('startFailed')
             }
         },
         async stop() {
@@ -154,17 +165,17 @@ function webEngine(): TalosDictationEngine {
             // The Web Speech API prompts on start; there is no separate grant step.
             return webSpeechConstructor() !== null
         },
-        async start(events) {
+        async start(events, options = {}) {
             const Ctor = webSpeechConstructor()
             if (!Ctor) {
-                events.onError('Speech recognition is not available in this browser.')
+                events.onError('unavailable')
                 return
             }
             stopping = false
             recognition = new Ctor()
             recognition.continuous = true
             recognition.interimResults = true
-            recognition.lang = navigator.language || 'en-US'
+            recognition.lang = options.language || navigator.language || 'en-US'
             let finalText = ''
             recognition.onresult = (event) => {
                 let interim = ''
@@ -181,8 +192,8 @@ function webEngine(): TalosDictationEngine {
             recognition.onerror = (event) => {
                 if (stopping || instance !== recognition) return
                 events.onError(event.error === 'not-allowed'
-                    ? 'TALOS needs microphone permission to dictate.'
-                    : 'Speech recognition failed. Try again.')
+                    ? 'permissionDenied'
+                    : 'recognitionFailed')
             }
             recognition.onend = () => {
                 // A superseded instance must not clobber the live session.
@@ -203,7 +214,7 @@ function webEngine(): TalosDictationEngine {
 const unsupportedEngine: TalosDictationEngine = {
     async supported() { return false },
     async requestPermission() { return false },
-    async start(events) { events.onError('Dictation is not available on this device.') },
+    async start(events) { events.onError('unavailable') },
     async stop() {},
 }
 
@@ -224,6 +235,7 @@ export interface TalosDictationDiagnostics {
     permissionsRaw: string | null
     availableRaw: string | null
     available: boolean | null
+    trace: string
     error: string | null
 }
 
@@ -239,9 +251,11 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
     const native = Capacitor.isNativePlatform()
     if (!native) {
         const webOk = webSpeechConstructor() !== null
+        const trace = `build ${buildId} · web speech ${webOk ? 'present' : 'absent'}`
         return {
             buildId, native, registered: webOk, pluginLoaded: webOk, methods: webOk ? ['webSpeech'] : [],
-            permissionsRaw: null, availableRaw: null, available: webOk, error: `build ${buildId} · web speech ${webOk ? 'present' : 'absent'}`,
+            permissionsRaw: null, availableRaw: null, available: webOk, trace,
+            error: webOk ? null : trace,
         }
     }
 
@@ -249,6 +263,7 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
     // fenced, timed, and written to the Doctor ring, so a single report pins
     // the exact dying step without adb.
     const steps: string[] = [`build ${buildId}`]
+    const failures: string[] = []
     const step = async <T>(name: string, run: () => Promise<T>, ms = 3000): Promise<T | null> => {
         const started = performance.now()
         try {
@@ -257,7 +272,9 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
             return value
         } catch (error) {
             const detail = String(error).slice(0, 120)
-            steps.push(`${name}:FAIL ${detail}`)
+            const failure = `${name}:FAIL ${detail}`
+            steps.push(failure)
+            failures.push(failure)
             talosLogDeviceIssue(`TALOS_SPEECH_STEP_${name}`, detail)
             return null
         }
@@ -272,8 +289,14 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
     } catch { registered = false }
     steps.push(`registered:${registered}`)
     if (!registered) {
-        talosLogDeviceIssue('TALOS_SPEECH_STEP_registered', `build ${buildId} · plugin NOT registered in the native runtime`)
-        return { buildId, native, registered, pluginLoaded: false, methods: [], permissionsRaw: null, availableRaw: null, available: null, error: steps.join(' · ') }
+        const failure = `build ${buildId} · plugin NOT registered in the native runtime`
+        talosLogDeviceIssue('TALOS_SPEECH_STEP_registered', failure)
+        const trace = steps.join(' · ')
+        return {
+            buildId, native, registered, pluginLoaded: false, methods: [],
+            permissionsRaw: null, availableRaw: null, available: null,
+            trace, error: failure,
+        }
     }
 
     // Step 1 — resolve the wrapper SYNCHRONOUSLY. It is a thenable Capacitor
@@ -286,10 +309,20 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
         plugin = loadPlugin()
         steps.push('resolve:ok(sync)')
     } catch (error) {
-        steps.push(`resolve:FAIL ${String(error).slice(0, 120)}`)
-        talosLogDeviceIssue('TALOS_SPEECH_STEP_resolve', String(error).slice(0, 120))
+        const detail = String(error).slice(0, 120)
+        const failure = `resolve:FAIL ${detail}`
+        steps.push(failure)
+        failures.push(failure)
+        talosLogDeviceIssue('TALOS_SPEECH_STEP_resolve', detail)
     }
-    if (!plugin) return { buildId, native, registered, pluginLoaded: false, methods: [], permissionsRaw: null, availableRaw: null, available: null, error: steps.join(' · ') }
+    if (!plugin) {
+        const trace = steps.join(' · ')
+        return {
+            buildId, native, registered, pluginLoaded: false, methods: [],
+            permissionsRaw: null, availableRaw: null, available: null,
+            trace, error: failures.join(' · ') || trace,
+        }
+    }
     const pluginObj = plugin as unknown as Record<string, unknown>
     const methods = PLUGIN_METHODS.filter((name) => typeof pluginObj[name] === 'function')
     steps.push(`methods:[${methods.join(',')}]`)
@@ -316,11 +349,9 @@ export async function talosDictationDiagnostics(): Promise<TalosDictationDiagnos
         permissionsRaw,
         availableRaw,
         available: availability ? (availability as { available?: boolean }).available === true : null,
-        error: steps.join(' · '),
+        trace: steps.join(' · '),
+        error: failures.length > 0 ? failures.join(' · ') : null,
     }
-    // A single ring entry with the whole deep report — surfaces in "Recent
-    // issues" so the owner can read the full chain in one place.
-    talosLogDeviceIssue('TALOS_SPEECH_DEEP', steps.join(' · '))
     return report
 }
 

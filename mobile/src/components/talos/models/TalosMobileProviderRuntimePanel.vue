@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
+import { useTalosI18n } from '@/i18n'
+import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { BadgeCheck, ChevronDown, KeyRound, RefreshCw, RotateCcw, Server, Trash2 } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
@@ -7,6 +9,7 @@ import { TALOS_MOBILE_PROVIDERS } from '@/lib/mobileProviders'
 import { useChatController } from '@/stores/chatController'
 
 const controller = useChatController()
+const { t } = useTalosI18n()
 const providers = TALOS_MOBILE_PROVIDERS.filter(
     (provider): provider is typeof provider & { id: TalosMobileProviderId } => provider.id !== 'unknown',
 )
@@ -44,7 +47,7 @@ watch(() => controller.modelLabPreferences.value.provider_runtime, (value) => {
 }, { immediate: true, deep: true })
 
 function modelCountLabel(count: number): string {
-    return `${count} ${count === 1 ? 'model' : 'models'} available`
+    return count === 1 ? t('models.availableOne') : t('models.availableMany', { count })
 }
 
 async function run(provider: TalosMobileProviderId, action: () => Promise<unknown>): Promise<void> {
@@ -54,7 +57,8 @@ async function run(provider: TalosMobileProviderId, action: () => Promise<unknow
     try {
         await action()
     } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : 'The provider operation failed.'
+        error.value = talosTranslatableErrorMessage(cause, t)
+            ?? (cause instanceof Error ? cause.message : t('models.providerOperationFailed'))
     } finally {
         busyProvider.value = null
     }
@@ -79,7 +83,7 @@ async function saveRuntime(provider: TalosMobileProviderId): Promise<void> {
             return
         }
         if (!endpoint) {
-            if (provider === 'ollama') throw new Error('Ollama requires an endpoint reachable from this device.')
+            if (provider === 'ollama') throw new Error(t('models.ollamaEndpointRequired'))
             await controller.removeEndpoint(provider)
             await controller.refreshProvider(provider)
             return
@@ -123,13 +127,13 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                     <h5 :id="`provider-${provider.id}-title`" class="truncate text-sm font-semibold text-[var(--talos-text)]">{{ provider.label }}</h5>
                     <p class="text-2xs text-[var(--talos-muted)]">
                         <template v-if="controller.catalogs[provider.id].status === 'ready'">{{ modelCountLabel(controller.catalogs[provider.id].models.length) }}</template>
-                        <template v-else-if="controller.catalogs[provider.id].status === 'loading'">Discovering models...</template>
-                        <template v-else-if="controller.catalogs[provider.id].status === 'error'">Discovery failed</template>
-                        <template v-else>Not configured</template>
+                        <template v-else-if="controller.catalogs[provider.id].status === 'loading'">{{ $t('models.discovering') }}</template>
+                        <template v-else-if="controller.catalogs[provider.id].status === 'error'">{{ $t('models.discoveryFailed') }}</template>
+                        <template v-else>{{ $t('models.notConfigured') }}</template>
                     </p>
                 </div>
                 <span v-if="controller.secrets[provider.id]" data-testid="key-present" class="inline-flex items-center gap-1 text-2xs font-semibold text-[var(--talos-success,var(--talos-accent))]">
-                    <BadgeCheck class="size-3.5" aria-hidden="true" /> Key saved
+                    <BadgeCheck class="size-3.5" aria-hidden="true" /> {{ $t('models.keySaved') }}
                 </span>
                 <ChevronDown
                     class="size-4 shrink-0 text-[var(--talos-muted)] transition-transform"
@@ -141,20 +145,20 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             <div v-show="isExpanded(provider.id)" :id="`provider-${provider.id}-body`" class="px-3 pb-3">
             <div v-if="provider.requiresSecret" class="flex gap-2">
                 <label class="min-w-0 flex-1">
-                    <span class="sr-only">{{ provider.label }} API key</span>
+                    <span class="sr-only">{{ $t('models.apiKey', { provider: provider.label }) }}</span>
                     <input
                         v-model="keyDrafts[provider.id]"
                         type="password"
                         autocomplete="new-password"
-                        :aria-label="`${provider.label} API key`"
-                        :placeholder="controller.secrets[provider.id] ? 'Enter a replacement key' : 'Paste API key'"
+                        :aria-label="$t('models.apiKey', { provider: provider.label })"
+                        :placeholder="controller.secrets[provider.id] ? $t('models.replacementKey') : $t('models.pasteApiKey')"
                         class="h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                     >
                 </label>
-                <button type="button" :aria-label="`Save ${provider.label} key`" :disabled="busyProvider === provider.id || !keyDrafts[provider.id]?.trim()" class="h-11 rounded-md bg-[var(--talos-accent)] px-3 text-sm font-medium text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50" @click="saveKey(provider.id)">
-                    Save
+                <button type="button" :aria-label="$t('models.saveKey', { provider: provider.label })" :disabled="busyProvider === provider.id || !keyDrafts[provider.id]?.trim()" class="h-11 rounded-md bg-[var(--talos-accent)] px-3 text-sm font-medium text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50" @click="saveKey(provider.id)">
+                    {{ $t('common.save') }}
                 </button>
-                <button v-if="controller.secrets[provider.id]" type="button" :aria-label="`Remove ${provider.label} key`" :disabled="busyProvider === provider.id" class="inline-flex size-11 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="run(provider.id, () => controller.removeKey(provider.id))">
+                <button v-if="controller.secrets[provider.id]" type="button" :aria-label="$t('models.removeKey', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex size-11 items-center justify-center rounded-md border border-[var(--talos-border)] text-[var(--talos-muted)] disabled:opacity-50" @click="run(provider.id, () => controller.removeKey(provider.id))">
                     <Trash2 class="size-4" aria-hidden="true" />
                 </button>
             </div>
@@ -162,7 +166,7 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
             <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <label v-if="endpointProviders.has(provider.id)" class="min-w-0">
                     <span class="mb-1 flex items-center gap-1 text-xs font-medium text-[var(--talos-muted)]">
-                        <Server class="size-3.5" aria-hidden="true" /> {{ provider.id === 'ollama' ? 'Endpoint' : 'Custom endpoint' }}
+                        <Server class="size-3.5" aria-hidden="true" /> {{ provider.id === 'ollama' ? $t('models.endpoint') : $t('models.customEndpoint') }}
                     </span>
                     <input
                         v-model="endpointDrafts[provider.id]"
@@ -170,29 +174,29 @@ async function resetEndpoint(provider: TalosMobileProviderId): Promise<void> {
                         inputmode="url"
                         autocapitalize="none"
                         autocomplete="url"
-                        :aria-label="provider.id === 'ollama' ? 'Ollama endpoint' : `${provider.label} custom endpoint`"
-                        :placeholder="provider.id === 'ollama' ? 'http://192.168.1.20:11434' : 'Official endpoint'"
+                        :aria-label="provider.id === 'ollama' ? 'Ollama endpoint' : $t('models.providerCustomEndpoint', { provider: provider.label })"
+                        :placeholder="provider.id === 'ollama' ? 'http://192.168.1.20:11434' : $t('models.officialEndpoint')"
                         class="h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                     >
                 </label>
                 <div :class="endpointProviders.has(provider.id) ? '' : 'sm:col-span-2'">
-                    <label :for="`provider-${provider.id}-timeout`" class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">Timeout</label>
+                    <label :for="`provider-${provider.id}-timeout`" class="mb-1 block text-xs font-medium text-[var(--talos-muted)]">{{ $t('models.timeout') }}</label>
                     <div class="flex items-center gap-2">
-                        <input :id="`provider-${provider.id}-timeout`" v-model.number="timeoutDrafts[provider.id]" type="range" min="5" max="300" step="5" class="min-w-0 flex-1 accent-[var(--talos-accent)]" :aria-label="`${provider.label} timeout`">
-                        <input v-model.number="timeoutDrafts[provider.id]" type="number" min="5" max="300" step="1" :aria-label="`${provider.label} timeout seconds`" class="h-11 w-20 rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-2 text-sm text-[var(--talos-text)]">
+                        <input :id="`provider-${provider.id}-timeout`" v-model.number="timeoutDrafts[provider.id]" type="range" min="5" max="300" step="5" class="min-w-0 flex-1 accent-[var(--talos-accent)]" :aria-label="$t('models.providerTimeout', { provider: provider.label })">
+                        <input v-model.number="timeoutDrafts[provider.id]" type="number" min="5" max="300" step="1" :aria-label="$t('models.providerTimeoutSeconds', { provider: provider.label })" class="h-11 w-20 rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-2 text-sm text-[var(--talos-text)]">
                     </div>
                 </div>
             </div>
 
             <div class="mt-3 flex flex-wrap items-center gap-2">
-                <button type="button" :aria-label="`Save ${provider.label} runtime options`" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-[var(--talos-accent)] px-3 text-xs font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50" @click="saveRuntime(provider.id)">
-                    <KeyRound class="size-3.5" aria-hidden="true" /> Save runtime
+                <button type="button" :aria-label="$t('models.saveRuntimeOptions', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-[var(--talos-accent)] px-3 text-xs font-semibold text-[var(--talos-accent-contrast,var(--talos-accent-text))] disabled:opacity-50" @click="saveRuntime(provider.id)">
+                    <KeyRound class="size-3.5" aria-hidden="true" /> {{ $t('models.saveRuntime') }}
                 </button>
-                <button type="button" :aria-label="`Refresh ${provider.label} models`" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--talos-border)] px-3 text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50" @click="run(provider.id, () => controller.refreshProvider(provider.id))">
-                    <RefreshCw class="size-3.5" aria-hidden="true" /> Refresh
+                <button type="button" :aria-label="$t('models.refreshProvider', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--talos-border)] px-3 text-xs font-semibold text-[var(--talos-text)] disabled:opacity-50" @click="run(provider.id, () => controller.refreshProvider(provider.id))">
+                    <RefreshCw class="size-3.5" aria-hidden="true" /> {{ $t('chat.refresh') }}
                 </button>
-                <button v-if="endpointProviders.has(provider.id) && controller.endpoints[provider.id]" type="button" :aria-label="`Reset ${provider.label} endpoint`" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[var(--talos-muted)] disabled:opacity-50" @click="resetEndpoint(provider.id)">
-                    <RotateCcw class="size-3.5" aria-hidden="true" /> Reset endpoint
+                <button v-if="endpointProviders.has(provider.id) && controller.endpoints[provider.id]" type="button" :aria-label="$t('models.resetProviderEndpoint', { provider: provider.label })" :disabled="busyProvider === provider.id" class="inline-flex min-h-10 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[var(--talos-muted)] disabled:opacity-50" @click="resetEndpoint(provider.id)">
+                    <RotateCcw class="size-3.5" aria-hidden="true" /> {{ $t('models.resetEndpoint') }}
                 </button>
             </div>
 

@@ -42,7 +42,7 @@ const toasts = useTalosMobileToasts()
                 </button>
                 <button
                     type="button"
-                    aria-label="Dismiss notification"
+                    :aria-label="$t('accessibility.dismissNotification')"
                     class="talos-pressable flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[var(--talos-muted)]"
                     @click="toasts.dismiss(toast.id)"
                 >

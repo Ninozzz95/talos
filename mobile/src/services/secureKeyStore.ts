@@ -6,6 +6,7 @@
  * boolean `has_secret` from `hasProviderKey`.
  */
 import { SecureStorage } from '@aparajita/capacitor-secure-storage'
+import { TalosUiError } from '@/i18n/uiErrors'
 import { talosBridgeCall } from '@/lib/talosBridge'
 
 const KEY_PREFIX = 'talos.provider.key.'
@@ -36,7 +37,11 @@ export async function setProviderKey(
 ): Promise<void> {
     const trimmed = key.trim()
     if (trimmed === '') {
-        throw new Error('Provider key must not be empty.')
+        throw new TalosUiError(
+            'TALOS_PROVIDER_KEY_REQUIRED',
+            'models.providerKeyRequired',
+            { provider },
+        )
     }
     await backend.set(storageKey(provider), trimmed)
 }

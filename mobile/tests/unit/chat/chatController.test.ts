@@ -3,9 +3,37 @@ import { reactive } from 'vue'
 import { createChatController, type ChatControllerDeps } from '@/stores/chatController'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
-import type { TalosChatRepository } from '@/repositories/chatRepository'
+import type { TalosChatRepository, TalosLocalVaultFile } from '@/repositories/chatRepository'
 import type { TalosMobileManualModel, TalosMobileModelLabPreferences } from '@/lib/modelLabContracts'
 import type { TalosVaultService } from '@/services/talosVaultService'
+import { talosTestT } from '../../helpers/talosTestI18n'
+import {
+    TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+    applyTalosToolAuthorizationGrant,
+    digestTalosToolAuthorizationInput,
+    revokeTalosToolAuthorizationGrant,
+} from '@/lib/tools/toolAuthorizations'
+import {
+    applyTalosLibraryContextPolicyPatch,
+} from '@/lib/chat/libraryPolicy'
+import { parseTalosToolAuthorizationCheckpoint } from '@/lib/tools/toolAuthorizationCheckpoint'
+
+const webSearchRuntime = vi.hoisted(() => ({
+    runTalosSearch: vi.fn(),
+    readTalosPage: vi.fn(),
+}))
+vi.mock('@/services/webSearchRuntime', () => webSearchRuntime)
+
+const deviceFileSave = vi.hoisted(() => ({
+    saveTalosVaultFileToDevice: vi.fn(),
+}))
+vi.mock('@/services/saveVaultFileToDevice', () => deviceFileSave)
+
+function deferred<T = void>() {
+    let resolve!: (value: T | PromiseLike<T>) => void
+    const promise = new Promise<T>((settle) => { resolve = settle })
+    return { promise, resolve }
+}
 
 function attachmentRuntime(repository: TalosChatRepository): {
     picker: { pickFiles: ReturnType<typeof vi.fn> }
@@ -127,6 +155,37 @@ function makeDeps() {
             probe_results: {},
         } as TalosMobileModelLabPreferences,
         tone: { preset: 'balanced' as const },
+        shell: {
+            library_context_enabled: false,
+            library_context_policy: null as import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyV1 | null,
+            library_autosave_generated: false,
+            debug_diagnostics: false,
+        },
+        search: {
+            source: null as 'tavily' | 'brave' | 'searxng' | 'custom' | null,
+            endpoint: null as string | null,
+        },
+        tools: {
+            read: 'allow' as const,
+            write: 'ask' as const,
+            outbound: 'deny' as const,
+        },
+        agent_tools: {
+            library_list: true,
+            library_search: true,
+            library_read: true,
+            notes_list: true,
+            tasks_list: true,
+            memory_search: true,
+            time_now: true,
+            web_search: true,
+            web_read: true,
+            document_create: true,
+            generate_image: true,
+            library_export: true,
+            library_context_policy_update: false,
+        },
+        tool_authorizations: TALOS_EMPTY_TOOL_AUTHORIZATIONS,
     })
     const settings = {
         state: settingsState,
@@ -140,8 +199,56 @@ function makeDeps() {
         setTone: vi.fn(async (preset: 'balanced' | 'engineering' | 'friendly' | 'concise') => {
             settingsState.tone = { preset } as never
         }),
+        setLibraryContextPolicy: vi.fn(async (
+            patch: import('@/lib/chat/libraryPolicy').TalosLibraryContextPolicyPatch,
+            expectedRevision: number,
+        ) => {
+            const current = settingsState.shell.library_context_policy ?? {
+                schema_version: 1 as const,
+                revision: 0,
+                enabled: settingsState.shell.library_context_enabled,
+                mode: 'broad_compat_v1' as const,
+                included_file_ids: [],
+                excluded_file_ids: [],
+                updated_at: null,
+            }
+            const updated = applyTalosLibraryContextPolicyPatch(
+                current,
+                patch,
+                expectedRevision,
+                '2026-07-29T17:00:00.000Z',
+            )
+            settingsState.shell = {
+                ...settingsState.shell,
+                library_context_enabled: updated.enabled,
+                library_context_policy: updated,
+            }
+            return updated
+        }),
+        grantToolAuthorization: vi.fn(async (
+            tool: Parameters<typeof applyTalosToolAuthorizationGrant>[1],
+            actions: Parameters<typeof applyTalosToolAuthorizationGrant>[2],
+        ) => {
+            settingsState.tool_authorizations = applyTalosToolAuthorizationGrant(
+                settingsState.tool_authorizations,
+                tool,
+                actions,
+                settingsState.tool_authorizations.revision,
+                '2026-07-29T12:00:00.000Z',
+            )
+        }),
+        revokeToolAuthorization: vi.fn(async (
+            tool: Parameters<typeof revokeTalosToolAuthorizationGrant>[1],
+        ) => {
+            settingsState.tool_authorizations = revokeTalosToolAuthorizationGrant(
+                settingsState.tool_authorizations,
+                tool,
+                settingsState.tool_authorizations.revision,
+            )
+        }),
     }
     const deps: ChatControllerDeps = {
+        translate: talosTestT('en'),
         hasKey: async (provider) => store.has(provider),
         getKey: async (provider) => store.get(provider) ?? null,
         setKey: async (provider, key) => { store.set(provider, key) },
@@ -156,7 +263,1910 @@ function makeDeps() {
     return { store, endpoints, request, chatRepository, settings, deps }
 }
 
+async function createBroadAnswerGuardDocuments(
+    chatRepository: TalosChatRepository,
+): Promise<void> {
+    await chatRepository.createVaultFile({
+        id: 'guard-omniroute',
+        display_name: 'OmniRoute architecture.md',
+        media_type: 'text/markdown',
+        size_bytes: 96,
+        private_uri: 'talos-vault/files/guard-omniroute.md',
+        status: 'available',
+        trust: 'untrusted',
+        sha256: '8'.repeat(64),
+        extracted_text: 'OMNIROUTE_GUARD_SENTINEL OmniRoute coordinates service routing and renewals.',
+        failure_code: null,
+        metadata: { origin: 'uploaded', library_shared: true },
+        created_at: '2026-07-29T10:00:00.000Z',
+    })
+    await chatRepository.createVaultFile({
+        id: 'guard-iterm',
+        display_name: 'iTerm mock GPS.md',
+        media_type: 'text/markdown',
+        size_bytes: 96,
+        private_uri: 'talos-vault/files/guard-iterm.md',
+        status: 'available',
+        trust: 'untrusted',
+        sha256: '9'.repeat(64),
+        extracted_text: 'ITERM_GPS_GUARD_SENTINEL iTerm can simulate a location with mock GPS.',
+        failure_code: null,
+        metadata: { origin: 'uploaded', library_shared: true },
+        created_at: '2026-07-29T10:00:01.000Z',
+    })
+}
+
 describe('chatController', () => {
+    it('I18N-TS-03 emits model-probe guidance through the selected locale', async () => {
+        const { deps } = makeDeps()
+        deps.translate = talosTestT('it')
+        const controller = createChatController(deps)
+
+        await expect(controller.probeProvider('anthropic')).resolves.toEqual({
+            ok: false,
+            provider: 'anthropic',
+            message: 'Configura anthropic prima della verifica.',
+        })
+    })
+
+    it('TOOL-AUTH-25 exposes and cancels an uncertain checkpoint without auto-retry', async () => {
+        const { deps, chatRepository, request } = makeDeps()
+        const createdAt = '2026-07-29T12:00:00.000Z'
+        const input = { title: 'Q2', body: 'Verified.' }
+        await chatRepository.createSession({
+            id: 'session-recovery',
+            title: 'Q2 recovery',
+            active_model_profile_id: 'anthropic:claude-live',
+            created_at: createdAt,
+        })
+        await chatRepository.appendToolActivity({
+            id: 'checkpoint-recovery',
+            session_id: 'session-recovery',
+            message_id: null,
+            operation: 'tool.authorization',
+            status: 'recovery_required',
+            payload: {
+                contract: 'talos.tool.authorization-checkpoint/1',
+                checkpoint: {
+                    schema_version: 1,
+                    id: 'checkpoint-recovery',
+                    session_id: 'session-recovery',
+                    send_identity: {
+                        sendId: 'send-recovery',
+                        sessionId: 'session-recovery',
+                        sessionTitle: 'Q2 recovery',
+                        surface: 'chat',
+                        modelProfileId: 'anthropic:claude-live',
+                        acceptedAt: createdAt,
+                    },
+                    runtime: {
+                        profile_id: 'anthropic:claude-live',
+                        provider: 'anthropic',
+                        model: 'claude-live',
+                    },
+                    loop: {
+                        schema_version: 1,
+                        stage: 'before_tools',
+                        turns: [{ role: 'user', content: 'Create Q2' }],
+                        completion: {
+                            text: '',
+                            toolCalls: [{
+                                id: 'call-recovery',
+                                name: 'document_create',
+                                arguments: JSON.stringify(input),
+                            }],
+                        },
+                    },
+                    phase: 'running_tools',
+                    requests: [{
+                        schema_version: 1,
+                        id: 'request-recovery',
+                        checkpoint_id: 'checkpoint-recovery',
+                        session_id: 'session-recovery',
+                        send_id: 'send-recovery',
+                        model_profile_id: 'anthropic:claude-live',
+                        call_id: 'call-recovery',
+                        tool: 'document_create',
+                        actions: ['write'],
+                        input,
+                        input_digest: await digestTalosToolAuthorizationInput(input),
+                        allow_persistent: true,
+                        decision: 'allow_once',
+                        created_at: createdAt,
+                        decided_at: createdAt,
+                    }],
+                    created_at: createdAt,
+                    updated_at: createdAt,
+                },
+            },
+            evidence: {
+                contract: 'talos.tool.authorization-checkpoint/1',
+                phase: 'running_tools',
+            },
+            created_at: createdAt,
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+
+        expect(controller.toolAuthorizationRecoveries.value).toEqual([
+            expect.objectContaining({
+                checkpoint_id: 'checkpoint-recovery',
+                session_title: 'Q2 recovery',
+                tools: [{
+                    tool: 'document_create',
+                    actions: ['write'],
+                }],
+            }),
+        ])
+        expect(request).not.toHaveBeenCalledWith(expect.objectContaining({
+            url: expect.stringContaining('/v1/messages'),
+        }))
+
+        await controller.cancelToolAuthorization('checkpoint-recovery')
+
+        expect(controller.toolAuthorizationRecoveries.value).toEqual([])
+        expect((await chatRepository.listSessionToolActivities('session-recovery'))[0]?.status)
+            .toBe('cancelled')
+    })
+
+    it('TOOL-AUTH-02 controller persists Italian authorization and releases the foreground send', async () => {
+        const { deps, store, request } = makeDeps()
+        deps.translate = talosTestT('it')
+        store.set('anthropic', 'sk-ant')
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-localized-consent',
+                                name: 'document_create',
+                                input: {
+                                    format: 'md',
+                                    title: 'Rapporto Q2',
+                                    body: 'Contenuto verificabile.',
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Il file non è stato creato.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        const sending = controller.send('crea un markdown chiamato Rapporto Q2')
+
+        await vi.waitFor(
+            () => expect(controller.pendingToolAuthorizations.value).toHaveLength(1),
+            { timeout: 10_000, interval: 20 },
+        )
+        await expect(sending).resolves.toBe(true)
+        expect(providerRound).toBe(1)
+        expect(controller.chat.state.sending).toBe(false)
+        expect(controller.pendingToolAuthorizations.value[0]).toMatchObject({
+            title: 'Crea un documento',
+            description: 'Crea un file reale e lo salva nella Libreria cifrata su questo dispositivo.',
+            input: {
+                format: 'md',
+                title: 'Rapporto Q2',
+                body: 'Contenuto verificabile.',
+            },
+        })
+        expect(controller.pendingToolAuthorizations.value[0]?.title).not.toBe('Create a document')
+
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'deny',
+        )
+
+        expect(providerRound).toBe(2)
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+    }, 15_000)
+
+    it('TOOL-AUTH-24 generated save markers use the durable nonblocking authorization path', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: false,
+                library_autosave_generated: true,
+                debug_diagnostics: false,
+            },
+        })
+        const base = attachmentRuntime(chatRepository).vault
+        const createGenerated = vi.fn(async (input: {
+            name: string
+            mediaType: string
+            text: string
+        }, originSessionId?: string | null) => ({
+            file: {
+                id: 'generated-marker-file',
+                display_name: input.name,
+                media_type: input.mediaType,
+                size_bytes: input.text.length,
+                private_uri: 'talos-vault/files/generated-marker.md',
+                status: 'available' as const,
+                trust: 'untrusted' as const,
+                sha256: 'a'.repeat(64),
+                extracted_text: input.text,
+                failure_code: null,
+                metadata: { origin: 'generated', origin_session_id: originSessionId ?? null },
+                created_at: '2026-07-29T12:00:00.000Z',
+                updated_at: '2026-07-29T12:00:00.000Z',
+            },
+            grant: {
+                id: 'generated-marker-grant',
+                vault_file_id: 'generated-marker-file',
+                permissions: ['model.read'] as const,
+                status: 'active' as const,
+                label: input.name,
+                created_at: '2026-07-29T12:00:00.000Z',
+                updated_at: '2026-07-29T12:00:00.000Z',
+                revoked_at: null,
+            },
+        }))
+        deps.vaultService = { ...base, createGenerated }
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{
+                            type: 'text',
+                            text: 'Report ready.\n[TALOS_SAVE_LIBRARY:Q2.md]\nVerified.\n[/TALOS_SAVE_LIBRARY]',
+                        }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('crea il rapporto Q2')
+
+        expect(createGenerated).not.toHaveBeenCalled()
+        expect(controller.chat.state.sending).toBe(false)
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        expect(controller.pendingToolAuthorizations.value[0]).toMatchObject({
+            tool: 'document_create',
+            actions: ['write'],
+            input: {
+                name: 'Q2.md',
+                mediaType: 'text/markdown',
+                text: 'Verified.',
+            },
+        })
+
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+
+        expect(createGenerated).toHaveBeenCalledWith({
+            name: 'Q2.md',
+            mediaType: 'text/markdown',
+            text: 'Verified.',
+        }, controller.chat.activeSession.value?.id)
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+    }, 15_000)
+
+    it('P1-CTX-AGENT-01/06 confirms an Italian natural-language policy change while Library is off', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        deps.translate = talosTestT('it')
+        store.set('anthropic', 'sk-ant')
+        settings.state.agent_tools.library_context_policy_update = true
+        settings.state.shell = {
+            library_context_enabled: false,
+            library_context_policy: null,
+            library_autosave_generated: false,
+            debug_diagnostics: false,
+        }
+        let providerRound = 0
+        request.mockImplementation(async ({ url, data }: { url: string; data?: unknown }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    expect((data as { tools: Array<{ name: string }> }).tools
+                        .filter((tool) => tool.name.startsWith('library_'))
+                        .map((tool) => tool.name))
+                        .toEqual(['library_context_policy_update'])
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-policy-global',
+                                name: 'library_context_policy_update',
+                                input: {
+                                    action: 'set_enabled',
+                                    scope: 'global',
+                                    enabled: true,
+                                    expected_revision: 0,
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'La Libreria è ora attiva.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        const sending = controller.send('Ativa la libreria x tutte le chat')
+
+        await vi.waitFor(
+            () => expect(controller.pendingToolAuthorizations.value).toHaveLength(1),
+            { timeout: 10_000, interval: 20 },
+        )
+        await expect(sending).resolves.toBe(true)
+        expect(settings.state.shell.library_context_enabled).toBe(false)
+        expect(controller.pendingToolAuthorizations.value[0]).toMatchObject({
+            tool: 'library_context_policy_update',
+            actions: ['write'],
+            allow_persistent: false,
+            title: 'Modifica la policy Libreria',
+        })
+
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+
+        expect(providerRound).toBe(2)
+        expect(settings.state.shell.library_context_enabled).toBe(true)
+        expect(settings.state.shell.library_context_policy).toMatchObject({
+            revision: 1,
+            enabled: true,
+            mode: 'broad_compat_v1',
+        })
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+        const sessionId = controller.chat.activeSession.value!.id
+        expect(await chatRepository.listSessionToolActivities(sessionId))
+            .toContainEqual(expect.objectContaining({
+                operation: 'tool.library_context_policy_update',
+                status: 'succeeded',
+                evidence: expect.objectContaining({
+                    contract: 'talos.library-context-policy-receipt/1',
+                    scope: 'global',
+                    previous_revision: 0,
+                    applied_revision: 1,
+                }),
+            }))
+    }, 15_000)
+
+    it('P1-CTX-AGENT-03/04 preserves chat revision and undo across English multi-turn sends', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        settings.state.agent_tools.library_context_policy_update = true
+        let providerRound = 0
+        let receiptId = ''
+        let finalProviderPayload = ''
+        request.mockImplementation(async ({ url, data }: { url: string; data?: unknown }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-policy-chat',
+                                name: 'library_context_policy_update',
+                                input: {
+                                    action: 'set_mode',
+                                    scope: 'chat',
+                                    mode: 'smart_relevant_v1',
+                                    expected_revision: 0,
+                                },
+                            }],
+                        },
+                    }
+                }
+                if (providerRound === 2) {
+                    receiptId = JSON.stringify(data)
+                        .match(/Undo receipt: ([A-Za-z0-9._:-]+)/)?.[1] ?? ''
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'end_turn',
+                            content: [{
+                                type: 'text',
+                                text: `Chat policy changed. Undo receipt: ${receiptId}.`,
+                            }],
+                        },
+                    }
+                }
+                if (providerRound === 3) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-policy-undo',
+                                name: 'library_context_policy_update',
+                                input: {
+                                    action: 'undo',
+                                    scope: 'chat',
+                                    receipt_id: receiptId,
+                                    expected_revision: 1,
+                                },
+                            }],
+                        },
+                    }
+                }
+                finalProviderPayload = JSON.stringify(data)
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'The prior chat policy is restored.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('Use only relevant Library sources in this chat')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+        expect(controller.chat.activeSession.value?.metadata.library_context_policy)
+            .toMatchObject({
+                revision: 1,
+                enabled: true,
+                mode: 'smart_relevant_v1',
+            })
+
+        await controller.send('Undo that policy change')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+
+        expect(providerRound).toBe(4)
+        expect(receiptId).toMatch(/\.$/)
+        expect(finalProviderPayload).toContain(
+            'Restored the previous chat Library policy',
+        )
+        const persistedSession = (await chatRepository.listSessions())
+            .find((session) => session.id === controller.chat.activeSession.value?.id)
+        expect(persistedSession?.metadata.library_context_policy)
+            .toEqual(expect.objectContaining({
+                revision: 2,
+                enabled: null,
+                mode: null,
+                included_file_ids: [],
+                excluded_file_ids: [],
+            }))
+        expect(controller.chat.activeSession.value?.metadata.library_context_policy)
+            .toEqual(expect.objectContaining({
+                revision: 2,
+                enabled: null,
+                mode: null,
+                included_file_ids: [],
+                excluded_file_ids: [],
+            }))
+    }, 20_000)
+
+    it('P1-CTX-AGENT-07 applies a confirmed turn policy to this response only', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        settings.state.agent_tools.library_context_policy_update = true
+        settings.state.shell = {
+            library_context_enabled: true,
+            library_context_policy: {
+                schema_version: 1,
+                revision: 4,
+                enabled: true,
+                mode: 'agentic_on_demand_v1',
+                included_file_ids: [],
+                excluded_file_ids: [],
+                updated_at: '2026-07-29T16:00:00.000Z',
+            },
+            library_autosave_generated: false,
+            debug_diagnostics: false,
+        }
+        await chatRepository.createVaultFile({
+            id: 'turn-contract',
+            display_name: 'OmniRoute contract.md',
+            media_type: 'text/markdown',
+            size_bytes: 48,
+            private_uri: 'talos-vault/files/turn-contract.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '7'.repeat(64),
+            extracted_text: 'TURN_CONTRACT_SENTINEL OmniRoute expires in March 2027.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T16:00:00.000Z',
+        })
+        await chatRepository.createVaultFile({
+            id: 'turn-garden',
+            display_name: 'Garden notes.md',
+            media_type: 'text/markdown',
+            size_bytes: 32,
+            private_uri: 'talos-vault/files/turn-garden.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '8'.repeat(64),
+            extracted_text: 'TURN_GARDEN_SENTINEL Water basil at dawn.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T16:01:00.000Z',
+        })
+
+        let providerRound = 0
+        const providerPayloads: string[] = []
+        request.mockImplementation(async ({ url, data }: { url: string; data?: unknown }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                providerPayloads.push(JSON.stringify(data))
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-policy-turn',
+                                name: 'library_context_policy_update',
+                                input: {
+                                    action: 'set_mode',
+                                    scope: 'turn',
+                                    mode: 'smart_relevant_v1',
+                                    expected_revision: 0,
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{
+                            type: 'text',
+                            text: providerRound === 2
+                                ? 'OmniRoute expires in March 2027.'
+                                : 'No Library context used.',
+                        }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('For this response use relevant Library sources about OmniRoute')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+
+        expect(providerPayloads[0]).not.toContain('TURN_CONTRACT_SENTINEL')
+        expect(providerPayloads[1]).toContain('TURN_CONTRACT_SENTINEL')
+        expect(providerPayloads[1]).not.toContain('TURN_GARDEN_SENTINEL')
+        expect(settings.state.shell.library_context_policy).toMatchObject({
+            revision: 4,
+            mode: 'agentic_on_demand_v1',
+        })
+        expect(controller.chat.activeSession.value?.metadata.library_context_policy)
+            .toBeUndefined()
+        expect(controller.chat.messages.at(-1)?.metadata).toMatchObject({
+            library_context_receipt: {
+                mode: 'smart_relevant_v1',
+                transmitted_file_ids: ['turn-contract'],
+            },
+            used_library: [{
+                id: 'turn-contract',
+                title: 'OmniRoute contract.md',
+            }],
+        })
+
+        const authorizationActivity = (await chatRepository.listSessionToolActivities(
+            controller.chat.activeSession.value!.id,
+        )).find((activity) => activity.operation === 'tool.authorization')
+        const checkpoint = parseTalosToolAuthorizationCheckpoint(
+            authorizationActivity?.payload.checkpoint,
+        )
+        expect(checkpoint?.phase).toBe('before_model')
+        expect(JSON.stringify(checkpoint?.runtime)).toContain('smart_relevant_v1')
+        expect(JSON.stringify(checkpoint?.loop)).toContain('TURN_CONTRACT_SENTINEL')
+
+        await controller.send('Answer this without Library context')
+        expect(providerPayloads[2]).not.toContain('TURN_CONTRACT_SENTINEL')
+        expect(providerPayloads[2]).not.toContain('TURN_GARDEN_SENTINEL')
+    }, 20_000)
+
+    it('AGENT-TOOLS-06 sends only enabled tool schemas for a natural-language request', async () => {
+        const { deps, store, settings, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        settings.state.agent_tools.library_search = false
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.selectModel('anthropic:claude-live')
+        await controller.send('cerac nella mia libreria il contratto')
+
+        const completion = request.mock.calls
+            .map(([call]) => call)
+            .find((call) => call.url.includes('anthropic.com/v1/messages'))
+        const names = (completion?.data.tools as Array<{ name: string }>).map((tool) => tool.name)
+        expect(names).toContain('library_list')
+        expect(names).not.toContain('library_search')
+    })
+
+    it('P1-CTX-COMPAT-07 LIB-REVOKE-05 denies an offered Library call when access is withdrawn before execution', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        const shell = {
+            library_context_enabled: true,
+            library_autosave_generated: false,
+            debug_diagnostics: false,
+        }
+        Object.assign(settings.state, { shell })
+        const listSummaries = vi.spyOn(chatRepository, 'listVaultFileSummaries')
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    // The schema was legitimately offered. Revoke before the
+                    // provider-returned call reaches the execution boundary.
+                    shell.library_context_enabled = false
+                    listSummaries.mockClear()
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-library-revoked',
+                                name: 'library_list',
+                                input: { origin: 'all', file_type: 'all', page_size: 20 },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Library access was withdrawn.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.selectModel('anthropic:claude-live')
+        await controller.send('elenca tutti i file della mia libreria')
+
+        expect(listSummaries).not.toHaveBeenCalled()
+        const messageCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(JSON.stringify(messageCalls[1]?.data)).toContain('disabled in Agent Tools settings')
+        const activity = await chatRepository.listSessionToolActivities(
+            controller.chat.activeSession.value!.id,
+        )
+        expect(activity).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                operation: 'tool.library_list',
+                status: 'failed',
+                payload: expect.objectContaining({ outcome: 'denied' }),
+            }),
+        ]))
+    })
+
+    it('OPENROUTER-TOOLS-04 keeps a non-tool catalog model on a truthful plain-chat path', async () => {
+        const { deps, store, request } = makeDeps()
+        store.set('openrouter', 'router-key')
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url === 'https://openrouter.ai/api/v1/models') {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{
+                            id: 'vendor/plain',
+                            name: 'Plain model',
+                            architecture: {
+                                input_modalities: ['text'],
+                                output_modalities: ['text'],
+                            },
+                            supported_parameters: [],
+                        }],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/chat/completions') {
+                return {
+                    status: 200,
+                    data: {
+                        model: 'vendor/plain',
+                        choices: [{ message: { content: 'Use a tool-capable model.' }, finish_reason: 'stop' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('stream unavailable')))
+
+        try {
+            const controller = createChatController(deps)
+            await controller.init()
+            await controller.selectModel('openrouter:vendor/plain')
+            await controller.send('salva un file e cerca nella libreria')
+
+            const completion = request.mock.calls
+                .map(([call]) => call)
+                .find((call) => call.url === 'https://openrouter.ai/api/v1/chat/completions')
+            expect(completion?.data).not.toHaveProperty('tools')
+            expect(completion?.data).not.toHaveProperty('tool_choice')
+            const system = completion?.data.messages[0]?.content
+            expect(system).toContain('No TALOS tools are available in this turn')
+            expect(system).not.toContain('library_export')
+            expect(system).not.toContain('[TALOS_SAVE_LIBRARY]')
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    })
+
+    it('P1-LIB-NL-01 answers an Italian browse request through library_list and audits every file', async () => {
+        const { deps, store, settings, chatRepository, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        for (let index = 1; index <= 12; index += 1) {
+            await chatRepository.createVaultFile({
+                id: `generated-library-${index.toString().padStart(2, '0')}`,
+                display_name: `Documento ${index}.md`,
+                media_type: 'text/markdown',
+                size_bytes: 32,
+                private_uri: `talos-vault/files/generated-library-${index}.md`,
+                status: 'available',
+                trust: 'untrusted',
+                sha256: String(index % 10).repeat(64),
+                extracted_text: `Private body ${index} must not enter a metadata-only list.`,
+                failure_code: null,
+                metadata: {
+                    origin: 'generated',
+                    origin_session_id: `origin-chat-${index}`,
+                },
+                created_at: `2026-07-${index.toString().padStart(2, '0')}T12:00:00.000Z`,
+            })
+        }
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-library-list',
+                                name: 'library_list',
+                                input: {
+                                    origin: 'all',
+                                    file_type: 'all',
+                                    page_size: 20,
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{
+                            type: 'text',
+                            text: 'La tua Library contiene 12 file accessibili alla chat.',
+                        }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send(
+            'Mostrami tutti i file della mia libreria, senza cercare una parola specifica.',
+        )
+
+        const messageCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(messageCalls[0].data.tools).toEqual(expect.arrayContaining([
+            expect.objectContaining({ name: 'library_list' }),
+        ]))
+        const secondRound = JSON.stringify(messageCalls[1].data.messages)
+        for (let index = 1; index <= 12; index += 1) {
+            expect(secondRound).toContain(`generated-library-${index.toString().padStart(2, '0')}`)
+        }
+        expect(secondRound).not.toContain('Private body')
+
+        const sessionId = controller.chat.activeSession.value!.id
+        const activity = await chatRepository.listSessionToolActivities(sessionId)
+        expect(activity).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                operation: 'tool.library_list',
+                status: 'succeeded',
+                evidence: expect.objectContaining({
+                    total_size: 12,
+                    returned: 12,
+                    next_page_token: null,
+                }),
+            }),
+        ]))
+        expect(controller.chat.messages.at(-1)?.content).toContain('12 file')
+    })
+
+    it('P2-FILENAME-04 saves a generated image with a whole-grapheme UTF-8 name', async () => {
+        const { deps, store, settings, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('openai', 'sk-openai')
+        Object.assign(settings.state.tools, { write: 'allow', outbound: 'allow' })
+        const prompt = `${'i'.repeat(47)}😀tail`
+        const createGeneratedBinary = vi.fn(async (input: {
+            name: string
+            mediaType: string
+            bytes: Uint8Array
+        }) => {
+            const createdAt = '2026-07-28T10:00:00.000Z'
+            return {
+                file: {
+                    id: 'generated-image',
+                    display_name: input.name,
+                    media_type: input.mediaType,
+                    size_bytes: input.bytes.byteLength,
+                    private_uri: 'talos-vault/files/generated-image.png',
+                    status: 'available' as const,
+                    trust: 'untrusted' as const,
+                    sha256: 'a'.repeat(64),
+                    extracted_text: '',
+                    failure_code: null,
+                    metadata: { origin: 'generated' as const },
+                    created_at: createdAt,
+                    updated_at: createdAt,
+                },
+                grant: {
+                    id: 'generated-image-grant',
+                    vault_file_id: 'generated-image',
+                    permissions: ['browser.upload', 'model.read'] as Array<'browser.upload' | 'model.read'>,
+                    status: 'active' as const,
+                    label: input.name,
+                    created_at: createdAt,
+                    updated_at: createdAt,
+                    revoked_at: null,
+                },
+            }
+        })
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated: vi.fn(),
+            createGeneratedBinary,
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn().mockResolvedValue(undefined),
+            resolveMessageParts: vi.fn().mockResolvedValue([]),
+            readFilePreview: vi.fn().mockResolvedValue(null),
+            readFileText: vi.fn().mockResolvedValue(null),
+            listFiles: vi.fn().mockResolvedValue([]),
+            listSummaries: vi.fn().mockResolvedValue([]),
+            setFileShared: vi.fn().mockResolvedValue(undefined),
+            deleteFile: vi.fn().mockResolvedValue(undefined),
+            reconcilePending: vi.fn().mockResolvedValue(undefined),
+        }
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url === 'https://api.openai.com/v1/models') {
+                return {
+                    status: 200,
+                    data: {
+                        object: 'list',
+                        data: [{ id: 'gpt-image-1', object: 'model', owned_by: 'openai' }],
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-image-name',
+                                name: 'generate_image',
+                                input: { prompt, shape: 'square' },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Image saved.' }],
+                    },
+                }
+            }
+            if (url.endsWith('/images/generations')) {
+                return {
+                    status: 200,
+                    data: { data: [{ b64_json: 'AQID', revised_prompt: prompt }] },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+        vi.stubGlobal('fetch', vi.fn(async () => ({
+            arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+        })))
+
+        try {
+            const controller = createChatController({
+                ...deps,
+                filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+                vaultService,
+            })
+            await controller.init()
+            await controller.selectModel('anthropic:claude-live')
+            await controller.send('crea una immagine')
+
+            expect(createGeneratedBinary).toHaveBeenCalledWith(
+                expect.objectContaining({ name: `${'i'.repeat(47)}.png` }),
+                expect.any(String),
+            )
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    })
+
+    it('SOURCE-FILE-04 saves a requested Python script through a natural-language tool round', async () => {
+        const { deps, store, settings, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        ;(settings.state.tools as { write: 'allow' | 'ask' | 'deny' }).write = 'allow'
+        const body = '# script richiesto\nprint("caffè 你好")\n'
+        const createGeneratedBinary = vi.fn(async (input: {
+            name: string
+            mediaType: string
+            bytes: Uint8Array
+        }) => {
+            const createdAt = '2026-07-28T10:00:00.000Z'
+            return {
+                file: {
+                    id: 'generated-python',
+                    display_name: input.name,
+                    media_type: input.mediaType,
+                    size_bytes: input.bytes.byteLength,
+                    private_uri: 'talos-vault/files/generated-python.py',
+                    status: 'available' as const,
+                    trust: 'untrusted' as const,
+                    sha256: 'b'.repeat(64),
+                    extracted_text: new TextDecoder().decode(input.bytes),
+                    failure_code: null,
+                    metadata: { origin: 'generated' as const },
+                    created_at: createdAt,
+                    updated_at: createdAt,
+                },
+                grant: {
+                    id: 'generated-python-grant',
+                    vault_file_id: 'generated-python',
+                    permissions: ['browser.upload', 'model.read'] as Array<'browser.upload' | 'model.read'>,
+                    status: 'active' as const,
+                    label: input.name,
+                    created_at: createdAt,
+                    updated_at: createdAt,
+                    revoked_at: null,
+                },
+            }
+        })
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated: vi.fn(),
+            createGeneratedBinary,
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn().mockResolvedValue(undefined),
+            resolveMessageParts: vi.fn().mockResolvedValue([]),
+            readFilePreview: vi.fn().mockResolvedValue(null),
+            readFileText: vi.fn().mockResolvedValue(null),
+            listFiles: vi.fn().mockResolvedValue([]),
+            listSummaries: vi.fn().mockResolvedValue([]),
+            setFileShared: vi.fn().mockResolvedValue(undefined),
+            deleteFile: vi.fn().mockResolvedValue(undefined),
+            reconcilePending: vi.fn().mockResolvedValue(undefined),
+        }
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-python-file',
+                                name: 'document_create',
+                                input: {
+                                    format: 'py',
+                                    title: 'patch_mock_gps_iterm.py',
+                                    body,
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Script Python salvato.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController({
+            ...deps,
+            filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+            vaultService,
+        })
+        await controller.init()
+        await controller.send('Salva anche lo script Python nella libreria come patch_mock_gps_iterm.py')
+
+        expect(createGeneratedBinary).toHaveBeenCalledTimes(1)
+        const saved = createGeneratedBinary.mock.calls[0]![0]
+        expect(saved.name).toBe('patch_mock_gps_iterm.py')
+        expect(saved.mediaType).toBe('text/plain')
+        expect(new TextDecoder('utf-8', { fatal: true }).decode(saved.bytes)).toBe(body)
+    })
+
+    it('IMAGE-OR-05 IMAGE-DUR-01/02/03 returns, stores, renders, and reloads an OpenRouter tool image', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('openrouter', 'router-key')
+        Object.assign(settings.state.tools, { write: 'allow', outbound: 'allow' })
+        const createGeneratedBinary = vi.fn(async (input: {
+            name: string
+            mediaType: string
+            bytes: Uint8Array
+        }) => {
+            const createdAt = '2026-07-28T10:00:00.000Z'
+            const file = await chatRepository.createVaultFile({
+                id: 'generated-openrouter-image',
+                display_name: input.name,
+                media_type: input.mediaType,
+                size_bytes: input.bytes.byteLength,
+                private_uri: 'talos-vault/files/generated-openrouter-image.png',
+                status: 'available',
+                trust: 'untrusted',
+                sha256: 'c'.repeat(64),
+                extracted_text: null,
+                failure_code: null,
+                metadata: { origin: 'generated', origin_session_id: 'chat-image' },
+                created_at: createdAt,
+            })
+            const grant = await chatRepository.createFileAuthorityGrant({
+                id: 'generated-openrouter-image-grant',
+                vault_file_id: file.id,
+                permissions: ['browser.upload', 'model.read'],
+                label: input.name,
+                created_at: createdAt,
+            })
+            return { file, grant }
+        })
+        const resolveMessageParts = vi.fn().mockResolvedValue([{
+            type: 'image' as const,
+            attachmentId: 'generated-openrouter-image-binding',
+            name: 'generated.png',
+            mediaType: 'image/png' as const,
+            base64: 'A'.repeat(600),
+            sha256: 'c'.repeat(64),
+        }])
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated: vi.fn(),
+            createGeneratedBinary,
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn().mockResolvedValue(undefined),
+            resolveMessageParts,
+            readFilePreview: vi.fn().mockResolvedValue({
+                bytes: new Uint8Array([1, 2, 3]),
+                mediaType: 'image/png',
+            }),
+            readFileText: vi.fn().mockResolvedValue(null),
+            listFiles: () => chatRepository.listVaultFiles(),
+            listSummaries: async () => (await chatRepository.listVaultFileSummaries())
+                .map(({ text_preview: _preview, ...file }) => ({ ...file, extracted_text: null })),
+            setFileShared: vi.fn().mockResolvedValue(undefined),
+            deleteFile: vi.fn().mockResolvedValue(undefined),
+            reconcilePending: vi.fn().mockResolvedValue(undefined),
+        }
+
+        let chatRound = 0
+        request.mockImplementation(async ({
+            url,
+            method,
+            data,
+        }: {
+            url: string
+            method?: string
+            data?: Record<string, unknown>
+        }) => {
+            if (url === 'https://openrouter.ai/api/v1/models') {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{
+                            id: 'google/gemini-3.6-flash',
+                            name: 'Gemini 3.6 Flash',
+                            architecture: {
+                                input_modalities: ['text', 'image'],
+                                output_modalities: ['text'],
+                            },
+                            supported_parameters: ['tools'],
+                        }],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/images/models') {
+                return {
+                    status: 200,
+                    data: {
+                        data: [
+                            {
+                                id: 'zeta/new-image',
+                                created: 200,
+                                architecture: { input_modalities: ['text'], output_modalities: ['image'] },
+                                supported_parameters: {},
+                            },
+                            {
+                                id: 'google/gemini-3.1-flash-image',
+                                created: 100,
+                                architecture: { input_modalities: ['text'], output_modalities: ['image'] },
+                                supported_parameters: { aspect_ratio: { type: 'enum', values: ['1:1'] } },
+                            },
+                        ],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/images' && method === 'POST') {
+                expect(data).toMatchObject({
+                    model: 'google/gemini-3.1-flash-image',
+                    prompt: 'un gatto astronauta',
+                    n: 1,
+                    output_format: 'png',
+                })
+                return {
+                    status: 200,
+                    data: {
+                        data: [{
+                            b64_json: 'A'.repeat(600),
+                            media_type: 'image/png',
+                        }],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/chat/completions') {
+                chatRound += 1
+                if (chatRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'google/gemini-3.6-flash',
+                            choices: [{
+                                finish_reason: 'tool_calls',
+                                message: {
+                                    content: null,
+                                    tool_calls: [{
+                                        id: 'call-image-openrouter',
+                                        type: 'function',
+                                        function: {
+                                            name: 'generate_image',
+                                            arguments: JSON.stringify({
+                                                prompt: 'un gatto astronauta',
+                                                shape: 'square',
+                                            }),
+                                        },
+                                    }],
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'google/gemini-3.6-flash',
+                        choices: [{ message: { content: 'Immagine salvata.' }, finish_reason: 'stop' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+        vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+            if (String(input).startsWith('data:image/')) {
+                return {
+                    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+                }
+            }
+            throw new TypeError('stream unavailable')
+        }))
+
+        try {
+            const controller = createChatController({
+                ...deps,
+                filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+                vaultService,
+            })
+            await controller.init()
+            await controller.selectModel('openrouter:google/gemini-3.6-flash')
+            await controller.send('genera un gatto astronauta')
+
+            expect(request.mock.calls.some(([call]) =>
+                call.url === 'https://openrouter.ai/api/v1/images/models')).toBe(true)
+            expect(request.mock.calls.some(([call]) =>
+                call.url === 'https://openrouter.ai/api/v1/images')).toBe(true)
+            expect(createGeneratedBinary).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    mediaType: 'image/png',
+                    bytes: new Uint8Array([1, 2, 3]),
+                }),
+                expect.any(String),
+            )
+            const chatRequests = request.mock.calls
+                .map(([call]) => call)
+                .filter((call) => call.url === 'https://openrouter.ai/api/v1/chat/completions')
+            expect(JSON.stringify(chatRequests[1]!.data)).toContain('data:image/png;base64,')
+            expect(controller.chat.messages.find((message) => message.role === 'assistant')?.attachments)
+                .toEqual([expect.objectContaining({
+                    vault_file_id: 'generated-openrouter-image',
+                    display_name: expect.stringMatching(/\.png$/),
+                })])
+
+            const reloaded = createChatController({
+                ...deps,
+                filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+                vaultService,
+            })
+            await reloaded.init()
+            expect(reloaded.chat.messages.find((message) => message.role === 'assistant')?.attachments)
+                .toEqual([expect.objectContaining({ vault_file_id: 'generated-openrouter-image' })])
+
+            resolveMessageParts.mockClear()
+            await reloaded.send('ora rispondi solo ciao')
+            const lastChatRequest = request.mock.calls
+                .map(([call]) => call)
+                .filter((call) => call.url === 'https://openrouter.ai/api/v1/chat/completions')
+                .at(-1)!
+            expect(JSON.stringify(lastChatRequest.data)).not.toContain('data:image/')
+            expect(resolveMessageParts).not.toHaveBeenCalled()
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    })
+
+    it('IMAGE-DUR-FAIL-02 controller never persists, renders, or regenerates an image after the Vault rejects it', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('openrouter', 'router-key')
+        Object.assign(settings.state.tools, { write: 'allow', outbound: 'allow' })
+        const createGeneratedBinary = vi.fn()
+            .mockRejectedValue(new Error('TALOS_PRIVATE_STORAGE_WRITE_FAILED'))
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated: vi.fn(),
+            createGeneratedBinary,
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn().mockResolvedValue(undefined),
+            resolveMessageParts: vi.fn().mockResolvedValue([]),
+            readFilePreview: vi.fn().mockResolvedValue(null),
+            readFileText: vi.fn().mockResolvedValue(null),
+            listFiles: () => chatRepository.listVaultFiles(),
+            listSummaries: async () => (await chatRepository.listVaultFileSummaries())
+                .map(({ text_preview: _preview, ...file }) => ({ ...file, extracted_text: null })),
+            setFileShared: vi.fn().mockResolvedValue(undefined),
+            deleteFile: vi.fn().mockResolvedValue(undefined),
+            reconcilePending: vi.fn().mockResolvedValue(undefined),
+        }
+
+        let chatRound = 0
+        request.mockImplementation(async ({
+            url,
+            method,
+        }: {
+            url: string
+            method?: string
+        }) => {
+            if (url === 'https://openrouter.ai/api/v1/models') {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{
+                            id: 'google/gemini-3.6-flash',
+                            name: 'Gemini 3.6 Flash',
+                            architecture: {
+                                input_modalities: ['text', 'image'],
+                                output_modalities: ['text'],
+                            },
+                            supported_parameters: ['tools'],
+                        }],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/images/models') {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{
+                            id: 'google/gemini-3.1-flash-image',
+                            created: 100,
+                            architecture: {
+                                input_modalities: ['text'],
+                                output_modalities: ['image'],
+                            },
+                            supported_parameters: {
+                                aspect_ratio: { type: 'enum', values: ['1:1'] },
+                            },
+                        }],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/images' && method === 'POST') {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{
+                            b64_json: 'A'.repeat(600),
+                            media_type: 'image/png',
+                        }],
+                    },
+                }
+            }
+            if (url === 'https://openrouter.ai/api/v1/chat/completions') {
+                chatRound += 1
+                if (chatRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'google/gemini-3.6-flash',
+                            choices: [{
+                                finish_reason: 'tool_calls',
+                                message: {
+                                    content: null,
+                                    tool_calls: [{
+                                        id: 'call-image-storage-failure',
+                                        type: 'function',
+                                        function: {
+                                            name: 'generate_image',
+                                            arguments: JSON.stringify({
+                                                prompt: 'un gatto astronauta',
+                                                shape: 'square',
+                                            }),
+                                        },
+                                    }],
+                                },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'google/gemini-3.6-flash',
+                        choices: [{
+                            message: {
+                                content: 'Immagine non disponibile: il salvataggio locale non è riuscito.',
+                            },
+                            finish_reason: 'stop',
+                        }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+        vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+            if (String(input).startsWith('data:image/')) {
+                return {
+                    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+                }
+            }
+            throw new TypeError('stream unavailable')
+        }))
+
+        try {
+            const controller = createChatController({
+                ...deps,
+                filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+                vaultService,
+            })
+            await controller.init()
+            await controller.selectModel('openrouter:google/gemini-3.6-flash')
+            await controller.send('genera un gatto astronauta')
+
+            const imageRequests = request.mock.calls
+                .map(([call]) => call)
+                .filter((call) => call.url === 'https://openrouter.ai/api/v1/images')
+            const chatRequests = request.mock.calls
+                .map(([call]) => call)
+                .filter((call) => call.url === 'https://openrouter.ai/api/v1/chat/completions')
+            const persisted = JSON.stringify(controller.chat.messages)
+
+            expect(imageRequests).toHaveLength(1)
+            expect(createGeneratedBinary).toHaveBeenCalledTimes(1)
+            expect(chatRequests).toHaveLength(2)
+            expect(JSON.stringify(chatRequests[1]!.data)).toContain('TALOS_IMAGE_PERSIST_FAILED')
+            expect(JSON.stringify(chatRequests[1]!.data)).not.toContain('data:image/')
+            expect(persisted).not.toContain('data:image/')
+            expect(persisted).not.toContain('A'.repeat(600))
+            expect(controller.chat.messages.find((message) => message.role === 'assistant')
+                ?.attachments ?? []).toEqual([])
+            await expect(chatRepository.listVaultFiles()).resolves.toEqual([])
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    })
+
+    it('exports an existing Library file through a realistic natural-language tool round', async () => {
+        deviceFileSave.saveTalosVaultFileToDevice.mockReset()
+        const { deps, store, settings, chatRepository, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        ;(settings.state.tools as { write: 'allow' | 'ask' | 'deny' }).write = 'allow'
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.createVaultFile({
+            id: 'vault-export',
+            display_name: 'Quarterly Report.pdf',
+            media_type: 'application/pdf',
+            size_bytes: 3,
+            private_uri: 'talos-vault/files/vault-export.pdf',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'a'.repeat(64),
+            extracted_text: 'private report',
+            failure_code: null,
+            metadata: { origin: 'generated' },
+            created_at: '2026-07-28T10:00:00.000Z',
+        })
+        const bytes = new Uint8Array([1, 2, 3])
+        const readFilePreview = vi.fn(async () => ({
+            bytes,
+            mediaType: 'application/pdf',
+        }))
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated: vi.fn(),
+            createGeneratedBinary: vi.fn(),
+            readFilePreview,
+            readFileText: vi.fn(async () => 'private report'),
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn(),
+            resolveMessageParts: vi.fn(async () => []),
+            listFiles: vi.fn(() => chatRepository.listVaultFiles()),
+            listSummaries: vi.fn(() => chatRepository.listVaultFiles()),
+            setFileShared: vi.fn(),
+            deleteFile: vi.fn(),
+            reconcilePending: vi.fn(),
+        }
+        deviceFileSave.saveTalosVaultFileToDevice.mockResolvedValueOnce({
+            status: 'saved',
+            delivery: 'android-saf',
+            bytesWritten: 3,
+            displayName: 'Quarterly Report.pdf',
+        })
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-export-1',
+                                name: 'library_export',
+                                input: { reference: 'Quarterly Report.pdf' },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Saved to the location you chose.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController({
+            ...deps,
+            filePicker: { pickFiles: vi.fn(async () => []) },
+            vaultService,
+        })
+        await controller.init()
+        await controller.send('salva Quarterly Report.pdf nella memoria del telefono')
+
+        expect(readFilePreview).toHaveBeenCalledWith('vault-export')
+        expect(deviceFileSave.saveTalosVaultFileToDevice).toHaveBeenCalledWith({
+            displayName: 'Quarterly Report.pdf',
+            mediaType: 'application/pdf',
+            bytes,
+        })
+        const messageCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(messageCalls[0].data.system).toContain('private Library')
+        expect(messageCalls[0].data.system).toContain('library_export')
+
+        const sessionId = controller.chat.activeSession.value!.id
+        const activity = await chatRepository.listSessionToolActivities(sessionId)
+        expect(activity).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                operation: 'tool.library_export',
+                status: 'succeeded',
+                evidence: expect.objectContaining({
+                    library_file_id: 'vault-export',
+                    bytes: 3,
+                    delivery: 'android-saf',
+                }),
+            }),
+        ]))
+        expect(controller.chat.messages.at(-1)?.content).toContain('Saved to the location you chose')
+    })
+
+    it('finds a generated PDF from a typoed natural-language Library request without inventing uploaded matches', async () => {
+        const { deps, store, settings, chatRepository, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+
+        for (let index = 1; index <= 4; index += 1) {
+            await chatRepository.createVaultFile({
+                id: `uploaded-photo-${index}`,
+                display_name: `IMG_2026072${index}.jpg`,
+                media_type: 'image/jpeg',
+                size_bytes: 3,
+                private_uri: `talos-vault/files/uploaded-photo-${index}.jpg`,
+                status: 'available',
+                trust: 'untrusted',
+                sha256: String(index).repeat(64),
+                extracted_text: null,
+                failure_code: null,
+                metadata: { origin: 'uploaded', origin_session_id: `photo-chat-${index}` },
+                created_at: `2026-07-28T14:0${index}:00.000Z`,
+            })
+        }
+        await chatRepository.createVaultFile({
+            id: 'vault-ds4',
+            display_name: 'ds4-inference-engine-antirez.pdf',
+            media_type: 'application/pdf',
+            size_bytes: 58,
+            private_uri: 'talos-vault/files/vault-ds4.pdf',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'd'.repeat(64),
+            extracted_text: 'DwarfStar 4 is an inference engine by Salvatore Sanfilippo.',
+            failure_code: null,
+            metadata: { origin: 'generated', origin_session_id: 'research-chat' },
+            created_at: '2026-07-28T14:30:00.000Z',
+        })
+
+        const readFileText = vi.fn(async (id: string) => (
+            id === 'vault-ds4'
+                ? 'DwarfStar 4 is an inference engine by Salvatore Sanfilippo.'
+                : null
+        ))
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated: vi.fn(),
+            createGeneratedBinary: vi.fn(),
+            readFilePreview: vi.fn(async () => null),
+            readFileText,
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn(),
+            resolveMessageParts: vi.fn(async () => []),
+            listFiles: vi.fn(() => chatRepository.listVaultFiles()),
+            listSummaries: vi.fn(() => chatRepository.listVaultFiles()),
+            setFileShared: vi.fn(),
+            deleteFile: vi.fn(),
+            reconcilePending: vi.fn(),
+        }
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-library-search',
+                                name: 'library_search',
+                                input: {
+                                    query: 'ds4 inference engine Salvatore Sanfilippo antirez',
+                                    limit: 5,
+                                },
+                            }],
+                        },
+                    }
+                }
+                if (providerRound === 2) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-library-read',
+                                name: 'library_read',
+                                input: { id: 'vault-ds4' },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{
+                            type: 'text',
+                            text: 'Ho trovato e letto il PDF ds4 già presente nella tua Library.',
+                        }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController({
+            ...deps,
+            filePicker: { pickFiles: vi.fn(async () => []) },
+            vaultService,
+        })
+        await controller.init()
+        await controller.send('puoi cercare ancora il pfd ds4 nella libreria?')
+
+        const messageCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        // Generated files are reachable only after an explicit tool call; they
+        // are still excluded from the automatic ambient context.
+        expect(JSON.stringify(messageCalls[0].data.messages)).not.toContain('vault-ds4')
+        expect(JSON.stringify(messageCalls[0].data.messages)).not.toContain(
+            'DwarfStar 4 is an inference engine by Salvatore Sanfilippo.',
+        )
+        expect(JSON.stringify(messageCalls[1].data.messages)).toContain('vault-ds4')
+        expect(JSON.stringify(messageCalls[1].data.messages)).toContain('origin: generated')
+        expect(JSON.stringify(messageCalls[1].data.messages)).not.toContain('uploaded-photo-')
+        expect(JSON.stringify(messageCalls[2].data.messages)).toContain(
+            'DwarfStar 4 is an inference engine by Salvatore Sanfilippo.',
+        )
+        expect(JSON.stringify(messageCalls[2].data.messages)).toContain(
+            'TALOS_TOOL_RESULT (untrusted data',
+        )
+        expect(readFileText).toHaveBeenCalledWith('vault-ds4')
+
+        const sessionId = controller.chat.activeSession.value!.id
+        const activity = await chatRepository.listSessionToolActivities(sessionId)
+        expect(activity).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                operation: 'tool.library_search',
+                status: 'succeeded',
+                evidence: expect.objectContaining({
+                    matched: ['vault-ds4'],
+                    matched_total: 1,
+                }),
+            }),
+            expect.objectContaining({
+                operation: 'tool.library_read',
+                status: 'succeeded',
+                evidence: expect.objectContaining({ id: 'vault-ds4' }),
+            }),
+        ]))
+        expect(controller.chat.messages.at(-1)?.content).toContain('già presente')
+    })
+
     it('BR-A8 waits for an in-flight persistence bootstrap before enabling Browse', async () => {
         const { deps, chatRepository } = makeDeps()
         let releaseInitialization!: () => void
@@ -493,6 +2503,268 @@ describe('chatController', () => {
         expect(controller.chat.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'pong' })
     })
 
+    it('P1-CTX-ISO-03 R8-A-SEND-01 rejects a second send while the first Library preflight is pending', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'preflight-file',
+            display_name: 'preflight.md',
+            media_type: 'text/markdown',
+            size_bytes: 16,
+            private_uri: 'talos-vault/files/preflight.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'c'.repeat(64),
+            extracted_text: 'PREFLIGHT_SENTINEL',
+            failure_code: null,
+            metadata: { origin: 'uploaded' },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const listStarted = deferred()
+        const releaseList = deferred()
+        const listSummaries = chatRepository.listVaultFileSummaries.bind(chatRepository)
+        vi.spyOn(chatRepository, 'listVaultFileSummaries').mockImplementationOnce(async () => {
+            listStarted.resolve()
+            await releaseList.promise
+            return listSummaries()
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+
+        const first = controller.send('first owner turn')
+        await listStarted.promise
+        const sendingDuringPreflight = controller.chat.state.sending
+        const secondAccepted = await controller.send('must be rejected')
+        releaseList.resolve()
+        const firstAccepted = await first
+
+        expect(sendingDuringPreflight).toBe(true)
+        expect(firstAccepted).toBe(true)
+        expect(secondAccepted).toBe(false)
+        expect(controller.chat.messages.filter((message) => message.role === 'user').map((message) => message.content))
+            .toEqual(['first owner turn'])
+        expect(request.mock.calls.filter(([call]) => call.url.includes('/v1/messages'))).toHaveLength(1)
+    })
+
+    it('P1-CTX-ISO-04 R8-A-SEND-02 keeps a preflight send owned by its accepted session after navigation', async () => {
+        const { deps, store, settings, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'session-owner-file',
+            display_name: 'owner.md',
+            media_type: 'text/markdown',
+            size_bytes: 12,
+            private_uri: 'talos-vault/files/owner.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'd'.repeat(64),
+            extracted_text: 'OWNER_SENTINEL',
+            failure_code: null,
+            metadata: { origin: 'uploaded' },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.newSession()
+        const owner = controller.chat.activeSession.value!
+        await controller.newSession()
+        const destination = controller.chat.activeSession.value!
+        await controller.selectSession(owner.id)
+
+        const listStarted = deferred()
+        const releaseList = deferred()
+        const listSummaries = chatRepository.listVaultFileSummaries.bind(chatRepository)
+        vi.spyOn(chatRepository, 'listVaultFileSummaries').mockImplementationOnce(async () => {
+            listStarted.resolve()
+            await releaseList.promise
+            return listSummaries()
+        })
+
+        const pending = controller.send('belongs to owner')
+        await listStarted.promise
+        await controller.selectSession(destination.id)
+        releaseList.resolve()
+        await expect(pending).resolves.toBe(true)
+
+        const ownerMessages = await chatRepository.listMessages(owner.id)
+        const destinationMessages = await chatRepository.listMessages(destination.id)
+        expect(ownerMessages.map((message) => message.content)).toEqual(['belongs to owner', 'pong'])
+        expect(destinationMessages).toEqual([])
+        expect(controller.chat.activeSession.value?.id).toBe(destination.id)
+        expect(controller.chat.messages).toEqual([])
+    })
+
+    it('P1-CTX-ISO-04 binds tool execution and audit to the accepted session after navigation', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                return providerRound === 1
+                    ? {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-owner-list',
+                                name: 'library_list',
+                                input: { origin: 'all', file_type: 'all', page_size: 20 },
+                            }],
+                        },
+                    }
+                    : {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'end_turn',
+                            content: [{ type: 'text', text: 'owner tool complete' }],
+                        },
+                    }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.newSession()
+        const owner = controller.chat.activeSession.value!
+        await controller.newSession()
+        const destination = controller.chat.activeSession.value!
+        await controller.selectSession(owner.id)
+
+        const listStarted = deferred()
+        const releaseList = deferred()
+        const listSummaries = chatRepository.listVaultFileSummaries.bind(chatRepository)
+        vi.spyOn(chatRepository, 'listVaultFileSummaries').mockImplementationOnce(async () => {
+            listStarted.resolve()
+            await releaseList.promise
+            return listSummaries()
+        })
+
+        const pending = controller.send('list files for owner')
+        await listStarted.promise
+        await controller.selectSession(destination.id)
+        releaseList.resolve()
+        await expect(pending).resolves.toBe(true)
+
+        expect(await chatRepository.listSessionToolActivities(owner.id)).toEqual([
+            expect.objectContaining({
+                operation: 'tool.library_list',
+                status: 'succeeded',
+            }),
+        ])
+        expect(await chatRepository.listSessionToolActivities(destination.id)).toEqual([])
+        expect((await chatRepository.listMessages(owner.id)).map((message) => message.content))
+            .toEqual(['list files for owner', 'owner tool complete'])
+        expect(await chatRepository.listMessages(destination.id)).toEqual([])
+        expect(controller.chat.activeSession.value?.id).toBe(destination.id)
+        expect(controller.chat.messages).toEqual([])
+    })
+
+    it('P1-CTX-COMPAT-10 P1-CTX-ISO-05 R8-A-SEND-03 freezes model and Library sources for the accepted send only', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'frozen-source',
+            display_name: 'frozen.md',
+            media_type: 'text/markdown',
+            size_bytes: 13,
+            private_uri: 'talos-vault/files/frozen.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'e'.repeat(64),
+            extracted_text: 'FROZEN_SOURCE',
+            failure_code: null,
+            metadata: { origin: 'uploaded' },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.selectModel('anthropic:claude-live')
+        await controller.newSession()
+
+        const listStarted = deferred()
+        const releaseList = deferred()
+        const listSummaries = chatRepository.listVaultFileSummaries.bind(chatRepository)
+        vi.spyOn(chatRepository, 'listVaultFileSummaries').mockImplementationOnce(async () => {
+            listStarted.resolve()
+            await releaseList.promise
+            return listSummaries()
+        })
+
+        const pending = controller.send('frozen model turn')
+        await listStarted.promise
+        await controller.selectModel('gemini:gemini-live')
+        releaseList.resolve()
+        await expect(pending).resolves.toBe(true)
+
+        const anthropicCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        const geminiGenerationCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('gemini-live:'))
+        expect(anthropicCalls).toHaveLength(1)
+        expect(JSON.stringify(anthropicCalls[0]?.data)).toContain('FROZEN_SOURCE')
+        expect(geminiGenerationCalls).toHaveLength(0)
+
+        const persistedUser = controller.chat.messages.find((message) => message.role === 'user')
+        expect(persistedUser).toMatchObject({
+            content: 'frozen model turn',
+            model_profile_id: 'anthropic:claude-live',
+            metadata: {
+                used_library: [
+                    expect.objectContaining({ id: 'frozen-source', trust_level: 'untrusted' }),
+                ],
+            },
+        })
+        expect(controller.selectedModelId.value).toBe('gemini:gemini-live')
+        expect(controller.chat.activeSession.value?.active_model_profile_id).toBe('gemini:gemini-live')
+    })
+
     // F4 Memory station — active memories inject the desktop-identical
     // untrusted block into the PROVIDER payload only; the persisted message
     // stays verbatim, the disclosure lands in its metadata, and used
@@ -552,7 +2824,800 @@ describe('chatController', () => {
         expect(touched?.last_used_at).not.toBeNull()
     })
 
-    it('reconciles the Vault and sends a granted attachment through the durable provider pipeline', async () => {
+    it('P1-CTX-COMPAT-05 injects uploaded Library text only and keeps the persisted user turn verbatim', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'uploaded-ambient',
+            display_name: 'uploaded-ambient.md',
+            media_type: 'text/markdown',
+            size_bytes: 32,
+            private_uri: 'talos-vault/files/uploaded-ambient.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'a'.repeat(64),
+            extracted_text: 'UPLOADED_AMBIENT_SENTINEL',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-23T10:00:00.000Z',
+        })
+        await chatRepository.createVaultFile({
+            id: 'generated-ambient',
+            display_name: 'generated-ambient.md',
+            media_type: 'text/markdown',
+            size_bytes: 33,
+            private_uri: 'talos-vault/files/generated-ambient.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: 'b'.repeat(64),
+            extracted_text: 'GENERATED_AMBIENT_SENTINEL',
+            failure_code: null,
+            metadata: { origin: 'generated', library_shared: true },
+            created_at: '2026-07-23T10:00:01.000Z',
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.send('Use only relevant context.')
+
+        const providerCall = request.mock.calls.find(([call]) => call.url.includes('/v1/messages'))
+        const providerBody = JSON.stringify(providerCall?.[0].data)
+        expect(providerBody).toContain('UPLOADED_AMBIENT_SENTINEL')
+        expect(providerBody).not.toContain('GENERATED_AMBIENT_SENTINEL')
+
+        const persistedUser = controller.chat.messages.find((message) => message.role === 'user')
+        expect(persistedUser?.content).toBe('Use only relevant context.')
+        expect(persistedUser?.metadata?.used_library).toEqual([
+            expect.objectContaining({
+                id: 'uploaded-ambient',
+                origin: 'uploaded',
+                trust_level: 'untrusted',
+            }),
+        ])
+    })
+
+    it('P1-CTX-ISO-02 corrects one iTerm pivot from the immutable OmniRoute snapshot, then abstains', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: null,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                const text = providerRound === 1
+                    ? 'OmniRouter può indicare più prodotti.'
+                    : providerRound === 2
+                        ? 'Il secondo è OmniRoute, il componente di routing.'
+                        : providerRound === 4
+                            ? 'OmniRoute coordina il routing coerente tra i servizi.'
+                            : 'Dal documento caricato: iTerm può simulare una posizione con mock GPS.'
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('stream unavailable')))
+
+        try {
+            const controller = createChatController(deps)
+            await controller.init()
+            request.mockClear()
+            await controller.send('Parlami di omnirouter')
+            await controller.send('Il secondo')
+            await createBroadAnswerGuardDocuments(chatRepository)
+
+            await controller.send('Si spiegami')
+
+            let providerCalls = request.mock.calls
+                .map(([call]) => call)
+                .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+            expect(providerCalls).toHaveLength(4)
+            const firstGuardPayload = JSON.stringify(providerCalls[2]?.data.messages)
+            expect(firstGuardPayload).toContain('OMNIROUTE_GUARD_SENTINEL')
+            expect(firstGuardPayload).toContain('ITERM_GPS_GUARD_SENTINEL')
+            expect(firstGuardPayload.indexOf('Same-session user topic anchor'))
+                .toBeLessThan(firstGuardPayload.indexOf('LIBRARY DOC 1'))
+            expect(firstGuardPayload.indexOf('LIBRARY DOC 1'))
+                .toBeLessThan(firstGuardPayload.lastIndexOf('USER_TASK'))
+            expect(providerCalls[3]?.data).not.toHaveProperty('tools')
+            const firstMessages = providerCalls[2]?.data.messages as unknown[]
+            const correctionMessages = providerCalls[3]?.data.messages as unknown[]
+            expect(correctionMessages).toHaveLength(firstMessages.length)
+            expect(correctionMessages.slice(0, -1)).toEqual(firstMessages.slice(0, -1))
+            const correctionPayload = JSON.stringify(correctionMessages)
+            expect(correctionPayload).toContain('TALOS_LIBRARY_TOPIC_CORRECTION')
+            expect(correctionPayload).toContain('OMNIROUTE_GUARD_SENTINEL')
+            expect(correctionPayload).toContain('ITERM_GPS_GUARD_SENTINEL')
+
+            let assistant = controller.chat.messages
+                .filter((message) => message.role === 'assistant')
+                .at(-1)
+            expect(assistant?.content).toContain('OmniRoute')
+            expect(assistant?.content).not.toContain('iTerm')
+            expect(assistant?.metadata.library_answer_guard).toMatchObject({
+                contract: 'talos.library-answer-guard/1',
+                outcome: 'corrected',
+                correction_attempts: 1,
+                first_draft_score: 0,
+            })
+            expect((assistant?.metadata.library_answer_guard as { correction_score: number })
+                .correction_score).toBeGreaterThan(0)
+
+            await controller.send('E poi?')
+
+            providerCalls = request.mock.calls
+                .map(([call]) => call)
+                .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+            expect(providerCalls).toHaveLength(6)
+            expect(providerCalls[5]?.data).not.toHaveProperty('tools')
+            assistant = controller.chat.messages
+                .filter((message) => message.role === 'assistant')
+                .at(-1)
+            expect(assistant?.content).toBe(
+                'I could not produce a reliable answer that stayed on the current conversation topic. '
+                + 'Please rephrase the question or name the source to use.',
+            )
+            expect(assistant?.metadata.library_answer_guard).toMatchObject({
+                contract: 'talos.library-answer-guard/1',
+                outcome: 'abstained',
+                correction_attempts: 1,
+                first_draft_score: 0,
+                correction_score: 0,
+            })
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    }, 20_000)
+
+    it('P1-CTX-ISO-07 never adds inference after a relevant answer or an executed tool action', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: null,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (!url.includes('anthropic.com/v1/messages')) {
+                return { status: 500, data: { error: { message: 'unexpected test request' } } }
+            }
+            providerRound += 1
+            if (providerRound === 4) {
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'tool_use',
+                        content: [{
+                            type: 'tool_use',
+                            id: 'toolu-guard-time',
+                            name: 'time_now',
+                            input: {},
+                        }],
+                    },
+                }
+            }
+            const text = providerRound === 1
+                ? 'OmniRouter può indicare più prodotti.'
+                : providerRound === 2
+                    ? 'Il secondo è OmniRoute.'
+                    : providerRound === 3
+                        ? 'OmniRoute coordina il routing tra servizi.'
+                        : 'iTerm e mock GPS sono un altro argomento.'
+            return {
+                status: 200,
+                data: {
+                    model: 'claude-live',
+                    stop_reason: 'end_turn',
+                    content: [{ type: 'text', text }],
+                },
+            }
+        })
+        vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('stream unavailable')))
+
+        try {
+            const controller = createChatController(deps)
+            await controller.init()
+            request.mockClear()
+            await controller.send('Parlami di omnirouter')
+            await controller.send('Il secondo')
+            await createBroadAnswerGuardDocuments(chatRepository)
+
+            await controller.send('Si spiegami')
+            expect(providerRound).toBe(3)
+            expect(controller.chat.messages.filter((message) => message.role === 'assistant').at(-1)
+                ?.metadata.library_answer_guard).toBeUndefined()
+
+            await controller.send('E a che ora?')
+            expect(providerRound).toBe(5)
+            const activity = await chatRepository.listSessionToolActivities(
+                controller.chat.activeSession.value!.id,
+            )
+            expect(activity.filter((entry) => entry.operation === 'tool.time_now'))
+                .toHaveLength(1)
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    }, 20_000)
+
+    it('P1-CTX-ISO-07 exposes a failed guarded stream once and never corrects after its partial', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: null,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (!url.includes('anthropic.com/v1/messages')) {
+                return { status: 500, data: { error: { message: 'unexpected test request' } } }
+            }
+            providerRound += 1
+            return {
+                status: 200,
+                data: {
+                    model: 'claude-live',
+                    stop_reason: 'end_turn',
+                    content: [{
+                        type: 'text',
+                        text: providerRound === 1
+                            ? 'OmniRouter può indicare più prodotti.'
+                            : 'Il secondo è OmniRoute.',
+                    }],
+                },
+            }
+        })
+        let guardedStream = false
+        let guardedFetches = 0
+        const encoder = new TextEncoder()
+        vi.stubGlobal('fetch', vi.fn(async () => {
+            if (!guardedStream) throw new TypeError('stream unavailable')
+            guardedFetches += 1
+            let emitted = false
+            return new Response(new ReadableStream<Uint8Array>({
+                pull(controller) {
+                    if (!emitted) {
+                        emitted = true
+                        controller.enqueue(encoder.encode(
+                            'data: {"type":"content_block_delta","delta":'
+                            + '{"type":"text_delta","text":"Risposta parziale iTerm"}}\n\n',
+                        ))
+                        return
+                    }
+                    controller.error(new Error('connection reset'))
+                },
+            }), {
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+            })
+        }))
+
+        try {
+            const controller = createChatController(deps)
+            await controller.init()
+            request.mockClear()
+            await controller.send('Parlami di omnirouter')
+            await controller.send('Il secondo')
+            await createBroadAnswerGuardDocuments(chatRepository)
+
+            guardedStream = true
+            await controller.send('Si spiegami')
+
+            expect(guardedFetches).toBe(1)
+            expect(providerRound).toBe(2)
+            const assistant = controller.chat.messages
+                .filter((message) => message.role === 'assistant')
+                .at(-1)
+            expect(assistant?.content).toBe('Risposta parziale iTerm')
+            expect(assistant?.metadata.interrupted).toBe(true)
+            expect(assistant?.metadata.library_answer_guard).toBeUndefined()
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    }, 20_000)
+
+    it('P1-CTX-ISO-07 never corrects a guarded request after the user aborts it', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: null,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (!url.includes('anthropic.com/v1/messages')) {
+                return { status: 500, data: { error: { message: 'unexpected test request' } } }
+            }
+            providerRound += 1
+            return {
+                status: 200,
+                data: {
+                    model: 'claude-live',
+                    stop_reason: 'end_turn',
+                    content: [{
+                        type: 'text',
+                        text: providerRound === 1
+                            ? 'OmniRouter può indicare più prodotti.'
+                            : 'Il secondo è OmniRoute.',
+                    }],
+                },
+            }
+        })
+        let guardedStream = false
+        let guardedFetches = 0
+        const streamStarted = deferred()
+        vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+            if (!guardedStream) throw new TypeError('stream unavailable')
+            guardedFetches += 1
+            return new Response(new ReadableStream<Uint8Array>({
+                start(controller) {
+                    streamStarted.resolve()
+                    init?.signal?.addEventListener('abort', () => {
+                        controller.error(new DOMException('Aborted', 'AbortError'))
+                    }, { once: true })
+                },
+            }), {
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+            })
+        }))
+
+        try {
+            const controller = createChatController(deps)
+            await controller.init()
+            request.mockClear()
+            await controller.send('Parlami di omnirouter')
+            await controller.send('Il secondo')
+            await createBroadAnswerGuardDocuments(chatRepository)
+
+            guardedStream = true
+            const sending = controller.send('Si spiegami')
+            await streamStarted.promise
+            controller.chat.stopStreaming()
+            await sending
+
+            expect(guardedFetches).toBe(1)
+            expect(providerRound).toBe(2)
+            expect(controller.chat.state.sending).toBe(false)
+            expect(controller.chat.messages
+                .filter((message) => message.role === 'system')
+                .map((message) => message.content)).toEqual([])
+        } finally {
+            vi.unstubAllGlobals()
+        }
+    }, 20_000)
+
+    it('P1-CTX-SMART-01 applies one turn override once, then restores broad compatibility', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: {
+                    schema_version: 1,
+                    revision: 4,
+                    enabled: true,
+                    mode: 'broad_compat_v1',
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: '2026-07-29T10:00:00.000Z',
+                },
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'smart-omniroute',
+            display_name: 'Contratto OmniRoute.md',
+            media_type: 'text/markdown',
+            size_bytes: 64,
+            private_uri: 'talos-vault/files/smart-omniroute.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '1'.repeat(64),
+            extracted_text: 'OMNIROUTE_SENTINEL Il contratto OmniRoute scade nel marzo 2027.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        await chatRepository.createVaultFile({
+            id: 'smart-garden',
+            display_name: 'Garden notes.md',
+            media_type: 'text/markdown',
+            size_bytes: 64,
+            private_uri: 'talos-vault/files/smart-garden.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '2'.repeat(64),
+            extracted_text: 'GARDEN_SENTINEL Water the basil every morning.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:01.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        request.mockClear()
+
+        await controller.send('Quando scade OmniRoute?', {
+            mode: 'smart_relevant_v1',
+        })
+        await controller.send('Second broad turn')
+
+        const providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(JSON.stringify(providerCalls[0]?.data)).toContain('OMNIROUTE_SENTINEL')
+        expect(JSON.stringify(providerCalls[0]?.data)).not.toContain('GARDEN_SENTINEL')
+        expect(JSON.stringify(providerCalls[1]?.data)).toContain('OMNIROUTE_SENTINEL')
+        expect(JSON.stringify(providerCalls[1]?.data)).toContain('GARDEN_SENTINEL')
+
+        const users = controller.chat.messages.filter((message) => message.role === 'user')
+        expect(users[0]?.metadata.library_context_receipt).toMatchObject({
+            mode: 'smart_relevant_v1',
+            candidate_file_ids: ['smart-omniroute'],
+            transmitted_file_ids: ['smart-omniroute'],
+        })
+        expect(users[1]?.metadata.library_context_receipt).toMatchObject({
+            mode: 'broad_compat_v1',
+            candidate_file_ids: expect.arrayContaining(['smart-omniroute', 'smart-garden']),
+        })
+    })
+
+    it('P1-CTX-ASK-01/02 yields a durable nonblocking checkpoint before ambient egress', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        const policy = {
+            schema_version: 1 as const,
+            revision: 1,
+            enabled: true,
+            mode: 'ask_before_use_v1' as const,
+            included_file_ids: [],
+            excluded_file_ids: [],
+            updated_at: '2026-07-29T10:00:00.000Z',
+        }
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: policy,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'consent-omniroute',
+            display_name: 'OmniRoute renewal.md',
+            media_type: 'text/markdown',
+            size_bytes: 48,
+            private_uri: 'talos-vault/files/consent-omniroute.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '3'.repeat(64),
+            extracted_text: 'CONSENT_SENTINEL OmniRoute renewal is March 2027.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        request.mockClear()
+
+        const sending = controller.send('When is OmniRoute renewed?')
+        await vi.waitFor(
+            () => expect(controller.pendingToolAuthorizations.value).toHaveLength(1),
+            { timeout: 10_000, interval: 20 },
+        )
+        await expect(sending).resolves.toBe(true)
+
+        expect(request.mock.calls.filter(
+            ([call]) => call.url.includes('anthropic.com/v1/messages'),
+        )).toHaveLength(0)
+        expect(controller.chat.state.sending).toBe(false)
+        expect(controller.pendingToolAuthorizations.value[0]).toMatchObject({
+            tool: 'library_read',
+            actions: ['read'],
+            allow_persistent: true,
+            input: {
+                contract: 'talos.library-context-consent/1',
+                mode: 'ask_before_use_v1',
+                candidate_file_ids: ['consent-omniroute'],
+                candidate_names: ['OmniRoute renewal.md'],
+            },
+        })
+        expect(JSON.stringify(controller.pendingToolAuthorizations.value[0]?.input))
+            .not.toContain('CONSENT_SENTINEL')
+        expect(controller.chat.messages.find((message) => message.role === 'user')
+            ?.metadata.library_context_receipt).toMatchObject({
+                reason: 'awaiting_consent',
+                candidate_file_ids: ['consent-omniroute'],
+                transmitted_file_ids: [],
+            })
+
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+        const consentedProviderCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(consentedProviderCalls).toHaveLength(1)
+        expect(JSON.stringify(consentedProviderCalls[0]?.data)).toContain('CONSENT_SENTINEL')
+        expect(controller.chat.messages.filter((message) => message.role === 'assistant').at(-1)
+            ?.metadata.library_context_receipt).toMatchObject({
+                reason: 'consent_granted',
+                transmitted_file_ids: ['consent-omniroute'],
+            })
+
+        policy.mode = 'agentic_on_demand_v1'
+        policy.revision = 2
+        await controller.send('Use tools only')
+
+        const providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(JSON.stringify(providerCalls[1]?.data)).not.toContain('CONSENT_SENTINEL')
+        expect((providerCalls[1]?.data.tools as Array<{ name: string }>).map((tool) => tool.name))
+            .toContain('library_search')
+
+        const users = controller.chat.messages.filter((message) => message.role === 'user')
+        expect(users[0]?.metadata.library_context_receipt).toMatchObject({
+            reason: 'awaiting_consent',
+            candidate_file_ids: ['consent-omniroute'],
+            transmitted_file_ids: [],
+        })
+        expect(users[1]?.metadata.library_context_receipt).toMatchObject({
+            reason: 'agentic_on_demand',
+            candidate_file_ids: [],
+            transmitted_file_ids: [],
+        })
+    }, 15_000)
+
+    it('P1-CTX-ASK-03 honors persistent consent, revocation, and denial without body drift', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: {
+                    schema_version: 1,
+                    revision: 1,
+                    enabled: true,
+                    mode: 'ask_before_use_v1',
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: '2026-07-29T10:00:00.000Z',
+                },
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'persistent-omniroute',
+            display_name: 'OmniRoute persistent.md',
+            media_type: 'text/markdown',
+            size_bytes: 48,
+            private_uri: 'talos-vault/files/persistent-omniroute.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '5'.repeat(64),
+            extracted_text: 'PERSISTENT_CONSENT_SENTINEL renewal is March 2027.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        request.mockClear()
+
+        await controller.send('When is OmniRoute renewed?')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'always_allow',
+        )
+
+        expect(settings.state.tool_authorizations.grants.library_read).toMatchObject({
+            actions: ['read'],
+            scope: 'device',
+        })
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+        await controller.send('Please verify OmniRoute again')
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+
+        let providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(providerCalls).toHaveLength(2)
+        expect(providerCalls.every(
+            (call) => JSON.stringify(call.data).includes('PERSISTENT_CONSENT_SENTINEL'),
+        )).toBe(true)
+
+        await settings.revokeToolAuthorization('library_read')
+        await controller.send('One final OmniRoute check')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(providerCalls).toHaveLength(2)
+
+        const revoked = await chatRepository.getVaultFile('persistent-omniroute')
+        await chatRepository.updateVaultFile('persistent-omniroute', {
+            metadata: { ...revoked!.metadata, library_shared: false },
+        })
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+        providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(providerCalls).toHaveLength(3)
+        expect(JSON.stringify(providerCalls[2]?.data))
+            .not.toContain('PERSISTENT_CONSENT_SENTINEL')
+        expect(controller.chat.messages.filter((message) => message.role === 'assistant').at(-1)
+            ?.metadata.library_context_receipt).toMatchObject({
+                reason: 'consent_granted',
+                candidate_file_ids: ['persistent-omniroute'],
+                transmitted_file_ids: [],
+            })
+
+        await chatRepository.updateVaultFile('persistent-omniroute', {
+            metadata: { ...revoked!.metadata, library_shared: true },
+        })
+        await controller.send('Deny this OmniRoute check')
+        expect(controller.pendingToolAuthorizations.value).toHaveLength(1)
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'deny',
+        )
+        providerCalls = request.mock.calls
+            .map(([call]) => call)
+            .filter((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(providerCalls).toHaveLength(4)
+        expect(JSON.stringify(providerCalls[3]?.data))
+            .not.toContain('PERSISTENT_CONSENT_SENTINEL')
+        expect(controller.chat.messages.filter((message) => message.role === 'assistant').at(-1)
+            ?.metadata.library_context_receipt).toMatchObject({
+                reason: 'awaiting_consent',
+                candidate_file_ids: ['persistent-omniroute'],
+                transmitted_file_ids: [],
+            })
+    }, 15_000)
+
+    it('P1-CTX-COMPAT-07 rechecks file revocation before egress and persists actual transmission', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: null,
+                library_autosave_generated: false,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'late-revoked',
+            display_name: 'late-revoked.md',
+            media_type: 'text/markdown',
+            size_bytes: 32,
+            private_uri: 'talos-vault/files/late-revoked.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '4'.repeat(64),
+            extracted_text: 'LATE_REVOKED_SENTINEL',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const original = chatRepository.getVaultFile.bind(chatRepository)
+        let reads = 0
+        vi.spyOn(chatRepository, 'getVaultFile').mockImplementation(async (fileId) => {
+            const snapshot = await original(fileId)
+            reads += 1
+            if (reads === 1 && snapshot) {
+                await chatRepository.updateVaultFile(fileId, {
+                    metadata: { ...snapshot.metadata, library_shared: false },
+                })
+            }
+            return snapshot
+        })
+        const controller = createChatController(deps)
+        await controller.init()
+        request.mockClear()
+
+        await controller.send('Use the late document')
+
+        const providerCall = request.mock.calls
+            .map(([call]) => call)
+            .find((call) => call.url.includes('anthropic.com/v1/messages'))
+        expect(JSON.stringify(providerCall?.data)).not.toContain('LATE_REVOKED_SENTINEL')
+        const user = controller.chat.messages.find((message) => message.role === 'user')
+        const assistant = controller.chat.messages.find((message) => message.role === 'assistant')
+        expect(user?.metadata.library_context_receipt).toMatchObject({
+            candidate_file_ids: ['late-revoked'],
+            transmitted_file_ids: ['late-revoked'],
+        })
+        expect(assistant?.metadata.library_context_receipt).toMatchObject({
+            candidate_file_ids: ['late-revoked'],
+            transmitted_file_ids: [],
+        })
+    })
+
+    it('P1-CTX-COMPAT-08 reconciles the Vault and sends a granted attachment through the durable provider pipeline', async () => {
         const { deps, store, request, chatRepository } = makeDeps()
         const runtime = attachmentRuntime(chatRepository)
         deps.filePicker = runtime.picker
@@ -818,6 +3883,186 @@ describe('chatController', () => {
         expect(controller.chat.activeSession.value?.id).toBe(first!.id)
         await controller.deleteSession(first!.id)
         expect(controller.chat.activeSession.value?.id).toBe(second?.id)
+    })
+
+    it('WEB-LIB-07 keeps a typoed search-only journey in Sources and Library after reload', async () => {
+        const { deps, store, settings, chatRepository, request } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        settings.state.search.source = 'tavily'
+        settings.state.tools.outbound = 'allow'
+        settings.state.tools.write = 'allow'
+        webSearchRuntime.runTalosSearch.mockResolvedValueOnce([
+            {
+                url: 'https://example.com/luxury#services',
+                title: 'Luxury Italia',
+                snippet: 'Yacht, ville e supercar.',
+                publishedAt: '2026-07-20',
+            },
+            {
+                url: 'https://concierge.example/offerta',
+                title: 'Concierge Italia',
+                snippet: 'Elicotteri e jet.',
+                publishedAt: null,
+            },
+        ])
+
+        let providerRound = 0
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return {
+                    status: 200,
+                    data: {
+                        data: [{ id: 'claude-live', display_name: 'Claude Live' }],
+                        has_more: false,
+                    },
+                }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                providerRound += 1
+                if (providerRound === 1) {
+                    return {
+                        status: 200,
+                        data: {
+                            model: 'claude-live',
+                            stop_reason: 'tool_use',
+                            content: [{
+                                type: 'tool_use',
+                                id: 'toolu-web-1',
+                                name: 'web_search',
+                                input: { query: 'aziende di lusso in italia' },
+                            }],
+                        },
+                    }
+                }
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{ type: 'text', text: 'Ho trovato due aziende.' }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const vaultFiles: TalosLocalVaultFile[] = []
+        const createGenerated = vi.fn(async (input: {
+            name: string
+            mediaType: string
+            text: string
+            kind?: 'document' | 'web_source'
+            sourceUrl?: string | null
+            sourceLinks?: readonly Array<{ url: string; title: string }>
+        }, originSessionId: string | null = null) => {
+            const createdAt = '2026-07-28T10:00:00.000Z'
+            const file: TalosLocalVaultFile = {
+                id: 'search-dossier-1',
+                display_name: input.name,
+                media_type: input.mediaType,
+                size_bytes: input.text.length,
+                private_uri: 'talos-vault/files/search-dossier-1.md',
+                status: 'available',
+                trust: 'untrusted',
+                sha256: 'a'.repeat(64),
+                extracted_text: input.text,
+                failure_code: null,
+                metadata: {
+                    origin: 'generated',
+                    origin_session_id: originSessionId,
+                    kind: input.kind ?? 'document',
+                    ...(input.sourceUrl ? { source_url: input.sourceUrl } : {}),
+                    ...(input.sourceLinks?.length ? { source_links: input.sourceLinks } : {}),
+                },
+                created_at: createdAt,
+                updated_at: createdAt,
+            }
+            vaultFiles.push(file)
+            return {
+                file,
+                grant: {
+                    id: 'grant-search-1',
+                    vault_file_id: file.id,
+                    permissions: ['browser.upload', 'model.read'] as Array<'browser.upload' | 'model.read'>,
+                    status: 'active' as const,
+                    label: file.display_name,
+                    created_at: createdAt,
+                    updated_at: createdAt,
+                    revoked_at: null,
+                },
+            }
+        })
+        const vaultService: TalosVaultService = {
+            ingest: vi.fn(),
+            createGenerated,
+            createGeneratedBinary: vi.fn(),
+            createGrant: vi.fn(),
+            revokeGrant: vi.fn().mockResolvedValue(undefined),
+            resolveMessageParts: vi.fn().mockResolvedValue([]),
+            readFilePreview: vi.fn().mockResolvedValue(null),
+            readFileText: vi.fn().mockResolvedValue(null),
+            listFiles: vi.fn(async () => vaultFiles.slice()),
+            listSummaries: vi.fn(async () => vaultFiles.slice()),
+            setFileShared: vi.fn().mockResolvedValue(undefined),
+            deleteFile: vi.fn().mockResolvedValue(undefined),
+            reconcilePending: vi.fn().mockResolvedValue(undefined),
+        }
+        const controller = createChatController({
+            ...deps,
+            filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+            vaultService,
+        })
+        vi.stubGlobal('fetch', vi.fn(async () => {
+            throw new TypeError('Failed to fetch')
+        }))
+
+        try {
+            await controller.init()
+            await controller.send('fai una ricerca weeb delle aziende in italia con yacht auto e ville')
+
+            expect(webSearchRuntime.runTalosSearch).toHaveBeenCalledWith(
+                'tavily',
+                expect.any(Object),
+                'aziende di lusso in italia',
+                5,
+            )
+            expect(createGenerated).toHaveBeenCalledWith(expect.objectContaining({
+                kind: 'web_source',
+                sourceLinks: [
+                    { url: 'https://example.com/luxury', title: 'Luxury Italia' },
+                    { url: 'https://concierge.example/offerta', title: 'Concierge Italia' },
+                ],
+            }), expect.any(String))
+            expect(controller.attachments.vaultFiles).toEqual([
+                expect.objectContaining({ id: 'search-dossier-1' }),
+            ])
+            const answer = controller.chat.messages.findLast((message) => message.role === 'assistant')
+            expect(answer?.metadata.sources).toEqual([
+                expect.objectContaining({ url: 'https://example.com/luxury' }),
+                expect.objectContaining({ url: 'https://concierge.example/offerta' }),
+            ])
+
+            const reloaded = createChatController({
+                ...deps,
+                filePicker: { pickFiles: vi.fn().mockResolvedValue([]) },
+                vaultService,
+            })
+            await reloaded.init()
+            const restored = reloaded.chat.messages.findLast((message) => message.role === 'assistant')
+            expect(restored?.metadata.sources).toEqual(answer?.metadata.sources)
+            expect(reloaded.attachments.vaultFiles).toEqual([
+                expect.objectContaining({
+                    metadata: expect.objectContaining({
+                        kind: 'web_source',
+                        source_links: expect.arrayContaining([
+                            expect.objectContaining({ url: 'https://example.com/luxury' }),
+                        ]),
+                    }),
+                }),
+            ])
+        } finally {
+            vi.unstubAllGlobals()
+        }
     })
 
     it('fails closed when local persistence cannot initialize and never calls the provider', async () => {

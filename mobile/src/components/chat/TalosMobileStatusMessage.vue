@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { CircleAlert, Info, ShieldAlert } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import { talosMobileControlledFault, type TalosMobileControlledFaultLayer } from '@/lib/talosMessageState'
 
 const props = defineProps<{ message: TalosMobileMessageView }>()
+const { t } = useTalosI18n()
 const fault = computed(() => talosMobileControlledFault(props.message))
-const titles: Record<TalosMobileControlledFaultLayer, string> = {
-    validator: 'Validation fault', policy: 'Policy denial', provider: 'Provider failure',
-    network: 'Network failure', worker: 'Worker failure', system: 'Execution failure',
+const titleKeys: Record<TalosMobileControlledFaultLayer, string> = {
+    validator: 'chat.validationFault', policy: 'chat.policyDenial', provider: 'chat.providerFailure',
+    network: 'chat.networkFailure', worker: 'chat.workerFailure', system: 'chat.executionFailure',
 }
-const title = computed(() => fault.value ? titles[fault.value.layer] : 'System notice')
+const title = computed(() => t(fault.value ? titleKeys[fault.value.layer] : 'chat.systemNotice'))
 const providerLabel = computed(() => {
     if (!fault.value?.provider && !fault.value?.model) return null
     return [fault.value.provider, fault.value.model].filter(Boolean).join(' / ')
@@ -37,14 +39,14 @@ const providerLabel = computed(() => {
                 </div>
                 <p class="mt-2 break-words text-sm leading-6 [overflow-wrap:anywhere]">{{ fault.message }}</p>
                 <div v-if="fault.nextAction" class="mt-3 border-t border-[var(--talos-danger-border)] pt-2">
-                    <div class="text-2xs font-semibold uppercase text-[var(--talos-danger)]">Next action</div>
+                    <div class="text-2xs font-semibold uppercase text-[var(--talos-danger)]">{{ $t('chat.nextAction') }}</div>
                     <p class="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{{ fault.nextAction }}</p>
                 </div>
                 <div class="mt-3 flex flex-wrap items-center gap-2 text-2xs text-[var(--talos-muted)]">
                     <span v-if="providerLabel">{{ providerLabel }}</span>
                     <span v-if="fault.status">HTTP {{ fault.status }}</span>
                     <span v-if="fault.retryable !== null" class="rounded border border-[var(--talos-border)] px-1.5 py-0.5">
-                        {{ fault.retryable ? 'Retry available' : 'Manual action required' }}
+                        {{ fault.retryable ? $t('chat.retryAvailable') : $t('chat.manualActionRequired') }}
                     </span>
                 </div>
             </div>

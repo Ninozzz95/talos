@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Check, Loader2 } from '@lucide/vue'
+import { useTalosI18n } from '@/i18n'
+import { Check, ExternalLink, Loader2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_SEARCH_SOURCES, type TalosSearchSourceId } from '@/lib/search/searchSources'
@@ -21,6 +22,7 @@ import { TALOS_SEARCH_SOURCES, type TalosSearchSourceId } from '@/lib/search/sea
  * like every provider key, and this screen only ever learns whether one is set.
  */
 const settings = useSettingsStore()
+const { t } = useTalosI18n()
 
 const selected = computed<TalosSearchSourceId | null>(() => settings.state.search.source)
 const source = computed(() => TALOS_SEARCH_SOURCES.find((entry) => entry.id === selected.value) ?? null)
@@ -29,13 +31,15 @@ const keyDraft = ref('')
 const endpointDraft = ref('')
 const hasKey = ref(false)
 const busy = ref(false)
+const tavilyOpening = ref(false)
 const feedback = ref<string | null>(null)
+const TAVILY_PLATFORM_URL = 'https://app.tavily.com/'
 
-const NOTES: Record<TalosSearchSourceId, string> = {
-    tavily: '1,000 searches a month at no cost and no card required. Built for agents, so results come back clean.',
-    brave: 'An independent index — Brave does not resell Google or Bing. Since February 2026 it needs a credit card, keeps its $5 monthly credit only while you attribute Brave publicly, and has no spending cap.',
-    searxng: 'Your own SearXNG, so no third party sees the query at all. One Docker container. JSON output ships disabled — turn it on in the instance settings or TALOS gets an HTML page back.',
-    custom: 'Any other search API that answers with a top-level "results" array.',
+const NOTE_KEYS: Record<TalosSearchSourceId, string> = {
+    tavily: 'search.tavilyNote',
+    brave: 'search.braveNote',
+    searxng: 'search.searxngNote',
+    custom: 'search.customNote',
 }
 
 async function refreshKeyState(): Promise<void> {
@@ -65,17 +69,32 @@ async function saveKey(): Promise<void> {
         await setProviderKey(`search.${selected.value}`, keyDraft.value)
         keyDraft.value = ''
         await refreshKeyState()
-        feedback.value = 'Key saved to this device.'
+        feedback.value = t('search.keySaved')
     } catch {
-        feedback.value = 'The key could not be saved. Nothing was changed.'
+        feedback.value = t('search.keySaveFailed')
     } finally {
         busy.value = false
     }
 }
 
+async function openTavilyPlatform(): Promise<void> {
+    if (tavilyOpening.value) return
+    tavilyOpening.value = true
+    feedback.value = null
+    try {
+        const { openTalosLinkOnce } = await import('@/services/inAppBrowserService')
+        const opened = await openTalosLinkOnce(TAVILY_PLATFORM_URL, 'system_browser')
+        if (!opened) feedback.value = t('search.tavilyOpenFailed')
+    } catch {
+        feedback.value = t('search.tavilyOpenFailed')
+    } finally {
+        tavilyOpening.value = false
+    }
+}
+
 async function saveEndpoint(): Promise<void> {
     await settings.setSearchPreferences({ endpoint: endpointDraft.value.trim() || null })
-    feedback.value = 'Address saved.'
+    feedback.value = t('search.addressSaved')
 }
 
 async function clearSource(): Promise<void> {
@@ -90,21 +109,20 @@ async function clearSource(): Promise<void> {
 
 /** What the model will actually be offered, said plainly. */
 const readiness = computed(() => {
-    if (!source.value) return 'No source chosen — TALOS will not offer web search to the model.'
-    if (source.value.needsKey && !hasKey.value) return 'A key is still needed. Web search stays off until it is set.'
+    if (!source.value) return t('search.noSource')
+    if (source.value.needsKey && !hasKey.value) return t('search.keyNeeded')
     if (source.value.needsEndpoint && !settings.state.search.endpoint) {
-        return 'The instance address is still needed. Web search stays off until it is set.'
+        return t('search.addressNeeded')
     }
-    return 'Ready — the model can search the web, and only the query leaves this device.'
+    return t('search.ready')
 })
 </script>
 
 <template>
     <section class="pt-4" data-testid="talos-search-source">
-        <h3 class="text-sm font-semibold text-[var(--talos-text)]">Where web search comes from</h3>
+        <h3 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('search.title') }}</h3>
         <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">
-            TALOS has no index of the web, so it asks one of these. The pages themselves are
-            downloaded and read <strong>on this device</strong> — only the query leaves it.
+            {{ t('search.description') }}
         </p>
 
         <ul class="mt-3 space-y-2">
@@ -126,16 +144,31 @@ const readiness = computed(() => {
                     />
                     <span class="min-w-0">
                         <span class="block text-sm text-[var(--talos-text)]">{{ entry.label }}</span>
-                        <span class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]">{{ NOTES[entry.id] }}</span>
+                        <span class="mt-0.5 block text-2xs leading-4 text-[var(--talos-muted)]">{{ t(NOTE_KEYS[entry.id]) }}</span>
                     </span>
                 </button>
             </li>
         </ul>
 
         <template v-if="source">
+            <Button
+                v-if="selected === 'tavily'"
+                type="button"
+                variant="outline"
+                data-testid="talos-tavily-api-key-link"
+                class="mt-3 min-h-11 w-full justify-start"
+                :disabled="tavilyOpening"
+                @click="openTavilyPlatform"
+            >
+                <Loader2 v-if="tavilyOpening" class="size-3.5 animate-spin" aria-hidden="true" />
+                <ExternalLink v-else class="size-3.5" aria-hidden="true" />
+                {{ t('search.tavilyKeyLink') }}
+            </Button>
+
             <label v-if="source.needsKey" class="mt-3 block">
                 <span class="block text-xs font-medium text-[var(--talos-muted)]">
-                    API key <span v-if="hasKey" data-testid="talos-search-key-set">· one is already saved</span>
+                    {{ t('search.apiKey') }}
+                    <span v-if="hasKey" data-testid="talos-search-key-set">{{ t('search.keyAlreadySaved') }}</span>
                 </span>
                 <input
                     v-model="keyDraft"
@@ -143,31 +176,31 @@ const readiness = computed(() => {
                     inputmode="text"
                     autocomplete="off"
                     data-testid="talos-search-key"
-                    :placeholder="hasKey ? 'Replace the saved key' : 'Paste the key'"
+                    :placeholder="hasKey ? t('search.replaceKey') : t('search.pasteKey')"
                     class="mt-1 min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)]"
                 >
                 <Button class="mt-2" :disabled="busy || !keyDraft.trim()" @click="saveKey">
                     <Loader2 v-if="busy" class="mr-1 size-3.5 animate-spin" aria-hidden="true" />
-                    Save key
+                    {{ t('search.saveKey') }}
                 </Button>
             </label>
 
             <label v-if="source.needsEndpoint" class="mt-3 block">
-                <span class="block text-xs font-medium text-[var(--talos-muted)]">Instance address</span>
+                <span class="block text-xs font-medium text-[var(--talos-muted)]">{{ t('search.instanceAddress') }}</span>
                 <input
                     v-model="endpointDraft"
                     type="url"
                     inputmode="url"
                     autocomplete="off"
                     data-testid="talos-search-endpoint"
-                    placeholder="https://searx.example.org"
+                    :placeholder="t('search.endpointPlaceholder')"
                     class="mt-1 min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-transparent px-3 text-sm text-[var(--talos-text)]"
                     @blur="saveEndpoint"
                 >
             </label>
 
             <Button variant="ghost" class="mt-2" data-testid="talos-search-clear" @click="clearSource">
-                Turn web search off
+                {{ t('search.turnOff') }}
             </Button>
         </template>
 

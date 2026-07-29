@@ -35,6 +35,39 @@ export interface TalosDoctorRow {
     ok: boolean
 }
 
+export interface TalosStorageDoctorInput {
+    native: boolean
+    status: 'idle' | 'loading' | 'ready' | 'error'
+    error: string | null
+}
+
+/**
+ * An actionable storage row without reflecting arbitrary native error text.
+ *
+ * The copied diagnostics report already scrubs secret-shaped values at its
+ * boundary, but the Doctor itself is a user surface. Keep known recovery
+ * families explicit and every other native/plugin detail out of the UI.
+ */
+export function talosStorageDoctorRow(input: TalosStorageDoctorInput): TalosDoctorRow {
+    const engine = input.native ? 'SQLCipher native' : 'sql.js web store'
+    let hint = ''
+    if (input.status === 'error') {
+        if (/No available connection for database/i.test(input.error ?? '')) {
+            hint = ' · connection closed; unlock and retry'
+        } else if (/TALOS_(?:CHAT_)?DB_KEY_LOCKED/i.test(input.error ?? '')) {
+            hint = ' · unlock required'
+        } else {
+            hint = ' · retry local storage'
+        }
+    }
+    return {
+        id: 'storage',
+        label: 'Encrypted local storage',
+        value: `${engine} — ${input.status}${hint}`,
+        ok: input.status === 'ready',
+    }
+}
+
 /**
  * The single line that lets a healthy user leave without reading anything.
  *

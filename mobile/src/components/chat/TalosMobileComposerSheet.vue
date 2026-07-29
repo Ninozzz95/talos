@@ -70,7 +70,7 @@ onMounted(() => {
             <header class="flex shrink-0 items-center gap-2 px-3 py-2">
                 <button
                     type="button"
-                    aria-label="Close"
+                    :aria-label="$t('common.close')"
                     class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
                     @click="requestClose"
                 >

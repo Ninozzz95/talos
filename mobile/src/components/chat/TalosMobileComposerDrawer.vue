@@ -8,6 +8,7 @@
 import {
     BrainCircuit, Database, FlaskConical, Globe2, Paperclip, Sparkles,
 } from '@lucide/vue'
+import { useTalosI18n } from '@/i18n'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 
@@ -34,18 +35,23 @@ const emit = defineEmits<{
     enhancePrompt: []
 }>()
 
+const { t } = useTalosI18n()
 function single(action: 'attach' | 'openContext' | 'openModelLab' | 'enhancePrompt'): void {
     emit(action as never)
     emit('close')
 }
 
 const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
+function effortLabel(level: string): string {
+    const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
+    return t(key)
+}
 </script>
 
 <template>
     <!-- SF-7: shared sheet shell = teleport + real modality (inert app root,
          focus trap, focus restore) for the Add-to-chat drawer too. -->
-    <TalosMobileComposerSheet title="Add to chat" testid="talos-composer-drawer" @close="emit('close')">
+    <TalosMobileComposerSheet :title="$t('chat.addToChat')" testid="talos-composer-drawer" @close="emit('close')">
                 <div class="grid grid-cols-3 gap-3">
                     <button
                         type="button"
@@ -57,7 +63,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                         <span class="flex size-12 items-center justify-center rounded-full bg-[var(--talos-active)]">
                             <Paperclip class="size-5" aria-hidden="true" />
                         </span>
-                        Attach
+                        {{ $t('chat.attach') }}
                     </button>
                     <button
                         type="button"
@@ -69,7 +75,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                         <span class="flex size-12 items-center justify-center rounded-full bg-[var(--talos-active)]">
                             <Database class="size-5" aria-hidden="true" />
                         </span>
-                        Library
+                        {{ $t('navigation.library') }}
                     </button>
                     <button
                         type="button"
@@ -80,7 +86,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                         <span class="flex size-12 items-center justify-center rounded-full bg-[var(--talos-active)]">
                             <FlaskConical class="size-5" aria-hidden="true" />
                         </span>
-                        Model Lab
+                        {{ $t('navigation.modelLab') }}
                     </button>
                 </div>
 
@@ -95,7 +101,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                     <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
                         <Globe2 class="size-4" aria-hidden="true" />
                     </span>
-                    <span class="min-w-0 flex-1 text-sm">Browse the web</span>
+                    <span class="min-w-0 flex-1 text-sm">{{ $t('chat.browseWeb') }}</span>
                     <span
                         class="relative h-6 w-11 rounded-full transition-colors duration-200"
                         :class="browseMode ? 'bg-[var(--talos-accent,var(--primary))]' : 'bg-[var(--talos-border)]'"
@@ -117,7 +123,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                     <span class="flex size-9 items-center justify-center rounded-full bg-[var(--talos-active)]">
                         <BrainCircuit class="size-4" aria-hidden="true" />
                     </span>
-                    <span class="min-w-0 flex-1 text-sm">Extended thinking</span>
+                    <span class="min-w-0 flex-1 text-sm">{{ $t('chat.extendedThinking') }}</span>
                     <span
                         class="relative h-6 w-11 rounded-full transition-colors duration-200"
                         :class="thinking ? 'bg-[var(--talos-accent,var(--primary))]' : 'bg-[var(--talos-border)]'"
@@ -128,8 +134,8 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                 </button>
 
                 <div v-if="realEfforts().length" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3">
-                    <p class="text-xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">Reasoning effort</p>
-                    <div class="mt-2 flex gap-1" role="radiogroup" aria-label="Reasoning effort">
+                    <p class="text-xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('chat.reasoningEffort') }}</p>
+                    <div class="mt-2 flex gap-1" role="radiogroup" :aria-label="$t('chat.reasoningEffort')">
                         <button
                             v-for="level in effortLevels"
                             :key="level"
@@ -143,7 +149,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                                 : 'text-[var(--talos-muted)] hover:bg-[var(--talos-active)]'"
                             @click="emit('selectEffort', level as never)"
                         >
-                            {{ level }}
+                            {{ effortLabel(level) }}
                         </button>
                     </div>
                 </div>
@@ -152,7 +158,7 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                 <button
                     type="button"
                     data-testid="talos-drawer-enhance"
-                    :title="enhanceReason ?? 'Improve prompt'"
+                    :title="enhanceReason ?? $t('chat.improvePrompt')"
                     class="talos-pressable flex min-h-13 w-full items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 px-3 text-left"
                     @click="single('enhancePrompt')"
                 >
@@ -160,9 +166,9 @@ const realEfforts = () => props.effortLevels.filter((level) => level !== 'off')
                         <Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                     </span>
                     <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="text-sm">Improve prompt</span>
+                        <span class="text-sm">{{ $t('chat.improvePrompt') }}</span>
                         <span class="text-2xs text-[var(--talos-muted)]">
-                            {{ enhanceReason ?? 'Rewrite your draft with the selected model' }}
+                            {{ enhanceReason ?? $t('chat.rewriteDraft') }}
                         </span>
                     </span>
                 </button>

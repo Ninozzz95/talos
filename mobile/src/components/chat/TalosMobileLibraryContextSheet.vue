@@ -1,0 +1,189 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { Check, Database, MinusCircle, PlusCircle } from '@lucide/vue'
+import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
+import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
+import {
+    TALOS_LIBRARY_CONTEXT_MODES,
+    type TalosLibraryContextMode,
+    type TalosLibraryTurnOverride,
+} from '@/lib/chat/libraryPolicy'
+
+const props = defineProps<{
+    effectiveEnabled: boolean
+    effectiveMode: TalosLibraryContextMode
+    override: TalosLibraryTurnOverride | null
+    files: readonly TalosLocalVaultFile[]
+}>()
+
+const emit = defineEmits<{
+    close: []
+    'update:override': [override: TalosLibraryTurnOverride | null]
+}>()
+
+type TurnModeValue = 'inherit' | 'off' | TalosLibraryContextMode
+
+const modeValue = computed<TurnModeValue>(() => {
+    if (props.override?.enabled === false) return 'off'
+    return props.override?.mode ?? 'inherit'
+})
+
+const modeOptions = computed<Array<{ value: TurnModeValue; label: string }>>(() => [
+    { value: 'inherit', label: 'library.contextInheritChat' },
+    { value: 'off', label: 'library.contextOffForTurn' },
+    { value: 'broad_compat_v1', label: 'aiDefaults.libraryModes.broad' },
+    { value: 'smart_relevant_v1', label: 'aiDefaults.libraryModes.smart' },
+    { value: 'ask_before_use_v1', label: 'aiDefaults.libraryModes.ask' },
+    { value: 'agentic_on_demand_v1', label: 'aiDefaults.libraryModes.onDemand' },
+])
+
+function uniqueIds(values: readonly string[] | undefined): string[] {
+    return [...new Set((values ?? []).filter((value) => value.trim() !== ''))]
+}
+
+function publish(candidate: TalosLibraryTurnOverride): void {
+    const included = uniqueIds(candidate.included_file_ids)
+    const excluded = uniqueIds(candidate.excluded_file_ids)
+    const blocked = new Set(excluded)
+    const normalized: TalosLibraryTurnOverride = {}
+    if (typeof candidate.enabled === 'boolean') normalized.enabled = candidate.enabled
+    if (candidate.mode) normalized.mode = candidate.mode
+    if (included.length > 0) {
+        normalized.included_file_ids = included.filter((id) => !blocked.has(id))
+    } else if (candidate.included_file_ids !== undefined) {
+        normalized.included_file_ids = []
+    }
+    if (excluded.length > 0) normalized.excluded_file_ids = excluded
+    else if (candidate.excluded_file_ids !== undefined) normalized.excluded_file_ids = []
+    if (candidate.consent_granted === true) normalized.consent_granted = true
+    emit('update:override', Object.keys(normalized).length > 0 ? normalized : null)
+}
+
+function setMode(value: TurnModeValue): void {
+    const candidate = { ...(props.override ?? {}) }
+    delete candidate.enabled
+    delete candidate.mode
+    delete candidate.consent_granted
+    if (value === 'off') candidate.enabled = false
+    else if ((TALOS_LIBRARY_CONTEXT_MODES as readonly string[]).includes(value)) {
+        candidate.enabled = true
+        candidate.mode = value as TalosLibraryContextMode
+    }
+    publish(candidate)
+}
+
+function fileState(fileId: string): 'automatic' | 'included' | 'excluded' {
+    if (props.override?.excluded_file_ids?.includes(fileId)) return 'excluded'
+    if (props.override?.included_file_ids?.includes(fileId)) return 'included'
+    return 'automatic'
+}
+
+function setFileState(fileId: string, state: 'automatic' | 'included' | 'excluded'): void {
+    const included = uniqueIds(props.override?.included_file_ids).filter((id) => id !== fileId)
+    const excluded = uniqueIds(props.override?.excluded_file_ids).filter((id) => id !== fileId)
+    if (state === 'included') included.push(fileId)
+    if (state === 'excluded') excluded.push(fileId)
+    publish({
+        ...(props.override ?? {}),
+        included_file_ids: included,
+        excluded_file_ids: excluded,
+    })
+}
+</script>
+
+<template>
+    <TalosMobileComposerSheet
+        :title="$t('library.contextForNextMessage')"
+        testid="talos-library-context-sheet"
+        @close="emit('close')"
+    >
+        <p class="text-xs leading-5 text-[var(--talos-muted)]">
+            {{ $t('library.contextForNextMessageBody') }}
+        </p>
+
+        <section>
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                {{ $t('library.modeForNextMessage') }}
+            </h3>
+            <div class="mt-2 grid gap-2">
+                <button
+                    v-for="option in modeOptions"
+                    :key="option.value"
+                    type="button"
+                    :data-testid="`talos-library-turn-mode-${option.value}`"
+                    :aria-pressed="modeValue === option.value"
+                    class="talos-pressable flex min-h-12 w-full items-center gap-3 rounded-xl border px-3 text-left text-sm"
+                    :class="modeValue === option.value
+                        ? 'border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-text)]'
+                        : 'border-[var(--talos-border)] text-[var(--talos-muted)]'"
+                    @click="setMode(option.value)"
+                >
+                    <Database class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <span class="min-w-0 flex-1">{{ $t(option.label) }}</span>
+                    <Check v-if="modeValue === option.value" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                </button>
+            </div>
+        </section>
+
+        <section v-if="files.length">
+            <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                {{ $t('library.sourcesForNextMessage') }}
+            </h3>
+            <p class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]">
+                {{ $t('library.sourcesForNextMessageBody') }}
+            </p>
+            <ul class="mt-2 space-y-2">
+                <li
+                    v-for="file in files"
+                    :key="file.id"
+                    class="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--talos-border)] p-2"
+                >
+                    <span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[var(--talos-panel)]">
+                        <TalosMobileLibraryFileGlyph :file="file" />
+                    </span>
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate text-xs font-medium text-[var(--talos-text)]">
+                            {{ file.display_name }}
+                        </span>
+                        <span class="mt-0.5 block text-2xs text-[var(--talos-muted)]">
+                            {{ $t(`library.context${fileState(file.id).charAt(0).toUpperCase()}${fileState(file.id).slice(1)}`) }}
+                        </span>
+                    </span>
+                    <button
+                        type="button"
+                        :data-testid="`talos-library-turn-include-${file.id}`"
+                        :aria-label="$t('library.includeNamedForNextMessage', { name: file.display_name })"
+                        :aria-pressed="fileState(file.id) === 'included'"
+                        class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)]"
+                        :class="fileState(file.id) === 'included' ? 'text-[var(--talos-accent)]' : 'text-[var(--talos-muted)]'"
+                        @click="setFileState(file.id, fileState(file.id) === 'included' ? 'automatic' : 'included')"
+                    >
+                        <PlusCircle class="size-4" aria-hidden="true" />
+                    </button>
+                    <button
+                        type="button"
+                        :data-testid="`talos-library-turn-exclude-${file.id}`"
+                        :aria-label="$t('library.excludeNamedForNextMessage', { name: file.display_name })"
+                        :aria-pressed="fileState(file.id) === 'excluded'"
+                        class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full border border-[var(--talos-border)]"
+                        :class="fileState(file.id) === 'excluded' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'"
+                        @click="setFileState(file.id, fileState(file.id) === 'excluded' ? 'automatic' : 'excluded')"
+                    >
+                        <MinusCircle class="size-4" aria-hidden="true" />
+                    </button>
+                </li>
+            </ul>
+        </section>
+
+        <button
+            v-if="override"
+            type="button"
+            data-testid="talos-library-turn-reset"
+            class="talos-pressable min-h-12 w-full rounded-xl border border-[var(--talos-border)] px-3 text-sm text-[var(--talos-muted)]"
+            @click="emit('update:override', null)"
+        >
+            {{ $t('library.clearNextMessageOverride') }}
+        </button>
+    </TalosMobileComposerSheet>
+</template>

@@ -6,7 +6,7 @@ import type {
 } from './talosTypes'
 
 /**
- * Chat text size, in rem, before the global `--talos-ui-scale` multiplier.
+ * Chat message size in root-relative rem.
  *
  * The sizes used to live in a nested ternary inside the message list's inline
  * style. Owner asked for a fourth step on 2026-07-26 ("extra small"), and a
@@ -31,10 +31,15 @@ export const TALOS_CHAT_BUBBLE_SCALE_OPTIONS: Array<{
     { value: 'expanded', label: 'Large' },
 ]
 
-/** The rendered size for a step, global UI scale included. */
+/**
+ * The rendered message-prose size for a step.
+ *
+ * Deliberately independent from `--talos-ui-scale`: Appearance "Font size"
+ * owns interface chrome, while "Chat message size" owns message prose.
+ */
 export function talosChatTextSize(scale: TalosChatBubbleScale | undefined): string {
     const rem = TALOS_CHAT_TEXT_SCALE_REM[scale ?? 'balanced'] ?? TALOS_CHAT_TEXT_SCALE_REM.balanced
-    return `calc(${rem}rem * var(--talos-ui-scale, 1))`
+    return `${rem}rem`
 }
 
 

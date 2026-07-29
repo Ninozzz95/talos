@@ -1,4 +1,6 @@
 import { reactive, readonly, ref, type Ref } from 'vue'
+import type { TalosTranslate } from '@/i18n/contracts'
+import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import type {
     TalosMobileMessageRole,
     TalosMobileMessageState,
@@ -7,7 +9,21 @@ import type {
 } from '@/components/chat/mobileChatTypes'
 import { parseTalosMobileBrowserEvidenceEnvelope } from '@/lib/browser/browserContracts'
 import { stripLibrarySaveMarkers } from '@/lib/chat/librarySave'
+import { talosMessageReasoning } from '@/lib/chat/messageReasoning'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
+import {
+    createTalosChatSendIdentity,
+    type TalosChatSendIdentity,
+    type TalosChatSendPreparation,
+    type TalosChatSendPreparationContext,
+} from '@/lib/chat/sendSnapshot'
+import {
+    applyTalosSessionLibraryContextPolicyPatch,
+    parseTalosSessionLibraryContextPolicy,
+    type TalosLibraryTurnOverride,
+    type TalosSessionLibraryContextPolicyPatch,
+    type TalosSessionLibraryContextPolicyV1,
+} from '@/lib/chat/libraryPolicy'
 import type { TalosToolDefinition } from '@/lib/tools/registry'
 import { newTalosMobileId } from '@/lib/mobileIds'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
@@ -29,6 +45,8 @@ import type {
  * ChatGPT both use. 40 covers most conversations in one read.
  */
 export const TALOS_MESSAGE_PAGE_SIZE = 40
+const CHAT_SESSION_NOT_FOUND = 'TALOS_CHAT_SESSION_NOT_FOUND'
+const NEW_CHAT_TITLE = 'New chat'
 
 /**
  * Defect #5: the trace is model output like any other — it can rehearse the
@@ -37,11 +55,13 @@ export const TALOS_MESSAGE_PAGE_SIZE = 40
  */
 const REASONING_MAX_CHARS = 64_000
 
-function capturedReasoning(text: string): string {
+function capturedReasoning(text: string, translate: TalosTranslate): string {
     const clean = stripLibrarySaveMarkers(text)
     return clean.length <= REASONING_MAX_CHARS
         ? clean
-        : `${clean.slice(0, REASONING_MAX_CHARS)}\n… reasoning truncated at ${REASONING_MAX_CHARS} characters.`
+        : `${clean.slice(0, REASONING_MAX_CHARS)}\n${translate('chat.reasoningTruncated', {
+            count: REASONING_MAX_CHARS,
+        })}`
 }
 
 /** Debt A1: a provider-agnostic tool call (hub-and-spoke IR — each adapter
@@ -93,7 +113,7 @@ export interface TalosStreamHandlers {
 }
 
 /**
- * Owner 2026-07-26: one page the answer rests on. Kept per ANSWER so the chat
+ * Owner 2026-07-26: one search result/page the answer rests on. Kept per ANSWER so the chat
  * can show a "Sources" chip under that reply — a chip listing everything the
  * conversation ever read would not be a citation.
  */
@@ -108,6 +128,8 @@ export interface TalosMobileWebSource {
  *  dispatches on, and it used to be produced by every adapter and then discarded. */
 export interface ChatCompletionResult {
     text: string
+    /** Controller-owned durable assistant evidence; never provider output. */
+    metadata?: Readonly<Record<string, unknown>>
     finishReason?: string | null
     /**
      * Token accounting exactly as the provider reported it.
@@ -122,18 +144,38 @@ export interface ChatCompletionResult {
     /** Defect #5: kept beside the answer, never mixed into it. */
     reasoning?: string
     /**
-     * Owner 2026-07-26: the pages this answer rests on, so the chat can show a
+     * Owner 2026-07-26: the search results/pages this answer rests on, so the chat can show a
      * "Sources" chip under it. Per ANSWER, never per chat — a chip listing
      * everything the conversation ever read is not a citation.
      */
     sources?: readonly TalosMobileWebSource[]
+    /** Tool-produced Vault bindings persisted on the final assistant row. */
+    attachments?: readonly AppendChatAttachmentInput[]
 }
 
-export type ChatCompletion = (
+export interface ChatCompletionInvocation<Runtime> {
+    readonly identity: Readonly<TalosChatSendIdentity>
+    readonly runtime: Runtime
+    /** Durable assistant-only resume; never inferred from the selected chat. */
+    readonly continuation?: Readonly<{
+        checkpoint_id: string
+        checkpoint: Readonly<Record<string, unknown>>
+    }>
+}
+
+export interface TalosChatContinuationInput<Runtime> {
+    readonly identity: Readonly<TalosChatSendIdentity>
+    readonly runtime: Runtime
+    readonly checkpoint_id: string
+    readonly checkpoint: Readonly<Record<string, unknown>>
+}
+
+export type ChatCompletion<Runtime = undefined> = (
     turns: ChatTurn[],
     stream?: TalosStreamHandlers,
     /** Tools this turn may call; omitted by callers that have no suite. */
     tools?: readonly TalosToolDefinition<never>[],
+    invocation?: ChatCompletionInvocation<Runtime>,
 ) => Promise<ChatCompletionResult>
 export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -161,14 +203,30 @@ export interface ChatState {
     persistenceError: string | null
 }
 
-export interface ChatStoreOptions {
+export interface ChatStoreOptions<Runtime = undefined> {
     repository: TalosChatRepository
+    translate: TalosTranslate
     makeId?: () => string
     now?: () => string
     resolveMessageParts?: (messageId: string) => Promise<TalosMobileInputPart[]>
+    /**
+     * Synchronous boundary: copies controller-owned state after session capture
+     * and before any retrieval await.
+     */
+    captureSendRuntime?: (
+        identity: Readonly<TalosChatSendIdentity>,
+        turnPolicy: TalosLibraryTurnOverride | null,
+    ) => Runtime
+    prepareSend?: (
+        context: TalosChatSendPreparationContext<Runtime>,
+    ) => Promise<TalosChatSendPreparation<Runtime>>
 }
 
-export interface ChatStore {
+declare const TALOS_CHAT_STORE_RUNTIME: unique symbol
+
+export interface ChatStore<Runtime = undefined> {
+    /** @internal Type-only link between a store and its completion runtime. */
+    readonly [TALOS_CHAT_STORE_RUNTIME]?: Runtime
     stopStreaming(): void
     readonly messages: readonly TalosMobileMessageView[]
     readonly sessionBrowserActivities: readonly TalosMobileBrowserActivityView[]
@@ -184,6 +242,11 @@ export interface ChatStore {
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<void>
     setSessionArchived(sessionId: string, archived: boolean): Promise<void>
+    setSessionLibraryContextPolicy(
+        sessionId: string,
+        patch: TalosSessionLibraryContextPolicyPatch,
+        expectedRevision: number,
+    ): Promise<TalosSessionLibraryContextPolicyV1>
     setSessionOrder(orderedIds: string[]): Promise<void>
     exportSnapshot(sessionId?: string): Promise<{
         session: TalosLocalChatSession
@@ -208,7 +271,13 @@ export interface ChatStore {
         // assistant stream — so the composer (text + attachments) can clear
         // immediately instead of lingering for the whole generation.
         onPersisted?: () => void,
+        turnPolicy?: TalosLibraryTurnOverride | null,
     ): Promise<boolean>
+    /**
+     * Resume durable assistant work on its captured owner. The continuation is
+     * queued behind an active send and never invents another user message.
+     */
+    continueFromCheckpoint(input: TalosChatContinuationInput<Runtime>): Promise<boolean>
 }
 
 function toBrowserActivityView(activity: TalosLocalToolActivity): TalosMobileBrowserActivityView | null {
@@ -235,12 +304,14 @@ function toBrowserActivityView(activity: TalosLocalToolActivity): TalosMobileBro
     }
 }
 
-function errorMessage(error: unknown): string {
-    return error instanceof Error && error.message ? error.message : 'Local chat storage failed.'
+function errorMessage(error: unknown, translate: TalosTranslate): string {
+    return error instanceof Error && error.message
+        ? error.message
+        : translate('chat.localStorageFailed')
 }
 
 function titleFromPrompt(prompt: string): string {
-    return prompt.replace(/\s+/g, ' ').trim().slice(0, 255) || 'New chat'
+    return prompt.replace(/\s+/g, ' ').trim().slice(0, 255) || NEW_CHAT_TITLE
 }
 
 function toMessageView(
@@ -261,6 +332,11 @@ function toMessageView(
         model_profile_id: message.model_profile_id,
         run_id: message.run_id,
         metadata: message.metadata,
+        // A completed chat row consumes a typed view value, not a second
+        // ad-hoc read from the metadata bag. The export uses the same extractor.
+        reasoning: message.role === 'assistant'
+            ? talosMessageReasoning(message.metadata)
+            : null,
     }
     if (attachments.length > 0) {
         view.attachments = attachments.map((attachment) => ({
@@ -294,7 +370,11 @@ function modelIdentity(modelProfileId: string | null): { provider: string | null
     }
 }
 
-function providerFault(error: unknown, modelProfileId: string | null): Record<string, unknown> {
+function providerFault(
+    error: unknown,
+    modelProfileId: string | null,
+    translate: TalosTranslate,
+): Record<string, unknown> {
     const identity = modelIdentity(modelProfileId)
     if (error instanceof TalosMobileProviderError) {
         const status = error.status ?? null
@@ -304,10 +384,10 @@ function providerFault(error: unknown, modelProfileId: string | null): Record<st
         return {
             layer: 'provider',
             code: status ? `PROVIDER_HTTP_${status}` : 'PROVIDER_CHAT_FAILED',
-            message: error.message,
+            message: talosTranslatableErrorMessage(error, translate) ?? error.message,
             next_action: status === 401 || status === 403
-                ? 'Update the provider credential in Settings, then retry.'
-                : 'Check provider health and retry the message.',
+                ? translate('chat.updateProviderCredential')
+                : translate('chat.checkProviderHealth'),
             retryable,
             status,
             provider: error.provider || identity.provider,
@@ -317,8 +397,9 @@ function providerFault(error: unknown, modelProfileId: string | null): Record<st
     return {
         layer: 'system',
         code: 'CHAT_EXECUTION_FAILED',
-        message: errorMessage(error),
-        next_action: 'Check the selected model and connection, then retry.',
+        message: talosTranslatableErrorMessage(error, translate)
+            ?? errorMessage(error, translate),
+        next_action: translate('chat.checkModelConnection'),
         retryable: null,
         status: null,
         provider: identity.provider,
@@ -326,8 +407,12 @@ function providerFault(error: unknown, modelProfileId: string | null): Record<st
     }
 }
 
-export function createChatStore(complete: ChatCompletion, options: ChatStoreOptions): ChatStore {
+export function createChatStore<Runtime = undefined>(
+    complete: ChatCompletion<Runtime>,
+    options: ChatStoreOptions<Runtime>,
+): ChatStore<Runtime> {
     const repository = options.repository
+    const translate = options.translate
     const makeId = options.makeId ?? newTalosMobileId
     const now = options.now ?? (() => new Date().toISOString())
     const messages = reactive<TalosMobileMessageView[]>([])
@@ -347,6 +432,14 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         persistenceError: null,
     })
     let initialization: Promise<void> | null = null
+    let navigationRevision = 0
+    const sessionMutationTails = new Map<string, Promise<void>>()
+    const desiredModelProfileBySession = new Map<string, string | null>()
+    const continuationQueue: Array<{
+        input: TalosChatContinuationInput<Runtime>
+        resolve(value: boolean): void
+    }> = []
+    let drainingContinuations = false
 
     async function loadMessageView(message: TalosLocalChatMessage): Promise<TalosMobileMessageView> {
         const [attachments, toolActivities] = await Promise.all([
@@ -367,9 +460,9 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     }
 
     function markPersistenceFailure(error: unknown): void {
-        const detail = errorMessage(error)
+        const detail = errorMessage(error, translate)
         state.persistenceStatus = 'error'
-        state.persistenceError = `Local chat storage is unavailable. ${detail}`
+        state.persistenceError = translate('chat.localStorageUnavailableDetail', { detail })
         state.lastError = state.persistenceError
     }
 
@@ -440,8 +533,28 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
 
     function requirePersistence(): void {
         if (state.persistenceStatus !== 'ready') {
-            throw new Error(state.persistenceError ?? 'Local chat storage is not ready.')
+            throw new Error(state.persistenceError ?? translate('chat.localStorageNotReady'))
         }
+    }
+
+    /**
+     * SQLite writes for one session are ordered by invocation, so a slow older
+     * model write cannot land after a newer user selection.
+     */
+    function enqueueSessionMutation<T>(
+        sessionId: string,
+        operation: () => Promise<T>,
+    ): Promise<T> {
+        const previous = sessionMutationTails.get(sessionId) ?? Promise.resolve()
+        const current = previous.catch(() => undefined).then(operation)
+        let tail!: Promise<void>
+        tail = current.then(() => undefined, () => undefined).finally(() => {
+            if (sessionMutationTails.get(sessionId) === tail) {
+                sessionMutationTails.delete(sessionId)
+            }
+        })
+        sessionMutationTails.set(sessionId, tail)
+        return current
     }
 
     async function refreshSessionList(): Promise<void> {
@@ -471,9 +584,10 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     }
 
     async function createSession(
-        title = 'New chat',
+        title = NEW_CHAT_TITLE,
         modelProfileId: string | null = null,
     ): Promise<TalosLocalChatSession> {
+        const revision = ++navigationRevision
         resetPaging()
         requirePersistence()
         try {
@@ -484,6 +598,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 created_at: now(),
             })
             await refreshSessionList()
+            if (revision !== navigationRevision) return created
             activeSession.value = sessions.find((session) => session.id === created.id) ?? created
             messages.splice(0, messages.length)
             sessionBrowserActivities.splice(0, sessionBrowserActivities.length)
@@ -533,6 +648,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     }
 
     async function selectSession(sessionId: string): Promise<void> {
+        const revision = ++navigationRevision
         requirePersistence()
         try {
             await repository.selectSession(sessionId)
@@ -547,7 +663,8 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 })
             await refreshSessionList()
             const selected = sessions.find((session) => session.id === sessionId)
-            if (!selected) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+            if (!selected) throw new Error(CHAT_SESSION_NOT_FOUND)
+            if (revision !== navigationRevision) return
             activeSession.value = selected
             messages.splice(0, messages.length, ...restored)
             sessionBrowserActivities.splice(0, sessionBrowserActivities.length, ...browserActivities)
@@ -572,6 +689,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     }
 
     async function deleteSession(sessionId: string): Promise<void> {
+        const revision = ++navigationRevision
         requirePersistence()
         try {
             const nextId = await repository.deleteSession(sessionId)
@@ -590,6 +708,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                         return view ? [view] : []
                     })
                 : []
+            if (revision !== navigationRevision) return
             sessions.splice(0, sessions.length, ...available)
             activeSession.value = next
             messages.splice(0, messages.length, ...restored)
@@ -618,14 +737,23 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     async function setActiveModelProfile(modelProfileId: string | null): Promise<void> {
         requirePersistence()
         const active = activeSession.value
-        if (!active || active.active_model_profile_id === modelProfileId) return
+        if (!active) return
+        const currentDesired = desiredModelProfileBySession.has(active.id)
+            ? desiredModelProfileBySession.get(active.id)
+            : active.active_model_profile_id
+        if (currentDesired === modelProfileId) return
+        desiredModelProfileBySession.set(active.id, modelProfileId)
         try {
-            const updated = await repository.updateSession(active.id, {
+            await enqueueSessionMutation(active.id, () => repository.updateSession(active.id, {
                 active_model_profile_id: modelProfileId,
-            })
-            activeSession.value = updated
-            await refreshSessionList()
+            }))
+            if (desiredModelProfileBySession.get(active.id) === modelProfileId) {
+                await refreshSessionList()
+            }
         } catch (error) {
+            if (desiredModelProfileBySession.get(active.id) === modelProfileId) {
+                desiredModelProfileBySession.delete(active.id)
+            }
             markPersistenceFailure(error)
             throw error
         }
@@ -637,9 +765,9 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     async function exportSnapshot(sessionId?: string) {
         requirePersistence()
         const targetId = sessionId ?? activeSession.value?.id
-        if (!targetId) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        if (!targetId) throw new Error(CHAT_SESSION_NOT_FOUND)
         const session = sessions.find((candidate) => candidate.id === targetId)
-        if (!session) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        if (!session) throw new Error(CHAT_SESSION_NOT_FOUND)
         const exportMessages = await repository.listMessages(targetId)
         const activities = await repository.listSessionToolActivities(targetId)
         const attachments = []
@@ -657,7 +785,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     async function setSessionArchived(sessionId: string, archived: boolean): Promise<void> {
         requirePersistence()
         const current = sessions.find((session) => session.id === sessionId)
-        if (!current) throw new Error('TALOS_CHAT_SESSION_NOT_FOUND')
+        if (!current) throw new Error(CHAT_SESSION_NOT_FOUND)
         try {
             const updated = await repository.updateSessionMetadata(sessionId, {
                 ...current.metadata, archived,
@@ -668,6 +796,48 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             markPersistenceFailure(error)
             throw error
         }
+    }
+
+    async function setSessionLibraryContextPolicy(
+        sessionId: string,
+        patch: TalosSessionLibraryContextPolicyPatch,
+        expectedRevision: number,
+    ): Promise<TalosSessionLibraryContextPolicyV1> {
+        requirePersistence()
+        return enqueueSessionMutation(sessionId, async () => {
+            const current = sessions.find((session) => session.id === sessionId)
+            if (!current) throw new Error(CHAT_SESSION_NOT_FOUND)
+            const stored = parseTalosSessionLibraryContextPolicy(
+                current.metadata.library_context_policy,
+            )
+            const candidate = applyTalosSessionLibraryContextPolicyPatch(
+                stored ?? {
+                    schema_version: 1,
+                    revision: 0,
+                    enabled: null,
+                    mode: null,
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: null,
+                },
+                patch,
+                expectedRevision,
+                now(),
+            )
+            try {
+                const updated = await repository.updateSessionMetadata(sessionId, {
+                    ...current.metadata,
+                    library_context_policy: candidate,
+                })
+                const index = sessions.findIndex((session) => session.id === sessionId)
+                if (index >= 0) sessions[index] = updated
+                if (activeSession.value?.id === sessionId) activeSession.value = updated
+                return candidate
+            } catch (error) {
+                markPersistenceFailure(error)
+                throw error
+            }
+        })
     }
 
     async function setSessionOrder(orderedIds: string[]): Promise<void> {
@@ -691,7 +861,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
     async function setSurface(surface: TalosLocalChatSurface): Promise<void> {
         requirePersistence()
         let active = activeSession.value
-        if (!active) active = await createSession('New chat')
+        if (!active) active = await createSession(NEW_CHAT_TITLE)
         if (active.surface === surface) return
         try {
             const updated = await repository.updateSession(active.id, { surface })
@@ -727,13 +897,30 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         let active = activeSession.value
         if (!active) return createSession(titleFromPrompt(prompt), modelProfileId)
 
+        const targetSessionId = active.id
+        const projectionRevision = navigationRevision
         const update: { title?: string; active_model_profile_id?: string | null } = {}
         if (active.active_model_profile_id !== modelProfileId) update.active_model_profile_id = modelProfileId
-        if (messages.length === 0 && active.title === 'New chat') update.title = titleFromPrompt(prompt)
+        if (messages.length === 0 && active.title === NEW_CHAT_TITLE) update.title = titleFromPrompt(prompt)
         if (Object.keys(update).length > 0) {
-            active = await repository.updateSession(active.id, update)
-            activeSession.value = active
-            await refreshSessionList()
+            if ('active_model_profile_id' in update) {
+                desiredModelProfileBySession.set(targetSessionId, modelProfileId)
+            }
+            active = await enqueueSessionMutation(
+                targetSessionId,
+                () => repository.updateSession(targetSessionId, update),
+            )
+            const isLatestModel = !('active_model_profile_id' in update)
+                || desiredModelProfileBySession.get(targetSessionId) === modelProfileId
+            if (isLatestModel) {
+                if (
+                    projectionRevision === navigationRevision
+                    && activeSession.value?.id === targetSessionId
+                ) {
+                    activeSession.value = active
+                }
+                await refreshSessionList()
+            }
         }
         return active
     }
@@ -758,8 +945,165 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
             attachments,
             created_at: now(),
         })
-        messages.push(await loadMessageView(persisted))
+        const view = await loadMessageView(persisted)
+        if (activeSession.value?.id === sessionId) messages.push(view)
         bumpSessionRecency(sessionId, persisted.created_at)
+    }
+
+    async function runContinuation(
+        input: TalosChatContinuationInput<Runtime>,
+    ): Promise<boolean> {
+        state.sending = true
+        state.lastError = null
+        const abort = new AbortController()
+        activeStreamAbort = abort
+        let streamed = ''
+        let reasoned = ''
+        try {
+            const owner = (await repository.listSessions()).find(
+                (session) => session.id === input.identity.sessionId,
+            )
+            if (!owner) {
+                state.lastError = CHAT_SESSION_NOT_FOUND
+                return false
+            }
+
+            // Crash reconciliation: the final assistant row is the receipt.
+            // If it exists, no provider or tool call may happen again.
+            const existing = await repository.listMessages(owner.id)
+            if (existing.some((message) =>
+                message.role === 'assistant'
+                && message.metadata?.tool_authorization_checkpoint_id === input.checkpoint_id)) {
+                return true
+            }
+
+            state.streamingSessionId = owner.id
+            const handlers: TalosStreamHandlers = {
+                onChunk: (text) => {
+                    streamed += text
+                    state.streamingText = streamed.includes('[TALOS_SAVE_LIBRARY')
+                        ? stripLibrarySaveMarkers(streamed)
+                        : streamed
+                },
+                onReasoning: (text) => {
+                    reasoned += text
+                    state.streamingReasoning = reasoned
+                },
+                onReasoningReset: () => {
+                    reasoned = ''
+                    state.streamingReasoning = null
+                },
+                signal: abort.signal,
+            }
+            const invocation: ChatCompletionInvocation<Runtime> = Object.freeze({
+                identity: input.identity,
+                runtime: input.runtime,
+                continuation: Object.freeze({
+                    checkpoint_id: input.checkpoint_id,
+                    checkpoint: input.checkpoint,
+                }),
+            })
+            const reply = await complete([], handlers, undefined, invocation)
+            const rawThinking = reply.reasoning ?? (reasoned || undefined)
+            const thinking = rawThinking ? capturedReasoning(rawThinking, translate) : undefined
+            const assistantMetadata = {
+                ...(reply.metadata ?? {}),
+                tool_authorization_checkpoint_id: input.checkpoint_id,
+                ...(reply.toolCalls?.length
+                    ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null }
+                    : {}),
+                ...(thinking ? { reasoning: thinking } : {}),
+                ...(reply.sources?.length ? { sources: reply.sources } : {}),
+            }
+            await appendDurable(
+                owner.id,
+                'assistant',
+                reply.text,
+                'persisted',
+                input.identity.modelProfileId,
+                assistantMetadata,
+                reply.attachments,
+            )
+            return true
+        } catch (error) {
+            const aborted = error instanceof Error && error.name === 'AbortError'
+            if (streamed || reasoned) {
+                try {
+                    await appendDurable(
+                        input.identity.sessionId,
+                        'assistant',
+                        stripLibrarySaveMarkers(streamed),
+                        'persisted',
+                        input.identity.modelProfileId,
+                        {
+                            interrupted: true,
+                            ...(reasoned
+                                ? { reasoning: capturedReasoning(reasoned, translate) }
+                                : {}),
+                        },
+                    )
+                } catch (persistenceError) {
+                    markPersistenceFailure(persistenceError)
+                }
+            }
+            if (!aborted) {
+                state.lastError = errorMessage(error, translate)
+                try {
+                    await appendDurable(
+                        input.identity.sessionId,
+                        'system',
+                        state.lastError,
+                        'failed',
+                        input.identity.modelProfileId,
+                        { chat_error: providerFault(error, input.identity.modelProfileId, translate) },
+                    )
+                } catch (persistenceError) {
+                    markPersistenceFailure(persistenceError)
+                }
+            }
+            return false
+        } finally {
+            state.streamingText = null
+            state.streamingSessionId = null
+            state.streamingReasoning = null
+            if (activeStreamAbort === abort) activeStreamAbort = null
+            state.sending = false
+        }
+    }
+
+    async function drainContinuationQueue(): Promise<void> {
+        if (drainingContinuations || state.sending) return
+        drainingContinuations = true
+        try {
+            while (continuationQueue.length > 0 && !state.sending) {
+                const queued = continuationQueue.shift()!
+                queued.resolve(await runContinuation(queued.input))
+            }
+        } finally {
+            drainingContinuations = false
+            if (continuationQueue.length > 0 && !state.sending) {
+                void drainContinuationQueue()
+            }
+        }
+    }
+
+    function continueFromCheckpoint(
+        input: TalosChatContinuationInput<Runtime>,
+    ): Promise<boolean> {
+        if (
+            !input.checkpoint_id
+            || !input.identity.sessionId
+            || !input.identity.sendId
+            || input.checkpoint === null
+            || typeof input.checkpoint !== 'object'
+            || Array.isArray(input.checkpoint)
+        ) {
+            return Promise.resolve(false)
+        }
+        return new Promise<boolean>((resolve) => {
+            continuationQueue.push({ input, resolve })
+            void drainContinuationQueue()
+        })
     }
 
     async function send(
@@ -768,31 +1112,90 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         metadata: Record<string, unknown> = {},
         attachments: readonly AppendChatAttachmentInput[] = [],
         onPersisted?: () => void,
+        turnPolicy: TalosLibraryTurnOverride | null = null,
     ): Promise<boolean> {
         const trimmed = text.trim()
         if ((!trimmed && attachments.length === 0) || state.sending) return false
         if (state.persistenceStatus !== 'ready') {
-            state.lastError = state.persistenceError ?? 'Local chat storage is not ready.'
+            state.lastError = state.persistenceError ?? translate('chat.localStorageNotReady')
             return false
         }
 
         state.sending = true
         state.lastError = null
+        const acceptedAt = new Date().toISOString()
+        const abort = new AbortController()
+        activeStreamAbort = abort
+        const finishSend = (): void => {
+            state.streamingText = null
+            state.streamingSessionId = null
+            state.streamingReasoning = null
+            activeStreamAbort = null
+            state.sending = false
+            void drainContinuationQueue()
+        }
         let session: TalosLocalChatSession
+        let invocation: ChatCompletionInvocation<Runtime>
         try {
             session = await ensureActiveSession(trimmed || 'Shared files', modelProfileId)
+        } catch (error) {
+            markPersistenceFailure(error)
+            finishSend()
+            return false
+        }
+
+        let preparedMetadata = { ...metadata }
+        try {
+            const identity = createTalosChatSendIdentity({
+                sendId: newTalosMobileId(),
+                sessionId: session.id,
+                sessionTitle: session.title,
+                surface: session.surface,
+                modelProfileId,
+                acceptedAt,
+            })
+            let runtime = options.captureSendRuntime
+                ? options.captureSendRuntime(identity, turnPolicy)
+                : undefined as Runtime
+            if (options.prepareSend) {
+                const prepared = await options.prepareSend({
+                    identity,
+                    text: trimmed,
+                    metadata: Object.freeze({ ...metadata }),
+                    attachments: Object.freeze([...attachments]),
+                    signal: abort.signal,
+                    runtime,
+                })
+                runtime = prepared.runtime
+                preparedMetadata = {
+                    ...preparedMetadata,
+                    ...(prepared.metadata ?? {}),
+                }
+            }
+            if (abort.signal.aborted) {
+                finishSend()
+                return false
+            }
+            invocation = Object.freeze({ identity, runtime })
+        } catch (error) {
+            state.lastError = errorMessage(error, translate)
+            finishSend()
+            return false
+        }
+
+        try {
             await appendDurable(
                 session.id,
                 'user',
                 trimmed,
                 'persisted',
                 modelProfileId,
-                metadata,
+                preparedMetadata,
                 attachments,
             )
         } catch (error) {
             markPersistenceFailure(error)
-            state.sending = false
+            finishSend()
             return false
         }
 
@@ -820,7 +1223,10 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                         role: message.role as ChatTurn['role'],
                         content: message.content,
                     }
-                    if (withAttachments.has(message.id)) {
+                    // Assistant attachments are durable visual results. Replaying
+                    // them on every later request would silently grant ambient
+                    // model access and repeatedly upload the same generated bytes.
+                    if (message.role === 'user' && withAttachments.has(message.id)) {
                         if (!options.resolveMessageParts) {
                             throw new Error('TALOS_ATTACHMENT_RESOLVER_UNAVAILABLE')
                         }
@@ -830,24 +1236,22 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                     return turn
                 }))
         } catch (error) {
-            state.lastError = errorMessage(error)
+            state.lastError = errorMessage(error, translate)
             try {
                 await appendDurable(session.id, 'system', state.lastError, 'failed', modelProfileId, {
-                    chat_error: providerFault(error, modelProfileId),
+                    chat_error: providerFault(error, modelProfileId, translate),
                 })
             } catch (persistenceError) {
                 markPersistenceFailure(persistenceError)
             }
-            state.sending = false
+            finishSend()
             return true
         }
 
-        const abort = new AbortController()
-        activeStreamAbort = abort
         let streamed = ''
         let reasoned = ''
         try {
-            const reply = await complete(turns, {
+            const handlers: TalosStreamHandlers = {
                 onChunk: (text) => {
                     streamed += text
                     // Security review: never render raw save-markers mid-stream.
@@ -867,14 +1271,18 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                     state.streamingReasoning = null
                 },
                 signal: abort.signal,
-            })
+            }
+            const reply = options.captureSendRuntime || options.prepareSend
+                ? await complete(turns, handlers, undefined, invocation)
+                : await complete(turns, handlers)
             // Debt A1: the loop dispatches on finishReason. No tool is registered
             // yet, so 'tool_calls' cannot occur — but the turn is persisted with its
             // calls so the round-trip is durable the moment tools land, instead of
             // the send path being rewritten again.
             const rawThinking = reply.reasoning ?? (reasoned || undefined)
-            const thinking = rawThinking ? capturedReasoning(rawThinking) : undefined
+            const thinking = rawThinking ? capturedReasoning(rawThinking, translate) : undefined
             const assistantMetadata = {
+                ...(reply.metadata ?? {}),
                 ...(reply.toolCalls?.length
                     ? { tool_calls: reply.toolCalls, finish_reason: reply.finishReason ?? null }
                     : {}),
@@ -885,8 +1293,15 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 // reload is not a citation.
                 ...(reply.sources?.length ? { sources: reply.sources } : {}),
             }
-            await appendDurable(session.id, 'assistant', reply.text, 'persisted', modelProfileId,
-                Object.keys(assistantMetadata).length ? assistantMetadata : undefined)
+            await appendDurable(
+                session.id,
+                'assistant',
+                reply.text,
+                'persisted',
+                modelProfileId,
+                Object.keys(assistantMetadata).length ? assistantMetadata : undefined,
+                reply.attachments,
+            )
         } catch (error) {
             const aborted = error instanceof Error && error.name === 'AbortError'
             // A streamed partial is preserved honestly, never re-fetched or dropped.
@@ -906,22 +1321,19 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
                 }
             }
             if (!aborted) {
-                const providerError = errorMessage(error)
+                const providerError = talosTranslatableErrorMessage(error, translate)
+                    ?? errorMessage(error, translate)
                 state.lastError = providerError
                 try {
                     await appendDurable(session.id, 'system', providerError, 'failed', modelProfileId, {
-                        chat_error: providerFault(error, modelProfileId),
+                        chat_error: providerFault(error, modelProfileId, translate),
                     })
                 } catch (persistenceError) {
                     markPersistenceFailure(persistenceError)
                 }
             }
         } finally {
-            state.streamingText = null
-            state.streamingSessionId = null
-            state.streamingReasoning = null
-            activeStreamAbort = null
-            state.sending = false
+            finishSend()
         }
         return true
     }
@@ -945,6 +1357,7 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         renameSession,
         deleteSession,
         setSessionArchived,
+        setSessionLibraryContextPolicy,
         setSessionOrder,
         exportSnapshot,
         loadComposerDraft,
@@ -953,5 +1366,6 @@ export function createChatStore(complete: ChatCompletion, options: ChatStoreOpti
         setSurface,
         recordBrowserActivity,
         send,
+        continueFromCheckpoint,
     }
 }

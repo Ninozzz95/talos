@@ -38,6 +38,8 @@ export interface TalosToolResult {
      * after the results, and all four adapters translate them unchanged.
      */
     images?: import('@/lib/chat/attachmentContracts').TalosMobileImageInputPart[]
+    /** Vault bindings to persist on the final assistant message. */
+    messageAttachments?: import('@/repositories/chatRepository').AppendChatAttachmentInput[]
     /** Anything the audit row should keep that the model does not need. */
     evidence?: Record<string, unknown>
 }
@@ -53,13 +55,39 @@ export interface TalosToolDefinition<Input = unknown> {
     title: string
     /** Read by the MODEL: it decides whether the tool fits the question. */
     description: string
+    /**
+     * Complete capability set for compound tools. `action` remains the stable
+     * primary activity label; legacy tools omit this field and require only it.
+     */
+    requiredActions?: readonly TalosToolAction[]
     action: TalosToolAction
+    /**
+     * `always` is a hard per-call confirmation boundary. It ignores baseline
+     * allow and saved grants; deny and disabled state still win.
+     */
+    confirmation?: 'policy' | 'always'
     input: ZodType<Input>
     run(input: Input, context: TalosToolContext): Promise<TalosToolResult>
 }
 
 export function defineTalosTool<Input>(definition: TalosToolDefinition<Input>): TalosToolDefinition<Input> {
     return definition
+}
+
+/**
+ * One canonical permission view for schema offering, execution and audit.
+ *
+ * Always retain the primary action even if a malformed compound declaration
+ * omits it, and remove duplicates without changing declaration order.
+ */
+export function talosToolRequiredActions(
+    tool: Pick<TalosToolDefinition<never>, 'action' | 'requiredActions'>,
+): TalosToolAction[] {
+    const actions: TalosToolAction[] = [tool.action]
+    for (const action of tool.requiredActions ?? []) {
+        if (!actions.includes(action)) actions.push(action)
+    }
+    return actions
 }
 
 type JsonSchema = Record<string, unknown>

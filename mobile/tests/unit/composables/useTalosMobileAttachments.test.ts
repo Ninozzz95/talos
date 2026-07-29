@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import { useTalosMobileAttachments } from '@/composables/useTalosMobileAttachments'
+import {
+    useTalosMobileAttachments as createAttachments,
+    type TalosMobileAttachmentsOptions,
+} from '@/composables/useTalosMobileAttachments'
 import { TALOS_MOBILE_ATTACHMENT_LIMITS } from '@/lib/chat/attachmentContracts'
 import type { TalosLocalFileAuthorityGrant, TalosLocalVaultFile } from '@/repositories/chatRepository'
 import type { TalosPickedFile } from '@/services/nativeFilePicker'
 import type { TalosVaultService, TalosVaultTrayItem } from '@/services/talosVaultService'
+import { talosTestT } from '../../helpers/talosTestI18n'
+
+function useTalosMobileAttachments(options: Omit<TalosMobileAttachmentsOptions, 'translate'>) {
+    return createAttachments({ ...options, translate: talosTestT('en') })
+}
 
 function picked(name = 'brief.txt', sizeBytes = 5): TalosPickedFile {
     return {
@@ -65,12 +73,22 @@ function makeVault(overrides: Partial<TalosVaultService> = {}): TalosVaultServic
             const stored = vaultFile(`gen-${input.name}`, input.name, input.text.length)
             return { file: stored, grant: grant(`grant-gen-${input.name}`, stored.id) }
         }),
+        createGeneratedBinary: vi.fn(async (input): Promise<TalosVaultTrayItem> => {
+            const stored = {
+                ...vaultFile(`gen-${input.name}`, input.name, input.bytes.byteLength),
+                media_type: input.mediaType,
+            }
+            return { file: stored, grant: grant(`grant-gen-${input.name}`, stored.id) }
+        }),
+        readFilePreview: vi.fn().mockResolvedValue(null),
+        readFileText: vi.fn().mockResolvedValue(null),
         createGrant: vi.fn(async (fileId) => grant(`grant-${fileId}`, fileId)),
         revokeGrant: vi.fn().mockResolvedValue(undefined),
         resolveMessageParts: vi.fn().mockResolvedValue([]),
         listFiles: vi.fn().mockResolvedValue([]),
         // Boot path now reads summaries (bodies are hydrated on demand).
         listSummaries: vi.fn().mockResolvedValue([]),
+        setFileShared: vi.fn().mockResolvedValue(undefined),
         deleteFile: vi.fn().mockResolvedValue(undefined),
         reconcilePending: vi.fn().mockResolvedValue(undefined),
         ...overrides,
@@ -249,6 +267,134 @@ describe('useTalosMobileAttachments', () => {
         expect(service.revokeGrant).toHaveBeenCalledWith('grant-gen') // not attached → no lingering grant
         expect(file.id).toBe('gen-1')
         expect(attachments.vaultFiles.map((candidate) => candidate.id)).toContain('gen-1')
+    })
+
+    it('passes a multi-link search dossier through without flattening its metadata', async () => {
+        const stored = vaultFile('search-1', 'Web search.md', 10)
+        const service = makeVault({
+            createGenerated: vi.fn().mockResolvedValue({
+                file: stored,
+                grant: grant('grant-search', 'search-1'),
+            }),
+            listSummaries: vi.fn().mockResolvedValue([stored]),
+        })
+        const attachments = useTalosMobileAttachments({
+            picker: { pickFiles: vi.fn().mockResolvedValue([]) },
+            vault: service,
+            currentSessionId: () => 'session-web',
+        })
+        const input = {
+            name: 'Web search.md',
+            mediaType: 'text/markdown',
+            text: '# Search',
+            kind: 'web_source' as const,
+            sourceUrl: null,
+            sourceLinks: [{ url: 'https://example.com/a', title: 'A' }],
+        }
+
+        await attachments.saveGenerated(input)
+
+        expect(service.createGenerated).toHaveBeenCalledWith(input, 'session-web')
+        expect(service.revokeGrant).toHaveBeenCalledWith('grant-search')
+    })
+
+    it('P1-CTX-ISO-07 stamps generated artifacts with the captured owner instead of live navigation', async () => {
+        const textFile = vaultFile('generated-owner-text', 'owner.md', 5)
+        const binaryFile = vaultFile('generated-owner-binary', 'owner.pdf', 4)
+        const service = makeVault({
+            createGenerated: vi.fn().mockResolvedValue({
+                file: textFile,
+                grant: grant('grant-owner-text', textFile.id),
+            }),
+            createGeneratedBinary: vi.fn().mockResolvedValue({
+                file: binaryFile,
+                grant: grant('grant-owner-binary', binaryFile.id),
+            }),
+            listSummaries: vi.fn().mockResolvedValue([textFile, binaryFile]),
+        })
+        const attachments = useTalosMobileAttachments({
+            picker: { pickFiles: vi.fn().mockResolvedValue([]) },
+            vault: service,
+            currentSessionId: () => 'navigated-chat',
+        })
+
+        await attachments.saveGenerated({
+            name: 'owner.md',
+            mediaType: 'text/markdown',
+            text: 'owner',
+        }, 'captured-owner-chat')
+        await attachments.saveGeneratedBinary({
+            name: 'owner.pdf',
+            mediaType: 'application/pdf',
+            bytes: new Uint8Array([1, 2, 3, 4]),
+        }, false, 'captured-owner-chat')
+
+        expect(service.createGenerated).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'owner.md' }),
+            'captured-owner-chat',
+        )
+        expect(service.createGeneratedBinary).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'owner.pdf' }),
+            'captured-owner-chat',
+        )
+    })
+
+    it('IMAGE-DUR-04 retains only the grant used by a generated assistant attachment', async () => {
+        const inline = {
+            ...vaultFile('generated-inline', 'astronaut.png', 3),
+            media_type: 'image/png',
+        }
+        const libraryOnly = {
+            ...vaultFile('generated-library', 'report.pdf', 4),
+            media_type: 'application/pdf',
+        }
+        const service = makeVault({
+            createGeneratedBinary: vi.fn()
+                .mockResolvedValueOnce({
+                    file: inline,
+                    grant: grant('grant-inline', inline.id),
+                })
+                .mockResolvedValueOnce({
+                    file: libraryOnly,
+                    grant: grant('grant-library', libraryOnly.id),
+                }),
+            listSummaries: vi.fn()
+                .mockResolvedValueOnce([inline])
+                .mockResolvedValueOnce([inline, libraryOnly]),
+        })
+        const attachments = useTalosMobileAttachments({
+            picker: { pickFiles: vi.fn().mockResolvedValue([]) },
+            vault: service,
+            currentSessionId: () => 'chat-image',
+        })
+
+        const result = await attachments.saveGeneratedBinary({
+            name: 'astronaut.png',
+            mediaType: 'image/png',
+            bytes: new Uint8Array([1, 2, 3]),
+        }, true)
+
+        expect(result).toEqual({
+            file: inline,
+            attachment: {
+                id: 'grant-inline',
+                vault_file_id: 'generated-inline',
+                grant_id: 'grant-inline',
+            },
+        })
+        expect(service.revokeGrant).not.toHaveBeenCalledWith('grant-inline')
+
+        await attachments.saveGeneratedBinary({
+            name: 'report.pdf',
+            mediaType: 'application/pdf',
+            bytes: new Uint8Array([1, 2, 3, 4]),
+        })
+        expect(service.revokeGrant).toHaveBeenCalledWith('grant-library')
+        expect(service.createGeneratedBinary).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ name: 'astronaut.png' }),
+            'chat-image',
+        )
     })
 
     it('reconciles pending files and exposes the durable Vault catalog at startup', async () => {

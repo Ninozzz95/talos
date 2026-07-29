@@ -3,10 +3,10 @@
  *
  * Owner decision D1, revised 2026-07-26 after checking the pricing rather than
  * trusting a memory of it: **Tavily** is the first door (1,000 credits a month,
- * no credit card), **Brave** an option for its independent index (it closed its
- * free tier in February 2026 and now wants a card with no spending cap, which is
- * a hard barrier on an app that is distributed), **SearXNG self-hosted** for
- * anyone who wants no third party at all, and a **custom endpoint** for the rest.
+ * no credit card), **Brave** an option for its independent index (card required,
+ * spending limits available; its current API terms prohibit retaining response
+ * data without a separate agreement), **SearXNG self-hosted** for anyone who
+ * wants no third party at all, and a **custom endpoint** for the rest.
  *
  * `request` and `parse` are pure and separate. That is not tidiness: it is how
  * the wire formats get pinned by tests with no network, and writing a wire

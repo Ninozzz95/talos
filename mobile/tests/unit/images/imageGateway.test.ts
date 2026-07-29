@@ -5,6 +5,8 @@ import {
     pickTalosImageModel,
     planTalosImageRequest,
 } from '@/lib/images/imageGateway'
+import * as imageGatewayModule from '@/lib/images/imageGateway'
+import { parseTalosImageModels } from '@/lib/images/openRouterImageCatalog'
 
 /**
  * Owner's own architecture sketch: chat → model → gateway → provider adapters →
@@ -41,9 +43,27 @@ describe('asking two different providers for the same picture', () => {
         // pixel was drawn, and three models called it a content refusal.
         expect(plan.body.response_format).toEqual({
             type: 'image',
-            mime_type: 'image/png',
+            // Normative ImageResponseFormat enum + owner wire: PNG is a 400.
+            mime_type: 'image/jpeg',
             aspect_ratio: '3:4',
             image_size: '1K',
+        })
+    })
+
+    it('IMAGE-OR-02 speaks the dedicated OpenRouter Image API contract', () => {
+        const plan = planTalosImageRequest(
+            'openrouter' as never,
+            { prompt: 'un gatto', shape: 'landscape' },
+            { apiKey: 'or-secret', model: 'google/gemini-3.1-flash-image' },
+        )
+        expect(plan.url).toBe('https://openrouter.ai/api/v1/images')
+        expect(plan.headers.Authorization).toBe('Bearer or-secret')
+        expect(plan.body).toEqual({
+            model: 'google/gemini-3.1-flash-image',
+            prompt: 'un gatto',
+            n: 1,
+            aspect_ratio: '16:9',
+            output_format: 'png',
         })
     })
 
@@ -70,12 +90,58 @@ describe('asking two different providers for the same picture', () => {
     })
 })
 
+describe('dedicated image model discovery', () => {
+    const catalogApi = imageGatewayModule as unknown as {
+        planTalosImageCatalogRequest(
+            provider: 'openrouter',
+            config: { apiKey: string; endpoint?: string | null },
+        ): { url: string; headers: Record<string, string> }
+    }
+
+    it('IMAGE-OR-03 plans and shape-validates the dedicated OpenRouter image catalog', () => {
+        const plan = catalogApi.planTalosImageCatalogRequest('openrouter', {
+            apiKey: 'or-secret',
+        })
+        expect(plan.url).toBe('https://openrouter.ai/api/v1/images/models')
+        expect(plan.headers.Authorization).toBe('Bearer or-secret')
+
+        expect(parseTalosImageModels('openrouter', {
+            data: [{
+                id: 'google/gemini-3.1-flash-image',
+                created: 123,
+                architecture: {
+                    input_modalities: ['text'],
+                    output_modalities: ['image'],
+                },
+                supported_parameters: {
+                    aspect_ratio: { type: 'enum', values: ['1:1', '16:9'] },
+                },
+            }],
+        })).toEqual([expect.objectContaining({
+            id: 'google/gemini-3.1-flash-image',
+            createdAt: 123,
+        })])
+    })
+
+    it('IMAGE-OR-03 rejects malformed catalog payloads instead of guessing', () => {
+        expect(() => parseTalosImageModels('openrouter', {
+            data: [{ id: '', architecture: { output_modalities: ['image'] } }],
+        })).toThrow(/TALOS_IMAGE_CATALOG_INVALID/)
+    })
+})
+
 describe('finding the picture in the answer', () => {
     const bytes = 'A'.repeat(600)
 
     it('reads the OpenAI shape', () => {
         expect(parseTalosGeneratedImages({ data: [{ b64_json: bytes }] }))
             .toEqual([{ base64: bytes, mediaType: 'image/png' }])
+    })
+
+    it('IMAGE-MIME-01 preserves a supported media_type beside b64_json', () => {
+        expect(parseTalosGeneratedImages({
+            data: [{ b64_json: bytes, media_type: 'image/webp' }],
+        })).toEqual([{ base64: bytes, mediaType: 'image/webp' }])
     })
 
     it('reads the Gemini shape, and the interleaved one too', () => {
@@ -102,6 +168,13 @@ describe('choosing who draws', () => {
         // A chat on OpenAI must not quietly bill a Google key.
         expect(chooseTalosImageProvider({ openai: true, gemini: true }, 'gemini')).toBe('gemini')
         expect(chooseTalosImageProvider({ openai: true, gemini: true }, 'openai')).toBe('openai')
+    })
+
+    it('IMAGE-OR-01 keeps an OpenRouter conversation on its configured image API', () => {
+        expect(chooseTalosImageProvider(
+            { openrouter: true } as never,
+            'openrouter',
+        )).toBe('openrouter')
     })
 
     it('falls back to whoever has a key when the current provider cannot draw', () => {
@@ -142,6 +215,24 @@ describe('which model draws', () => {
             { id: 'text-embedding-004' }, { id: 'gemini-3.1-flash-image' },
         ])).toBe('gemini-3.1-flash-image')
         expect(pickTalosImageModel('openai', [{ id: 'gpt-4o' }])).not.toBe('gpt-4o')
+    })
+
+    it('IMAGE-GEM-01 never routes an Imagen model to Gemini Interactions', () => {
+        expect(pickTalosImageModel('gemini', [
+            { id: 'imagen-4.0-ultra-generate-001' },
+            { id: 'gemini-3.1-flash-image' },
+        ])).toBe('gemini-3.1-flash-image')
+    })
+
+    it('IMAGE-OR-04 prefers the current OpenRouter author before a newer unrelated image model', () => {
+        expect(pickTalosImageModel(
+            'openrouter' as never,
+            [
+                { id: 'zeta/new-image', createdAt: 200 },
+                { id: 'google/gemini-3.1-flash-image', createdAt: 100 },
+            ] as never,
+            'google/gemini-3.6-flash',
+        )).toBe('google/gemini-3.1-flash-image')
     })
 
     it('falls back to a floor rather than refusing when the catalogue is empty', () => {

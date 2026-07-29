@@ -1,4 +1,5 @@
 import { readonly, ref, type Ref } from 'vue'
+import type { TalosTranslate } from '@/i18n/contracts'
 import { normalizeComposerDraft, normalizeComposerDraftScope } from '@/repositories/chatRepository'
 
 export interface TalosMobileComposerDraftPort {
@@ -7,6 +8,7 @@ export interface TalosMobileComposerDraftPort {
 }
 
 export interface TalosMobileComposerDraftOptions extends TalosMobileComposerDraftPort {
+    translate: TalosTranslate
     debounceMs?: number
     maxWaitMs?: number
 }
@@ -22,9 +24,11 @@ export interface TalosMobileComposerDraftController {
     dispose(): Promise<void>
 }
 
-function actionableDraftError(error: unknown): string {
-    const detail = error instanceof Error && error.message ? error.message : 'unknown storage error'
-    return `TALOS could not save this draft. The text remains in the composer. ${detail}`
+function actionableDraftError(error: unknown, translate: TalosTranslate): string {
+    const detail = error instanceof Error && error.message
+        ? error.message
+        : translate('common.unknown')
+    return translate('chat.draftSaveFailed', { detail })
 }
 
 export function createTalosMobileComposerDraftController(
@@ -62,7 +66,7 @@ export function createTalosMobileComposerDraftController(
                 succeeded = true
             } catch (cause) {
                 volatileDrafts.set(scopeId, value)
-                error.value = actionableDraftError(cause)
+                error.value = actionableDraftError(cause, options.translate)
             }
         })
         await writeQueue
@@ -107,7 +111,7 @@ export function createTalosMobileComposerDraftController(
         } catch (cause) {
             if (revision !== scopeRevision) return
             initialized = true
-            error.value = actionableDraftError(cause)
+            error.value = actionableDraftError(cause, options.translate)
         }
     }
 

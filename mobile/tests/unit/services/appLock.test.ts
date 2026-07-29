@@ -40,14 +40,18 @@ describe('appLock service (F2-T6)', () => {
     it('rejects a too-short PIN at setup', async () => {
         const backend = memoryBackend()
         // Debt S3: four digits is 10 000 candidates against a local verifier.
-        await expect(setupAppLockPin('1234', backend)).rejects.toThrow(/at least 6/i)
+        await expect(setupAppLockPin('1234', backend))
+            .rejects.toThrow('TALOS_APP_LOCK_PIN_TOO_SHORT')
     })
 
     it('rejects a trivial PIN at setup', async () => {
         const backend = memoryBackend()
-        await expect(setupAppLockPin('000000', backend)).rejects.toThrow(/predictable/i)
-        await expect(setupAppLockPin('123456', backend)).rejects.toThrow(/predictable/i)
-        await expect(setupAppLockPin('654321', backend)).rejects.toThrow(/predictable/i)
+        await expect(setupAppLockPin('000000', backend))
+            .rejects.toThrow('TALOS_APP_LOCK_PIN_PREDICTABLE')
+        await expect(setupAppLockPin('123456', backend))
+            .rejects.toThrow('TALOS_APP_LOCK_PIN_PREDICTABLE')
+        await expect(setupAppLockPin('654321', backend))
+            .rejects.toThrow('TALOS_APP_LOCK_PIN_PREDICTABLE')
     })
 
     it('verification is fail-closed when no PIN record exists', async () => {

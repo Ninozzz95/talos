@@ -1,5 +1,6 @@
 import type { TalosChatRepository } from '@/repositories/chatRepository'
 import { newTalosMobileId } from '@/lib/mobileIds'
+import { upsertTalosDisplayNameMemory } from '@/services/profileMemory'
 
 /**
  * R2-8 — station CRUD facades extracted from the chat controller (it had
@@ -37,6 +38,8 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
             metadata: { created_from: 'talos_mobile_station' },
             created_at: new Date().toISOString(),
         }),
+        upsertDisplayName: (displayName: string) =>
+            upsertTalosDisplayNameMemory(deps.repository, displayName),
         setStatus: (memoryId: string, status: 'active' | 'disabled' | 'quarantined' | 'rejected') =>
             deps.repository.updateMemoryStatus(memoryId, status),
         remove: (memoryId: string) => deps.repository.deleteMemory(memoryId),

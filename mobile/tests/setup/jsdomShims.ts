@@ -1,3 +1,10 @@
+import { config } from '@vue/test-utils'
+import { createTalosI18n } from '@/i18n'
+
+config.global.plugins = [
+    await createTalosI18n(),
+]
+
 /**
  * jsdom implements no scrolling API, so any component that calls
  * `element.scrollTo(...)` rejects asynchronously — which made `vitest run` exit

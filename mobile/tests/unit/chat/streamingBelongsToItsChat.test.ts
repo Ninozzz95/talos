@@ -35,21 +35,18 @@ vi.mock('@/stores/settings', () => ({
     useSettingsStore: () => ({ state: { shell: { streaming_animation: 'fade' } } }),
 }))
 
-/** One paced commit: the reveal is driven by the frame clock in both modes. */
-async function paint(wrapper: { vm: { $nextTick: () => Promise<void> } }): Promise<void> {
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    await wrapper.vm.$nextTick()
-}
-
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 
 describe('the in-flight reply belongs to one conversation', () => {
     it('renders in the chat it was started from', async () => {
         controller.chat.activeSession.value = { id: 'session-a', title: 'A' }
         const wrapper = mount(TalosMobileStreamingReply)
-        await paint(wrapper)
-        expect(wrapper.find('[data-testid="talos-mobile-streaming"]').exists()).toBe(true)
+        // Complete-word buffering can legitimately keep the first fragment in
+        // the loader for more than two frames. This test owns conversation
+        // routing, not a fixed paint deadline.
+        await vi.waitFor(() => {
+            expect(wrapper.find('[data-testid="talos-mobile-streaming"]').exists()).toBe(true)
+        })
     })
 
     it('does NOT render in a different chat, even while it is still running', () => {

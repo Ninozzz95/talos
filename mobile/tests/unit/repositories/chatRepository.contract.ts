@@ -275,6 +275,29 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     expect((await repository.listMemories()).find((entry) => entry.id === 'memory-2')?.last_used_at)
         .toBe('2026-07-22T11:05:00.000Z')
 
+    const upserted = await repository.upsertMemory({
+        id: 'memory-2',
+        scope_type: 'global',
+        scope_id: null,
+        kind: 'preference',
+        title: 'Updated preference',
+        content: 'The stable row is updated without duplication.',
+        source: 'talos_mobile_workspace_setup',
+        metadata: { system_memory_key: 'profile.display_name' },
+        created_at: '2026-07-22T11:10:00.000Z',
+    })
+    expect(upserted).toMatchObject({
+        id: 'memory-2',
+        scope_type: 'global',
+        status: 'active',
+        content: 'The stable row is updated without duplication.',
+        last_used_at: '2026-07-22T11:05:00.000Z',
+        created_at: '2026-07-22T11:00:01.000Z',
+        updated_at: '2026-07-22T11:10:00.000Z',
+    })
+    expect((await repository.listMemories()).map((entry) => entry.id).sort())
+        .toEqual(['memory-1', 'memory-2'])
+
     await repository.deleteMemory('memory-1')
     expect((await repository.listMemories()).map((entry) => entry.id)).toEqual(['memory-2'])
     await expect(repository.updateMemoryStatus('memory-1', 'active'))

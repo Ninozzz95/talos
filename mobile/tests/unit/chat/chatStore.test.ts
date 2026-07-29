@@ -1,7 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
-import { TALOS_MESSAGE_PAGE_SIZE, createChatStore, type ChatTurn } from '@/stores/chat'
+import {
+    TALOS_MESSAGE_PAGE_SIZE,
+    createChatStore as createLocalizedChatStore,
+    type ChatCompletion,
+    type ChatStoreOptions,
+    type ChatTurn,
+} from '@/stores/chat'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
+import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
+import { talosTestT } from '../../helpers/talosTestI18n'
+
+function createChatStore(
+    complete: ChatCompletion,
+    options: Omit<ChatStoreOptions, 'translate'>,
+) {
+    return createLocalizedChatStore(complete, {
+        ...options,
+        translate: talosTestT('en'),
+    })
+}
 
 function makeClock(): () => string {
     let tick = 0
@@ -11,6 +29,12 @@ function makeClock(): () => string {
 function makeIds(): () => string {
     let sequence = 0
     return () => `local-${++sequence}`
+}
+
+function deferred<T = void>() {
+    let resolve!: (value: T | PromiseLike<T>) => void
+    const promise = new Promise<T>((settle) => { resolve = settle })
+    return { promise, resolve }
 }
 
 describe('createChatStore durable sessions', () => {
@@ -351,6 +375,42 @@ describe('createChatStore durable sessions', () => {
         expect(await store.loadComposerDraft()).toBe('Draft B')
     })
 
+    it('P1-CTX-ISO-06 R8-A-SEND-04 cannot reactivate an old session when its model persistence resolves late', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        const store = createChatStore(vi.fn().mockResolvedValue({ text: 'unused', finishReason: 'stop' }), {
+            repository,
+            makeId: makeIds(),
+            now,
+        })
+        await store.initialize()
+        const owner = await store.createSession('Owner', 'openai:model-a')
+        const destination = await store.createSession('Destination', 'openai:model-a')
+        await store.selectSession(owner.id)
+
+        const updateStarted = deferred()
+        const releaseUpdate = deferred()
+        const updateSession = repository.updateSession.bind(repository)
+        vi.spyOn(repository, 'updateSession').mockImplementation(async (sessionId, patch) => {
+            if (sessionId === owner.id && patch.active_model_profile_id === 'anthropic:model-b') {
+                updateStarted.resolve()
+                await releaseUpdate.promise
+            }
+            return updateSession(sessionId, patch)
+        })
+
+        const pending = store.setActiveModelProfile('anthropic:model-b')
+        await updateStarted.promise
+        await store.selectSession(destination.id)
+        releaseUpdate.resolve()
+        await pending
+
+        expect(store.activeSession.value?.id).toBe(destination.id)
+        expect(store.activeSession.value?.active_model_profile_id).toBe('openai:model-a')
+        expect((await repository.listSessions()).find((session) => session.id === owner.id))
+            .toMatchObject({ active_model_profile_id: 'anthropic:model-b' })
+    })
+
     it('fails closed when persistence initialization fails and recovers only through retry', async () => {
         const now = makeClock()
         const repository = createMemoryChatRepository({ now })
@@ -430,6 +490,38 @@ describe('createChatStore durable sessions', () => {
         await first
     })
 
+    it('P1-CTX-ISO-08 releases the send lock without poisoning storage when preparation fails', async () => {
+        type Runtime = Readonly<{ marker: string }>
+        const repository = createMemoryChatRepository()
+        const prepareSend = vi.fn()
+            .mockRejectedValueOnce(new Error('context retrieval failed'))
+            .mockImplementationOnce(async (context) => ({
+                runtime: context.runtime,
+                metadata: { prepared: true },
+            }))
+        const complete = vi.fn().mockResolvedValue({ text: 'ok', finishReason: 'stop' })
+        const store = createLocalizedChatStore<Runtime>(complete, {
+            repository,
+            translate: talosTestT('en'),
+            captureSendRuntime: () => Object.freeze({ marker: 'captured' }),
+            prepareSend,
+        })
+        await store.initialize()
+
+        await expect(store.send('first')).resolves.toBe(false)
+        expect(store.state.persistenceStatus).toBe('ready')
+        expect(store.state.sending).toBe(false)
+        expect(store.state.lastError).toContain('context retrieval failed')
+        expect(await repository.listSessions()).toHaveLength(1)
+        expect(store.messages).toEqual([])
+
+        await expect(store.send('second')).resolves.toBe(true)
+        expect(prepareSend).toHaveBeenCalledTimes(2)
+        expect(complete).toHaveBeenCalledTimes(1)
+        expect(store.messages.find((message) => message.role === 'user')?.metadata)
+            .toMatchObject({ prepared: true })
+    })
+
     // F4-#16 — export snapshot: raw session/messages/activities/attachments
     // (sha256-enriched from the vault) assembled for the local export builders.
     it('assembles an export snapshot of the active session with sha256-enriched attachments', async () => {
@@ -492,6 +584,100 @@ describe('createChatStore durable sessions', () => {
         await store.setSessionArchived(session.id, false)
         const restored = store.sessions.find((candidate) => candidate.id === session.id)
         expect(restored?.metadata.archived).toBe(false)
+    })
+
+    it('P1-CTX-POLICY-02 aborts chat policy publication when metadata persistence fails', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        const store = createChatStore(vi.fn().mockResolvedValue({
+            text: 'unused',
+            finishReason: 'stop',
+        }), { repository, makeId: makeIds(), now })
+        await store.initialize()
+        const session = await store.createSession('Policy owner')
+        const update = vi.spyOn(repository, 'updateSessionMetadata')
+            .mockRejectedValueOnce(new Error('session metadata write failed'))
+
+        try {
+            await expect(store.setSessionLibraryContextPolicy(
+                session.id,
+                { enabled: true, mode: 'smart_relevant_v1' },
+                0,
+            )).rejects.toThrow('session metadata write failed')
+
+            expect(store.sessions.find((item) => item.id === session.id)?.metadata)
+                .not.toHaveProperty('library_context_policy')
+
+            await store.retryPersistence()
+            const committed = await store.setSessionLibraryContextPolicy(
+                session.id,
+                { enabled: true, mode: 'smart_relevant_v1' },
+                0,
+            )
+            expect(committed).toMatchObject({
+                revision: 1,
+                enabled: true,
+                mode: 'smart_relevant_v1',
+            })
+        } finally {
+            update.mockRestore()
+        }
+    })
+
+    it('P1-CTX-POLICY-02 serializes chat policy revisions without reactivating its owner', async () => {
+        const now = makeClock()
+        const repository = createMemoryChatRepository({ now })
+        const store = createChatStore(vi.fn().mockResolvedValue({
+            text: 'unused',
+            finishReason: 'stop',
+        }), { repository, makeId: makeIds(), now })
+        await store.initialize()
+        const owner = await store.createSession('Policy owner')
+        const ownerUpdatedAt = owner.updated_at
+        const gate = deferred()
+        const original = repository.updateSessionMetadata.bind(repository)
+        let calls = 0
+        const update = vi.spyOn(repository, 'updateSessionMetadata')
+            .mockImplementation(async (sessionId, metadata) => {
+                calls += 1
+                if (calls === 1) await gate.promise
+                return original(sessionId, metadata)
+            })
+
+        try {
+            const first = store.setSessionLibraryContextPolicy(
+                owner.id,
+                { enabled: true },
+                0,
+            )
+            await Promise.resolve()
+            const other = await store.createSession('Current chat')
+            const second = store.setSessionLibraryContextPolicy(
+                owner.id,
+                { mode: 'ask_before_use_v1' },
+                1,
+            )
+            await Promise.resolve()
+
+            expect(update).toHaveBeenCalledTimes(1)
+            gate.resolve()
+            const [, committed] = await Promise.all([first, second])
+
+            expect(update).toHaveBeenCalledTimes(2)
+            expect(committed).toMatchObject({
+                revision: 2,
+                enabled: true,
+                mode: 'ask_before_use_v1',
+            })
+            expect(store.activeSession.value?.id).toBe(other.id)
+            const persistedOwner = store.sessions.find((item) => item.id === owner.id)!
+            expect(persistedOwner.updated_at).toBe(ownerUpdatedAt)
+            expect(parseTalosSessionLibraryContextPolicy(
+                persistedOwner.metadata.library_context_policy,
+            )).toEqual(committed)
+        } finally {
+            update.mockRestore()
+        }
     })
 
     it('persists a manual order as sort_index for every listed session', async () => {

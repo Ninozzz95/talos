@@ -51,15 +51,19 @@ export function createTalosDocumentTools(
         description: [
             'Create a real document file and save it to the user\'s Library.',
             'Use `report` for a laid-out PDF (cover, KPI cards, tables, bar and pie charts),',
-            '`body` for prose formats (md, html, docx, pdf), `rows` for tables (csv, xlsx)',
-            'and `slides` for presentations (pptx). The file is written on this device and',
-            'reopened to check it is valid before you are told it succeeded.',
+            '`body` for prose formats (md, html, docx, pdf) or source files (py, js, ts, sql',
+            'and the other code formats in the enum), `rows` for tables (csv, xlsx), and',
+            '`slides` for presentations (pptx). For a source file, `format` is its real',
+            'extension and `body` is preserved as UTF-8. The file is written on this device',
+            'and reopened to check it is valid before you are told it succeeded.',
         ].join(' '),
         action: 'write',
         input: z.object({
-            format: z.enum(TALOS_DOCUMENT_FORMATS).describe('The file format to produce.'),
+            format: z.enum(TALOS_DOCUMENT_FORMATS)
+                .describe('The actual output file format and final filename extension.'),
             title: z.string().min(1).describe('The document title; it also becomes the file name.'),
-            body: z.string().optional().describe('Prose content, markdown-flavoured.'),
+            body: z.string().optional()
+                .describe('Prose content, or exact UTF-8 source text for a code-file format.'),
             // Numbers and booleans are ACCEPTED and converted, not refused.
             //
             // Owner's R37 trace: the model spent sixty seconds writing a

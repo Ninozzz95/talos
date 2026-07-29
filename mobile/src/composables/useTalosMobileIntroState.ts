@@ -10,7 +10,7 @@ import type { TalosMobileIntroOutcome, TalosMobileOnboardingState } from '@/stor
  * keeps the session latch (no reopen loop) — the unsaved version simply offers
  * the intro again on the next cold start, which is honest.
  */
-export const TALOS_MOBILE_INTRO_VERSION = 1
+export const TALOS_MOBILE_INTRO_VERSION = 2
 
 export interface TalosMobileIntroStateDependencies {
     hydrated: () => boolean
@@ -21,14 +21,19 @@ export interface TalosMobileIntroStateDependencies {
 
 export interface TalosMobileIntroState {
     introOpen: ComputedRef<boolean>
+    replaying: ComputedRef<boolean>
     closeIntro(outcome: TalosMobileIntroOutcome): Promise<void>
     replayIntro(): void
+    setBack(handler: (() => void) | null): void
+    handleBack(): void
 }
 
 export function useTalosMobileIntroState(deps: TalosMobileIntroStateDependencies): TalosMobileIntroState {
     // Session latch: once closed (or persisted), never auto-reopen this session.
     const latched = ref(false)
     const replaying = ref(false)
+    const backHandler = ref<(() => void) | null>(null)
+    const replayStatus = computed(() => replaying.value)
 
     const introOpen = computed(() => {
         if (replaying.value) return true
@@ -42,6 +47,7 @@ export function useTalosMobileIntroState(deps: TalosMobileIntroStateDependencies
     async function closeIntro(outcome: TalosMobileIntroOutcome): Promise<void> {
         replaying.value = false
         latched.value = true
+        backHandler.value = null
         if (persisted) return
         persisted = true
         try {
@@ -61,5 +67,20 @@ export function useTalosMobileIntroState(deps: TalosMobileIntroStateDependencies
         persisted = false
     }
 
-    return { introOpen, closeIntro, replayIntro }
+    function setBack(handler: (() => void) | null): void {
+        backHandler.value = handler
+    }
+
+    function handleBack(): void {
+        backHandler.value?.()
+    }
+
+    return {
+        introOpen,
+        replaying: replayStatus,
+        closeIntro,
+        replayIntro,
+        setBack,
+        handleBack,
+    }
 }

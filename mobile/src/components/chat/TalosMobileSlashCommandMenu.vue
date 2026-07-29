@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import {
     isTalosMobileCommandEnabled,
     TALOS_MOBILE_COMMANDS,
@@ -21,7 +22,34 @@ const emit = defineEmits<{
     filteredCount: [count: number]
 }>()
 
-const filteredCommands = computed(() => filterTalosMobileSlashCommands(props.commands, props.query))
+const { t } = useTalosI18n()
+const commandKeys: Record<TalosMobileCommandId, { label: string; description: string }> = {
+    new_session: { label: 'commands.newSessionLabel', description: 'commands.newSessionDescription' },
+    send_message: { label: 'commands.sendMessageLabel', description: 'commands.sendMessageDescription' },
+    open_browse: { label: 'commands.openBrowseLabel', description: 'commands.openBrowseDescription' },
+    attach_file: { label: 'commands.attachFileLabel', description: 'commands.attachFileDescription' },
+    open_context_vault: { label: 'commands.openContextLabel', description: 'commands.openContextDescription' },
+    open_model_center: { label: 'commands.openModelLabel', description: 'commands.openModelDescription' },
+    open_doctor: { label: 'commands.openDoctorLabel', description: 'commands.openDoctorDescription' },
+    export_report: { label: 'commands.exportReportLabel', description: 'commands.exportReportDescription' },
+    open_notes: { label: 'commands.openNotesLabel', description: 'commands.openNotesDescription' },
+    open_tasks: { label: 'commands.openTasksLabel', description: 'commands.openTasksDescription' },
+}
+const categoryKeys: Partial<Record<TalosMobileCommand['category'], string>> = {
+    chat: 'commands.categoryChat',
+    context: 'commands.categoryContext',
+    model: 'commands.categoryModel',
+    system: 'commands.categorySystem',
+    report: 'commands.categoryReport',
+    productivity: 'commands.categoryProductivity',
+}
+const localizedCommands = computed(() => props.commands.map((command) => ({
+    ...command,
+    label: t(commandKeys[command.id].label),
+    description: t(commandKeys[command.id].description),
+    category: (categoryKeys[command.category] ? t(categoryKeys[command.category]!) : command.category) as TalosMobileCommand['category'],
+})))
+const filteredCommands = computed(() => filterTalosMobileSlashCommands(localizedCommands.value, props.query))
 
 function selectCommand(command: TalosMobileCommand): void {
     if (!isTalosMobileCommandEnabled(command)) return
@@ -44,12 +72,12 @@ defineExpose({ activateSelected })
         class="w-full max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-md border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] shadow-xl"
     >
         <div class="border-b border-[var(--talos-border,var(--border))] px-3 py-2 font-mono text-2xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
-            Slash commands
+            {{ $t('chat.slashCommands') }}
         </div>
         <div
             class="max-h-[min(18rem,48vh)] overflow-y-auto p-2"
             role="listbox"
-            aria-label="Composer slash commands"
+            :aria-label="$t('chat.composerSlashCommands')"
         >
             <button
                 v-for="(command, index) in filteredCommands"
@@ -93,7 +121,7 @@ defineExpose({ activateSelected })
                 v-if="filteredCommands.length === 0"
                 class="px-3 py-6 text-center text-sm text-[var(--talos-muted,var(--muted-foreground))]"
             >
-                No slash commands match this input.
+                {{ $t('chat.noSlashMatches') }}
             </p>
         </div>
     </section>

@@ -16,6 +16,7 @@ import { applyTalosTheme, DEFAULT_THEME_STATE, useThemeStore } from '@/stores/th
 import { applyTalosFontScale, readRememberedTalosFontScale } from '@/lib/talosFontScale'
 import { useSettingsStore } from '@/stores/settings'
 import { preloadTalosMobileRoutes } from '@/lib/mobileRoutes'
+import { createTalosI18n } from '@/i18n'
 
 declare global {
     interface Window {
@@ -71,14 +72,15 @@ if (!disabled.has('native')) {
     })
 }
 
-function bootstrapTalosMobileApp(): void {
+async function bootstrapTalosMobileApp(): Promise<void> {
     // Perf review 2026-07-25: this AWAITED the preload of all 10 route chunks + 6
     // shell chunks before mounting — 792KB of boot-blocking JS instead of the
     // 505KB the budget gate measures, and nothing (not even the boot logo) painted
     // until it finished. In a packaged APK every chunk is a local file:// asset,
     // so the "offline readiness" rationale buys nothing on device.
     // Mount first; warm the station chunks once the main thread is free.
-    createApp(App).use(router).mount('#app')
+    const i18n = await createTalosI18n()
+    createApp(App).use(i18n).use(router).mount('#app')
 
     const warm = (): void => {
         void preloadTalosMobileRoutes()

@@ -1,4 +1,5 @@
 import { sha256 } from 'js-sha256'
+import { talosMessageReasoning } from '@/lib/chat/messageReasoning'
 import type {
     TalosChatAttachmentBinding,
     TalosLocalChatMessage,
@@ -76,7 +77,7 @@ function sessionPayload(session: TalosLocalChatSession) {
 }
 
 function messagePayload(message: TalosLocalChatMessage) {
-    const reasoning = typeof message.metadata.reasoning === 'string' ? message.metadata.reasoning : null
+    const reasoning = talosMessageReasoning(message.metadata)
     return {
         id: message.id,
         role: message.role,
@@ -140,7 +141,7 @@ function markdownTranscript(input: TalosMobileSessionExportInput): string {
     ]
     for (const message of input.messages) {
         lines.push('', `### ${message.role.toUpperCase()} - ${message.created_at}`, '', message.content)
-        const reasoning = typeof message.metadata.reasoning === 'string' ? message.metadata.reasoning.trim() : ''
+        const reasoning = talosMessageReasoning(message.metadata)?.trim() ?? ''
         if (reasoning) {
             // Quoted, and after the answer: in a document the conclusion leads
             // and the working is shown below it.

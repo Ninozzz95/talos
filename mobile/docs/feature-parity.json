@@ -85,7 +85,7 @@
                 "desktop_contract": "Context Vault: file disponibili, chunk con chunk_id/content_hash, context set, grounding bounded lato server con disclosure used_context",
                 "desktop_owner": "control_plane",
                 "mobile_owner": "mobile_core",
-                "mobile_surface": "Library / Context Vault with durable local file inventory, attach-existing, fresh grants, revoke and delete",
+                "mobile_surface": "Library / Context Vault with durable local inventory, global/chat/one-turn additive context controls, per-file include/exclude, immutable send snapshots, confirmed natural-language policy tools, audit/undo, revoke/delete, and Android system Save-As",
                 "execution_location": [
                     "local_mobile",
                     "trusted_node"
@@ -94,11 +94,18 @@
                     "vault.file.read",
                     "rag.local.retrieve"
                 ],
-                "evidence_contract": "Vault reuse, grant renewal, revoke, delete and historical safe-label persistence pass real reload journeys; chunk retrieval, context sets and sync remain P2/P6 work",
+                "evidence_contract": "Legacy broad users remain byte-compatible while broad, positive-evidence smart retrieval, ask-before-body-egress and explicit-tool on-demand modes resolve transactionally at global/chat/one-turn/file scope. Model/session/provider/file ownership is frozen before async retrieval; live revocation, exact authorization binding, confirmed natural-language mutation, optimistic revision conflict, audit receipt and bounded undo are permanent tests. Broad-mode topic correction is one-shot/no-tool and never retries a tool, abort or visible partial stream. R8 intentionally ships a deterministic multilingual lexical adapter, not semantic embeddings: an exact pinned model, offline/APK/memory/latency/license/download-consent benchmark remains a separate gate. Vault reuse, reload, exact-byte export and deletion remain covered; physical Android Save-As and real-provider acceptance remain owner gates",
                 "status": "implemented",
                 "blocking_reason": null,
                 "test_ids": [
-                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts"
+                    "mobile/tests/e2e/mobile-chat-files.e2e.spec.ts",
+                    "mobile/tests/e2e/mobile-settings-parity.e2e.spec.ts",
+                    "mobile/tests/unit/lib/libraryPolicy.test.ts",
+                    "mobile/tests/unit/chat/sendSnapshot.test.ts",
+                    "mobile/tests/unit/chat/chatController.test.ts",
+                    "mobile/tests/unit/tools/libraryContextPolicyTools.test.ts",
+                    "mobile/tests/unit/services/saveVaultFileToDevice.test.ts",
+                    "mobile/tests/unit/tools/libraryExportTools.test.ts"
                 ],
                 "desktop_revision": "76a0aa933bf0388e4f99fa06a943997d2129d8d7"
             },

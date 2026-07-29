@@ -90,7 +90,7 @@ defineExpose({ openArtifact })
             ref="surfaceRoot"
             role="dialog"
             aria-modal="true"
-            aria-label="Browser capture"
+            :aria-label="$t('browser.captureTitle')"
             tabindex="-1"
             data-testid="talos-mobile-browser-frame"
             :data-zoom="String(zoom)"
@@ -100,27 +100,27 @@ defineExpose({ openArtifact })
         >
             <div class="flex items-start justify-between gap-2 text-left">
                 <div>
-                    <h2 class="text-base font-semibold">Browser capture</h2>
+                    <h2 class="text-base font-semibold">{{ $t('browser.captureTitle') }}</h2>
                     <p class="text-sm text-[var(--talos-muted)]">
-                        Capture {{ activeIndex + 1 }} of {{ artifacts.length }}. Page content is untrusted evidence.
+                        {{ $t('browser.capturePosition', { current: activeIndex + 1, total: artifacts.length }) }}
                     </p>
                 </div>
-                <Button type="button" size="icon" variant="ghost" aria-label="Close browser capture" @click="open = false">
+                <Button type="button" size="icon" variant="ghost" :aria-label="$t('browser.closeCapture')" @click="open = false">
                     <X class="size-4" aria-hidden="true" />
                 </Button>
             </div>
 
-            <div class="flex min-w-0 flex-wrap items-center gap-1" aria-label="Browser capture controls">
-                <Button type="button" size="icon" variant="outline" aria-label="Previous browser capture" :disabled="artifacts.length < 2" @click="step(-1)">
+            <div class="flex min-w-0 flex-wrap items-center gap-1" :aria-label="$t('browser.captureControls')">
+                <Button type="button" size="icon" variant="outline" :aria-label="$t('browser.previousCapture')" :disabled="artifacts.length < 2" @click="step(-1)">
                     <ArrowLeft class="size-4" aria-hidden="true" />
                 </Button>
-                <Button type="button" size="icon" variant="outline" aria-label="Next browser capture" :disabled="artifacts.length < 2" @click="step(1)">
+                <Button type="button" size="icon" variant="outline" :aria-label="$t('browser.nextCapture')" :disabled="artifacts.length < 2" @click="step(1)">
                     <ArrowRight class="size-4" aria-hidden="true" />
                 </Button>
-                <Button type="button" size="icon" variant="outline" aria-label="Zoom browser capture out" :disabled="zoom <= 1" @click="changeZoom(-0.5)">
+                <Button type="button" size="icon" variant="outline" :aria-label="$t('browser.zoomOut')" :disabled="zoom <= 1" @click="changeZoom(-0.5)">
                     <Minus class="size-4" aria-hidden="true" />
                 </Button>
-                <Button type="button" size="icon" variant="outline" aria-label="Zoom browser capture in" :disabled="zoom >= 4" @click="changeZoom(0.5)">
+                <Button type="button" size="icon" variant="outline" :aria-label="$t('browser.zoomIn')" :disabled="zoom >= 4" @click="changeZoom(0.5)">
                     <Plus class="size-4" aria-hidden="true" />
                 </Button>
                 <Button
@@ -128,7 +128,7 @@ defineExpose({ openArtifact })
                     type="button"
                     size="icon"
                     variant="outline"
-                    aria-label="Retry browser action on current frame"
+                    :aria-label="$t('browser.retryCurrentFrame')"
                     @click="emit('retry', activeArtifact.id)"
                 >
                     <RefreshCw class="size-4" aria-hidden="true" />
@@ -142,7 +142,7 @@ defineExpose({ openArtifact })
                     @click="emit('openLive', activeArtifact.source_url)"
                 >
                     <ExternalLink class="size-4" aria-hidden="true" />
-                    Open live page
+                    {{ $t('browser.openLivePage') }}
                 </Button>
             </div>
 
@@ -150,7 +150,7 @@ defineExpose({ openArtifact })
                 <img
                     data-testid="talos-mobile-browser-frame-image"
                     :src="activeArtifact.preview_uri ?? undefined"
-                    alt="Current browser capture"
+                    :alt="$t('browser.currentCapture')"
                     class="h-full w-full object-contain transition-transform motion-reduce:transition-none"
                     :class="interactionAvailable ? 'cursor-crosshair' : 'cursor-default'"
                     :style="{ transform: `scale(${zoom})` }"
@@ -158,7 +158,7 @@ defineExpose({ openArtifact })
                 >
             </div>
             <p v-if="!interactionAvailable" class="text-xs leading-5 text-[var(--talos-muted)]">
-                Trusted interaction unavailable. Pair an authenticated TALOS node before clicks or scroll commands can be sent.
+                {{ $t('browser.trustedInteractionUnavailable') }}
             </p>
         </div>
     </div>

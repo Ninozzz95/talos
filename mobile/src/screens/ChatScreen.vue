@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
+import { useTalosI18n } from '@/i18n'
+import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { Button } from '@/components/ui/button'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
 import { useTalosMobileDictation } from '@/composables/useTalosMobileDictation'
+import { resolveTalosDictationLanguageTag } from '@/lib/dictationPolicy'
 import { talosLightImpact } from '@/services/haptics'
 import {
     createTalosManualBrowserActivity,
@@ -23,6 +26,12 @@ import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
 import { useChatController } from '@/stores/chatController'
 import { useSettingsStore } from '@/stores/settings'
 import { useTalosMobileToasts } from '@/stores/toasts'
+import {
+    parseTalosSessionLibraryContextPolicy,
+    resolveTalosLibraryContextPolicy,
+    type TalosLibraryTurnOverride,
+} from '@/lib/chat/libraryPolicy'
+import { isTalosLibraryFileShared, parseVaultOrigin } from '@/lib/vaultLibrary'
 
 const TalosMobileBrowserActivity = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileBrowserActivity.vue'),
@@ -37,6 +46,7 @@ const TalosMobileBrowserActivity = defineAsyncComponent(
 const emit = defineEmits<{ export: [] }>()
 
 const router = useRouter()
+const { t } = useTalosI18n()
 const controller = useChatController()
 const settings = useSettingsStore()
 const {
@@ -63,25 +73,51 @@ const {
 const draft = createTalosMobileComposerDraftController({
     load: (scopeId) => chat.loadComposerDraft(scopeId),
     save: (scopeId, value) => chat.saveComposerDraft(value, scopeId),
+    translate: t,
 })
 const prompt = draft.prompt
 // F2-T5: live dictation — partials compose onto the draft captured at start.
 const dictation = useTalosMobileDictation({
     base: () => prompt.value,
     onTranscript: (text) => draft.updatePrompt(text),
+    language: () => resolveTalosDictationLanguageTag(settings.state.voice.dictation_language),
+    errorMessage: (code) => t(`chat.dictationErrors.${code}`),
 })
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const composerWrap = ref<HTMLElement | null>(null)
 // F4-#22: shared guard — failed session actions surface as toasts, never as
 // swallowed unhandled rejections (owner saw silent no-ops on device).
 const toasts = useTalosMobileToasts()
-const sessionActions = createSessionActionRunner(toasts)
+const sessionActions = createSessionActionRunner(toasts, t)
 const sessionActionBusy = sessionActions.busy
 const messageActionError = ref<string | null>(null)
 const browserError = ref<string | null>(null)
 const browserBusy = ref(false)
 const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
+const libraryTurnOverride = ref<TalosLibraryTurnOverride | null>(null)
+const sessionLibraryContextPolicy = computed(() =>
+    parseTalosSessionLibraryContextPolicy(
+        chat.activeSession.value?.metadata?.library_context_policy,
+    ))
+const effectiveLibraryContextPolicy = computed(() => resolveTalosLibraryContextPolicy({
+    legacy_enabled: settings.state.shell.library_context_enabled === true,
+    global_policy: settings.state.shell.library_context_policy,
+    session_policy: sessionLibraryContextPolicy.value,
+    turn_override: libraryTurnOverride.value,
+}))
+const effectiveLibraryContextEnabled = computed(() => (
+    settings.state.shell.library_context_enabled === true
+    && effectiveLibraryContextPolicy.value.enabled
+))
+const libraryTurnFiles = computed(() => attachments.vaultFiles.filter((file) => (
+    file.status === 'available'
+    && parseVaultOrigin(file.metadata) === 'uploaded'
+    && isTalosLibraryFileShared(file.metadata)
+)))
+const librarySelectedSourceCount = computed(
+    () => effectiveLibraryContextPolicy.value.included_file_ids.length,
+)
 // F2-T2: friendly per-message model attribution (id -> display name) for the meta row.
 const modelLabels = computed(() => Object.fromEntries(
     profiles.value.map((profile) => [profile.id, profile.display_name]),
@@ -94,6 +130,18 @@ const composerExpanded = computed(() => (
     || attachmentBusy.value
     || Boolean(attachmentError.value)
 ))
+const TalosWelcomeTitleFallback = () => h(
+    'h1',
+    { class: 'talos-welcome-title' },
+    t('chat.welcomeHeadline'),
+)
+const TalosWelcomeTitle = defineAsyncComponent({
+    loader: () => import('@/components/chat/TalosWelcomeTitle.vue'),
+    loadingComponent: TalosWelcomeTitleFallback,
+    errorComponent: TalosWelcomeTitleFallback,
+    delay: 0,
+    suspensible: false,
+})
 const draftError = computed(() => draft.error.value)
 const browserSuggestionUrl = computed(() => (
     settings.state.browser.suggest_for_urls
@@ -110,10 +158,10 @@ let browserPresentation = settings.state.browser.presentation
 let browserActivityQueue: Promise<void> = Promise.resolve()
 
 function browserEventStatus(event: TalosInAppBrowserEvent): string {
-    if (event.type === 'opening') return 'Opening local browser'
-    if (event.type === 'loaded' || event.type === 'navigated') return 'Page opened in local browser'
-    if (event.type === 'closed') return 'Local browser closed'
-    return event.message ?? 'Local browser failed'
+    if (event.type === 'opening') return t('chat.browserOpening')
+    if (event.type === 'loaded' || event.type === 'navigated') return t('chat.browserOpened')
+    if (event.type === 'closed') return t('chat.browserClosed')
+    return event.message ?? t('chat.browserFailed')
 }
 
 function queueBrowserEvent(event: TalosInAppBrowserEvent): void {
@@ -141,17 +189,12 @@ function queueBrowserEvent(event: TalosInAppBrowserEvent): void {
         }))
         .catch((error) => {
             browserError.value = error instanceof Error && error.message
-                ? `Browser activity could not be saved. ${error.message}`
-                : 'Browser activity could not be saved.'
+                ? t('chat.browserActivitySaveFailedDetail', { detail: error.message })
+                : t('chat.browserActivitySaveFailed')
         })
 }
 
 const browserService = createTalosInAppBrowserService({ onEvent: queueBrowserEvent })
-
-const welcome = {
-    headline: 'What claim should we benchmark?',
-    body: 'Turn a prompt into comparable AVM ON/OFF evidence with matching model, context, evaluator, and logs.',
-}
 
 // F2-T6 first-run setup checklist — REAL state only (no fake progress):
 // a key exists when any profile carries a stored secret; the model step is
@@ -251,6 +294,7 @@ watch(() => chat.state.streamingText, async (text) => {
 })
 
 watch(() => chat.activeSession.value?.id, async () => {
+    libraryTurnOverride.value = null
     liveEdge.rejoin()
     await nextTick()
     scrollChatToBottom('auto')
@@ -265,6 +309,10 @@ function publishComposerHeight(): void {
 
 async function onSend(): Promise<void> {
     const text = prompt.value
+    // Capture the exact one-turn object before any draft/storage await. The
+    // sheet always publishes a new object, so a later edit is distinguishable
+    // and must not be cleared by this older send.
+    const turnPolicy = libraryTurnOverride.value
     void talosLightImpact()
     // SF5-3: a live mic must not survive the send — late partials would
     // resurrect the sent text into the composer.
@@ -276,13 +324,18 @@ async function onSend(): Promise<void> {
     // rejoin the live edge so the message-add watch auto-scrolls (it was gated
     // when the user had scrolled up).
     rejoinLiveEdge()
-    const accepted = await controller.send(text)
+    const accepted = turnPolicy
+        ? await controller.send(text, turnPolicy)
+        : await controller.send(text)
     if (!accepted) {
         draft.updatePrompt(text)
         await draft.flush()
         await nextTick()
         composer.value?.focusPrompt()
         return
+    }
+    if (libraryTurnOverride.value === turnPolicy) {
+        libraryTurnOverride.value = null
     }
     await draft.activateScope(activeSessionId.value ?? 'new')
 }
@@ -324,23 +377,23 @@ controller.sessionLifecycle.register(orchestrator)
 onBeforeUnmount(() => controller.sessionLifecycle.unregister(orchestrator))
 
 function newSession(): void {
-    void sessionActions.run('New chat', () => orchestrator.newSession())
+    void sessionActions.run(t('chat.actionNewChat'), () => orchestrator.newSession())
 }
 
 function selectSession(sessionId: string): void {
-    void sessionActions.run('Open chat', () => orchestrator.selectSession(sessionId))
+    void sessionActions.run(t('chat.actionOpenChat'), () => orchestrator.selectSession(sessionId))
 }
 
 function renameSession(sessionId: string, title: string): void {
-    void sessionActions.run('Rename chat', () => orchestrator.renameSession(sessionId, title))
+    void sessionActions.run(t('chat.actionRenameChat'), () => orchestrator.renameSession(sessionId, title))
 }
 
 function deleteSession(sessionId: string): void {
-    void sessionActions.run('Delete chat', () => orchestrator.deleteSession(sessionId))
+    void sessionActions.run(t('chat.actionDeleteChat'), () => orchestrator.deleteSession(sessionId))
 }
 
 function retryPersistence(): void {
-    void sessionActions.run('Reconnect storage', () => chat.retryPersistence())
+    void sessionActions.run(t('chat.actionReconnectStorage'), () => chat.retryPersistence())
 }
 
 function selectAttachments(): void {
@@ -360,9 +413,10 @@ async function runMessageAction(action: () => Promise<void>): Promise<void> {
     try {
         await action()
     } catch (error) {
-        messageActionError.value = error instanceof Error && error.message
-            ? error.message
-            : 'TALOS could not complete the message action.'
+        messageActionError.value = talosTranslatableErrorMessage(error, t)
+            ?? (error instanceof Error && error.message
+                ? error.message
+                : t('chat.messageActionFailed'))
     }
 }
 
@@ -393,7 +447,7 @@ function saveMessageToLibrary(messageId: string): void {
             mediaType: 'text/markdown',
             text: message.content,
         })
-        toasts.push({ message: `Saved “${file.display_name}” to your Library.`, durationMs: 6000 })
+        toasts.push({ message: t('chat.savedNamedLibrary', { name: file.display_name }), durationMs: 6000 })
     })
 }
 
@@ -450,7 +504,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
     // Owner 2026-07-25 (defect #6): four commands claimed "not installed" while
     // the feature shipped and worked. The registry no longer lies, so the
     // handler has to actually run them.
-    void sessionActions.run('Run command', async () => {
+    void sessionActions.run(t('chat.actionRunCommand'), async () => {
         draft.updatePrompt('')
         await draft.flush()
         controller.clearPromptEnhancement()
@@ -496,7 +550,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
 }
 
 function toggleBrowseMode(enabled: boolean): void {
-    void sessionActions.run('Toggle browsing', async () => {
+    void sessionActions.run(t('chat.actionToggleBrowsing'), async () => {
         browserError.value = null
         await controller.setBrowseMode(enabled)
         if (!enabled) {
@@ -517,7 +571,7 @@ function openBrowserUrl(url: string): void {
         try {
             await controller.setBrowseMode(true)
             const owner = chat.activeSession.value
-            if (!owner) throw new Error('TALOS_CHAT_SESSION_REQUIRED')
+            if (!owner) throw new Error(t('chat.browserSessionRequired'))
             browserOwnerSessionId = owner.id
             browserSessionId = newTalosMobileId()
             browserPresentation = settings.state.browser.presentation
@@ -525,8 +579,8 @@ function openBrowserUrl(url: string): void {
             await browserActivityQueue
         } catch (error) {
             browserError.value = error instanceof Error && error.message
-                ? `The local browser could not open this link. ${error.message}`
-                : 'The local browser could not open this link.'
+                ? t('chat.localBrowserOpenFailedDetail', { detail: error.message })
+                : t('chat.localBrowserOpenFailed')
         } finally {
             browserBusy.value = false
         }
@@ -553,7 +607,7 @@ onBeforeUnmount(() => {
 <template>
     <section
         data-testid="mobile-screen"
-        aria-label="Chat"
+        :aria-label="t('navigation.chat')"
         class="relative flex h-full min-h-0 flex-1 flex-col bg-transparent"
     >
         <div
@@ -571,7 +625,7 @@ onBeforeUnmount(() => {
                 :disabled="sessionActionBusy"
                 @click="retryPersistence"
             >
-                Retry
+                {{ t('common.retry') }}
             </Button>
         </div>
 
@@ -605,7 +659,7 @@ onBeforeUnmount(() => {
                     role="status"
                 >
                     <Globe2 class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <span class="min-w-0 flex-1">Browse mode · Manual local browser</span>
+                    <span class="min-w-0 flex-1">{{ t('chat.browseModeManual') }}</span>
                     <span v-if="browserStatus" class="truncate text-[var(--talos-muted)]">{{ browserStatus }}</span>
                 </div>
 
@@ -640,28 +694,21 @@ onBeforeUnmount(() => {
                         class="talos-orbitron-brand font-semibold text-[var(--talos-text)]"
                         :class="composerExpanded ? 'mt-1 text-2xl' : 'mt-2 text-4xl sm:text-5xl'"
                     >TALOS</span>
-                    <h1
-                        class="font-semibold text-[var(--talos-text)]"
-                        :class="composerExpanded ? 'mt-3 text-lg' : 'mt-6 text-2xl'"
-                    >{{ welcome.headline }}</h1>
-                    <p
-                        v-if="!composerExpanded"
-                        class="mt-3 max-w-[560px] text-sm leading-6 text-[var(--talos-muted)]"
-                    >{{ welcome.body }}</p>
+                    <TalosWelcomeTitle />
 
                     <!-- F2-T6 first-run setup: REAL progress only, dismissible. -->
                     <section
                         v-if="setupChecklistVisible && !composerExpanded"
                         data-testid="talos-setup-checklist"
-                        aria-label="Getting started"
+                        :aria-label="t('chat.gettingStarted')"
                         class="mt-6 w-full max-w-[420px] rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-card,var(--card))]/80 p-3 text-left backdrop-blur"
                     >
                         <div class="flex items-center justify-between">
-                            <h2 class="text-sm font-semibold text-[var(--talos-text)]">Get set up</h2>
+                            <h2 class="text-sm font-semibold text-[var(--talos-text)]">{{ t('chat.getSetUp') }}</h2>
                             <button
                                 type="button"
                                 data-testid="talos-setup-dismiss"
-                                aria-label="Dismiss setup checklist"
+                                :aria-label="t('chat.dismissSetup')"
                                 class="talos-pressable -mr-1.5 flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
                                 @click="dismissSetupChecklist"
                             >
@@ -676,7 +723,7 @@ onBeforeUnmount(() => {
                         >
                             <CheckCircle2 v-if="setupHasKey" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <Circle v-else class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                            <span class="text-sm" :class="setupHasKey ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">Add a provider key</span>
+                            <span class="text-sm" :class="setupHasKey ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">{{ t('chat.addProviderKey') }}</span>
                         </button>
                         <button
                             type="button"
@@ -686,7 +733,7 @@ onBeforeUnmount(() => {
                         >
                             <CheckCircle2 v-if="setupHasModel" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <Circle v-else class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                            <span class="text-sm" :class="setupHasModel ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">Choose your model</span>
+                            <span class="text-sm" :class="setupHasModel ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">{{ t('chat.chooseYourModel') }}</span>
                         </button>
                     </section>
                 </div>
@@ -723,7 +770,7 @@ onBeforeUnmount(() => {
                     v-if="liveEdge.showPill.value"
                     type="button"
                     data-testid="talos-back-to-bottom"
-                    aria-label="Back to latest message"
+                    :aria-label="t('chat.backToLatest')"
                     class="talos-pressable absolute -top-14 left-1/2 z-10 flex min-h-11 min-w-11 -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-card)]/95 px-3 text-sm text-[var(--talos-text)] shadow-[0_4px_16px_rgba(0,0,0,0.14)] backdrop-blur"
                     @click="rejoinLiveEdge"
                 >
@@ -769,6 +816,11 @@ onBeforeUnmount(() => {
                 :drawer-mode="settings.state.shell.composer_drawer"
                 :immersive-composer="settings.state.shell.immersive_composer"
                 :plus-dropdown="settings.state.shell.plus_dropdown"
+                :library-context-enabled="effectiveLibraryContextEnabled"
+                :library-context-mode="effectiveLibraryContextPolicy.mode"
+                :library-source-count="librarySelectedSourceCount"
+                :library-turn-override="libraryTurnOverride"
+                :library-files="libraryTurnFiles"
                 @update:prompt="draft.updatePrompt($event)"
                 @send="onSend"
                 @stop="chat.stopStreaming()"
@@ -790,6 +842,7 @@ onBeforeUnmount(() => {
                 @select-slash-command="selectSlashCommand"
                 @toggle-browse="toggleBrowseMode"
                 @open-browser-url="openBrowserUrl"
+                @update-library-turn-override="libraryTurnOverride = $event"
             />
         </div>
 

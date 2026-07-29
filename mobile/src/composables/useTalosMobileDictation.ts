@@ -1,6 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
 import { talosDictationEngine, type TalosDictationEngine } from '@/services/dictation'
+import type { TalosDictationErrorCode } from '@/lib/dictationPolicy'
 
 /**
  * F2-T5 — dictation state for the composer. Live partials compose onto the
@@ -17,6 +18,10 @@ export interface UseTalosMobileDictationOptions {
     engine?: TalosDictationEngine
     /** Injectable for tests; defaults to the real platform check. */
     native?: boolean
+    /** Resolved at start so a persisted language change applies next session. */
+    language?: () => string | undefined
+    /** Live locale boundary; raw plugin prose never becomes application UI. */
+    errorMessage?: (code: TalosDictationErrorCode) => string
 }
 
 export interface TalosMobileDictation {
@@ -38,6 +43,17 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     const supported = ref(false)
     const status = ref<TalosMobileDictationStatus>('idle')
     const error = ref<string | null>(null)
+    const defaultErrorMessages: Record<TalosDictationErrorCode, string> = {
+        permissionDenied: 'Microphone permission is required.',
+        unavailable: 'Dictation unavailable.',
+        recognitionFailed: 'Speech recognition failed.',
+        startFailed: 'Speech recognition failed to start.',
+        startTimeout: 'Speech did not hear anything.',
+        noSpeech: 'No speech heard. Try again.',
+        stoppedResponding: 'Speech stopped responding. Try again.',
+    }
+    const messageFor = (code: TalosDictationErrorCode): string =>
+        options.errorMessage?.(code) ?? defaultErrorMessages[code]
 
     // F5.2 waveform — the maintained fork exposes no RMS (upstream ticket
     // filed): the level is driven by the REAL signal we do have, incoming
@@ -119,7 +135,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             stopEngineBestEffort()
             sessionEpoch += 1
             status.value = 'error'
-            error.value = 'The speech recognizer stopped responding. Tap the microphone to try again.'
+            error.value = messageFor('stoppedResponding')
         }, LISTENING_INACTIVITY_MS)
     }
 
@@ -128,7 +144,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         const granted = await engine.requestPermission()
         if (!granted) {
             status.value = 'error'
-            error.value = 'TALOS needs microphone permission to dictate.'
+            error.value = messageFor('permissionDenied')
             return
         }
         const capturedBase = options.base().trim()
@@ -142,7 +158,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
             stopEngineBestEffort()
             sessionEpoch += 1
             status.value = 'error'
-            error.value = 'Speech recognition did not hear anything. Check that Google speech services are enabled, then try again.'
+            error.value = messageFor('startTimeout')
         }, START_WATCHDOG_MS)
         await engine.start({
             onStart: () => {
@@ -174,16 +190,16 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                     return
                 }
                 status.value = 'error'
-                error.value = "TALOS did not hear any speech. Try again closer to the microphone."
+                error.value = messageFor('noSpeech')
             },
-            onError: (message) => {
+            onError: (code) => {
                 if (epoch !== sessionEpoch) return
                 clearWatchdog()
                 stopLevel()
                 status.value = 'error'
-                error.value = message
+                error.value = messageFor(code)
             },
-        })
+        }, { language: options.language?.() })
     }
 
     // F4-#18 inversion: hiding the mic on a failed probe made real-device

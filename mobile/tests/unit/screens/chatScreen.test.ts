@@ -15,7 +15,14 @@ const mockState = vi.hoisted(() => ({
     settings: {
         state: {
             chat_layout: { message_style: 'sections' },
-            shell: { immersive_header: false },
+            shell: {
+                immersive_header: false,
+                composer_drawer: false,
+                immersive_composer: false,
+                plus_dropdown: false,
+                library_context_enabled: true,
+                library_context_policy: null,
+            },
             motion_v6: { background_enabled: true, mode: 'off' },
             onboarding: { intro_version: 0, intro_outcome: null as string | null, setup_dismissed: false },
             browser: {
@@ -49,7 +56,7 @@ import ChatScreen from '@/screens/ChatScreen.vue'
 interface FakeMessage { id: string; role: 'user' | 'assistant' | 'system'; content: string; created_at: string; state: string; model_profile_id?: string | null; run_id?: string | null; metadata?: Record<string, unknown> }
 
 function makeController(messages: FakeMessage[] = []) {
-    const sessions = reactive<Array<{ id: string; title: string }>>([])
+    const sessions = reactive<Array<{ id: string; title: string; metadata?: Record<string, unknown> }>>([])
     const drafts = new Map<string, string>()
     const chat = {
         messages: reactive(messages.map((message) => ({
@@ -60,7 +67,7 @@ function makeController(messages: FakeMessage[] = []) {
         }))),
         sessions,
         sessionBrowserActivities: reactive([]),
-        activeSession: ref<{ id: string; title: string } | null>(null),
+        activeSession: ref<{ id: string; title: string; metadata?: Record<string, unknown> } | null>(null),
         state: reactive({
             sending: false,
             persistenceStatus: 'ready',
@@ -164,7 +171,14 @@ beforeEach(() => {
     mockState.settings.state.browser.presentation = 'isolated_webview'
     mockState.settings.state.browser.developer_untrusted_evidence = false
     mockState.settings.state.onboarding = { intro_version: 0, intro_outcome: null, setup_dismissed: false }
-    mockState.settings.state.shell = { immersive_header: false }
+    mockState.settings.state.shell = {
+        immersive_header: false,
+        composer_drawer: false,
+        immersive_composer: false,
+        plus_dropdown: false,
+        library_context_enabled: true,
+        library_context_policy: null,
+    }
     mockState.settings.setOnboarding.mockReset()
     mockState.controller = makeController()
 })
@@ -217,12 +231,14 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(mockState.routerPush).not.toHaveBeenCalled()
         expect(wrapper.get('[aria-label="Disable Browse mode"]').exists()).toBe(true)
     })
-    it('shows the TALOS brand hero + welcome and docks the composer when empty', () => {
+    it('WELCOME-SCREEN-01/02 shows one title-only TALOS hero and docks the composer when empty', () => {
         const wrapper = mount(ChatScreen)
-        expect(wrapper.find('[data-testid="talos-empty-brand"]').exists()).toBe(true)
-        expect(wrapper.find('.talos-short-logo-mark').exists()).toBe(true)
-        expect(wrapper.find('.talos-orbitron-brand').text()).toBe('TALOS')
-        expect(wrapper.find('h1').text()).toBe('What claim should we benchmark?')
+        const hero = wrapper.get('[data-testid="talos-empty-brand"]')
+        expect(hero.find('.talos-short-logo-mark').exists()).toBe(true)
+        expect(hero.find('.talos-orbitron-brand').text()).toBe('TALOS')
+        expect(hero.findAll('h1')).toHaveLength(1)
+        expect(hero.get('h1').text().trim()).not.toBe('')
+        expect(hero.findAll('p')).toHaveLength(0)
         expect(wrapper.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
     })
 
@@ -303,7 +319,7 @@ describe('ChatScreen (functional, local-first)', () => {
 
         expect(hero.attributes('data-composer-expanded')).toBe('false')
         expect(hero.classes()).toContain('justify-center')
-        expect(hero.find('p').exists()).toBe(true)
+        expect(hero.find('p').exists()).toBe(false)
     })
 
     it('sends an authorized attachment without text and blocks a failed tray item', async () => {
@@ -369,6 +385,42 @@ describe('ChatScreen (functional, local-first)', () => {
                 .toBe('Do not lose this')
         })
         expect(controller.send).toHaveBeenCalledWith('Do not lose this')
+    })
+
+    it('P1-CTX-UI-04 keeps a turn override after rejection and consumes it after acceptance', async () => {
+        const controller = makeController()
+        controller.canSend = ref(true)
+        controller.chat.activeSession.value = {
+            id: 'chat-policy',
+            title: 'Policy chat',
+            metadata: {},
+        }
+        controller.chat.sessions.push(controller.chat.activeSession.value)
+        controller.send = vi.fn()
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true)
+        mockState.controller = controller
+        const wrapper = mount(ChatScreen)
+        const composer = wrapper.getComponent(TalosMobileComposer)
+        const override = {
+            mode: 'smart_relevant_v1' as const,
+            included_file_ids: ['vault-brief'],
+            excluded_file_ids: [],
+        }
+        composer.vm.$emit('updateLibraryTurnOverride', override)
+        await wrapper.vm.$nextTick()
+        await wrapper.get('[aria-label="Message TALOS"]').setValue('Use this brief')
+
+        composer.vm.$emit('send')
+        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledWith(
+            'Use this brief',
+            override,
+        ))
+        await vi.waitFor(() => expect(composer.props('libraryTurnOverride')).toEqual(override))
+
+        composer.vm.$emit('send')
+        await vi.waitFor(() => expect(controller.send).toHaveBeenCalledTimes(2))
+        await vi.waitFor(() => expect(composer.props('libraryTurnOverride')).toBeNull())
     })
 
     it('reuses a message prompt and focuses the composer', async () => {

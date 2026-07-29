@@ -24,6 +24,20 @@ describe('mobile prompt enhancement contract', () => {
             .toThrowError(TalosMobilePromptEnhancementError)
     })
 
+    it('I18N-TS-04 carries a stable code and catalog metadata for visible validation failures', () => {
+        try {
+            buildTalosMobilePromptEnhancementPayload('')
+        } catch (error) {
+            expect(error).toBeInstanceOf(TalosMobilePromptEnhancementError)
+            expect((error as TalosMobilePromptEnhancementError).message)
+                .toBe('PROMPT_ENHANCER_INPUT_INVALID')
+            expect((error as TalosMobilePromptEnhancementError).uiMessageKey)
+                .toBe('chat.promptEnhancerWriteFirst')
+            return
+        }
+        throw new Error('Expected prompt-enhancement validation failure')
+    })
+
     it('accepts strict raw and whole-fence results with desktop limits', () => {
         expect(parseTalosMobilePromptEnhancement(JSON.stringify({
             enhanced_prompt: '  Produce a verified release checklist.  ',

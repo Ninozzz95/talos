@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { createTalosSmoothReveal } from '@/lib/chat/smoothReveal'
+import { splitGraphemes } from 'unicode-segmenter/grapheme'
+
+function graphemeBoundaries(text: string): Set<number> {
+    const boundaries = new Set<number>([0])
+    let offset = 0
+    for (const grapheme of splitGraphemes(text)) {
+        offset += grapheme.length
+        boundaries.add(offset)
+    }
+    return boundaries
+}
 
 /**
  * Owner 2026-07-26: "l'animazione di rendering della risposta non è smooth.
@@ -39,6 +50,36 @@ describe('pacing text that arrives in lumps', () => {
             // Whatever is on screen ends at a word boundary.
             expect(shown).toMatch(/(^|\s)$|^\S+(\s\S+)*\s$|^[\S\s]*\s$/)
         }
+    })
+
+    it('never reveals a partial first spaced-language word', () => {
+        const reveal = createTalosSmoothReveal({
+            initialCharsPerSec: 1_000,
+            minCharsPerSec: 1_000,
+            maxCharsPerSec: 1_000,
+        })
+        reveal.arrive('renderiz', 0)
+
+        expect(reveal.tick(1_000)).toBe('')
+
+        reveal.arrive('renderizza ', 1_100)
+        expect(reveal.tick(1_200)).toBe('renderizza ')
+    })
+
+    it('holds the partial next word across provider chunks', () => {
+        const reveal = createTalosSmoothReveal({
+            initialCharsPerSec: 1_000,
+            minCharsPerSec: 1_000,
+            maxCharsPerSec: 1_000,
+        })
+        reveal.arrive('fine ', 0)
+        expect(reveal.tick(100)).toBe('fine ')
+
+        reveal.arrive('fine par', 200)
+        expect(reveal.tick(300)).toBe('fine ')
+
+        reveal.arrive('fine parola ', 400)
+        expect(reveal.tick(500)).toBe('fine parola ')
     })
 
     it('catches up when the model is faster than the reveal', () => {
@@ -92,19 +133,73 @@ describe('pacing text that arrives in lumps', () => {
         // Scrolled away, came back: 4,000 characters must not type themselves
         // out. The fade is a feature until it becomes a wait.
         const reveal = createTalosSmoothReveal({ backlogHardFlush: 1_500 })
-        reveal.arrive('y'.repeat(4_000), 0)
-        expect(reveal.tick(40).length).toBe(4_000)
+        const backlog = 'parola '.repeat(600)
+        reveal.arrive(backlog, 0)
+        expect(reveal.tick(40)).toBe(backlog)
     })
 
-    it('keeps emoji whole', () => {
-        // Advancing a cursor by code units splits surrogate pairs and ZWJ
-        // sequences, and half an emoji is rendered as mojibake mid-fade.
-        const reveal = createTalosSmoothReveal({ initialCharsPerSec: 4 })
-        reveal.arrive('ciao 👨‍👩‍👧 bene', 0)
-        for (let at = 40; at <= 4_000; at += 40) {
-            const shown = reveal.tick(at)
-            expect(shown).not.toMatch(/[\uD800-\uDBFF]$/)
+    it('keeps every visible prefix on a UAX #29 extended grapheme boundary', () => {
+        const cases: Array<{ grapheme: string; targetCodeUnits: number }> = [
+            { grapheme: '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}', targetCodeUnits: 2 },
+            { grapheme: '\u{1F1EE}\u{1F1F9}', targetCodeUnits: 2 },
+            { grapheme: 'e\u0301', targetCodeUnits: 1 },
+            { grapheme: '1\uFE0F\u20E3', targetCodeUnits: 2 },
+            { grapheme: '\u0915\u094D\u0937', targetCodeUnits: 2 },
+        ]
+
+        for (const { grapheme, targetCodeUnits } of cases) {
+            const full = `${grapheme} `
+            const reveal = createTalosSmoothReveal({
+                initialCharsPerSec: targetCodeUnits,
+                minCharsPerSec: targetCodeUnits,
+                maxCharsPerSec: targetCodeUnits,
+                firstStepMs: 1_000,
+            })
+            reveal.arrive(full, 0)
+
+            const shown = reveal.tick(0)
+            expect(
+                graphemeBoundaries(full).has(shown.length),
+                `unsafe boundary ${shown.length} for ${JSON.stringify(grapheme)}`,
+            ).toBe(true)
+            expect(reveal.finish()).toBe(full)
         }
+    })
+
+    it('keeps the trailing grapheme provisional across provider chunks', () => {
+        const reveal = createTalosSmoothReveal({
+            initialCharsPerSec: 1_000,
+            minCharsPerSec: 1_000,
+            maxCharsPerSec: 1_000,
+        })
+
+        reveal.arrive('\u4F60', 0)
+        expect(reveal.tick(100)).toBe('')
+
+        const extended = '\u4F60\u0301\u597D'
+        reveal.arrive(extended, 200)
+        const shown = reveal.tick(300)
+        expect(graphemeBoundaries(extended).has(shown.length)).toBe(true)
+        expect(shown).toBe('\u4F60\u0301')
+    })
+
+    it('continues progressively for scripts without whitespace word separators', () => {
+        const full = '你好世界欢迎使用塔洛斯'
+        const reveal = createTalosSmoothReveal({
+            initialCharsPerSec: 25,
+            minCharsPerSec: 25,
+            maxCharsPerSec: 25,
+            firstStepMs: 40,
+        })
+        reveal.arrive(full, 0)
+
+        const first = reveal.tick(40)
+        const second = reveal.tick(80)
+        expect(first.length).toBeGreaterThan(0)
+        expect(second.length).toBeGreaterThan(first.length)
+        expect(second.length).toBeLessThan(full.length)
+        expect(graphemeBoundaries(full).has(first.length)).toBe(true)
+        expect(graphemeBoundaries(full).has(second.length)).toBe(true)
     })
 
     it('reveals instantly when motion is unwelcome', () => {

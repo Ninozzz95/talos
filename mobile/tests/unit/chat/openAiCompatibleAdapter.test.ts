@@ -5,6 +5,19 @@ import {
     openRouterAdapter,
 } from '@/lib/chat/providers/openAiCompatibleAdapter'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
+import { defineTalosTool } from '@/lib/tools/registry'
+import { z } from 'zod'
+
+const libraryTool = defineTalosTool({
+    name: 'library_list',
+    title: 'List the Library',
+    description: 'List Library files.',
+    action: 'read',
+    input: z.object({}),
+    async run() {
+        return { ok: true, content: '' }
+    },
+})
 
 function transportWith(...responses: Array<{ status: number; data: unknown }>) {
     const request = vi.fn()
@@ -170,6 +183,63 @@ describe('OpenAI-compatible mobile adapters', () => {
             chatCompatibility: 'supported',
         })
         expect(catalog.models[1]?.chatCompatibility).toBe('unsupported')
+    })
+
+    it('OPENROUTER-TOOLS-01 omits tool parameters when the selected model does not declare tools', async () => {
+        const { request, transport } = transportWith({
+            status: 200,
+            data: { model: 'vendor/plain', choices: [{ message: { content: 'plain reply' }, finish_reason: 'stop' }] },
+        })
+
+        await openRouterAdapter.complete({
+            model: {
+                id: 'vendor/plain',
+                provider: 'openrouter',
+                displayName: 'Plain model',
+                chatCompatibility: 'supported',
+                inputModalities: ['text'],
+                outputModalities: ['text'],
+                supportedParameters: [],
+            },
+            turns: [{ role: 'user', content: 'List files' }],
+            tools: [libraryTool] as never,
+            effort: 'off',
+            thinking: false,
+        }, { apiKey: 'sentinel-secret' }, transport)
+
+        expect(request.mock.calls[0][0].data).not.toHaveProperty('tools')
+        expect(request.mock.calls[0][0].data).not.toHaveProperty('tool_choice')
+    })
+
+    it('OPENROUTER-TOOLS-02 retains canonical tool parameters for a capable model', async () => {
+        const { request, transport } = transportWith({
+            status: 200,
+            data: { model: 'vendor/tools', choices: [{ message: { content: 'ready' }, finish_reason: 'stop' }] },
+        })
+
+        await openRouterAdapter.complete({
+            model: {
+                id: 'vendor/tools',
+                provider: 'openrouter',
+                displayName: 'Tool model',
+                chatCompatibility: 'supported',
+                inputModalities: ['text'],
+                outputModalities: ['text'],
+                supportedParameters: ['tools'],
+            },
+            turns: [{ role: 'user', content: 'List files' }],
+            tools: [libraryTool] as never,
+            effort: 'off',
+            thinking: false,
+        }, { apiKey: 'sentinel-secret' }, transport)
+
+        expect(request.mock.calls[0][0].data.tools).toEqual([
+            expect.objectContaining({
+                type: 'function',
+                function: expect.objectContaining({ name: 'library_list' }),
+            }),
+        ])
+        expect(request.mock.calls[0][0].data.tool_choice).toBe('auto')
     })
 
     it('accepts documented nested OpenRouter usage while keeping canonical numeric metrics', async () => {

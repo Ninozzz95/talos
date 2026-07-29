@@ -88,5 +88,19 @@ describe('useTalosMobileIntroState (F2-T6)', () => {
         intro.replayIntro()
         await nextTick()
         expect(intro.introOpen.value).toBe(true)
+        expect(intro.replaying.value).toBe(true)
+    })
+
+    it('routes hardware Back through the active unified setup handler', () => {
+        const { intro } = harness()
+        const back = vi.fn()
+
+        intro.setBack(back)
+        intro.handleBack()
+        expect(back).toHaveBeenCalledOnce()
+
+        intro.setBack(null)
+        intro.handleBack()
+        expect(back).toHaveBeenCalledOnce()
     })
 })

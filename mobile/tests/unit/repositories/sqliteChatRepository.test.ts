@@ -40,6 +40,30 @@ function harness(rows: TalosSqlRow[][] = []) {
 }
 
 describe('createSqliteChatRepository', () => {
+    it('P0 relock: reacquires the runtime connection after the runtime replaces its wrapper', async () => {
+        const first = harness().connection
+        const second = harness().connection
+        let current = first
+        const runtime: TalosSqliteRuntime = {
+            platform: 'native',
+            connect: vi.fn(async () => current),
+            persist: vi.fn().mockResolvedValue(undefined),
+            close: vi.fn().mockResolvedValue(undefined),
+        }
+        const repository = createSqliteChatRepository(runtime)
+
+        await repository.initialize()
+        // This is the observable boundary of relock -> unlock: the runtime has
+        // discarded upstream wrapper A and now owns wrapper B. The repository
+        // must not keep A as a second source of truth.
+        current = second
+        await repository.listSessions()
+
+        expect(runtime.connect).toHaveBeenCalledTimes(2)
+        expect(first.query).not.toHaveBeenCalled()
+        expect(second.query).toHaveBeenCalledOnce()
+    })
+
     it('BR-03 persists and parses tool activities through exact repository methods', async () => {
         const row = {
             id: 'activity-1',

@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { renderTalosMarkdownBlock, splitTalosMarkdownBlocks } from '@/lib/talosMessageMarkdown'
+import { useTalosI18n } from '@/i18n'
+import {
+    renderTalosMarkdownBlock,
+    splitTalosMarkdownBlocks,
+    type TalosMarkdownLabels,
+} from '@/lib/talosMessageMarkdown'
 import { writeTalosClipboardText } from '@/services/clipboard'
 
 // R2-10 (owner obliteration directive): the sensitive-censor mechanism is
@@ -9,7 +14,19 @@ const props = defineProps<{
     content: string
 }>()
 
+const { t } = useTalosI18n()
 const copyStatus = ref('')
+const markdownLabels = computed<TalosMarkdownLabels>(() => ({
+    completedTask: t('messageMarkdown.completedTask'),
+    openTask: t('messageMarkdown.openTask'),
+    scrollableTable: t('messageMarkdown.scrollableTable'),
+    image: t('messageMarkdown.image'),
+    externalImageOmitted: t('messageMarkdown.externalImageOmitted'),
+    code: t('messageMarkdown.code'),
+    copyCode: t('messageMarkdown.copyCode'),
+    copy: t('common.copy'),
+    truncatedMessage: t('messageMarkdown.truncated'),
+}))
 /**
  * Rendered BLOCK BY BLOCK, not as one document.
  *
@@ -33,7 +50,9 @@ const blocks = computed(() => splitTalosMarkdownBlocks(props.content))
  * and eighty parses a second on a phone, and all but one produce exactly the
  * string already on screen. Only the last block changes while an answer streams.
  */
-const renderedBlocks = computed(() => blocks.value.map(renderTalosMarkdownBlock))
+const renderedBlocks = computed(() => blocks.value.map(source => renderTalosMarkdownBlock(source, {
+    labels: markdownLabels.value,
+})))
 
 async function handleContentClick(event: MouseEvent): Promise<void> {
     const target = event.target instanceof Element
@@ -44,14 +63,14 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
         .replace(/\r\n?/g, '\n')
     try {
         await writeTalosClipboardText(code)
-        target.textContent = 'Copied'
-        copyStatus.value = 'Code copied.'
+        target.textContent = t('common.copied')
+        copyStatus.value = t('messageMarkdown.codeCopied')
         window.setTimeout(() => {
-            if (target.isConnected) target.textContent = 'Copy'
+            if (target.isConnected) target.textContent = t('common.copy')
             copyStatus.value = ''
         }, 1600)
     } catch {
-        copyStatus.value = 'Code copy failed.'
+        copyStatus.value = t('messageMarkdown.codeCopyFailed')
     }
 }
 </script>
@@ -65,7 +84,7 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
         <div
             v-for="(html, index) in renderedBlocks"
             :key="index"
-            v-memo="[blocks[index]]"
+            v-memo="[blocks[index], html]"
             class="talos-message-block"
             v-html="html"
         />

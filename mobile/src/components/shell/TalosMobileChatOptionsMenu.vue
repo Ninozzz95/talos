@@ -86,7 +86,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
             type="button"
             size="icon-lg"
             variant="ghost"
-            aria-label="Chat options"
+            :aria-label="$t('chat.chatOptions')"
             aria-haspopup="menu"
             :aria-expanded="optionsOpen"
             class="talos-pressable min-h-11 min-w-11"
@@ -114,48 +114,48 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                 ref="optionsMenu"
                 data-testid="talos-chat-options-menu"
                 role="menu"
-                aria-label="Chat options"
+                :aria-label="$t('chat.chatOptions')"
                 class="absolute right-0 top-full z-30 mt-2 w-48 origin-top-right rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.12)]"
             >
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('newChat')">
-                    <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> New chat
+                    <MessageSquarePlus class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.newChat') }}
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
-                    <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Rename chat
+                    <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.renameChat') }}
                 </button>
                 <!-- Owner 2026-07-26: reachable from the menu in BOTH header
                      modes. Tapping the title only works in the solid header —
                      the immersive chrome renders no title at all, and it is the
                      default, so the menu is the entry that always exists. -->
                 <button v-if="props.canOpenMedia" type="button" role="menuitem" data-testid="talos-chat-options-media" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('media')">
-                    <Images class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Media in this chat
+                    <Images class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('library.thisChat') }}
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; emit('export')">
-                    <Download class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Export chat
+                    <Download class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.exportChat') }}
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-danger,#dc5b5b)] hover:bg-[var(--talos-active)]" @click="optionsOpen = false; deleteOpen = true">
-                    <Trash2 class="size-4" aria-hidden="true" /> Delete chat
+                    <Trash2 class="size-4" aria-hidden="true" /> {{ $t('chat.deleteChat') }}
                 </button>
             </div>
         </Transition>
 
         <TalosMobileConfirmDialog
             v-if="renameOpen"
-            title="Rename chat"
-            description="Choose a concise name for this conversation."
+            :title="$t('chat.renameChat')"
+            :description="$t('chat.renameDescription')"
             @close="renameOpen = false"
         >
             <input
                 ref="renameInput"
                 v-model="renameValue"
-                aria-label="Chat name"
+                :aria-label="$t('chat.chatName')"
                 class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                 @keydown.enter.prevent="submitRename"
             >
             <template #footer>
-                <Button type="button" variant="ghost" @click="renameOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" variant="ghost" @click="renameOpen = false"><X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}</Button>
                 <Button type="button" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
-                    <Check class="size-4" aria-hidden="true" /> Save
+                    <Check class="size-4" aria-hidden="true" /> {{ $t('common.save') }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>

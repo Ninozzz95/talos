@@ -8,8 +8,12 @@
  * testable filter/sort over the file list.
  */
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
+import { canonicalTalosWebSourceUrl } from '@/lib/search/webSourceArchive'
+import { matchesTalosLibrarySearchFields } from '@/lib/librarySearchText'
 
 export type TalosVaultOrigin = 'uploaded' | 'generated'
+export type TalosLibraryFileType = 'image' | 'document' | 'link'
+export type TalosLibrarySurfaceTab = 'all' | 'images' | 'files' | 'links'
 
 /** Fail-closed: anything not explicitly 'generated' is treated as an upload. */
 export function parseVaultOrigin(metadata: Record<string, unknown> | null | undefined): TalosVaultOrigin {
@@ -53,6 +57,37 @@ export function parseVaultKind(
 }
 
 /**
+ * One product identity for every Library surface and the agent tool boundary.
+ *
+ * A web source is retained as Markdown so its evidence survives a dead page,
+ * but that storage MIME must not turn its user-facing identity back into a
+ * document. Source kind therefore takes precedence over MIME.
+ */
+export function talosLibraryFileType(
+    file: Pick<TalosLocalVaultFile, 'media_type' | 'metadata'>,
+): TalosLibraryFileType {
+    if (parseVaultKind(file.metadata) === 'web_source') return 'link'
+    return file.media_type.startsWith('image/') ? 'image' : 'document'
+}
+
+/**
+ * Global and per-chat Libraries deliberately share one mutually-exclusive
+ * FILE-branch contract. `all` admits every non-link file; a surface that owns
+ * a Links projection aggregates it separately so research addresses are never
+ * duplicated as transcript tiles.
+ */
+export function matchesTalosLibrarySurfaceTab(
+    file: Pick<TalosLocalVaultFile, 'media_type' | 'metadata'>,
+    tab: TalosLibrarySurfaceTab,
+): boolean {
+    const type = talosLibraryFileType(file)
+    if (tab === 'all') return type !== 'link'
+    if (tab === 'images') return type === 'image'
+    if (tab === 'files') return type === 'document'
+    return type === 'link'
+}
+
+/**
  * Where a saved page came from, as an address rather than a sentence.
  *
  * Owner 2026-07-27: sources read during a search should appear in the Library
@@ -68,14 +103,41 @@ export function parseVaultKind(
 export function parseVaultSourceUrl(
     metadata: Record<string, unknown> | null | undefined,
 ): string | null {
-    const value = metadata?.source_url
-    if (typeof value !== 'string' || value === '') return null
-    try {
-        const url = new URL(value)
-        return url.protocol === 'https:' || url.protocol === 'http:' ? value : null
-    } catch {
-        return null
+    return canonicalTalosWebSourceUrl(metadata?.source_url)
+}
+
+function safeStoredLinkTitle(value: unknown, url: string): string {
+    if (typeof value === 'string') {
+        const title = value
+            .normalize('NFKC')
+            .replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 200)
+        if (title) return title
     }
+    return new URL(url).hostname.replace(/^www\./, '')
+}
+
+/**
+ * One compact search dossier can project multiple links. Treat the untyped
+ * metadata bag as hostile: exact object fields, canonical web URL, bounded
+ * display title, and per-file URL deduplication.
+ */
+function parseVaultSourceLinks(
+    metadata: Record<string, unknown> | null | undefined,
+): Array<{ url: string; title: string }> {
+    const raw = metadata?.source_links
+    if (!Array.isArray(raw)) return []
+    const byUrl = new Map<string, { url: string; title: string }>()
+    for (const candidate of raw.slice(0, 10)) {
+        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+        const row = candidate as Record<string, unknown>
+        const url = canonicalTalosWebSourceUrl(row.url)
+        if (!url || byUrl.has(url)) continue
+        byUrl.set(url, { url, title: safeStoredLinkTitle(row.title, url) })
+    }
+    return [...byUrl.values()]
 }
 
 /** One saved page, as something you can tap rather than something to read. */
@@ -125,19 +187,63 @@ export function talosSavedLinkRows(files: readonly TalosLocalVaultFile[]): Talos
     const byUrl = new Map<string, TalosSavedLinkRow>()
     for (const file of files) {
         if (parseVaultKind(file.metadata) !== 'web_source') continue
-        const url = parseVaultSourceUrl(file.metadata) ?? sourceUrlFromTranscript(file.extracted_text)
-        if (!url) continue
-        const previous = byUrl.get(url)
-        if (previous && previous.savedAt >= file.created_at) continue
-        byUrl.set(url, {
-            fileId: file.id,
-            url,
-            title: file.display_name.replace(/\.md$/i, ''),
-            host: new URL(url).hostname.replace(/^www\./, ''),
-            savedAt: file.created_at,
-        })
+        const multiple = parseVaultSourceLinks(file.metadata)
+        const single = parseVaultSourceUrl(file.metadata) ?? (
+            multiple.length === 0 ? sourceUrlFromTranscript(file.extracted_text) : null
+        )
+        const links = [
+            ...multiple,
+            ...(single
+                ? [{ url: single, title: file.display_name.replace(/\.md$/i, '') }]
+                : []),
+        ]
+        for (const link of links) {
+            const previous = byUrl.get(link.url)
+            if (previous && previous.savedAt >= file.created_at) continue
+            byUrl.set(link.url, {
+                fileId: file.id,
+                url: link.url,
+                title: link.title,
+                host: new URL(link.url).hostname.replace(/^www\./, ''),
+                savedAt: file.created_at,
+            })
+        }
     }
     return [...byUrl.values()].sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+}
+
+/**
+ * Search the logical saved-link projection by what the user can identify.
+ *
+ * The retained Markdown dossier remains useful search evidence, but it is not
+ * the row identity. Title, host and canonical URL therefore participate too,
+ * through the same Unicode-safe matcher used by ordinary Library files.
+ */
+export function filterTalosSavedLinkRows(
+    files: readonly TalosLocalVaultFile[],
+    query: string,
+): TalosSavedLinkRow[] {
+    const filesById = new Map(files.map((file) => [file.id, file]))
+    const rows = talosSavedLinkRows(files)
+    const directMatches = rows.filter((row) => (
+        matchesTalosLibrarySearchFields(query, [
+            { text: row.title, weight: 3 },
+            { text: row.host, weight: 2 },
+            { text: row.url, weight: 2 },
+        ])
+    ))
+    // A real dossier repeats every result URL in one body. Once the query
+    // identifies a visible row, admitting siblings through that shared text
+    // would make a host filter look broken. Copy-text search is therefore a
+    // fallback only when no logical row identity matched.
+    if (directMatches.length > 0) return directMatches
+    return rows.filter((row) => {
+        const retainedCopy = filesById.get(row.fileId)
+        return matchesTalosLibrarySearchFields(query, [
+            { text: retainedCopy?.display_name, weight: 3 },
+            { text: retainedCopy?.extracted_text },
+        ])
+    })
 }
 
 export interface LibraryFilter {
@@ -164,7 +270,6 @@ export function filterLibraryFiles(
     files: readonly TalosLocalVaultFile[],
     filter: LibraryFilter,
 ): TalosLocalVaultFile[] {
-    const query = filter.query.trim().toLowerCase()
     const admitted = new Set(filter.alsoFileIds ?? [])
     return files
         .filter((file) => !filter.kind || parseVaultKind(file.metadata) === filter.kind)
@@ -172,9 +277,10 @@ export function filterLibraryFiles(
             || admitted.has(file.id)
             || parseVaultOriginSession(file.metadata) === filter.sessionId)
         .filter((file) => filter.origin === 'all' || parseVaultOrigin(file.metadata) === filter.origin)
-        .filter((file) => query === ''
-            || file.display_name.toLowerCase().includes(query)
-            || (file.extracted_text?.toLowerCase().includes(query) ?? false))
+        .filter((file) => matchesTalosLibrarySearchFields(filter.query, [
+            { text: file.display_name },
+            { text: file.extracted_text },
+        ]))
         .slice()
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
 }

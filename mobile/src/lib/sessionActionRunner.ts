@@ -1,4 +1,6 @@
 import { ref, type Ref } from 'vue'
+import type { TalosTranslate } from '@/i18n/contracts'
+import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 
 /**
  * F4-#22 — shared guard for session actions (new/select/rename/delete). The
@@ -15,7 +17,10 @@ export interface TalosSessionActionRunner {
     run(label: string, action: () => Promise<void>): Promise<void>
 }
 
-export function createSessionActionRunner(toasts: TalosSessionActionToasts): TalosSessionActionRunner {
+export function createSessionActionRunner(
+    toasts: TalosSessionActionToasts,
+    translate: TalosTranslate,
+): TalosSessionActionRunner {
     const busy = ref(false)
     return {
         busy,
@@ -25,8 +30,12 @@ export function createSessionActionRunner(toasts: TalosSessionActionToasts): Tal
             try {
                 await action()
             } catch (error) {
-                const detail = error instanceof Error && error.message ? error.message : String(error)
-                toasts.push({ message: `${label} failed: ${detail}`, durationMs: 6000 })
+                const detail = talosTranslatableErrorMessage(error, translate)
+                    ?? (error instanceof Error && error.message ? error.message : String(error))
+                toasts.push({
+                    message: translate('common.actionFailed', { action: label, detail }),
+                    durationMs: 6000,
+                })
             } finally {
                 busy.value = false
             }

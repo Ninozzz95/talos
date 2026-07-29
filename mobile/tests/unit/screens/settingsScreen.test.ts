@@ -162,12 +162,16 @@ describe('SettingsScreen (functional)', () => {
 
         expect(tabs.map((tab) => tab.text())).toEqual(['Providers', 'Catalog'])
         expect(wrapper.find('[aria-label="Search model catalog"]').exists()).toBe(false)
+        expect(wrapper.get('[data-model-lab-section="providers"]').classes())
+            .toContain('talos-motion-tab-panel')
 
         await tabs[1]!.trigger('mousedown', { button: 0, ctrlKey: false })
         await vi.dynamicImportSettled()
         await flushPromises()
 
         expect(tabs[1]!.attributes('data-state')).toBe('active')
+        expect(wrapper.get('[data-model-lab-section="catalog"]').classes())
+            .toContain('talos-motion-tab-panel')
         expect(wrapper.get('[aria-label="Search model catalog"]').exists()).toBe(true)
     })
 

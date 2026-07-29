@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { createChatStore, type ChatCompletion, type ChatTurn } from '@/stores/chat'
+import {
+    createChatStore as createLocalizedChatStore,
+    type ChatCompletion,
+    type ChatStoreOptions,
+    type ChatTurn,
+} from '@/stores/chat'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
+import { talosTestT } from '../../helpers/talosTestI18n'
+
+function createChatStore(
+    complete: ChatCompletion,
+    options: Omit<ChatStoreOptions, 'translate'>,
+) {
+    return createLocalizedChatStore(complete, {
+        ...options,
+        translate: talosTestT('en'),
+    })
+}
 
 /**
  * Debt A1 (architecture review): the completion contract was `Promise<string>`,

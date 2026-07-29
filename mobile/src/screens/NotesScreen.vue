@@ -4,6 +4,7 @@
  * disclosed context (same trust discipline as memories); the banner says so.
  */
 import { computed, onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { StickyNote, Plus, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useChatController } from '@/stores/chatController'
@@ -11,6 +12,7 @@ import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalNote } from '@/repositories/chatRepository'
 
 const controller = useChatController()
+const { t } = useTalosI18n()
 
 const entries = ref<TalosLocalNote[]>([])
 const error = ref<string | null>(null)
@@ -20,6 +22,15 @@ const saving = ref(false)
 
 const canCreate = computed(() =>
     title.value.trim().length > 0 && content.value.trim().length > 0 && !saving.value)
+const relativeTimeLabels = computed(() => ({
+    justNow: t('chat.justNow'),
+    minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
+    hoursAgo: (count: number) => t('chat.hoursAgo', { count }),
+    daysAgo: (count: number) => t('chat.daysAgo', { count }),
+}))
+function updatedAt(value: string): string {
+    return talosRelativeTime(value, new Date(), relativeTimeLabels.value)
+}
 
 function describeError(cause: unknown): string {
     return cause instanceof Error && cause.message ? cause.message : String(cause)
@@ -65,9 +76,7 @@ async function remove(note: TalosLocalNote): Promise<void> {
 <template>
     <div class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3" data-testid="talos-notes-screen">
         <p class="text-xs leading-5 text-[var(--talos-muted)]">
-            Notes are stored on this device and treated as
-            <span class="font-semibold text-[var(--talos-text)]">untrusted disclosed context</span> —
-            they can never carry instructions.
+            {{ t('notes.intro') }}
         </p>
 
         <form class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3" @submit.prevent="submit">
@@ -75,15 +84,15 @@ async function remove(note: TalosLocalNote): Promise<void> {
                 v-model="title"
                 data-testid="talos-note-title"
                 maxlength="255"
-                aria-label="Note title"
-                placeholder="Note title"
+                :aria-label="t('notes.title')"
+                :placeholder="t('notes.title')"
                 class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <textarea
                 v-model="content"
                 data-testid="talos-note-content"
-                aria-label="Note content"
-                placeholder="Note content"
+                :aria-label="t('notes.content')"
+                :placeholder="t('notes.content')"
                 rows="3"
                 class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 py-2 text-sm leading-5 text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             />
@@ -94,14 +103,14 @@ async function remove(note: TalosLocalNote): Promise<void> {
                 class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
             >
                 <Plus class="size-4" aria-hidden="true" />
-                Add note
+                {{ t('notes.add') }}
             </Button>
         </form>
 
         <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
 
         <p v-if="!entries.length" class="py-6 text-center text-sm text-[var(--talos-muted)]">
-            No notes yet — capture the first one above.
+            {{ t('notes.empty') }}
         </p>
 
         <ul v-else class="flex flex-col gap-2">
@@ -116,14 +125,14 @@ async function remove(note: TalosLocalNote): Promise<void> {
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-1.5">
                             <span class="text-sm font-semibold text-[var(--talos-text)]">{{ note.title }}</span>
-                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">untrusted</span>
+                            <span class="rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ t('notes.untrusted') }}</span>
                         </div>
                         <p class="mt-1 whitespace-pre-wrap text-xs leading-5 text-[var(--talos-muted)]">{{ note.content }}</p>
-                        <p class="mt-1 text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(note.updated_at) }}</p>
+                        <p class="mt-1 text-2xs text-[var(--talos-muted)]">{{ updatedAt(note.updated_at) }}</p>
                     </div>
                     <button
                         type="button"
-                        :aria-label="`Delete note ${note.title}`"
+                        :aria-label="t('notes.deleteNamed', { title: note.title })"
                         class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
                         @click="remove(note)"
                     >

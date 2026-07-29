@@ -52,6 +52,12 @@ export interface TalosMobileMessageView {
     model_profile_id: string | null
     run_id: string | null
     metadata: Record<string, unknown>
+    /**
+     * Canonical display projection of persisted provider reasoning.
+     * Store-produced views always set it; optional keeps direct fixture and
+     * extension consumers source-compatible while they migrate.
+     */
+    reasoning?: string | null
     attachments?: readonly TalosMobileMessageAttachmentView[]
     browserActivities?: readonly TalosMobileBrowserActivityView[]
 }

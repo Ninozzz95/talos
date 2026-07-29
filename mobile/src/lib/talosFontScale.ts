@@ -3,12 +3,14 @@
  * tutto il sistema non solo chat."
  *
  * One runtime variable — `--talos-ui-scale` on <html> — multiplies every
- * Tailwind text token (see the `@theme inline` block in style.css), so a single
- * write reaches chat, menus, settings, header, sheets, toasts and composer.
- * Web research (rem/root-relative scaling is the accepted mechanism for
- * user-controlled text size; MDN font-size, 2026 rem/em guidance) confirmed
- * this over per-component plumbing, which is exactly how the previous chat-only
- * attempt shipped broken twice.
+ * Tailwind interface text token (see the `@theme inline` block in style.css),
+ * so a single write reaches menus, settings, header, sheets, toasts, composer,
+ * and message-adjacent controls. Message prose is deliberately rooted at the
+ * independent `chat_layout.bubble_scale` boundary.
+ *
+ * Standards research (W3C CSS Values/Cascade, WCAG 2.2, Android 14 font
+ * scaling; refreshed 2026-07-28) supports separate root-relative message sizing
+ * rather than multiplying the two app-level controls together.
  *
  * Deliberately typography-only: spacing and hit targets stay put, so the
  * largest step cannot push controls off a small screen (Android splits the same

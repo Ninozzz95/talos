@@ -30,6 +30,12 @@ vi.mock('@/stores/chatController', () => ({
         toolActivity: mockChatState.toolActivity,
     }),
 }))
+const mockSettings = vi.hoisted(() => ({
+    state: { shell: { streaming_animation: 'typewriter' as 'typewriter' | 'fade' } },
+}))
+vi.mock('@/stores/settings', () => ({
+    useSettingsStore: () => mockSettings,
+}))
 
 import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 
@@ -91,7 +97,7 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         expect(wrapper.find('.talos-typing-dot').exists()).toBe(false)
     })
 
-    it('owner 2026-07-25: each revealed letter is its own animated node (fluid, not jumpy)', async () => {
+    it('owner 2026-07-25: newly revealed fragments animate in the inline tail (fluid, not jumpy)', async () => {
         const wrapper = mountStreaming(true, 'Fluido come una macchina da scrivere che non salta mai una lettera.')
         await vi.waitFor(() => {
             expect(wrapper.findAll('.talos-stream-char').length).toBeGreaterThan(0)
@@ -100,6 +106,58 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         // The tail lives INSIDE the rendered markdown, so letters continue the
         // current line instead of dropping to a new one.
         expect(tail.element.closest('.talos-message-content')).not.toBeNull()
+    })
+
+    it('P10c: never duplicates already-painted text when the markdown prefix catches up', async () => {
+        const initial = 'Primo frammento stabile.'
+        const complete = `${initial} Secondo frammento aggiunto.`
+        const wrapper = mountStreaming(true, initial)
+
+        await vi.waitFor(() => {
+            expect(wrapper.get('.talos-message-content').text()).toBe(initial)
+        }, { timeout: 4000 })
+        // Let the throttled Markdown prefix absorb the first raw tail before a
+        // new provider chunk arrives. The next paint must concatenate, not
+        // append another copy of text the parser now owns.
+        await new Promise<void>((resolve) => setTimeout(resolve, 150))
+        mockChatState.state.streamingText = complete
+
+        await vi.waitFor(() => {
+            expect(wrapper.get('.talos-message-content').text()).toBe(complete)
+        }, { timeout: 4000 })
+        expect(wrapper.get('.talos-message-content').text().match(/Primo frammento/g)).toHaveLength(1)
+    })
+
+    it('P10c: Fade paints the fade modifier and never creates the typewriter caret', async () => {
+        mockSettings.state.shell.streaming_animation = 'fade'
+        try {
+            const wrapper = mountStreaming(true, 'Fade pulito senza il cursore da macchina da scrivere.')
+            await vi.waitFor(() => {
+                expect(wrapper.find('.talos-stream-char--fade').exists()).toBe(true)
+            }, { timeout: 4000 })
+            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(false)
+        } finally {
+            mockSettings.state.shell.streaming_animation = 'typewriter'
+        }
+    })
+
+    it('P10c/R4: Fade holds a provider fragment until its word is complete', async () => {
+        mockSettings.state.shell.streaming_animation = 'fade'
+        try {
+            const wrapper = mountStreaming(true, 'renderiz')
+            await new Promise<void>((resolve) => setTimeout(resolve, 250))
+
+            expect(wrapper.text()).not.toContain('renderiz')
+            expect(wrapper.find('.talos-stream-char--fade').exists()).toBe(false)
+
+            mockChatState.state.streamingText = 'renderizza '
+            await vi.waitFor(() => {
+                expect(wrapper.get('[data-testid="talos-mobile-streaming"]').text())
+                    .toContain('renderizza')
+            }, { timeout: 4000 })
+        } finally {
+            mockSettings.state.shell.streaming_animation = 'typewriter'
+        }
     })
 
     it('owner 2026-07-25: waiting shows the mark ALONE — no bubble, no container', () => {
@@ -182,6 +240,19 @@ describe('tool activity in the streaming reply', () => {
         expect(activity.text()).toContain('agenziaentrate.gov.it')
         expect(activity.text()).toContain('fiscoetasse.com')
         expect(activity.text()).not.toContain('web_read')
+    })
+
+    it('names image generation and device save without wire names', async () => {
+        const wrapper = mountStreaming(true, null, [
+            { name: 'generate_image', detail: null },
+            { name: 'library_export', detail: 'Quarterly Report.pdf' },
+        ])
+        await flushPromises()
+        const activity = wrapper.get('[data-testid="talos-tool-activity"]')
+        expect(activity.text()).toContain('Generating an image')
+        expect(activity.text()).toContain('Saving a file to your device: Quarterly Report.pdf')
+        expect(activity.text()).not.toContain('generate_image')
+        expect(activity.text()).not.toContain('library_export')
     })
 
     it('shows nothing when no tool is running', async () => {

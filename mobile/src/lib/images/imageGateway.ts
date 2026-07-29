@@ -25,7 +25,7 @@
  * dialect. A tool whose arguments are one vendor's enum breaks the day you add
  * the second vendor.
  */
-export type TalosImageProvider = 'openai' | 'gemini'
+export type TalosImageProvider = 'openai' | 'gemini' | 'openrouter'
 export type TalosImageShape = 'square' | 'portrait' | 'landscape'
 
 export interface TalosImageRequest {
@@ -42,6 +42,14 @@ export interface TalosImagePlan {
 export interface TalosGeneratedImage {
     base64: string
     mediaType: string
+}
+
+export interface TalosImageModelCandidate {
+    id: string
+    createdAt?: string | number | null
+    inputModalities?: readonly string[]
+    outputModalities?: readonly string[]
+    supportedParameters?: readonly string[]
 }
 
 const OPENAI_SIZE: Record<TalosImageShape, string> = {
@@ -80,6 +88,23 @@ export function planTalosImageRequest(
             },
         }
     }
+    if (provider === 'openrouter') {
+        const base = (config.endpoint ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, '')
+        return {
+            url: `${base}/images`,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${config.apiKey}`,
+            },
+            body: {
+                model: config.model,
+                prompt: request.prompt,
+                n: 1,
+                aspect_ratio: GEMINI_ASPECT[request.shape],
+                output_format: 'png',
+            },
+        }
+    }
     const base = (config.endpoint ?? 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '')
     return {
         url: `${base}/interactions`,
@@ -112,11 +137,31 @@ export function planTalosImageRequest(
              */
             response_format: {
                 type: 'image',
-                mime_type: 'image/png',
+                /**
+                 * The normative Interactions ImageResponseFormat enum exposes
+                 * only JPEG, and the owner's real wire response confirms it:
+                 *   HTTP 400: The value 'image/png' is not supported.
+                 *   Supported values: 'image/jpeg'.
+                 * Some guide snippets still show PNG; schema + live endpoint
+                 * are the binding contract when examples disagree.
+                 */
+                mime_type: 'image/jpeg',
                 aspect_ratio: GEMINI_ASPECT[request.shape],
                 image_size: '1K',
             },
         },
+    }
+}
+
+export function planTalosImageCatalogRequest(
+    provider: Extract<TalosImageProvider, 'openrouter'>,
+    config: { apiKey: string; endpoint?: string | null },
+): Pick<TalosImagePlan, 'url' | 'headers'> {
+    if (provider !== 'openrouter') throw new Error('TALOS_IMAGE_CATALOG_PROVIDER_UNSUPPORTED')
+    const base = (config.endpoint ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, '')
+    return {
+        url: `${base}/images/models`,
+        headers: { Authorization: `Bearer ${config.apiKey}` },
     }
 }
 
@@ -145,7 +190,13 @@ function walk(node: unknown, found: TalosGeneratedImage[], depth: number): void 
     // OpenAI: data[].b64_json
     const b64 = record.b64_json
     if (typeof b64 === 'string' && b64 !== '') {
-        found.push({ base64: b64, mediaType: 'image/png' })
+        const declared = record.media_type ?? record.mime_type ?? record.mimeType
+        const mediaType = declared === undefined
+            ? 'image/png'
+            : declared === 'image/png' || declared === 'image/jpeg' || declared === 'image/webp'
+                ? declared
+                : null
+        if (mediaType) found.push({ base64: b64, mediaType })
         return
     }
     // Gemini: output_image.data, and inlineData.data on interleaved steps.
@@ -199,19 +250,48 @@ function looksLikeImageBytes(value: string): boolean {
 const IMAGE_MODEL_FLOOR: Record<TalosImageProvider, string> = {
     openai: 'gpt-image-1',
     gemini: 'gemini-3.1-flash-image',
+    openrouter: 'google/gemini-3.1-flash-image',
 }
 
 export function pickTalosImageModel(
     provider: TalosImageProvider,
-    models: ReadonlyArray<{ id: string }>,
+    models: ReadonlyArray<TalosImageModelCandidate>,
+    preferredModel?: string | null,
 ): string {
-    const pattern = provider === 'openai' ? /^gpt-image/i : /image/i
-    const candidates = models
-        .map((model) => model.id)
-        .filter((id) => pattern.test(id) && !/embed|vision|edit/i.test(id))
+    let candidates = models.filter((model) => {
+        if (/embed|vision|edit/i.test(model.id)) return false
+        if (provider === 'openai') return /^gpt-image/i.test(model.id)
+        if (provider === 'gemini') return /^gemini-[a-z0-9.-]*image[a-z0-9.-]*$/i.test(model.id)
+        return model.outputModalities?.includes('image') ?? true
+    })
     if (candidates.length === 0) return IMAGE_MODEL_FLOOR[provider]
-    const full = candidates.filter((id) => !/mini|lite|flash-lite/i.test(id))
-    return (full.length > 0 ? full : candidates).sort((left, right) => right.localeCompare(left))[0]!
+
+    if (provider === 'openrouter') {
+        const preferredAuthor = preferredModel?.includes('/')
+            ? preferredModel.slice(0, preferredModel.indexOf('/'))
+            : null
+        const sameAuthor = preferredAuthor
+            ? candidates.filter((model) => model.id.startsWith(`${preferredAuthor}/`))
+            : []
+        if (sameAuthor.length > 0) candidates = sameAuthor
+    }
+
+    const full = candidates.filter((model) => !/mini|lite|flash-lite/i.test(model.id))
+    const pool = full.length > 0 ? full : candidates
+    return [...pool].sort((left, right) => {
+        if (provider === 'gemini') {
+            const version = (id: string): number => {
+                const match = /^gemini-(\d+)(?:\.(\d+))?/i.exec(id)
+                return match ? Number(match[1]) * 1_000 + Number(match[2] ?? 0) : 0
+            }
+            const versionDifference = version(right.id) - version(left.id)
+            if (versionDifference !== 0) return versionDifference
+        }
+        const leftCreated = typeof left.createdAt === 'number' ? left.createdAt : 0
+        const rightCreated = typeof right.createdAt === 'number' ? right.createdAt : 0
+        if (leftCreated !== rightCreated) return rightCreated - leftCreated
+        return right.id.localeCompare(left.id)
+    })[0]!.id
 }
 
 /**
@@ -270,12 +350,4 @@ export function talosImageErrorIsPermanent(status: number): boolean {
     return status >= 400 && status < 500 && status !== 408 && status !== 429
 }
 
-export function chooseTalosImageProvider(
-    available: Partial<Record<TalosImageProvider, boolean>>,
-    preferred?: string | null,
-): TalosImageProvider | null {
-    if ((preferred === 'openai' || preferred === 'gemini') && available[preferred] === true) return preferred
-    if (available.openai === true) return 'openai'
-    if (available.gemini === true) return 'gemini'
-    return null
-}
+export { chooseTalosImageProvider } from '@/lib/images/imageProviderSelection'

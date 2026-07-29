@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createTalosWebTools } from '@/lib/search/webTools'
 import { TALOS_DEFAULT_TOOL_PERMISSIONS, executeTalosTool } from '@/lib/tools/executor'
+import { createTalosToolset } from '@/lib/tools/toolset'
+import { TALOS_DEFAULT_AGENT_TOOL_ENABLED } from '@/lib/tools/toolControls'
 
 /**
  * F1 — `web_search` and `web_read`, driven through the real executor because
@@ -26,17 +28,29 @@ function sources(overrides: Record<string, unknown> = {}) {
             siteName: 'Example',
             publishedAt: '2026-03-04',
         })),
+        rememberSearch: vi.fn(async (_query, results: unknown[]) => ({
+            policy: 'stored' as const,
+            saved: results.length,
+            skipped: 0,
+            failed: 0,
+        })),
         remember: vi.fn(async () => {}),
         ...overrides,
     }
 }
 
-function deps() {
+function deps(overrides: Record<string, unknown> = {}) {
     return {
-        permissions: TALOS_DEFAULT_TOOL_PERMISSIONS,
-        requestConsent: vi.fn(async () => { throw new Error('a read tool must never ask') }),
+        permissions: {
+            ...TALOS_DEFAULT_TOOL_PERMISSIONS,
+            write: 'allow' as const,
+            outbound: 'allow' as const,
+        },
+        isToolEnabled: () => true,
+        requestConsent: vi.fn(async () => { throw new Error('an allowed outbound tool must never ask') }),
         audit: vi.fn(async () => {}),
         context: { sessionId: 'session-1' },
+        ...overrides,
     }
 }
 
@@ -47,11 +61,110 @@ function byName(tools: ReturnType<typeof createTalosWebTools>, name: string) {
 }
 
 describe('web tools', () => {
-    it('both are READS: searching and reading cannot damage anything', () => {
+    it('P0-WEB-01 classifies both network tools as outbound plus write', () => {
         const tools = createTalosWebTools(sources())
         expect(tools.map((tool) => tool.name)).toEqual(['web_search', 'web_read'])
-        expect(tools.every((tool) => tool.action === 'read')).toBe(true)
+        expect(tools.every((tool) => tool.action === 'outbound')).toBe(true)
+        expect(tools.every((tool) => (
+            JSON.stringify(tool.requiredActions) === JSON.stringify(['outbound', 'write'])
+        ))).toBe(true)
     })
+
+    it.each(['web_search', 'web_read'] as const)(
+        'WEB-OUTBOUND-02/03 denies %s before its network source when read is allowed',
+        async (name) => {
+            const source = sources()
+            const tool = byName(createTalosWebTools(source), name)
+            const result = await executeTalosTool(
+                tool,
+                name === 'web_search' ? { query: 'private words' } : { url: 'https://example.org/a' },
+                deps({
+                    permissions: { read: 'allow', write: 'ask', outbound: 'deny' },
+                }),
+            )
+
+            expect(result.ok).toBe(false)
+            expect(result.code).toBe('TALOS_TOOL_DENIED_BY_POLICY')
+            expect(source.search).not.toHaveBeenCalled()
+            expect(source.read).not.toHaveBeenCalled()
+        },
+    )
+
+    it('WEB-OUTBOUND-04 asks before any query leaves the device', async () => {
+        const source = sources()
+        const requestConsent = vi.fn(async () => false)
+        const result = await executeTalosTool(
+            byName(createTalosWebTools(source), 'web_search'),
+            { query: 'private words' },
+            deps({
+                permissions: { read: 'allow', write: 'ask', outbound: 'ask' },
+                requestConsent,
+            }),
+        )
+
+        expect(requestConsent).toHaveBeenCalledTimes(1)
+        expect(result.ok).toBe(false)
+        expect(source.search).not.toHaveBeenCalled()
+    })
+
+    it('WEB-OUTBOUND-05 does not advertise denied web schemas', async () => {
+        const toolset = await createTalosToolset({
+            repository: {} as never,
+            readVaultFileText: vi.fn(async () => null),
+            web: () => sources(),
+        })
+
+        const denied = toolset.offer(
+            { read: 'allow', write: 'ask', outbound: 'deny' },
+            TALOS_DEFAULT_AGENT_TOOL_ENABLED,
+        )
+        const allowed = toolset.offer(
+            { read: 'allow', write: 'ask', outbound: 'allow' },
+            TALOS_DEFAULT_AGENT_TOOL_ENABLED,
+        )
+        expect(denied.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(['web_search', 'web_read']))
+        expect(allowed.map((tool) => tool.name)).toEqual(expect.arrayContaining(['web_search', 'web_read']))
+    })
+
+    it('P0-WEB-02 does not advertise web schemas when persistent writes are denied', async () => {
+        const toolset = await createTalosToolset({
+            repository: {} as never,
+            readVaultFileText: vi.fn(async () => null),
+            web: () => sources(),
+        })
+
+        const denied = toolset.offer(
+            { read: 'allow', write: 'deny', outbound: 'allow' },
+            TALOS_DEFAULT_AGENT_TOOL_ENABLED,
+        )
+        expect(denied.map((tool) => tool.name))
+            .not.toEqual(expect.arrayContaining(['web_search', 'web_read']))
+    })
+
+    it.each(['web_search', 'web_read'] as const)(
+        'P0-WEB-03 denies %s before network and persistence when write is denied',
+        async (name) => {
+            const source = sources()
+            const result = await executeTalosTool(
+                byName(createTalosWebTools(source), name),
+                name === 'web_search'
+                    ? { query: 'private acquisition' }
+                    : { url: 'https://example.org/a' },
+                deps({
+                    permissions: { read: 'allow', write: 'deny', outbound: 'allow' },
+                }),
+            )
+
+            expect(result).toMatchObject({
+                ok: false,
+                code: 'TALOS_TOOL_DENIED_BY_POLICY',
+            })
+            expect(source.search).not.toHaveBeenCalled()
+            expect(source.read).not.toHaveBeenCalled()
+            expect(source.rememberSearch).not.toHaveBeenCalled()
+            expect(source.remember).not.toHaveBeenCalled()
+        },
+    )
 
     it('search returns urls the model can then read, and states the date it has', async () => {
         const tools = createTalosWebTools(sources())
@@ -59,6 +172,66 @@ describe('web tools', () => {
         expect(result.ok).toBe(true)
         expect(result.content).toContain('https://example.org/a')
         expect(result.content).toContain('2026-03-04')
+    })
+
+    it('WEB-LIB-01 archives non-empty search results before reporting success', async () => {
+        const rememberSearch = vi.fn(async (_query, results: unknown[]) => ({
+            policy: 'stored' as const,
+            saved: results.length,
+            skipped: 0,
+            failed: 0,
+        }))
+        const tools = createTalosWebTools(sources({ rememberSearch }))
+
+        const result = await executeTalosTool(
+            byName(tools, 'web_search'),
+            { query: 'aziende lusso in Italia' },
+            deps(),
+        )
+
+        expect(rememberSearch).toHaveBeenCalledWith(
+            'aziende lusso in Italia',
+            expect.arrayContaining([expect.objectContaining({ url: 'https://example.org/a' })]),
+        )
+        expect(result.content).toMatch(/2 source links saved to the Library/i)
+    })
+
+    it('WEB-LIB-04 exposes an archive failure without discarding valid search results', async () => {
+        const tools = createTalosWebTools(sources({
+            rememberSearch: vi.fn(async () => { throw new Error('SQLCipher unavailable') }),
+        }))
+
+        const result = await executeTalosTool(
+            byName(tools, 'web_search'),
+            { query: 'aziende lusso' },
+            deps(),
+        )
+
+        expect(result.ok).toBe(true)
+        expect(result.content).toContain('https://example.org/a')
+        expect(result.content).toMatch(/could not be saved to the Library/i)
+        expect(result.content).not.toContain('SQLCipher unavailable')
+    })
+
+    it('WEB-LIB-05 tells the model to web_read under a retention-restricted provider', async () => {
+        const tools = createTalosWebTools(sources({
+            rememberSearch: vi.fn(async (_query, results: unknown[]) => ({
+                policy: 'provider_retention_restricted' as const,
+                saved: 0,
+                skipped: results.length,
+                failed: 0,
+            })),
+        }))
+
+        const result = await executeTalosTool(
+            byName(tools, 'web_search'),
+            { query: 'aziende lusso' },
+            deps(),
+        )
+
+        expect(result.ok).toBe(true)
+        expect(result.content).toMatch(/provider.*retention/i)
+        expect(result.content).toMatch(/web_read/i)
     })
 
     it('says "date unknown" out loud instead of leaving a silent gap (D7)', async () => {
@@ -85,6 +258,21 @@ describe('web tools', () => {
             url: 'https://example.org/a',
             title: 'Fattura elettronica 2026',
         }))
+    })
+
+    it('WEB-LIB-04 makes a full-page save failure visible without losing the page', async () => {
+        const tools = createTalosWebTools(sources({
+            remember: vi.fn(async () => { throw new Error('storage down') }),
+        }))
+        const result = await executeTalosTool(
+            byName(tools, 'web_read'),
+            { url: 'https://example.org/a' },
+            deps(),
+        )
+        expect(result.ok).toBe(true)
+        expect(result.content).toContain('2196 euro')
+        expect(result.content).toMatch(/could not be saved to the Library/i)
+        expect(result.content).not.toContain('storage down')
     })
 
     it('refuses a url that is not http(s), instead of handing it to the fetcher', async () => {
@@ -119,9 +307,14 @@ describe('web tools', () => {
     })
 
     it('a search that genuinely finds nothing is DIFFERENT from a failure', async () => {
-        const tools = createTalosWebTools(sources({ search: vi.fn(async () => []) }))
+        const rememberSearch = vi.fn()
+        const tools = createTalosWebTools(sources({
+            search: vi.fn(async () => []),
+            rememberSearch,
+        }))
         const result = await executeTalosTool(byName(tools, 'web_search'), '{"query":"x"}', deps())
         expect(result.ok).toBe(true)
         expect(result.content).toMatch(/no results/i)
+        expect(rememberSearch).not.toHaveBeenCalled()
     })
 })

@@ -2,21 +2,27 @@
 """Generate the 14 per-theme Android adaptive launcher icons for TALOS mobile.
 
 Owner (2026-07-24): the launcher icon follows the active theme preset. Each of
-the 14 presets gets its own adaptive icon = preset BACKGROUND colour behind the
-canonical TALOS mark (shield + DAG) stroked in the preset ACCENT colour — a 1:1
-mirror of the in-app themed logo (desktop parity).
+the 14 presets gets its own adaptive icon: preset BACKGROUND behind the exact
+completed boot symbol (rested shield + lit DAG, without the boot wordmark).
 
 minSdk is 26, so ONLY mipmap-anydpi-v26 adaptive icons are needed (no legacy
-raster fallback). Source of truth for the mark = public/talos/brand/logo-short.svg
-(viewBox 0 0 500 500). Circles are expressed as stroked ring paths and the two
-diagonal branches as rotated VectorDrawable groups (SVG translate()->rotate()).
+raster fallback). Source of truth is the versioned
+src/assets/talosBootFinalFrame.json contract. Circles are expressed as paths
+and diagonal branches as rotated VectorDrawable groups.
 
 Regenerate after any preset table / mark change:
     python tools/android-assets/gen_theme_icons.py
-"""
-import os
 
-# (id, background, accent) — kept in TALOS_THEME_IDS order (src/lib/talosThemes.ts).
+Verify tracked outputs without writing:
+    python tools/android-assets/gen_theme_icons.py --check
+"""
+import argparse
+import json
+import os
+import sys
+
+# (id, background, accent) — kept in TALOS_THEME_IDS order
+# (src/lib/talosThemes.ts). Launcher aliases remain preset-scoped, as before.
 PRESETS = [
     ("forge",     "#080b11", "#c98b32"),
     ("paper",     "#f8fafc", "#a96617"),
@@ -36,57 +42,127 @@ PRESETS = [
 DEFAULT_ID = "calm"  # TALOS_DEFAULT_THEME — the alias shipped enabled in the manifest.
 
 RES = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "android", "app", "src", "main", "res"))
+FRAME_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "src", "assets", "talosBootFinalFrame.json")
+)
+
+
+def load_frame() -> dict:
+    with open(FRAME_PATH, "r", encoding="utf-8") as source:
+        frame = json.load(source)
+    if frame.get("schema") != "talos.boot-final-frame/1":
+        raise ValueError("Unsupported TALOS boot-final-frame schema")
+    if frame.get("canvasDp") != 108 or frame.get("safeZoneDp") != 66:
+        raise ValueError("TALOS launcher frame must retain the Android 108/66dp contract")
+    viewport_width = float(frame["viewBox"].split()[2])
+    adaptive = frame["adaptive"]
+    if adaptive.get("content") != "mark-only":
+        raise ValueError("TALOS launcher foreground must contain only the boot symbol")
+    bounds = adaptive["visualBounds"]
+    scaled_width_dp = (
+        (bounds["right"] - bounds["left"])
+        * adaptive["scale"]
+        * frame["canvasDp"]
+        / viewport_width
+    )
+    scaled_height_dp = (
+        (bounds["bottom"] - bounds["top"])
+        * adaptive["scale"]
+        * frame["canvasDp"]
+        / viewport_width
+    )
+    if min(scaled_width_dp, scaled_height_dp) < 48:
+        raise ValueError("TALOS launcher symbol is smaller than the Android 48dp guidance")
+    if max(scaled_width_dp, scaled_height_dp) > frame["safeZoneDp"]:
+        raise ValueError("TALOS launcher symbol exceeds the Android adaptive-icon safe zone")
+    return frame
+
+
+FRAME = load_frame()
 
 
 def ring(cx: float, cy: float, r: float) -> str:
-    """A stroked circle expressed as a VectorDrawable ring path (no <circle> in AVD)."""
-    return f"M{cx - r},{cy} a{r},{r} 0 1,0 {2 * r},0 a{r},{r} 0 1,0 {-2 * r},0"
-
-
-def stroke_path(data: str, color: str, width: float) -> str:
+    """A closed circle path; VectorDrawable has no circle element."""
     return (
-        f'    <path android:strokeColor="{color}" android:strokeWidth="{width}"\n'
-        f'        android:strokeLineCap="round" android:strokeLineJoin="round"\n'
-        f'        android:fillColor="#00000000" android:pathData="{data}" />'
+        f"M{cx - r},{cy} a{r},{r} 0 1,0 {2 * r},0 "
+        f"a{r},{r} 0 1,0 {-2 * r},0 Z"
+    )
+
+
+def stroke_path(
+    data: str,
+    color: str,
+    width: float,
+    *,
+    fill: str = "#00000000",
+    alpha: float | None = None,
+    indent: str = "      ",
+) -> str:
+    alpha_attr = (
+        f'\n{indent}    android:strokeAlpha="{alpha}"'
+        if alpha is not None
+        else ""
+    )
+    return (
+        f'{indent}<path android:strokeColor="{color}" android:strokeWidth="{width}"'
+        f'{alpha_attr}\n'
+        f'{indent}    android:strokeLineCap="round" android:strokeLineJoin="round"\n'
+        f'{indent}    android:fillColor="{fill}" android:pathData="{data}" />'
     )
 
 
 def foreground_vector(accent: str) -> str:
-    shield = ("M218,123.5 L121.9,179 A21,21 0 0 0 111.5,197 L111.5,333 "
-              "A21,21 0 0 0 121.9,351 L239.6,419 A21,21 0 0 0 260.4,419 "
-              "L378.1,351 A21,21 0 0 0 388.5,333 L388.5,197 A21,21 0 0 0 378.1,179 L282,123.5")
-    body = "\n".join([
-        stroke_path(shield, accent, 12),
-        stroke_path(ring(250, 105, 22), accent, 9),
-        stroke_path(ring(250, 225, 18), accent, 9),
-        stroke_path(ring(250, 338, 14), accent, 9),
-        stroke_path("M250,140 L250,195", accent, 9),
-        stroke_path("M250,255 L250,315", accent, 9),
-    ])
-    branch = (
-        f'    <group android:translateX="250" android:translateY="225" android:rotation="{{deg}}">\n'
-        f'      <path android:strokeColor="{accent}" android:strokeWidth="9"\n'
-        f'          android:strokeLineCap="round" android:strokeLineJoin="round"\n'
-        f'          android:fillColor="#00000000" android:pathData="M0,32 L0,95" />\n'
-        f'      <path android:strokeColor="{accent}" android:strokeWidth="9"\n'
-        f'          android:strokeLineCap="round" android:strokeLineJoin="round"\n'
-        f'          android:fillColor="#00000000" android:pathData="{ring(0, 118, 14)}" />\n'
-        f'    </group>'
+    adaptive = FRAME["adaptive"]
+    mark = FRAME["mark"]
+    hexagon = mark["hex"]
+    edge_width = mark["edgeStrokeWidth"]
+    node_width = mark["nodeStrokeWidth"]
+    viewport = FRAME["viewBox"].split()
+
+    body = [
+        stroke_path(
+            hexagon["path"],
+            accent,
+            hexagon["strokeWidth"],
+            alpha=hexagon["strokeOpacity"],
+        ),
+    ]
+    body.extend(
+        stroke_path(edge["path"], accent, edge_width)
+        for edge in mark["edges"]
     )
+    body.extend(
+        stroke_path(
+            ring(node["cx"], node["cy"], node["r"]),
+            accent,
+            node_width,
+            fill=accent,
+        )
+        for node in mark["nodes"]
+    )
+
+    for branch in mark["branches"]:
+        node = branch["node"]
+        body.append(
+            '      <group android:translateX="250" android:translateY="225" '
+            f'android:rotation="{branch["rotation"]}">\n'
+            f'{stroke_path(branch["edgePath"], accent, edge_width, indent="        ")}\n'
+            f'{stroke_path(ring(node["cx"], node["cy"], node["r"]), accent, node_width, fill=accent, indent="        ")}\n'
+            '      </group>'
+        )
+
+    body_xml = "\n".join(body)
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<!-- GENERATED by tools/android-assets/gen_theme_icons.py — do not edit by hand. -->\n'
         '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
         '    android:width="108dp" android:height="108dp"\n'
-        '    android:viewportWidth="500" android:viewportHeight="500">\n'
-        # Optical centring (owner device feedback 2026-07-24): the mark's visual mass
-        # sits low (hexagon body + 3 lower nodes vs a single top node), so it read as
-        # not-quite-centred. Scale 0.90 for presence + translateY -9 lifts it to a
-        # balanced top/bottom gap inside the adaptive safe zone (verified by render).
-        '  <group android:scaleX="0.82" android:scaleY="0.82" android:pivotX="250" android:pivotY="250" android:translateY="-8">\n'
-        f'{body}\n'
-        f'{branch.format(deg=45)}\n'
-        f'{branch.format(deg=-45)}\n'
+        f'    android:viewportWidth="{viewport[2]}" android:viewportHeight="{viewport[3]}">\n'
+        f'  <group android:scaleX="{adaptive["scale"]}" android:scaleY="{adaptive["scale"]}"\n'
+        f'      android:pivotX="{adaptive["pivotX"]}" android:pivotY="{adaptive["pivotY"]}">\n'
+        f'    <group android:translateX="{mark["translateX"]}" android:translateY="{mark["translateY"]}">\n'
+        f'{body_xml}\n'
+        '    </group>\n'
         '  </group>\n'
         '</vector>\n'
     )
@@ -99,40 +175,24 @@ def adaptive_icon(pid: str) -> str:
         '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
         f'    <background android:drawable="@color/ic_talos_bg_{pid}" />\n'
         f'    <foreground android:drawable="@drawable/ic_talos_fg_{pid}" />\n'
+        f'    <monochrome android:drawable="@drawable/ic_talos_fg_{pid}" />\n'
         '</adaptive-icon>\n'
     )
 
 
-def main() -> None:
-    drawable = os.path.join(RES, "drawable")
-    anydpi = os.path.join(RES, "mipmap-anydpi-v26")
-    os.makedirs(drawable, exist_ok=True)
-    os.makedirs(anydpi, exist_ok=True)
-
-    for pid, _bg, accent in PRESETS:
-        with open(os.path.join(drawable, f"ic_talos_fg_{pid}.xml"), "w", encoding="utf-8") as f:
-            f.write(foreground_vector(accent))
-        for suffix in ("", "_round"):
-            with open(os.path.join(anydpi, f"ic_launcher_{pid}{suffix}.xml"), "w", encoding="utf-8") as f:
-                f.write(adaptive_icon(pid))
-
-    # The base app icon (used by recents/settings and as the pre-alias default) is
-    # the TALOS default-theme mark, replacing the Capacitor placeholder icon.
-    for suffix in ("", "_round"):
-        with open(os.path.join(anydpi, f"ic_launcher{suffix}.xml"), "w", encoding="utf-8") as f:
-            f.write(adaptive_icon(DEFAULT_ID))
-
-    # Per-preset background colours.
-    colors = ['<?xml version="1.0" encoding="utf-8"?>',
-              "<!-- GENERATED (theme icon backgrounds) by gen_theme_icons.py — do not edit by hand. -->",
-              "<resources>"]
+def color_resource() -> str:
+    colors = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        "<!-- GENERATED (theme icon backgrounds) by gen_theme_icons.py — do not edit by hand. -->",
+        "<resources>",
+    ]
     for pid, bg, _accent in PRESETS:
         colors.append(f'    <color name="ic_talos_bg_{pid}">{bg}</color>')
     colors.append("</resources>\n")
-    with open(os.path.join(RES, "values", "ic_talos_colors.xml"), "w", encoding="utf-8") as f:
-        f.write("\n".join(colors))
+    return "\n".join(colors)
 
-    # The manifest alias list + the default, emitted as snippets for review/paste.
+
+def alias_resource() -> str:
     aliases = []
     for pid, _bg, _accent in PRESETS:
         enabled = "true" if pid == DEFAULT_ID else "false"
@@ -151,12 +211,78 @@ def main() -> None:
             f'            </intent-filter>\n'
             f'        </activity-alias>'
         )
-    with open(os.path.join(os.path.dirname(__file__), "aliases.generated.xml"), "w", encoding="utf-8") as f:
-        f.write("\n".join(aliases) + "\n")
+    return "\n".join(aliases) + "\n"
+
+
+def generated_outputs() -> dict[str, str]:
+    drawable = os.path.join(RES, "drawable")
+    anydpi = os.path.join(RES, "mipmap-anydpi-v26")
+    outputs: dict[str, str] = {}
+
+    for pid, _bg, accent in PRESETS:
+        outputs[os.path.join(drawable, f"ic_talos_fg_{pid}.xml")] = (
+            foreground_vector(accent)
+        )
+        for suffix in ("", "_round"):
+            outputs[os.path.join(anydpi, f"ic_launcher_{pid}{suffix}.xml")] = (
+                adaptive_icon(pid)
+            )
+
+    # The base app icon (used by recents/settings and as the pre-alias default) is
+    # the TALOS default-theme mark, replacing the Capacitor placeholder icon.
+    for suffix in ("", "_round"):
+        outputs[os.path.join(anydpi, f"ic_launcher{suffix}.xml")] = (
+            adaptive_icon(DEFAULT_ID)
+        )
+
+    outputs[os.path.join(RES, "values", "ic_talos_colors.xml")] = color_resource()
+    outputs[os.path.join(os.path.dirname(__file__), "aliases.generated.xml")] = alias_resource()
+    return outputs
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail if any tracked generated resource differs; never write",
+    )
+    args = parser.parse_args(argv)
+    outputs = generated_outputs()
+
+    if args.check:
+        stale = []
+        for path, expected in outputs.items():
+            try:
+                # Preserve newline bytes so --check cannot silently normalize a
+                # Windows CRLF output into the LF-only canonical string.
+                with open(path, "r", encoding="utf-8", newline="") as source:
+                    actual = source.read()
+            except FileNotFoundError:
+                stale.append(path)
+                continue
+            if actual != expected:
+                stale.append(path)
+
+        if stale:
+            for path in stale:
+                print(f"STALE: {os.path.relpath(path, os.getcwd())}", file=sys.stderr)
+            return 1
+
+        print(f"CHECK OK: {len(outputs)} generated resources match canonical frame")
+        return 0
+
+    for path, content in outputs.items():
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # Explicit LF keeps generated XML byte-identical across host OSes and
+        # prevents CR bytes from surfacing as trailing whitespace in Git.
+        with open(path, "w", encoding="utf-8", newline="\n") as destination:
+            destination.write(content)
 
     print(f"OK: {len(PRESETS)} presets -> foregrounds+adaptive+round, ic_talos_colors.xml, aliases.generated.xml")
     print(f"    default enabled alias: MainActivityIcon_{DEFAULT_ID}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

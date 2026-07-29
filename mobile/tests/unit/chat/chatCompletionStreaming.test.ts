@@ -91,6 +91,29 @@ describe('buildChatCompletion streaming routing (F2-T4)', () => {
         expect(complete).not.toHaveBeenCalled()
     })
 
+    it('P1-CTX-ISO-07 abort signal state wins over a wrapped stream error', async () => {
+        const abort = new AbortController()
+        const streamComplete = vi.fn(async () => {
+            abort.abort()
+            throw new Error('reader closed after cancellation')
+        })
+        const complete = vi.fn(async () => ({
+            text: 'This fallback must never run.',
+            model: 'claude-opus-4-8',
+        }))
+        registryMock.providerAdapterFor.mockReturnValue({
+            provider: 'anthropic', requiresSecret: true, streamComplete, complete,
+        })
+        const completion = buildChatCompletion(contextFor)
+
+        await expect(completion(
+            [{ role: 'user', content: 'hi' }],
+            { onChunk: () => {}, signal: abort.signal },
+        )).rejects.toMatchObject({ name: 'AbortError' })
+        expect(streamComplete).toHaveBeenCalledOnce()
+        expect(complete).not.toHaveBeenCalled()
+    })
+
     it('uses buffered complete directly when the adapter cannot stream', async () => {
         const complete = vi.fn(async () => ({ text: 'Plain answer', model: 'claude-opus-4-8' }))
         registryMock.providerAdapterFor.mockReturnValue({

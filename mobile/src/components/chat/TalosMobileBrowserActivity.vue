@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Check, ChevronDown, CircleAlert, Loader2, ScanSearch, X } from '@lucide/vue'
 import type { TalosMobileBrowserActivityView } from '@/components/chat/mobileChatTypes'
 
@@ -21,25 +22,32 @@ const emit = defineEmits<{
     openLive: [url: string]
 }>()
 
+const { t } = useTalosI18n()
 const rawOpen = ref(false)
-const operationLabels: Record<string, string> = {
-    navigate: 'Page navigation',
-    screenshot: 'Screenshot capture',
-    snapshot: 'Page structure capture',
-    read: 'Page read',
-    session_start: 'Browser session',
-    click: 'Page interaction',
-    scroll: 'Page scroll',
-    upload: 'File upload',
-    wait: 'Page wait',
-    tabs: 'Tab operation',
+const operationLabelKeys: Record<string, string> = {
+    navigate: 'browser.operationNavigate',
+    screenshot: 'browser.operationScreenshot',
+    snapshot: 'browser.operationSnapshot',
+    read: 'browser.operationRead',
+    session_start: 'browser.operationSessionStart',
+    click: 'browser.operationClick',
+    scroll: 'browser.operationScroll',
+    upload: 'browser.operationUpload',
+    wait: 'browser.operationWait',
+    tabs: 'browser.operationTabs',
 }
-const statusLabels: Record<string, string> = {
-    pending: 'running',
-    succeeded: 'succeeded',
-    failed: 'failed',
-    cancelled: 'cancelled',
-    recovery_required: 'needs recovery',
+const statusLabelKeys: Record<string, string> = {
+    pending: 'browser.statusRunning',
+    succeeded: 'browser.statusSucceeded',
+    failed: 'browser.statusFailed',
+    cancelled: 'browser.statusCancelled',
+    recovery_required: 'browser.statusRecovery',
+}
+function operationLabel(operation: string): string {
+    return t(operationLabelKeys[operation] ?? 'browser.operationUnknown')
+}
+function statusLabel(status: string): string {
+    return t(statusLabelKeys[status] ?? 'browser.statusUpdated')
 }
 const validActivities = computed(() => props.activities.filter((activity) => activity.evidence !== null))
 const invalidActivities = computed(() => props.activities.filter((activity) => activity.evidence === null))
@@ -55,7 +63,7 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
         v-if="activities.length"
         data-testid="talos-mobile-browser-activity"
         class="mt-3 min-w-0 max-w-full border-t border-[var(--talos-border)] pt-3 text-xs text-[var(--talos-text)]"
-        aria-label="Browser evidence"
+        :aria-label="$t('browser.evidenceSection')"
     >
         <div class="space-y-1" aria-live="polite">
             <div
@@ -68,8 +76,8 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
                 <X v-else-if="activity.status === 'cancelled'" class="size-3.5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                 <Check v-else class="size-3.5 shrink-0 text-[var(--talos-success)]" aria-hidden="true" />
                 <span class="min-w-0 break-words">
-                    {{ operationLabels[activity.evidence?.activity.operation ?? activity.operation] ?? 'Browser operation' }}
-                    {{ statusLabels[activity.status] ?? 'updated' }}
+                    {{ operationLabel(activity.evidence?.activity.operation ?? activity.operation) }}
+                    {{ statusLabel(activity.status) }}
                 </span>
             </div>
         </div>
@@ -80,7 +88,7 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
             role="alert"
             class="mt-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-2.5 py-2 text-[var(--talos-text)]"
         >
-            Browser evidence could not be verified. Retry from the current frame or open Browser settings.
+            {{ $t('browser.verificationFailed') }}
         </div>
 
         <TalosMobileBrowserScreenshotEvidence
@@ -99,7 +107,7 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
                 @click="rawOpen = !rawOpen"
             >
                 <ScanSearch class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                <span class="min-w-0 flex-1 truncate">Untrusted browser evidence</span>
+                <span class="min-w-0 flex-1 truncate">{{ $t('browser.untrustedEvidence') }}</span>
                 <ChevronDown class="size-3.5 shrink-0 transition-transform" :class="rawOpen ? 'rotate-180' : ''" aria-hidden="true" />
             </button>
             <div v-if="rawOpen" class="mt-2 max-h-72 space-y-3 overflow-y-auto overscroll-contain pr-1">
@@ -108,7 +116,7 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
                     :key="item.id"
                     class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-2"
                 >
-                    <div class="font-semibold">{{ item.snapshot.title || 'Captured page' }}</div>
+                    <div class="font-semibold">{{ item.snapshot.title || $t('browser.capturedPage') }}</div>
                     <div v-if="item.snapshot.url" class="mt-1 break-all text-3xs text-[var(--talos-muted)]">{{ item.snapshot.url }}</div>
                     <div class="mt-2 space-y-1">
                         <div
@@ -117,7 +125,7 @@ const rawAvailable = computed(() => props.showUntrustedEvidence && snapshots.val
                             class="grid min-w-0 grid-cols-[72px_1fr] gap-2 rounded border border-[var(--talos-border)] px-2 py-1"
                         >
                             <span class="truncate font-mono text-3xs uppercase text-[var(--talos-accent)]">{{ node.role }}</span>
-                            <span class="min-w-0 break-words [overflow-wrap:anywhere]">{{ node.name || '(unnamed)' }}</span>
+                            <span class="min-w-0 break-words [overflow-wrap:anywhere]">{{ node.name || $t('browser.unnamedNode') }}</span>
                         </div>
                     </div>
                 </section>

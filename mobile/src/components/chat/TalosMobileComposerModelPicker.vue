@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Check, FlaskConical, RefreshCw, WandSparkles } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { ChevronDown, Search } from '@lucide/vue'
@@ -38,6 +39,7 @@ const emit = defineEmits<{
     openModelLab: []
 }>()
 
+const { t } = useTalosI18n()
 const listbox = ref<HTMLElement | null>(null)
 const visibleProfiles = computed(() => props.modelProfiles.filter((profile) => profile.show_in_composer))
 
@@ -84,20 +86,33 @@ function capabilityValue(profile: TalosMobileModelProfileView, key: string): unk
 
 function compatibilityLabel(profile: TalosMobileModelProfileView): string {
     const value = capabilityValue(profile, 'chat_compatibility')
-    return typeof value === 'string' ? value : 'unknown'
+    if (value === 'supported') return t('chat.compatibilitySupported')
+    if (value === 'unsupported') return t('chat.compatibilityUnsupported')
+    return typeof value === 'string' ? value : t('common.unknown').toLocaleLowerCase()
 }
 
 function contextLabel(profile: TalosMobileModelProfileView): string | null {
     const value = capabilityValue(profile, 'context_length')
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
-    return value >= 1000 ? `${Math.round(value / 1000)}k context` : `${value} context`
+    const formatted = value >= 1000 ? `${Math.round(value / 1000)}k` : String(value)
+    return t('chat.contextValue', { value: formatted })
 }
 
 function modalityLabel(profile: TalosMobileModelProfileView): string | null {
     const value = capabilityValue(profile, 'input_modalities')
     if (!Array.isArray(value)) return null
     const modalities = value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
-    return modalities.length ? modalities.join(' + ') : null
+    const localized = modalities.map((modality) => {
+        const key = `chat.modality${modality.charAt(0).toUpperCase()}${modality.slice(1)}`
+        return t(key)
+    })
+    return localized.length ? localized.join(' + ') : null
+}
+
+function statusLabel(status: string): string {
+    if (status === 'enabled') return t('chat.statusEnabled')
+    if (status === 'disabled') return t('chat.statusDisabled')
+    return status
 }
 
 function routingIsSelectable(profile: TalosMobileRoutingProfileView): boolean {
@@ -170,7 +185,7 @@ function onListKeydown(event: KeyboardEvent): void {
         <div
             ref="listbox"
             role="listbox"
-            aria-label="Model for this conversation"
+            :aria-label="$t('chat.modelForConversation')"
             class="max-h-[70dvh] min-h-[40dvh] space-y-3 overflow-y-auto overscroll-contain pr-1"
             @keydown="onListKeydown"
         >
@@ -185,9 +200,9 @@ function onListKeydown(event: KeyboardEvent): void {
                     class="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]"
                 >
                     <WandSparkles class="size-3.5 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
-                    Auto
+                    {{ $t('chat.autoRouting') }}
                     <span class="ml-1 min-w-0 truncate text-3xs font-normal normal-case">
-                        routing picks the model per turn
+                        {{ $t('chat.autoRoutingDetail') }}
                     </span>
                 </header>
                 <p
@@ -195,7 +210,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     role="status"
                     class="px-2 py-2 text-xs text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    Loading routes...
+                    {{ $t('chat.loadingRoutes') }}
                 </p>
                 <button
                     v-for="profile in routingProfiles"
@@ -215,7 +230,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.name }}</span>
                         <span class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
-                            {{ profile.lane_count }} lanes - {{ profile.status }}
+                            {{ $t('chat.routeLaneStatus', { count: profile.lane_count, status: statusLabel(profile.status) }) }}
                         </span>
                     </span>
                     <Check
@@ -235,20 +250,20 @@ function onListKeydown(event: KeyboardEvent): void {
                     id="talos-mobile-model-picker-models"
                     class="px-1 text-xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    Models
+                    {{ $t('chat.models') }}
                 </header>
                 <p
                     v-if="loadingModels"
                     role="status"
                     class="px-2 py-2 text-xs text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    Loading profiles...
+                    {{ $t('chat.loadingProfiles') }}
                 </p>
                 <p
                     v-else-if="!visibleProfiles.length"
                     class="px-2 py-2 text-xs leading-5 text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    No composer models yet - open Model Lab to add one.
+                    {{ $t('chat.noComposerModels') }}
                 </p>
                 <label v-if="visibleProfiles.length > 6" class="relative mb-1 block px-1">
                     <Search class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--talos-muted,var(--muted-foreground))]" aria-hidden="true" />
@@ -257,8 +272,8 @@ function onListKeydown(event: KeyboardEvent): void {
                         type="search"
                         inputmode="search"
                         data-testid="talos-model-search"
-                        aria-label="Search models"
-                        placeholder="Search models"
+                        :aria-label="$t('chat.searchModels')"
+                        :placeholder="$t('chat.searchModels')"
                         class="min-h-11 w-full rounded-lg border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-8 pr-2 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                     >
                 </label>
@@ -267,7 +282,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     v-if="searching && !modelGroups.length"
                     class="px-2 py-2 text-xs text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    No model matches “{{ modelQuery.trim() }}”.
+                    {{ $t('chat.noModelMatches', { query: modelQuery.trim() }) }}
                 </p>
 
                 <div v-for="group in modelGroups" :key="group.provider" :data-model-group="group.provider">
@@ -308,7 +323,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.display_name }}</span>
                         <span class="truncate font-mono text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
-                            {{ profile.model }} - {{ profile.status }}
+                            {{ profile.model }} - {{ statusLabel(profile.status) }}
                         </span>
                         <span class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
                             {{ compatibilityLabel(profile) }}
@@ -329,22 +344,22 @@ function onListKeydown(event: KeyboardEvent): void {
         <footer class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
             <button
                 type="button"
-                aria-label="Refresh model catalog"
+                :aria-label="$t('chat.refreshModelCatalog')"
                 :disabled="refreshingModels"
                 class="inline-flex min-h-11 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-muted,var(--muted-foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] hover:text-[var(--talos-text,var(--foreground))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))] disabled:opacity-50"
                 @click="emit('refreshModels')"
             >
                 <RefreshCw :class="['size-4', refreshingModels ? 'animate-spin' : '']" aria-hidden="true" />
-                Refresh
+                {{ $t('chat.refresh') }}
             </button>
             <button
                 type="button"
-                aria-label="Open Model Lab"
+                :aria-label="$t('chat.openModelLab')"
                 class="inline-flex min-h-11 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-text,var(--foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
                 @click="emit('openModelLab')"
             >
                 <FlaskConical class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
-                Model Lab
+                {{ $t('navigation.modelLab') }}
             </button>
         </footer>
     </div>
