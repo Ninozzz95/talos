@@ -139,6 +139,74 @@ describe('talos.tool.authorization-checkpoint/1', () => {
         })).toBeNull()
     })
 
+    /**
+     * I-05. `hydrate()` guards a checkpoint it cannot PARSE — that record is
+     * quarantined and the loop continues. What it did not guard was
+     * `announceReady()`, and the consumer behind it throws: the controller
+     * validates the serialised runtime and raises
+     * TALOS_TOOL_AUTHORIZATION_RUNTIME_INVALID when a field is missing.
+     *
+     * That throw escaped the loop, escaped hydrate(), and `performInit()`
+     * awaits hydrate() — so ONE bad record stopped the whole app from starting,
+     * taking every valid checkpoint after it down as well.
+     *
+     * The trigger is not corruption, it is upgrading. The validator requires
+     * fields that did not exist in earlier builds, so a checkpoint written by a
+     * previous version of TALOS throws on the first launch of the new one. The
+     * owner installs APKs over each other; a pending authorisation at the wrong
+     * moment is an app that no longer opens.
+     *
+     * One record failing must cost that record, and nothing else.
+     */
+    it('I-05 a checkpoint whose consumer throws is quarantined beside a valid one', async () => {
+        const failing = await makeCheckpoint([], {
+            id: 'checkpoint-legacy',
+            phase: 'before_model',
+        })
+        const healthy = await makeCheckpoint([], {
+            id: 'checkpoint-current',
+            phase: 'before_model',
+            created_at: '2026-07-29T12:00:01.000Z',
+        })
+        const announced: string[] = []
+        const gate = coordinator(vi.fn(async (checkpoint: TalosToolAuthorizationCheckpointV1) => {
+            if (checkpoint.id === 'checkpoint-legacy') {
+                // Exactly what controllerRuntimeFromCheckpoint() does to a
+                // record written before a runtime field existed.
+                throw new Error('TALOS_TOOL_AUTHORIZATION_RUNTIME_INVALID')
+            }
+            announced.push(checkpoint.id)
+        }))
+        for (const checkpoint of [failing, healthy]) {
+            await repository.appendToolActivity({
+                id: checkpoint.id,
+                session_id: checkpoint.session_id,
+                message_id: null,
+                operation: 'tool.authorization',
+                status: 'pending',
+                payload: {
+                    contract: 'talos.tool.authorization-checkpoint/1',
+                    checkpoint,
+                },
+                evidence: {},
+                created_at: checkpoint.created_at,
+            })
+        }
+
+        // The app has to start.
+        await expect(gate.hydrate()).resolves.toBeUndefined()
+
+        // The healthy record behind the poisoned one was still delivered.
+        expect(announced).toEqual(['checkpoint-current'])
+
+        // And the poisoned one is parked where it can be seen, not retried.
+        const activities = await repository.listSessionToolActivities('session-1')
+        const quarantined = activities.find((activity) => activity.id === 'checkpoint-legacy')
+        expect(quarantined?.status).toBe('recovery_required')
+        // The reason is recorded; the raw payload is not echoed into evidence.
+        expect(JSON.stringify(quarantined?.evidence)).toContain('TALOS_TOOL_AUTHORIZATION')
+    })
+
     it('TOOL-AUTH-09 rejects a checkpoint whose encrypted input does not match its digest', async () => {
         const checkpoint = await makeCheckpoint()
         const parsed = parseTalosToolAuthorizationCheckpoint({
