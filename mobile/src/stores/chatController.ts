@@ -2769,7 +2769,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             if (loop.suspension) {
                 const next = createAuthorizationCheckpoint({
                     identity: sendIdentity,
-                    runtime: sendRuntime,
+                    // I-01: the EFFECTIVE runtime, not the snapshot taken before
+                    // consent and turn-scoped policy were resolved. Serialising
+                    // `sendRuntime` here recorded "consent not granted" moments
+                    // after the user granted it, so resuming asked again for a
+                    // decision already made — or refused the checkpoint as
+                    // inconsistent. What is written must be what was in force.
+                    runtime: effectiveLibraryRuntime,
                     loop: loop.suspension.checkpoint,
                     requests: loop.suspension.requests as TalosToolConsentRequest[],
                 })
@@ -2828,7 +2834,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             if (blocks.length > 0 && writePermission === 'ask' && markerToolEnabled) {
                 const markerCheckpoint = await createGeneratedSaveCheckpoint({
                     identity: sendIdentity,
-                    runtime: sendRuntime,
+                    // I-01: same reason as the suspension checkpoint above. This
+                    // one is created at the very END of the send, so it is the
+                    // most likely of the two to have drifted from the snapshot.
+                    runtime: effectiveLibraryRuntime,
                     finalText: stripLibrarySaveMarkers(finalText),
                     blocks,
                 })

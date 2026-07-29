@@ -3463,6 +3463,116 @@ describe('chatController', () => {
         })
     }, 15_000)
 
+    /**
+     * I-01. A send builds `sendRuntime` once, and then `effectiveLibraryRuntime`
+     * on top of it as consent and turn-scoped policy are resolved. The provider
+     * call uses the effective one — correctly. But the checkpoints created LATER
+     * in the same send serialised `sendRuntime`, the snapshot from before any of
+     * that happened.
+     *
+     * So: ask-mode, the user taps "Allow once", the answer comes back with a
+     * save marker, and the second checkpoint records a runtime that says consent
+     * was never granted. Resume from it and the Library consent is demanded
+     * again for a decision the user already made a moment ago — or the
+     * checkpoint is refused outright as inconsistent.
+     *
+     * What is serialised has to be what was actually in force.
+     */
+    it('I-01 a second checkpoint in the same send keeps the consent already granted', async () => {
+        const { deps, store, settings, request, chatRepository } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        Object.assign(settings.state, {
+            shell: {
+                library_context_enabled: true,
+                library_context_policy: {
+                    schema_version: 1 as const,
+                    revision: 1,
+                    enabled: true,
+                    mode: 'ask_before_use_v1' as const,
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: '2026-07-29T10:00:00.000Z',
+                },
+                // The second checkpoint of the send comes from this path.
+                library_autosave_generated: true,
+                debug_diagnostics: false,
+            },
+        })
+        await chatRepository.initialize()
+        await chatRepository.createVaultFile({
+            id: 'i01-omniroute',
+            display_name: 'OmniRoute renewal.md',
+            media_type: 'text/markdown',
+            size_bytes: 48,
+            private_uri: 'talos-vault/files/i01-omniroute.md',
+            status: 'available',
+            trust: 'untrusted',
+            sha256: '7'.repeat(64),
+            extracted_text: 'I01_SENTINEL OmniRoute renewal is March 2027.',
+            failure_code: null,
+            metadata: { origin: 'uploaded', library_shared: true },
+            created_at: '2026-07-29T10:00:00.000Z',
+        })
+        const base = attachmentRuntime(chatRepository).vault
+        deps.vaultService = { ...base, createGenerated: vi.fn(async () => { throw new Error('not reached') }) }
+        request.mockImplementation(async ({ url }: { url: string }) => {
+            if (url.includes('anthropic.com/v1/models')) {
+                return { status: 200, data: { data: [{ id: 'claude-live', display_name: 'Claude Live' }], has_more: false } }
+            }
+            if (url.includes('anthropic.com/v1/messages')) {
+                return {
+                    status: 200,
+                    data: {
+                        model: 'claude-live',
+                        stop_reason: 'end_turn',
+                        content: [{
+                            type: 'text',
+                            text: 'Renewal noted.\n[TALOS_SAVE_LIBRARY:Renewal.md]\nMarch 2027.\n[/TALOS_SAVE_LIBRARY]',
+                        }],
+                    },
+                }
+            }
+            return { status: 500, data: { error: { message: 'unexpected test request' } } }
+        })
+
+        const controller = createChatController(deps)
+        await controller.init()
+        const sessionId = controller.chat.activeSession.value?.id as string
+
+        // First checkpoint: the Library wants consent before any body egresses.
+        const sending = controller.send('When is OmniRoute renewed?')
+        await vi.waitFor(
+            () => expect(controller.pendingToolAuthorizations.value).toHaveLength(1),
+            { timeout: 10_000, interval: 20 },
+        )
+        await expect(sending).resolves.toBe(true)
+        expect(controller.pendingToolAuthorizations.value[0]?.tool).toBe('library_read')
+
+        await controller.decideToolAuthorization(
+            controller.pendingToolAuthorizations.value[0]!.request_id,
+            'allow_once',
+        )
+
+        // Second checkpoint: the generated file wants a write authorization.
+        await vi.waitFor(
+            () => expect(controller.pendingToolAuthorizations.value).toHaveLength(1),
+            { timeout: 10_000, interval: 20 },
+        )
+        expect(controller.pendingToolAuthorizations.value[0]?.tool).toBe('document_create')
+
+        // The consent granted moments ago has to be inside the record that will
+        // be resumed, or resuming asks for it a second time.
+        const activities = await chatRepository.listSessionToolActivities(
+            controller.chat.activeSession.value?.id as string,
+        )
+        const second = activities
+            .filter((activity) => activity.operation === 'tool.authorization')
+            .map((activity) => (activity.payload as { checkpoint?: { runtime?: Record<string, unknown> } })?.checkpoint)
+            .filter((checkpoint): checkpoint is { runtime?: Record<string, unknown> } => !!checkpoint)
+            .at(-1)
+        expect(second?.runtime?.libraryConsentGranted).toBe(true)
+    }, 20_000)
+
     it('P1-CTX-ASK-03 honors persistent consent, revocation, and denial without body drift', async () => {
         const { deps, store, settings, request, chatRepository } = makeDeps()
         store.set('anthropic', 'sk-ant')
