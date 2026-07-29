@@ -46,6 +46,7 @@ function gateway(overrides: Partial<TalosCapacitorSqliteGateway> = {}) {
         clearEncryptionSecret: vi.fn().mockResolvedValue(undefined),
         exportToJson: vi.fn().mockResolvedValue({ database: 'talos', tables: [] }),
         importFromJson: vi.fn().mockResolvedValue({ changes: 1 }),
+        isJsonValid: vi.fn().mockResolvedValue(true),
         deleteDatabase: vi.fn().mockResolvedValue(undefined),
         initWebStore: vi.fn().mockResolvedValue(undefined),
         saveToStore: vi.fn().mockResolvedValue(undefined),
@@ -258,5 +259,121 @@ describe('createCapacitorSqliteRuntime', () => {
         expect(value.retrieveConnection).toHaveBeenCalledWith(TALOS_CHAT_DATABASE_NAME, false)
         expect(value.createConnection).not.toHaveBeenCalled()
         expect(db.open).not.toHaveBeenCalled()
+    })
+
+    /**
+     * CR-CAND-01. `adoptManagedSecret` exports the legacy database, writes the
+     * payload to disk, DELETES the database and imports under the new key. If
+     * that import fails the data exists only in the migration file, and the
+     * next launch has to restore it before anything else touches the store.
+     *
+     * It did not. A failed resume was swallowed and `establish()` walked on to
+     * `createConnection`, minting an empty database over the user's chats. The
+     * file survived, but nothing ever surfaced it: what the owner saw was an
+     * app that had forgotten everything, with no error to explain it.
+     */
+    it('P0-DB-MIGRATION-01: a pending migration that cannot be imported blocks the replacement database', async () => {
+        const { value } = gateway({
+            isSecretStored: vi.fn().mockResolvedValue(true),
+            importFromJson: vi.fn().mockRejectedValue(new Error('UNIQUE constraint failed')),
+        })
+        const seams = migration()
+        await seams.persistMigration('{"database":"talos","tables":[]}')
+        const runtime = createCapacitorSqliteRuntime({
+            platform: 'native',
+            gateway: value,
+            secret: vi.fn().mockResolvedValue({ secret: 'h'.repeat(64), fresh: false }),
+            prepareWebStore: vi.fn(),
+            ...seams,
+        })
+
+        await expect(runtime.connect()).rejects.toThrow(/TALOS_DB_MIGRATION_PENDING/)
+        // The whole point: no empty database may be created over the export.
+        expect(value.createConnection).not.toHaveBeenCalled()
+        expect(value.retrieveConnection).not.toHaveBeenCalled()
+        // And the only copy of the data stays exactly where it is.
+        expect(await seams.readMigration()).toContain('talos')
+        expect(seams.clearMigration).not.toHaveBeenCalled()
+    })
+
+    /**
+     * CR-CAND-01, second mouth. Upstream types `importFromJson` as
+     * `Promise<capSQLiteChanges>` and the import runs as THREE separate SQL
+     * transactions, so it is not atomic — a resolved call is not proof the
+     * data landed. Our gateway discarded the result entirely, which made a
+     * partial or refused import indistinguishable from a complete one.
+     */
+    it('P0-DB-MIGRATION-02: a pending migration reporting no applied changes blocks the replacement database', async () => {
+        const { value } = gateway({
+            isSecretStored: vi.fn().mockResolvedValue(true),
+            importFromJson: vi.fn().mockResolvedValue({ changes: -1 }),
+        })
+        const seams = migration()
+        await seams.persistMigration('{"database":"talos","tables":[]}')
+        const runtime = createCapacitorSqliteRuntime({
+            platform: 'native',
+            gateway: value,
+            secret: vi.fn().mockResolvedValue({ secret: 'i'.repeat(64), fresh: false }),
+            prepareWebStore: vi.fn(),
+            ...seams,
+        })
+
+        await expect(runtime.connect()).rejects.toThrow(/TALOS_DB_MIGRATION_PENDING/)
+        expect(value.createConnection).not.toHaveBeenCalled()
+        expect(await seams.readMigration()).toContain('talos')
+        expect(seams.clearMigration).not.toHaveBeenCalled()
+    })
+
+    /**
+     * CR-CAND-01, third mouth. The payload is validated with the plugin's own
+     * `isJsonValid` BEFORE the database is destroyed. A payload that upstream
+     * would refuse must be refused while the original data still exists.
+     */
+    it('P0-DB-MIGRATION-03: adopting a managed secret refuses to destroy the database over an invalid export', async () => {
+        const { value, db } = gateway({
+            isSecretStored: vi.fn().mockResolvedValue(true),
+            isDatabase: vi.fn().mockResolvedValue(true),
+            isJsonValid: vi.fn().mockResolvedValue(false),
+        })
+        db.isOpen = vi.fn().mockResolvedValue(true)
+        const seams = migration()
+        const runtime = createCapacitorSqliteRuntime({
+            platform: 'native',
+            gateway: value,
+            secret: vi.fn().mockResolvedValue({ secret: 'j'.repeat(64), fresh: false }),
+            prepareWebStore: vi.fn(),
+            ...seams,
+        })
+        await runtime.connect()
+
+        await expect(runtime.adoptManagedSecret('k'.repeat(64))).rejects.toThrow(/TALOS_DB_ADOPT_FAILED/)
+        // Nothing irreversible may have happened: the database is still there.
+        expect(value.deleteDatabase).not.toHaveBeenCalled()
+        expect(value.clearEncryptionSecret).not.toHaveBeenCalled()
+    })
+
+    /**
+     * The recovery path has to actually recover. This is the contract the two
+     * fail-closed tests above must not break.
+     */
+    it('P0-DB-MIGRATION-04: a pending migration that imports cleanly is cleared and the database opens', async () => {
+        const { value, db } = gateway({
+            isSecretStored: vi.fn().mockResolvedValue(true),
+            importFromJson: vi.fn().mockResolvedValue({ changes: 42 }),
+        })
+        const seams = migration()
+        await seams.persistMigration('{"database":"talos","tables":[]}')
+        const runtime = createCapacitorSqliteRuntime({
+            platform: 'native',
+            gateway: value,
+            secret: vi.fn().mockResolvedValue({ secret: 'l'.repeat(64), fresh: false }),
+            prepareWebStore: vi.fn(),
+            ...seams,
+        })
+
+        await expect(runtime.connect()).resolves.toBe(db)
+        expect(value.importFromJson).toHaveBeenCalledOnce()
+        expect(seams.clearMigration).toHaveBeenCalledOnce()
+        expect(value.createConnection).toHaveBeenCalled()
     })
 })

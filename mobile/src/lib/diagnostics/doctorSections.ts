@@ -52,7 +52,12 @@ export function talosStorageDoctorRow(input: TalosStorageDoctorInput): TalosDoct
     const engine = input.native ? 'SQLCipher native' : 'sql.js web store'
     let hint = ''
     if (input.status === 'error') {
-        if (/No available connection for database/i.test(input.error ?? '')) {
+        if (/TALOS_DB_MIGRATION_PENDING/i.test(input.error ?? '')) {
+            // CR-CAND-01: the boot is refusing to build a database over an
+            // unrestored export. Say the chats are held. "retry local storage"
+            // reads like a shrug next to an app that has gone blank.
+            hint = ' · migration held; your data is kept, retry to restore'
+        } else if (/No available connection for database/i.test(input.error ?? '')) {
             hint = ' · connection closed; unlock and retry'
         } else if (/TALOS_(?:CHAT_)?DB_KEY_LOCKED/i.test(input.error ?? '')) {
             hint = ' · unlock required'
