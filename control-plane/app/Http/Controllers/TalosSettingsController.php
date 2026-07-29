@@ -58,7 +58,7 @@ final class TalosSettingsController extends Controller
 
         DB::beginTransaction();
         try {
-            $settings = $this->settingsForUpdate((int) $userId, true);
+            $settings = $this->settingsForUpdate((int) $userId, true, true);
             $this->assertExpectedRevision($settings, $validated['expected_revision'] ?? null, (int) $userId);
             $storedPreferences = TalosWorkspaceSetting::sanitizePreferences(
                 $settings->preferences ?? [],
@@ -75,18 +75,23 @@ final class TalosSettingsController extends Controller
                     $storedPreferences,
                     $validated['preferences'],
                 );
+                $effectivePreferences = TalosWorkspaceSetting::canonicalizePreferencesForWrite($effectivePreferences);
                 $sidebarRailErrors = $rawPreferenceValues['sidebar_rail']['present']
                     ? TalosWorkspaceSetting::validateRawSidebarRailForWrite($rawPreferenceValues['sidebar_rail']['value'])
                     : TalosWorkspaceSetting::validateSidebarRailPreferencesForWrite($validated['preferences']);
                 $onboardingErrors = $rawPreferenceValues['onboarding']['present']
                     ? TalosWorkspaceSetting::validateRawOnboardingForWrite($rawPreferenceValues['onboarding']['value'])
                     : TalosWorkspaceSetting::validateOnboardingPreferencesForWrite($validated['preferences']);
+                $promptCacheErrors = $rawPreferenceValues['prompt_cache']['present']
+                    ? TalosWorkspaceSetting::validateRawPromptCacheForWrite($rawPreferenceValues['prompt_cache']['value'])
+                    : TalosWorkspaceSetting::validatePromptCachePreferencesForWrite($validated['preferences']);
                 $themeErrors = array_replace_recursive(
                     $themeErrors,
                     TalosThemeContrast::validatePreferences($effectivePreferences),
                     TalosWorkspaceSetting::validateBrowserHmiPreferencesForWrite($validated['preferences']),
                     $sidebarRailErrors,
                     $onboardingErrors,
+                    $promptCacheErrors,
                 );
                 if ($themeErrors !== []) {
                     throw ValidationException::withMessages($themeErrors);
@@ -148,11 +153,15 @@ final class TalosSettingsController extends Controller
             'user_id' => $userId,
         ], [
             'id' => TalosWorkspaceSetting::idForUser($userId),
-            'preferences' => [],
+            'preferences' => TalosWorkspaceSetting::freshPreferences(),
         ]);
     }
 
-    private function settingsForUpdate(int $userId, bool $lockForUpdate = false): TalosWorkspaceSetting
+    private function settingsForUpdate(
+        int $userId,
+        bool $lockForUpdate = false,
+        bool $useFreshDefaults = false,
+    ): TalosWorkspaceSetting
     {
         $query = TalosWorkspaceSetting::query()->where('user_id', $userId);
         if ($lockForUpdate) {
@@ -166,7 +175,7 @@ final class TalosSettingsController extends Controller
         return new TalosWorkspaceSetting([
             'id' => TalosWorkspaceSetting::idForUser($userId),
             'user_id' => $userId,
-            'preferences' => [],
+            'preferences' => $useFreshDefaults ? TalosWorkspaceSetting::freshPreferences() : [],
             'revision' => 0,
         ]);
     }
@@ -225,7 +234,8 @@ final class TalosSettingsController extends Controller
      *     empty: bool,
      *     theme_motion_v6: array{present: bool, value: mixed},
      *     sidebar_rail: array{present: bool, value: mixed},
-     *     onboarding: array{present: bool, value: mixed}
+     *     onboarding: array{present: bool, value: mixed},
+     *     prompt_cache: array{present: bool, value: mixed}
      * }
      */
     private function extractRawPreferenceValues(Request $request): array
@@ -237,6 +247,7 @@ final class TalosSettingsController extends Controller
                 'theme_motion_v6' => $missing,
                 'sidebar_rail' => $missing,
                 'onboarding' => $missing,
+                'prompt_cache' => $missing,
             ];
         }
 
@@ -247,6 +258,7 @@ final class TalosSettingsController extends Controller
                 'theme_motion_v6' => $missing,
                 'sidebar_rail' => $missing,
                 'onboarding' => $missing,
+                'prompt_cache' => $missing,
             ];
         }
 
@@ -260,9 +272,22 @@ final class TalosSettingsController extends Controller
             ]);
         }
 
+        if ((is_array($root) && $root === [])
+            || ($root instanceof stdClass && $root::class === stdClass::class && get_object_vars($root) === [])
+        ) {
+            return [
+                'empty' => true,
+                'theme_motion_v6' => $missing,
+                'sidebar_rail' => $missing,
+                'onboarding' => $missing,
+                'prompt_cache' => $missing,
+            ];
+        }
+
         $themeMotionV6 = $missing;
         $sidebarRail = $missing;
         $onboarding = $missing;
+        $promptCache = $missing;
         if ($root instanceof stdClass
             && $root::class === stdClass::class
             && property_exists($root, 'preferences')
@@ -280,6 +305,10 @@ final class TalosSettingsController extends Controller
             if (property_exists($root->preferences, 'onboarding')) {
                 $onboarding = ['present' => true, 'value' => $root->preferences->onboarding];
             }
+
+            if (property_exists($root->preferences, 'prompt_cache')) {
+                $promptCache = ['present' => true, 'value' => $root->preferences->prompt_cache];
+            }
         }
 
         return [
@@ -287,6 +316,7 @@ final class TalosSettingsController extends Controller
             'theme_motion_v6' => $themeMotionV6,
             'sidebar_rail' => $sidebarRail,
             'onboarding' => $onboarding,
+            'prompt_cache' => $promptCache,
         ];
     }
 
@@ -421,6 +451,7 @@ final class TalosSettingsController extends Controller
             'ui_animation_customization' => true,
             'theme_area_tokens' => true,
             'workspace_default_theme' => true,
+            'ui_scale' => true,
         ];
 
         foreach ($lockedKeys as $key => $_locked) {
@@ -434,7 +465,7 @@ final class TalosSettingsController extends Controller
             ? $storedPreferences['chat_layout']
             : [];
         $effectiveLayout = is_array($incomingLayout) ? $incomingLayout : [];
-        foreach (['bubble_scale', 'composer_mode'] as $key) {
+        foreach (['bubble_scale', 'message_scale', 'composer_mode'] as $key) {
             if (($effectiveLayout[$key] ?? null) !== ($storedLayout[$key] ?? null)) {
                 return true;
             }

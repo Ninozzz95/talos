@@ -5,7 +5,7 @@ import { createDefaultTalosMotionV6Preferences } from './defaults'
 import { resolveTalosWorkspaceMotionV6 } from './workspaceRuntime'
 
 describe('TALOS product scene registry V6', () => {
-    it('combines exactly 13 Complex, 13 Simple and 13 Static registrations', () => {
+    it('combines exactly 14 Complex, 14 Simple and 14 Static registrations', () => {
         const scheduler = { now: () => 0, requestFrame: () => 1, cancelFrame: () => {} }
         const simplePlatform = {
             createLayer: (id: string, role: string) => ({ id, role }), appendLayer: () => {}, removeLayer: () => {}, applyStyle: () => {},
@@ -15,7 +15,7 @@ describe('TALOS product scene registry V6', () => {
             scheduler, createSurface: (id: string) => ({ id }), appendSurface: () => {}, resizeSurface: () => {}, getContext: () => ({}), removeSurface: () => {},
         }
         const registry = createTalosProductSceneRegistry({ simplePlatform, complexPlatform })
-        expect(registry.snapshot()).toHaveLength(39)
+        expect(registry.snapshot()).toHaveLength(42)
         for (const kind of ['complex', 'simple', 'static'] as const) {
             expect(registry.snapshot().filter((entry) => entry.kind === kind).map((entry) => entry.id)).toEqual(TALOS_MOTION_SCENE_IDS)
         }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import TalosExportDialog from '../chat/TalosExportDialog.vue'
 import TalosDeleteSessionDialog from '../chat/TalosDeleteSessionDialog.vue'
 import TalosChatSurface from './TalosChatSurface.vue'
@@ -25,6 +25,7 @@ import { useTalosRailResize } from '../../../composables/useTalosRailResize'
 import { useTalosIntroState, type TalosIntroOutcome } from '../../../composables/useTalosIntroState'
 import { sessionChatState, useTalosSessions } from '../../../composables/useTalosSessions'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
+import { TALOS_CAPABILITIES_KEY, useTalosCapabilities } from '../../../composables/useTalosCapabilities'
 import { useTalosToast } from '../../../composables/useTalosToast'
 import { useTalosRailPreferences } from '../../../composables/useTalosRailPreferences'
 import { dismissTopTalosOverlay, registerTalosDismiss } from '../../../composables/useTalosDismissStack'
@@ -49,6 +50,7 @@ import type { TalosCommand, TalosContextSet, TalosPendingToolApproval } from '..
 const TalosProceduralBackground = defineAsyncComponent(() => import('./TalosProceduralBackground.vue'))
 const TalosWindowLayer = defineAsyncComponent(() => import('./TalosWindowLayer.vue'))
 const TalosIntroModal = defineAsyncComponent(() => import('./TalosIntroModal.vue'))
+const TalosChatMediaPanel = defineAsyncComponent(() => import('../chat/TalosChatMediaPanel.vue'))
 // The native Sonner toaster (vue-sonner runtime + reka-free wrapper + lucide
 // icons) is shell furniture rendered once; loading it behind a dynamic boundary
 // keeps it out of the initial static chunk without changing toast behavior.
@@ -174,6 +176,10 @@ const {
     openSessionExportDialog, closeSessionExportDialog, runSessionExport,
 } = sessionActions
 const { expandedEvidenceMessageIds, toggleMessageEvidence, previousUserMessageFor } = useTalosMessageEvidence(messages)
+const chatMediaOpen = ref(false)
+function openChatMedia() {
+    if (activeSession.value) chatMediaOpen.value = true
+}
 const lastUserPrompt = computed(() => {
     for (let index = messages.value.length - 1; index >= 0; index -= 1) {
         if (messages.value[index].role === 'user') return messages.value[index].content
@@ -251,9 +257,19 @@ const {
     hydratePendingApprovals,
     decideToolApproval,
 } = useTalosToolApprovals(computed(() => activeSession.value?.id ?? null))
-const { persistUserMessage, persistAssistantMessage, sendPersistentChat } = useTalosChat()
+const {
+    persistUserMessage,
+    persistAssistantMessage,
+    sendPersistentChat,
+    streamingState,
+    streamingCanCancel,
+    cancelStreaming,
+} = useTalosChat({
+    streamingEnabled: () => talosCapabilities.isUsable('chat.streaming'),
+})
 const attachmentTray = useTalosChatAttachments()
-const attachmentVaultFiles = ref<Array<{ id: string; original_name: string; status: string }>>([])
+type AttachableVaultFile = { id: string; original_name: string; status: string }
+const attachmentVaultFiles = ref<AttachableVaultFile[]>([])
 const attachmentVaultLoading = ref(false)
 async function handleOpenAttachmentVault() {
     attachmentVaultLoading.value = true
@@ -276,9 +292,29 @@ async function handleAttachFiles(files: File[]) {
     }
 }
 async function handleAttachVaultFile(fileId: string) {
-    const vaultFile = attachmentVaultFiles.value.find((file) => file.id === fileId)
-    if (!vaultFile) return
     try {
+        let vaultFile = attachmentVaultFiles.value.find((file) => file.id === fileId)
+        if (!vaultFile) {
+            const response = await talosFetch<{ data: unknown }>(`/api/talos/files/${encodeURIComponent(fileId)}`)
+            const candidate = response.data
+            if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+                throw new TypeError('TALOS returned an invalid Library file.')
+            }
+            const record = candidate as Record<string, unknown>
+            if (record.id !== fileId
+                || typeof record.original_name !== 'string'
+                || record.original_name.trim() === ''
+                || record.original_name.length > 255
+                || record.status !== 'available') {
+                throw new TypeError('Only an owned, available Library file can be attached.')
+            }
+            vaultFile = {
+                id: fileId,
+                original_name: record.original_name.trim(),
+                status: 'available',
+            }
+            attachmentVaultFiles.value = [...attachmentVaultFiles.value, vaultFile]
+        }
         await attachmentTray.attachVaultFile(vaultFile as never)
     } catch (error) {
         uiError.value = error instanceof Error ? error.message : 'TALOS could not attach this Vault file.'
@@ -292,6 +328,7 @@ async function handleRemoveAttachment(attachmentId: string) {
     }
 }
 watch(() => activeSession.value?.id ?? null, async (sessionId) => {
+    chatMediaOpen.value = false
     attachmentTray.reset()
     try {
         await hydratePendingApprovals(sessionId)
@@ -357,6 +394,12 @@ const {
     loadSettings: loadWorkspaceSettings,
     updateSettings: updateWorkspaceSettings,
 } = useTalosSettings()
+const talosCapabilities = useTalosCapabilities({
+    authenticated: computed(() => props.authenticated),
+    runtimeReady: workspaceRuntimeReady,
+    ownerKey: computed(() => workspaceSettings.value?.id ?? null),
+})
+provide(TALOS_CAPABILITIES_KEY, talosCapabilities)
 const railPreferences = useTalosRailPreferences({
     load: async () => {
         const stored = workspaceSettings.value?.preferences?.sidebar_rail
@@ -389,17 +432,17 @@ const {
     clearPromptEnhancement,
 } = useTalosPromptEnhancement()
 const {
-    bubbleScale,
-    bubbleScaleLabel,
+    uiScale,
+    messageScale,
     composerMode,
     messageStyle,
     advancedRailExpanded,
     mobileWindowPresentation,
     policyLocked: chatLayoutPolicyLocked,
     apply: applyChatLayoutPreference,
-    decrementBubbleScale,
-    incrementBubbleScale,
-    resetBubbleScale,
+    decrementMessageScale,
+    incrementMessageScale,
+    resetMessageScale,
     toggleAdvancedRail,
     setMessageStyle,
 } = useTalosChatLayoutPreferences(workspaceSettings, updateWorkspaceSettings, uiError)
@@ -425,7 +468,8 @@ const {
     workspaceRoot,
     railCollapsed,
     railWidth,
-    bubbleScale,
+    uiScale,
+    messageScale,
 })
 const {
     openWindowIds,
@@ -967,15 +1011,16 @@ onBeforeUnmount(() => {
         <section class="talos-chat-scroll-root relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden" :style="windowReflowStyle" :data-window-reflow="windowReflow.mode">
             <TalosProceduralBackground v-if="workspaceRuntimeReady" :requested-mode="workspaceMotionV6Decision.requestedMode" :effective-mode="workspaceMotionV6Decision.effectiveMode" :scene-id="workspaceMotionV6SceneId" :input="workspaceMotionV6SceneInput" :background-enabled="workspaceMotionV6Decision.backgroundEnabled" :glow-intensity="workspaceMotionV6Preferences.glow_intensity" :paused="workspaceMotionV6Decision.paused" :runtime-reason="workspaceMotionV6Decision.reason" :degradation-stage="workspaceMotionV6Decision.degradationStage" :recovery-locked="workspaceMotionV6GovernorSnapshot.recoveryLocked" @motion-frame="recordWorkspaceMotionFrame" @renderer-fault="recordWorkspaceMotionRendererFault" @stable-window="recordWorkspaceMotionStableWindow" />
             <div v-else class="pointer-events-none absolute inset-0 bg-[var(--talos-background)]" aria-hidden="true" data-testid="talos-workspace-bootstrap-background" />
-            <TalosWorkspaceHeader v-if="workspaceAppearanceVisibility.chat_area.session_header" :status-text="statusText" :temporary-session="activeSessionIsTemporary" :has-active-session="Boolean(activeSession)" :exporting-session="exportingSession" :authenticated="authenticated" :auth-label="authLabel" :login-url="loginUrl" :logout-url="logoutUrl" :csrf-token="csrfToken" :bubble-scale="bubbleScale" :bubble-scale-label="bubbleScaleLabel" :chat-layout-locked="chatLayoutPolicyLocked" :navigation-open="mobileNavigationOpen" @open-navigation="mobileNavigationOpen = true" @open-commands="openCommandPalette" @open-export="openSessionExportDialog" @open-account="openAccountSettings" @decrease-message-scale="decrementBubbleScale" @increase-message-scale="incrementBubbleScale" @reset-message-scale="resetBubbleScale" />
+            <TalosWorkspaceHeader v-if="workspaceAppearanceVisibility.chat_area.session_header" :status-text="statusText" :temporary-session="activeSessionIsTemporary" :has-active-session="Boolean(activeSession)" :exporting-session="exportingSession" :authenticated="authenticated" :auth-label="authLabel" :login-url="loginUrl" :logout-url="logoutUrl" :csrf-token="csrfToken" :message-scale="messageScale" :chat-layout-locked="chatLayoutPolicyLocked" :navigation-open="mobileNavigationOpen" @open-navigation="mobileNavigationOpen = true" @open-commands="openCommandPalette" @open-export="openSessionExportDialog" @open-account="openAccountSettings" @decrease-message-scale="decrementMessageScale" @increase-message-scale="incrementMessageScale" @reset-message-scale="resetMessageScale" />
             <TalosMobileRail :creating-session="creatingSession" :visibility="workspaceAppearanceVisibility.sidebar" :active-ids="[...openWindowIds, ...(isBrowseSurface ? ['browse'] : [])]" :navigation-open="mobileNavigationOpen" @new-chat="startNewChat" @focus-chat="focusChatFromMobileRail" @open-navigation="mobileNavigationOpen = true" @open-window="openModule" />
-            <div class="relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden"><TalosChatSurface ref="chatSurface" :ui-error="uiError || toolApprovalError" :session-error="sessionError" :message-error="messageError" :model-profile-error="modelProfileError || modelRoutingProfileError" :context-set-error="contextSetError" :loading-messages="loadingMessages" :messages="messages" :logo-url="talosShortLogoUrl" :selected-model-profile-is-usable="selectedModelSelectionIsUsable" :context-selected="Boolean(selectedContextSet)" :context-sets-count="contextSets.length" :session-ready="Boolean(activeSession)" :message-evidence-ready="messageEvidenceReady" :sending="sending" :benchmarking-run-id="benchmarkingRunId" :expanded-evidence-message-ids="expandedEvidenceMessageIds" :welcome-prompt-id="activeWelcomePromptId" :show-welcome-message="workspaceAppearanceVisibility.chat_area.welcome_message" :show-mission-path="showMissionPath" :full-width-chat="workspaceAppearanceVisibility.chat_area.full_width_chat" :sensitive-blur="workspaceAppearanceVisibility.chat_area.sensitive_blur" :bubble-scale="bubbleScale" :message-style="messageStyle" :browser-activities="visibleBrowserActivities" :browser-snapshot="latestBrowserSnapshot" :active-browser-session="activeBrowserSession" :browser-ref-frame="browserRefFrame" :browser-ref-targets-loading="browserRefTargetsLoading" :browser-ref-targets-error="browserRefTargetsError" :browser-interaction-pending="browserInteractionPending" :browser-interaction-locked="browserMode.status === 'recovery_required'" :browser-interaction-error="browserInteractionError" :pending-browser-interaction-approval="pendingBrowserInteractionApproval" :pending-tool-approvals="pendingToolApprovals" :deciding-tool-approval-ids="decidingApprovalIds" :browser-tasks="browserTasks" :browser-task-busy="browserTaskBusy" :browser-task-error="browserTaskError" :browser-task-command-target-id="browserTaskCommandTargetId" :dev-browser-evidence="devBrowserEvidence" :development-mode="developmentMode" :active-talos-session-id="activeSession?.id ?? null" :mobile="breakpoint !== 'desktop'" :mobile-window-presentation="mobileWindowPresentation" :viewport="chatViewport" @open-model="openWindowFromSource('model_lab', undefined, 'command')" @open-context="openWindowFromSource('library', undefined, 'command')" @set-prompt="prompt = $event" @message-copied="setCommandFeedback('Message copied.')" @message-copy-failed="uiError = 'TALOS could not access the clipboard. Use your browser copy shortcut.'" @message-edited="setCommandFeedback('Prompt loaded for reuse.')" @resend-message="resendMessage" @retry-assistant-message="retryAssistantMessage" @toggle-message-evidence="toggleMessageEvidence" @benchmark-message-run="benchmarkMessageRun" @interact-browser-frame="interactWithBrowserFrame" @interact-browser-ref="interactWithBrowserRef" @scroll-browser-frame="scrollBrowserFrame" @confirm-browser-frame-interaction="confirmBrowserFrameInteraction" @decide-tool-approval="handleToolApprovalDecision" @cancel-browser-task="cancelBrowserTask" /></div>
-            <div data-testid="talos-window-layer"><TalosWindowLayer :breakpoint="breakpoint" :development-mode="developmentMode" :visible-window-ids="visibleWindowIds" :minimized-window-ids="minimizedWindowIds" :docked-window-ids="dockedWindowIds" :fullscreen-window-ids="fullscreenWindowIds" :active-window-id="activeWindowId" :window-positions="windowPositions" :window-sizes="windowSizes" :window-restore-bounds="windowRestoreBounds" :window-tile-targets="windowTileTargets" :window-z-indexes="windowZIndexes" :window-area="windowArea" :window-maximize-area="windowMaximizeArea" :window-fullscreen-area="windowFullscreenArea" :current-rail-width="currentRailWidth" :runtime-requested-tab="runtimeRequestedTab" :runtime-requested-tab-revision="runtimeRequestedTabRevision" :selected-benchmark-group-id="selectedBenchmarkGroupId" :selected-benchmark-scenario-ref="selectedBenchmarkScenarioRef" :model-profiles="modelProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-context-set-id="selectedContextSetId" :settings-requested-tab="settingsRequestedTab" :settings-requested-tab-revision="settingsRequestedTabRevision" :authenticated="authenticated" :auth-user-name="authUserName" :logout-url="logoutUrl" :csrf-token="csrfToken" :active-talos-session-id="activeSession?.id ?? null" :theme="theme" :motion-preferences="workspaceMotionV6Preferences" :reduced-motion="workspaceMotionV6Decision.reducedMotionApplied" :ui-motion-disabled="workspaceUiMotionDisabled" :mobile-window-presentation="mobileWindowPresentation" :window-launch-origins="windowLaunchOrigins" :window-launch-revisions="windowLaunchRevisions" :requested-window-sections="requestedWindowSections" :requested-window-section-revision="requestedWindowSectionRevision" @close-window="closeWindow" @minimize-window="minimizeWindow" @dock-window="toggleDock" @fullscreen-window="toggleFullscreenWindow" @focus-window="focusWindow" @open-window="openWindowFromSource($event, undefined, 'command')" @restore-window="restoreWindow" @set-window-position="setWindowPosition" @set-window-bounds="setWindowBounds" @reset-window-size="resetWindowSize" @save-window-layout="saveWindowLayout" @open-audit-log="openAuditLogFromRuntime" @context-set-created="handleContextSetCreated" @snap-window="snapWindow" @tile-window="tileWindow" @untile-window="untileWindow" @benchmark-scenario-selected="handleBenchmarkScenarioSelected" @select-model="selectModelProfile" @select-context="selectContextSet" @change-theme="toggleTheme" @open-module="openModule" @settings-saved="handleWorkspaceSettingsSaved" @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate" @theme-draft-changed="handleThemeDraftChanged" @replay-intro="handleIntroReplayRequest" /></div>
-            <TalosComposerDock ref="composerDock" :prompt="prompt" :last-user-prompt="lastUserPrompt" :browser-context="browserEvidenceAttached ? browserContext : null" :browser-current-page="browserCurrentPage" :browser-mode="browserMode" :browser-recovery-action="browserRecoveryAction" :browse-setup-fault="browseSetupFault" :attachments="attachmentTray.attachments.value" :vault-files="attachmentVaultFiles" :vault-picker-loading="attachmentVaultLoading" :dev-browser-evidence="devBrowserEvidence" :composer-mode="composerMode" :dictation-status="dictationStatus" :dictation-error="dictationError" :dictation-mode="dictationMode" :dictation-recording-started-at="dictationRecordingStartedAt" :dictation-resolved-mode="dictationResolvedMode" :dictation-supported="dictationSupported" :auto-browse-url="autoBrowseUrl" :viewport="chatViewport" :commands="workspaceCommands" :can-send="canSend" :sending="sending" :status-text="statusText" :model-label="modelLabel" :model-provider="selectedModelProvider" :context-label="contextLabel" :temporary-mode="sessionPersistenceMode === 'temporary'" :send-disabled-reason="sendMessageCommandDisabledReason" :enhancer-disabled-reason="assistantEnhancerDisabledReason" :model-popover-open="modelPopoverOpen" :context-popover-open="contextPopoverOpen" :model-profiles="composerModelProfiles" :model-routing-profiles="modelRoutingProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-model-routing-profile-id="selectedModelRoutingProfileId" :selected-context-set-id="selectedContextSetId" :selected-effort="selectedEffort" :thinking="thinking" :effort-levels="selectedProfileEffortLevels" :supports-thinking="selectedProfileSupportsThinking" :selected-context-set="selectedContextSet" :loading-model-profiles="loadingModelProfiles" :loading-model-routing-profiles="loadingModelRoutingProfiles" :loading-context-sets="loadingContextSets" :prompt-enhancement-result="promptEnhancementResult" :enhancing-prompt="enhancingPrompt" :prompt-enhancement-error="promptEnhancementError" :visibility="workspaceAppearanceVisibility.chat_bar" @update-prompt="prompt = $event" @send="sendChat" @open-model="toggleModelPopover" @open-context="toggleContextPopover" @open-settings="openSettings()" @toggle-temporary="toggleTemporaryMode" @enhance="enhanceCurrentPrompt" @slash-command="selectCommand" @select-model-profile="selectModelProfile" @select-model-routing-profile="selectModelRoutingProfile" @select-effort="selectEffort" @select-thinking="selectThinking" @select-context-set="selectContextSet" @browse-open="openBrowseFromComposer" @refresh-model-and-context="refreshModelAndContext" @open-model-lab="openWindowFromSource('model_lab', undefined, 'command')" @open-library="openWindowFromSource('library', undefined, 'command')" @replace-prompt-with-enhanced="replacePromptWithEnhanced" @insert-enhanced-prompt-below="insertEnhancedPromptBelow" @clear-prompt-enhancement="clearPromptEnhancement" @detach-browser-context="browserEvidenceAttached = false" @enable-browse="handleEnableBrowse" @disable-browse="handleDisableBrowse" @stop-browse="handleStopBrowse" @restart-browse="handleRestartBrowse" @recover-browse="handleRecoverBrowse" @capture-screenshot="handleCaptureScreenshot" @capture-snapshot="handleCaptureSnapshot" @attach-files="handleAttachFiles" @attach-vault-file="handleAttachVaultFile" @remove-attachment="handleRemoveAttachment" @open-vault-picker="handleOpenAttachmentVault" @close-popovers="closePopover" @toggle-dictation="toggleDictation" @finish-dictation="finishDictation" @cancel-dictation="cancelDictation" @retry-dictation="toggleDictation" @accept-auto-browse="acceptAutoBrowse" @dismiss-auto-browse="dismissAutoBrowse" />
+            <div class="relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden"><TalosChatSurface ref="chatSurface" :ui-error="uiError || toolApprovalError" :session-error="sessionError" :message-error="messageError" :model-profile-error="modelProfileError || modelRoutingProfileError" :context-set-error="contextSetError" :loading-messages="loadingMessages" :messages="messages" :logo-url="talosShortLogoUrl" :selected-model-profile-is-usable="selectedModelSelectionIsUsable" :context-selected="Boolean(selectedContextSet)" :context-sets-count="contextSets.length" :session-ready="Boolean(activeSession)" :message-evidence-ready="messageEvidenceReady" :sending="sending" :streaming-state="streamingState" :streaming-reduced-motion="workspaceMotionV6Decision.reducedMotionApplied || workspaceUiMotionDisabled" :benchmarking-run-id="benchmarkingRunId" :expanded-evidence-message-ids="expandedEvidenceMessageIds" :welcome-prompt-id="activeWelcomePromptId" :show-welcome-message="workspaceAppearanceVisibility.chat_area.welcome_message" :show-mission-path="showMissionPath" :full-width-chat="workspaceAppearanceVisibility.chat_area.full_width_chat" :sensitive-blur="workspaceAppearanceVisibility.chat_area.sensitive_blur" :message-scale="messageScale" :message-style="messageStyle" :browser-activities="visibleBrowserActivities" :browser-snapshot="latestBrowserSnapshot" :active-browser-session="activeBrowserSession" :browser-ref-frame="browserRefFrame" :browser-ref-targets-loading="browserRefTargetsLoading" :browser-ref-targets-error="browserRefTargetsError" :browser-interaction-pending="browserInteractionPending" :browser-interaction-locked="browserMode.status === 'recovery_required'" :browser-interaction-error="browserInteractionError" :pending-browser-interaction-approval="pendingBrowserInteractionApproval" :pending-tool-approvals="pendingToolApprovals" :deciding-tool-approval-ids="decidingApprovalIds" :browser-tasks="browserTasks" :browser-task-busy="browserTaskBusy" :browser-task-error="browserTaskError" :browser-task-command-target-id="browserTaskCommandTargetId" :dev-browser-evidence="devBrowserEvidence" :development-mode="developmentMode" :active-talos-session-id="activeSession?.id ?? null" :mobile="breakpoint !== 'desktop'" :mobile-window-presentation="mobileWindowPresentation" :viewport="chatViewport" @open-model="openWindowFromSource('model_lab', undefined, 'command')" @open-context="openWindowFromSource('library', undefined, 'command')" @set-prompt="prompt = $event" @message-copied="setCommandFeedback('Message copied.')" @message-copy-failed="uiError = 'TALOS could not access the clipboard. Use your browser copy shortcut.'" @message-edited="setCommandFeedback('Prompt loaded for reuse.')" @resend-message="resendMessage" @retry-assistant-message="retryAssistantMessage" @open-chat-media="openChatMedia" @toggle-message-evidence="toggleMessageEvidence" @benchmark-message-run="benchmarkMessageRun" @interact-browser-frame="interactWithBrowserFrame" @interact-browser-ref="interactWithBrowserRef" @scroll-browser-frame="scrollBrowserFrame" @confirm-browser-frame-interaction="confirmBrowserFrameInteraction" @decide-tool-approval="handleToolApprovalDecision" @cancel-browser-task="cancelBrowserTask" /></div>
+            <div data-testid="talos-window-layer"><TalosWindowLayer :breakpoint="breakpoint" :development-mode="developmentMode" :visible-window-ids="visibleWindowIds" :minimized-window-ids="minimizedWindowIds" :docked-window-ids="dockedWindowIds" :fullscreen-window-ids="fullscreenWindowIds" :active-window-id="activeWindowId" :window-positions="windowPositions" :window-sizes="windowSizes" :window-restore-bounds="windowRestoreBounds" :window-tile-targets="windowTileTargets" :window-z-indexes="windowZIndexes" :window-area="windowArea" :window-maximize-area="windowMaximizeArea" :window-fullscreen-area="windowFullscreenArea" :current-rail-width="currentRailWidth" :runtime-requested-tab="runtimeRequestedTab" :runtime-requested-tab-revision="runtimeRequestedTabRevision" :selected-benchmark-group-id="selectedBenchmarkGroupId" :selected-benchmark-scenario-ref="selectedBenchmarkScenarioRef" :model-profiles="modelProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-context-set-id="selectedContextSetId" :settings-requested-tab="settingsRequestedTab" :settings-requested-tab-revision="settingsRequestedTabRevision" :authenticated="authenticated" :settings-owner-key="workspaceSettings?.id ?? null" :auth-user-name="authUserName" :logout-url="logoutUrl" :csrf-token="csrfToken" :active-talos-session-id="activeSession?.id ?? null" :theme="theme" :motion-preferences="workspaceMotionV6Preferences" :reduced-motion="workspaceMotionV6Decision.reducedMotionApplied" :ui-motion-disabled="workspaceUiMotionDisabled" :mobile-window-presentation="mobileWindowPresentation" :window-launch-origins="windowLaunchOrigins" :window-launch-revisions="windowLaunchRevisions" :requested-window-sections="requestedWindowSections" :requested-window-section-revision="requestedWindowSectionRevision" @close-window="closeWindow" @minimize-window="minimizeWindow" @dock-window="toggleDock" @fullscreen-window="toggleFullscreenWindow" @focus-window="focusWindow" @open-window="openWindowFromSource($event, undefined, 'command')" @restore-window="restoreWindow" @set-window-position="setWindowPosition" @set-window-bounds="setWindowBounds" @reset-window-size="resetWindowSize" @save-window-layout="saveWindowLayout" @open-audit-log="openAuditLogFromRuntime" @context-set-created="handleContextSetCreated" @snap-window="snapWindow" @tile-window="tileWindow" @untile-window="untileWindow" @benchmark-scenario-selected="handleBenchmarkScenarioSelected" @select-model="selectModelProfile" @select-context="selectContextSet" @change-theme="toggleTheme" @open-module="openModule" @settings-saved="handleWorkspaceSettingsSaved" @theme-customization-changed="refreshWorkspaceSettingsAfterThemeUpdate" @theme-draft-changed="handleThemeDraftChanged" @attach-library-file="handleAttachVaultFile" @replay-intro="handleIntroReplayRequest" /></div>
+            <TalosComposerDock ref="composerDock" :prompt="prompt" :last-user-prompt="lastUserPrompt" :browser-context="browserEvidenceAttached ? browserContext : null" :browser-current-page="browserCurrentPage" :browser-mode="browserMode" :browser-recovery-action="browserRecoveryAction" :browse-setup-fault="browseSetupFault" :attachments="attachmentTray.attachments.value" :vault-files="attachmentVaultFiles" :vault-picker-loading="attachmentVaultLoading" :dev-browser-evidence="devBrowserEvidence" :composer-mode="composerMode" :dictation-status="dictationStatus" :dictation-error="dictationError" :dictation-mode="dictationMode" :dictation-recording-started-at="dictationRecordingStartedAt" :dictation-resolved-mode="dictationResolvedMode" :dictation-supported="dictationSupported" :auto-browse-url="autoBrowseUrl" :viewport="chatViewport" :commands="workspaceCommands" :can-send="canSend" :sending="sending" :streaming-active="streamingCanCancel" :status-text="statusText" :model-label="modelLabel" :model-provider="selectedModelProvider" :context-label="contextLabel" :temporary-mode="sessionPersistenceMode === 'temporary'" :send-disabled-reason="sendMessageCommandDisabledReason" :enhancer-disabled-reason="assistantEnhancerDisabledReason" :model-popover-open="modelPopoverOpen" :context-popover-open="contextPopoverOpen" :model-profiles="composerModelProfiles" :model-routing-profiles="modelRoutingProfiles" :context-sets="contextSets" :selected-model-profile-id="selectedModelProfileId" :selected-model-routing-profile-id="selectedModelRoutingProfileId" :selected-context-set-id="selectedContextSetId" :selected-effort="selectedEffort" :thinking="thinking" :effort-levels="selectedProfileEffortLevels" :supports-thinking="selectedProfileSupportsThinking" :selected-context-set="selectedContextSet" :loading-model-profiles="loadingModelProfiles" :loading-model-routing-profiles="loadingModelRoutingProfiles" :loading-context-sets="loadingContextSets" :prompt-enhancement-result="promptEnhancementResult" :enhancing-prompt="enhancingPrompt" :prompt-enhancement-error="promptEnhancementError" :visibility="workspaceAppearanceVisibility.chat_bar" @update-prompt="prompt = $event" @send="sendChat" @cancel-stream="cancelStreaming" @open-model="toggleModelPopover" @open-context="toggleContextPopover" @open-settings="openSettings()" @toggle-temporary="toggleTemporaryMode" @enhance="enhanceCurrentPrompt" @slash-command="selectCommand" @select-model-profile="selectModelProfile" @select-model-routing-profile="selectModelRoutingProfile" @select-effort="selectEffort" @select-thinking="selectThinking" @select-context-set="selectContextSet" @browse-open="openBrowseFromComposer" @refresh-model-and-context="refreshModelAndContext" @open-model-lab="openWindowFromSource('model_lab', undefined, 'command')" @open-library="openWindowFromSource('library', undefined, 'command')" @replace-prompt-with-enhanced="replacePromptWithEnhanced" @insert-enhanced-prompt-below="insertEnhancedPromptBelow" @clear-prompt-enhancement="clearPromptEnhancement" @detach-browser-context="browserEvidenceAttached = false" @enable-browse="handleEnableBrowse" @disable-browse="handleDisableBrowse" @stop-browse="handleStopBrowse" @restart-browse="handleRestartBrowse" @recover-browse="handleRecoverBrowse" @capture-screenshot="handleCaptureScreenshot" @capture-snapshot="handleCaptureSnapshot" @attach-files="handleAttachFiles" @attach-vault-file="handleAttachVaultFile" @remove-attachment="handleRemoveAttachment" @open-vault-picker="handleOpenAttachmentVault" @close-popovers="closePopover" @toggle-dictation="toggleDictation" @finish-dictation="finishDictation" @cancel-dictation="cancelDictation" @retry-dictation="toggleDictation" @accept-auto-browse="acceptAutoBrowse" @dismiss-auto-browse="dismissAutoBrowse" />
             <div v-if="commandPaletteOpen" class="talos-command-palette-overlay fixed inset-0 z-50 bg-black/40 px-4 py-16 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="TALOS command palette" @click.self="closeCommandPalette"><div class="mx-auto w-full max-w-2xl"><TalosCommandPalette :commands="workspaceCommands" @selected="selectCommand" /></div></div>
             <TalosExportDialog v-if="exportDialogOpen" :session="activeSession" :result="sessionExportResult" :exporting="exportingSession" :error="sessionExportError" @close="closeSessionExportDialog" @export="runSessionExport" />
             <TalosDeleteSessionDialog v-if="pendingDeleteSession" :session="pendingDeleteSession" :deleting="deletingSession" @cancel="pendingDeleteSession = null" @confirm="confirmDeleteSession" />
-            <TalosIntroModal v-if="introOpen" :open="introOpen" :links="publicLinks" @close="handleIntroClose" />
+            <TalosChatMediaPanel v-if="chatMediaOpen" :open="chatMediaOpen" :authenticated="authenticated" :owner-key="workspaceSettings?.id ?? null" :session-id="activeSession?.id ?? null" @update:open="chatMediaOpen = $event" />
+            <TalosIntroModal v-if="introOpen" :open="introOpen" :links="publicLinks" :capabilities="talosCapabilities.manifest.value" @close="handleIntroClose" />
             <Toaster :theme="workspaceResolvedThemeMode" position="top-right" :class="{ 'talos-sonner-motion-disabled': workspaceUiMotionDisabled }" />
         </section>
         <div id="talos-portal-root" class="talos-portal-root" data-testid="talos-portal-root"></div>

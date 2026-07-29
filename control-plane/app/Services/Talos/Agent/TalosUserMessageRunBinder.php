@@ -11,6 +11,30 @@ use Illuminate\Support\Facades\DB;
 
 final class TalosUserMessageRunBinder
 {
+    public function alreadyBoundRun(
+        TalosSession $session,
+        string $messageId,
+        string $content,
+    ): ?TalosRun {
+        $message = TalosMessage::query()
+            ->whereKey($messageId)
+            ->where('session_id', $session->id)
+            ->where('role', 'user')
+            ->whereNotNull('run_id')
+            ->first();
+        if (! $message instanceof TalosMessage
+            || ! hash_equals((string) $message->content, $content)
+            || ! is_string($message->run_id)) {
+            return null;
+        }
+
+        return TalosRun::query()
+            ->whereKey($message->run_id)
+            ->where('session_id', $session->id)
+            ->where('user_id', $session->user_id)
+            ->first();
+    }
+
     public function matchesUnbound(TalosSession $session, string $messageId, string $content): bool
     {
         $message = $this->unboundMessage($session, $messageId);

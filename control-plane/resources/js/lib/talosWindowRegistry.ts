@@ -80,6 +80,19 @@ const contextSections = [
     { id: 'documents', label: 'Documents', description: 'Generated documents and exports.' },
 ] as const
 
+const librarySections = [
+    {
+        id: 'unified',
+        label: 'Unified',
+        description: 'Files, media, links and generated outputs across every chat.',
+    },
+    {
+        id: 'sources',
+        label: 'Sources',
+        description: 'Manage Context Vault files, context sets and generated documents.',
+    },
+] as const
+
 export const TALOS_WINDOW_REGISTRY = {
     runtime: descriptor({
         id: 'runtime',
@@ -175,7 +188,8 @@ export const TALOS_WINDOW_REGISTRY = {
         title: 'Library',
         stationCode: 'LIB',
         description: 'Files, context sets and generated documents.',
-        sections: contextSections,
+        sections: librarySections,
+        defaultSection: 'unified',
         minDesktopSize: { width: 760, height: 520 },
         defaultDesktopSize: { width: 820, height: 540 },
         loader: () => import('../components/talos/window/modules/TalosLibraryWindow.vue'),

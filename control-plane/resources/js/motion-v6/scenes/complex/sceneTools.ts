@@ -654,6 +654,21 @@ function drawTelemetry(context: CanvasContext, geometry: ComplexSceneGeometry, p
     }
 }
 
+function drawCalm(context: CanvasContext, geometry: ComplexSceneGeometry, phase: number): void {
+    drawGlacier(context, geometry, phase)
+
+    const y = geometry.height * (0.68 + (0.035 * Math.sin(phase * 0.35)))
+    context.beginPath()
+    context.moveTo(geometry.width * 0.12, y)
+    context.lineTo(geometry.width * 0.88, y)
+    context.stroke()
+
+    const veilY = geometry.height * (0.3 + (0.06 * Math.sin((phase * 0.22) + 1.7)))
+    context.globalAlpha = opacity(geometry, 0.09)
+    context.fillStyle = geometry.accent
+    context.fillRect(geometry.width * 0.1, veilY, geometry.width * 0.8, geometry.height * 0.045)
+}
+
 const DRAWERS: Readonly<Record<TalosMotionSceneId, (context: CanvasContext, geometry: ComplexSceneGeometry, phase: number) => void>> = Object.freeze({
     forge: drawForge,
     paper: drawPaper,
@@ -668,6 +683,7 @@ const DRAWERS: Readonly<Record<TalosMotionSceneId, (context: CanvasContext, geom
     claudius: drawClaudius,
     basicus: drawBasicus,
     telemetry: drawTelemetry,
+    calm: drawCalm,
 })
 
 export function createComplexDefinition(

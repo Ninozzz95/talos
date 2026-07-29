@@ -22,6 +22,21 @@ describe('TalosChatSurface message actions placement and reveal', () => {
         expect(source.slice(actionsIndex, articleCloseAfterActions)).not.toContain('talos-message-bubble')
     })
 
+    it('renders message metadata and actions only at the end of a same-role group', () => {
+        expect(source).toContain('function messageIsGrouped(index: number)')
+        expect(source).toContain('function messageIsGroupEnd(index: number)')
+        expect(source).toMatch(/v-if="message\.role !== 'system' && messageIsGroupEnd\(index\)" class="talos-message-meta/)
+        expect(source).toMatch(/v-if="message\.role !== 'system' && messageIsGroupEnd\(index\)"[\s\S]*?class="talos-message-actions/)
+    })
+
+    it('keeps conditional rich-message renderers behind async chunk boundaries', () => {
+        for (const component of ['TalosEvidenceDrawer', 'TalosMessageImage', 'TalosReasoningRow', 'TalosToolActivityRow']) {
+            expect(source).toContain(`const ${component} = defineAsyncComponent(`)
+            expect(source).toContain(`() => import('../chat/${component}.vue')`)
+            expect(source).not.toMatch(new RegExp(`import ${component} from`))
+        }
+    })
+
     it('reveals actions on hover, on keyboard focus-within, and always on touch', () => {
         expect(source).toMatch(/\.talos-message-actions\s*\{[^}]*opacity:\s*0/)
         expect(source).toMatch(/\.talos-chat-message:hover\s*>\s*\.talos-message-actions/)

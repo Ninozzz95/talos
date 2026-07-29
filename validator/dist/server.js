@@ -179,7 +179,7 @@ export function buildServer() {
     });
     // Chat relay to PHP
     server.post('/chat', async (request) => {
-        const { message, api_key, provider, model, base_url, tool_context, browser_mode } = request.body;
+        const { message, api_key, provider, model, base_url, tool_context, browser_mode, effort, thinking } = request.body;
         if (!message)
             return { error: 'message required' };
         // Use absolute path to PHP binary — env var override if set
@@ -230,7 +230,7 @@ export function buildServer() {
                 }
                 resolve({ error: 'Core chat process returned no output.', code: 'CORE_CHAT_EMPTY_OUTPUT' });
             });
-            php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode }) + '\n');
+            php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode, effort, thinking }) + '\n');
             php.stdin.end();
         });
     });

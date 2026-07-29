@@ -121,6 +121,41 @@ final class TalosModelProfileApiTest extends TestCase
             ->assertJsonMissingPath('data.encrypted_secret');
     }
 
+    public function test_profile_api_exposes_server_derived_prompt_cache_capability_fail_closed(): void
+    {
+        $supported = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openai',
+            'model' => 'gpt-5.6',
+            'display_name' => 'GPT 5.6',
+            'status' => 'healthy',
+        ]);
+        $unverified = TalosModelProfile::query()->create([
+            'user_id' => $this->user->id,
+            'provider' => 'openrouter',
+            'model' => 'openai/gpt-5.6',
+            'display_name' => 'OpenRouter GPT',
+            'status' => 'healthy',
+        ]);
+
+        $this->getJson("/api/talos/model-profiles/{$supported->id}")
+            ->assertOk()
+            ->assertJsonPath('data.prompt_cache_capability.contract', 'talos.prompt_cache.capability.v1')
+            ->assertJsonPath('data.prompt_cache_capability.supported', true)
+            ->assertJsonPath('data.prompt_cache_capability.minimum_input_tokens', 1024)
+            ->assertJsonPath('data.prompt_cache_capability.modes.0', 'provider_default')
+            ->assertJsonPath('data.prompt_cache_capability.modes.1', 'automatic')
+            ->assertJsonPath('data.prompt_cache_capability.ttls.0', '30m')
+            ->assertJsonPath('data.prompt_cache_capability.usage_metrics.write', true);
+
+        $this->getJson("/api/talos/model-profiles/{$unverified->id}")
+            ->assertOk()
+            ->assertJsonPath('data.prompt_cache_capability.supported', false)
+            ->assertJsonPath('data.prompt_cache_capability.modes', [])
+            ->assertJsonPath('data.prompt_cache_capability.ttls', [])
+            ->assertJsonPath('data.prompt_cache_capability.usage_metrics.read', false);
+    }
+
     public function test_model_profiles_are_scoped_to_the_authenticated_user(): void
     {
         $otherUser = User::factory()->create();

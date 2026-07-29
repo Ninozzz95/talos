@@ -21,6 +21,14 @@ describe('TalosWorkspace INTRO-1 wiring contract', () => {
         expect(workspaceSource).toContain("label: 'Retry'")
     })
 
+    it('loads capabilities for the authenticated settings owner, provides them to windows and passes them to Intro', () => {
+        expect(workspaceSource).toContain('useTalosCapabilities(')
+        expect(workspaceSource).toContain('ownerKey: computed(() => workspaceSettings.value?.id ?? null)')
+        expect(workspaceSource).toContain('provide(TALOS_CAPABILITIES_KEY, talosCapabilities)')
+        expect(workspaceSource).toMatch(/<TalosIntroModal[^>]*:capabilities="talosCapabilities\.manifest\.value"/)
+        expect(workspaceSource).not.toContain('capabilitiesOptimisticallyAvailable')
+    })
+
     it('closes the settings window before replaying the intro and focuses the composer after close', () => {
         expect(workspaceSource).toContain('@replay-intro="handleIntroReplayRequest"')
         expect(workspaceSource).toContain("closeWindow('settings')")

@@ -46,4 +46,23 @@ describe('TALOS Sonner wrapper', () => {
         const closeButton = document.querySelector('[data-close-button], button[aria-label="Close toast"], button[data-button][data-close-button]')
         expect(closeButton, 'native close control should be present').toBeTruthy()
     })
+
+    it('keeps top notifications below the workspace header by default', async () => {
+        const container = document.createElement('div')
+        document.body.append(container)
+        app = createApp(defineComponent({
+            setup: () => () => h(Toaster, { position: 'top-right' }),
+        }))
+        app.mount(container)
+        await flush()
+
+        const region = document.querySelector<HTMLElement>(
+            '[data-sonner-toaster][data-y-position="top"][data-x-position="right"]',
+        )
+        expect(region).not.toBeNull()
+        expect(region?.style.getPropertyValue('--offset-top')).toBe('4.5rem')
+        expect(region?.style.getPropertyValue('--offset-right')).toBe('1rem')
+        expect(region?.style.getPropertyValue('--mobile-offset-top')).toBe('4.5rem')
+        expect(region?.style.getPropertyValue('--mobile-offset-right')).toBe('1rem')
+    })
 })

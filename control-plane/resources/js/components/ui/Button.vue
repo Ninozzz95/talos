@@ -31,6 +31,7 @@ const classes = computed(() => cn(
         :disabled="props.disabled || props.loading"
         :aria-busy="props.loading ? 'true' : undefined"
         :data-loading="props.loading ? 'true' : undefined"
+        :data-size="props.size"
     >
         <slot />
     </button>

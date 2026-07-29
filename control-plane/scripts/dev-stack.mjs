@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,10 +15,80 @@ import {
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url))
 const defaultWorkspaceRoot = path.resolve(scriptDirectory, '..', '..')
 
-function executable(workspaceRoot, name, platform, fileExists) {
+export function readGitCommonDirectory(
+    workspaceRoot,
+    {
+        platform = process.platform,
+        runGit = execFileSync,
+    } = {},
+) {
+    try {
+        const output = runGit(
+            'git',
+            ['rev-parse', '--git-common-dir'],
+            {
+                cwd: workspaceRoot,
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+                windowsHide: true,
+            },
+        ).trim()
+        const lines = output.split(/\r?\n/u)
+        if (lines.length !== 1 || lines[0] === '') return null
+
+        const paths = platform === 'win32' ? path.win32 : path.posix
+
+        return paths.isAbsolute(lines[0])
+            ? paths.normalize(lines[0])
+            : paths.resolve(workspaceRoot, lines[0])
+    } catch {
+        return null
+    }
+}
+
+function compatibleToolchainRoot(root, platform, fileExists, paths) {
     const suffix = platform === 'win32' ? '.cmd' : ''
-    const localExecutable = path.join(workspaceRoot, '.tools', 'bin', `${name}${suffix}`)
-    if (fileExists(localExecutable)) return localExecutable
+    const phpRuntime = paths.join(
+        root,
+        '.tools',
+        'php',
+        platform === 'win32' ? 'php.exe' : 'bin/php',
+    )
+
+    return [
+        paths.join(root, '.tools', 'bin', `php${suffix}`),
+        paths.join(root, '.tools', 'bin', `npm${suffix}`),
+        phpRuntime,
+    ].every(fileExists)
+}
+
+function resolveToolchainRoot({
+    workspaceRoot,
+    platform,
+    fileExists,
+    readCommonDirectory,
+}) {
+    const paths = platform === 'win32' ? path.win32 : path.posix
+    if (compatibleToolchainRoot(workspaceRoot, platform, fileExists, paths)) {
+        return workspaceRoot
+    }
+
+    const gitCommonDirectory = readCommonDirectory(workspaceRoot)
+    if (!gitCommonDirectory) return null
+
+    const primaryRoot = paths.resolve(gitCommonDirectory, '..')
+
+    return compatibleToolchainRoot(primaryRoot, platform, fileExists, paths)
+        ? primaryRoot
+        : null
+}
+
+function executable(toolchainRoot, name, platform, paths) {
+    if (toolchainRoot) {
+        const suffix = platform === 'win32' ? '.cmd' : ''
+
+        return paths.join(toolchainRoot, '.tools', 'bin', `${name}${suffix}`)
+    }
 
     return platform === 'win32' && name === 'npm' ? 'npm.cmd' : name
 }
@@ -33,14 +104,24 @@ export function createDevStackConfig({
     platform = process.platform,
     workspaceRoot = defaultWorkspaceRoot,
     fileExists = existsSync,
+    readGitCommonDirectory: readCommonDirectory = readGitCommonDirectory,
 } = {}) {
-    const php = quoted(executable(workspaceRoot, 'php', platform, fileExists))
-    const npm = quoted(executable(workspaceRoot, 'npm', platform, fileExists))
-    const phpRoot = path.join(workspaceRoot, '.tools', 'php')
-    const localPhpRuntime = path.join(phpRoot, platform === 'win32' ? 'php.exe' : 'bin/php')
-    const caBundle = path.join(phpRoot, 'extras', 'ssl', 'cacert.pem')
-    const hasLocalPhpRuntime = fileExists(localPhpRuntime)
-    const hasLocalCaBundle = hasLocalPhpRuntime && fileExists(caBundle)
+    const paths = platform === 'win32' ? path.win32 : path.posix
+    const toolchainRoot = resolveToolchainRoot({
+        workspaceRoot,
+        platform,
+        fileExists,
+        readCommonDirectory,
+    })
+    const php = quoted(executable(toolchainRoot, 'php', platform, paths))
+    const npm = quoted(executable(toolchainRoot, 'npm', platform, paths))
+    const phpRoot = toolchainRoot ? paths.join(toolchainRoot, '.tools', 'php') : null
+    const localPhpRuntime = phpRoot
+        ? paths.join(phpRoot, platform === 'win32' ? 'php.exe' : 'bin/php')
+        : null
+    const caBundle = phpRoot ? paths.join(phpRoot, 'extras', 'ssl', 'cacert.pem') : null
+    const hasLocalPhpRuntime = localPhpRuntime !== null
+    const hasLocalCaBundle = caBundle !== null && fileExists(caBundle)
     const browserWorker = path.join(workspaceRoot, 'browser-worker')
     const validator = path.join(workspaceRoot, 'validator')
     const sanitizedInheritedEnv = { ...inheritedEnv }
@@ -57,7 +138,7 @@ export function createDevStackConfig({
         AVM_VALIDATOR_URL: 'http://127.0.0.1:3000',
         TALOS_VALIDATOR_HEALTH_URL: 'http://127.0.0.1:3000/health',
         TALOS_BROWSER_WORKER_URL: 'http://127.0.0.1:3100',
-        PHP_BIN: hasLocalPhpRuntime ? localPhpRuntime : 'php',
+        PHP_BIN: hasLocalPhpRuntime && localPhpRuntime ? localPhpRuntime : 'php',
         ...(hasLocalCaBundle ? {
             TALOS_PHP_ROOT: phpRoot,
             CURL_CA_BUNDLE: caBundle,

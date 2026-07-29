@@ -85,7 +85,7 @@ export function useTalosWorkspaceCommandActions(deps: TalosWorkspaceCommandActio
             runtimeRequestedTabRevision.value += 1
         }
         if (route.windowSection) {
-            requestedWindowSections.value = { ...requestedWindowSections.value, [route.windowId]: route.windowSection }
+            requestedWindowSections.value = { [route.windowId]: route.windowSection }
             requestedWindowSectionRevision.value += 1
         }
         deps.openWindowFromSource(route.windowId, undefined, 'command')

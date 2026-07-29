@@ -32,8 +32,17 @@ describe('useTalosWorkspaceThemeActions', () => {
         expect(localStorage.getItem('talos_theme')).toBe('paper')
         expect(updateWorkspaceSettings).not.toHaveBeenCalled()
 
-        await actions.refreshWorkspaceSettingsAfterThemeUpdate({ preferences: { theme: 'paper', chat_layout: { composer_mode: 'minimal' } } })
+        await actions.refreshWorkspaceSettingsAfterThemeUpdate({
+            preferences: {
+                theme: 'paper',
+                ui_scale: 1.2,
+                chat_layout: { message_scale: 1.25, composer_mode: 'minimal' },
+            },
+        })
         expect(workspaceSettings.value?.id).toBe('settings-1')
-        expect(applyChatLayoutPreference).toHaveBeenCalledWith({ composer_mode: 'minimal' })
+        expect(applyChatLayoutPreference).toHaveBeenCalledWith(
+            { message_scale: 1.25, composer_mode: 'minimal' },
+            1.2,
+        )
     })
 })

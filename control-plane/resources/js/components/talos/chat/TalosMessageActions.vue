@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
-import { BarChart3, Copy, Loader2, Pencil, RefreshCcw, RotateCcw, ShieldCheck } from '@lucide/vue'
+import { BarChart3, Copy, Images, Loader2, Pencil, RefreshCcw, RotateCcw, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Tooltip from '../../ui/Tooltip.vue'
 const TalosMessageOverflowMenu = defineAsyncComponent(() => import('./TalosMessageOverflowMenu.vue'))
@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
     message: TalosMessage
     canRetry?: boolean
     busy?: boolean
+    hasMedia?: boolean
     hasEvidence?: boolean
     evidenceOpen?: boolean
     hasBenchmark?: boolean
@@ -17,6 +18,7 @@ const props = withDefaults(defineProps<{
 }>(), {
     canRetry: false,
     busy: false,
+    hasMedia: false,
     hasEvidence: false,
     evidenceOpen: false,
     hasBenchmark: false,
@@ -26,6 +28,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
     copy: [message: TalosMessage]
     edit: [message: TalosMessage]
+    openMedia: [message: TalosMessage]
     resend: [message: TalosMessage]
     retry: [message: TalosMessage]
     toggleEvidence: [message: TalosMessage]
@@ -33,6 +36,7 @@ const emit = defineEmits<{
 }>()
 
 const hasSecondaryCapabilities = computed(() => props.message.role === 'user'
+    || props.hasMedia
     || (props.message.role === 'assistant' && (props.hasEvidence || props.hasBenchmark)))
 </script>
 
@@ -62,15 +66,24 @@ const hasSecondaryCapabilities = computed(() => props.message.role === 'user'
         <TalosMessageOverflowMenu
             v-if="hasSecondaryCapabilities"
             :message="message"
+            :has-media="hasMedia"
             :has-evidence="hasEvidence"
             :evidence-open="evidenceOpen"
             :has-benchmark="hasBenchmark"
             :benchmarking="benchmarking"
             @edit="emit('edit', $event)"
+            @open-media="emit('openMedia', $event)"
             @toggle-evidence="emit('toggleEvidence', $event)"
             @benchmark="emit('benchmark', $event)"
         />
         <div class="hidden items-center gap-1 lg:flex" data-secondary-inline>
+            <Tooltip v-if="hasMedia" content="Open media">
+                <template #default>
+                    <Button type="button" variant="ghost" size="icon" aria-label="Open media" @click="emit('openMedia', message)">
+                        <Images class="h-3.5 w-3.5" />
+                    </Button>
+                </template>
+            </Tooltip>
             <Tooltip v-if="message.role === 'user'" content="Reuse prompt">
                 <template #default>
                     <Button type="button" variant="ghost" size="icon" aria-label="Reuse prompt" @click="emit('edit', message)">

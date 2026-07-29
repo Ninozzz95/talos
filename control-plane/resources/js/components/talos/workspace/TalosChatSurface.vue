@@ -2,9 +2,6 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { AlertCircle, FileText, Loader2 } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
-import TalosEvidenceDrawer from '../chat/TalosEvidenceDrawer.vue'
-import TalosBrowserActivity from '../chat/TalosBrowserActivity.vue'
-import TalosBrowserCard from '../chat/TalosBrowserCard.vue'
 import TalosBrowserClarificationChoices from '../chat/TalosBrowserClarificationChoices.vue'
 import Skeleton from '../../ui/Skeleton.vue'
 import TalosMessageContent from '../chat/TalosMessageContent.vue'
@@ -23,6 +20,13 @@ import {
     type TalosBrowserCardPlacement,
 } from '../../../lib/talosBrowserCardPlacement'
 import type { TalosMessage } from '../../../lib/talosTypes'
+import {
+    parseTalosMessageMetadata,
+    type TalosMessageAttachment,
+    type TalosMessageMetadataProjection,
+    type TalosToolActivity,
+    type TalosVisibleReasoning,
+} from '../../../lib/talosMessageMetadata'
 import type {
     TalosBrowserActivity as TalosBrowserActivityItem,
     TalosBrowserClarificationChoice,
@@ -35,15 +39,39 @@ import type {
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
     TalosBrowserTask,
-    TalosChatBubbleScale,
     TalosMessageStyle,
     TalosMobileWindowPresentation,
     TalosPendingToolApproval,
 } from '../../../lib/talosTypes'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
+import type { TalosStreamingChatState } from '../../../composables/useTalosStreamingChat'
 
 const TalosBrowserScreenshotEvidence = defineAsyncComponent(
     () => import('../chat/TalosBrowserScreenshotEvidence.vue'),
+)
+const TalosBrowserActivity = defineAsyncComponent(
+    () => import('../chat/TalosBrowserActivity.vue'),
+)
+const TalosBrowserCard = defineAsyncComponent(
+    () => import('../chat/TalosBrowserCard.vue'),
+)
+const TalosEvidenceDrawer = defineAsyncComponent(
+    () => import('../chat/TalosEvidenceDrawer.vue'),
+)
+const TalosReasoningDrawer = defineAsyncComponent(
+    () => import('../chat/TalosReasoningDrawer.vue'),
+)
+const TalosMessageImage = defineAsyncComponent(
+    () => import('../chat/TalosMessageImage.vue'),
+)
+const TalosReasoningRow = defineAsyncComponent(
+    () => import('../chat/TalosReasoningRow.vue'),
+)
+const TalosToolActivityRow = defineAsyncComponent(
+    () => import('../chat/TalosToolActivityRow.vue'),
+)
+const TalosStreamingReply = defineAsyncComponent(
+    () => import('../chat/TalosStreamingReply.vue'),
 )
 
 type MessageSource = {
@@ -69,6 +97,8 @@ const props = withDefaults(defineProps<{
     sessionReady: boolean
     messageEvidenceReady: boolean
     sending: boolean
+    streamingState?: Readonly<TalosStreamingChatState> | null
+    streamingReducedMotion?: boolean
     benchmarkingRunId: string | null
     expandedEvidenceMessageIds: string[]
     welcomePromptId?: string | null
@@ -77,7 +107,7 @@ const props = withDefaults(defineProps<{
     fullWidthChat: boolean
     sensitiveBlur: boolean
     censorEnabled?: boolean
-    bubbleScale: TalosChatBubbleScale
+    messageScale: number
     messageStyle?: TalosMessageStyle
     browserActivities: TalosBrowserActivityItem[]
     browserSnapshot: TalosBrowserSnapshotPreview | null
@@ -105,6 +135,8 @@ const props = withDefaults(defineProps<{
     censorEnabled: true,
     developmentMode: false,
     messageStyle: 'sections',
+    streamingReducedMotion: false,
+    streamingState: null,
 })
 
 const emit = defineEmits<{
@@ -116,6 +148,7 @@ const emit = defineEmits<{
     messageEdited: []
     resendMessage: [message: TalosMessage]
     retryAssistantMessage: [message: TalosMessage]
+    openChatMedia: [attachment: TalosMessageAttachment]
     toggleMessageEvidence: [message: TalosMessage]
     benchmarkMessageRun: [message: TalosMessage]
     interactBrowserFrame: [frame: TalosBrowserPointerFrame]
@@ -129,22 +162,51 @@ const emit = defineEmits<{
 const chatThreadEl = ref<HTMLElement | null>(null)
 const welcomePrompt = computed(() => resolveTalosWelcomePrompt(props.welcomePromptId, props.welcomePromptId ?? 'talos'))
 const unseenUpdates = computed(() => props.viewport.unseenCount.value)
+const visibleStreamingState = computed(() => {
+    const state = props.streamingState
+    if (!state || !props.activeTalosSessionId || state.ownerSessionId !== props.activeTalosSessionId) {
+        return null
+    }
 
-function messageAttachments(message: TalosMessage): Array<{ file_id: string; name: string }> {
-    const attachments = message.metadata?.attachments
-    if (!Array.isArray(attachments)) return []
+    return ['connecting', 'streaming', 'awaiting_approval', 'cancelled', 'failed'].includes(state.status)
+        ? state
+        : null
+})
+const emptyMessageMetadata = parseTalosMessageMetadata(null)
+const messageMetadataById = computed(() => new Map(
+    props.messages.map((message) => [message.id, parseTalosMessageMetadata(message.metadata)]),
+))
+const selectedReasoningMessageId = ref<string | null>(null)
+const selectedReasoning = computed(() => {
+    const messageId = selectedReasoningMessageId.value
+    return messageId ? messageMetadataById.value.get(messageId)?.visibleReasoning ?? null : null
+})
 
-    return attachments.flatMap((candidate) => {
-        if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
-        const attachment = candidate as Record<string, unknown>
-        if (typeof attachment.file_id !== 'string' || typeof attachment.name !== 'string') return []
-        return [{ file_id: attachment.file_id, name: attachment.name }]
-    })
+function messageMetadata(message: TalosMessage): TalosMessageMetadataProjection {
+    return messageMetadataById.value.get(message.id) ?? emptyMessageMetadata
+}
+
+function messageAttachments(message: TalosMessage): readonly TalosMessageAttachment[] {
+    return messageMetadata(message).attachments
+}
+
+function messageImageAttachments(message: TalosMessage): readonly TalosMessageAttachment[] {
+    return messageAttachments(message).filter((attachment) => (
+        ['image/png', 'image/jpeg', 'image/webp'].includes(attachment.mime_type ?? '')
+        && Boolean(attachment.content_url)
+    ))
+}
+
+function messageVisibleReasoning(message: TalosMessage): TalosVisibleReasoning | null {
+    return message.role === 'assistant' ? messageMetadata(message).visibleReasoning : null
+}
+
+function messageToolActivities(message: TalosMessage): readonly TalosToolActivity[] {
+    return message.role === 'assistant' ? messageMetadata(message).toolActivities : []
 }
 
 function messageBrowserActivities(message: TalosMessage): TalosBrowserActivityItem[] {
-    const activities = message.metadata?.browser_activities
-    if (!Array.isArray(activities)) return []
+    const activities = messageMetadata(message).browserActivities
 
     return activities.flatMap((candidate) => {
         if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return []
@@ -173,7 +235,7 @@ function messageBrowserActivities(message: TalosMessage): TalosBrowserActivityIt
 }
 
 function messageBrowserClarificationChoices(message: TalosMessage): TalosBrowserClarificationChoice[] {
-    const followUp = message.metadata?.browser_follow_up
+    const followUp = messageMetadata(message).browserFollowUp
     if (message.role !== 'assistant'
         || !followUp
         || typeof followUp !== 'object'
@@ -313,6 +375,20 @@ function formatTime(value: string) {
     return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function messageIsGrouped(index: number) {
+    const current = props.messages[index]
+    const previous = props.messages[index - 1]
+
+    return Boolean(previous && current.role !== 'system' && previous.role === current.role)
+}
+
+function messageIsGroupEnd(index: number) {
+    const current = props.messages[index]
+    const next = props.messages[index + 1]
+
+    return !next || next.role !== current.role
+}
+
 // Assistant answers render as full-width sections (no bubble) unless the operator
 // opted back into bubbles; user and system messages are unaffected by this choice.
 function messageSurfaceClass(message: TalosMessage) {
@@ -377,24 +453,12 @@ function messageMeta(message: TalosMessage) {
 }
 
 function messageMutations(message: TalosMessage) {
-    const mutations = message.metadata?.mutations
+    const mutations = messageMetadata(message).raw.mutations
     return Array.isArray(mutations) ? mutations : []
 }
 
 function messageSources(message: TalosMessage): MessageSource[] {
-    const sources = message.metadata?.used_context
-
-    if (!Array.isArray(sources)) {
-        return []
-    }
-
-    return sources.flatMap((source) => {
-        if (!source || typeof source !== 'object' || Array.isArray(source)) {
-            return []
-        }
-
-        return [source as MessageSource]
-    })
+    return messageMetadata(message).usedContext as readonly MessageSource[] as MessageSource[]
 }
 
 function messageHasEvidence(message: TalosMessage) {
@@ -481,6 +545,15 @@ function sourcePreview(source: MessageSource) {
     return source.preview || 'Context source attached to this answer.'
 }
 
+function openReasoning(message: TalosMessage) {
+    if (!messageVisibleReasoning(message)) return
+    selectedReasoningMessageId.value = message.id
+}
+
+function closeReasoning() {
+    selectedReasoningMessageId.value = null
+}
+
 function messageContainsSensitiveText(value: string) {
     return /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(value)
         || /\b(?:sk|pk|tok|key|secret)[-_][A-Za-z0-9._-]{8,}\b/i.test(value)
@@ -500,6 +573,12 @@ defineExpose({ scrollToBottom })
                 @return-to-latest="viewport.followLatest()"
             />
         </Teleport>
+        <TalosReasoningDrawer
+            v-if="selectedReasoning"
+            :open="true"
+            :reasoning="selectedReasoning"
+            @update:open="closeReasoning"
+        />
         <div class="mx-auto flex min-h-full min-w-0 w-full flex-col" :class="fullWidthChat ? 'max-w-[min(1120px,calc(100vw-3rem))]' : 'max-w-3xl'">
             <div v-if="uiError || sessionError || messageError" class="mb-4 flex items-start gap-2 rounded-md border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] px-3 py-2 text-sm text-[var(--talos-text)]">
                 <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-[var(--talos-accent)]" />
@@ -557,31 +636,43 @@ defineExpose({ scrollToBottom })
             </div>
 
             <div v-else class="space-y-5">
-                <template v-for="message in messages" :key="message.id">
+                <template v-for="(message, index) in messages" :key="message.id">
                     <article
                         class="talos-chat-message flex flex-col"
                         :class="message.role === 'user' ? 'items-end' : 'items-start'"
                         :data-message-role="message.role"
                         :data-message-id="message.id"
+                        :data-grouped="messageIsGrouped(index) ? 'true' : undefined"
                     >
                     <div
                         class="talos-message-bubble min-w-0 rounded-md"
                         :data-message-kind="message.role"
-                        :data-bubble-scale="bubbleScale"
+                        :data-message-scale="messageScale"
                         :data-message-style="messageStyle"
                         :class="messageSurfaceClass(message)"
                     >
-                        <div v-if="message.role !== 'system'" class="talos-message-meta mb-2 flex flex-wrap items-center gap-2 opacity-80">
-                            <span class="font-semibold">{{ messageLabel(message) }}</span>
-                            <span>{{ messageMeta(message) }}</span>
-                            <span>{{ formatTime(message.created_at) }}</span>
-                        </div>
                         <TalosStatusMessage
                             v-if="message.role === 'system'"
                             :message="message"
                         />
+                        <TalosReasoningRow
+                            v-if="messageVisibleReasoning(message)"
+                            :reasoning="messageVisibleReasoning(message)!"
+                            @open="openReasoning(message)"
+                        />
+                        <div
+                            v-if="messageToolActivities(message).length"
+                            class="mt-2 space-y-1"
+                            aria-label="Tool activity"
+                        >
+                            <TalosToolActivityRow
+                                v-for="activity in messageToolActivities(message)"
+                                :key="activity.id"
+                                :activity="activity"
+                            />
+                        </div>
                         <TalosMessageContent
-                            v-else-if="message.role === 'assistant'"
+                            v-if="message.role === 'assistant'"
                             :content="message.content"
                             :sensitive="sensitiveBlur && messageContainsSensitiveText(message.content)"
                             :censor-enabled="censorEnabled"
@@ -669,6 +760,14 @@ defineExpose({ scrollToBottom })
                                 {{ userMessageCollapsed(message) ? 'Expand' : 'Reduce' }}
                             </button>
                         </template>
+                        <div v-if="messageImageAttachments(message).length" class="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
+                            <TalosMessageImage
+                                v-for="attachment in messageImageAttachments(message)"
+                                :key="attachment.file_id"
+                                :attachment="attachment"
+                                @open="emit('openChatMedia', $event)"
+                            />
+                        </div>
                         <div v-if="messageAttachments(message).length > 0" class="mt-2 flex flex-wrap gap-1.5">
                             <span
                                 v-for="attachment in messageAttachments(message)"
@@ -703,18 +802,25 @@ defineExpose({ scrollToBottom })
                             </div>
                         </div>
                     </div>
+                    <div v-if="message.role !== 'system' && messageIsGroupEnd(index)" class="talos-message-meta mt-1 flex max-w-full flex-wrap items-center gap-2 px-1 text-[var(--talos-muted)]">
+                        <span class="font-semibold">{{ messageLabel(message) }}</span>
+                        <span>{{ messageMeta(message) }}</span>
+                        <span>{{ formatTime(message.created_at) }}</span>
+                    </div>
                     <TalosMessageActions
-                        v-if="message.role !== 'system'"
+                        v-if="message.role !== 'system' && messageIsGroupEnd(index)"
                         class="talos-message-actions mt-1"
                         :message="message"
                         :busy="sending"
                         :can-retry="canRetryAssistantMessage(message)"
+                        :has-media="messageImageAttachments(message).length > 0"
                         :has-evidence="messageHasEvidence(message)"
                         :evidence-open="messageEvidenceOpen(message)"
                         :has-benchmark="Boolean(message.run_id)"
                         :benchmarking="benchmarkingRunId === message.run_id"
                         @copy="copyMessage"
                         @edit="editMessage"
+                        @open-media="emit('openChatMedia', messageImageAttachments($event)[0]!)"
                         @resend="emit('resendMessage', $event)"
                         @retry="emit('retryAssistantMessage', $event)"
                         @toggle-evidence="emit('toggleMessageEvidence', $event)"
@@ -732,7 +838,7 @@ defineExpose({ scrollToBottom })
                         <div
                             class="talos-message-bubble min-w-0 max-w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]"
                             data-message-kind="assistant"
-                            :data-bubble-scale="bubbleScale"
+                            :data-message-scale="messageScale"
                         >
                             <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase opacity-75">
                                 <span class="font-semibold">TALOS</span>
@@ -772,6 +878,13 @@ defineExpose({ scrollToBottom })
                     </article>
                 </template>
 
+                <TalosStreamingReply
+                    v-if="visibleStreamingState"
+                    :state="visibleStreamingState"
+                    :reduced-motion="streamingReducedMotion"
+                    :sensitive-blur="sensitiveBlur"
+                />
+
                 <article
                     v-if="hasUnplacedBrowserSessionActivity"
                     class="talos-chat-message flex justify-start"
@@ -783,7 +896,7 @@ defineExpose({ scrollToBottom })
                     <div
                         class="talos-message-bubble min-w-0 max-w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-assistant)] text-[var(--talos-assistant-text)]"
                         data-message-kind="browser"
-                        :data-bubble-scale="bubbleScale"
+                        :data-message-scale="messageScale"
                     >
                         <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] uppercase opacity-75">
                             <span class="font-semibold">TALOS</span>
@@ -817,7 +930,7 @@ defineExpose({ scrollToBottom })
                     </div>
                 </article>
 
-                <div v-if="sending" class="flex justify-start">
+                <div v-if="sending && !visibleStreamingState" class="flex justify-start">
                     <div class="inline-flex items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 py-3 text-sm text-[var(--talos-muted)]">
                         <Loader2 class="h-4 w-4 animate-spin text-[var(--talos-accent)]" />
                         Processing
@@ -851,6 +964,10 @@ defineExpose({ scrollToBottom })
     border: 0;
     background: transparent;
     padding: 0;
+}
+
+.talos-chat-message[data-grouped='true'] {
+    margin-top: 0.25rem !important;
 }
 
 .talos-chat-message:focus-within,

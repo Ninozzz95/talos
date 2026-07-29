@@ -1,0 +1,21 @@
+event: response.created
+data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_stream_1","status":"in_progress","output":[]}}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","sequence_number":1,"response_id":"resp_stream_1","item_id":"rs_1","output_index":0,"summary_index":0,"delta":"I checked the evidence. "}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","sequence_number":2,"response_id":"resp_stream_1","item_id":"msg_1","output_index":1,"content_index":0,"delta":"Ciao 👋. I will inspect the page. "}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","sequence_number":3,"response_id":"resp_stream_1","output_index":2,"item":{"id":"fc_1","type":"function_call","status":"in_progress","arguments":"","call_id":"call_browser_1","name":"browser_navigate"}}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":4,"response_id":"resp_stream_1","item_id":"fc_1","output_index":2,"delta":"{\"url\":\"https://"}
+
+event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","sequence_number":5,"response_id":"resp_stream_1","item_id":"fc_1","output_index":2,"delta":"example.com\"}"}
+
+event: response.completed
+data: {"type":"response.completed","sequence_number":6,"response":{"id":"resp_stream_1","status":"completed","output":[{"id":"rs_1","type":"reasoning","summary":[{"type":"summary_text","text":"I checked the evidence. "}]},{"id":"msg_1","type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Ciao 👋. I will inspect the page. ","annotations":[]}]},{"id":"fc_1","type":"function_call","status":"completed","arguments":"{\"url\":\"https://example.com\"}","call_id":"call_browser_1","name":"browser_navigate"}],"usage":{"input_tokens":47,"output_tokens":15,"total_tokens":62,"input_tokens_details":{"cached_tokens":9,"cache_write_tokens":3}}}}
+

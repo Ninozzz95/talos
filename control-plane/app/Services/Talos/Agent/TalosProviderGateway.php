@@ -6,11 +6,15 @@ namespace App\Services\Talos\Agent;
 
 use App\Models\TalosModelProfile;
 use App\Models\TalosToolTurn;
+use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Crypt;
 use InvalidArgumentException;
 use Kadmos\Provider\ProviderFailure;
+use Kadmos\Provider\ProviderStream;
+use Kadmos\Provider\ProviderStreamEvent;
 use Kadmos\Provider\ProviderTurnAdapter;
+use Kadmos\Provider\StreamingProviderTurnAdapter;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ProviderTurnResponse;
 use Kadmos\Tool\ProviderTurnState;
@@ -67,6 +71,51 @@ final class TalosProviderGateway
         return $this->adapter($ownedProfile)->capabilities()->adapterVersion;
     }
 
+    public function startStreaming(
+        int $ownerId,
+        TalosToolTurn $turn,
+        TalosModelProfile $profile,
+        ProviderTurnRequest $request,
+        Closure $onEvent,
+        Closure $isCancelled,
+        ?string $leaseToken = null,
+    ): ProviderTurnResponse {
+        $ownedTurn = $this->ownedTurn($ownerId, $turn->id);
+        $ownedProfile = $this->ownedProfile($ownerId, $profile->id);
+        $this->assertTurnProfile($ownedTurn, $ownedProfile, $request);
+        $adapter = $this->adapter($ownedProfile);
+        $this->assertAdapterVersion($ownedTurn, $adapter);
+        $operation = $this->beginOperation(
+            $ownedTurn,
+            'start',
+            $this->hashPayload($request->toRedactedArray()),
+            $leaseToken,
+            $adapter,
+        );
+        if ($operation['response'] instanceof ProviderTurnResponse) {
+            return $operation['response'];
+        }
+        $operationKey = $operation['key'];
+
+        try {
+            $response = $adapter instanceof StreamingProviderTurnAdapter
+                ? $this->consumeStream($adapter->streamStart($request, $isCancelled), $onEvent)
+                : $adapter->start($request);
+        } catch (TalosProviderStreamCancelledException $exception) {
+            $this->markOperationCancelled($ownedTurn, $operationKey, $leaseToken);
+
+            throw $exception;
+        } catch (Throwable) {
+            $this->markOperationRecoveryRequired($ownedTurn, $operationKey, $leaseToken);
+
+            throw new TalosProviderRecoveryRequiredException;
+        }
+
+        $this->persistResponse($ownedTurn, $response, $operationKey, $leaseToken);
+
+        return $response;
+    }
+
     /** @param list<ToolResult> $toolResults */
     public function continue(int $ownerId, string $turnId, array $toolResults, ?string $leaseToken = null): ProviderTurnResponse
     {
@@ -104,6 +153,66 @@ final class TalosProviderGateway
 
         try {
             $response = $adapter->continue($state, $toolResults);
+        } catch (Throwable) {
+            $this->markOperationRecoveryRequired($turn, $operationKey, $leaseToken);
+
+            throw new TalosProviderRecoveryRequiredException;
+        }
+
+        $this->persistResponse($turn, $response, $operationKey, $leaseToken);
+
+        return $response;
+    }
+
+    /** @param list<ToolResult> $toolResults */
+    public function continueStreaming(
+        int $ownerId,
+        string $turnId,
+        array $toolResults,
+        Closure $onEvent,
+        Closure $isCancelled,
+        ?string $leaseToken = null,
+    ): ProviderTurnResponse {
+        $turn = $this->ownedTurn($ownerId, $turnId);
+        if ($turn->status === 'recovery_required'
+            || in_array($turn->provider_operation_status, ['in_flight', 'recovery_required'], true)) {
+            throw new TalosProviderRecoveryRequiredException;
+        }
+        if ($turn->status !== 'awaiting_tool_results') {
+            throw new InvalidArgumentException('Provider turn is not awaiting tool results.');
+        }
+        $this->assertToolResultCorrelation($turn, $toolResults);
+        $profileId = is_string($turn->model_profile_id) ? $turn->model_profile_id : '';
+        if ($profileId === '') {
+            throw new InvalidArgumentException('Provider turn has no model profile.');
+        }
+        $profile = $this->ownedProfile($ownerId, $profileId);
+        $adapter = $this->adapter($profile);
+        $this->assertAdapterVersion($turn, $adapter);
+        $state = $this->stateFromDatabase($turn, $adapter);
+        $operation = $this->beginOperation(
+            $turn,
+            'continue',
+            $this->hashPayload([
+                'provider_state_sha256' => $turn->provider_state_sha256,
+                'results' => array_map(static fn (ToolResult $result): array => $result->toWireArray(), $toolResults),
+            ]),
+            $leaseToken,
+            $adapter,
+        );
+        if ($operation['response'] instanceof ProviderTurnResponse) {
+            return $operation['response'];
+        }
+        $operationKey = $operation['key'];
+
+        try {
+            $response = $adapter instanceof StreamingProviderTurnAdapter
+                ? $this->consumeStream($adapter->streamContinue($state, $toolResults, $isCancelled), $onEvent)
+                : $adapter->continue($state, $toolResults);
+        } catch (TalosProviderStreamCancelledException $exception) {
+            $this->markOperationCancelled($turn, $operationKey, $leaseToken);
+
+            throw $exception;
         } catch (Throwable) {
             $this->markOperationRecoveryRequired($turn, $operationKey, $leaseToken);
 
@@ -376,14 +485,7 @@ final class TalosProviderGateway
 
     private function tokenUsage(mixed $usage): TokenUsage
     {
-        $usage = is_array($usage) ? $usage : [];
-
-        return new TokenUsage(
-            (int) ($usage['input_tokens'] ?? 0),
-            (int) ($usage['output_tokens'] ?? 0),
-            (int) ($usage['total_tokens'] ?? 0),
-            (int) ($usage['cached_tokens'] ?? 0),
-        );
+        return TokenUsage::fromArray(is_array($usage) ? $usage : []);
     }
 
     private function providerFailure(mixed $failure): ProviderFailure
@@ -430,6 +532,33 @@ final class TalosProviderGateway
             }, 3);
         } catch (TalosProviderRecoveryRequiredException) {
             // An expired fence leaves the existing in-flight marker as the recovery signal.
+        }
+    }
+
+    private function markOperationCancelled(
+        TalosToolTurn $turn,
+        string $operationKey,
+        ?string $leaseToken,
+    ): void {
+        try {
+            DB::transaction(function () use ($turn, $operationKey, $leaseToken): void {
+                $locked = $this->mutableTurn($turn, $leaseToken);
+                if ($locked->provider_operation_status !== 'in_flight'
+                    || ! is_string($locked->provider_operation_key)
+                    || ! hash_equals($locked->provider_operation_key, $operationKey)) {
+                    throw new TalosProviderRecoveryRequiredException;
+                }
+
+                $locked->forceFill([
+                    'status' => 'cancelled',
+                    'provider_operation_status' => 'cancelled',
+                    'pending_tool_call_ids' => [],
+                    'cancel_requested_at' => $locked->cancel_requested_at ?? now(),
+                    'completed_at' => now(),
+                ])->save();
+            }, 3);
+        } catch (TalosProviderRecoveryRequiredException) {
+            // A concurrent owner-authorized cancellation already owns the terminal state.
         }
     }
 
@@ -489,6 +618,21 @@ final class TalosProviderGateway
 
             $locked->forceFill($attributes)->save();
         }, 3);
+    }
+
+    private function consumeStream(ProviderStream $stream, Closure $onEvent): ProviderTurnResponse
+    {
+        foreach ($stream as $event) {
+            if (! $event instanceof ProviderStreamEvent) {
+                throw new InvalidArgumentException('Provider stream yielded an invalid canonical event.');
+            }
+            $onEvent($event);
+            if ($event->kind === ProviderStreamEvent::CANCELLED) {
+                throw new TalosProviderStreamCancelledException((string) $event->payload['reason']);
+            }
+        }
+
+        return $stream->finalOutcome();
     }
 
     private function mutableTurn(TalosToolTurn $turn, ?string $leaseToken): TalosToolTurn

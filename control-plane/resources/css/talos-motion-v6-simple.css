@@ -368,3 +368,34 @@
 [data-talos-motion-layer-role="telemetry-tick-cluster"] {
     background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--talos-v6-accent) 60%, transparent) 0 1px, transparent 1px 4px);
 }
+
+/* Calm uses quiet linear structure with no decorative orb vocabulary. */
+[data-talos-motion-layer-role="calm-facet-field"],
+[data-talos-motion-layer-role="calm-structure-grid"],
+[data-talos-motion-layer-role="calm-depth-grid"] {
+    border: 1px solid color-mix(in srgb, var(--talos-v6-border) 34%, transparent);
+    background:
+        repeating-linear-gradient(90deg, color-mix(in srgb, var(--talos-v6-border) 14%, transparent) 0 1px, transparent 1px 18px),
+        repeating-linear-gradient(0deg, color-mix(in srgb, var(--talos-v6-secondary) 10%, transparent) 0 1px, transparent 1px 20px);
+    mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+}
+
+[data-talos-motion-layer-role="calm-refraction"] {
+    border: 1px solid color-mix(in srgb, var(--talos-v6-accent) 22%, transparent);
+    background: linear-gradient(145deg, color-mix(in srgb, var(--talos-v6-surface) 24%, transparent), transparent 62%);
+}
+
+[data-talos-motion-layer-role="calm-schedule-band"] {
+    border-block: 1px solid color-mix(in srgb, var(--talos-v6-accent) 28%, transparent);
+    background: color-mix(in srgb, var(--talos-v6-accent) 7%, transparent);
+}
+
+[data-talos-motion-layer-role="calm-dependency-cut"] {
+    background: color-mix(in srgb, var(--talos-v6-accent) 58%, transparent);
+}
+
+[data-talos-motion-layer-role="calm-queue-mark"] {
+    border: 1px solid color-mix(in srgb, var(--talos-v6-accent) 52%, transparent);
+    background: color-mix(in srgb, var(--talos-v6-accent) 30%, transparent);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}

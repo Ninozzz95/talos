@@ -5,13 +5,21 @@ import { CircleCheck, Info, LoaderCircle, OctagonX, TriangleAlert, X } from '@lu
 import { Toaster as Sonner } from 'vue-sonner'
 
 const props = defineProps<ToasterProps>()
-const delegatedProps = reactiveOmit(props, 'toastOptions')
+const delegatedProps = reactiveOmit(props, 'toastOptions', 'offset', 'mobileOffset')
+const TALOS_TOAST_OFFSET = Object.freeze({
+    top: '4.5rem',
+    right: '1rem',
+    bottom: '1rem',
+    left: '1rem',
+})
 </script>
 
 <template>
     <Sonner
         class="toaster group talos-sonner pointer-events-auto"
         :close-button="true"
+        :offset="props.offset ?? TALOS_TOAST_OFFSET"
+        :mobile-offset="props.mobileOffset ?? TALOS_TOAST_OFFSET"
         :toast-options="{
             classes: {
                 toast: 'talos-motion-feedback pointer-events-auto flex min-h-11 items-start gap-3 rounded-md border px-3 py-2 text-xs leading-5 shadow-lg bg-[var(--talos-card)] text-[var(--talos-text)] border-[var(--talos-border)]',

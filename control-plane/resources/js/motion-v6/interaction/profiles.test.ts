@@ -20,7 +20,14 @@ describe('TALOS V6 interaction profiles', () => {
 
     it('makes every profile structurally and temporally distinct', () => {
         const fingerprints = TALOS_INTERACTION_PROFILES_V6.map((profile) => JSON.stringify(profile.specs))
-        expect(new Set(fingerprints).size).toBe(13)
+        expect(new Set(fingerprints).size).toBe(14)
+    })
+
+    it('ports the approved Calm interaction tuning', () => {
+        const profile = getTalosInteractionProfileV6('calm')
+        expect(profile?.id).toBe('calm')
+        expect(profile?.specs['window-open'].easing).toBe('cubic-bezier(0.22, 0.8, 0.24, 1)')
+        expect(profile?.specs['window-open'].durationMs).toBeGreaterThanOrEqual(160)
     })
 
     it.each(TALOS_INTERACTION_PROFILES_V6)('$id resolves every intent and its reduced-motion form', (profile) => {
@@ -49,7 +56,7 @@ describe('TALOS V6 interaction profiles', () => {
             restore: profile.specs['window-restore'],
             focus: profile.specs['window-focus'],
         }))
-        expect(new Set(fingerprints).size).toBe(13)
+        expect(new Set(fingerprints).size).toBe(14)
     })
 
     it.each([

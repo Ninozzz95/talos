@@ -70,6 +70,7 @@ const props = withDefaults(defineProps<{
     commands: TalosCommand[]
     canSend: boolean
     sending: boolean
+    streamingActive?: boolean
     statusText: string
     modelLabel: string
     modelProvider?: string | null
@@ -116,10 +117,12 @@ const props = withDefaults(defineProps<{
     thinking: false,
     effortLevels: () => [],
     supportsThinking: false,
+    streamingActive: false,
 })
 
 const emit = defineEmits<{
     send: []
+    cancelStream: []
     openModel: []
     selectEffort: [level: string]
     selectThinking: [enabled: boolean]
@@ -183,7 +186,9 @@ function handleAttachmentInput(event: Event) {
 }
 
 const enhanceTitle = computed(() => props.enhancerDisabledReason || 'Improve prompt')
-const sendTitle = computed(() => props.sendDisabledReason || 'Send message')
+const sendTitle = computed(() => (
+    props.streamingActive ? 'Stop response' : (props.sendDisabledReason || 'Send message')
+))
 const browseMenuOpen = ref(false)
 const promptRow = ref<HTMLElement | null>(null)
 const promptField = ref<{ $el?: unknown } | HTMLTextAreaElement | null>(null)
@@ -306,6 +311,14 @@ function handleKeydown(event: KeyboardEvent) {
     }
 }
 
+function handlePrimaryAction() {
+    if (props.streamingActive) {
+        emit('cancelStream')
+        return
+    }
+    emit('send')
+}
+
 function toggleBrowseMenu() {
     browseMenuOpen.value = !browseMenuOpen.value
 }
@@ -376,11 +389,12 @@ onBeforeUnmount(() => {
                     type="button"
                     size="icon"
                     class="absolute bottom-1 right-1"
-                    aria-label="Send"
-                    :disabled="!canSend"
-                    @click="emit('send')"
+                    :aria-label="streamingActive ? 'Stop response' : 'Send'"
+                    :disabled="streamingActive ? false : !canSend"
+                    @click="handlePrimaryAction"
                 >
-                    <Loader2 v-if="sending" class="h-4 w-4 animate-spin" />
+                    <Square v-if="streamingActive" class="h-4 w-4" />
+                    <Loader2 v-else-if="sending" class="h-4 w-4 animate-spin" />
                     <Send v-else class="h-4 w-4" />
                 </Button>
             </Tooltip>

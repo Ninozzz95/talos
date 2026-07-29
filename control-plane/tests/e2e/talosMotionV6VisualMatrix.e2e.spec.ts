@@ -10,7 +10,7 @@ const loginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
 
 const PRESETS = [
     'forge', 'paper', 'terminal', 'aurora', 'glacier', 'ember',
-    'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus',
+    'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus', 'calm',
 ] as const
 const COLOR_MODES = ['light', 'dark'] as const
 const RENDERER_MODES = ['simple', 'complex', 'static'] as const

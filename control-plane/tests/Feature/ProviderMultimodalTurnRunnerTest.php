@@ -65,7 +65,13 @@ final class ProviderMultimodalTurnRunnerTest extends TestCase
         $captured = [];
         $transport = new CapturingProviderTransport($captured, [
             'id' => 'resp_1',
-            'choices' => [['finish_reason' => 'stop', 'message' => ['content' => 'A red square.']]],
+            'choices' => [[
+                'finish_reason' => 'stop',
+                'message' => [
+                    'reasoning_content' => 'I inspected the image geometry.',
+                    'content' => 'A red square.',
+                ],
+            ]],
             'usage' => ['prompt_tokens' => 12, 'completion_tokens' => 4, 'total_tokens' => 16],
         ]);
         $profile = $this->profile('openai', 'gpt-4o', 'https://api.openai.com/v1');
@@ -80,6 +86,7 @@ final class ProviderMultimodalTurnRunnerTest extends TestCase
         $result = $runner->run($profile, $this->imageTurn('openai', 'gpt-4o', 'medium', false));
 
         self::assertSame('A red square.', $result['text']);
+        self::assertSame('I inspected the image geometry.', $result['visible_reasoning']);
         self::assertSame('openai', $result['provider']);
         self::assertSame('gpt-4o', $result['model']);
 

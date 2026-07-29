@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BarChart3, EllipsisVertical, Loader2, Pencil, ShieldCheck } from '@lucide/vue'
+import { BarChart3, EllipsisVertical, Images, Loader2, Pencil, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import {
     DropdownMenu,
@@ -11,6 +11,7 @@ import type { TalosMessage } from '../../../lib/talosTypes'
 
 defineProps<{
     message: TalosMessage
+    hasMedia: boolean
     hasEvidence: boolean
     evidenceOpen: boolean
     hasBenchmark: boolean
@@ -19,6 +20,7 @@ defineProps<{
 
 const emit = defineEmits<{
     edit: [message: TalosMessage]
+    openMedia: [message: TalosMessage]
     toggleEvidence: [message: TalosMessage]
     benchmark: [message: TalosMessage]
 }>()
@@ -47,6 +49,15 @@ const emit = defineEmits<{
             >
                 <Pencil class="h-4 w-4" aria-hidden="true" />
                 Reuse prompt
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                v-if="hasMedia"
+                aria-label="Open media"
+                class="min-h-11"
+                @select="emit('openMedia', message)"
+            >
+                <Images class="h-4 w-4" aria-hidden="true" />
+                Open media
             </DropdownMenuItem>
             <DropdownMenuItem
                 v-if="message.role === 'assistant' && hasEvidence"

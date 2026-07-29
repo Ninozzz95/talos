@@ -32,6 +32,117 @@ final class TalosSettingsApiTest extends TestCase
         $this->assertTrue(Schema::hasColumn('talos_workspace_settings', 'user_id'));
     }
 
+    public function test_prompt_cache_preferences_default_round_trip_and_fail_closed_atomically(): void
+    {
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.prompt_cache.mode', 'automatic')
+            ->assertJsonPath('data.preferences.prompt_cache.ttl', null);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'prompt_cache' => [
+                    'mode' => 'explicit',
+                    'ttl' => '1h',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.prompt_cache.mode', 'explicit')
+            ->assertJsonPath('data.preferences.prompt_cache.ttl', '1h');
+
+        foreach ([
+            ['value' => [], 'error' => 'preferences.prompt_cache'],
+            ['value' => ['mode' => 'automatic', 'ttl' => null, 'provider' => 'openai'], 'error' => 'preferences.prompt_cache.provider'],
+            ['value' => ['mode' => 'aggressive'], 'error' => 'preferences.prompt_cache.mode'],
+            ['value' => ['ttl' => '24h'], 'error' => 'preferences.prompt_cache.ttl'],
+            ['value' => ['ttl' => 300], 'error' => 'preferences.prompt_cache.ttl'],
+        ] as $case) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => ['prompt_cache' => $case['value']],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors($case['error']);
+        }
+
+        $this->getJson('/api/talos/settings')
+            ->assertOk()
+            ->assertJsonPath('data.preferences.prompt_cache.mode', 'explicit')
+            ->assertJsonPath('data.preferences.prompt_cache.ttl', '1h');
+    }
+
+    public function test_calm_and_numeric_scale_preferences_are_strict_and_round_trip_canonically(): void
+    {
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'theme' => 'calm',
+                'ui_scale' => 1.3,
+                'chat_layout' => [
+                    'message_scale' => 0.75,
+                    'composer_mode' => 'full',
+                    'message_style' => 'sections',
+                    'advanced_rail_expanded' => false,
+                    'mobile_window_presentation' => 'drawer',
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.preferences.theme', 'calm')
+            ->assertJsonPath('data.preferences.ui_scale', 1.3)
+            ->assertJsonPath('data.preferences.chat_layout.message_scale', 0.75);
+
+        foreach ([
+            ['ui_scale', 0.79],
+            ['ui_scale', 1.31],
+            ['ui_scale', 1.03],
+            ['ui_scale', '1.0'],
+        ] as [$key, $value]) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => [$key => $value],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors("preferences.{$key}");
+        }
+
+        foreach ([0.74, 1.41, 1.03, '1.0'] as $value) {
+            $this->patchJson('/api/talos/settings', [
+                'preferences' => [
+                    'chat_layout' => ['message_scale' => $value],
+                ],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('preferences.chat_layout.message_scale');
+        }
+    }
+
+    public function test_theme_policy_lock_blocks_ui_and_message_scale_changes(): void
+    {
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($this->user->id),
+            'user_id' => $this->user->id,
+            'preferences' => [
+                'theme' => 'telemetry',
+                'theme_policy_locked' => true,
+                'ui_scale' => 1.0,
+                'chat_layout' => ['message_scale' => 1.0],
+            ],
+        ]);
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => ['ui_scale' => 1.1],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preferences.theme');
+
+        $this->patchJson('/api/talos/settings', [
+            'preferences' => [
+                'chat_layout' => ['message_scale' => 1.1],
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('preferences.theme');
+    }
+
     public function test_sensitive_censor_preference_is_strict_boolean_and_defaults_enabled(): void
     {
         $this->getJson('/api/talos/settings')
@@ -213,15 +324,17 @@ final class TalosSettingsApiTest extends TestCase
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.preferences.chat_layout.bubble_scale', 'expanded')
+            ->assertJsonPath('data.preferences.chat_layout.message_scale', 1.15)
+            ->assertJsonMissingPath('data.preferences.chat_layout.bubble_scale')
             ->assertJsonPath('data.preferences.chat_layout.composer_mode', 'minimal')
             ->assertJsonPath('data.preferences.chat_layout.advanced_rail_expanded', true)
             ->assertJsonPath('data.preferences.chat_layout.mobile_window_presentation', 'fullscreen');
 
         $layout = $response->json('data.preferences.chat_layout');
         $this->assertSame([
-            'bubble_scale' => 'expanded',
+            'message_scale' => 1.15,
             'composer_mode' => 'minimal',
+            'message_style' => 'sections',
             'advanced_rail_expanded' => true,
             'mobile_window_presentation' => 'fullscreen',
         ], $layout);
@@ -306,7 +419,8 @@ final class TalosSettingsApiTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('data.preferences.chat_layout.advanced_rail_expanded', true)
-            ->assertJsonPath('data.preferences.chat_layout.bubble_scale', 'balanced')
+            ->assertJsonPath('data.preferences.chat_layout.message_scale', 1)
+            ->assertJsonMissingPath('data.preferences.chat_layout.bubble_scale')
             ->assertJsonPath('data.preferences.chat_layout.composer_mode', 'full')
             ->assertJsonPath('data.preferences.theme', 'forge')
             ->assertJsonPath('data.preferences.theme_policy_locked', true);
@@ -973,7 +1087,8 @@ JSON;
             ->assertJsonPath('data.preferences.theme_library.0.tokens.background', '#02080c')
             ->assertJsonPath('data.preferences.theme_library.0.area_tokens.chat.accent', '#31d6c8')
             ->assertJsonPath('data.preferences.theme_library.0.motion', 'subtle')
-            ->assertJsonPath('data.preferences.theme_library.0.chat_layout.bubble_scale', 'expanded')
+            ->assertJsonPath('data.preferences.theme_library.0.chat_layout.message_scale', 1.15)
+            ->assertJsonMissingPath('data.preferences.theme_library.0.chat_layout.bubble_scale')
             ->assertJsonPath('data.preferences.theme_library.0.chat_layout.composer_mode', 'minimal')
             ->assertJsonPath('data.preferences.theme_library.0.chat_layout.advanced_rail_expanded', true)
             ->assertJsonPath('data.preferences.theme', 'violet')
@@ -2366,13 +2481,19 @@ JSON;
         $stored = json_decode((string) $this->storedPreferencesForCurrentUser(), true, 32, JSON_THROW_ON_ERROR);
         $storedMotion = $stored['theme_motion_v6'];
         unset($stored['theme_motion_v6']);
+        $canonicalLegacy = $legacy;
+        $canonicalLegacy['chat_layout'] = [
+            'message_scale' => 1.15,
+            'composer_mode' => 'minimal',
+            'advanced_rail_expanded' => true,
+        ];
 
         self::assertSame($motion, $storedMotion);
-        self::assertSame($legacy, $stored);
-        self::assertSame($legacyBytes, json_encode($stored, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        self::assertSame($canonicalLegacy, $stored);
+        self::assertNotSame($legacyBytes, json_encode($stored, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         self::assertSame($motion, $response->json('data.preferences.theme_motion_v6'));
         self::assertSame($legacy['theme_customization'], $response->json('data.preferences.theme_customization'));
-        self::assertSame($legacy['chat_layout'], $response->json('data.preferences.chat_layout'));
+        self::assertSame($canonicalLegacy['chat_layout'], $response->json('data.preferences.chat_layout'));
     }
 
     public function test_invalid_stored_theme_motion_v6_is_omitted_fail_closed_without_mutating_storage(): void
@@ -2470,8 +2591,10 @@ JSON;
 
     public function test_theme_motion_v6_is_user_scoped_on_read_and_write(): void
     {
+        $firstUserMotion = $this->motionV6Defaults();
+        $firstUserMotion['speed'] = 125;
         $this->patchJson('/api/talos/settings', [
-            'preferences' => ['theme_motion_v6' => $this->motionV6Defaults()],
+            'preferences' => ['theme_motion_v6' => $firstUserMotion],
         ])->assertOk();
 
         $otherUser = User::factory()->create();
@@ -2480,7 +2603,9 @@ JSON;
         $this->getJson('/api/talos/settings')
             ->assertOk()
             ->assertJsonPath('data.user_id', $otherUser->id)
-            ->assertJsonMissingPath('data.preferences.theme_motion_v6');
+            ->assertJsonPath('data.preferences.theme_motion_v6.speed', 100)
+            ->assertJsonPath('data.preferences.theme_motion_v6.background_enabled', false)
+            ->assertJsonPath('data.preferences.theme_motion_v6.interface_enabled', true);
     }
 
     public function test_named_theme_motion_v6_is_validated_persisted_and_returned_without_data_loss(): void
@@ -2798,7 +2923,7 @@ JSON;
                 'stagger' => 40,
             ],
             'chat_layout' => [
-                'bubble_scale' => 'expanded',
+                'message_scale' => 1.15,
                 'composer_mode' => 'minimal',
                 'advanced_rail_expanded' => true,
             ],

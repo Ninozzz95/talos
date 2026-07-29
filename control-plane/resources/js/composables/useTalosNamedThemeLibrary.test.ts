@@ -168,4 +168,37 @@ describe('useTalosNamedThemeLibrary', () => {
         expect(harness.persistPreferences).not.toHaveBeenCalled()
         expect(harness.persistence.localThemeError.value).toContain('rejected')
     })
+
+    it('canonicalizes a legacy compact import before persisting the active layout and library theme', async () => {
+        const harness = createHarness()
+        harness.library.importJson.value = JSON.stringify({
+            schema: 'talos_theme_export_v1',
+            exported_at: now,
+            theme: {
+                id: 'legacy-compact',
+                name: 'Legacy Compact',
+                base_theme: 'terminal',
+                tokens: {},
+                chat_layout: {
+                    bubble_scale: 'compact',
+                    composer_mode: 'minimal',
+                },
+            },
+        })
+
+        const importing = harness.library.importTheme()
+        await Promise.resolve()
+
+        const preferences = harness.persistPreferences.mock.calls[0]?.[0] as Record<string, unknown>
+        const activeLayout = preferences.chat_layout as Record<string, unknown>
+        const library = preferences.theme_library as Array<Record<string, unknown>>
+        const storedLayout = library[0]?.chat_layout as Record<string, unknown>
+        expect(activeLayout).toMatchObject({ message_scale: 0.9, composer_mode: 'minimal' })
+        expect(storedLayout).toMatchObject({ message_scale: 0.9, composer_mode: 'minimal' })
+        expect(activeLayout).not.toHaveProperty('bubble_scale')
+        expect(storedLayout).not.toHaveProperty('bubble_scale')
+
+        harness.releaseWrite(harness.committedSettings.value)
+        await importing
+    })
 })

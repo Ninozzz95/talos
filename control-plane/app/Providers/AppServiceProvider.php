@@ -2,6 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\TalosBrowserArtifact;
+use App\Models\TalosDocument;
+use App\Models\TalosFile;
+use App\Models\TalosMessage;
+use App\Models\TalosRun;
+use App\Models\TalosRunArtifact;
+use App\Observers\TalosLibraryChatReferenceObserver;
+use App\Observers\TalosLibrarySourceObserver;
 use App\Services\FileIngestion\FileBenchmarkScenarioFactory;
 use App\Services\FileIngestion\Malware\ClamAvInstreamClient;
 use App\Services\FileIngestion\Malware\TalosMalwareScanner;
@@ -120,6 +128,13 @@ class AppServiceProvider extends ServiceProvider
         UrlGenerator $urlGenerator,
     ): void
     {
+        TalosFile::observe(TalosLibrarySourceObserver::class);
+        TalosDocument::observe(TalosLibrarySourceObserver::class);
+        TalosRunArtifact::observe(TalosLibrarySourceObserver::class);
+        TalosBrowserArtifact::observe(TalosLibrarySourceObserver::class);
+        TalosMessage::observe(TalosLibraryChatReferenceObserver::class);
+        TalosRun::observe(TalosLibraryChatReferenceObserver::class);
+
         if (! $this->app->environment('local')) {
             $canonicalOrigin = rtrim((string) config('app.url'), '/');
             if ($canonicalOrigin === '') {

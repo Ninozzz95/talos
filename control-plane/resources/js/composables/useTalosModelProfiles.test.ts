@@ -73,6 +73,18 @@ describe('useTalosModelProfiles', () => {
         expect(profiles.usableModelProfiles.value).toEqual([verified])
     })
 
+    it('shares one reactive profile catalog between Model Lab and composer consumers', () => {
+        const modelLab = useTalosModelProfiles()
+        const composer = useTalosModelProfiles()
+        const verified = profile({ id: 'profile-shared' })
+
+        modelLab.modelProfiles.value = [verified]
+
+        expect(composer.modelProfiles).toBe(modelLab.modelProfiles)
+        expect(composer.modelProfiles.value).toEqual([verified])
+        expect(composer.callableModelProfiles.value).toEqual([verified])
+    })
+
     it('creates then probes the persisted profile before exposing it as callable', async () => {
         const profiles = useTalosModelProfiles()
         const created = profile({

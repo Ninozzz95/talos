@@ -11,8 +11,8 @@ export type TalosWorkspaceCommandRoute = {
 }
 
 export const TALOS_WORKSPACE_COMMAND_TARGETS: Partial<Record<TalosCommand['id'], TalosWorkspaceCommandRoute>> = {
-    attach_file: { windowId: 'library', windowSection: 'context' },
-    open_context_vault: { windowId: 'library', windowSection: 'context' },
+    attach_file: { windowId: 'library', windowSection: 'sources' },
+    open_context_vault: { windowId: 'library', windowSection: 'sources' },
     open_trace_replay: { windowId: 'runtime', runtimeTab: 'replay' },
     open_benchmark_workbench: { windowId: 'compare' },
     open_model_center: { windowId: 'model_lab', windowSection: 'models' },

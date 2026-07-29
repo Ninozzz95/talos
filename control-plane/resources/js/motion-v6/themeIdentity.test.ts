@@ -27,6 +27,7 @@ const EXPECTED_THEME_IDS = [
     'claudius',
     'basicus',
     'telemetry',
+    'calm',
 ] as const
 
 const EXPECTED_PALETTE_TOKENS = {
@@ -122,9 +123,9 @@ describe('TALOS shared theme identity V6', () => {
         expect(isTalosThemeIdentityCanonicalColor('var(--talos-accent)')).toBe(false)
     })
 
-    it('uses the independent literal list of exactly thirteen preset IDs', () => {
-        expect(EXPECTED_THEME_IDS).toHaveLength(13)
-        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(13)
+    it('uses the independent literal list of exactly fourteen preset IDs', () => {
+        expect(EXPECTED_THEME_IDS).toHaveLength(14)
+        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(14)
         expect(TALOS_THEME_PRESETS.map((preset) => preset.id)).toEqual(EXPECTED_THEME_IDS)
         expect(TALOS_THEME_IDENTITIES_V6.map((identity) => identity.id)).toEqual(EXPECTED_THEME_IDS)
     })
@@ -170,7 +171,7 @@ describe('TALOS shared theme identity V6', () => {
             mismatch_count: mismatchCount,
             max_delta: Number(maxDelta.toFixed(6)),
         }).toEqual({
-            channel_comparisons: 1248,
+            channel_comparisons: 1344,
             mismatch_count: 0,
             max_delta: 0.001961,
         })

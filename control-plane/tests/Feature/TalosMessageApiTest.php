@@ -9,6 +9,7 @@ use App\Models\TalosBrowserAction;
 use App\Models\TalosBrowserEvidenceBundle;
 use App\Models\TalosBrowserSession;
 use App\Models\TalosBrowserTask;
+use App\Models\TalosFile;
 use App\Models\TalosSession;
 use App\Models\TalosRun;
 use App\Models\User;
@@ -246,6 +247,106 @@ final class TalosMessageApiTest extends TestCase
             'session_id' => $session->id,
             'metadata->browser_activities->0->id' => 'forged-activity',
         ]);
+    }
+
+    public function test_message_api_projects_safe_metadata_without_provider_private_state(): void
+    {
+        $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Safe metadata projection',
+            'mode' => 'verified_execution',
+        ]);
+        $message = $session->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Safe answer.',
+            'metadata' => [
+                'source' => 'talos_agent_turn',
+                'legacy_safe' => ['label' => 'kept'],
+                'visible_reasoning' => [
+                    'source' => 'provider',
+                    'provider' => 'deepseek',
+                    'text' => 'Compared the available evidence.',
+                    'duration_ms' => 120,
+                ],
+                'nested' => [
+                    'signature' => 'opaque',
+                    'encrypted_content' => 'opaque',
+                    'redacted_thinking' => 'opaque',
+                    'raw_tool_result' => ['private' => true],
+                    'api_key' => 'secret',
+                ],
+            ],
+        ]);
+
+        $response = $this->getJson('/api/talos/sessions/'.$session->id.'/messages')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $message->id)
+            ->assertJsonPath('data.0.metadata.contract', 'talos.message.metadata.v2')
+            ->assertJsonPath('data.0.metadata.legacy_safe.label', 'kept')
+            ->assertJsonPath('data.0.metadata.visible_reasoning.text', 'Compared the available evidence.')
+            ->assertJsonMissingPath('data.0.metadata.nested.signature')
+            ->assertJsonMissingPath('data.0.metadata.nested.encrypted_content')
+            ->assertJsonMissingPath('data.0.metadata.nested.redacted_thinking')
+            ->assertJsonMissingPath('data.0.metadata.nested.raw_tool_result')
+            ->assertJsonMissingPath('data.0.metadata.nested.api_key');
+
+        self::assertStringNotContainsString('opaque', $response->getContent());
+        self::assertStringNotContainsString('secret', $response->getContent());
+    }
+
+    public function test_client_attachment_metadata_must_reference_an_owned_available_file(): void
+    {
+        $session = TalosSession::query()->create([
+            'user_id' => $this->user->id,
+            'title' => 'Attachment metadata ownership',
+            'mode' => 'verified_execution',
+        ]);
+        $owned = TalosFile::query()->create([
+            'user_id' => $this->user->id,
+            'original_name' => 'owned.png',
+            'mime_type' => 'image/png',
+            'detected_mime' => 'image/png',
+            'size_bytes' => 8,
+            'checksum' => hash('sha256', 'ownedpng'),
+            'status' => 'available',
+            'scan_status' => 'clean',
+            'storage_disk' => 'local',
+            'storage_path' => 'ingested/owned.png',
+            'metadata' => [],
+        ]);
+        $foreign = TalosFile::query()->create([
+            'user_id' => User::factory()->create()->id,
+            'original_name' => 'foreign.png',
+            'mime_type' => 'image/png',
+            'detected_mime' => 'image/png',
+            'size_bytes' => 10,
+            'checksum' => hash('sha256', 'foreignpng'),
+            'status' => 'available',
+            'scan_status' => 'clean',
+            'storage_disk' => 'local',
+            'storage_path' => 'ingested/foreign.png',
+            'metadata' => [],
+        ]);
+
+        $this->postJson('/api/talos/sessions/'.$session->id.'/messages', [
+            'role' => 'user',
+            'content' => 'Use this image.',
+            'metadata' => ['attachments' => [['file_id' => $owned->id, 'name' => 'owned.png']]],
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.metadata.attachments.0.file_id', $owned->id)
+            ->assertJsonPath('data.metadata.attachments.0.mime_type', 'image/png')
+            ->assertJsonPath('data.metadata.attachments.0.content_url', '/api/talos/files/'.$owned->id.'/content');
+
+        foreach ([$foreign->id, 'missing-file'] as $fileId) {
+            $this->postJson('/api/talos/sessions/'.$session->id.'/messages', [
+                'role' => 'user',
+                'content' => 'Use a forged image.',
+                'metadata' => ['attachments' => [['file_id' => $fileId, 'name' => 'forged.png']]],
+            ])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors(['metadata.attachments']);
+        }
     }
 
     public function test_message_listing_rebuilds_run_scoped_browser_evidence_with_a_constant_query_budget(): void

@@ -72,9 +72,16 @@ final class TalosRunController extends Controller
     public function events(Request $request, TalosRun $run): JsonResponse
     {
         $this->assertRunOwnedByCurrentUser($request, $run);
+        $validated = $request->validate([
+            'after_sequence' => ['sometimes', 'integer', 'min:0', 'max:2147483647'],
+        ]);
 
-        $events = $run->events()
-            ->oldest('sequence')
+        $query = $run->events()->oldest('sequence');
+        if (array_key_exists('after_sequence', $validated)) {
+            $query->where('sequence', '>', (int) $validated['after_sequence']);
+        }
+
+        $events = $query
             ->get()
             ->map(fn (TalosRunEvent $event): array => $event->toApiArray())
             ->values();

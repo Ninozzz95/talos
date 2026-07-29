@@ -82,4 +82,25 @@ describe('useTalosWorkspaceBootstrap', () => {
         expect(order).toEqual(['preferences', 'browse', 'models', 'routing', 'context', 'settings', 'sessions', 'select', 'restore-browse'])
         expect(deps.scrollChat).toHaveBeenCalledOnce()
     })
+
+    it('applies persisted UI and message scales together during bootstrap', async () => {
+        const deps = dependencies()
+        deps.loadWorkspaceSettings.mockResolvedValue({
+            preferences: {
+                ui_scale: 1.2,
+                chat_layout: {
+                    message_scale: 1.25,
+                    composer_mode: 'full',
+                },
+            },
+        })
+        const bootstrap = useTalosWorkspaceBootstrap(deps)
+
+        await bootstrap.loadPersistedWorkspaceSettings()
+
+        expect(deps.applyChatLayoutPreference).toHaveBeenCalledWith({
+            message_scale: 1.25,
+            composer_mode: 'full',
+        }, 1.2)
+    })
 })

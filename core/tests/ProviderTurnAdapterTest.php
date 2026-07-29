@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\OpenAiChatTurnAdapter;
+use Kadmos\Provider\PromptCachePlan;
 use Kadmos\Provider\ProviderRequestException;
 use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
@@ -40,6 +41,8 @@ function providerTurnRequest(
     bool $emptyProperties = false,
     ?bool $reasoningVisible = null,
     ?string $responseMimeType = null,
+    ?PromptCachePlan $promptCachePlan = null,
+    ?string $model = null,
 ): ProviderTurnRequest
 {
     $definition = json_decode(
@@ -54,7 +57,7 @@ function providerTurnRequest(
 
     return new ProviderTurnRequest(
         provider: $provider,
-        model: $provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4.1-mini',
+        model: $model ?? ($provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4.1-mini'),
         systemPrompt: 'Use tools only when evidence is required.',
         messages: [
             ['role' => 'user', 'content' => 'Earlier question.'],
@@ -66,6 +69,7 @@ function providerTurnRequest(
         temperature: 0.0,
         reasoningVisible: $reasoningVisible,
         responseMimeType: $responseMimeType,
+        promptCachePlan: $promptCachePlan,
     );
 }
 
@@ -118,6 +122,17 @@ function testOpenAiAdapterNormalizesFinalTextAndPreservesConversationHistory(): 
     assertProviderTurn($response->toolCalls === [], 'Final text cannot invent tool calls.');
     assertProviderTurn(count($requests[0]['payload']['messages'] ?? []) === 4, 'The adapter must send system plus the complete durable conversation history.');
     assertProviderTurn(($requests[0]['payload']['messages'][1]['content'] ?? null) === 'Earlier question.', 'Earlier user context must survive the provider boundary.');
+}
+
+function testOpenAiAdapterSeparatesProviderVisibleReasoningFromFinalText(): void
+{
+    $responses = [providerFixture('final-visible-reasoning')['provider_response']];
+    $requests = [];
+    $response = openAiFixtureAdapter($responses, $requests)->start(providerTurnRequest(reasoningVisible: true));
+
+    assertProviderTurn($response->kind === 'final', 'Provider-visible reasoning must not change the final outcome kind.');
+    assertProviderTurn($response->text === 'The page is ready.', 'Provider-visible reasoning must not be duplicated into the answer.');
+    assertProviderTurn($response->visibleReasoning === 'I compared the available evidence before answering.', 'Provider-designated reasoning must survive normalization separately.');
 }
 
 function testOpenAiAdapterAcceptsPreambleAndMultipleNativeCalls(): void
@@ -465,6 +480,134 @@ function testOpenAiChatAdapterRejectsGifWithoutStaticFrameProof(): void
     throw new RuntimeException('OpenAI Chat GIF input without static-frame proof must fail closed.');
 }
 
+function testOpenAiChatAdapterMapsGpt56PromptCachePolicyAcrossToolContinuation(): void
+{
+    $plan = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_AUTOMATIC,
+        keyHash: str_repeat('a', 64),
+        breakpoints: [PromptCachePlan::BREAKPOINT_SYSTEM, 'message:0'],
+        ttl: PromptCachePlan::TTL_30_MINUTES,
+        minimumInputTokens: 1024,
+    );
+    $responses = [
+        providerFixture('mixed-preamble-tool-call')['provider_response'],
+        providerFixture('final-text')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = openAiFixtureAdapter($responses, $requests, 'openai');
+    $first = $adapter->start(providerTurnRequest(
+        provider: 'openai',
+        promptCachePlan: $plan,
+        model: 'gpt-5.6-sol',
+    ));
+    $adapter->continue(
+        $first->state,
+        [ToolResult::error('call_browser_1', 'BROWSER_TIMEOUT', 'Retry later.')],
+    );
+
+    foreach ($requests as $index => $request) {
+        assertProviderTurn(
+            ($request['payload']['prompt_cache_key'] ?? null) === str_repeat('a', 64),
+            "OpenAI GPT-5.6 request {$index} must preserve the opaque stable cache key.",
+        );
+        assertProviderTurn(
+            ($request['payload']['prompt_cache_options'] ?? null) === [
+                'mode' => 'implicit',
+                'ttl' => '30m',
+            ],
+            "OpenAI GPT-5.6 request {$index} must preserve the automatic cache policy.",
+        );
+    }
+    assertProviderTurn(
+        ($requests[0]['payload']['messages'][0]['content'][0]['prompt_cache_breakpoint']['mode'] ?? null) === 'explicit',
+        'OpenAI Chat must map the canonical system breakpoint to its text block.',
+    );
+    assertProviderTurn(
+        ($requests[0]['payload']['messages'][1]['content'][0]['prompt_cache_breakpoint']['mode'] ?? null) === 'explicit',
+        'OpenAI Chat must map canonical message indexes without counting the injected system message.',
+    );
+    assertProviderTurn(
+        ($requests[1]['payload']['messages'][0]['content'][0]['prompt_cache_breakpoint']['mode'] ?? null) === 'explicit',
+        'OpenAI Chat continuation must preserve prior explicit breakpoint blocks.',
+    );
+}
+
+function testOpenAiChatAdapterKeepsOlderAndCompatibleProviderCacheDialectsFailClosed(): void
+{
+    $automatic = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_AUTOMATIC,
+        keyHash: str_repeat('b', 64),
+        breakpoints: [],
+        ttl: null,
+        minimumInputTokens: 1024,
+    );
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    openAiFixtureAdapter($responses, $requests, 'openai')->start(providerTurnRequest(
+        provider: 'openai',
+        promptCachePlan: $automatic,
+        model: 'gpt-4.1-mini',
+    ));
+    assertProviderTurn(
+        ($requests[0]['payload']['prompt_cache_key'] ?? null) === str_repeat('b', 64),
+        'Documented older OpenAI models may receive the stable routing key.',
+    );
+    assertProviderTurn(
+        ! array_key_exists('prompt_cache_options', $requests[0]['payload']),
+        'Older OpenAI models must not receive GPT-5.6 prompt_cache_options.',
+    );
+
+    $disabled = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_DISABLED,
+        keyHash: str_repeat('c', 64),
+        breakpoints: [],
+        ttl: null,
+        minimumInputTokens: null,
+    );
+    $responses = [providerFixture('final-text')['provider_response']];
+    $requests = [];
+    openAiFixtureAdapter($responses, $requests, 'openai')->start(providerTurnRequest(
+        provider: 'openai',
+        promptCachePlan: $disabled,
+        model: 'gpt-5.6',
+    ));
+    assertProviderTurn(
+        ($requests[0]['payload']['prompt_cache_options'] ?? null) === ['mode' => 'explicit'],
+        'GPT-5.6 disabled mode must suppress implicit caching with an empty explicit policy.',
+    );
+    assertProviderTurn(
+        ! array_key_exists('prompt_cache_key', $requests[0]['payload']),
+        'A disabled OpenAI cache plan must not emit a routing key.',
+    );
+
+    $explicit = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_EXPLICIT,
+        keyHash: str_repeat('d', 64),
+        breakpoints: [PromptCachePlan::BREAKPOINT_SYSTEM],
+        ttl: PromptCachePlan::TTL_30_MINUTES,
+        minimumInputTokens: 1024,
+    );
+    foreach ([
+        ['provider' => 'openai', 'model' => 'gpt-4.1-mini'],
+        ['provider' => 'deepseek', 'model' => 'deepseek-chat'],
+    ] as $case) {
+        $responses = [providerFixture('final-text')['provider_response']];
+        $requests = [];
+        try {
+            openAiFixtureAdapter($responses, $requests, $case['provider'])->start(providerTurnRequest(
+                provider: $case['provider'],
+                promptCachePlan: $explicit,
+                model: $case['model'],
+            ));
+        } catch (InvalidArgumentException) {
+            assertProviderTurn($requests === [], 'Unsupported explicit cache controls must fail before provider transport.');
+            continue;
+        }
+
+        throw new RuntimeException('Unsupported OpenAI-compatible explicit cache controls must fail closed.');
+    }
+}
+
 function testOpenAiChatAdapterNormalizesConfiguredProviderIdentity(): void
 {
     $responses = [providerFixture('final-text')['provider_response']];
@@ -536,6 +679,7 @@ function testOpenAiChatAdapterSerializesNativeOpenAiResourcesAndRejectsCompatibl
 
 $tests = [
     'testOpenAiAdapterNormalizesFinalTextAndPreservesConversationHistory',
+    'testOpenAiAdapterSeparatesProviderVisibleReasoningFromFinalText',
     'testOpenAiAdapterSerializesEmptySchemaPropertiesAsAnObject',
     'testOpenAiAdapterAcceptsPreambleAndMultipleNativeCalls',
     'testOpenAiAdapterFailsClosedForMalformedCallsRefusalAndTruncation',
@@ -552,6 +696,8 @@ $tests = [
     'testOpenAiChatAdapterRejectsUnsupportedDocumentMimeBeforeTransport',
     'testOpenAiChatAdapterNormalizesConfiguredProviderIdentity',
     'testOpenAiChatAdapterRejectsGifWithoutStaticFrameProof',
+    'testOpenAiChatAdapterMapsGpt56PromptCachePolicyAcrossToolContinuation',
+    'testOpenAiChatAdapterKeepsOlderAndCompatibleProviderCacheDialectsFailClosed',
 ];
 
 foreach ($tests as $test) {

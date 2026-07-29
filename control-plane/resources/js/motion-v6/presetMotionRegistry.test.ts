@@ -24,6 +24,7 @@ const EXPECTED_THEME_IDS = [
     'claudius',
     'basicus',
     'telemetry',
+    'calm',
 ] as const
 
 type MutableProfile = Record<string, any>
@@ -42,10 +43,10 @@ function profilePayload(id: typeof EXPECTED_THEME_IDS[number] = 'forge'): TalosD
 }
 
 describe('TALOS desktop motion profile V6 registry', () => {
-    it('uses exact unique Simple and Complex renderer namespaces for all thirteen IDs', () => {
-        expect(EXPECTED_THEME_IDS).toHaveLength(13)
-        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(13)
-        expect(TALOS_DESKTOP_MOTION_PROFILES_V6).toHaveLength(13)
+    it('uses exact unique Simple and Complex renderer namespaces for all fourteen IDs', () => {
+        expect(EXPECTED_THEME_IDS).toHaveLength(14)
+        expect(new Set(EXPECTED_THEME_IDS)).toHaveLength(14)
+        expect(TALOS_DESKTOP_MOTION_PROFILES_V6).toHaveLength(14)
 
         const identityIds = TALOS_DESKTOP_MOTION_PROFILES_V6.map((profile) => profile.identity_id)
         const simpleIds = TALOS_DESKTOP_MOTION_PROFILES_V6.map((profile) => profile.simple_scene_id)
@@ -54,13 +55,25 @@ describe('TALOS desktop motion profile V6 registry', () => {
         expect(identityIds).toEqual(EXPECTED_THEME_IDS)
         expect(simpleIds).toEqual(EXPECTED_THEME_IDS)
         expect(complexIds).toEqual(EXPECTED_THEME_IDS)
-        expect(new Set(simpleIds)).toHaveLength(13)
-        expect(new Set(complexIds)).toHaveLength(13)
+        expect(new Set(simpleIds)).toHaveLength(14)
+        expect(new Set(complexIds)).toHaveLength(14)
 
         for (const profile of TALOS_DESKTOP_MOTION_PROFILES_V6) {
             expect(profile.simple_scene_id).toBe(profile.identity_id)
             expect(profile.complex_scene_id).toBe(profile.identity_id)
         }
+    })
+
+    it('uses the approved quiet Calm renderer profile', () => {
+        expect(getTalosDesktopMotionProfileV6('calm')).toMatchObject({
+            identity_id: 'calm',
+            simple_scene_id: 'calm',
+            complex_scene_id: 'calm',
+            default_mode: 'simple',
+            default_quality: 'low',
+            fps_cap: 24,
+            dpr_cap: 1,
+        })
     })
 
     it('composes every current metadata field and explicit legacy effect mapping', () => {

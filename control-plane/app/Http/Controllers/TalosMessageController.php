@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\TalosFile;
+use App\Models\TalosMessage;
 use App\Models\TalosSession;
 use App\Services\Talos\Browser\TalosBrowserActivityProjector;
+use App\Support\TalosMessageMetadata;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 
 final class TalosMessageController extends Controller
 {
@@ -26,7 +31,11 @@ final class TalosMessageController extends Controller
             ->get();
         $browserActivityProjector->projectMissingForSession($messages, $session);
 
-        return response()->json(['data' => $messages]);
+        return response()->json([
+            'data' => $messages
+                ->map(fn (TalosMessage $message): array => $this->messagePayload($message))
+                ->values(),
+        ]);
     }
 
     public function store(Request $request, TalosSession $session): JsonResponse
@@ -51,11 +60,6 @@ final class TalosMessageController extends Controller
                 'sometimes',
                 'nullable',
                 'array',
-                static function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (self::containsSecretLikeKey($value)) {
-                        $fail('The metadata contains secret-like keys and cannot be persisted.');
-                    }
-                },
             ],
             'metadata.command_id' => ['sometimes', 'string', 'max:120'],
             'metadata.copy_of_message_id' => ['sometimes', 'string', 'max:255', $sameSessionMessage()],
@@ -65,99 +69,81 @@ final class TalosMessageController extends Controller
         ]);
 
         if ($request->has('metadata')) {
-            $metadata = $request->input('metadata');
-            if (is_array($metadata)) {
-                unset($metadata['browser_activities'], $metadata['used_browser_context']);
+            try {
+                $metadata = TalosMessageMetadata::fromClientInput($request->input('metadata'))->toStorageArray();
+                $metadata = $this->withAuthorizedAttachments($request, $metadata);
+            } catch (InvalidArgumentException $exception) {
+                throw ValidationException::withMessages([
+                    'metadata' => $exception->getMessage(),
+                ]);
             }
             $validated['metadata'] = $metadata;
         }
 
         $message = $session->messages()->create($validated);
 
-        return response()->json(['data' => $message], 201);
+        return response()->json(['data' => $this->messagePayload($message)], 201);
     }
 
-    private static function containsSecretLikeKey(mixed $value): bool
+    /**
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    private function withAuthorizedAttachments(Request $request, array $metadata): array
     {
-        if (! is_array($value)) {
-            return false;
+        $attachments = $metadata['attachments'] ?? null;
+        if (! is_array($attachments) || $attachments === []) {
+            return $metadata;
         }
 
-        foreach ($value as $key => $nestedValue) {
-            if (is_string($key) && self::isSecretLikeKey($key)) {
-                return true;
-            }
-
-            if (self::containsSecretLikeKey($nestedValue)) {
-                return true;
-            }
+        $fileIds = array_values(array_map(
+            static fn (array $attachment): string => (string) $attachment['file_id'],
+            $attachments,
+        ));
+        $files = TalosFile::query()
+            ->where('user_id', $request->user()?->id)
+            ->where('status', 'available')
+            ->where('scan_status', 'clean')
+            ->whereIn('id', $fileIds)
+            ->get()
+            ->keyBy('id');
+        if ($files->count() !== count($fileIds)) {
+            throw ValidationException::withMessages([
+                'metadata.attachments' => 'Every attachment must be an owned, clean and available TALOS file.',
+            ]);
         }
 
-        return false;
+        $metadata['attachments'] = array_map(
+            static function (string $fileId) use ($files): array {
+                /** @var TalosFile $file */
+                $file = $files->get($fileId);
+                $mime = is_string($file->detected_mime) && trim($file->detected_mime) !== ''
+                    ? trim($file->detected_mime)
+                    : (string) $file->mime_type;
+
+                return [
+                    'file_id' => (string) $file->id,
+                    'name' => (string) $file->original_name,
+                    'mime_type' => $mime,
+                    'size_bytes' => (int) $file->size_bytes,
+                    'content_url' => '/api/talos/files/'.$file->id.'/content',
+                ];
+            },
+            $fileIds,
+        );
+
+        return TalosMessageMetadata::fromStorage($metadata)->toStorageArray();
     }
 
-    private static function isSecretLikeKey(string $key): bool
+    /**
+     * @return array<string, mixed>
+     */
+    private function messagePayload(TalosMessage $message): array
     {
-        $normalized = strtolower(str_replace(['-', ' '], '_', $key));
-
-        $tokenMetricKeys = [
-            'cached_tokens',
-            'completion_tokens',
-            'input_tokens',
-            'output_tokens',
-            'prompt_tokens',
-            'reasoning_tokens',
-            'token_count',
-            'token_estimate',
-            'tokens',
-            'total_tokens',
+        return [
+            ...$message->toArray(),
+            'metadata' => TalosMessageMetadata::fromStorage($message->metadata)->toApiArray(),
         ];
-
-        $tokenMetricPrefixes = [
-            'accepted_prediction',
-            'audio',
-            'cache_creation_input',
-            'cache_read_input',
-            'cached',
-            'completion',
-            'image',
-            'input',
-            'output',
-            'prompt',
-            'reasoning',
-            'rejected_prediction',
-            'text',
-            'total',
-        ];
-
-        if (in_array($normalized, $tokenMetricKeys, true)
-            || str_ends_with($normalized, '_token_count')
-            || str_ends_with($normalized, '_token_estimate')
-        ) {
-            return false;
-        }
-
-        foreach ($tokenMetricPrefixes as $prefix) {
-            if ($normalized === $prefix . '_tokens') {
-                return false;
-            }
-        }
-
-        return str_contains($normalized, 'api_key')
-            || str_contains($normalized, 'secret')
-            || str_contains($normalized, 'password')
-            || $normalized === 'token'
-            || str_contains($normalized, 'access_token')
-            || str_contains($normalized, 'api_token')
-            || str_contains($normalized, 'auth_token')
-            || str_contains($normalized, 'bearer_token')
-            || str_contains($normalized, 'client_token')
-            || str_contains($normalized, 'csrf_token')
-            || str_contains($normalized, 'id_token')
-            || str_contains($normalized, 'refresh_token')
-            || str_contains($normalized, 'session_token')
-            || str_contains($normalized, 'token_hash')
-            || str_contains($normalized, 'token_value');
     }
 
     private function abortUnlessOwnedByCurrentUser(Request $request, TalosSession $session): void

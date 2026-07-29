@@ -1,0 +1,27 @@
+{
+  "provider_response": {
+    "id": "msg-reasoning-final-1",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "I compared the available evidence before answering.",
+        "signature": "opaque-anthropic-signature"
+      },
+      {
+        "type": "redacted_thinking",
+        "data": "opaque-anthropic-redacted-state"
+      },
+      {
+        "type": "text",
+        "text": "The page is ready."
+      }
+    ],
+    "stop_reason": "end_turn",
+    "usage": {
+      "input_tokens": 20,
+      "output_tokens": 12
+    }
+  }
+}

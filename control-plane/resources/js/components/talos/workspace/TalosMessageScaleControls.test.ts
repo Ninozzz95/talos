@@ -12,15 +12,14 @@ afterEach(() => {
 })
 
 describe('TalosMessageScaleControls', () => {
-    it('renders as an inline header control and emits all calibration actions', async () => {
+    function mountControl(messageScale: number, locked = false) {
         const events: string[] = []
         const host = document.createElement('div')
         document.body.appendChild(host)
         const app = createApp({
             render: () => h(TalosMessageScaleControls, {
-                bubbleScale: 'balanced',
-                label: 'Balanced',
-                locked: false,
+                messageScale,
+                locked,
                 onDecrease: () => events.push('decrease'),
                 onIncrease: () => events.push('increase'),
                 onReset: () => events.push('reset'),
@@ -29,9 +28,15 @@ describe('TalosMessageScaleControls', () => {
         mounted.push(app)
         app.mount(host)
 
+        return { host, events }
+    }
+
+    it('renders a numeric percentage and emits all calibration actions', async () => {
+        const { host, events } = mountControl(1)
         const controls = host.querySelector<HTMLElement>('[aria-label="Message size controls"]')
         expect(controls).toBeTruthy()
         expect(controls?.classList.contains('absolute')).toBe(false)
+        expect(host.querySelector('[data-testid="talos-message-scale-status"]')?.textContent).toBe('100%')
 
         host.querySelector<HTMLButtonElement>('[aria-label="Decrease message size"]')?.click()
         host.querySelector<HTMLButtonElement>('[aria-label="Increase message size"]')?.click()
@@ -39,5 +44,18 @@ describe('TalosMessageScaleControls', () => {
         await Promise.resolve()
 
         expect(events).toEqual(['decrease', 'increase', 'reset'])
+    })
+
+    it('disables step actions at numeric bounds and locks every action under policy', () => {
+        const minimum = mountControl(0.75)
+        expect(minimum.host.querySelector<HTMLButtonElement>('[aria-label="Decrease message size"]')?.disabled).toBe(true)
+        expect(minimum.host.querySelector<HTMLButtonElement>('[aria-label="Increase message size"]')?.disabled).toBe(false)
+
+        const maximum = mountControl(1.4)
+        expect(maximum.host.querySelector<HTMLButtonElement>('[aria-label="Decrease message size"]')?.disabled).toBe(false)
+        expect(maximum.host.querySelector<HTMLButtonElement>('[aria-label="Increase message size"]')?.disabled).toBe(true)
+
+        const locked = mountControl(1, true)
+        expect(Array.from(locked.host.querySelectorAll<HTMLButtonElement>('button')).every((button) => button.disabled)).toBe(true)
     })
 })
