@@ -101,6 +101,26 @@ describe('composer drawer mode (F3-T4bis)', () => {
 
         const chip = wrapper.get('[data-testid="talos-composer-library-chip"]')
         expect(chip.text()).toMatch(/Relevant sources only.*1 source/i)
+        /**
+         * Owner 2026-07-29: "fai in modo che sia solo un icona nella pill, il
+         * Testo solo per i display grandi tipo tablet."
+         *
+         * On a phone this row holds the plus, the model chip and this one, and
+         * three labels compete for width that does not exist — the model name,
+         * the thing you actually need to read, is what gets truncated. The icon
+         * stays; the words wait for room.
+         *
+         * `md:` is 768px, which is exactly TALOS_TABLET_WIDTH_MEDIA_QUERY, so
+         * the visual breakpoint and the app's own definition of a tablet cannot
+         * drift apart.
+         */
+        const chipLabel = wrapper.get('[data-testid="talos-composer-library-chip-label"]')
+        expect(chipLabel.classes()).toContain('hidden')
+        expect(chipLabel.classes()).toContain('md:flex')
+        // The icon is never hidden: on a phone it is all that remains.
+        expect(chip.find('svg').exists()).toBe(true)
+        // And the accessible name still carries the whole meaning.
+        expect(chip.attributes('aria-label')).toBeTruthy()
         await chip.trigger('click')
         await vi.waitFor(() => {
             expect(wrapper.find('[data-testid="talos-library-context-sheet"]').exists()).toBe(true)
