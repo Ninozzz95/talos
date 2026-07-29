@@ -74,6 +74,31 @@ export function talosStorageDoctorRow(input: TalosStorageDoctorInput): TalosDoct
 }
 
 /**
+ * I-09. The lock has its own health, separate from storage.
+ *
+ * `recovery_required` means the re-lock could not clear the plugin's stored
+ * passphrase, so the next launch would open the database without asking for
+ * the PIN. Everything else on this screen would look fine — the interface is
+ * locked, storage may even be ready — which is exactly why this row exists.
+ *
+ * The underlying error can carry a database path, so it is classified rather
+ * than echoed.
+ */
+export function talosLockDoctorRow(
+    state: 'unlocked' | 'locked' | 'recovery_required',
+    failure: string | null,
+): TalosDoctorRow {
+    return {
+        id: 'lock',
+        label: 'Database lock',
+        value: state === 'recovery_required'
+            ? `${state} · the stored key was not cleared; lock again to retry`
+            : state,
+        ok: state !== 'recovery_required' && failure === null,
+    }
+}
+
+/**
  * The single line that lets a healthy user leave without reading anything.
  *
  * The biggest anti-crowding win in the whole screen: a wall of twelve green

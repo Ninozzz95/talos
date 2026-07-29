@@ -25,6 +25,8 @@ const {
     enableTalosDatabaseProtection,
     registerTalosSqliteRuntime,
     relockTalosDatabase,
+    talosDatabaseLockFailure,
+    talosDatabaseLockState,
     unlockTalosDatabase,
 } = await import('@/services/databaseProtection')
 
@@ -154,5 +156,99 @@ describe('disableTalosDatabaseProtection', () => {
     it('is a no-op when there is nothing to unprotect', async () => {
         await disableTalosDatabaseProtection()
         expect(key.unprotectTalosDatabaseKey).not.toHaveBeenCalled()
+    })
+})
+
+/**
+ * I-09. The shell locked the screen and started the re-lock without waiting for
+ * it. Nothing ordered the transitions, so a PIN entered while the previous
+ * close was still in flight left an unlocked interface sitting on top of a
+ * database still being torn down underneath it — the owner's own
+ * `No available connection for database talos_mobile`.
+ */
+describe('lock transitions are serialized', () => {
+    it('P1-DB-LOCK-01 an unlock waits for an in-flight relock instead of racing it', async () => {
+        let releaseForget!: () => void
+        const order: string[] = []
+        key.talosDatabaseKeyIsProtected.mockResolvedValue(true)
+        const value = runtime({
+            forgetSecret: vi.fn(async () => {
+                order.push('forget:start')
+                await new Promise<void>((resolve) => { releaseForget = resolve })
+                order.push('forget:end')
+            }),
+        })
+        registerTalosSqliteRuntime(value as never)
+        key.unlockTalosDatabaseKey.mockImplementation(async () => {
+            order.push('unlock')
+            return 'unwrapped'
+        })
+
+        const relock = relockTalosDatabase()
+        await Promise.resolve()
+        const unlock = unlockTalosDatabase('481902')
+        await Promise.resolve()
+
+        // The unlock must not have run yet: the key is still being taken away.
+        expect(order).toEqual(['forget:start'])
+        releaseForget()
+        await Promise.all([relock, unlock])
+
+        expect(order).toEqual(['forget:start', 'forget:end', 'unlock'])
+    })
+
+    /**
+     * The security half, and worse than an unavailable connection.
+     *
+     * `forgetSecret()` closes the connection and only then clears the plugin's
+     * stored passphrase. If the close throws, the clear never runs — and the
+     * failure was swallowed. So the key left memory, the screen showed a PIN
+     * pad, and the NEXT launch found `isSecretStored()` true and opened the
+     * database without ever asking for the PIN. A lock that reports success
+     * while leaving the door open is worse than no lock at all.
+     */
+    it('P1-DB-LOCK-02 a re-lock that could not clear the stored secret is recorded, not swallowed', async () => {
+        key.talosDatabaseKeyIsProtected.mockResolvedValue(true)
+        const value = runtime({
+            forgetSecret: vi.fn(async () => { throw new Error('connection close refused') }),
+        })
+        registerTalosSqliteRuntime(value as never)
+
+        await relockTalosDatabase()
+
+        // The key still leaves memory — that part was always right.
+        expect(key.lockTalosDatabaseKey).toHaveBeenCalled()
+        // But the lock did NOT fully engage, and something has to say so.
+        expect(talosDatabaseLockState()).toBe('recovery_required')
+        expect(talosDatabaseLockFailure()).toMatch(/close refused/)
+    })
+
+    it('P1-DB-LOCK-03 a later re-lock retries the clear and recovers the state', async () => {
+        key.talosDatabaseKeyIsProtected.mockResolvedValue(true)
+        const forgetSecret = vi.fn()
+            .mockRejectedValueOnce(new Error('connection close refused'))
+            .mockResolvedValueOnce(undefined)
+        registerTalosSqliteRuntime(runtime({ forgetSecret }) as never)
+
+        await relockTalosDatabase()
+        expect(talosDatabaseLockState()).toBe('recovery_required')
+
+        await relockTalosDatabase()
+
+        expect(forgetSecret).toHaveBeenCalledTimes(2)
+        expect(talosDatabaseLockState()).toBe('locked')
+        expect(talosDatabaseLockFailure()).toBeNull()
+    })
+
+    it('P1-DB-LOCK-04 a clean relock/unlock cycle reports the states it passed through', async () => {
+        key.talosDatabaseKeyIsProtected.mockResolvedValue(true)
+        registerTalosSqliteRuntime(runtime() as never)
+
+        await relockTalosDatabase()
+        expect(talosDatabaseLockState()).toBe('locked')
+
+        await expect(unlockTalosDatabase('481902')).resolves.toBe(true)
+        expect(talosDatabaseLockState()).toBe('unlocked')
+        expect(talosDatabaseLockFailure()).toBeNull()
     })
 })

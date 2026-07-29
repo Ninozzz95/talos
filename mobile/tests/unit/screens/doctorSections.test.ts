@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     TALOS_DOCTOR_SECTIONS,
+    talosLockDoctorRow,
     talosStorageDoctorRow,
     talosDoctorVerdict,
     splitTalosDoctorRows,
@@ -115,6 +116,30 @@ describe('the encrypted-storage check', () => {
             status: 'error',
             error: 'unexpected path C:\\private\\owner.db',
         }).value).toBe('sql.js web store — error · retry local storage')
+    })
+
+    /**
+     * I-09. A re-lock that could not clear the plugin's stored passphrase
+     * leaves the database openable without the PIN on the next launch. The
+     * app itself looks fine — the screen is locked, storage may even be
+     * 'ready' — so nothing else on this screen would ever say otherwise.
+     */
+    it('P1-DB-LOCK-05 reports a lock that did not fully engage, without echoing the raw error', () => {
+        expect(talosLockDoctorRow('locked', null)).toEqual({
+            id: 'lock',
+            label: 'Database lock',
+            value: 'locked',
+            ok: true,
+        })
+        expect(talosLockDoctorRow('unlocked', null).ok).toBe(true)
+
+        const row = talosLockDoctorRow(
+            'recovery_required',
+            'connection close refused for /data/user/0/ai.talos/databases/talos_mobile.db',
+        )
+        expect(row.value).toBe('recovery_required · the stored key was not cleared; lock again to retry')
+        expect(row.value).not.toContain('/data/user/0')
+        expect(row.ok).toBe(false)
     })
 
     /**
