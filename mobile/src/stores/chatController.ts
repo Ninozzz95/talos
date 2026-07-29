@@ -18,6 +18,7 @@ import {
     type TalosToolActivity,
 } from '@/lib/tools/toolLabels'
 import type { TalosAgentToolEnabled, TalosAgentToolId } from '@/lib/tools/toolControls'
+import { talosLibrarySearchTerms } from '@/lib/librarySearchText'
 import {
     TALOS_EMPTY_TOOL_AUTHORIZATIONS,
     digestTalosToolAuthorizationInput,
@@ -1227,7 +1228,28 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const previewDecision = decide(summaries.map(
                 (file) => toDoc(file, file.text_preview ?? ''),
             ))
-            const hydrated = await Promise.all(previewDecision.candidates.map(async (doc) => {
+            /**
+             * I-03. The pass above scores `text_preview`, which is the first 600
+             * characters, so a document whose match sits further in was dropped
+             * before its text was ever read — a false "not found" for a file
+             * that plainly says the thing.
+             *
+             * The repository is asked the same question against the WHOLE text,
+             * in SQL, and returns only ids. Those join the candidates for
+             * hydration, and the real ranking still happens below on full text.
+             * A longer preview would only have moved the cliff.
+             */
+            const deepMatches = await deps.chatRepository.matchVaultFileTerms(
+                talosLibrarySearchTerms(topicAnchor),
+            )
+            const candidates = [...previewDecision.candidates]
+            const alreadyCandidate = new Set(candidates.map((doc) => doc.id))
+            for (const file of summaries) {
+                if (!alreadyCandidate.has(file.id) && deepMatches[file.id]) {
+                    candidates.push(toDoc(file, file.text_preview ?? ''))
+                }
+            }
+            const hydrated = await Promise.all(candidates.map(async (doc) => {
                 const full = await deps.chatRepository.getVaultFile(doc.id)
                 if (
                     !full

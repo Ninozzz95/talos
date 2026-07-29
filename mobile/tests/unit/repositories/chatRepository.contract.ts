@@ -141,6 +141,47 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
         expect.objectContaining({ id: vaultFile.id }),
     ])
 
+    /**
+     * I-03. Candidate selection used to score documents on `text_preview`,
+     * which is the first 600 characters. A word that appears further in is
+     * invisible: the file is dropped before its full text is ever read, and the
+     * user is told their document does not mention something it plainly does.
+     *
+     * The answer is not a longer preview — that just moves the cliff. The
+     * question "does this file contain this word" is answered where the text
+     * already lives, in SQL, so recall stops depending on position and no
+     * corpus is loaded into memory to get it.
+     */
+    const deepFile = await repository.createVaultFile({
+        id: 'vault-deep',
+        display_name: 'deep.txt',
+        media_type: 'text/plain',
+        size_bytes: 4_000,
+        private_uri: 'talos-vault/files/vault-deep.txt',
+        status: 'available',
+        trust: 'untrusted',
+        sha256: 'd'.repeat(64),
+        // The term sits far beyond the 600-character preview window.
+        extracted_text: `${'padding. '.repeat(200)}OMNIROUTE renewal is March 2027.`,
+        failure_code: null,
+        created_at: '2026-07-22T10:00:03.500Z',
+    })
+
+    const matched = await repository.matchVaultFileTerms(['omniroute'])
+    expect(matched[deepFile.id]).toBe(1)
+    // A file that genuinely does not contain the term is not reported.
+    expect(matched[vaultFile.id]).toBeUndefined()
+
+    // Case folding, several terms, and a term nobody has.
+    expect(await repository.matchVaultFileTerms(['OMNIROUTE', 'renewal', 'zebra']))
+        .toMatchObject({ [deepFile.id]: 2 })
+    // No terms is not "match everything".
+    expect(await repository.matchVaultFileTerms([])).toEqual({})
+    // Neither is an empty or whitespace-only term.
+    expect(await repository.matchVaultFileTerms(['', '   '])).toEqual({})
+
+    await repository.deleteVaultFile(deepFile.id)
+
     const otherFile = await repository.createVaultFile({
         id: 'vault-other',
         display_name: 'other.txt',

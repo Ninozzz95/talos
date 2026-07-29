@@ -719,6 +719,38 @@ export function createSqliteChatRepository(
                 return { ...rest, text_preview: preview === '' ? null : preview }
             })
         },
+        /**
+         * I-03. The term is compared against the WHOLE text, inside SQLite. Only
+         * ids and hit counts cross the bridge, so recall stops depending on a
+         * word landing inside the first 600 characters and nothing is
+         * materialised to find that out.
+         *
+         * Terms are capped: the statement grows one CASE per term, and an
+         * unbounded question would build an unbounded query.
+         */
+        async matchVaultFileTerms(terms: readonly string[]) {
+            const cleaned = [...new Set(
+                terms.map((term) => term.trim().toLowerCase()).filter((term) => term.length > 0),
+            )].slice(0, 12)
+            if (cleaned.length === 0) return {}
+            const hits = cleaned
+                .map(() => "(CASE WHEN instr(lower(COALESCE(extracted_text, '')), ?) > 0 THEN 1 ELSE 0 END)")
+                .join(' + ')
+            const rows = await (await db()).query(
+                `SELECT id, ${hits} AS hits
+                 FROM talos_vault_files
+                 WHERE status != 'revoked'`,
+                cleaned,
+            )
+            const matched: Record<string, number> = {}
+            for (const row of rows) {
+                const count = Number(row.hits)
+                if (typeof row.id === 'string' && Number.isFinite(count) && count > 0) {
+                    matched[row.id] = count
+                }
+            }
+            return matched
+        },
         async getVaultFile(fileId: string) {
             const rows = await (await db()).query(
                 `SELECT id, display_name, media_type, size_bytes, private_uri, status, trust,
