@@ -352,6 +352,51 @@ export function createTalosToolAuthorizationCoordinator(deps: {
         return checkpoint.requests.filter((request) => request.decision === 'pending')
     }
 
+    /**
+     * I-05. Hydrate ONE record, absorbing its own failure.
+     *
+     * Whatever goes wrong — an unparseable payload, a digest that no longer
+     * matches, a consumer that refuses the serialised runtime — the record is
+     * parked as `recovery_required` and the next one is still processed. It is
+     * removed from `open` too: a checkpoint the consumer could not adopt must
+     * not look live to the rest of the session.
+     *
+     * The reason is bounded to a short code. The thrown message can come from
+     * anywhere, and this evidence is read back into the Doctor.
+     */
+    async function hydrateOne(activity: TalosLocalToolActivity): Promise<void> {
+        let adopted: string | null = null
+        try {
+            const checkpoint = checkpointFromActivity(activity)
+            if (!checkpoint || !(await hasValidDigests(checkpoint))) {
+                await markInvalid(activity, 'TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+                return
+            }
+            open.set(checkpoint.id, { activity, checkpoint })
+            adopted = checkpoint.id
+            // An uncertain side effect is never automatically repeated.
+            if (
+                checkpoint.phase === 'running_tools'
+                || activity.status === 'recovery_required'
+            ) {
+                return
+            }
+            await announceReady(checkpoint)
+        } catch (error) {
+            if (adopted !== null) open.delete(adopted)
+            const reason = error instanceof Error && /^[A-Z0-9_]{4,64}$/.test(error.message)
+                ? error.message
+                : 'TALOS_TOOL_AUTHORIZATION_HYDRATE_FAILED'
+            try {
+                await markInvalid(activity, reason)
+            } catch {
+                // Even the quarantine write can fail. The app still starts:
+                // that is the whole point, and the record stays pending for the
+                // next launch rather than blocking this one.
+            }
+        }
+    }
+
     async function announceReady(checkpoint: TalosToolAuthorizationCheckpointV1): Promise<void> {
         if (
             checkpoint.phase === 'before_model'
@@ -407,20 +452,22 @@ export function createTalosToolAuthorizationCoordinator(deps: {
                     || left.id.localeCompare(right.id))
 
             for (const activity of activities) {
-                const checkpoint = checkpointFromActivity(activity)
-                if (!checkpoint || !(await hasValidDigests(checkpoint))) {
-                    await markInvalid(activity, 'TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
-                    continue
-                }
-                open.set(checkpoint.id, { activity, checkpoint })
-                // An uncertain side effect is never automatically repeated.
-                if (
-                    checkpoint.phase === 'running_tools'
-                    || activity.status === 'recovery_required'
-                ) {
-                    continue
-                }
-                await announceReady(checkpoint)
+                // I-05: one record must cost that record and nothing else.
+                //
+                // A checkpoint that fails to PARSE was already quarantined here,
+                // but `announceReady()` was not guarded — and the consumer
+                // behind it throws: the controller validates the serialised
+                // runtime and raises TALOS_TOOL_AUTHORIZATION_RUNTIME_INVALID
+                // when a field is absent. That throw escaped this loop, escaped
+                // hydrate(), and `performInit()` awaits hydrate() — so a single
+                // bad record stopped the entire app from starting and took every
+                // valid checkpoint after it down with it.
+                //
+                // The trigger is upgrading, not corruption: the validator
+                // requires fields that earlier builds never wrote, so a
+                // checkpoint left pending across an update poisons the first
+                // launch of the new build.
+                await hydrateOne(activity)
             }
         },
         async suspend(value) {
