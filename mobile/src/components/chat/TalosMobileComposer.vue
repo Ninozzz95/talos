@@ -780,8 +780,26 @@ watch(() => props.prompt, () => {
                 @click="librarySheetOpen = true"
             >
                 <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                <span class="min-w-0 truncate">{{ libraryModeLabel }}</span>
-                <span class="shrink-0">· {{ librarySourceCountLabel }}</span>
+                <!--
+                    Owner 2026-07-29: icon only on a phone, words from a tablet up.
+                    This row already holds the plus and the model chip, and three
+                    labels compete for width that is not there — the model name,
+                    the one you actually need to read, is what gets truncated.
+
+                    `md:` is 768px, the same threshold as
+                    TALOS_TABLET_WIDTH_MEDIA_QUERY, so this cannot drift from the
+                    app's own idea of a tablet. The button keeps its aria-label
+                    and title, so nothing is lost to assistive tech or to a
+                    long-press tooltip — only to the eye, and only where there is
+                    no room anyway.
+                -->
+                <span
+                    data-testid="talos-composer-library-chip-label"
+                    class="hidden min-w-0 items-center gap-1.5 md:flex"
+                >
+                    <span class="min-w-0 truncate">{{ libraryModeLabel }}</span>
+                    <span class="shrink-0">· {{ librarySourceCountLabel }}</span>
+                </span>
             </button>
             <span class="flex-1" aria-hidden="true" />
             <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25):
