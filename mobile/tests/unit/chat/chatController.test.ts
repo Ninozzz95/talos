@@ -403,6 +403,25 @@ describe('chatController', () => {
             url: expect.stringContaining('/v1/messages'),
         }))
 
+        /**
+         * I-02. The shell counts pending requests AND recoveries to decide
+         * whether to offer the reopen control, but `showToolAuthorization()`
+         * only looked at pending ones. A recovery-only card dismissed with
+         * "Later" therefore offered a button that did nothing, and the only
+         * way back to an uncertain side effect was a reload.
+         *
+         * "Later" is not a denial, so what it hides must be reachable again.
+         */
+        expect(controller.pendingToolAuthorizations.value).toEqual([])
+        controller.dismissToolAuthorization()
+        expect(controller.toolAuthorizationPromptVisible.value).toBe(false)
+
+        controller.showToolAuthorization()
+
+        expect(controller.toolAuthorizationPromptVisible.value).toBe(true)
+        // And the recovery itself is untouched by hiding and showing it.
+        expect(controller.toolAuthorizationRecoveries.value).toHaveLength(1)
+
         await controller.cancelToolAuthorization('checkpoint-recovery')
 
         expect(controller.toolAuthorizationRecoveries.value).toEqual([])
