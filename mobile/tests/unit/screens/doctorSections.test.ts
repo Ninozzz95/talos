@@ -116,4 +116,22 @@ describe('the encrypted-storage check', () => {
             error: 'unexpected path C:\\private\\owner.db',
         }).value).toBe('sql.js web store — error · retry local storage')
     })
+
+    /**
+     * CR-CAND-01. Failing closed on a pending migration is only half an
+     * answer: a user staring at a blank app needs to know the chats still
+     * exist. "retry local storage" reads like a shrug — this row has to say
+     * the data is held, or the fix just changes how the loss feels.
+     */
+    it('P0-DB-MIGRATION-05 says the data is held when a migration is blocking the boot', () => {
+        const row = talosStorageDoctorRow({
+            native: true,
+            status: 'error',
+            error: 'TALOS_DB_MIGRATION_PENDING: your data is safe in the migration file but could not be restored (Error: UNIQUE constraint failed on chat_messages).',
+        })
+
+        expect(row.value).toBe('SQLCipher native — error · migration held; your data is kept, retry to restore')
+        expect(row.value).not.toContain('chat_messages')
+        expect(row.ok).toBe(false)
+    })
 })

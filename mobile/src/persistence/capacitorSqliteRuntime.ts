@@ -36,7 +36,15 @@ export interface TalosCapacitorSqliteGateway {
     setEncryptionSecret(passphrase: string): Promise<void>
     clearEncryptionSecret(): Promise<void>
     exportToJson(database: string): Promise<unknown>
-    importFromJson(payload: string): Promise<void>
+    /**
+     * CR-CAND-01: upstream types this `Promise<capSQLiteChanges>` and runs the
+     * import as three separate SQL transactions, so a resolved call is not
+     * proof the rows landed. The count is the only evidence we get; discarding
+     * it made a refused import look identical to a complete one.
+     */
+    importFromJson(payload: string): Promise<TalosSqlChanges>
+    /** Upstream's own payload check, so a bad export is caught before anything is destroyed. */
+    isJsonValid(payload: string): Promise<boolean>
     deleteDatabase(database: string): Promise<void>
     initWebStore(): Promise<void>
     saveToStore(database: string): Promise<void>
@@ -102,7 +110,8 @@ function createDefaultGateway(): TalosCapacitorSqliteGateway {
             const link = await sqlite.retrieveConnection(database, false)
             return (await link.exportToJson('full')).export
         },
-        importFromJson: async (payload) => { await sqlite.importFromJson(payload) },
+        importFromJson: async (payload) => changes(await sqlite.importFromJson(payload)),
+        isJsonValid: async (payload) => (await sqlite.isJsonValid(payload)).result === true,
         deleteDatabase: async (database) => {
             const link = await sqlite.retrieveConnection(database, false)
             await link.delete()
@@ -169,6 +178,44 @@ export function createCapacitorSqliteRuntime(
     let connection: TalosSqlConnection | null = null
     let connecting: Promise<TalosSqlConnection> | null = null
 
+    /**
+     * CR-CAND-01. Upstream gives two pieces of evidence and we now use both:
+     * `isJsonValid` before touching anything, and the applied-change count
+     * afterwards. `importFromJson` runs as three separate SQL transactions, so
+     * resolving is not the same as succeeding.
+     *
+     * A negative count is the plugin's documented error sentinel. An absent
+     * count is not treated as failure: refusing on missing evidence would lock
+     * a user out of a database that is perfectly fine, and locking someone out
+     * of their own chats is its own kind of data loss.
+     */
+    async function applyMigrationPayload(payload: string): Promise<void> {
+        if (!await options.gateway.isJsonValid(payload)) {
+            throw new Error('the exported payload is not a database the plugin will accept')
+        }
+        const applied = await options.gateway.importFromJson(payload)
+        if (applied.changes < 0) {
+            throw new Error(`the import reported ${applied.changes} applied changes`)
+        }
+    }
+
+    /**
+     * A pending migration is data that exists ONLY in that file. Either it goes
+     * back into the database or the boot stops here — there is no third branch
+     * where we carry on with an empty store and hope someone notices.
+     */
+    async function resumeMigration(payload: string): Promise<void> {
+        try {
+            await applyMigrationPayload(payload)
+        } catch (error) {
+            throw new Error(
+                `TALOS_DB_MIGRATION_PENDING: your data is safe in the migration file but could not be restored (${String(error)}). `
+                + 'TALOS will not open a new database over it. Retrying re-reads the same file, so the attempt is safe to repeat.',
+            )
+        }
+        await options.clearMigration()
+    }
+
     async function establish(): Promise<TalosSqlConnection> {
         if (options.platform === 'web') {
             await options.prepareWebStore()
@@ -187,15 +234,18 @@ export function createCapacitorSqliteRuntime(
 
         // Debt S1: a migration interrupted by a process kill left its data in a
         // file. Restore it BEFORE anything else touches the database.
+        //
+        // CR-CAND-01: this used to swallow a failed resume and walk on. The
+        // next few lines then created a database — an EMPTY one, over the only
+        // copy of the user's chats. The file survived, but nothing surfaced it:
+        // what you saw was an app that had forgotten everything, silently.
+        //
+        // A pending migration is now a hard stop. While one exists, no
+        // replacement database may be created under any circumstances.
         if (options.platform === 'native') {
             const pending = await options.readMigration()
             if (pending) {
-                try {
-                    await options.gateway.importFromJson(pending)
-                    await options.clearMigration()
-                } catch {
-                    // Keep the file: a failed resume must not discard the data.
-                }
+                await resumeMigration(pending)
             }
         }
 
@@ -277,6 +327,21 @@ export function createCapacitorSqliteRuntime(
             } catch (error) {
                 throw new Error(`TALOS_DB_ADOPT_FAILED: export refused (${String(error)})`)
             }
+            // CR-CAND-01: everything below this line is irreversible. Ask the
+            // plugin whether it would accept this payload back BEFORE handing
+            // it the delete. Failing here is safe — the user simply keeps the
+            // database they already have.
+            let importable = false
+            try {
+                importable = await options.gateway.isJsonValid(payload)
+            } catch {
+                importable = false
+            }
+            if (!importable) {
+                throw new Error(
+                    'TALOS_DB_ADOPT_FAILED: the export could not be validated, so nothing was deleted. Your database is untouched.',
+                )
+            }
             // SF-CRITICAL: the export used to live in this local variable alone.
             // Android kills backgrounded apps freely, and this runs while the
             // user waits on a modal — a kill between the delete and the import
@@ -294,7 +359,7 @@ export function createCapacitorSqliteRuntime(
                 }
                 await options.gateway.clearEncryptionSecret()
                 await options.gateway.setEncryptionSecret(secret)
-                await options.gateway.importFromJson(payload)
+                await applyMigrationPayload(payload)
             } catch (error) {
                 throw new Error(`TALOS_DB_ADOPT_FAILED: ${String(error)} — your data is safe in the migration file and will be restored on the next launch.`)
             }
