@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import {
-    mobileEffortLabel,
     mobileEffortLadderFromLevels,
 } from '@/lib/mobileEffort'
 
@@ -19,7 +19,12 @@ const emit = defineEmits<{
     requestClose: []
 }>()
 
+const { t } = useTalosI18n()
 const effortLadder = computed(() => mobileEffortLadderFromLevels(props.effortLevels))
+function effortLabel(level: string): string {
+    const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
+    return t(key)
+}
 
 function onKeydown(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return
@@ -35,12 +40,12 @@ function onKeydown(event: KeyboardEvent): void {
         @keydown="onKeydown"
     >
         <div class="text-2xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]">
-            Reasoning effort
+            {{ $t('chat.reasoningEffort') }}
         </div>
         <div
             class="flex flex-wrap gap-1.5"
             role="group"
-            aria-label="Reasoning effort levels"
+            :aria-label="$t('chat.reasoningEffortLevels')"
         >
             <button
                 v-for="level in effortLadder"
@@ -53,7 +58,7 @@ function onKeydown(event: KeyboardEvent): void {
                 :data-selected="level === selectedEffort ? 'true' : 'false'"
                 @click="emit('selectEffort', level)"
             >
-                {{ mobileEffortLabel(level) }}
+                {{ effortLabel(level) }}
             </button>
         </div>
 
@@ -61,7 +66,7 @@ function onKeydown(event: KeyboardEvent): void {
             v-if="supportsThinking"
             class="flex min-h-11 items-center justify-between gap-3 border-t border-[var(--talos-border,var(--border))] pt-2 text-sm text-[var(--talos-text,var(--foreground))]"
         >
-            <span class="min-w-0">Extended thinking</span>
+            <span class="min-w-0">{{ $t('chat.extendedThinking') }}</span>
             <button
                 type="button"
                 role="switch"
@@ -83,7 +88,7 @@ function onKeydown(event: KeyboardEvent): void {
             v-if="effortLadder.length <= 1"
             class="text-2xs leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
         >
-            This model runs without a reasoning setting.
+            {{ $t('chat.noReasoningSetting') }}
         </p>
     </div>
 </template>

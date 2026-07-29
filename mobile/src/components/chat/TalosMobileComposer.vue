@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { createTalosSendGate } from '@/lib/chat/sendGate'
 import { Loader2, ArrowUp,
     BrainCircuit,
@@ -28,6 +29,11 @@ import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
 import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
+import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
+import type {
+    TalosLibraryContextMode,
+    TalosLibraryTurnOverride,
+} from '@/lib/chat/libraryPolicy'
 
 
 const TalosMobileSlashCommandMenu = defineAsyncComponent(
@@ -36,6 +42,9 @@ const TalosMobileSlashCommandMenu = defineAsyncComponent(
 // F3-T4bis: the organized tool drawer loads only when drawer mode opens it.
 const TalosMobileComposerDrawer = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileComposerDrawer.vue'),
+)
+const TalosMobileLibraryContextSheet = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileLibraryContextSheet.vue'),
 )
 
 const props = withDefaults(defineProps<{
@@ -76,6 +85,11 @@ const props = withDefaults(defineProps<{
     immersiveComposer?: boolean
     // Owner 2026-07-24: the "+" opens an anchored dropdown, not the drawer.
     plusDropdown?: boolean
+    libraryContextEnabled?: boolean
+    libraryContextMode?: TalosLibraryContextMode
+    librarySourceCount?: number
+    libraryTurnOverride?: TalosLibraryTurnOverride | null
+    libraryFiles?: readonly TalosLocalVaultFile[]
 }>(), {
     routingProfiles: () => [],
     selectedModelProfileId: null,
@@ -88,9 +102,9 @@ const props = withDefaults(defineProps<{
     attachmentBusy: false,
     attachmentError: null,
     attachmentsAvailable: true,
-    attachmentDisabledReason: 'Vault file access is not available until the local Vault bridge is configured.',
+    attachmentDisabledReason: '',
     contextAvailable: false,
-    contextDisabledReason: 'Context selection is not available until the local Context bridge is configured.',
+    contextDisabledReason: '',
     enhancingPrompt: false,
     promptEnhancement: null,
     promptEnhancementError: '',
@@ -104,6 +118,11 @@ const props = withDefaults(defineProps<{
     drawerMode: false,
     immersiveComposer: false,
     plusDropdown: false,
+    libraryContextEnabled: false,
+    libraryContextMode: 'broad_compat_v1',
+    librarySourceCount: 0,
+    libraryTurnOverride: null,
+    libraryFiles: () => [],
 })
 
 const emit = defineEmits<{
@@ -129,8 +148,11 @@ const emit = defineEmits<{
     selectSlashCommand: [commandId: TalosMobileCommandId]
     toggleBrowse: [enabled: boolean]
     openBrowserUrl: [url: string]
+    updateLibraryTurnOverride: [override: TalosLibraryTurnOverride | null]
 }>()
 
+const { t } = useTalosI18n()
+const composerRoot = ref<HTMLElement | null>(null)
 const promptField = ref<HTMLTextAreaElement | null>(null)
 const modelTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
 const effortTrigger = ref<ComponentPublicInstance | null>(null)
@@ -152,14 +174,43 @@ const composerCompact = computed(() =>
     && !props.prompt.trim()
     && (props.attachments?.length ?? 0) === 0,
 )
+const composerMotionIntent = ref<'composer-expand' | 'composer-collapse' | null>(null)
+const COMPOSER_LAYOUT_SHIFT = '--talos-composer-layout-shift'
+let composerMotionRevision = 0
 // Owner 2026-07-24 — the "+" opens an anchored dropdown instead of the drawer.
 const plusMenuOpen = ref(false)
 const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
 const plusMenu = ref<HTMLElement | null>(null)
+const libraryChip = ref<HTMLElement | null>(null)
+const librarySheetOpen = ref(false)
 // Re-review 2026-07-25: Back with the menu open used to skip it and eject the user.
 useTalosOverlayBack(() => { void closePlusMenu() }, () => plusMenuOpen.value)
 /** The "+" opens the anchored menu whenever the bottom drawer cannot mount. */
 const plusUsesMenu = computed(() => props.plusDropdown || !props.drawerMode)
+const showLibraryChip = computed(() => (
+    props.libraryContextEnabled
+    || props.libraryTurnOverride !== null
+    || props.libraryFiles.length > 0
+))
+const libraryModeLabel = computed(() => {
+    if (!props.libraryContextEnabled && props.libraryTurnOverride?.enabled !== true) {
+        return t('library.contextModeOff')
+    }
+    if (props.libraryContextMode === 'smart_relevant_v1') return t('aiDefaults.libraryModes.smart')
+    if (props.libraryContextMode === 'ask_before_use_v1') return t('aiDefaults.libraryModes.ask')
+    if (props.libraryContextMode === 'agentic_on_demand_v1') return t('aiDefaults.libraryModes.onDemand')
+    return t('aiDefaults.libraryModes.broad')
+})
+const librarySourceCountLabel = computed(() => t(
+    props.librarySourceCount === 1 ? 'library.sourceCountOne' : 'library.sourceCountMany',
+    { count: props.librarySourceCount },
+))
+
+async function closeLibrarySheet(): Promise<void> {
+    librarySheetOpen.value = false
+    await nextTick()
+    libraryChip.value?.focus()
+}
 
 async function openPlus(): Promise<void> {
     // Product review 2026-07-25: the bottom drawer only renders under drawerMode,
@@ -193,7 +244,7 @@ const selectedRoute = computed(() => (
 const modelTitle = computed(() => {
     if (selectedRoute.value) return selectedRoute.value.name
     if (selectedProfile.value) return selectedProfile.value.display_name
-    return 'No model selected'
+    return t('chat.noModelSelected')
 })
 const hasAuthorizedAttachment = computed(() =>
     props.attachments.some((attachment) => attachment.status === 'authorized'),
@@ -216,16 +267,16 @@ const canRequestEnhancement = computed(() => (
 // F4-#20: a mute disabled control explains nothing on touch — when the
 // enhancer cannot run, the tap surfaces WHY instead of dying silently.
 const enhanceUnavailableReason = computed<string | null>(() => {
-    if (selectedProfile.value === null) return 'Select a callable model before improving the prompt.'
-    if (props.prompt.trim().length === 0) return 'Write a prompt first — Improve prompt rewrites your draft.'
+    if (selectedProfile.value === null) return t('chat.selectCallableModel')
+    if (props.prompt.trim().length === 0) return t('chat.writePromptFirst')
     return null
 })
 const slashMenuOpen = computed(() => /^\/[^\s\n]*$/.test(props.prompt))
 const statusText = computed(() => {
-    if (props.sending) return 'Processing'
-    if (props.attachmentBusy) return 'Adding files'
-    if (attachmentBlocked.value) return 'Remove files that could not be added before sending'
-    if (props.enhancingPrompt) return 'Improving prompt'
+    if (props.sending) return t('chat.processing')
+    if (props.attachmentBusy) return t('chat.addingFiles')
+    if (attachmentBlocked.value) return t('chat.removeFailedFiles')
+    if (props.enhancingPrompt) return t('chat.improvingPrompt')
     if (props.promptEnhancementError) return props.promptEnhancementError
     return props.sendDisabledReason
 })
@@ -247,17 +298,23 @@ const rightAction = computed<'stop' | 'dictating' | 'send' | 'mic'>(() => {
 /** Stable accessible name; the reason travels in the title. */
 const rightActionLabel = computed(() => {
     switch (rightAction.value) {
-        case 'stop': return 'Stop response'
-        case 'dictating': return 'Stop dictation'
-        case 'send': return 'Send message'
-        default: return 'Dictate'
+        case 'stop': return t('chat.stopResponse')
+        case 'dictating': return t('chat.stopDictation')
+        case 'send': return t('chat.sendMessage')
+        default: return t('chat.dictate')
     }
 })
 const rightActionTitle = computed(() => {
-    if (rightAction.value === 'dictating' && props.dictationStarting) return 'Starting dictation…'
-    if (rightAction.value === 'send') return statusText.value || 'Send message'
+    if (rightAction.value === 'dictating' && props.dictationStarting) return t('chat.startingDictation')
+    if (rightAction.value === 'send') return statusText.value || t('chat.sendMessage')
     return rightActionLabel.value
 })
+const attachmentReason = computed(() => props.attachmentDisabledReason || t('chat.attachmentUnavailable'))
+const contextReason = computed(() => props.contextDisabledReason || t('chat.contextUnavailable'))
+function effortLabel(level: string): string {
+    const key = `chat.effort${level.charAt(0).toUpperCase()}${level.slice(1)}`
+    return t(key)
+}
 const rightActionDisabled = computed(() => {
     if (rightAction.value === 'send') return !canSubmit.value
     if (rightAction.value === 'mic') return !props.dictationSupported
@@ -283,9 +340,43 @@ function resizePrompt(): void {
     const floor = 48
     field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, 192))}px`
 }
+/**
+ * FLIP only the fixed composer surface: Vue commits the final text layout
+ * first, then the old/new top edge is bridged with a compositor transform.
+ * Text is never scaled and no intermediate height can re-wrap it.
+ */
+async function runComposerLayoutMotion(compact: boolean): Promise<void> {
+    const revision = ++composerMotionRevision
+    const root = composerRoot.value!
+    const beforeHeight = root.offsetHeight
+    composerMotionIntent.value = null
+    root.style.removeProperty(COMPOSER_LAYOUT_SHIFT)
+
+    await nextTick(resizePrompt)
+    if (revision !== composerMotionRevision || composerRoot.value !== root) return
+
+    const shift = root.offsetHeight - beforeHeight
+    const intent = compact ? 'composer-collapse' : 'composer-expand'
+    if (
+        !shift
+        || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        || !(parseFloat(getComputedStyle(root)
+            .getPropertyValue(`--talos-motion-duration-${intent}`)) > 0)
+    ) return
+
+    root.style.setProperty(COMPOSER_LAYOUT_SHIFT, `${shift}px`)
+    composerMotionIntent.value = intent
+}
+
+function clearComposerLayoutMotion(event: AnimationEvent): void {
+    if (event.target !== composerRoot.value) return
+    composerMotionIntent.value = null
+    composerRoot.value?.style.removeProperty(COMPOSER_LAYOUT_SHIFT)
+}
+
 // Recompute the field height when the pill flips compact↔expanded so the floor
 // (48↔56) and centring track the layout, not just typing.
-watch(composerCompact, () => { void nextTick(resizePrompt) })
+watch(composerCompact, (compact) => { void runComposerLayoutMotion(compact) })
 
 function updatePrompt(event: Event): void {
     const field = event.currentTarget as HTMLTextAreaElement
@@ -439,9 +530,12 @@ watch(() => props.prompt, () => {
 
 <template>
     <section
+        ref="composerRoot"
         data-testid="talos-mobile-composer"
+        :data-talos-motion-intent="composerMotionIntent ?? undefined"
         class="relative mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))]/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur"
-        aria-label="Chat composer"
+        :aria-label="$t('chat.composer')"
+        @animationend="clearComposerLayoutMotion"
     >
         <div
             v-if="slashMenuOpen"
@@ -478,11 +572,11 @@ watch(() => props.prompt, () => {
                 variant="ghost"
                 class="min-h-11 shrink-0 gap-1 px-2"
                 :disabled="browserBusy"
-                :aria-label="`Open detected link ${browserSuggestionUrl}`"
+                :aria-label="$t('chat.openDetectedLink', { url: browserSuggestionUrl })"
                 @click="emit('openBrowserUrl', browserSuggestionUrl)"
             >
                 <ExternalLink class="size-4" aria-hidden="true" />
-                <span class="sr-only">Open detected link</span>
+                <span class="sr-only">{{ $t('chat.openDetectedLinkShort') }}</span>
             </Button>
         </div>
 
@@ -501,11 +595,11 @@ watch(() => props.prompt, () => {
             </span>
             <TalosMicWaveform :level="dictationStarting ? 0.12 : dictationLevel" :bars="18" class="min-w-0 flex-1" />
             <span class="shrink-0 text-xs font-semibold tracking-wide text-[var(--talos-accent,var(--primary))]">
-                {{ dictationStarting ? 'Starting…' : 'Listening' }}
+                {{ dictationStarting ? $t('chat.starting') : $t('chat.listening') }}
             </span>
             <button
                 type="button"
-                aria-label="Cancel dictation"
+                :aria-label="$t('chat.cancelDictation')"
                 class="talos-pressable flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 @click="emit('toggleDictation')"
             >
@@ -525,7 +619,7 @@ watch(() => props.prompt, () => {
                 size="icon"
                 variant="ghost"
                 data-mobile-icon-only="true"
-                aria-label="Add to chat"
+                :aria-label="$t('chat.addToChat')"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
                 :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
                 class="talos-pressable absolute bottom-0.5 left-0.5 z-10 min-h-11 min-w-11 rounded-2xl"
@@ -538,8 +632,8 @@ watch(() => props.prompt, () => {
                 ref="promptField"
                 :value="prompt"
                 rows="1"
-                aria-label="Message TALOS"
-                placeholder="Message TALOS..."
+                :aria-label="$t('chat.messagePlaceholder')"
+                :placeholder="$t('chat.messagePlaceholderEllipsis')"
                 class="block max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
                 :class="[
                     'min-h-12 py-3',
@@ -619,11 +713,11 @@ watch(() => props.prompt, () => {
                 class="absolute bottom-full left-1 z-[60] mb-2 min-w-52 origin-bottom-left overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
                 @keydown.escape="closePlusMenu"
             >
-                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Attach a file</button>
-                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Library</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Model Lab</button>
-                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? 'Browsing on' : 'Browse the web' }}</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Improve prompt</button>
+                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.attachFile') }}</button>
+                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.library') }}</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.modelLab') }}</button>
+                <button type="button" role="menuitem" :aria-pressed="browseMode" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('toggleBrowse', !browseMode); closePlusMenu()"><Globe2 class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ browseMode ? $t('chat.browseOn') : $t('chat.browseWeb') }}</button>
+                <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.improvePrompt') }}</button>
             </div>
             </Transition>
         </div>
@@ -643,7 +737,7 @@ watch(() => props.prompt, () => {
                 size="icon"
                 variant="ghost"
                 data-mobile-icon-only="true"
-                aria-label="Add to chat"
+                :aria-label="$t('chat.addToChat')"
                 :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
                 :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
                 class="talos-pressable min-h-11 min-w-11 rounded-2xl"
@@ -655,7 +749,7 @@ watch(() => props.prompt, () => {
                 ref="modelTrigger"
                 type="button"
                 data-testid="talos-composer-model-chip"
-                aria-label="Choose model profile"
+                :aria-label="$t('chat.chooseModelProfile')"
                 :title="modelTitle"
                 aria-haspopup="dialog"
                 :aria-expanded="modelPickerOpen"
@@ -668,11 +762,26 @@ watch(() => props.prompt, () => {
                     class="size-5 border-0 bg-transparent"
                 />
                 <span class="truncate text-sm font-medium text-[var(--talos-text,var(--foreground))]">
-                    {{ selectedProfile?.display_name ?? 'Choose model' }}
+                    {{ selectedProfile?.display_name ?? $t('chat.chooseModel') }}
                 </span>
                 <span v-if="selectedProfile && (thinking || selectedEffort !== 'off')" class="shrink-0 text-xs text-[var(--talos-muted,var(--muted-foreground))]">
-                    {{ thinking ? 'Thinking' : selectedEffort.charAt(0).toUpperCase() + selectedEffort.slice(1) }}
+                    {{ thinking ? $t('chat.thinking') : effortLabel(selectedEffort) }}
                 </span>
+            </button>
+            <button
+                v-if="showLibraryChip"
+                ref="libraryChip"
+                type="button"
+                data-testid="talos-composer-library-chip"
+                :aria-label="$t('library.contextForNextMessage')"
+                aria-haspopup="dialog"
+                :aria-expanded="librarySheetOpen"
+                class="talos-pressable flex min-h-11 max-w-40 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
+                @click="librarySheetOpen = true"
+            >
+                <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                <span class="min-w-0 truncate">{{ libraryModeLabel }}</span>
+                <span class="shrink-0">· {{ librarySourceCountLabel }}</span>
             </button>
             <span class="flex-1" aria-hidden="true" />
             <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25):
@@ -688,7 +797,7 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    aria-label="Choose model profile"
+                    :aria-label="$t('chat.chooseModelProfile')"
                     :title="modelTitle"
                     aria-haspopup="dialog"
                     :aria-expanded="modelPickerOpen"
@@ -709,8 +818,8 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    aria-label="Choose reasoning effort"
-                    :title="`Effort: ${selectedEffort}`"
+                    :aria-label="$t('chat.chooseReasoningEffort')"
+                    :title="$t('chat.effortValue', { effort: effortLabel(selectedEffort) })"
                     aria-haspopup="true"
                     :aria-expanded="modelPickerOpen"
                     class="min-h-11 min-w-11"
@@ -723,8 +832,8 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    aria-label="Improve prompt"
-                    :title="enhanceUnavailableReason ?? 'Improve prompt'"
+                    :aria-label="$t('chat.improvePrompt')"
+                    :title="enhanceUnavailableReason ?? $t('chat.improvePrompt')"
                     :disabled="sending || enhancingPrompt"
                     class="min-h-11 min-w-11"
                     @click="requestPromptEnhancement"
@@ -736,8 +845,8 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    aria-label="Attach a file"
-                    :title="attachmentsAvailable ? 'Attach a file' : attachmentDisabledReason"
+                    :aria-label="$t('chat.attachFile')"
+                    :title="attachmentsAvailable ? $t('chat.attachFile') : attachmentReason"
                     :disabled="!attachmentsAvailable || sending || attachmentBusy"
                     class="min-h-11 min-w-11"
                     @click="emit('attach')"
@@ -750,21 +859,35 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    aria-label="Choose grounding context"
-                    :title="contextAvailable ? 'Choose grounding context' : contextDisabledReason"
+                    :aria-label="$t('chat.chooseGroundingContext')"
+                    :title="contextAvailable ? $t('chat.chooseGroundingContext') : contextReason"
                     :disabled="!contextAvailable"
                     class="min-h-11 min-w-11"
                     @click="emit('openContext')"
                 >
                     <Database class="size-4" aria-hidden="true" />
                 </Button>
+                <button
+                    v-if="showLibraryChip"
+                    ref="libraryChip"
+                    type="button"
+                    data-testid="talos-composer-library-chip"
+                    :aria-label="$t('library.contextForNextMessage')"
+                    aria-haspopup="dialog"
+                    :aria-expanded="librarySheetOpen"
+                    class="talos-pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
+                    @click="librarySheetOpen = true"
+                >
+                    <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <span>{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
+                </button>
                 <Button
                     type="button"
                     size="icon"
                     variant="outline"
                     data-mobile-icon-only="true"
-                    :aria-label="browseMode ? 'Disable Browse mode' : 'Enable Browse mode'"
-                    :title="browseMode ? 'Disable Browse mode' : 'Enable Browse mode'"
+                    :aria-label="browseMode ? $t('chat.disableBrowse') : $t('chat.enableBrowse')"
+                    :title="browseMode ? $t('chat.disableBrowse') : $t('chat.enableBrowse')"
                     :aria-pressed="browseMode"
                     :disabled="browserBusy"
                     class="min-h-11 min-w-11"
@@ -778,8 +901,8 @@ watch(() => props.prompt, () => {
                     size="icon"
                     variant="ghost"
                     data-mobile-icon-only="true"
-                    aria-label="Open Model Lab"
-                    title="Open Model Lab"
+                    :aria-label="$t('chat.openModelLab')"
+                    :title="$t('chat.openModelLab')"
                     class="min-h-11 min-w-11"
                     @click="emit('openModelLab')"
                 >
@@ -844,6 +967,16 @@ watch(() => props.prompt, () => {
             @cancel="emit('cancelPromptEnhancement')"
             @insert="emit('insertPromptEnhancement')"
             @replace="emit('replacePromptEnhancement')"
+        />
+
+        <TalosMobileLibraryContextSheet
+            v-if="librarySheetOpen"
+            :effective-enabled="libraryContextEnabled"
+            :effective-mode="libraryContextMode"
+            :override="libraryTurnOverride"
+            :files="libraryFiles"
+            @close="closeLibrarySheet"
+            @update:override="emit('updateLibraryTurnOverride', $event)"
         />
     </section>
 </template>

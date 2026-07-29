@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
+import { useTalosI18n } from '@/i18n'
+import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import TalosBootLogo from '@/components/brand/TalosBootLogo.vue'
-import TalosMobileBackground from '@/components/talos/workspace/TalosMobileBackground.vue'
 import TalosMobileHeader from '@/components/shell/TalosMobileHeader.vue'
 import TalosMobileToastRegion from '@/components/shell/TalosMobileToastRegion.vue'
 import ChatScreen from '@/screens/ChatScreen.vue'
@@ -21,13 +22,10 @@ import {
     type TalosResumeRelockController,
 } from '@/services/resumeRelock'
 import { talosDisabledSubsystems } from '@/main'
-import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
-import { useTalosMobileWizardState } from '@/composables/useTalosMobileWizardState'
-import { TALOS_MOBILE_WIZARD_KEY } from '@/lib/wizardInjection'
 import { resolveTalosBackAction } from '@/lib/backNavigation'
 import { talosOverlayBackActive, handleTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import { talosLightImpact } from '@/services/haptics'
@@ -39,10 +37,10 @@ import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
-import TalosLauncherIconDialog from '@/components/talos/settings/TalosLauncherIconDialog.vue'
-
+import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
 const route = useRoute()
+const { t } = useTalosI18n()
 const preferences = usePreferencesStore()
 const themeStore = useThemeStore()
 const settingsStore = useSettingsStore()
@@ -52,6 +50,12 @@ const toastsStore = useTalosMobileToasts()
 const launcherIcon = useLauncherIconController()
 const disabled = talosDisabledSubsystems()
 const uiFallback = disabled.has('ui')
+
+// The static theme paints immediately. Procedural scenes and renderers are an
+// optional post-entry enhancement, kept outside the first-chat bundle.
+const TalosMobileBackground = defineAsyncComponent(
+    () => import('@/components/talos/workspace/TalosMobileBackground.vue'),
+)
 
 // Animated brand intro over the static native splash; dismisses to the chat.
 const showBoot = ref(true)
@@ -63,11 +67,6 @@ const shellActionBusy = ref(false)
 // 2026-07-27: two steps, replacing the six-slide carousel.
 const TalosMobileSetupIntro = defineAsyncComponent(
     () => import('@/components/intro/TalosMobileSetupIntro.vue'),
-)
-// N1 — the guided account wizard chunk loads only on an explicit replay from
-// Settings; it no longer follows first-run setup.
-const TalosMobileAccountWizard = defineAsyncComponent(
-    () => import('@/components/onboarding/TalosMobileAccountWizard.vue'),
 )
 // F2-T6 app lock: armed on cold start when the opt-in flag AND a real PIN
 // record exist; the lock screen chunk loads only when the lock is armed.
@@ -94,6 +93,11 @@ const TalosTabletSidebar = defineAsyncComponent(
 const TalosTabletDivider = defineAsyncComponent(
     () => import('@/components/shell/TalosTabletDivider.vue'),
 )
+// The controller remains eager so it can observe theme changes. The optional
+// preview dialog (and its SVG/UI tree) loads only for a real pending decision.
+const TalosLauncherIconDialog = defineAsyncComponent(
+    () => import('@/components/talos/settings/TalosLauncherIconDialog.vue'),
+)
 const sidebarEverOpened = ref(false)
 const locked = ref(false)
 const settingsHydrated = ref(false)
@@ -104,16 +108,6 @@ const intro = useTalosMobileIntroState({
     setOnboarding: (patch) => settingsStore.setOnboarding(patch),
 })
 provide(TALOS_MOBILE_INTRO_KEY, intro)
-
-// N1 — guided account wizard: opens after the intro is resolved (ONE fullscreen
-// surface at a time), once per wizard version; replayable from Settings.
-const accountWizard = useTalosMobileWizardState({
-    hydrated: () => settingsHydrated.value,
-    blocked: () => showBoot.value || locked.value || intro.introOpen.value,
-    onboarding: () => settingsStore.state.onboarding,
-    setOnboarding: (patch) => settingsStore.setOnboarding(patch),
-})
-provide(TALOS_MOBILE_WIZARD_KEY, accountWizard)
 
 /**
  * Owner 2026-07-27, from Android's own guidance: "Wait for the user to invoke
@@ -136,23 +130,25 @@ const reducedMotion = ref(typeof window !== 'undefined'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
     themeId: themeStore.state.theme,
-    preferences: createDefaultTalosMotionV6Preferences(),
+    preferences: settingsStore.state.motion_v6,
     reducedMotion: reducedMotion.value,
     paused: false,
 }))
 
-// F6 — fixed overlays (station sheet) read the rail width to spare the
-// persistent tablet panel; 0 on phones keeps them full-bleed.
+// F6 — fixed overlays read the visible leading rail. Settings is itself a
+// canonical list-detail surface: its categories replace the chat rail, so the
+// station owns the full tablet width while retaining the saved rail dimension.
 const shellStyle = computed(() => ({
     ...interactionMotionStyle.value,
-    '--talos-tablet-rail': tabletLayout.isTablet.value ? `${tabletSidebarWidth.value}px` : '0px',
+    '--talos-tablet-rail': tabletChatRailVisible.value ? `${tabletSidebarWidth.value}px` : '0px',
+    '--talos-tablet-sidebar-width': `${tabletSidebarWidth.value}px`,
 }))
 
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
 // (attachment revocation + draft scoping stay orchestrated in one place).
 const sidebarOpen = ref(false)
-// Owner 2026-07-25: GLOBAL text size. One variable on <html> drives every
-// Tailwind text token, so menus, settings, chrome and chat scale together.
+// Interface text size: one variable on <html> drives Tailwind UI tokens.
+// Message prose has its own root-relative chat_layout.bubble_scale boundary.
 watch(() => settingsStore.state.shell.ui_font_scale, (scale) => {
     applyTalosFontScale(scale)
 }, { immediate: true })
@@ -194,9 +190,9 @@ const sessionBusy = computed(() =>
     Boolean((chatScreen.value as { sessionActionBusy?: boolean } | null)?.sessionActionBusy)
     || shellActionBusy.value)
 
-function sidebarNavigate(name: TalosMobileRouteName): void {
+function sidebarNavigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}): void {
     sidebarOpen.value = false
-    void navigate(name)
+    void navigate(name, query)
 }
 
 // R2-7 — the shell drives session actions through the controller's lifecycle
@@ -211,15 +207,16 @@ function lifecycleAction(label: string, action: () => Promise<void>): void {
     shellActionBusy.value = true
     void action()
         .catch((error: unknown) => {
-            const detail = error instanceof Error && error.message ? error.message : String(error)
-            toastsStore.push({ message: `${label} failed: ${detail}`, durationMs: 6000 })
+            const detail = talosTranslatableErrorMessage(error, t)
+                ?? (error instanceof Error && error.message ? error.message : String(error))
+            toastsStore.push({ message: t('common.actionFailed', { action: label, detail }), durationMs: 6000 })
         })
         .finally(() => { shellActionBusy.value = false })
 }
 
 function sidebarNewChat(): void {
     sidebarOpen.value = false
-    lifecycleAction('New chat', async () => {
+    lifecycleAction(t('chat.newChat'), async () => {
         await chatController.sessionLifecycle.newSession()
         // New Chat always LANDS in the chat — never leaves you on a station.
         if (isStation.value) await navigate('chat')
@@ -229,11 +226,11 @@ function sidebarNewChat(): void {
 function sidebarSelect(sessionId: string): void {
     sidebarOpen.value = false
     void talosLightImpact()
-    lifecycleAction('Open chat', () => chatController.sessionLifecycle.selectSession(sessionId))
+    lifecycleAction(t('chat.openNamed', { title: '' }).trim(), () => chatController.sessionLifecycle.selectSession(sessionId))
 }
 
 function sidebarRename(sessionId: string, title: string): void {
-    lifecycleAction('Rename chat', () => chatController.sessionLifecycle.renameSession(sessionId, title))
+    lifecycleAction(t('chat.renameChat'), () => chatController.sessionLifecycle.renameSession(sessionId, title))
 }
 
 /**
@@ -245,7 +242,7 @@ function sidebarRename(sessionId: string, title: string): void {
  * then failing leaves orphans nobody can find their way back to.
  */
 function sidebarDelete(sessionId: string, choice?: { deleteMedia: boolean }): void {
-    lifecycleAction('Delete chat', async () => {
+    lifecycleAction(t('chat.deleteChat'), async () => {
         const failed = choice?.deleteMedia ? await chatController.deleteSessionMedia(sessionId) : []
         await chatController.sessionLifecycle.deleteSession(sessionId)
         // Reported only AFTER the chat is actually gone: announcing it earlier
@@ -253,7 +250,9 @@ function sidebarDelete(sessionId: string, choice?: { deleteMedia: boolean }): vo
         // second half threw.
         if (failed.length) {
             toastsStore.push({
-                message: `Chat deleted. ${failed.length} file${failed.length === 1 ? '' : 's'} could not be removed from the Library.`,
+                message: failed.length === 1
+                    ? t('chat.deletedFilesFailedOne')
+                    : t('chat.deletedFilesFailedMany', { count: failed.length }),
                 durationMs: 6000,
             })
         }
@@ -281,6 +280,10 @@ const mediaAttachedFileIds = ref<string[]>([])
 let mediaRequest = 0
 
 const canOpenChatMedia = computed(() => chatController.chat.activeSession.value !== null)
+const activeSessionLibraryContextPolicy = computed(() =>
+    parseTalosSessionLibraryContextPolicy(
+        chatController.chat.activeSession.value?.metadata.library_context_policy,
+    ))
 
 async function openChatMedia(): Promise<void> {
     const sessionId = chatController.chat.activeSession.value?.id
@@ -308,6 +311,57 @@ watch(() => chatController.chat.activeSession.value?.id, () => { mediaPanelOpen.
 const TalosMobileToolConsentSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileToolConsentSheet.vue'),
 )
+const TalosMobileToolAuthorizationRecoveryCard = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileToolAuthorizationRecoveryCard.vue'),
+)
+const activeToolAuthorization = computed(() =>
+    chatController.pendingToolAuthorizations.value[0] ?? null)
+const activeToolAuthorizationRecovery = computed(() =>
+    chatController.toolAuthorizationRecoveries.value[0] ?? null)
+const toolAuthorizationReviewCount = computed(() =>
+    chatController.pendingToolAuthorizations.value.length
+    + chatController.toolAuthorizationRecoveries.value.length)
+const toolAuthorizationRecoveryBusy = ref<string | null>(null)
+
+async function retryToolAuthorizationRecovery(checkpointId: string): Promise<void> {
+    if (toolAuthorizationRecoveryBusy.value !== null) return
+    toolAuthorizationRecoveryBusy.value = checkpointId
+    try {
+        await chatController.retryToolAuthorization(checkpointId)
+    } catch (error) {
+        const detail = talosTranslatableErrorMessage(error, t)
+            ?? (error instanceof Error && error.message ? error.message : String(error))
+        toastsStore.push({
+            message: t('common.actionFailed', {
+                action: t('chat.authorizationRecoveryRetry'),
+                detail,
+            }),
+            durationMs: 6000,
+        })
+    } finally {
+        toolAuthorizationRecoveryBusy.value = null
+    }
+}
+
+async function cancelToolAuthorizationRecovery(checkpointId: string): Promise<void> {
+    if (toolAuthorizationRecoveryBusy.value !== null) return
+    toolAuthorizationRecoveryBusy.value = checkpointId
+    try {
+        await chatController.cancelToolAuthorization(checkpointId)
+    } catch (error) {
+        const detail = talosTranslatableErrorMessage(error, t)
+            ?? (error instanceof Error && error.message ? error.message : String(error))
+        toastsStore.push({
+            message: t('common.actionFailed', {
+                action: t('chat.authorizationRecoveryCancel'),
+                detail,
+            }),
+            durationMs: 6000,
+        })
+    } finally {
+        toolAuthorizationRecoveryBusy.value = null
+    }
+}
 const TalosMobileSessionExportSheet = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSessionExportSheet.vue'),
 )
@@ -377,40 +431,45 @@ const activeRoute = computed<TalosMobileRouteName>(() => {
 // Chat is the persistent base; every other tab presents its screen in a sheet
 // over it — the mobile mirror of the desktop windowed workspace.
 const isStation = computed(() => activeRoute.value !== 'chat')
+// TABLET-SETTINGS-01: Settings categories are the primary pane for that task.
+// Mounting the unrelated chat rail beside them creates a redundant third pane.
+const tabletChatRailVisible = computed(() => (
+    tabletLayout.isTablet.value && activeRoute.value !== 'settings'
+))
 
-const SHEET_TITLE: Record<TalosMobileRouteName, string> = {
-    chat: 'Chat',
-    chats: 'Chats',
-    memory: 'Memory',
-    tasks: 'Tasks',
-    notes: 'Notes',
-    doctor: 'Doctor',
-    research: 'Deep Research V3',
-    runs: 'Runtime cockpit',
-    context: 'Library',
-    settings: 'Settings Center',
+const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
+    chat: 'navigation.chat',
+    chats: 'navigation.chats',
+    memory: 'navigation.memory',
+    tasks: 'navigation.tasks',
+    notes: 'navigation.notes',
+    doctor: 'navigation.doctor',
+    research: 'stations.deepResearchTitle',
+    runs: 'stations.runtimeCockpitTitle',
+    context: 'navigation.library',
+    settings: 'stations.settingsCenterTitle',
 }
-const sheetTitle = computed(() => SHEET_TITLE[activeRoute.value])
+const sheetTitle = computed(() => t(SHEET_TITLE_KEY[activeRoute.value]))
 
-const navItems = TALOS_MOBILE_ROUTES.map((entry) => ({
+const navItems = computed(() => TALOS_MOBILE_ROUTES.map((entry) => ({
     name: entry.name,
-    label: entry.name.charAt(0).toUpperCase() + entry.name.slice(1),
-}))
+    label: t(SHEET_TITLE_KEY[entry.name]),
+})))
 
 function pathFor(name: TalosMobileRouteName): string {
     return TALOS_MOBILE_ROUTES.find((entry) => entry.name === name)?.path ?? '/'
 }
 
-async function navigate(name: TalosMobileRouteName): Promise<void> {
-    await router.push(pathFor(name))
+async function navigate(name: TalosMobileRouteName, query: LocationQueryRaw = {}): Promise<void> {
+    await router.push({ path: pathFor(name), query })
     await preferences.setLastRoute(name)
 }
 
 onMounted(async () => {
     await preferences.hydrate()
-    // Local account (name/avatar initial) — fail-soft: a bad read just keeps
-    // the default TALOS initial.
-    void accountStore.hydrate().catch(() => undefined)
+    // Identity must hydrate before the unified setup opens, otherwise a
+    // returning user can briefly see an empty name and duplicate work.
+    await accountStore.hydrate().catch(() => undefined)
     // Intro gating waits for the REAL persisted onboarding state — a failed
     // read keeps the modal closed (fail-closed, no flash).
     try {
@@ -463,14 +522,9 @@ onMounted(async () => {
                 // — the lock screen would be dead to taps over it.
                 sidebarOpen.value = false
                 locked.value = true
-                // SF-MAJOR: a consent sheet rendered ABOVE the lock screen and
-                // stayed tappable, so anyone picking up the phone could allow a
-                // tool without the PIN. The lock now outranks every sheet, and
-                // the pending request dies with the session.
-                chatController.denyPendingToolConsent()
-                // A conversation-scoped yes must not survive the lock: whoever
-                // unlocks next is not necessarily who granted it.
-                chatController.clearSessionToolConsent()
+                // Hide arguments while locked. “Later” is not denial and the
+                // encrypted durable request remains available after unlock.
+                chatController.hideToolAuthorizations()
                 // SF-MAJOR: the in-flight send survived the lock. Every tool read
                 // then threw TALOS_DB_KEY_LOCKED, the answer could not be
                 // persisted and was lost — and, worse, the conversation kept
@@ -486,12 +540,12 @@ onMounted(async () => {
         lifecycle = registerNativeAppLifecycle({
             onBack: (event) => {
                 // Owner 2026-07-24: the sidebar is the MAIN MENU. Back walks the
-                // stack (wizard → sidebar → settings sub-view → station → chat).
+                // stack (setup → sidebar → settings sub-view → station → chat).
                 // A station TOP returns to the sidebar, NOT straight to chat, so
                 // leaving Settings/a tool reopens the menu it was launched from.
                 const action = resolveTalosBackAction({
                     composerOverlayOpen: talosOverlayBackActive(),
-                    wizardOpen: accountWizard.wizardOpen.value,
+                    wizardOpen: intro.introOpen.value,
                     sidebarOpen: sidebarOpen.value,
                     hasSheetSubView: sheetNav.subView.value !== null,
                     isStation: isStation.value,
@@ -499,7 +553,7 @@ onMounted(async () => {
                 })
                 switch (action) {
                     case 'close-overlay': handleTalosOverlayBack(); return 'handled'
-                    case 'dismiss-wizard': accountWizard.handleBack(); return 'handled'
+                    case 'dismiss-wizard': intro.handleBack(); return 'handled'
                     case 'close-sidebar': sidebarOpen.value = false; return 'handled'
                     case 'sheet-subview-back': sheetNav.subView.value?.back(); return 'handled'
                     case 'station-to-sidebar': void navigate('chat'); sidebarOpen.value = true; return 'handled'
@@ -543,15 +597,9 @@ onBeforeUnmount(async () => {
         <Transition leave-active-class="transition-opacity duration-200 ease-in motion-reduce:transition-none" leave-to-class="opacity-0">
             <TalosMobileSetupIntro
                 v-if="intro.introOpen.value"
+                :replay="intro.replaying.value"
                 @close="onIntroClose($event)"
             />
-        </Transition>
-
-        <!-- N1 guided account wizard: opens after the intro, once per version.
-             The shell persists its own outcome via the injected wizard state.
-             Owner 2026-07-24: leave transition (fade + soft lift) on close. -->
-        <Transition leave-active-class="transition duration-200 ease-in motion-reduce:transition-none" leave-to-class="opacity-0 scale-[0.98]">
-            <TalosMobileAccountWizard v-if="accountWizard.wizardOpen.value" />
         </Transition>
 
         <div
@@ -570,7 +618,7 @@ onBeforeUnmount(async () => {
             <main class="flex-1 overflow-y-auto">
                 <RouterView />
             </main>
-            <nav aria-label="Primary" data-testid="ui-fallback" class="relative z-50 flex shrink-0 items-stretch justify-around border-t border-[var(--talos-border)] bg-[var(--talos-sidebar)]">
+            <nav :aria-label="$t('navigation.primary')" data-testid="ui-fallback" class="relative z-50 flex shrink-0 items-stretch justify-around border-t border-[var(--talos-border)] bg-[var(--talos-sidebar)]">
                 <button
                     v-for="item in navItems"
                     :key="item.name"
@@ -596,24 +644,52 @@ onBeforeUnmount(async () => {
                 :files="chatController.attachments.vaultFiles"
                 :attached-file-ids="mediaAttachedFileIds"
                 :library-context-enabled="settingsStore.state.shell.library_context_enabled === true"
+                :global-library-context-policy="settingsStore.state.shell.library_context_policy"
+                :session-library-context-policy="activeSessionLibraryContextPolicy"
                 :preview-url="chatController.attachments.previewUrl"
                 :read-text="chatController.attachments.hydrateText"
                 :read-bytes="chatController.attachments.previewBytes"
                 :set-shared="chatController.attachments.setVaultFileShared"
+                :set-session-library-context-policy="chatController.chat.setSessionLibraryContextPolicy"
                 @close="mediaPanelOpen = false"
                 @open="mediaPanelOpen = false"
             />
 
-            <!-- Tool consent: dismissing it DENIES, which is why there is no
-                 close affordance other than the two explicit answers. -->
-            <TalosMobileToolConsentSheet
-                v-if="chatController.pendingToolConsent.value"
-                :title="chatController.pendingToolConsent.value.title"
-                :description="chatController.pendingToolConsent.value.description"
-                :input="chatController.pendingToolConsent.value.input"
-                @allow="chatController.pendingToolConsent.value?.allow()"
-                @deny="chatController.pendingToolConsent.value?.deny()"
+            <TalosMobileToolAuthorizationRecoveryCard
+                v-if="activeToolAuthorizationRecovery && chatController.toolAuthorizationPromptVisible.value"
+                :session-title="activeToolAuthorizationRecovery.session_title"
+                :tools="activeToolAuthorizationRecovery.tools"
+                :recovery-count="chatController.toolAuthorizationRecoveries.value.length"
+                :busy="toolAuthorizationRecoveryBusy === activeToolAuthorizationRecovery.checkpoint_id"
+                @retry="void retryToolAuthorizationRecovery(activeToolAuthorizationRecovery.checkpoint_id)"
+                @cancel="void cancelToolAuthorizationRecovery(activeToolAuthorizationRecovery.checkpoint_id)"
+                @later="chatController.dismissToolAuthorization()"
             />
+            <TalosMobileToolConsentSheet
+                v-else-if="activeToolAuthorization && chatController.toolAuthorizationPromptVisible.value"
+                :title="activeToolAuthorization.title"
+                :description="activeToolAuthorization.description"
+                :input="activeToolAuthorization.input"
+                :actions="activeToolAuthorization.actions"
+                :session-title="activeToolAuthorization.session_title"
+                :pending-count="chatController.pendingToolAuthorizations.value.length"
+                :allow-persistent="activeToolAuthorization.allow_persistent"
+                @allow-once="void chatController.decideToolAuthorization(activeToolAuthorization.request_id, 'allow_once')"
+                @always-allow="void chatController.decideToolAuthorization(activeToolAuthorization.request_id, 'always_allow')"
+                @deny="void chatController.decideToolAuthorization(activeToolAuthorization.request_id, 'deny')"
+                @later="chatController.dismissToolAuthorization()"
+            />
+            <button
+                v-else-if="toolAuthorizationReviewCount > 0"
+                type="button"
+                data-testid="talos-tool-authorization-reopen"
+                class="talos-pressable pointer-events-auto fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[94] min-h-11 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 text-xs font-medium text-[var(--talos-text)] shadow-lg"
+                @click="chatController.showToolAuthorization()"
+            >
+                {{ $t('chat.reviewToolActions', {
+                    count: toolAuthorizationReviewCount,
+                }) }}
+            </button>
 
             <TalosMobileSidebar
                 v-if="sidebarEverOpened"
@@ -628,14 +704,14 @@ onBeforeUnmount(async () => {
                 :cleanup-plan-for="cleanupPlanFor"
                 @delete="sidebarDelete"
                 @navigate="sidebarNavigate"
-                @open-model-lab="sidebarNavigate('settings')"
+                @open-model-lab="sidebarNavigate('settings', { tab: 'models' })"
                 @open-settings="sidebarNavigate('settings')"
             />
 
             <!-- F6 — tablet split view: [chat panel | divider | content column].
                  On phones the row degenerates to the single content column. -->
             <div class="relative z-10 flex min-h-0 flex-1">
-                <template v-if="tabletLayout.isTablet.value">
+                <template v-if="tabletChatRailVisible">
                     <TalosTabletSidebar
                         :width="tabletSidebarWidth"
                         @activated="onTabletActivated"
@@ -687,7 +763,7 @@ onBeforeUnmount(async () => {
 
             <TalosMobileToastRegion />
 
-            <TalosLauncherIconDialog />
+            <TalosLauncherIconDialog v-if="launcherIcon.state.pending" />
 
             <Transition
                 leave-active-class="transition duration-200 ease-in"

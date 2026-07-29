@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { Loader2, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
-import { describeTalosCleanup, talosCleanupCount } from '@/lib/chat/sessionCleanup'
+import { talosCleanupCount } from '@/lib/chat/sessionCleanup'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 
 /**
@@ -30,10 +31,28 @@ const emit = defineEmits<{
     confirm: [{ deleteMedia: boolean }]
 }>()
 
+const { t } = useTalosI18n()
 const deleteMedia = ref(false)
 const confirmed = ref(false)
 const count = computed(() => talosCleanupCount(props.plan))
-const description = computed(() => describeTalosCleanup(props.plan))
+const description = computed(() => {
+    const parts: string[] = []
+    if (props.plan.documents.length) {
+        const documentKey = props.plan.documents.length === 1
+            ? 'chat.cleanupDocumentOne'
+            : 'chat.cleanupDocumentMany'
+        parts.push(t(documentKey, { count: props.plan.documents.length }))
+    }
+    if (props.plan.sources.length) {
+        const sourceKey = props.plan.sources.length === 1
+            ? 'chat.cleanupSavedPageOne'
+            : 'chat.cleanupSavedPageMany'
+        parts.push(t(sourceKey, { count: props.plan.sources.length }))
+    }
+    return parts.length === 2
+        ? t('chat.cleanupJoin', { first: parts[0], second: parts[1] })
+        : (parts[0] ?? '')
+})
 
 /**
  * The spinner shows only while the parent is ACTUALLY working.
@@ -91,8 +110,8 @@ function close(): void {
 
 <template>
     <TalosMobileConfirmDialog
-        title="Delete chat?"
-        :description="`This permanently removes &quot;${props.title || 'New chat'}&quot; and its messages.`"
+        :title="$t('chat.deleteTitle')"
+        :description="$t('chat.deleteDescription', { title: props.title || $t('chat.newChat') })"
         @close="close"
     >
         <label
@@ -108,14 +127,14 @@ function close(): void {
                 :disabled="running"
             >
             <span class="text-sm leading-5">
-                Also delete this chat's files
-                <span class="block text-xs text-[var(--talos-muted)]">{{ description }} in the Library</span>
+                {{ $t('chat.deleteGeneratedFiles') }}
+                <span class="block text-xs text-[var(--talos-muted)]">{{ $t('chat.cleanupLibrarySuffix', { items: description }) }}</span>
             </span>
         </label>
 
         <template #footer>
             <Button type="button" variant="ghost" @click="close">
-                <X class="size-4" aria-hidden="true" /> Cancel
+                <X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}
             </Button>
             <Button
                 type="button"
@@ -126,7 +145,7 @@ function close(): void {
             >
                 <Loader2 v-if="running" class="size-4 animate-spin" aria-hidden="true" />
                 <Trash2 v-else class="size-4" aria-hidden="true" />
-                {{ running ? 'Deleting…' : 'Delete' }}
+                {{ running ? $t('chat.deleting') : $t('common.delete') }}
             </Button>
         </template>
     </TalosMobileConfirmDialog>

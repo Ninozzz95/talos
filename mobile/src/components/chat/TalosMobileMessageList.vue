@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { BookMarked, FileText } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
@@ -7,7 +8,6 @@ import TalosMobileMessageImage from '@/components/chat/TalosMobileMessageImage.v
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileSourcesChip from '@/components/chat/TalosMobileSourcesChip.vue'
-import TalosMobileStreamingReply from '@/components/chat/TalosMobileStreamingReply.vue'
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatTextSize } from '@/lib/talosChatLayout'
@@ -34,6 +34,7 @@ const emit = defineEmits<{
     saveToLibrary: [messageId: string]
 }>()
 
+const { t } = useTalosI18n()
 const PlainMessage = defineComponent({
     props: { content: { type: String, required: true } },
     setup(plainProps) {
@@ -47,6 +48,12 @@ const TalosMobileMessageContent = defineAsyncComponent({
 })
 const TalosMobileBrowserActivity = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileBrowserActivity.vue'),
+)
+// The streaming subtree owns the UAX #29 tables used by smooth reveal. Keep it
+// isolated from the initial app chunk while preserving its direct store
+// subscription and the message-list render boundary.
+const TalosMobileStreamingReply = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileStreamingReply.vue'),
 )
 const copyStatus = ref('')
 
@@ -81,7 +88,7 @@ function onMessagePointerDown(event: PointerEvent): void {
         // article's @click.capture guard and gets preventDefault()'d before
         // it reaches reka (root cause of the R2-11 dead menu). Suppression is
         // only for the finger's trailing real click after the hold.
-        article.querySelector<HTMLButtonElement>('[aria-label="More message actions"]')?.click()
+        article.querySelector<HTMLButtonElement>('[data-message-overflow-trigger]')?.click()
         suppressNextMessageClick = true
         clearMessageHold()
     }, MESSAGE_HOLD_MS)
@@ -155,12 +162,25 @@ function hasPreviousUser(messageId: string): boolean {
     return props.hasOlderMessages === true && props.messages[0]?.id === messageId
 }
 
+function hasMemoryDisclosure(message: TalosMobileMessageView): boolean {
+    return message.role !== 'system'
+        && Array.isArray(message.metadata.used_memories)
+        && message.metadata.used_memories.length > 0
+}
+
+// Owner 2026-07-29: memory provenance remains per-turn, but repeated pills are
+// thread noise. Cache one chronological winner for the materialized window;
+// prepending an older page deterministically moves, never duplicates, it.
+const firstMemoryDisclosureMessageId = computed(
+    () => props.messages.find(hasMemoryDisclosure)?.id ?? null,
+)
+
 async function copyMessage(message: TalosMobileMessageView): Promise<void> {
     try {
         await writeTalosClipboardText(message.content)
-        copyStatus.value = 'Message copied.'
+        copyStatus.value = t('chat.messageCopied')
     } catch {
-        copyStatus.value = 'Message copy failed.'
+        copyStatus.value = t('chat.messageCopyFailed')
     }
 }
 
@@ -184,6 +204,22 @@ function formatBytes(value: number): string {
     const megabytes = value / (1024 * 1024)
     return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`
 }
+
+function relativeTime(iso: string): string {
+    return talosRelativeTime(iso, now.value, {
+        justNow: t('chat.justNow'),
+        minutesAgo: count => t('chat.minutesAgo', { count }),
+        hoursAgo: count => t('chat.hoursAgo', { count }),
+        daysAgo: count => t('chat.daysAgo', { count }),
+    })
+}
+
+function messageStateLabel(state: string): string {
+    if (state === 'pending') return t('chat.statePending')
+    if (state === 'failed') return t('chat.stateFailed')
+    if (state === 'cancelled') return t('chat.stateCancelled')
+    return state
+}
 </script>
 
 <template>
@@ -203,7 +239,7 @@ function formatBytes(value: number): string {
             class="mb-2 flex items-center justify-center gap-2 text-2xs text-[var(--talos-muted)]"
         >
             <span v-if="props.loadingOlderMessages" class="talos-typing-pulse" aria-hidden="true"></span>
-            <span>{{ props.loadingOlderMessages ? 'Loading earlier messages…' : 'Scroll up for earlier messages' }}</span>
+            <span>{{ props.loadingOlderMessages ? $t('chat.loadingEarlier') : $t('chat.scrollEarlier') }}</span>
         </div>
 
         <article
@@ -243,8 +279,8 @@ function formatBytes(value: number): string {
                          the answer — it is how the answer was reached, so
                          putting it after would read backwards. -->
                     <TalosMobileReasoningBlock
-                        v-if="typeof message.metadata.reasoning === 'string'"
-                        :reasoning="message.metadata.reasoning"
+                        v-if="message.role === 'assistant' && message.reasoning"
+                        :reasoning="message.reasoning"
                     />
                     <TalosMobileMessageContent
                         :content="message.content"
@@ -256,26 +292,26 @@ function formatBytes(value: number): string {
                         v-if="Array.isArray(message.metadata.sources) && message.metadata.sources.length"
                         :sources="message.metadata.sources as never"
                     />
-                    <!-- F4 Memory: disclosure of injected untrusted memories -->
+                    <!-- F4 Memory: one calm-thread disclosure; every injected
+                         turn still retains its own auditable metadata. -->
                     <div
-                        v-if="Array.isArray(message.metadata.used_memories) && message.metadata.used_memories.length"
+                        v-if="message.id === firstMemoryDisclosureMessageId"
                         data-testid="talos-used-memories"
                         class="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
                         :title="(message.metadata.used_memories as Array<{ title?: string }>).map((entry) => entry?.title ?? '').join(' · ')"
                     >
                         <BookMarked class="size-3.5 shrink-0" aria-hidden="true" />
-                        {{ message.metadata.used_memories.length }}
-                        {{ message.metadata.used_memories.length === 1 ? 'memory' : 'memories' }} used
+                        {{ (message.metadata.used_memories as unknown[]).length === 1
+                            ? $t('chat.memoryUsedOne')
+                            : $t('chat.memoryUsedMany', { count: (message.metadata.used_memories as unknown[]).length }) }}
                     </div>
-                    <!-- Owner 2026-07-25 Library: the injected-docs disclosure stays in
-                         the message metadata (auditable) but is NOT badged on every
-                         message — with library context on by default that was constant
-                         noise. Memory keeps its badge: it is occasional and meaningful. -->
+                    <!-- Owner 2026-07-25 Library: injected-doc disclosure stays
+                         in metadata and is not repeated as visual chrome. -->
                     <div
                         v-if="message.attachments?.length"
                         class="mt-2 flex max-w-full flex-wrap gap-1.5"
                         role="list"
-                        aria-label="Attached files"
+                        :aria-label="$t('chat.attachedFiles')"
                     >
                         <!-- An image is SHOWN. Owner 2026-07-27: a photo
                              rendered as a chip with its filename is the one
@@ -299,7 +335,7 @@ function formatBytes(value: number): string {
                             <FileText class="size-3.5 shrink-0" aria-hidden="true" />
                             <span class="max-w-[180px] truncate">{{ attachment.display_name }}</span>
                             <span class="shrink-0 opacity-75">{{ formatBytes(attachment.size_bytes) }}</span>
-                            <span v-if="attachment.grant_status === 'revoked'" class="shrink-0">Access revoked</span>
+                            <span v-if="attachment.grant_status === 'revoked'" class="shrink-0">{{ $t('chat.accessRevoked') }}</span>
                         </span>
                     </div>
                     <TalosMobileBrowserActivity
@@ -308,16 +344,16 @@ function formatBytes(value: number): string {
                     />
                 </div>
                 <div v-if="isGroupEnd(index)" class="talos-message-meta mt-1 flex max-w-[92%] items-center gap-1.5 px-1 font-mono text-2xs text-[var(--talos-muted)]">
-                    <span>{{ message.role === 'user' ? 'You' : 'TALOS' }}</span>
+                    <span>{{ message.role === 'user' ? $t('chat.you') : 'TALOS' }}</span>
                     <template v-if="modelLabel(message)">
                         <span aria-hidden="true">·</span>
                         <span>{{ modelLabel(message) }}</span>
                     </template>
                     <span aria-hidden="true">·</span>
-                    <span>{{ talosRelativeTime(message.created_at, now) }}</span>
+                    <span>{{ relativeTime(message.created_at) }}</span>
                     <template v-if="message.state !== 'persisted'">
                         <span aria-hidden="true">·</span>
-                        <span>{{ message.state }}</span>
+                        <span>{{ messageStateLabel(message.state) }}</span>
                     </template>
                 </div>
                 <!-- SF-critic #7: the action row renders only where the group

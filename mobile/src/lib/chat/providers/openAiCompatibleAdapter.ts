@@ -11,6 +11,7 @@ import type {
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import { createTalosSseAccumulator, talosStreamText } from '@/lib/chat/providers/streamShared'
 import { talosPromptCacheKey } from '@/lib/chat/promptCache'
+import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
 import {
@@ -161,8 +162,9 @@ function compatibleCompletionData(
         messages.push(message as never)
     }
     const data: Record<string, unknown> = { model: input.model.id, messages, stream }
-    if (input.tools?.length) {
-        data.tools = talosToolsForOpenAi(input.tools)
+    const compatibleTools = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
+    if (compatibleTools?.length) {
+        data.tools = talosToolsForOpenAi(compatibleTools)
         data.tool_choice = 'auto'
     }
     if (config.provider === 'openrouter' && input.effort !== 'off' && input.model.supportedParameters.includes('reasoning')) {

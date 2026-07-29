@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import { useTalosMobileAttachments } from '@/composables/useTalosMobileAttachments'
+import {
+    useTalosMobileAttachments as createAttachments,
+    type TalosMobileAttachmentsOptions,
+} from '@/composables/useTalosMobileAttachments'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import type { TalosVaultService } from '@/services/talosVaultService'
+import { talosTestT } from '../../helpers/talosTestI18n'
+
+function useTalosMobileAttachments(options: Omit<TalosMobileAttachmentsOptions, 'translate'>) {
+    return createAttachments({ ...options, translate: talosTestT('en') })
+}
 
 /**
  * Owner 2026-07-26: deleting a chat must be able to take its documents with it,

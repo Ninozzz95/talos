@@ -1,4 +1,6 @@
 import { adaptTurnsForTextOnlyModel } from '@/lib/chat/visionFallback'
+import type { TalosMessageParameters } from '@/i18n/contracts'
+import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
 import { talosMobileHttpTransport, type TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
@@ -6,9 +8,14 @@ import { providerAdapterFor } from '@/lib/chat/providerRegistry'
 import type { ChatCompletion, ChatCompletionResult, ChatTurn, TalosStreamHandlers } from '@/stores/chat'
 
 export class ChatConfigError extends Error {
-    constructor(message: string) {
-        super(message)
+    readonly uiMessageKey: string
+    readonly uiMessageParameters?: TalosMessageParameters
+
+    constructor(code: string, uiMessageKey: string, uiMessageParameters?: TalosMessageParameters) {
+        super(code)
         this.name = 'ChatConfigError'
+        this.uiMessageKey = uiMessageKey
+        this.uiMessageParameters = uiMessageParameters
     }
 }
 
@@ -36,23 +43,35 @@ export function buildChatCompletion(
     ): Promise<ChatCompletionResult> => {
         const context = getContext()
         if (!context.profile) {
-            throw new ChatConfigError('Select a model before sending.')
+            throw new ChatConfigError('TALOS_CHAT_MODEL_REQUIRED', 'chat.selectModelBeforeSending')
         }
 
         const adapter = providerAdapterFor(context.profile.provider)
         if (adapter.requiresSecret && !context.apiKey) {
-            throw new ChatConfigError(`Add your ${context.profile.provider} API key in Settings to start chatting.`)
+            throw new ChatConfigError(
+                'TALOS_CHAT_PROVIDER_KEY_REQUIRED',
+                'chat.addProviderKeyToChat',
+                { provider: context.profile.provider },
+            )
         }
         if (!context.providerModel) {
-            throw new ChatConfigError(`Refresh the ${context.profile.provider} model catalog before sending.`)
+            throw new ChatConfigError(
+                'TALOS_CHAT_PROVIDER_CATALOG_REQUIRED',
+                'chat.refreshProviderBeforeSending',
+                { provider: context.profile.provider },
+            )
         }
         if (context.providerModel.provider !== context.profile.provider) {
-            throw new ChatConfigError('The selected model no longer matches its provider. Refresh the model catalog.')
+            throw new ChatConfigError(
+                'TALOS_CHAT_PROVIDER_MODEL_MISMATCH',
+                'chat.modelProviderMismatch',
+            )
         }
 
         const model = context.providerModel.id === context.profile.model
             ? context.providerModel
             : { ...context.providerModel, id: context.profile.model }
+        const compatibleTools = talosModelSupportsToolCalling(model) ? tools : undefined
         const supportsImageInput = model.inputModalities.some((modality) =>
             ['image', 'images'].includes(modality.toLowerCase()),
         )
@@ -76,7 +95,9 @@ export function buildChatCompletion(
             const last = turns[turns.length - 1]
             if (last?.parts?.some((part) => part.type === 'image')) {
                 throw new ChatConfigError(
-                    `${context.profile.display_name} does not declare image input support. Select a vision-capable model.`,
+                    'TALOS_CHAT_IMAGE_INPUT_UNSUPPORTED',
+                    'chat.modelCannotReadImages',
+                    { model: context.profile.display_name },
                 )
             }
             outbound = adaptTurnsForTextOnlyModel(turns).turns
@@ -87,7 +108,7 @@ export function buildChatCompletion(
             system: context.system,
             effort: context.effort,
             thinking: context.thinking,
-            ...(tools?.length ? { tools } : {}),
+            ...(compatibleTools?.length ? { tools: compatibleTools } : {}),
         }
         const credential = { apiKey: context.apiKey, endpoint: context.endpoint, timeoutMs: context.timeoutMs }
 
@@ -120,6 +141,12 @@ export function buildChatCompletion(
                     usage: streamed.usage ?? null,
                 }
             } catch (error) {
+                // A reader implementation may wrap cancellation in a generic
+                // Error. The signal is the authoritative user intent: never
+                // turn Stop into a second, buffered inference.
+                if (stream.signal?.aborted) {
+                    throw talosAbortError()
+                }
                 const aborted = error instanceof Error && error.name === 'AbortError'
                 // R1-SF-M3: a STALL means the server DID answer (or accepted
                 // the request) and then went silent — a transparent buffered
@@ -158,7 +185,13 @@ export function buildChatCompletion(
 function abortSignalRejection(signal?: AbortSignal): Promise<never> {
     return new Promise<never>((_resolve, reject) => {
         if (!signal) return // never settles → Promise.race resolves on the completion
-        if (signal.aborted) { reject(new DOMException('Aborted', 'AbortError')); return }
-        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        if (signal.aborted) { reject(talosAbortError()); return }
+        signal.addEventListener('abort', () => reject(talosAbortError()), { once: true })
     })
+}
+
+function talosAbortError(): Error {
+    const error = new Error('Aborted')
+    error.name = 'AbortError'
+    return error
 }

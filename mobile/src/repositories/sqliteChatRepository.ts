@@ -246,8 +246,14 @@ export function createSqliteChatRepository(
     let initializing: Promise<void> | null = null
 
     async function initialize(): Promise<void> {
-        if (connection) return
         if (!initializing) {
+            // P0 relock recovery: the runtime is the connection authority.
+            // `forgetSecret()` deliberately removes its upstream wrapper, but
+            // this repository survives behind the lazy production facade. A
+            // local non-null reference can therefore be closed and absent from
+            // the native registry. Reacquiring is bridge-free while healthy
+            // (runtime.connect returns its cache) and returns the replacement
+            // wrapper after unlock, before any read or write is attempted.
             initializing = runtime.connect().then((value) => { connection = value }).finally(() => {
                 initializing = null
             })
@@ -1042,6 +1048,54 @@ export function createSqliteChatRepository(
                 )
             })
             return memory
+        },
+        async upsertMemory(input: CreateMemoryInput) {
+            const memory: TalosLocalMemory = {
+                id: normalizeRepositoryId(input.id),
+                scope_type: input.scope_type,
+                scope_id: input.scope_id,
+                kind: input.kind,
+                status: 'active',
+                title: input.title,
+                content: input.content,
+                source: input.source,
+                metadata: cloneJsonObject(input.metadata),
+                trust_level: 'untrusted',
+                last_used_at: null,
+                created_at: input.created_at,
+                updated_at: input.created_at,
+            }
+            await transaction(async (database) => {
+                await database.run(
+                    `INSERT INTO talos_memories
+                        (id, scope_type, scope_id, kind, status, title, content, source,
+                         metadata_json, trust_level, last_used_at, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, 'untrusted', NULL, ?, ?)
+                     ON CONFLICT(id) DO UPDATE SET
+                         scope_type = excluded.scope_type,
+                         scope_id = excluded.scope_id,
+                         kind = excluded.kind,
+                         status = 'active',
+                         title = excluded.title,
+                         content = excluded.content,
+                         source = excluded.source,
+                         metadata_json = excluded.metadata_json,
+                         trust_level = 'untrusted',
+                         updated_at = excluded.updated_at`,
+                    [
+                        memory.id, memory.scope_type, memory.scope_id, memory.kind,
+                        memory.title, memory.content, memory.source, JSON.stringify(memory.metadata),
+                        memory.created_at, memory.updated_at,
+                    ],
+                )
+            })
+            const rows = await (await db()).query(
+                `SELECT id, scope_type, scope_id, kind, status, title, content, source, metadata_json, last_used_at, created_at, updated_at
+                 FROM talos_memories WHERE id = ? LIMIT 1`,
+                [memory.id],
+            )
+            if (rows.length !== 1) throw new Error('TALOS_MEMORY_NOT_FOUND')
+            return parseMemory(rows[0] as TalosSqlRow)
         },
         async listMemories() {
             const rows = await (await db()).query(

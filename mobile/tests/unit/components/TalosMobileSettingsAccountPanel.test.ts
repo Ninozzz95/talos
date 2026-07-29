@@ -1,15 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { config, flushPromises, mount } from '@vue/test-utils'
 import { computed } from 'vue'
 import TalosMobileSettingsAccountPanel from '@/components/talos/settings/TalosMobileSettingsAccountPanel.vue'
+import { TALOS_IT_MESSAGES } from '@/i18n/locales/it'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
 
 // F2-T6 — Account panel: local-first identity truth, "Replay introduction"
 // (desktop Account-tab parity) and the App lock opt-in (PIN + optional
 // biometrics; flags in Preferences, PIN derivation in the Keystore).
 const push = vi.fn()
+const upsertDisplayName = vi.hoisted(() => vi.fn(async () => ({})))
+const testI18n = config.global.plugins[0] as unknown as {
+    global: {
+        locale: { value: string }
+        setLocaleMessage(locale: string, messages: typeof TALOS_IT_MESSAGES): void
+    }
+}
+testI18n.global.setLocaleMessage('it', TALOS_IT_MESSAGES)
 vi.mock('vue-router', () => ({
     useRouter: () => ({ push }),
+}))
+vi.mock('@/stores/chatController', () => ({
+    useChatController: () => ({
+        memories: { upsertDisplayName },
+    }),
 }))
 
 const appLock = vi.hoisted(() => ({
@@ -32,6 +46,22 @@ const protection = vi.hoisted(() => ({
 }))
 vi.mock('@/services/databaseProtection', () => protection)
 
+const dictationDiagnostics = vi.hoisted(() => vi.fn(async () => ({
+    buildId: 'test-build',
+    native: true,
+    registered: true,
+    pluginLoaded: true,
+    methods: ['available'],
+    permissionsRaw: '{"speechRecognition":"granted"}',
+    availableRaw: '{"available":true}',
+    available: true,
+    trace: 'build test-build · available:ok(1ms)',
+    error: null,
+})))
+vi.mock('@/services/dictation', () => ({
+    talosDictationDiagnostics: dictationDiagnostics,
+}))
+
 const settingsMock = vi.hoisted(() => {
     const state = { security: { app_lock_enabled: false, app_lock_biometric: false } }
     return {
@@ -44,6 +74,7 @@ const settingsMock = vi.hoisted(() => {
 vi.mock('@/stores/settings', () => ({ useSettingsStore: () => settingsMock }))
 
 beforeEach(() => {
+    testI18n.global.locale.value = 'en'
     push.mockReset()
     appLock.setupAppLockPin.mockReset().mockResolvedValue(undefined)
     protection.enableTalosDatabaseProtection.mockReset().mockResolvedValue({ migrated: false })
@@ -52,6 +83,7 @@ beforeEach(() => {
     appLock.biometricUnlockAvailable.mockReset().mockResolvedValue(false)
     settingsMock.state.security = { app_lock_enabled: false, app_lock_biometric: false }
     settingsMock.setSecurity.mockClear()
+    upsertDisplayName.mockClear()
 })
 
 function mountPanel(replayIntro = vi.fn()) {
@@ -62,8 +94,11 @@ function mountPanel(replayIntro = vi.fn()) {
                 provide: {
                     [TALOS_MOBILE_INTRO_KEY as symbol]: {
                         introOpen: computed(() => false),
+                        replaying: computed(() => false),
                         closeIntro: vi.fn(),
                         replayIntro,
+                        setBack: vi.fn(),
+                        handleBack: vi.fn(),
                     },
                 },
             },
@@ -85,20 +120,41 @@ describe('TalosMobileSettingsAccountPanel (F2-T6)', () => {
         expect(wrapper.text()).toMatch(/soon/i)
     })
 
+    it('I18N-08 localizes OAuth controls instead of rendering store-owned English', () => {
+        testI18n.global.locale.value = 'it'
+        const { wrapper } = mountPanel()
+
+        expect(wrapper.get('[data-testid="talos-oauth-google"]').text()).toContain('Continua con Google')
+        expect(wrapper.get('[data-testid="talos-oauth-apple"]').text()).toContain('Continua con Apple')
+    })
+
     it('edits and persists the local display name', async () => {
         const { wrapper } = mountPanel()
         const input = wrapper.get('[data-testid="talos-account-name"]')
         await input.setValue('Antonio')
         await wrapper.get('[data-testid="talos-account-name-save"]').trigger('click')
-        await wrapper.vm.$nextTick()
+        await flushPromises()
         expect((wrapper.get('[data-testid="talos-account-name"]').element as HTMLInputElement).value).toBe('Antonio')
+        expect(upsertDisplayName).toHaveBeenCalledWith('Antonio')
     })
 
-    it('replays the introduction and returns to the chat', async () => {
+    it('exposes one unified setup replay and returns to chat before opening it', async () => {
         const { wrapper, replayIntro } = mountPanel()
-        await wrapper.get('button[data-testid="talos-replay-intro"]').trigger('click')
+        await wrapper.get('button[data-testid="talos-setup-replay"]').trigger('click')
         expect(replayIntro).toHaveBeenCalledOnce()
         expect(push).toHaveBeenCalledWith({ name: 'chat' })
+        expect(wrapper.find('[data-testid="talos-wizard-replay"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-replay-intro"]').exists()).toBe(false)
+    })
+
+    it('DICT-ACCOUNT-01 labels a healthy diagnostic trace as details, never an error', async () => {
+        const { wrapper } = mountPanel()
+        await flushPromises()
+
+        const diagnostics = wrapper.get('[data-testid="talos-dictation-diagnostics"]').text()
+        expect(diagnostics).toContain('details:')
+        expect(diagnostics).toContain('available:ok')
+        expect(diagnostics).not.toContain('Error build')
     })
 })
 

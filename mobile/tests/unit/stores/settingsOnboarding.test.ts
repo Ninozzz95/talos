@@ -33,8 +33,6 @@ describe('onboarding parsing (F2-T6)', () => {
             intro_version: 0,
             intro_outcome: null,
             setup_dismissed: false,
-            wizard_version: 0,
-            wizard_outcome: null,
         })
     })
 
@@ -44,7 +42,6 @@ describe('onboarding parsing (F2-T6)', () => {
         }))
         expect(parsed.onboarding).toEqual({
             intro_version: 1, intro_outcome: 'completed', setup_dismissed: true,
-            wizard_version: 0, wizard_outcome: null,
         })
     })
 
@@ -54,44 +51,12 @@ describe('onboarding parsing (F2-T6)', () => {
         }))
         expect(parsed.onboarding).toEqual({
             intro_version: 0, intro_outcome: null, setup_dismissed: false,
-            wizard_version: 0, wizard_outcome: null,
         })
     })
 })
 
 // N1 — the account wizard reuses the onboarding subtree with the same versioned
 // gate shape as the intro; setOnboarding is the single persist path.
-describe('account wizard onboarding fields (N1)', () => {
-    it('accepts a valid persisted wizard state', () => {
-        const parsed = parseTalosMobileSettings(JSON.stringify({
-            onboarding: { wizard_version: 1, wizard_outcome: 'completed' },
-        }))
-        expect(parsed.onboarding.wizard_version).toBe(1)
-        expect(parsed.onboarding.wizard_outcome).toBe('completed')
-    })
-
-    it('fails closed on garbage wizard fields', () => {
-        const parsed = parseTalosMobileSettings(JSON.stringify({
-            onboarding: { wizard_version: -3, wizard_outcome: 'boom' },
-        }))
-        expect(parsed.onboarding.wizard_version).toBe(0)
-        expect(parsed.onboarding.wizard_outcome).toBeNull()
-    })
-
-    it('setOnboarding persists the wizard outcome and survives hydrate without clobbering intro', async () => {
-        const store = useSettingsStore()
-        await store.setOnboarding({ intro_version: 1, intro_outcome: 'completed' })
-        await store.setOnboarding({ wizard_version: 1, wizard_outcome: 'completed' })
-        __resetSettingsStoreForTests()
-        const fresh = useSettingsStore()
-        await fresh.hydrate()
-        expect(fresh.state.onboarding.intro_version).toBe(1)
-        expect(fresh.state.onboarding.intro_outcome).toBe('completed')
-        expect(fresh.state.onboarding.wizard_version).toBe(1)
-        expect(fresh.state.onboarding.wizard_outcome).toBe('completed')
-    })
-})
-
 describe('onboarding persistence (F2-T6)', () => {
     it('setOnboarding persists and survives hydrate', async () => {
         const store = useSettingsStore()
@@ -112,8 +77,6 @@ describe('onboarding persistence (F2-T6)', () => {
             intro_version: 1,
             intro_outcome: 'completed',
             setup_dismissed: true,
-            wizard_version: 0,
-            wizard_outcome: null,
         })
     })
 })

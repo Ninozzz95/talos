@@ -10,7 +10,17 @@
 import { inject } from 'vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 
-defineProps<{ title: string; eyebrow?: string }>()
+withDefaults(defineProps<{
+    title: string
+    eyebrow?: string
+    /**
+     * A canonical list-detail station owns pane scrolling at expanded widths.
+     * Compact/mobile layout retains this shell's established gutter/scroller.
+     */
+    tabletEdgeToEdge?: boolean
+}>(), {
+    tabletEdgeToEdge: false,
+})
 const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
 </script>
 
@@ -43,7 +53,11 @@ const insideSheet = inject(TALOS_SHEET_CONTEXT_KEY, false)
              sticky section header (Appearance tabs) can pin FLUSH to the top
              (top-0 was landing 16px inside the old p-4). Sides/bottom keep the
              16px gutter; screens add their own top breathing room. -->
-        <div class="flex-1 overflow-y-auto px-4 pb-4 pt-0">
+        <div
+            data-testid="mobile-screen-body"
+            class="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-0"
+            :class="{ 'md:overflow-hidden md:p-0': tabletEdgeToEdge }"
+        >
             <slot />
         </div>
     </section>

@@ -1,5 +1,6 @@
 import { SecureStorage } from '@aparajita/capacitor-secure-storage'
 import { Capacitor } from '@capacitor/core'
+import { TalosUiError } from '@/i18n/uiErrors'
 import type { SecureKeyBackend } from '@/services/secureKeyStore'
 
 /**
@@ -61,8 +62,12 @@ export async function setupAppLockPin(
     const trimmed = pin.trim()
     // Debt S3 (security review): a 4-digit minimum is 10 000 unthrottled
     // candidates against a local verifier. Six digits, and no trivial sequence.
-    if (trimmed.length < 6) throw new Error('The PIN must be at least 6 digits.')
-    if (isTrivialPin(trimmed)) throw new Error('Choose a less predictable PIN.')
+    if (trimmed.length < 6) {
+        throw new TalosUiError('TALOS_APP_LOCK_PIN_TOO_SHORT', 'lock.pinTooShort')
+    }
+    if (isTrivialPin(trimmed)) {
+        throw new TalosUiError('TALOS_APP_LOCK_PIN_PREDICTABLE', 'lock.pinPredictable')
+    }
     const salt = crypto.getRandomValues(new Uint8Array(16))
     const record: AppLockRecord = {
         salt: toBase64(salt),

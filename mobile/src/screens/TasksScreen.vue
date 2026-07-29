@@ -5,6 +5,7 @@
  * delete. Fully functional in airplane mode — rows live in the encrypted DB.
  */
 import { computed, onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { CheckSquare, Plus, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useChatController } from '@/stores/chatController'
@@ -12,6 +13,7 @@ import { talosRelativeTime } from '@/lib/relativeTime'
 import type { TalosLocalTask } from '@/repositories/chatRepository'
 
 const controller = useChatController()
+const { t } = useTalosI18n()
 
 const entries = ref<TalosLocalTask[]>([])
 const error = ref<string | null>(null)
@@ -21,6 +23,15 @@ const runId = ref('')
 const saving = ref(false)
 
 const canCreate = computed(() => title.value.trim().length > 0 && !saving.value)
+const relativeTimeLabels = computed(() => ({
+    justNow: t('chat.justNow'),
+    minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
+    hoursAgo: (count: number) => t('chat.hoursAgo', { count }),
+    daysAgo: (count: number) => t('chat.daysAgo', { count }),
+}))
+function updatedAt(value: string): string {
+    return talosRelativeTime(value, new Date(), relativeTimeLabels.value)
+}
 
 function describeError(cause: unknown): string {
     return cause instanceof Error && cause.message ? cause.message : String(cause)
@@ -81,14 +92,14 @@ async function remove(task: TalosLocalTask): Promise<void> {
 }
 
 function shortId(value: string | null): string {
-    return value ? value.slice(0, 12) : 'none'
+    return value ? value.slice(0, 12) : t('tasks.noRun')
 }
 </script>
 
 <template>
     <div class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3" data-testid="talos-tasks-screen">
         <p class="text-xs leading-5 text-[var(--talos-muted)]">
-            Run-linked tasks, stored on this device — fully functional offline.
+            {{ t('tasks.intro') }}
         </p>
 
         <form class="flex flex-col gap-2 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3" @submit.prevent="submit">
@@ -96,21 +107,21 @@ function shortId(value: string | null): string {
                 v-model="title"
                 data-testid="talos-task-title"
                 maxlength="255"
-                aria-label="Task title"
-                placeholder="Task title"
+                :aria-label="t('tasks.title')"
+                :placeholder="t('tasks.title')"
                 class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             >
             <textarea
                 v-model="description"
-                aria-label="Task description"
-                placeholder="Task description (optional)"
+                :aria-label="t('tasks.description')"
+                :placeholder="t('tasks.descriptionOptional')"
                 rows="2"
                 class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 py-2 text-sm leading-5 text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
             />
             <input
                 v-model="runId"
-                aria-label="Optional run ID"
-                placeholder="run_id (optional)"
+                :aria-label="t('tasks.runIdOptional')"
+                :placeholder="t('tasks.runIdPlaceholder')"
                 class="min-h-11 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 font-mono text-xs text-[var(--talos-text)] outline-none"
             >
             <Button
@@ -120,14 +131,14 @@ function shortId(value: string | null): string {
                 class="talos-pressable min-h-11 rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
             >
                 <Plus class="size-4" aria-hidden="true" />
-                Add task
+                {{ t('tasks.add') }}
             </Button>
         </form>
 
         <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
 
         <p v-if="!entries.length" class="py-6 text-center text-sm text-[var(--talos-muted)]">
-            No tasks yet — add the first one above.
+            {{ t('tasks.empty') }}
         </p>
 
         <ul v-else class="flex flex-col gap-2">
@@ -146,20 +157,20 @@ function shortId(value: string | null): string {
                         </div>
                         <p v-if="task.description" class="mt-0.5 line-clamp-2 text-xs leading-5 text-[var(--talos-muted)]">{{ task.description }}</p>
                         <p class="mt-1 font-mono text-2xs text-[var(--talos-muted)]">
-                            run_id {{ shortId(task.run_id) }} · {{ talosRelativeTime(task.updated_at) }}
+                            {{ t('tasks.runIdLabel') }} {{ shortId(task.run_id) }} · {{ updatedAt(task.updated_at) }}
                         </p>
                     </div>
                     <button
                         type="button"
-                        :aria-label="`Cycle status of ${task.title}`"
+                        :aria-label="t('tasks.cycleNamed', { title: task.title })"
                         class="talos-pressable min-h-11 rounded-full bg-[var(--talos-active)] px-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
                         @click="cycleStatus(task)"
                     >
-                        {{ task.status }}
+                        {{ t(`tasks.status.${task.status}`) }}
                     </button>
                     <button
                         type="button"
-                        :aria-label="`Delete task ${task.title}`"
+                        :aria-label="t('tasks.deleteNamed', { title: task.title })"
                         class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
                         @click="remove(task)"
                     >

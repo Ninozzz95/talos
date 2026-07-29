@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 import type { TalosExtractedPage } from '@/lib/search/pageExtract'
 import type { TalosSearchResult } from '@/lib/search/searchSources'
+import type { TalosWebArchiveReport } from '@/lib/search/webSourceArchive'
 
 /**
  * F1 — the two tools the model actually calls.
@@ -13,11 +14,16 @@ import type { TalosSearchResult } from '@/lib/search/searchSources'
  * a url pasted by the user is never fetched on its own; the model must ask, and
  * the gate answers.
  *
- * Both are `read`: nothing here changes anything on the device or off it.
+ * Both require `outbound` because a model-selected query or URL leaves the
+ * device, and `write` because successful evidence is persisted as ordinary,
+ * user-visible Library content. The central compound permission gate decides
+ * before either source body runs.
  */
 export interface TalosWebToolSources {
     search(query: string, maxResults: number): Promise<TalosSearchResult[]>
     read(url: string): Promise<TalosExtractedPage | null>
+    /** Search snippets can ground an answer even when no page is opened. */
+    rememberSearch(query: string, results: readonly TalosSearchResult[]): Promise<TalosWebArchiveReport>
     /** D5: every page read becomes a source of this chat's dossier. */
     remember(page: TalosExtractedPage): Promise<void>
 }
@@ -35,6 +41,21 @@ function offline(error: unknown): boolean {
     return /TALOS_NETWORK_UNAVAILABLE|Failed to fetch|NetworkError|ENOTFOUND|ECONNREFUSED/i.test(message)
 }
 
+function archiveLine(report: TalosWebArchiveReport): string {
+    if (report.policy === 'provider_retention_restricted') {
+        return 'Library: the configured search provider’s retention rules do not allow TALOS to save these search results. Call web_read on every source used; directly fetched pages can be saved.'
+    }
+    if (report.failed > 0) {
+        return report.saved > 0
+            ? `Library: ${report.saved} source link${report.saved === 1 ? '' : 's'} saved; ${report.failed} could not be saved to the Library.`
+            : 'Library: the source links could not be saved to the Library.'
+    }
+    if (report.saved > 0) {
+        return `Library: ${report.saved} source link${report.saved === 1 ? '' : 's'} saved to the Library.`
+    }
+    return 'Library: no new source links were saved; all results were duplicates or invalid web addresses.'
+}
+
 /** Anything not http(s) is not a web page; it is a way into the device. */
 function webUrl(value: string): string | null {
     try {
@@ -49,8 +70,9 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
     const search = defineTalosTool({
         name: 'web_search',
         title: 'Search the web',
-        description: 'Search the web and return candidate pages with their title, url, a short snippet and the publication date the source reports. Use it when the answer depends on current information. Then call web_read on the pages worth opening.',
-        action: 'read',
+        description: 'Search the web and return candidate pages with their title, url, a short snippet and the publication date the source reports. Successful source records are saved to the encrypted Library, so this requires outbound and write permission. Use it when the answer depends on current information. Then call web_read on the pages worth opening.',
+        action: 'outbound',
+        requiredActions: ['outbound', 'write'],
         input: z.object({
             query: z.string().min(1).describe('What to search for, in the language of the expected sources.'),
             maxResults: z.number().int().min(1).max(10).optional()
@@ -79,6 +101,15 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
                 return { ok: true, content: `No results for "${input.query}".` }
             }
 
+            let saved: string
+            try {
+                saved = archiveLine(await sources.rememberSearch(input.query, results))
+            } catch {
+                // The search itself succeeded. Preserve its evidence for this
+                // round, but never make a failed local write look successful.
+                saved = 'Library: the source links could not be saved to the Library.'
+            }
+
             const lines = results.map((result, index) => [
                 `${index + 1}. ${result.title || '(untitled)'}`,
                 `   url: ${result.url}`,
@@ -93,6 +124,7 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
                 content: clip([
                     `${results.length} results for "${input.query}".`,
                     'Dates are what each source reports; "date unknown" means the page declares none — do not assume it is recent.',
+                    saved,
                     '',
                     ...lines,
                 ].join('\n')),
@@ -103,8 +135,9 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
     const read = defineTalosTool({
         name: 'web_read',
         title: 'Read a web page',
-        description: 'Download ONE web page and return its readable text, title, site and publication date. The page is fetched and extracted on this device. Use it on urls returned by web_search, or on a url the user has explicitly asked you to read.',
-        action: 'read',
+        description: 'Download ONE web page and return its readable text, title, site and publication date. The page is fetched and extracted on this device, then its snapshot is saved to the encrypted Library, so this requires outbound and write permission. Use it on urls returned by web_search, or on a url the user has explicitly asked you to read.',
+        action: 'outbound',
+        requiredActions: ['outbound', 'write'],
         input: z.object({
             url: z.string().min(1).describe('The full http(s) url of the page to read.'),
         }),
@@ -135,8 +168,14 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
             }
 
             // D5: it becomes a source of this chat, with its text, so the answer
-            // stays auditable after the page changes or disappears.
-            await sources.remember(page).catch(() => {})
+            // stays auditable after the page changes or disappears. A failed
+            // save does not erase a valid fetch, but it is no longer invisible.
+            let saved = 'Library: the full page snapshot was saved.'
+            try {
+                await sources.remember(page)
+            } catch {
+                saved = 'Library: the page was read, but it could not be saved to the Library.'
+            }
 
             return {
                 ok: true,
@@ -146,6 +185,7 @@ export function createTalosWebTools(sources: TalosWebToolSources): TalosToolDefi
                     `site: ${page.siteName ?? 'unknown'}`,
                     `published: ${page.publishedAt ?? 'date unknown'}`,
                     page.byline ? `byline: ${page.byline}` : '',
+                    saved,
                     '',
                     page.text,
                 ].filter(Boolean).join('\n')),

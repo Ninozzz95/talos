@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
+import {
+    createTalosMobileComposerDraftController as createDraftController,
+    type TalosMobileComposerDraftOptions,
+} from '@/composables/useTalosMobileComposerDraft'
+import { talosTestT } from '../../helpers/talosTestI18n'
+
+function createTalosMobileComposerDraftController(
+    options: Omit<TalosMobileComposerDraftOptions, 'translate'>,
+) {
+    return createDraftController({ ...options, translate: talosTestT('en') })
+}
 
 function deferred<T>() {
     let resolve!: (value: T) => void

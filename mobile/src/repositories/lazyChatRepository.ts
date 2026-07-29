@@ -164,6 +164,9 @@ export function createLazyChatRepository(loader: ChatRepositoryLoader): TalosCha
         async createMemory(input: CreateMemoryInput) {
             return (await ready()).createMemory(input)
         },
+        async upsertMemory(input: CreateMemoryInput) {
+            return (await ready()).upsertMemory(input)
+        },
         async listMemories() {
             return (await ready()).listMemories()
         },

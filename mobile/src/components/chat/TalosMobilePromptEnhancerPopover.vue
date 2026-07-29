@@ -27,13 +27,13 @@ const emit = defineEmits<{
                     id="talos-mobile-enhancer-title"
                     class="text-sm font-semibold text-[var(--talos-text,var(--foreground))]"
                 >
-                    Prompt enhancement preview
+                    {{ $t('chat.enhancementPreview') }}
                 </h2>
                 <p
                     data-testid="talos-mobile-enhancement-provenance"
                     class="font-mono text-xs text-[var(--talos-muted,var(--muted-foreground))]"
                 >
-                    Enhanced with {{ result.provider }} · {{ result.model }}
+                    {{ $t('chat.enhancedWith', { provider: result.provider, model: result.model }) }}
                 </p>
             </header>
 
@@ -50,13 +50,13 @@ const emit = defineEmits<{
                 id="talos-mobile-enhancer-description"
                 class="line-clamp-2 text-2xs leading-4 text-[var(--talos-muted,var(--muted-foreground))]"
             >
-                {{ result.summary || 'Review the enhanced prompt before changing your draft.' }}
+                {{ result.summary || $t('chat.enhancementFallbackSummary') }}
             </p>
 
             <ul
                 v-if="result.applied_principles.length"
                 class="flex flex-wrap gap-1"
-                aria-label="Applied prompt principles"
+                :aria-label="$t('chat.appliedPrinciples')"
             >
                 <li
                     v-for="principle in result.applied_principles"
@@ -75,7 +75,7 @@ const emit = defineEmits<{
                     class="min-h-11 min-w-11"
                     @click="emit('cancel')"
                 >
-                    Cancel
+                    {{ $t('common.cancel') }}
                 </Button>
                 <Button
                     type="button"
@@ -84,7 +84,7 @@ const emit = defineEmits<{
                     class="min-h-11 min-w-11"
                     @click="emit('insert')"
                 >
-                    Insert below
+                    {{ $t('chat.insertBelow') }}
                 </Button>
                 <Button
                     type="button"
@@ -92,7 +92,7 @@ const emit = defineEmits<{
                     class="min-h-11 min-w-11 bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                     @click="emit('replace')"
                 >
-                    Replace prompt
+                    {{ $t('chat.replacePrompt') }}
                 </Button>
             </footer>
         </div>

@@ -67,6 +67,26 @@ async function activateTab(wrapper: VueWrapper, label: string): Promise<void> {
 }
 
 describe('TalosMobileSettingsAppearancePanel', () => {
+    it('MOTION-SETTINGS-02 gives every Design/Motion/Voice panel the shared active-motion contract', async () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body,
+            global: {
+                stubs: {
+                    TalosThemedSelect: true,
+                    TalosMobileVoiceSettings: true,
+                },
+            },
+        })
+
+        for (const label of ['Design', 'Motion', 'Voice']) {
+            await activateTab(wrapper, label)
+            const panel = wrapper.get(`[data-appearance-section="${label.toLowerCase()}"]`)
+            expect(panel.classes()).toContain('talos-motion-tab-panel')
+            expect(panel.attributes('data-state')).toBe('active')
+        }
+        wrapper.unmount()
+    })
+
     it('offers all fourteen presets and changes preset and color mode through the theme store', async () => {
         const wrapper = mount(TalosMobileSettingsAppearancePanel, {
             attachTo: document.body,

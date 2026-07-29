@@ -91,7 +91,7 @@ function onReset(): void {
     <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize chat panel"
+        :aria-label="$t('accessibility.resizeSidebar')"
         data-testid="talos-tablet-divider"
         tabindex="0"
         :aria-valuenow="props.width"

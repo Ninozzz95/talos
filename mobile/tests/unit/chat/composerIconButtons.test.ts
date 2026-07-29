@@ -32,7 +32,7 @@ describe('composer icon buttons', () => {
     }
 
     it('the plus button is a bare icon, with no container', async () => {
-        const buttons = buttonsLabelled(await composerSource(), 'Add to chat')
+        const buttons = buttonsLabelled(await composerSource(), "$t('chat.addToChat')")
         expect(buttons.length).toBeGreaterThan(0)
         for (const button of buttons) {
             expect(button, button).not.toContain('variant="outline"')
@@ -55,7 +55,7 @@ describe('composer icon buttons', () => {
         const source = await composerSource()
         // Removing a border is a visual choice; shrinking a 44px target is an
         // accessibility regression, and this project enforces 44px elsewhere.
-        for (const button of buttonsLabelled(source, 'Add to chat')) {
+        for (const button of buttonsLabelled(source, "$t('chat.addToChat')")) {
             expect(button, button).toContain('min-h-11')
         }
         expect(source).toMatch(/rightActionLabel[\s\S]{0,400}?min-h-11/)

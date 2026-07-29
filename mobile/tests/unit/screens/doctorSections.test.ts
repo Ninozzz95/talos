@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     TALOS_DOCTOR_SECTIONS,
+    talosStorageDoctorRow,
     talosDoctorVerdict,
     splitTalosDoctorRows,
 } from '@/lib/diagnostics/doctorSections'
@@ -73,5 +74,46 @@ describe('what is shown and what is folded away', () => {
         const split = splitTalosDoctorRows(rows)
         expect(split.problems.map((row) => row.id)).toEqual(['b', 'z'])
         expect(split.passing.map((row) => row.id)).toEqual(['a', 'y'])
+    })
+})
+
+describe('the encrypted-storage check', () => {
+    it('keeps the healthy engine and state concise', () => {
+        expect(talosStorageDoctorRow({
+            native: true,
+            status: 'ready',
+            error: null,
+        })).toEqual({
+            id: 'storage',
+            label: 'Encrypted local storage',
+            value: 'SQLCipher native — ready',
+            ok: true,
+        })
+    })
+
+    it('P0 explains a missing native connection without copying the raw plugin error', () => {
+        const row = talosStorageDoctorRow({
+            native: true,
+            status: 'error',
+            error: 'Local chat storage is unavailable. Query: No available connection for database talos_mobile',
+        })
+
+        expect(row.value).toBe('SQLCipher native — error · connection closed; unlock and retry')
+        expect(row.value).not.toContain('talos_mobile')
+        expect(row.ok).toBe(false)
+    })
+
+    it('P0 distinguishes a locked key and never leaks unrelated native text', () => {
+        expect(talosStorageDoctorRow({
+            native: true,
+            status: 'error',
+            error: 'TALOS_DB_KEY_LOCKED: protected secret-value-that-must-not-render',
+        }).value).toBe('SQLCipher native — error · unlock required')
+
+        expect(talosStorageDoctorRow({
+            native: false,
+            status: 'error',
+            error: 'unexpected path C:\\private\\owner.db',
+        }).value).toBe('sql.js web store — error · retry local storage')
     })
 })

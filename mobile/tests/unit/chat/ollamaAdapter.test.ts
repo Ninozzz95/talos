@@ -79,9 +79,11 @@ describe('Ollama mobile adapter', () => {
         expect(request.mock.calls[0][0].data).toMatchObject({ stream: false, think: 'medium' })
     })
 
-    it('rejects missing or unsafe endpoint schemes', async () => {
+    it('I18N-CONFORMANCE-09 rejects missing or unsafe endpoints with stable error identities', async () => {
         const { transport } = transportWith()
-        await expect(ollamaAdapter.listModels({}, transport)).rejects.toThrow(/endpoint/i)
-        await expect(ollamaAdapter.listModels({ endpoint: 'file:///tmp/socket' }, transport)).rejects.toThrow(/http/i)
+        await expect(ollamaAdapter.listModels({}, transport))
+            .rejects.toThrow('TALOS_PROVIDER_ENDPOINT_REQUIRED')
+        await expect(ollamaAdapter.listModels({ endpoint: 'file:///tmp/socket' }, transport))
+            .rejects.toThrow('TALOS_PROVIDER_ENDPOINT_PROTOCOL')
     })
 })

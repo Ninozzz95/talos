@@ -336,6 +336,7 @@ export interface TalosChatRepository {
     listNotes(): Promise<TalosLocalNote[]>
     deleteNote(noteId: string): Promise<void>
     createMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
+    upsertMemory(input: CreateMemoryInput): Promise<TalosLocalMemory>
     listMemories(): Promise<TalosLocalMemory[]>
     updateMemoryStatus(memoryId: string, status: TalosMemoryStatus): Promise<TalosLocalMemory>
     touchMemories(memoryIds: string[], usedAt: string): Promise<void>

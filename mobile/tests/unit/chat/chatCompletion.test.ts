@@ -3,6 +3,8 @@ import { buildChatCompletion, ChatConfigError, type CompletionContext } from '@/
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
+import { defineTalosTool } from '@/lib/tools/registry'
+import { z } from 'zod'
 
 const anthropicProfile: TalosMobileModelProfileView = {
     id: 'claude-opus', provider: 'anthropic', model: 'claude-opus-4-8', display_name: 'Claude Opus 4.8',
@@ -14,6 +16,17 @@ const anthropicModel: TalosMobileProviderModel = {
     id: 'claude-opus-4-8', provider: 'anthropic', displayName: 'Claude Opus 4.8', chatCompatibility: 'supported',
     inputModalities: ['text'], outputModalities: ['text'], supportedParameters: ['thinking'],
 }
+
+const libraryTool = defineTalosTool({
+    name: 'library_list',
+    title: 'List the Library',
+    description: 'List Library files.',
+    action: 'read',
+    input: z.object({}),
+    async run() {
+        return { ok: true, content: '' }
+    },
+})
 
 function transportReturning(text: string): { transport: TalosMobileHttpTransport; request: ReturnType<typeof vi.fn> } {
     const request = vi.fn().mockResolvedValue({ status: 200, data: { model: 'claude-opus', content: [{ type: 'text', text }] } })
@@ -47,7 +60,10 @@ describe('buildChatCompletion', () => {
                 type: 'image', attachmentId: 'image-1', name: 'image.png', mediaType: 'image/png',
                 base64: 'aGVsbG8=', sha256: 'a'.repeat(64),
             }],
-        }])).rejects.toThrow(/image input/i)
+        }])).rejects.toMatchObject({
+            message: 'TALOS_CHAT_IMAGE_INPUT_UNSUPPORTED',
+            uiMessageKey: 'chat.modelCannotReadImages',
+        })
         expect(request).not.toHaveBeenCalled()
     })
 
@@ -58,7 +74,10 @@ describe('buildChatCompletion', () => {
 
     it('throws a helpful config error when the provider key is missing', async () => {
         const complete = buildChatCompletion(() => ({ profile: anthropicProfile, apiKey: null, effort: 'off', thinking: false }))
-        await expect(complete([{ role: 'user', content: 'hi' }])).rejects.toThrow(/api key/i)
+        await expect(complete([{ role: 'user', content: 'hi' }])).rejects.toMatchObject({
+            message: 'TALOS_CHAT_PROVIDER_KEY_REQUIRED',
+            uiMessageKey: 'chat.addProviderKeyToChat',
+        })
     })
 
     it('calls the Anthropic client with the selected model + key and returns the reply', async () => {
@@ -91,5 +110,37 @@ describe('buildChatCompletion', () => {
         }), { request })
         await expect(complete([{ role: 'user', content: 'hi' }])).resolves.toMatchObject({ text: 'router pong' })
         expect(request.mock.calls[0][0].url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    })
+
+    it('OPENROUTER-TOOLS-03 fails closed when a caller supplies tools to a model without capability', async () => {
+        const request = vi.fn().mockResolvedValue({
+            status: 200,
+            data: { model: 'vendor/plain', choices: [{ message: { content: 'plain reply' }, finish_reason: 'stop' }] },
+        })
+        const providerModel: TalosMobileProviderModel = {
+            id: 'vendor/plain',
+            provider: 'openrouter',
+            displayName: 'Plain model',
+            chatCompatibility: 'supported',
+            inputModalities: ['text'],
+            outputModalities: ['text'],
+            supportedParameters: [],
+        }
+        const complete = buildChatCompletion(() => ({
+            profile: { ...anthropicProfile, provider: 'openrouter', model: providerModel.id },
+            providerModel,
+            apiKey: 'k',
+            effort: 'off',
+            thinking: false,
+        }), { request })
+
+        await expect(complete(
+            [{ role: 'user', content: 'List files' }],
+            undefined,
+            [libraryTool] as never,
+        )).resolves.toMatchObject({ text: 'plain reply' })
+
+        expect(request.mock.calls[0][0].data).not.toHaveProperty('tools')
+        expect(request.mock.calls[0][0].data).not.toHaveProperty('tool_choice')
     })
 })

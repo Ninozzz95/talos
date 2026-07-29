@@ -16,34 +16,31 @@ export interface TalosVaultTrayItem {
     grant: TalosLocalFileAuthorityGrant
 }
 
+export interface TalosGeneratedSourceLink {
+    url: string
+    title: string
+}
+
+export interface TalosGeneratedTextInput {
+    name: string
+    mediaType: string
+    text: string
+    kind?: 'document' | 'web_source'
+    sourceUrl?: string | null
+    /**
+     * A search call owns one compact dossier but can project many openable
+     * source rows. Kept typed instead of hiding another shape in metadata.
+     */
+    sourceLinks?: readonly TalosGeneratedSourceLink[]
+}
+
 export interface TalosVaultService {
     /** originSessionId (owner 2026-07-25): the chat the file was uploaded in, so the
      *  Library can group by chat and the model knows a doc's origin. */
     ingest(file: TalosPickedFile, originSessionId?: string | null): Promise<TalosVaultTrayItem>
     /** Owner 2026-07-24: persist a chat-generated artifact into the Library as a
      *  reusable document (origin='generated', searchable via extracted text). */
-    createGenerated(
-        input: {
-            name: string
-            mediaType: string
-            text: string
-            /**
-             * Owner 2026-07-26: a web research that reads fifteen pages created
-             * fifteen Library documents sitting next to the user's own invoice,
-             * as though he had made them. D5 is still right — a dossier that
-             * survives dead links is the point — but a SOURCE is not a
-             * document, and marking it lets the Library group them instead of
-             * burying everything else.
-             */
-            kind?: 'document' | 'web_source'
-            /**
-             * The address a read page came from, so the Library can show it as
-             * a link you can open rather than a sentence buried in markdown.
-             */
-            sourceUrl?: string | null
-        },
-        originSessionId?: string | null,
-    ): Promise<TalosVaultTrayItem>
+    createGenerated(input: TalosGeneratedTextInput, originSessionId?: string | null): Promise<TalosVaultTrayItem>
     /**
      * A generated file whose content is BYTES, not text.
      *
@@ -170,6 +167,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
          * fact the Library can render.
          */
         sourceUrl: string | null = null,
+        sourceLinks: readonly TalosGeneratedSourceLink[] = [],
     ): Promise<TalosVaultTrayItem> {
         const fileId = idFactory()
         await options.repository.createVaultFile({
@@ -208,6 +206,9 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                     extension: analysis.extension, page_count: analysis.pageCount,
                     origin, origin_session_id: originSessionId, kind,
                     ...(sourceUrl ? { source_url: sourceUrl } : {}),
+                    ...(sourceLinks.length
+                        ? { source_links: sourceLinks.map((link) => ({ ...link })) }
+                        : {}),
                 },
             })
             const grant = await createGrant(file.id)
@@ -243,6 +244,10 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                         origin,
                         origin_session_id: originSessionId,
                         kind,
+                        ...(sourceUrl ? { source_url: sourceUrl } : {}),
+                        ...(sourceLinks.length
+                            ? { source_links: sourceLinks.map((link) => ({ ...link })) }
+                            : {}),
                         // Recorded, so the Library can say the document is not
                         // searchable rather than returning nothing for every
                         // query and looking broken.
@@ -258,7 +263,10 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
 
     return {
         ingest: (pickedFile, originSessionId = null) => ingestFile(pickedFile, 'uploaded', originSessionId),
-        async createGenerated({ name, mediaType, text, kind, sourceUrl }, originSessionId = null) {
+        async createGenerated(
+            { name, mediaType, text, kind, sourceUrl, sourceLinks },
+            originSessionId = null,
+        ) {
             // A chat-generated document flows through the SAME ingestion pipeline
             // (private copy + analysis → searchable extracted text + sha256), only
             // marked origin='generated'. Built from a web-blob so it needs no picker.
@@ -268,7 +276,7 @@ export function createTalosVaultService(options: TalosVaultServiceOptions): Talo
                 declaredMediaType: mediaType,
                 sizeBytes: bytes.byteLength,
                 source: { kind: 'web-blob', blob: new Blob([bytes], { type: mediaType }) },
-            }, 'generated', originSessionId, kind, sourceUrl ?? null)
+            }, 'generated', originSessionId, kind, sourceUrl ?? null, sourceLinks ?? [])
         },
         async createGeneratedBinary({ name, mediaType, bytes }, originSessionId = null) {
             // The same ingestion pipeline: private copy, analysis, sha256. Only

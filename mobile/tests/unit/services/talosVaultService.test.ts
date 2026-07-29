@@ -101,6 +101,52 @@ describe('createTalosVaultService', () => {
         expect((item.file.metadata as { origin?: string }).origin).toBe('generated')
     })
 
+    it('WEB-LIB-06 persists every typed source link in a degraded generated save', async () => {
+        const repository = createMemoryChatRepository({ now: () => '2026-07-28T10:00:00.000Z' })
+        const fileStore: TalosAttachmentFileStore = {
+            copyToPrivate: vi.fn(async () => ({
+                privateUri: 'talos-vault/files/search.md',
+                bytes: new TextEncoder().encode('search'),
+            })),
+            readPrivate: vi.fn(),
+            deletePrivate: vi.fn(),
+        }
+        const analysisClient: TalosAttachmentAnalysisClient = {
+            analyze: vi.fn(async () => { throw new Error('TALOS_ATTACHMENT_ANALYSIS_FAILED') }),
+        }
+        const service = createTalosVaultService({
+            repository,
+            fileStore,
+            analysisClient,
+            idFactory: vi.fn().mockReturnValueOnce('search-1').mockReturnValueOnce('grant-search'),
+            now: () => '2026-07-28T10:00:00.000Z',
+        })
+
+        const item = await service.createGenerated({
+            name: 'Web search.md',
+            mediaType: 'text/markdown',
+            text: '# Search',
+            kind: 'web_source',
+            sourceUrl: null,
+            sourceLinks: [
+                { url: 'https://example.com/a', title: 'A' },
+                { url: 'https://example.org/b', title: 'B' },
+            ],
+        }, 'session-web')
+
+        expect(item.file.status).toBe('available')
+        expect(item.file.metadata).toMatchObject({
+            origin: 'generated',
+            origin_session_id: 'session-web',
+            kind: 'web_source',
+            source_links: [
+                { url: 'https://example.com/a', title: 'A' },
+                { url: 'https://example.org/b', title: 'B' },
+            ],
+            analysis_failed: 'TALOS_ATTACHMENT_ANALYSIS_FAILED',
+        })
+    })
+
     it('AV-06 removes partial bytes and records a bounded failed state', async () => {
         const repository = createMemoryChatRepository()
         const fileStore: TalosAttachmentFileStore = {

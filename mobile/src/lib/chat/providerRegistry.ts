@@ -16,7 +16,9 @@ function lazyAdapter(
                 throw new TalosMobileProviderError({
                     provider,
                     operation: 'complete',
-                    message: `Provider adapter mismatch for ${provider}.`,
+                    message: 'TALOS_PROVIDER_ADAPTER_MISMATCH',
+                    uiMessageKey: 'models.providerAdapterMismatch',
+                    uiMessageParameters: { provider },
                 })
             }
             return adapter
@@ -41,7 +43,9 @@ function lazyAdapter(
                 throw new TalosMobileProviderError({
                     provider,
                     operation: 'complete',
-                    message: `Streaming is not supported for ${provider}.`,
+                    message: 'TALOS_PROVIDER_STREAMING_UNSUPPORTED',
+                    uiMessageKey: 'models.providerStreamingUnsupported',
+                    uiMessageParameters: { provider },
                 })
             }
             return loaded.streamComplete(input, credential, handlers)
@@ -67,6 +71,8 @@ export function providerAdapterFor(provider: TalosMobileProviderId | string): Ta
     throw new TalosMobileProviderError({
         provider: 'openai',
         operation: 'complete',
-        message: `Unsupported provider: ${provider}`,
+        message: 'TALOS_PROVIDER_UNSUPPORTED',
+        uiMessageKey: 'models.providerUnsupported',
+        uiMessageParameters: { provider },
     })
 }

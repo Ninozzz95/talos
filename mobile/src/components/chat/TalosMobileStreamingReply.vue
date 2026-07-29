@@ -1,12 +1,25 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolRow.vue'
-import { BookMarked, Clock, FileText, Globe, ListTodo, NotebookPen, Sparkles, Wrench } from '@lucide/vue'
+import {
+    BookMarked,
+    Clock,
+    Download,
+    FileText,
+    Globe,
+    Image as ImageIcon,
+    ListTodo,
+    NotebookPen,
+    Sparkles,
+    Wrench,
+} from '@lucide/vue'
 import {
     talosToolActivityLabel,
     talosToolIconName,
+    TALOS_TOOL_LABEL_KEYS,
     type TalosToolIconName,
 } from '@/lib/tools/toolLabels'
 import { stabilizeStreamingTalosMarkdown } from '@/lib/streamingMarkdown'
@@ -26,13 +39,14 @@ import { useSettingsStore } from '@/stores/settings'
  *    pace (see lib/typewriterPacing.ts).
  *  - PAINTING: markdown re-parsing costs 4–16ms — impossible at 60fps — so the
  *    parsed prefix stays throttled while the freshly revealed TAIL is written
- *    straight into the DOM, one character span per letter, appended to the last
+ *    straight into the DOM as small inline fragments, appended to the last
  *    rendered block so it flows inline instead of jumping to a new line.
  * The caret rides at the end of that tail, so it sits exactly where the next
  * letter will appear.
  */
 const controller = useChatController()
 const state = controller.chat.state
+const { t } = useTalosI18n()
 
 const streamingText = computed(() => state.streamingText ?? '')
 // The tool block: what TALOS is doing right now, in the user's words rather
@@ -47,12 +61,19 @@ const TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     clock: Clock,
     web: Globe,
     document: FileText,
+    image: ImageIcon,
+    download: Download,
     tool: Wrench,
 }
 
 const runningTools = computed(() => controller.toolActivity.value.map((activity) => ({
     key: `${activity.name}:${activity.detail ?? ''}`,
-    label: talosToolActivityLabel(activity),
+    label: talosToolActivityLabel(
+        activity,
+        TALOS_TOOL_LABEL_KEYS[activity.name]
+            ? t(TALOS_TOOL_LABEL_KEYS[activity.name]!)
+            : undefined,
+    ),
     icon: TOOL_ICONS[talosToolIconName(activity.name)],
 })))
 // Defect #5: reasoning streams on its own channel, so it can appear before the
@@ -205,14 +226,12 @@ function ensureTail(): HTMLElement | null {
 
 function appendChars(host: HTMLElement, text: string): void {
     /**
-     * One span per WORD, with its trailing space inside it.
+     * Batch each delivered fragment at whitespace boundaries.
      *
-     * It used to be one span per LETTER. A 3,000-character reply is then 3,000
-     * animated nodes in a single bubble — twice the size at which Lighthouse
-     * calls a DOM tree an error — on a phone whose main thread is also reading
-     * the network and re-parsing markdown. Word granularity is what every
-     * reference implementation chose: five and a half times fewer nodes, and
-     * nobody can see the difference.
+     * Fade normally arrives on whole-word boundaries. Typewriter can deliver a
+     * smaller frame slice, so claiming every node is a whole word would be
+     * false; the throttled Markdown prefix absorbs these temporary tail nodes
+     * every 110 ms and keeps the live DOM bounded.
      *
      * The trailing space goes INSIDE the span rather than beside it: a
      * whitespace-only span fragments copied text and makes a link's underline
@@ -320,7 +339,7 @@ onBeforeUnmount(() => {
         <div class="talos-streaming-body">
             <TalosMobileMessageContent :content="parsedMarkdown" />
         </div>
-        <span class="sr-only" role="status" aria-live="polite">Receiving response</span>
+        <span class="sr-only" role="status" aria-live="polite">{{ $t('chat.receivingResponse') }}</span>
     </article>
     <!-- Owner 2026-07-25: while waiting there is NO container — just the mark.
          It disappears the instant the first letter is painted. -->
@@ -334,6 +353,6 @@ onBeforeUnmount(() => {
         <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
              empty nodes; each node fills as the line passes through it. -->
         <TalosLineLoader :width="44" />
-        <span class="sr-only">Processing</span>
+        <span class="sr-only">{{ $t('chat.processing') }}</span>
     </div>
 </template>

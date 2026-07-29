@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
+import type { TalosMessageParameters } from '@/i18n/contracts'
+import { TalosUiError } from '@/i18n/uiErrors'
 import { buildChatCompletion } from '@/lib/chat/chatCompletion'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
@@ -64,12 +66,21 @@ export type TalosMobilePromptEnhancementErrorCode =
 export class TalosMobilePromptEnhancementError extends Error {
     readonly code: TalosMobilePromptEnhancementErrorCode
     readonly retryable: boolean
+    readonly uiMessageKey: string
+    readonly uiMessageParameters?: TalosMessageParameters
 
-    constructor(code: TalosMobilePromptEnhancementErrorCode, message: string, retryable: boolean) {
-        super(message)
+    constructor(
+        code: TalosMobilePromptEnhancementErrorCode,
+        uiMessageKey: string,
+        retryable: boolean,
+        uiMessageParameters?: TalosMessageParameters,
+    ) {
+        super(code)
         this.name = 'TalosMobilePromptEnhancementError'
         this.code = code
         this.retryable = retryable
+        this.uiMessageKey = uiMessageKey
+        this.uiMessageParameters = uiMessageParameters
     }
 }
 
@@ -86,7 +97,7 @@ function characterLength(value: string): number {
 function invalidResponse(): never {
     throw new TalosMobilePromptEnhancementError(
         'PROMPT_ENHANCER_INVALID_RESPONSE',
-        'The selected model returned an invalid prompt enhancement. Retry or choose another model.',
+        'chat.promptEnhancerInvalidResponse',
         true,
     )
 }
@@ -100,7 +111,7 @@ function stripWholeCodeFence(value: string): string {
 function safeEnhancementMessage(error: unknown, secret: string | null): string {
     let message = error instanceof Error && error.message
         ? error.message
-        : 'The provider request failed.'
+        : 'TALOS_PROVIDER_REQUEST_FAILED'
     if (secret) message = message.replaceAll(secret, '[redacted]')
     return message
 }
@@ -112,15 +123,16 @@ export function buildTalosMobilePromptEnhancementPayload(
     if (!normalized) {
         throw new TalosMobilePromptEnhancementError(
             'PROMPT_ENHANCER_INPUT_INVALID',
-            'Write a prompt before asking TALOS to improve it.',
+            'chat.promptEnhancerWriteFirst',
             false,
         )
     }
     if (characterLength(normalized) > TALOS_MOBILE_PROMPT_MAX_LENGTH) {
         throw new TalosMobilePromptEnhancementError(
             'PROMPT_ENHANCER_INPUT_INVALID',
-            `Prompt enhancement supports at most ${TALOS_MOBILE_PROMPT_MAX_LENGTH} characters.`,
+            'chat.promptEnhancerTooLong',
             false,
+            { count: TALOS_MOBILE_PROMPT_MAX_LENGTH },
         )
     }
 
@@ -173,12 +185,25 @@ export async function runTalosMobilePromptEnhancement(
     try {
         const payload = buildTalosMobilePromptEnhancementPayload(prompt)
         const { profile, providerModel } = context
-        if (!profile) throw new Error('Select a model before improving the prompt.')
+        if (!profile) {
+            throw new TalosUiError(
+                'TALOS_PROMPT_ENHANCER_MODEL_REQUIRED',
+                'chat.selectModelBeforeImproving',
+            )
+        }
         if (!talosMobileModelProfileIsCallable(profile)) {
-            throw new Error(`Add your ${profile.provider} API key in Settings to improve prompts.`)
+            throw new TalosUiError(
+                'TALOS_PROMPT_ENHANCER_KEY_REQUIRED',
+                'chat.addProviderKeyToImprove',
+                { provider: profile.provider },
+            )
         }
         if (!providerModel) {
-            throw new Error(`Refresh the ${profile.provider} model catalog before improving prompts.`)
+            throw new TalosUiError(
+                'TALOS_PROMPT_ENHANCER_CATALOG_REQUIRED',
+                'chat.refreshProviderBeforeImproving',
+                { provider: profile.provider },
+            )
         }
 
         const completion = buildChatCompletion(
@@ -209,7 +234,7 @@ export async function runTalosMobilePromptEnhancement(
     } catch (error) {
         const safeMessage = safeEnhancementMessage(error, context.apiKey)
         if (error instanceof TalosMobilePromptEnhancementError) {
-            throw new TalosMobilePromptEnhancementError(error.code, safeMessage, error.retryable)
+            throw error
         }
         if (error instanceof TalosMobileProviderError) {
             throw new TalosMobileProviderError({
@@ -217,8 +242,11 @@ export async function runTalosMobilePromptEnhancement(
                 operation: error.operation,
                 message: safeMessage,
                 status: error.status,
+                uiMessageKey: error.uiMessageKey,
+                uiMessageParameters: error.uiMessageParameters,
             })
         }
+        if (error instanceof TalosUiError) throw error
         throw new Error(safeMessage)
     }
 }

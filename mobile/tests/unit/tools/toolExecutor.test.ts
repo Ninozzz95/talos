@@ -5,7 +5,14 @@ import {
     TALOS_DEFAULT_TOOL_PERMISSIONS,
     decideTalosToolPermission,
     executeTalosTool,
+    preflightTalosToolExecution,
 } from '@/lib/tools/executor'
+import {
+    TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+    applyTalosToolAuthorizationGrant,
+    digestTalosToolAuthorizationInput,
+    type TalosToolAuthorizationRequestV1,
+} from '@/lib/tools/toolAuthorizations'
 
 /**
  * Owner decision 2026-07-25: permissions per ACTION TYPE, configured by the
@@ -50,12 +57,37 @@ const sender = defineTalosTool({
     },
 })
 
+const policyWriter = defineTalosTool({
+    name: 'library_context_policy_update',
+    title: 'Change Library context policy',
+    description: 'Apply an explicitly confirmed Library policy mutation.',
+    action: 'write',
+    confirmation: 'always',
+    input: z.object({ mode: z.string().min(1) }),
+    async run(input) {
+        return { ok: true, content: `updated: ${input.mode}` }
+    },
+})
+
+const compoundWebWriter = defineTalosTool({
+    name: 'web_archive',
+    title: 'Search and archive a web source',
+    description: 'Send a query off-device and persist its source locally.',
+    action: 'outbound',
+    requiredActions: ['outbound', 'write'],
+    input: z.object({ query: z.string().min(1) }),
+    async run(input) {
+        return { ok: true, content: `archived: ${input.query}` }
+    },
+})
+
 const audit = vi.fn(async () => {})
 const consent = vi.fn(async () => true)
 
 function deps(overrides: Record<string, unknown> = {}) {
     return {
         permissions: TALOS_DEFAULT_TOOL_PERMISSIONS,
+        isToolEnabled: () => true,
         requestConsent: consent,
         audit,
         context: { sessionId: 'session-1' },
@@ -81,6 +113,190 @@ describe('tool permissions', () => {
 })
 
 describe('executeTalosTool', () => {
+    it('TOOL-AUTH-01 preflights an unresolved write without executing, auditing, or parking consent', async () => {
+        const run = vi.spyOn(writer, 'run')
+
+        const result = await preflightTalosToolExecution(
+            writer,
+            { title: 'Spesa' },
+            deps({ callId: 'call-write-1' }),
+        )
+
+        expect(result).toMatchObject({
+            status: 'authorization_required',
+            request: {
+                callId: 'call-write-1',
+                actions: ['write'],
+                input: { title: 'Spesa' },
+                allowPersistent: true,
+            },
+        })
+        expect(run).not.toHaveBeenCalled()
+        expect(consent).not.toHaveBeenCalled()
+        expect(audit).not.toHaveBeenCalled()
+        run.mockRestore()
+    })
+
+    it('TOOL-AUTH-03 an exact allow-once request runs without the legacy consent Promise', async () => {
+        const input = { title: 'Spesa' }
+        const request: TalosToolAuthorizationRequestV1 = {
+            schema_version: 1,
+            id: 'request-write-1',
+            checkpoint_id: 'checkpoint-write-1',
+            session_id: 'session-1',
+            send_id: 'send-1',
+            model_profile_id: 'anthropic:claude-live',
+            call_id: 'call-write-1',
+            tool: 'notes_create',
+            actions: ['write'],
+            input,
+            input_digest: await digestTalosToolAuthorizationInput(input),
+            allow_persistent: true,
+            decision: 'allow_once',
+            created_at: '2026-07-29T12:00:00.000Z',
+            decided_at: '2026-07-29T12:01:00.000Z',
+        }
+
+        const result = await executeTalosTool(
+            writer,
+            input,
+            deps({
+                callId: 'call-write-1',
+                authorizationRequest: request,
+            }),
+        )
+
+        expect(result.ok).toBe(true)
+        expect(consent).not.toHaveBeenCalled()
+    })
+
+    it('TOOL-AUTH-05 an exact persistent grant suppresses only its matching tool prompt', async () => {
+        const authorizations = applyTalosToolAuthorizationGrant(
+            TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+            'document_create',
+            ['write'],
+            0,
+            '2026-07-29T12:00:00.000Z',
+        )
+        const documentWriter = defineTalosTool({
+            ...writer,
+            name: 'document_create',
+        })
+
+        const result = await executeTalosTool(
+            documentWriter,
+            { title: 'Spesa' },
+            deps({ authorizations, callId: 'call-doc-1' }),
+        )
+
+        expect(result.ok).toBe(true)
+        expect(consent).not.toHaveBeenCalled()
+        const unrelated = await preflightTalosToolExecution(
+            writer,
+            { title: 'Other' },
+            deps({ authorizations, callId: 'call-note-1' }),
+        )
+        expect(unrelated.status).toBe('authorization_required')
+    })
+
+    it('P1-CTX-AGENT-02/05 indirect content, write=allow, and a saved grant never suppress policy confirmation', async () => {
+        const run = vi.spyOn(policyWriter, 'run')
+        const authorizations = applyTalosToolAuthorizationGrant(
+            TALOS_EMPTY_TOOL_AUTHORIZATIONS,
+            'library_context_policy_update',
+            ['write'],
+            0,
+            '2026-07-29T12:00:00.000Z',
+        )
+
+        const preflight = await preflightTalosToolExecution(
+            policyWriter,
+            { mode: 'broad_compat_v1' },
+            deps({
+                permissions: { read: 'allow', write: 'allow', outbound: 'deny' },
+                authorizations,
+                callId: 'call-policy-1',
+            }),
+        )
+
+        expect(preflight).toMatchObject({
+            status: 'authorization_required',
+            request: {
+                callId: 'call-policy-1',
+                actions: ['write'],
+                allowPersistent: false,
+            },
+        })
+        expect(run).not.toHaveBeenCalled()
+        expect(consent).not.toHaveBeenCalled()
+        run.mockRestore()
+    })
+
+    it('AGENT-TOOLS-05 live revocation fails closed before parse, consent, or body', async () => {
+        const run = vi.fn(async () => ({ ok: true as const, content: 'must not run' }))
+        const revokedReader = defineTalosTool({ ...reader, run })
+        const result = await executeTalosTool(
+            revokedReader,
+            '{not valid json',
+            deps({ isToolEnabled: () => false }),
+        )
+
+        expect(result).toMatchObject({
+            ok: false,
+            code: 'TALOS_TOOL_DISABLED',
+        })
+        expect(run).not.toHaveBeenCalled()
+        expect(consent).not.toHaveBeenCalled()
+        expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+            tool: 'library_search',
+            status: 'denied',
+            input: '{not valid json',
+        }))
+    })
+
+    it('P0-CAP-01 deny on any required action blocks before the tool body', async () => {
+        const run = vi.spyOn(compoundWebWriter, 'run')
+        const result = await executeTalosTool(
+            compoundWebWriter,
+            { query: 'private acquisition' },
+            deps({
+                permissions: { read: 'allow', write: 'deny', outbound: 'allow' },
+            }),
+        )
+
+        expect(result).toMatchObject({
+            ok: false,
+            code: 'TALOS_TOOL_DENIED_BY_POLICY',
+        })
+        expect(run).not.toHaveBeenCalled()
+        expect(consent).not.toHaveBeenCalled()
+        expect(audit).toHaveBeenCalledWith(expect.objectContaining({
+            tool: 'web_archive',
+            action: 'outbound',
+            requiredActions: ['outbound', 'write'],
+            status: 'denied',
+        }))
+        run.mockRestore()
+    })
+
+    it('P0-CAP-02 asks once with exactly the unresolved compound actions', async () => {
+        const result = await executeTalosTool(
+            compoundWebWriter,
+            { query: 'private acquisition' },
+            deps({
+                permissions: { read: 'allow', write: 'ask', outbound: 'ask' },
+            }),
+        )
+
+        expect(result.ok).toBe(true)
+        expect(consent).toHaveBeenCalledTimes(1)
+        expect(consent).toHaveBeenCalledWith(expect.objectContaining({
+            tool: compoundWebWriter,
+            actions: ['outbound', 'write'],
+            input: { query: 'private acquisition' },
+        }))
+    })
+
     it('a read runs without asking anyone, and its output is MARKED untrusted', async () => {
         const result = await executeTalosTool(reader, '{"query":"fattura"}', deps())
         expect(result.ok).toBe(true)

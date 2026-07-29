@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import { CircleAlert, CircleCheck, CircleDashed, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import {
     talosPermissionAction,
-    talosPermissionLabel,
     visibleTalosPermissionRows,
     type TalosPermissionRow,
     type TalosPermissionState,
@@ -34,6 +34,7 @@ const device = ref<TalosDeviceState>({
     notificationsRuntime: false,
     biometricHardware: false,
 })
+const { t } = useTalosI18n()
 const busy = ref<string | null>(null)
 
 const rows = computed(() => visibleTalosPermissionRows({
@@ -46,6 +47,16 @@ function stateOf(row: TalosPermissionRow): TalosPermissionState | null {
     if (row.id === 'microphone') return device.value.microphone
     if (row.id === 'notifications') return device.value.notifications
     return null
+}
+function rowTitle(row: TalosPermissionRow): string {
+    return t(`privacyPermissions.rows.${row.id}.title`)
+}
+function rowPurpose(row: TalosPermissionRow): string {
+    return t(`privacyPermissions.rows.${row.id}.purpose`)
+}
+function permissionLabel(state: TalosPermissionState): string {
+    const key = state === 'prompt-with-rationale' ? 'rationale' : state
+    return t(`privacyPermissions.states.${key}`)
 }
 
 /**
@@ -91,9 +102,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
     <section data-testid="talos-settings-privacy" class="flex flex-col gap-3">
         <p class="flex items-start gap-2 text-xs leading-5 text-[var(--talos-muted)]">
             <ShieldCheck class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-            TALOS asks for something only when a feature needs it, at the moment you use that
-            feature. Android always has the final word — you can change any of these in the
-            system settings.
+            {{ t('privacyPermissions.intro') }}
         </p>
 
         <div
@@ -102,7 +111,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
             :data-permission-row="row.id"
             class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-3"
             role="group"
-            :aria-label="stateOf(row) ? `${row.title}, ${talosPermissionLabel(stateOf(row)!)}` : row.title"
+            :aria-label="stateOf(row) ? `${rowTitle(row)}, ${permissionLabel(stateOf(row)!)}` : rowTitle(row)"
         >
             <div class="flex items-center gap-2">
                 <CircleCheck
@@ -116,7 +125,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                     aria-hidden="true"
                 />
                 <CircleDashed v-else class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
-                <span class="text-sm font-semibold text-[var(--talos-text)]">{{ row.title }}</span>
+                <span class="text-sm font-semibold text-[var(--talos-text)]">{{ rowTitle(row) }}</span>
                 <!-- The state is TEXT, not colour alone: a badge nobody can read
                      is not a state, and a screen reader gets it from the group's
                      own label. -->
@@ -124,22 +133,21 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                     v-if="stateOf(row)"
                     class="ml-auto text-2xs uppercase tracking-wide text-[var(--talos-muted)]"
                     aria-live="polite"
-                >{{ talosPermissionLabel(stateOf(row)!) }}</span>
+                >{{ permissionLabel(stateOf(row)!) }}</span>
                 <span
                     v-else-if="row.kind === 'install'"
                     class="ml-auto text-2xs uppercase tracking-wide text-[var(--talos-muted)]"
-                >Granted at install</span>
+                >{{ t('privacyPermissions.grantedAtInstall') }}</span>
             </div>
 
-            <p class="mt-1.5 text-xs leading-5 text-[var(--talos-muted)]">{{ row.purpose }}</p>
+            <p class="mt-1.5 text-xs leading-5 text-[var(--talos-muted)]">{{ rowPurpose(row) }}</p>
 
             <!-- Past a permanent denial the system dialog never opens again, so
                  the only honest button is the one that goes to the setting — with
                  the steps, because no API can deep-link a single toggle. -->
             <template v-if="stateOf(row) === 'denied'">
                 <p class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]">
-                    To allow it: open the system settings, tap <strong>Permissions</strong>,
-                    then turn on <strong>{{ row.title }}</strong>.
+                    {{ t('privacyPermissions.allowSteps', { permission: rowTitle(row) }) }}
                 </p>
                 <Button
                     type="button"
@@ -148,7 +156,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                     class="mt-2 min-h-11 w-full rounded-xl text-sm"
                     :disabled="busy === row.id"
                     @click="act(row)"
-                >Open system settings</Button>
+                >{{ t('privacyPermissions.openSystemSettings') }}</Button>
             </template>
             <Button
                 v-else-if="stateOf(row) && talosPermissionAction(stateOf(row)!) === 'request'"
@@ -158,7 +166,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
                 class="mt-2 min-h-11 w-full rounded-xl text-sm"
                 :disabled="busy === row.id"
                 @click="act(row)"
-            >Allow</Button>
+            >{{ t('privacyPermissions.allow') }}</Button>
         </div>
     </section>
 </template>

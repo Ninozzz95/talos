@@ -24,6 +24,7 @@ function tool() {
 function deps() {
     return {
         permissions: { ...TALOS_DEFAULT_TOOL_PERMISSIONS, write: 'allow' as const },
+        isToolEnabled: () => true,
         requestConsent: vi.fn(async () => true),
         audit: vi.fn(async () => {}),
         context: { sessionId: 's1' },

@@ -35,6 +35,12 @@ const IMAGE = {
     sha256: 'a'.repeat(64),
 }
 
+const BINDING = {
+    id: 'binding-file-1',
+    vault_file_id: 'file-1',
+    grant_id: 'grant-file-1',
+}
+
 describe('a tool that hands back something to look at', () => {
     it('puts the image on a user turn, after the tool results', async () => {
         const complete = vi.fn()
@@ -77,23 +83,30 @@ describe('a tool that hands back something to look at', () => {
         expect(turns.some((turn) => turn.parts?.length)).toBe(false)
     })
 
-    it('gathers images from every tool in the round, in order', async () => {
+    it('IMAGE-DUR-05 gathers images and durable message bindings in tool-call order', async () => {
         const second = { ...IMAGE, attachmentId: 'file-2', name: 'cane.jpg' }
+        const secondBinding = {
+            id: 'binding-file-2',
+            vault_file_id: 'file-2',
+            grant_id: 'grant-file-2',
+        }
         const complete = vi.fn()
             .mockResolvedValueOnce({ text: '', toolCalls: [call('a'), call('b')] })
             .mockResolvedValue({ text: 'due animali' })
 
-        await runTalosAgentLoop([{ role: 'user', content: 'guarda' }], {
+        const outcome = await runTalosAgentLoop([{ role: 'user', content: 'guarda' }], {
             complete,
             execute: async (entry) => ({
                 ok: true,
                 content: 'ok',
                 images: [entry.id === 'a' ? IMAGE : second],
+                messageAttachments: [entry.id === 'a' ? BINDING : secondBinding],
             }),
         })
 
         const turns = complete.mock.calls[1]![0] as Array<{ role: string; parts?: unknown[] }>
         const withImage = turns.find((turn) => turn.parts?.length)
         expect(withImage?.parts).toEqual([IMAGE, second])
+        expect(outcome.messageAttachments).toEqual([BINDING, secondBinding])
     })
 })

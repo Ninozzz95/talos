@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, shallowMount } from '@vue/test-utils'
+
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
+// Resolve the two async component graphs before this environment starts and
+// tears down many shallow mounts in parallel with the wider chat suite.
+import '@/components/chat/TalosMobileMessageContent.vue'
+import '@/components/chat/TalosMobileStreamingReply.vue'
 import {
     TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_TEXT_SCALE_REM,
@@ -29,11 +34,24 @@ function message(id: string) {
     }
 }
 
-function mountList(textScale: TalosChatBubbleScale) {
-    return mount(TalosMobileMessageList, {
+async function mountList(textScale: TalosChatBubbleScale) {
+    const wrapper = shallowMount(TalosMobileMessageList, {
         props: { messages: [message('m1')], sending: false, textScale },
-        global: { stubs: { teleport: true } },
+        // This suite owns only the inherited font-size contract. Loading the
+        // Markdown/browser/streaming chunks here adds no proof and can leave an
+        // unobserved import alive while a parallel Vitest environment tears
+        // down.
+        global: {
+            stubs: {
+                teleport: true,
+                TalosMobileMessageContent: true,
+                TalosMobileBrowserActivity: true,
+                TalosMobileStreamingReply: true,
+            },
+        },
     })
+    await flushPromises()
+    return wrapper
 }
 
 describe('chat text size actually renders', () => {
@@ -47,19 +65,25 @@ describe('chat text size actually renders', () => {
         expect(new Set(rem).size).toBe(rem.length)
     })
 
-    it('produces a DISTINCT font size per step on the thread root', () => {
-        const sizes = scales.map((scale) => {
-            const root = mountList(scale).get('[data-testid="talos-mobile-message-list"]')
+    it('produces a DISTINCT font size per step on the thread root', async () => {
+        const wrappers = await Promise.all(scales.map((scale) => mountList(scale)))
+        const sizes = wrappers.map((wrapper) => {
+            const root = wrapper.get('[data-testid="talos-mobile-message-list"]')
             return (root.attributes('style') ?? '').match(/font-size:\s*([^;]+)/)?.[1]?.trim()
         })
         expect(sizes.every(Boolean)).toBe(true)
         expect(new Set(sizes).size).toBe(scales.length)
+        wrappers.forEach((wrapper) => wrapper.unmount())
     })
 
-    it('every step still multiplies by the GLOBAL ui scale, so one knob moves all type', () => {
+    it('keeps every chat step independent from the interface ui scale', async () => {
         for (const scale of scales) {
-            const root = mountList(scale).get('[data-testid="talos-mobile-message-list"]')
-            expect(root.attributes('style')).toContain('var(--talos-ui-scale, 1)')
+            const wrapper = await mountList(scale)
+            const root = wrapper.get('[data-testid="talos-mobile-message-list"]')
+            const style = root.attributes('style') ?? ''
+            expect(style).not.toContain('--talos-ui-scale')
+            expect(style).toContain(`font-size: ${TALOS_CHAT_TEXT_SCALE_REM[scale]}rem`)
+            wrapper.unmount()
         }
     })
 
@@ -68,10 +92,12 @@ describe('chat text size actually renders', () => {
         expect(sanitizeTalosChatLayout({ bubble_scale: 'microscopic' }).bubble_scale).toBe('balanced')
     })
 
-    it('leaves no absolute font size between the root and the message text', () => {
-        const html = mountList('expanded').html()
+    it('leaves no absolute font size between the root and the message text', async () => {
+        const wrapper = await mountList('expanded')
+        const html = wrapper.html()
         // A Tailwind text-* utility on the bubble/content would override the
         // inherited size — that is exactly how this broke the second time.
         expect(html).not.toMatch(/class="[^"]*\btext-sm\b[^"]*"[^>]*data-message-kind/)
+        wrapper.unmount()
     })
 })

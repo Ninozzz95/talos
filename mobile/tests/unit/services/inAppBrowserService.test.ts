@@ -1,5 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createTalosInAppBrowserService } from '@/services/inAppBrowserService'
+import {
+    createTalosInAppBrowserService,
+    openTalosLinkOnce,
+} from '@/services/inAppBrowserService'
+
+const oneShotNative = vi.hoisted(() => {
+    const removed = vi.fn(async () => undefined)
+    const plugin = {
+        addListener: vi.fn(async () => ({ remove: removed })),
+        openInWebView: vi.fn(async () => undefined),
+        openInSystemBrowser: vi.fn(async () => undefined),
+        close: vi.fn(async () => undefined),
+    }
+    return { plugin, removed }
+})
+
+vi.mock('@capacitor/core', () => ({
+    Capacitor: { isNativePlatform: () => true },
+}))
+vi.mock('@capacitor/inappbrowser', () => ({
+    InAppBrowser: oneShotNative.plugin,
+    DefaultWebViewOptions: {},
+    DefaultSystemBrowserOptions: { android: { showTitle: true } },
+}))
 
 function nativeHarness() {
     const listeners = new Map<string, (...args: unknown[]) => void>()
@@ -27,6 +50,26 @@ function nativeHarness() {
 }
 
 describe('createTalosInAppBrowserService', () => {
+    it("launches a one-shot Library link without immediately closing the user's browser", async () => {
+        oneShotNative.plugin.addListener.mockClear()
+        oneShotNative.plugin.openInWebView.mockClear()
+        oneShotNative.plugin.openInSystemBrowser.mockClear()
+        oneShotNative.plugin.close.mockClear()
+        oneShotNative.removed.mockClear()
+
+        await expect(openTalosLinkOnce('https://Example.com/source', 'system_browser'))
+            .resolves.toBe(true)
+
+        expect(oneShotNative.plugin.openInSystemBrowser).toHaveBeenCalledOnce()
+        expect(oneShotNative.plugin.openInSystemBrowser).toHaveBeenCalledWith({
+            url: 'https://example.com/source',
+            options: { android: { showTitle: true } },
+        })
+        expect(oneShotNative.plugin.openInWebView).not.toHaveBeenCalled()
+        expect(oneShotNative.plugin.close).not.toHaveBeenCalled()
+        expect(oneShotNative.removed).toHaveBeenCalledTimes(3)
+    })
+
     it('registers listeners before opening an isolated native WebView', async () => {
         const { listeners, load, plugin, removed } = nativeHarness()
         const events: unknown[] = []
@@ -86,6 +129,9 @@ describe('createTalosInAppBrowserService', () => {
             options: { android: { showTitle: true } },
         })
         expect(plugin.openInWebView).not.toHaveBeenCalled()
+
+        await service.dispose()
+        expect(plugin.close).toHaveBeenCalledOnce()
     })
 
     it('rejects unsafe URLs before loading or calling the native plugin', async () => {

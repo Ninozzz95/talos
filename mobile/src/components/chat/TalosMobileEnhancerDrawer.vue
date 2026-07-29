@@ -30,7 +30,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-    <TalosMobileComposerSheet title="Prompt enhancement" testid="talos-enhancer-drawer" @close="emit('close')">
+    <TalosMobileComposerSheet :title="$t('chat.promptEnhancement')" testid="talos-enhancer-drawer" @close="emit('close')">
         <div aria-live="polite" class="pb-2">
             <!-- F5-#30 (owner): modern TALOS loading — the boot-logo line
                  loader carries the wait, the text stays as the caption. -->
@@ -41,7 +41,7 @@ const emit = defineEmits<{
                 class="flex flex-col items-center gap-3 rounded-xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--popover))] px-3 py-6 text-sm text-[var(--talos-muted,var(--muted-foreground))]"
             >
                 <TalosLineLoader :width="72" />
-                Improving prompt with {{ modelTitle }}…
+                {{ $t('chat.improvingWithModel', { model: modelTitle }) }}
             </div>
             <div
                 v-else-if="error"

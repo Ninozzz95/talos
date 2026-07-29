@@ -8,6 +8,7 @@ vi.mock('@capacitor/preferences', () => ({
     },
 }))
 
+import { Preferences } from '@capacitor/preferences'
 import {
     DEFAULT_SETTINGS_STATE,
     parseTalosMobileSettings,
@@ -28,6 +29,52 @@ describe('parseTalosMobileSettings', () => {
     it('returns sane defaults for null / garbage', () => {
         expect(parseTalosMobileSettings(null)).toEqual(DEFAULT_SETTINGS_STATE)
         expect(parseTalosMobileSettings('{bad')).toEqual(DEFAULT_SETTINGS_STATE)
+    })
+    it('TOOL-AUTH-08 parses missing or corrupt persistent grants as empty', () => {
+        expect(parseTalosMobileSettings(null).tool_authorizations).toEqual({
+            schema_version: 1,
+            revision: 0,
+            grants: {},
+        })
+        expect(parseTalosMobileSettings(JSON.stringify({
+            tool_authorizations: {
+                schema_version: 1,
+                revision: 4,
+                grants: {
+                    document_create: {
+                        schema_version: 1,
+                        tool: 'generate_image',
+                        actions: ['write'],
+                        scope: 'device',
+                        granted_at: 'invalid',
+                    },
+                },
+            },
+        })).tool_authorizations).toEqual({
+            schema_version: 1,
+            revision: 4,
+            grants: {},
+        })
+    })
+    it('P1-CTX-COMPAT-03 preserves an existing explicit Library context opt-in', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            library_defaults_v1: true,
+            shell: { library_context_enabled: true },
+        }))
+
+        expect(parsed.shell.library_context_enabled).toBe(true)
+    })
+    it('P1-CTX-COMPAT-04 keeps Library context off by default', () => {
+        expect(parseTalosMobileSettings(null).shell.library_context_enabled).toBe(false)
+    })
+    it('P1-CTX-POLICY-03 resolves legacy Library settings without synthesizing policy state', () => {
+        const parsed = parseTalosMobileSettings(JSON.stringify({
+            library_defaults_v1: true,
+            shell: { library_context_enabled: true },
+        }))
+
+        expect(parsed.shell.library_context_enabled).toBe(true)
+        expect(parsed.shell.library_context_policy).toBeNull()
     })
     it('sanitizes each subtree via the desktop resolvers', () => {
         const motion = createDefaultTalosMotionV6Preferences()
@@ -109,9 +156,275 @@ describe('parseTalosMobileSettings', () => {
             },
         })).browser).toEqual(TALOS_DEFAULT_MOBILE_BROWSER_PREFERENCES)
     })
-})
 
+    it('DICT-SETTINGS-01 parses dictation language fail-closed', () => {
+        expect(parseTalosMobileSettings(null).voice.dictation_language).toBe('system')
+        expect(parseTalosMobileSettings(JSON.stringify({
+            voice: { dictation_language: 'it' },
+        })).voice.dictation_language).toBe('it')
+        expect(parseTalosMobileSettings(JSON.stringify({
+            voice: { dictation_language: 'de' },
+        })).voice.dictation_language).toBe('system')
+    })
+})
 describe('useSettingsStore', () => {
+    it('TOOL-AUTH-04 persists and rehydrates an exact per-tool grant', async () => {
+        const store = useSettingsStore()
+
+        await store.grantToolAuthorization('document_create', ['write'])
+        expect(store.state.tool_authorizations).toMatchObject({
+            schema_version: 1,
+            revision: 1,
+            grants: {
+                document_create: {
+                    tool: 'document_create',
+                    actions: ['write'],
+                    scope: 'device',
+                },
+            },
+        })
+        expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).tool_authorizations)
+            .toEqual(store.state.tool_authorizations)
+
+        __resetSettingsStoreForTests()
+        const reloaded = useSettingsStore()
+        await reloaded.hydrate()
+        expect(reloaded.state.tool_authorizations).toEqual(store.state.tool_authorizations)
+    })
+
+    it('TOOL-AUTH-04 publishes grants only after persistence and recovers after rejection', async () => {
+        const set = vi.spyOn(Preferences, 'set')
+            .mockRejectedValueOnce(new Error('native Preferences write failed'))
+        const store = useSettingsStore()
+
+        try {
+            await expect(store.grantToolAuthorization('document_create', ['write']))
+                .rejects.toThrow('native Preferences write failed')
+            expect(store.state.tool_authorizations.grants.document_create).toBeUndefined()
+            expect(store.state.tool_authorizations.revision).toBe(0)
+
+            await store.grantToolAuthorization('document_create', ['write'])
+            expect(store.state.tool_authorizations.grants.document_create).toBeDefined()
+            expect(store.state.tool_authorizations.revision).toBe(1)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('TOOL-AUTH-04 serializes overlapping exact-tool grants without a lost update', async () => {
+        let releaseFirst!: () => void
+        let callCount = 0
+        const set = vi.spyOn(Preferences, 'set').mockImplementation(async ({ key, value }) => {
+            callCount += 1
+            if (callCount === 1) {
+                await new Promise<void>((resolve) => { releaseFirst = resolve })
+            }
+            prefs.set(key, value)
+        })
+        const store = useSettingsStore()
+
+        try {
+            const first = store.grantToolAuthorization('document_create', ['write'])
+            const second = store.grantToolAuthorization('generate_image', ['write', 'outbound'])
+            await Promise.resolve()
+            expect(set).toHaveBeenCalledTimes(1)
+
+            releaseFirst()
+            await Promise.all([first, second])
+
+            expect(store.state.tool_authorizations.revision).toBe(2)
+            expect(Object.keys(store.state.tool_authorizations.grants).sort())
+                .toEqual(['document_create', 'generate_image'])
+            const persisted = JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!)
+            expect(Object.keys(persisted.tool_authorizations.grants).sort())
+                .toEqual(['document_create', 'generate_image'])
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('TOOL-AUTH-20 revokes a saved grant and persists ask-again state', async () => {
+        const store = useSettingsStore()
+        await store.grantToolAuthorization('document_create', ['write'])
+
+        await store.revokeToolAuthorization('document_create')
+
+        expect(store.state.tool_authorizations.revision).toBe(2)
+        expect(store.state.tool_authorizations.grants.document_create).toBeUndefined()
+        expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!)
+            .tool_authorizations.grants.document_create).toBeUndefined()
+    })
+
+    it('P1-CTX-POLICY-03 does not rewrite a legacy broad preference during hydration', async () => {
+        prefs.set(TALOS_MOBILE_SETTINGS_KEY, JSON.stringify({
+            library_defaults_v1: true,
+            shell: { library_context_enabled: true },
+        }))
+        const set = vi.spyOn(Preferences, 'set')
+        const store = useSettingsStore()
+
+        try {
+            await store.hydrate()
+
+            expect(store.state.shell.library_context_enabled).toBe(true)
+            expect(store.state.shell.library_context_policy).toBeNull()
+            expect(set).not.toHaveBeenCalled()
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('P1-CTX-POLICY-02 leaves reactive and persisted policy intact after a failed write', async () => {
+        const set = vi.spyOn(Preferences, 'set')
+            .mockRejectedValueOnce(new Error('native Preferences write failed'))
+        const store = useSettingsStore()
+
+        try {
+            await expect(store.setLibraryContextPolicy({
+                enabled: true,
+                mode: 'smart_relevant_v1',
+            }, 0)).rejects.toThrow('native Preferences write failed')
+
+            expect(store.state.shell.library_context_policy).toBeNull()
+            expect(store.state.shell.library_context_enabled).toBe(false)
+            expect(prefs.has(TALOS_MOBILE_SETTINGS_KEY)).toBe(false)
+
+            const committed = await store.setLibraryContextPolicy({
+                enabled: true,
+                mode: 'smart_relevant_v1',
+            }, 0)
+
+            expect(committed).toMatchObject({
+                revision: 1,
+                enabled: true,
+                mode: 'smart_relevant_v1',
+            })
+            expect(store.state.shell.library_context_policy).toEqual(committed)
+            expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).shell)
+                .toMatchObject({
+                    library_context_enabled: true,
+                    library_context_policy: committed,
+                })
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('P1-CTX-POLICY-02 serializes revision-checked policy writes without losing updates', async () => {
+        let releaseFirst!: () => void
+        let callCount = 0
+        const set = vi.spyOn(Preferences, 'set').mockImplementation(async ({ key, value }) => {
+            callCount += 1
+            if (callCount === 1) {
+                await new Promise<void>((resolve) => { releaseFirst = resolve })
+            }
+            prefs.set(key, value)
+        })
+        const store = useSettingsStore()
+
+        try {
+            const first = store.setLibraryContextPolicy({ enabled: true }, 0)
+            const second = store.setLibraryContextPolicy({ mode: 'ask_before_use_v1' }, 1)
+            await Promise.resolve()
+
+            expect(set).toHaveBeenCalledTimes(1)
+            expect(store.state.shell.library_context_policy).toBeNull()
+
+            releaseFirst()
+            const [, committed] = await Promise.all([first, second])
+
+            expect(set).toHaveBeenCalledTimes(2)
+            expect(committed).toMatchObject({
+                revision: 2,
+                enabled: true,
+                mode: 'ask_before_use_v1',
+            })
+            expect(store.state.shell.library_context_policy).toEqual(committed)
+            expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).shell
+                .library_context_policy).toEqual(committed)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('AGENT-TOOLS-03 hydrates and persists one known switch while dropping unknown tools', async () => {
+        prefs.set(TALOS_MOBILE_SETTINGS_KEY, JSON.stringify({
+            agent_tools: {
+                library_search: false,
+                future_shell: true,
+            },
+        }))
+        const store = useSettingsStore()
+
+        await store.hydrate()
+
+        expect(store.state.agent_tools.library_search).toBe(false)
+        expect(store.state.agent_tools).not.toHaveProperty('future_shell')
+        expect(store.state.agent_tools.library_context_policy_update).toBe(false)
+        expect(Object.keys(store.state.agent_tools)).toHaveLength(13)
+
+        await store.setAgentToolEnabled('library_search', true)
+
+        expect(store.state.agent_tools.library_search).toBe(true)
+        const persisted = JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!)
+        expect(persisted.agent_tools.library_search).toBe(true)
+        expect(persisted.agent_tools).not.toHaveProperty('future_shell')
+    })
+
+    it('AGENT-TOOLS-PERSIST-01 aborts reactive state when Preferences rejects and allows a later retry', async () => {
+        const set = vi.spyOn(Preferences, 'set')
+            .mockRejectedValueOnce(new Error('native Preferences write failed'))
+        const store = useSettingsStore()
+
+        try {
+            await expect(store.setAgentToolEnabled('library_search', false))
+                .rejects.toThrow('native Preferences write failed')
+            expect(store.state.agent_tools.library_search).toBe(true)
+            expect(prefs.has(TALOS_MOBILE_SETTINGS_KEY)).toBe(false)
+
+            await store.setAgentToolEnabled('library_search', false)
+
+            expect(store.state.agent_tools.library_search).toBe(false)
+            expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).agent_tools.library_search)
+                .toBe(false)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
+    it('AGENT-TOOLS-PERSIST-02 serializes overlapping switches without losing an update', async () => {
+        let releaseFirst!: () => void
+        let callCount = 0
+        const set = vi.spyOn(Preferences, 'set').mockImplementation(async ({ key, value }) => {
+            callCount += 1
+            if (callCount === 1) {
+                await new Promise<void>((resolve) => { releaseFirst = resolve })
+            }
+            prefs.set(key, value)
+        })
+        const store = useSettingsStore()
+
+        try {
+            const first = store.setAgentToolEnabled('library_search', false)
+            const second = store.setAgentToolEnabled('web_search', false)
+            await Promise.resolve()
+            const callsBeforeFirstSettlement = set.mock.calls.length
+
+            releaseFirst()
+            await Promise.all([first, second])
+
+            expect(callsBeforeFirstSettlement).toBe(1)
+            expect(set).toHaveBeenCalledTimes(2)
+            expect(store.state.agent_tools.library_search).toBe(false)
+            expect(store.state.agent_tools.web_search).toBe(false)
+            const persisted = JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!)
+            expect(persisted.agent_tools.library_search).toBe(false)
+            expect(persisted.agent_tools.web_search).toBe(false)
+        } finally {
+            set.mockRestore()
+        }
+    })
+
     it('hydrates from Preferences', async () => {
         prefs.set(TALOS_MOBILE_SETTINGS_KEY, JSON.stringify({ defaults_v3: true, chat_layout: { bubble_scale: 'expanded' } }))
         const store = useSettingsStore()
@@ -184,6 +497,18 @@ describe('useSettingsStore', () => {
             suggest_for_urls: false,
         })
         expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).browser).toEqual(store.state.browser)
+    })
+
+    it('persists and rehydrates an explicit dictation language', async () => {
+        const store = useSettingsStore()
+        await store.setVoicePreferences({ dictation_language: 'it' })
+        __resetSettingsStoreForTests()
+        const fresh = useSettingsStore()
+
+        await fresh.hydrate()
+
+        expect(fresh.state.voice.dictation_language).toBe('it')
+        expect(JSON.parse(prefs.get(TALOS_MOBILE_SETTINGS_KEY)!).voice.dictation_language).toBe('it')
     })
 
     it('sanitizes and persists Motion V6 preferences through the canonical parser', async () => {

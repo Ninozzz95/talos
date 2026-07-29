@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import TalosMobileSidebar from '@/components/shell/TalosMobileSidebar.vue'
+import { DrawerContent } from '@/components/ui/drawer'
 
 // F1-T3 — full-width hamburger sidebar (D5/D6), chat-first Claude pattern:
 // [New chat] -> Recents (sessions) -> Tools -> Settings pinned bottom.
@@ -73,10 +74,29 @@ describe('TalosMobileSidebar (F1-T3)', () => {
             expect(document.querySelector(`[data-testid="talos-mobile-sidebar"] [aria-label="Open ${label}"]`), label).toBeTruthy()
         }
         ;(document.querySelector('[aria-label="Open Research"]') as HTMLElement).click()
+        ;(document.querySelector('[aria-label="Open Model Lab"]') as HTMLElement).click()
         ;(document.querySelector('[aria-label="Open Settings"]') as HTMLElement).click()
         await flushPromises()
         expect(wrapper.emitted('navigate')).toEqual([['research']])
+        expect(wrapper.emitted('openModelLab')).toHaveLength(1)
         expect(wrapper.emitted('openSettings')).toHaveLength(1)
+    })
+
+    it('MOTION-SIDEBAR-FOCUS-01 suppresses close autofocus only when navigation transfers focus', async () => {
+        const navigationWrapper = mountSidebar()
+        await flushPromises()
+        ;(document.querySelector('[aria-label="Open Settings"]') as HTMLElement).click()
+        const navigationClose = new Event('closeAutoFocus', { cancelable: true })
+        navigationWrapper.findComponent(DrawerContent).vm.$emit('closeAutoFocus', navigationClose)
+        expect(navigationClose.defaultPrevented).toBe(true)
+        navigationWrapper.unmount()
+
+        const dismissalWrapper = mountSidebar()
+        await flushPromises()
+        ;(document.querySelector('[aria-label="Close menu"]') as HTMLElement).click()
+        const dismissalClose = new Event('closeAutoFocus', { cancelable: true })
+        dismissalWrapper.findComponent(DrawerContent).vm.$emit('closeAutoFocus', dismissalClose)
+        expect(dismissalClose.defaultPrevented).toBe(false)
     })
 
     it('emits newChat from the New chat FAB and closes via update:open', async () => {

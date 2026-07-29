@@ -28,6 +28,18 @@ describe('TalosMobileScreen', () => {
         expect(wrapper.find('[data-testid="screen-body"]').text()).toBe('hello')
     })
 
+    it('TABLET-SETTINGS-03 exposes an md-only edge-to-edge list-detail body', () => {
+        const wrapper = mount(TalosMobileScreen, {
+            props: { title: 'Settings Center', tabletEdgeToEdge: true },
+            slots: { default: '<p>settings</p>' },
+        })
+        const body = wrapper.get('[data-testid="mobile-screen-body"]')
+
+        expect(body.classes()).toContain('px-4')
+        expect(body.classes()).toContain('md:p-0')
+        expect(body.classes()).toContain('md:overflow-hidden')
+    })
+
     it('labels the screen region with its title for assistive tech', () => {
         const wrapper = mount(TalosMobileScreen, { props: { title: 'Library' } })
         expect(wrapper.get('[data-testid="mobile-screen"]').attributes('aria-label')).toBe('Library')

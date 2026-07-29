@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
 import type { TalosGeneratedImage, TalosImageShape } from '@/lib/images/imageGateway'
+import type { AppendChatAttachmentInput } from '@/repositories/chatRepository'
 
 /**
  * Drawing, as something the conversation can do.
@@ -17,8 +18,9 @@ import type { TalosGeneratedImage, TalosImageShape } from '@/lib/images/imageGat
  * is gone the moment the message is deleted; in the Library it keeps the chat it
  * came from, which is how every other generated file here behaves.
  *
- * `write`, not `read`: this spends the user's money and puts a file on the
- * device. The permission layer must be able to stop it.
+ * `outbound + write`: the prompt leaves the device for a configured provider
+ * and the returned bytes are persisted. Either policy must be able to stop the
+ * operation before the provider or Library is touched.
  */
 export interface TalosImageToolSources {
     /** Which provider will draw, for the sentence the model gets back. */
@@ -29,7 +31,12 @@ export interface TalosImageToolSources {
         signal?: AbortSignal,
     ): Promise<{ images: TalosGeneratedImage[]; error: string | null; permanent: boolean }>
     /** Into the Library, with the chat it came from. Returns the stored name. */
-    save(image: TalosGeneratedImage, prompt: string): Promise<{ id: string; name: string }>
+    save(image: TalosGeneratedImage, prompt: string): Promise<{
+        id: string
+        name: string
+        sha256: string
+        attachment: AppendChatAttachmentInput
+    }>
 }
 
 const SHAPES = ['square', 'portrait', 'landscape'] as const
@@ -42,6 +49,7 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
             + 'The image is saved in the Library and comes back for you to look at, so you can judge it and try again if it is wrong. '
             + 'Describe the subject, the composition and the style in the prompt; there is no separate style setting.',
         action: 'write',
+        requiredActions: ['outbound', 'write'],
         input: z.object({
             prompt: z.string().min(1).max(4_000)
                 .describe('What to draw, in full: subject, composition, style, colours, mood.'),
@@ -56,7 +64,7 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 return {
                     ok: false,
                     code: 'TALOS_IMAGE_NO_PROVIDER',
-                    content: 'No configured provider can generate images. A key for OpenAI or Gemini is needed in Settings.',
+                    content: 'No configured provider can generate images. A key for OpenAI, Gemini, or OpenRouter is needed in Settings.',
                 }
             }
 
@@ -104,15 +112,27 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
                 }
             }
 
-            let saved: { id: string; name: string } | null = null
+            let saved: {
+                id: string
+                name: string
+                sha256: string
+                attachment: AppendChatAttachmentInput
+            }
             try {
                 saved = await sources.save(image, input.prompt)
             } catch {
-                // Degrade rather than lose it: the picture is already drawn and
-                // paid for, so it goes to the conversation even when the Library
-                // would not take it. Saying so keeps the model from claiming the
-                // file is somewhere it is not.
-                saved = null
+                // There is no second durable image store behind a chat bubble.
+                // Returning volatile bytes here used to make the next model
+                // round claim success, while the final assistant message had no
+                // attachment to render or reload. The provider has already run,
+                // so neither saving nor generation is retried implicitly.
+                return {
+                    ok: false,
+                    code: 'TALOS_IMAGE_PERSIST_FAILED',
+                    content: 'TALOS_IMAGE_PERSIST_FAILED: The image was generated but could not be saved safely. '
+                        + 'It is not available in chat or Library. Do not claim success and do not retry or regenerate automatically. '
+                        + 'Tell the user to check encrypted local storage in Doctor and retry only after storage is healthy.',
+                }
             }
 
             // The three types every provider adapter can carry. A generator
@@ -125,18 +145,17 @@ export function createTalosImageTools(sources: TalosImageToolSources): TalosTool
 
             return {
                 ok: true,
-                content: saved
-                    ? `Drawn by ${provider} and saved to the Library as "${saved.name}". It follows for you to look at.`
-                    : `Drawn by ${provider}. It could not be saved to the Library, so it exists only in this conversation. It follows for you to look at.`,
+                content: `Drawn by ${provider} and saved to the Library as "${saved.name}". It follows for you to look at.`,
                 images: [{
                     type: 'image' as const,
-                    attachmentId: saved?.id ?? `generated-${provider}`,
-                    name: saved?.name ?? 'generated.png',
+                    attachmentId: saved.attachment.id,
+                    name: saved.name,
                     mediaType,
                     base64: image.base64,
-                    sha256: '',
+                    sha256: saved.sha256,
                 }],
-                evidence: { provider, shape: input.shape ?? 'square', saved: saved !== null },
+                messageAttachments: [saved.attachment],
+                evidence: { provider, shape: input.shape ?? 'square', saved: true },
             }
         },
     })

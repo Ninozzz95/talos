@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 // R1-5: the streaming/typing tail reads the chat store directly.
 vi.mock('@/stores/chatController', () => ({
@@ -44,7 +44,7 @@ describe('talosRelativeTime (F2-T2)', () => {
 })
 
 describe('TalosMobileMessageList calm thread (F2-T2)', () => {
-    it('shows relative time and the FRIENDLY model label in the meta row', () => {
+    it('shows relative time and the FRIENDLY model label in the meta row', async () => {
         const wrapper = mount(TalosMobileMessageList, {
             props: {
                 messages: [msg({ id: 'a1', role: 'assistant', content: 'Done.', model_profile_id: 'anthropic:claude-live' })],
@@ -52,14 +52,17 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
                 modelLabels: { 'anthropic:claude-live': 'Claude Live' },
             },
         })
+        await vi.dynamicImportSettled()
+        await flushPromises()
         const meta = wrapper.get('.talos-message-meta')
         expect(meta.text()).toContain('TALOS')
         expect(meta.text()).toContain('Claude Live')
         expect(meta.text()).not.toContain('anthropic:claude-live')
         expect(meta.text()).toMatch(/just now|m ago|h ago|d ago/)
+        wrapper.unmount()
     })
 
-    it('groups consecutive same-sender messages: grouped articles marked, meta only on the last', () => {
+    it('groups consecutive same-sender messages: grouped articles marked, meta only on the last', async () => {
         const wrapper = mount(TalosMobileMessageList, {
             props: {
                 messages: [
@@ -70,6 +73,8 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
                 sending: false,
             },
         })
+        await vi.dynamicImportSettled()
+        await flushPromises()
         const articles = wrapper.findAll('article')
         expect(articles[0].attributes('data-grouped')).toBeUndefined()
         expect(articles[1].attributes('data-grouped')).toBe('true')
@@ -78,9 +83,10 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         expect(articles[0].find('.talos-message-meta').exists()).toBe(false)
         expect(articles[1].find('.talos-message-meta').exists()).toBe(true)
         expect(articles[2].find('.talos-message-meta').exists()).toBe(true)
+        wrapper.unmount()
     })
 
-    it('never attributes a model to USER messages — attribution is assistant-only', () => {
+    it('never attributes a model to USER messages — attribution is assistant-only', async () => {
         // F2 capture finding: "You Gemini Live" is semantically wrong — the
         // human did not answer with a model.
         const wrapper = mount(TalosMobileMessageList, {
@@ -90,18 +96,24 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
                 modelLabels: { 'gemini:gemini-live': 'Gemini Live' },
             },
         })
+        await vi.dynamicImportSettled()
+        await flushPromises()
         const meta = wrapper.get('.talos-message-meta')
         expect(meta.text()).toContain('You')
         expect(meta.text()).not.toContain('Gemini Live')
+        wrapper.unmount()
     })
 
-    it('renders the boot-logo line loader (F4-#24): a sweep crossing 3 filling nodes', () => {
+    it('renders the boot-logo line loader (F4-#24): a sweep crossing 3 filling nodes', async () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [], sending: true } })
+        await vi.dynamicImportSettled()
+        await flushPromises()
         const typing = wrapper.get('[data-testid="talos-mobile-typing"]')
         expect(typing.find('.talos-line-loader-sweep').exists()).toBe(true)
         expect(typing.findAll('.talos-line-loader-node')).toHaveLength(3)
         expect(typing.findAll('.talos-typing-dot')).toHaveLength(0)
         expect(typing.attributes('role')).toBe('status')
         expect(typing.text()).toContain('Processing')
+        wrapper.unmount()
     })
 })

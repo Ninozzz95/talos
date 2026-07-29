@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     TALOS_DOCUMENT_FORMATS,
+    TALOS_SOURCE_TEXT_FORMATS,
     generateTalosDocument,
     verifyTalosDocument,
 } from '@/lib/documents/documentGenerator'
@@ -39,8 +40,18 @@ const SPEC = {
 
 describe('document generation', () => {
     it('offers every format the owner decided, together (D9)', () => {
-        expect([...TALOS_DOCUMENT_FORMATS].sort())
-            .toEqual(['csv', 'docx', 'html', 'md', 'pdf', 'pptx', 'xlsx'])
+        expect(TALOS_SOURCE_TEXT_FORMATS).toEqual([
+            'txt', 'json', 'xml',
+            'js', 'jsx', 'ts', 'tsx', 'vue',
+            'css', 'scss', 'php', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'kts',
+            'swift', 'c', 'h', 'cpp', 'hpp', 'cs',
+            'sh', 'bash', 'zsh', 'ps1', 'sql',
+            'yaml', 'yml', 'toml', 'ini',
+        ])
+        expect(TALOS_DOCUMENT_FORMATS).toEqual([
+            'md', 'csv', 'html', 'docx', 'xlsx', 'pptx', 'pdf',
+            ...TALOS_SOURCE_TEXT_FORMATS,
+        ])
     })
 
     for (const format of TALOS_DOCUMENT_FORMATS) {
@@ -139,5 +150,40 @@ describe('document generation', () => {
             body: 'x'.repeat(50),
         })
         expect(document.fileName).not.toMatch(/[/\\:"*?<>|]/)
+    })
+
+    it('P2-FILENAME-03 never persists a partial emoji at the document-name boundary', async () => {
+        const document = await generateTalosDocument({
+            format: 'md',
+            title: `${'a'.repeat(59)}😀tail`,
+            body: 'verified body',
+        })
+
+        expect(document.fileName).toBe(`${'a'.repeat(59)}.md`)
+        expect(document.fileName).not.toMatch(/[\ud800-\udfff](?![\udc00-\udfff])/u)
+    })
+
+    it('SOURCE-FILE-01/02 keeps one Python suffix and exact UTF-8 source bytes', async () => {
+        const body = '# esempio\nprint("caffè 你好")\n'
+        const document = await generateTalosDocument({
+            format: 'py',
+            title: 'patch_mock_gps_iterm.py',
+            body,
+        })
+
+        expect(document.fileName).toBe('patch_mock_gps_iterm.py')
+        expect(document.mediaType).toBe('text/plain')
+        expect(new TextDecoder('utf-8', { fatal: true }).decode(document.bytes)).toBe(body)
+        await expect(verifyTalosDocument(document)).resolves.toMatchObject({ ok: true })
+    })
+
+    it('SOURCE-FILE-05 preserves an unrelated final title suffix', async () => {
+        const document = await generateTalosDocument({
+            format: 'py',
+            title: 'migration.v2',
+            body: 'print("v2")',
+        })
+
+        expect(document.fileName).toBe('migration.v2.py')
     })
 })

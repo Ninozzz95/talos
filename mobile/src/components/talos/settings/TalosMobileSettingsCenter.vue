@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type Component } from 'vue'
-import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Mail, Palette, Search, Settings, Shield, ShieldCheck, User, Wrench } from '@lucide/vue'
+import { useTalosI18n } from '@/i18n'
+import { Bell, Bot, BrainCircuit, ChevronRight, Globe2, Languages, Mail, Palette, Search, Settings, Shield, ShieldCheck, User, Wrench } from '@lucide/vue'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosMediaQuery } from '@/composables/useTalosMediaQuery'
 import { useTalosAccountStore } from '@/stores/account'
@@ -9,15 +10,18 @@ import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import TalosMobileSettingsModelsPanel from './TalosMobileSettingsModelsPanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from './TalosMobileSettingsAiDefaultsPanel.vue'
 import TalosMobileSettingsAppearancePanel from './TalosMobileSettingsAppearancePanel.vue'
+import TalosMobileSettingsLanguagePanel from './TalosMobileSettingsLanguagePanel.vue'
 import TalosMobileSettingsPrivacyPanel from './TalosMobileSettingsPrivacyPanel.vue'
 import TalosMobileSettingsBrowserPanel from './TalosMobileSettingsBrowserPanel.vue'
 import TalosMobileSettingsAccountPanel from './TalosMobileSettingsAccountPanel.vue'
+import TalosMobileSettingsAgentToolsPanel from './TalosMobileSettingsAgentToolsPanel.vue'
 import TalosMobileSettingsCapabilityPanel from './TalosMobileSettingsCapabilityPanel.vue'
 import {
     TALOS_MOBILE_SETTINGS_ACCOUNT_TAB,
     TALOS_MOBILE_SETTINGS_GROUPS,
     TALOS_MOBILE_SETTINGS_TABS,
     talosMobileSettingsTab,
+    type TalosMobileSettingsTab,
     type TalosMobileSettingsTabId,
 } from './settingsTabs'
 
@@ -26,16 +30,27 @@ const props = withDefaults(defineProps<{
 }>(), {
     requestedTab: null,
 })
+const { t } = useTalosI18n()
 
 const activeTab = ref<TalosMobileSettingsTabId>('models')
 const mobilePane = ref<'categories' | 'detail'>('categories')
-const selectedTab = computed(() => talosMobileSettingsTab(activeTab.value))
-const accountTab = talosMobileSettingsTab(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)
+function localizedTab(tab: TalosMobileSettingsTab): TalosMobileSettingsTab {
+    return {
+        ...tab,
+        label: t(`settingsCenter.tabs.${tab.id}.label`),
+        description: tab.id === 'appearance' ? '' : t(`settingsCenter.tabs.${tab.id}.description`),
+        gateReason: tab.gateReason ? t(`settingsCenter.tabs.${tab.id}.gate`) : undefined,
+    }
+}
+const localizedTabs = computed(() => TALOS_MOBILE_SETTINGS_TABS.map(localizedTab))
+const selectedTab = computed(() => localizedTabs.value.find((tab) => tab.id === activeTab.value)
+    ?? localizedTab(talosMobileSettingsTab(activeTab.value)))
+const accountTab = computed(() => localizedTab(talosMobileSettingsTab(TALOS_MOBILE_SETTINGS_ACCOUNT_TAB)))
 // Resolve each grouped tab once (label + availability) rather than running the
 // linear settingsTab() lookup twice per row on every render.
 const resolvedGroups = computed(() => TALOS_MOBILE_SETTINGS_GROUPS.map((group) => ({
-    label: group.label,
-    tabs: group.tabIds.map((id) => talosMobileSettingsTab(id)),
+    label: t(`settingsCenter.groups.${group.label.toLowerCase()}`),
+    tabs: group.tabIds.map((id) => localizedTab(talosMobileSettingsTab(id))),
 })))
 const account = useTalosAccountStore()
 const developmentMode = import.meta.env.DEV
@@ -49,8 +64,64 @@ const developmentMode = import.meta.env.DEV
 // tablet-split threshold, which adds a min-height and would leave a broken band).
 const sheetNav = useTalosSheetNav()
 const isMdLayout = useTalosMediaQuery('(min-width: 768px)')
-function openDetail(): void { mobilePane.value = 'detail' }
-function backToCategories(): void { mobilePane.value = 'categories' }
+const categoryRoot = ref<HTMLElement | null>(null)
+const detailRoot = ref<HTMLElement | null>(null)
+const mobileMotionPane = ref<'categories' | 'detail' | null>(null)
+let mobileMotionRevision = 0
+
+function settingsTabDurationMs(root: HTMLElement): number {
+    const raw = getComputedStyle(root)
+        .getPropertyValue('--talos-motion-duration-tab-change')
+        .trim()
+        .toLowerCase()
+    const value = Number.parseFloat(raw)
+    if (!Number.isFinite(value) || value <= 0) return 0
+    if (raw.endsWith('ms')) return value
+    if (raw.endsWith('s')) return value * 1_000
+    return 0
+}
+
+function settingsReducedMotionRequested(): boolean {
+    return typeof window !== 'undefined'
+        && typeof window.matchMedia === 'function'
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+async function runMobilePaneMotion(pane: 'categories' | 'detail'): Promise<void> {
+    const revision = ++mobileMotionRevision
+    mobileMotionPane.value = null
+    mobilePane.value = pane
+    await nextTick()
+    if (revision !== mobileMotionRevision || isMdLayout.value) return
+
+    const target = pane === 'detail'
+        ? detailRoot.value
+        : categoryRoot.value?.querySelector<HTMLElement>(
+            `[data-settings-tab="${activeTab.value}"]`,
+        ) ?? null
+    target?.focus({ preventScroll: true })
+
+    const motionRoot = pane === 'detail' ? detailRoot.value : categoryRoot.value
+    if (
+        !motionRoot
+        || settingsReducedMotionRequested()
+        || settingsTabDurationMs(motionRoot) <= 0
+    ) return
+    mobileMotionPane.value = pane
+}
+
+function clearMobilePaneMotion(
+    pane: 'categories' | 'detail',
+    event: AnimationEvent,
+): void {
+    const root = pane === 'detail' ? detailRoot.value : categoryRoot.value
+    if (event.target !== root || mobileMotionPane.value !== pane) return
+    if (event.animationName && event.animationName !== 'talos-settings-tab-change') return
+    mobileMotionPane.value = null
+}
+
+function openDetail(): void { void runMobilePaneMotion('detail') }
+function backToCategories(): void { void runMobilePaneMotion('categories') }
 watch([mobilePane, selectedTab, isMdLayout], ([pane, tab, md]) => {
     if (pane === 'detail' && !md) sheetNav.setSubView({ title: tab.label, back: backToCategories })
     else sheetNav.clear()
@@ -59,7 +130,6 @@ watch([mobilePane, selectedTab, isMdLayout], ([pane, tab, md]) => {
 // Owner 2026-07-25: opening a panel kept the category list's scroll offset, so
 // Appearance appeared to start at "Color mode" (Theme preset was above the fold).
 // Every panel now opens at its top.
-const detailRoot = ref<HTMLElement | null>(null)
 watch([mobilePane, activeTab], async ([pane]) => {
     if (pane !== 'detail') return
     await nextTick()
@@ -85,6 +155,7 @@ const ICONS: Record<TalosMobileSettingsTabId, Component> = {
     email: Mail,
     reminders: Bell,
     appearance: Palette,
+    language: Languages,
     privacy: ShieldCheck,
     account: User,
     agent_tools: Shield,
@@ -95,8 +166,10 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     models: TalosMobileSettingsModelsPanel,
     ai_defaults: TalosMobileSettingsAiDefaultsPanel,
     appearance: TalosMobileSettingsAppearancePanel,
+    language: TalosMobileSettingsLanguagePanel,
     privacy: TalosMobileSettingsPrivacyPanel,
     account: TalosMobileSettingsAccountPanel,
+    agent_tools: TalosMobileSettingsAgentToolsPanel,
 }
 
 </script>
@@ -105,12 +178,21 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
     <!-- Owner 2026-07-24: the framed card was redundant nesting inside the
          sheet — on mobile the categories/detail go FULL-WIDTH with the coherent
          parent padding; the framed side-by-side stays on tablet (md). -->
-    <TabsRoot v-model="activeTab" orientation="vertical" activation-mode="automatic" class="flex flex-col md:min-h-[540px] md:flex-row md:overflow-hidden md:rounded-md md:border md:border-[var(--talos-border)] md:bg-[var(--talos-card)]">
+    <TabsRoot
+        v-model="activeTab"
+        data-testid="settings-list-detail"
+        orientation="vertical"
+        activation-mode="automatic"
+        class="flex flex-col md:h-full md:min-h-0 md:flex-row md:overflow-hidden md:rounded-none md:border-0 md:bg-[var(--talos-card)]"
+    >
         <aside
+            ref="categoryRoot"
             data-testid="settings-category-pane"
-            class="md:block md:min-h-0 md:w-56 md:flex-none md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
+            :data-talos-motion-intent="mobileMotionPane === 'categories' ? 'tab-change' : undefined"
+            class="md:flex md:min-h-0 md:w-[var(--talos-tablet-sidebar-width)] md:flex-none md:flex-col md:overflow-hidden md:border-r md:border-[var(--talos-border)] md:bg-[var(--talos-sidebar)]/80 md:p-3"
             :class="mobilePane === 'detail' ? 'hidden' : 'block'"
-            aria-label="Settings categories"
+            :aria-label="t('settingsCenter.categories')"
+            @animationend="clearMobilePaneMotion('categories', $event)"
         >
             <!-- Owner 2026-07-24 (Claude-style): account summary card on top +
                  grouped rounded cards (icon · label · gated hint · chevron).
@@ -118,7 +200,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
             <!-- Owner 2026-07-24: NO own horizontal padding on the phone — the
                  parent TalosMobileScreen already provides the 16px gutter (Claude
                  parity). Adding px here double-padded to 28px ("still too wide"). -->
-            <TabsList aria-label="TALOS settings categories" class="flex max-h-none w-full flex-col gap-5 px-0 py-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0">
+            <TabsList :aria-label="t('settingsCenter.talosCategories')" class="flex max-h-none w-full flex-col gap-5 px-0 py-2 md:min-h-0 md:flex-1 md:overflow-y-auto md:overscroll-contain md:px-0 md:py-0">
                 <TabsTrigger
                     :value="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
                     :data-settings-tab="TALOS_MOBILE_SETTINGS_ACCOUNT_TAB"
@@ -128,7 +210,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                     <TalosAccountAvatar size="md" />
                     <span class="min-w-0 flex-1">
                         <span class="block truncate text-sm font-semibold text-[var(--talos-text)]">{{ account.state.display_name || accountTab.label }}</span>
-                        <span class="block truncate text-xs text-[var(--talos-muted)]">Local workspace identity</span>
+                        <span class="block truncate text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.localIdentity') }}</span>
                     </span>
                     <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                 </TabsTrigger>
@@ -147,7 +229,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                             <component :is="ICONS[tab.id]" class="size-5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate text-sm text-[var(--talos-text)]">{{ tab.label }}</span>
-                                <span v-if="tab.availability === 'gated'" class="block truncate text-xs text-[var(--talos-muted)]">Not installed in this build</span>
+                                <span v-if="tab.availability === 'gated'" class="block truncate text-xs text-[var(--talos-muted)]">{{ t('settingsCenter.notInstalled') }}</span>
                             </span>
                             <ChevronRight class="size-4 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
                         </TabsTrigger>
@@ -159,18 +241,21 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
         <section
             ref="detailRoot"
             data-testid="settings-detail-pane"
-            class="min-w-0 px-0 py-2 md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
+            tabindex="-1"
+            :data-talos-motion-intent="mobileMotionPane === 'detail' ? 'tab-change' : undefined"
+            class="min-w-0 px-0 py-2 md:block md:flex-1 md:overflow-y-auto md:px-4 md:py-0"
             :class="mobilePane === 'categories' ? 'hidden' : 'block'"
-            :aria-label="`${selectedTab.label} settings`"
+            :aria-label="t('settingsCenter.detailLabel', { tab: selectedTab.label })"
+            @animationend="clearMobilePaneMotion('detail', $event)"
         >
             <!-- Owner 2026-07-24: the in-body "Categories" back is GONE — the
                  sheet header's single contextual Back now returns to the list. -->
             <TabsContent
-                v-for="tab in TALOS_MOBILE_SETTINGS_TABS"
+                v-for="tab in localizedTabs"
                 :key="tab.id"
                 :value="tab.id"
                 :data-settings-panel="tab.id"
-                class="outline-none"
+                class="talos-motion-tab-panel outline-none"
             >
                 <!-- Owner: the sheet header already shows the subsection title on
                      mobile — drop the duplicate eyebrow/title there, keep the
@@ -181,7 +266,7 @@ const LOCAL_PANELS: Partial<Record<TalosMobileSettingsTabId, Component>> = {
                      the one-line description hides when empty (Appearance dropped
                      its subtitle) — no stray bordered box above the content. -->
                 <header class="md:mb-4 md:border-b md:border-[var(--talos-border)] md:pb-3">
-                    <div class="hidden text-3xs font-semibold uppercase text-[var(--talos-muted)] md:block">Protected preferences</div>
+                    <div class="hidden text-3xs font-semibold uppercase text-[var(--talos-muted)] md:block">{{ t('settingsCenter.protectedPreferences') }}</div>
                     <h3 class="talos-title hidden text-md font-semibold text-[var(--talos-text)] md:mt-1 md:block">{{ tab.label }}</h3>
                     <p v-if="tab.description" class="mb-3 text-xs leading-5 text-[var(--talos-muted)] md:mb-0 md:mt-1">{{ tab.description }}</p>
                 </header>

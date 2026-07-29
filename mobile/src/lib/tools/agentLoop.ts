@@ -1,5 +1,6 @@
 import type { ChatTurn, TalosToolCall } from '@/stores/chat'
 import type { TalosMobileInputPart } from '@/lib/chat/attachmentContracts'
+import type { AppendChatAttachmentInput } from '@/repositories/chatRepository'
 
 /**
  * The agent loop: ask, run what the model asked for, tell it what happened,
@@ -45,15 +46,30 @@ export interface TalosAgentCompletion {
 export interface TalosAgentLoopDeps {
     /** One provider round trip. */
     complete(turns: ChatTurn[]): Promise<TalosAgentCompletion>
+    /**
+     * Resolves every call in a round before any call is allowed to execute.
+     * Omit only for legacy callers whose executor owns the complete gate.
+     */
+    preflight?(call: TalosToolCall): Promise<
+        | { status: 'ready' }
+        | { status: 'authorization_required'; request: unknown }
+    >
     /** Runs one call through the permission gate and the audit trail. */
     execute(call: TalosToolCall): Promise<{
         content: string
         ok: boolean
         /** Anything the model should LOOK at, handed over on a user turn. */
         images?: TalosMobileInputPart[]
+        /** Vault bindings to keep on the final assistant message. */
+        messageAttachments?: AppendChatAttachmentInput[]
     }>
     /** Fired when a round of calls starts, so the UI can show what is running. */
     onToolRound?(calls: TalosToolCall[]): void
+    /**
+     * Persist this state after tool effects/results exist and before the next
+     * provider request. If persistence fails, provider egress must not occur.
+     */
+    onBeforeModelCheckpoint?(checkpoint: TalosAgentLoopCheckpointV1): void | Promise<void>
     maxRounds?: number
     maxCalls?: number
     /** How many of one round's calls may run at once. */
@@ -66,6 +82,27 @@ export interface TalosAgentLoopOutcome extends TalosAgentCompletion {
     rounds: number
     /** True when a bound stopped the loop rather than the model finishing. */
     stoppedByLimit: boolean
+    /** Durable visual/file results produced by successful tools. */
+    messageAttachments: AppendChatAttachmentInput[]
+    /** Present when the loop yielded instead of parking a Promise in memory. */
+    suspension?: {
+        checkpoint: TalosAgentLoopCheckpointV1
+        requests: unknown[]
+    }
+}
+
+export interface TalosAgentLoopCheckpointV1 {
+    schema_version: 1
+    stage: 'before_tools' | 'before_model'
+    turns: ChatTurn[]
+    /** The exact provider completion to resume; null once results are durable. */
+    completion: TalosAgentCompletion | null
+    /** Model prose already shown/persisted, in provider-round order. */
+    spoken: string[]
+    executed: Array<{ call: TalosToolCall; ok: boolean }>
+    rounds: number
+    stoppedByLimit: boolean
+    messageAttachments: AppendChatAttachmentInput[]
 }
 
 /**
@@ -107,41 +144,176 @@ async function runCallsTogether(
     return outcomes
 }
 
-export async function runTalosAgentLoop(
-    initialTurns: ChatTurn[],
+interface MutableAgentLoopState {
+    turns: ChatTurn[]
+    completion: TalosAgentCompletion | null
+    spoken: string[]
+    executed: TalosAgentLoopOutcome['executed']
+    rounds: number
+    stoppedByLimit: boolean
+    messageAttachments: AppendChatAttachmentInput[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isToolCall(value: unknown): value is TalosToolCall {
+    return isRecord(value)
+        && typeof value.id === 'string'
+        && value.id.length > 0
+        && typeof value.name === 'string'
+        && value.name.length > 0
+        && typeof value.arguments === 'string'
+}
+
+function isTurn(value: unknown): value is ChatTurn {
+    if (
+        !isRecord(value)
+        || !['user', 'assistant', 'tool'].includes(typeof value.role === 'string' ? value.role : '')
+        || typeof value.content !== 'string'
+        || (value.parts !== undefined && !Array.isArray(value.parts))
+        || (value.toolCalls !== undefined
+            && (!Array.isArray(value.toolCalls) || !value.toolCalls.every(isToolCall)))
+        || (value.toolCallId !== undefined && typeof value.toolCallId !== 'string')
+        || (value.toolName !== undefined && typeof value.toolName !== 'string')
+    ) return false
+    if (value.role === 'tool') {
+        return typeof value.toolCallId === 'string' && typeof value.toolName === 'string'
+    }
+    return true
+}
+
+function isCompletion(value: unknown): value is TalosAgentCompletion {
+    return isRecord(value)
+        && typeof value.text === 'string'
+        && (value.finishReason === undefined
+            || value.finishReason === null
+            || typeof value.finishReason === 'string')
+        && (value.reasoning === undefined || typeof value.reasoning === 'string')
+        && (value.toolCalls === undefined
+            || (Array.isArray(value.toolCalls) && value.toolCalls.every(isToolCall)))
+}
+
+function isAttachment(value: unknown): value is AppendChatAttachmentInput {
+    return isRecord(value)
+        && typeof value.id === 'string'
+        && typeof value.vault_file_id === 'string'
+        && typeof value.grant_id === 'string'
+}
+
+function assertCheckpoint(
+    value: TalosAgentLoopCheckpointV1,
+): asserts value is TalosAgentLoopCheckpointV1 {
+    const record = value as unknown
+    if (
+        !isRecord(record)
+        || record.schema_version !== 1
+        || !['before_tools', 'before_model'].includes(
+            typeof record.stage === 'string' ? record.stage : '',
+        )
+        || !Array.isArray(record.turns)
+        || !record.turns.every(isTurn)
+        || (record.completion !== null && !isCompletion(record.completion))
+        || !Array.isArray(record.spoken)
+        || !record.spoken.every((entry) => typeof entry === 'string')
+        || !Array.isArray(record.executed)
+        || !record.executed.every((entry) => (
+            isRecord(entry) && isToolCall(entry.call) && typeof entry.ok === 'boolean'
+        ))
+        || !Number.isSafeInteger(record.rounds)
+        || (record.rounds as number) < 0
+        || typeof record.stoppedByLimit !== 'boolean'
+        || !Array.isArray(record.messageAttachments)
+        || !record.messageAttachments.every(isAttachment)
+        || (record.stage === 'before_tools'
+            && (!isCompletion(record.completion) || !record.completion.toolCalls?.length))
+        || (record.stage === 'before_model' && record.completion !== null)
+    ) {
+        throw new Error('TALOS_AGENT_LOOP_CHECKPOINT_INVALID')
+    }
+}
+
+function checkpointOf(
+    state: MutableAgentLoopState,
+    stage: TalosAgentLoopCheckpointV1['stage'],
+): TalosAgentLoopCheckpointV1 {
+    return {
+        schema_version: 1,
+        stage,
+        turns: [...state.turns],
+        completion: stage === 'before_tools' ? state.completion : null,
+        spoken: [...state.spoken],
+        executed: state.executed.map((entry) => ({ ...entry })),
+        rounds: state.rounds,
+        stoppedByLimit: state.stoppedByLimit,
+        messageAttachments: state.messageAttachments.map((entry) => ({ ...entry })),
+    }
+}
+
+function outcomeOf(
+    state: MutableAgentLoopState,
+    completion: TalosAgentCompletion,
+    suspension?: TalosAgentLoopOutcome['suspension'],
+): TalosAgentLoopOutcome {
+    return {
+        ...completion,
+        text: state.spoken.join('\n\n'),
+        executed: state.executed,
+        rounds: state.rounds,
+        stoppedByLimit: state.stoppedByLimit,
+        messageAttachments: state.messageAttachments,
+        ...(suspension ? { suspension } : {}),
+    }
+}
+
+async function pendingPreflights(
+    calls: readonly TalosToolCall[],
+    preflight: NonNullable<TalosAgentLoopDeps['preflight']>,
+): Promise<unknown[]> {
+    const resolutions = await Promise.all(calls.map((call) => preflight(call)))
+    return resolutions.flatMap((resolution) => (
+        resolution.status === 'authorization_required' ? [resolution.request] : []
+    ))
+}
+
+async function persistBeforeModel(
+    state: MutableAgentLoopState,
     deps: TalosAgentLoopDeps,
+): Promise<void> {
+    if (deps.onBeforeModelCheckpoint) {
+        await deps.onBeforeModelCheckpoint(checkpointOf(state, 'before_model'))
+    }
+}
+
+async function continueTalosAgentLoop(
+    state: MutableAgentLoopState,
+    deps: TalosAgentLoopDeps,
+    resumeRequestedRound: boolean,
 ): Promise<TalosAgentLoopOutcome> {
     const maxRounds = deps.maxRounds ?? TALOS_AGENT_MAX_ROUNDS
     const maxCalls = deps.maxCalls ?? TALOS_AGENT_MAX_CALLS
     const maxParallel = deps.maxParallel ?? TALOS_AGENT_MAX_PARALLEL
-    const executed: TalosAgentLoopOutcome['executed'] = []
-    let turns = initialTurns
-    let completion = await deps.complete(turns)
-    let rounds = 0
-    let stoppedByLimit = false
-    /**
-     * Every round's prose, in order.
-     *
-     * Models routinely speak before they call ("Let me look that up…"), and the
-     * stream handler is allocated once per send — so the user WATCHES that
-     * sentence arrive. Returning only the last completion meant the durable
-     * message replaced the stream with strictly less text than had just been on
-     * screen. What is persisted must equal what was rendered.
-     */
-    const spoken: string[] = []
-    const say = (text: string) => { if (text) spoken.push(text) }
+    const messageAttachmentIds = new Set(state.messageAttachments.map((entry) => entry.id))
+    const say = (text: string) => { if (text) state.spoken.push(text) }
 
-    while (completion.toolCalls?.length) {
-        if (rounds >= maxRounds) {
-            stoppedByLimit = true
-            // SF-MAJOR: this used to `break` and RETURN the tool-requesting
-            // completion, whose text is legitimately empty for a tool-only turn
-            // — so the user got a blank assistant bubble and the model never
-            // learned why it stopped. Answer every pending call, then ask once
-            // more for a final answer, exactly as the call cap does.
+    for (;;) {
+        const completion = state.completion
+        if (!completion) throw new Error('TALOS_AGENT_LOOP_CHECKPOINT_INVALID')
+
+        if (!completion.toolCalls?.length) {
             say(completion.text)
-            turns = [
-                ...turns,
+            return outcomeOf(state, completion)
+        }
+
+        if (!resumeRequestedRound && state.rounds >= maxRounds) {
+            state.stoppedByLimit = true
+            // SF-MAJOR: answer every pending call, then ask exactly once for a
+            // final answer. Persist that provider boundary first so a process
+            // death cannot rerun a tool.
+            say(completion.text)
+            state.turns = [
+                ...state.turns,
                 { role: 'assistant', content: completion.text, toolCalls: completion.toolCalls },
                 ...completion.toolCalls.map((call) => ({
                     role: 'tool' as const,
@@ -150,29 +322,46 @@ export async function runTalosAgentLoop(
                     toolName: call.name,
                 })),
             ]
-            completion = await deps.complete(turns)
-            break
+            state.completion = null
+            await persistBeforeModel(state, deps)
+            const finalCompletion = await deps.complete(state.turns)
+            say(finalCompletion.text)
+            return outcomeOf(state, finalCompletion)
         }
-        rounds += 1
-        say(completion.text)
+
+        if (!resumeRequestedRound) {
+            state.rounds += 1
+            say(completion.text)
+        }
+        resumeRequestedRound = false
         const requested = completion.toolCalls
-        deps.onToolRound?.(requested)
 
         // The budget is spent BEFORE anything runs. Deciding it as results
-        // arrive would make which calls are refused depend on which happened to
-        // finish first — a limit that moves with the network is not a limit.
-        const budget = Math.max(0, maxCalls - executed.length)
+        // arrive would make which calls are refused depend on the network.
+        const budget = Math.max(0, maxCalls - state.executed.length)
         const runnable = requested.slice(0, budget)
-        if (runnable.length < requested.length) stoppedByLimit = true
+        if (runnable.length < requested.length) state.stoppedByLimit = true
 
+        // Whole-round barrier: one unresolved sibling means NO sibling runs.
+        // This is what makes a durable before-tools checkpoint replayable.
+        const requests = deps.preflight
+            ? await pendingPreflights(runnable, deps.preflight)
+            : []
+        if (requests.length) {
+            state.completion = completion
+            return outcomeOf(state, completion, {
+                checkpoint: checkpointOf(state, 'before_tools'),
+                requests,
+            })
+        }
+
+        deps.onToolRound?.(requested)
         const outcomes = await runCallsTogether(runnable, deps.execute, maxParallel)
-
         const results: ChatTurn[] = requested.map((call, index) => {
             const outcome = outcomes[index]
             if (!outcome) {
-                // Answer the refused calls honestly instead of dropping them:
-                // an unanswered call id makes the next request invalid for
-                // every provider that checks, and silence teaches nothing.
+                // Every refused call still receives a result: dropping an ID
+                // produces an invalid next request for strict providers.
                 return {
                     role: 'tool',
                     content: `Not run: the limit of ${maxCalls} tool calls for one message was reached. Answer with what you have.`,
@@ -180,27 +369,34 @@ export async function runTalosAgentLoop(
                     toolName: call.name,
                 }
             }
-            return { role: 'tool', content: outcome.content, toolCallId: call.id, toolName: call.name }
-        })
-        // In the order the model asked, never the order the network answered.
-        const seen: TalosMobileInputPart[] = []
-        runnable.forEach((call, index) => {
-            const outcome = outcomes[index]!
-            executed.push({ call, ok: outcome.ok })
-            if (outcome.images?.length) seen.push(...outcome.images)
+            return {
+                role: 'tool',
+                content: outcome.content,
+                toolCallId: call.id,
+                toolName: call.name,
+            }
         })
 
-        turns = [
-            ...turns,
+        // Provider order, never completion order.
+        const seen: TalosMobileInputPart[] = []
+        runnable.forEach((call, index) => {
+            const toolOutcome = outcomes[index]!
+            state.executed.push({ call, ok: toolOutcome.ok })
+            if (toolOutcome.images?.length) seen.push(...toolOutcome.images)
+            for (const attachment of toolOutcome.messageAttachments ?? []) {
+                if (messageAttachmentIds.has(attachment.id)) continue
+                messageAttachmentIds.add(attachment.id)
+                state.messageAttachments.push(attachment)
+            }
+        })
+
+        state.turns = [
+            ...state.turns,
             { role: 'assistant', content: completion.text, toolCalls: requested },
             ...results,
             /**
-             * Anything a tool handed back to LOOK at, on a user turn.
-             *
-             * After the results, never before: the model has to be told what the
-             * picture is before it is shown one. Only when there is something —
-             * an empty turn is one more thing for the model to account for, and
-             * on some providers empty content is a 400.
+             * Anything a tool handed back to LOOK at, on a user turn. Results
+             * come first and an empty visual turn is never emitted.
              */
             ...(seen.length
                 ? [{
@@ -210,15 +406,44 @@ export async function runTalosAgentLoop(
                 }]
                 : []),
         ]
-        completion = await deps.complete(turns)
+        state.completion = null
+        await persistBeforeModel(state, deps)
+        state.completion = await deps.complete(state.turns)
     }
+}
 
-    say(completion.text)
-    return {
-        ...completion,
-        text: spoken.join('\n\n'),
-        executed,
-        rounds,
-        stoppedByLimit,
+export async function runTalosAgentLoop(
+    initialTurns: ChatTurn[],
+    deps: TalosAgentLoopDeps,
+): Promise<TalosAgentLoopOutcome> {
+    const completion = await deps.complete(initialTurns)
+    return continueTalosAgentLoop({
+        turns: initialTurns,
+        completion,
+        spoken: [],
+        executed: [],
+        rounds: 0,
+        stoppedByLimit: false,
+        messageAttachments: [],
+    }, deps, false)
+}
+
+export async function resumeTalosAgentLoop(
+    checkpoint: TalosAgentLoopCheckpointV1,
+    deps: TalosAgentLoopDeps,
+): Promise<TalosAgentLoopOutcome> {
+    assertCheckpoint(checkpoint)
+    const state: MutableAgentLoopState = {
+        turns: [...checkpoint.turns],
+        completion: checkpoint.completion,
+        spoken: [...checkpoint.spoken],
+        executed: checkpoint.executed.map((entry) => ({ ...entry })),
+        rounds: checkpoint.rounds,
+        stoppedByLimit: checkpoint.stoppedByLimit,
+        messageAttachments: checkpoint.messageAttachments.map((entry) => ({ ...entry })),
     }
+    if (checkpoint.stage === 'before_model') {
+        state.completion = await deps.complete(state.turns)
+    }
+    return continueTalosAgentLoop(state, deps, checkpoint.stage === 'before_tools')
 }

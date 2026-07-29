@@ -8,16 +8,16 @@ import {
 
 // Each tab route must load its real parity screen, not the old title-only placeholder.
 const SCREEN_CONTRACT: Record<string, { file: string; component: string; markers: string[] }> = {
-    chat: { file: 'ChatScreen.vue', component: 'ChatScreen', markers: ['TALOS', 'What claim should we benchmark?'] },
-    chats: { file: 'ChatsScreen.vue', component: 'ChatsScreen', markers: ['Search chats'] },
-    memory: { file: 'MemoryScreen.vue', component: 'MemoryScreen', markers: ['untrusted disclosed context'] },
-    tasks: { file: 'TasksScreen.vue', component: 'TasksScreen', markers: ['Run-linked tasks'] },
-    notes: { file: 'NotesScreen.vue', component: 'NotesScreen', markers: ['untrusted disclosed context'] },
-    doctor: { file: 'DoctorScreen.vue', component: 'DoctorScreen', markers: ['Honest readiness report'] },
-    research: { file: 'ResearchScreen.vue', component: 'ResearchScreen', markers: ['Deep Research V3'] },
-    runs: { file: 'RunsScreen.vue', component: 'RunsScreen', markers: ['Runtime cockpit'] },
-    context: { file: 'ContextScreen.vue', component: 'ContextScreen', markers: ['Library'] },
-    settings: { file: 'SettingsScreen.vue', component: 'SettingsScreen', markers: ['Settings Center'] },
+    chat: { file: 'ChatScreen.vue', component: 'ChatScreen', markers: ['data-testid="talos-chat-scroll"'] },
+    chats: { file: 'ChatsScreen.vue', component: 'ChatsScreen', markers: ['data-testid="talos-chats-screen"'] },
+    memory: { file: 'MemoryScreen.vue', component: 'MemoryScreen', markers: ['data-testid="talos-memory-screen"'] },
+    tasks: { file: 'TasksScreen.vue', component: 'TasksScreen', markers: ['data-testid="talos-tasks-screen"'] },
+    notes: { file: 'NotesScreen.vue', component: 'NotesScreen', markers: ['data-testid="talos-notes-screen"'] },
+    doctor: { file: 'DoctorScreen.vue', component: 'DoctorScreen', markers: ['data-testid="talos-doctor-screen"'] },
+    research: { file: 'ResearchScreen.vue', component: 'ResearchScreen', markers: ["t('stations.deepResearchTitle')"] },
+    runs: { file: 'RunsScreen.vue', component: 'RunsScreen', markers: ["t('stations.runtimeCockpitTitle')"] },
+    context: { file: 'ContextScreen.vue', component: 'ContextScreen', markers: ['data-testid="talos-library-search"'] },
+    settings: { file: 'SettingsScreen.vue', component: 'SettingsScreen', markers: ["t('stations.settingsCenterTitle')"] },
 }
 
 describe('router wiring', () => {
@@ -46,7 +46,7 @@ describe('router wiring', () => {
         // boot-blocking instead of 505KB). The station chunks must be warmed only
         // once the shell is on screen.
         const source = readFileSync(resolve(process.cwd(), 'src/main.ts'), 'utf8')
-        const mountIndex = source.indexOf("createApp(App).use(router).mount('#app')")
+        const mountIndex = source.indexOf(".mount('#app')")
         const preloadIndex = source.indexOf('preloadTalosMobileRoutes()', mountIndex)
 
         expect(mountIndex).toBeGreaterThan(-1)

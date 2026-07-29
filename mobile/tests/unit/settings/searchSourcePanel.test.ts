@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
 const settings = vi.hoisted(() => ({
     state: {
@@ -29,6 +29,10 @@ vi.mock('@/services/secureKeyStore', () => ({
     setProviderKey: vi.fn(async () => {}),
     clearProviderKey: vi.fn(async () => {}),
 }))
+const browser = vi.hoisted(() => ({
+    openTalosLinkOnce: vi.fn(async () => true),
+}))
+vi.mock('@/services/inAppBrowserService', () => browser)
 
 import TalosMobileSearchSourcePanel from '@/components/talos/settings/TalosMobileSearchSourcePanel.vue'
 import TalosMobileSettingsAiDefaultsPanel from '@/components/talos/settings/TalosMobileSettingsAiDefaultsPanel.vue'
@@ -50,6 +54,7 @@ beforeEach(() => {
     settings.state.search.source = null
     settings.state.search.endpoint = null
     vi.clearAllMocks()
+    browser.openTalosLinkOnce.mockResolvedValue(true)
     warnings = []
     warn = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
         warnings.push(args.map(String).join(' '))
@@ -91,6 +96,47 @@ describe('search source panel', () => {
         expect(wrapper.find('[data-testid="talos-search-endpoint"]').exists()).toBe(false)
     })
 
+    it('TAVILY-LINK-01 shows the account/key action only for Tavily', async () => {
+        settings.state.search.source = 'tavily'
+        const wrapper = mount(TalosMobileSearchSourcePanel)
+        expect(wrapper.get('[data-testid="talos-tavily-api-key-link"]').text())
+            .toMatch(/Get a Tavily API key/i)
+
+        wrapper.unmount()
+        settings.state.search.source = 'brave'
+        const braveWrapper = mount(TalosMobileSearchSourcePanel)
+        expect(braveWrapper.find('[data-testid="talos-tavily-api-key-link"]').exists()).toBe(false)
+    })
+
+    it('TAVILY-LINK-02 opens only the exact official platform in the system browser', async () => {
+        settings.state.search.source = 'tavily'
+        const wrapper = mount(TalosMobileSearchSourcePanel)
+
+        await wrapper.get('[data-testid="talos-tavily-api-key-link"]').trigger('click')
+        await flushPromises()
+
+        expect(browser.openTalosLinkOnce).toHaveBeenCalledOnce()
+        expect(browser.openTalosLinkOnce).toHaveBeenCalledWith(
+            'https://app.tavily.com/',
+            'system_browser',
+        )
+    })
+
+    it('TAVILY-LINK-03 reports a failed open without touching settings or secure keys', async () => {
+        browser.openTalosLinkOnce.mockResolvedValueOnce(false)
+        settings.state.search.source = 'tavily'
+        const wrapper = mount(TalosMobileSearchSourcePanel)
+
+        await wrapper.get('[data-testid="talos-tavily-api-key-link"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.get('[role="status"]').text()).toMatch(/could not open Tavily/i)
+        expect(settings.setSearchPreferences).not.toHaveBeenCalled()
+        const secure = await import('@/services/secureKeyStore')
+        expect(secure.setProviderKey).not.toHaveBeenCalled()
+        expect(secure.clearProviderKey).not.toHaveBeenCalled()
+    })
+
     it('asks for the instance address for SearXNG, and no key', () => {
         settings.state.search.source = 'searxng'
         const wrapper = mount(TalosMobileSearchSourcePanel)
@@ -107,12 +153,16 @@ describe('search source panel', () => {
             .toMatch(/key is still needed/i)
     })
 
-    it('is honest that Brave now needs a card and has no spending cap', () => {
-        // The owner was told the opposite by me, from memory, before it was
-        // checked. The correction belongs in front of the user too.
+    it('shows Brave current billing controls and its blocking retention constraint', () => {
+        // Rechecked against Brave's current official FAQ on 2026-07-28:
+        // spending limits now exist, while API data retention is prohibited
+        // without a separate agreement.
         const text = mount(TalosMobileSearchSourcePanel).text()
         expect(text).toMatch(/credit card/i)
-        expect(text).toMatch(/no spending cap/i)
+        expect(text).toMatch(/spending limit/i)
+        expect(text).toMatch(/does not allow TALOS to save search results/i)
+        expect(text).toMatch(/web_read|open/i)
+        expect(text).not.toMatch(/no spending cap/i)
     })
 
     it('mounts inside the AI panel with every component resolved', () => {

@@ -21,10 +21,11 @@ export interface TalosSmoothRevealDeps {
  * hidden (battery, on a phone that matters), and using the timestamp is what
  * stops the reveal running half again as fast on a 90 or 120 Hz Android panel.
  *
- * Committing at ~25 Hz, not every frame: 40ms sits inside the range every
- * published implementation converged on (Convex 50ms, the AI SDK's 50ms
- * throttle) and leaves the rest of the frame for the markdown work that follows
- * each commit.
+ * Committing at ~25 Hz, not every frame: 40ms stays close to Convex's
+ * client-side smoothing cadence and leaves the rest of the frame for the
+ * Markdown work that follows each commit. Vercel AI SDK 7.0.40 defaults to a
+ * 10ms upstream word transform, but that boundary does not pay Vue/DOM parsing
+ * work and is therefore not a like-for-like mobile paint budget.
  */
 export const TALOS_COMMIT_INTERVAL_MS = 40
 

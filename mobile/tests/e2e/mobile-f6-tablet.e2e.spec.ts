@@ -39,6 +39,77 @@ test('tablet shows the persistent chat panel with search, list and divider', asy
     expect(overflow).toBeLessThanOrEqual(0)
 })
 
+test('keyboard-height resize keeps the persistent panel mounted', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator(PANEL)).toBeVisible()
+
+    // Capacitor KeyboardResize.Native shrinks the WebView. This is the same
+    // geometry transition without pretending Playwright can summon Android's
+    // real IME.
+    await page.setViewportSize({ width: 1024, height: 420 })
+
+    await expect(page.locator(PANEL)).toBeVisible()
+    await expect(page.locator(DIVIDER)).toBeVisible()
+    await expect(page.getByLabel('Message TALOS')).toBeVisible()
+})
+
+test('tablet Settings replaces the chat rail with categories and restores it on close', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator(PANEL)).toBeVisible()
+    const originalWidth = Math.round(await panelWidth(page))
+    await page.locator('[data-testid="talos-tablet-menu"]').click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
+
+    await expect(page.locator(SHEET)).toBeVisible()
+    await expect(page.locator(PANEL)).toHaveCount(0)
+    await expect(page.locator(DIVIDER)).toHaveCount(0)
+    await expect(page.locator('[data-testid="settings-category-pane"]')).toBeVisible()
+    await expect(page.locator('[data-testid="settings-detail-pane"]')).toBeVisible()
+    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+
+    const sheetBox = (await page.locator(SHEET).boundingBox())!
+    const categoriesBox = (await page.locator('[data-testid="settings-category-pane"]').boundingBox())!
+    expect(Math.round(sheetBox.x)).toBe(0)
+    expect(Math.round(categoriesBox.x)).toBe(0)
+    expect(Math.round(categoriesBox.width)).toBe(originalWidth)
+
+    await page.locator('[data-testid="talos-sheet-back"]').click()
+    await expect(page.locator(SHEET)).toHaveCount(0)
+    await expect(page.locator(PANEL)).toBeVisible()
+    await expect(page.locator(DIVIDER)).toBeVisible()
+    expect(Math.round(await panelWidth(page))).toBe(originalWidth)
+})
+
+test('tablet Settings category rail owns a real bounded vertical scrollport', async ({ page }) => {
+    await page.goto('/')
+    await page.locator('[data-testid="talos-tablet-menu"]').click()
+    await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
+    await expect(page.locator(SHEET)).toBeVisible()
+
+    // A reduced tablet/WebView height reproduces large-font and keyboard
+    // pressure without substituting a synthetic DOM-only measurement.
+    await page.setViewportSize({ width: 1024, height: 420 })
+    const rail = page.locator('[data-testid="settings-category-pane"]')
+    const tablist = rail.getByRole('tablist')
+    const before = await tablist.evaluate((element) => ({
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+        scrollTop: element.scrollTop,
+    }))
+
+    expect(before.scrollHeight).toBeGreaterThan(before.clientHeight)
+    expect(before.scrollTop).toBe(0)
+    expect(await rail.evaluate((element) => element.scrollTop)).toBe(0)
+
+    await tablist.hover()
+    await page.mouse.wheel(0, 1200)
+    await expect.poll(() => tablist.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+    expect(await rail.evaluate((element) => element.scrollTop)).toBe(0)
+
+    await tablist.getByRole('tab', { name: 'System' }).click()
+    await expect(page.locator('[data-settings-panel="system"]')).toBeVisible()
+})
+
 test('panel hamburger opens the tools drawer; new chat from the panel stays in place', async ({ page }) => {
     await page.goto('/')
     await page.locator('[aria-label="Open menu"]').click()

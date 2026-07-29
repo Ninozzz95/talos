@@ -39,8 +39,10 @@ const retryArtifactId = computed(() => {
 <template>
     <figure v-if="artifacts.length" class="mt-3 min-w-0 max-w-full overflow-hidden" data-testid="talos-mobile-browser-screenshot-evidence">
         <figcaption class="mb-2 flex items-center justify-between gap-3 text-3xs font-semibold uppercase text-[var(--talos-muted)]">
-            <span>Integrity-verified capture</span>
-            <span>{{ artifacts.length }} capture{{ artifacts.length === 1 ? '' : 's' }}</span>
+            <span>{{ $t('browser.integrityVerifiedCapture') }}</span>
+            <span>{{ artifacts.length === 1
+                ? $t('browser.captureCountOne')
+                : $t('browser.captureCountMany', { count: artifacts.length }) }}</span>
         </figcaption>
         <div class="grid min-w-0 gap-2" :class="artifacts.length === 1 ? 'grid-cols-1' : 'sm:grid-cols-2'">
             <button
@@ -49,17 +51,17 @@ const retryArtifactId = computed(() => {
                 type="button"
                 :data-testid="`browser-evidence-open-${artifact.id}`"
                 class="group relative block min-w-0 max-w-full overflow-hidden rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
-                :aria-label="`Inspect browser capture ${index + 1} of ${artifacts.length}`"
+                :aria-label="$t('browser.inspectCapture', { current: index + 1, total: artifacts.length })"
                 @click="frame?.openArtifact(artifact.id)"
             >
                 <img
                     :src="artifact.preview_uri ?? undefined"
                     :data-browser-artifact-id="artifact.id"
-                    :alt="`Browser screenshot ${index + 1} of ${artifacts.length}`"
+                    :alt="$t('browser.screenshotPosition', { current: index + 1, total: artifacts.length })"
                     class="aspect-[8/5] w-full max-w-full bg-[var(--talos-panel-soft)] object-contain"
                     loading="lazy"
                 >
-                <span class="absolute bottom-2 right-2 rounded border border-[var(--talos-border)] bg-[var(--talos-background)]/90 px-2 py-1 text-3xs font-semibold">Inspect</span>
+                <span class="absolute bottom-2 right-2 rounded border border-[var(--talos-border)] bg-[var(--talos-background)]/90 px-2 py-1 text-3xs font-semibold">{{ $t('browser.inspect') }}</span>
             </button>
         </div>
     </figure>

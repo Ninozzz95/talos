@@ -15,12 +15,12 @@ const emit = defineEmits<{ click: [] }>()
     <button
         type="button"
         data-testid="talos-new-chat-fab"
-        aria-label="New chat"
+        :aria-label="$t('chat.newChat')"
         :disabled="disabled"
         class="talos-pressable inline-flex min-h-12 items-center gap-2 rounded-full bg-[var(--talos-accent,var(--primary))] px-5 text-sm font-semibold text-[var(--talos-accent-contrast,var(--primary-foreground))] shadow-[0_8px_24px_rgba(0,0,0,0.22)] outline-none transition-transform focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:opacity-60"
         @click="emit('click')"
     >
         <Plus class="size-5" aria-hidden="true" />
-        New chat
+        {{ $t('chat.newChat') }}
     </button>
 </template>

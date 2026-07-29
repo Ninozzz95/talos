@@ -43,7 +43,16 @@ export interface TalosInAppBrowserServiceOptions {
 export interface TalosInAppBrowserService {
     open(url: string, presentation: TalosMobileBrowserPresentation): Promise<void>
     close(): Promise<void>
-    dispose(): Promise<void>
+    dispose(options?: TalosInAppBrowserDisposeOptions): Promise<void>
+}
+
+export interface TalosInAppBrowserDisposeOptions {
+    /**
+     * Defaults to true for an owned Browse session. A one-shot user navigation
+     * releases TALOS listeners/references but leaves the accepted browser page
+     * under browser/user ownership.
+     */
+    closeActive?: boolean
 }
 
 async function loadOfficialPlugin(): Promise<TalosInAppBrowserModule> {
@@ -179,8 +188,8 @@ export function createTalosInAppBrowserService(
         if (plugin) await plugin.close()
     }
 
-    async function dispose(): Promise<void> {
-        if (!closed) await close()
+    async function dispose(disposeOptions: TalosInAppBrowserDisposeOptions = {}): Promise<void> {
+        if (disposeOptions.closeActive !== false && !closed) await close()
         await removeListeners()
         plugin = null
         externalWindow = null
@@ -217,12 +226,15 @@ export async function openTalosLinkOnce(
     const browser = createTalosInAppBrowserService({ onEvent: () => {} })
     try {
         await browser.open(url, presentation)
+        // Launch-and-release is not launch-and-close. Once the official browser
+        // accepted this explicit tap, remove our JS callbacks and relinquish
+        // ownership without dismissing the page the user is trying to read.
+        await browser.dispose({ closeActive: false })
         return true
     } catch {
         // A link that will not open reports by staying put rather than by a dead
         // tap: the address is on screen and can be copied.
+        await browser.dispose()
         return false
-    } finally {
-        await browser.dispose?.()
     }
 }

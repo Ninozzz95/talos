@@ -232,4 +232,25 @@ describe('Interaction Motion Kernel V6', () => {
         expect(css).toContain('opacity')
         expect(css).toContain('@media (prefers-reduced-motion: reduce)')
     })
+
+    it('MOTION-CSS-01 keeps composer and Settings motion off the layout pipeline', () => {
+        const css = readFileSync('src/css/talos-interaction-motion-v6.css', 'utf8')
+        expect(css).toContain('@keyframes talos-composer-layout-expand')
+        expect(css).toContain('@keyframes talos-composer-layout-collapse')
+        expect(css).toContain('@keyframes talos-settings-tab-change')
+        expect(css).toContain('.talos-motion-tab-panel[data-state="active"]')
+
+        const productMotion = css.slice(css.indexOf('@keyframes talos-composer-layout-expand'))
+        expect(productMotion).toMatch(/transform\s*:/)
+        expect(productMotion).toMatch(/opacity\s*:/)
+        expect(productMotion).not.toMatch(
+            /\b(?:height|width|min-height|max-height|min-width|max-width|margin|padding|inset|top|right|bottom|left|grid-template|font-size|line-height)\s*:/,
+        )
+
+        const reduced = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'))
+        expect(reduced).toContain('.talos-motion-tab-panel[data-state="active"]')
+        expect(reduced).toMatch(/animation:\s*none\s*!important/)
+        expect(reduced).toMatch(/transform:\s*none\s*!important/)
+        expect(reduced).toMatch(/opacity:\s*1\s*!important/)
+    })
 })

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 
@@ -73,10 +74,103 @@ describe('composer drawer mode (F3-T4bis)', () => {
         expect(wrapper.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
     })
+
+    it('P1-CTX-UI-04 opens one-turn Library controls from a compact source chip', async () => {
+        const wrapper = mountComposer({
+            drawerMode: true,
+            libraryContextEnabled: true,
+            libraryContextMode: 'smart_relevant_v1',
+            librarySourceCount: 1,
+            libraryTurnOverride: null,
+            libraryFiles: [{
+                id: 'vault-brief',
+                display_name: 'Brief.md',
+                media_type: 'text/markdown',
+                size_bytes: 128,
+                private_uri: 'talos-vault/files/vault-brief',
+                status: 'available',
+                trust: 'untrusted',
+                sha256: 'a'.repeat(64),
+                extracted_text: 'brief',
+                failure_code: null,
+                metadata: { origin: 'uploaded', library_shared: true },
+                created_at: '2026-07-29T12:00:00.000Z',
+                updated_at: '2026-07-29T12:00:00.000Z',
+            }],
+        })
+
+        const chip = wrapper.get('[data-testid="talos-composer-library-chip"]')
+        expect(chip.text()).toMatch(/Relevant sources only.*1 source/i)
+        await chip.trigger('click')
+        await vi.waitFor(() => {
+            expect(wrapper.find('[data-testid="talos-library-context-sheet"]').exists()).toBe(true)
+        })
+
+        await wrapper.get('[data-testid="talos-library-turn-include-vault-brief"]').trigger('click')
+        expect(wrapper.emitted('updateLibraryTurnOverride')?.at(-1)).toEqual([{
+            included_file_ids: ['vault-brief'],
+            excluded_file_ids: [],
+        }])
+    })
 })
 
 // Owner 2026-07-24 — immersive composer (compact→expand) and the "+" dropdown.
 describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
+    it('MOTION-COMPOSER-01/02 bridges focus geometry in both directions without losing focus', async () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        document.body.appendChild(wrapper.element)
+        const surface = wrapper.get<HTMLElement>('[data-testid="talos-mobile-composer"]')
+        const field = wrapper.get<HTMLTextAreaElement>('textarea')
+        surface.element.style.setProperty('--talos-motion-duration-composer-expand', '180ms')
+        surface.element.style.setProperty('--talos-motion-duration-composer-collapse', '150ms')
+        vi.spyOn(surface.element, 'offsetHeight', 'get').mockImplementation(
+            () => wrapper.find('[data-testid="talos-composer-model-chip"]').exists() ? 100 : 50,
+        )
+
+        field.element.focus()
+        await flushPromises()
+        expect(document.activeElement).toBe(field.element)
+        expect(surface.attributes('data-talos-motion-intent')).toBe('composer-expand')
+        expect(surface.element.style.getPropertyValue('--talos-composer-layout-shift')).toBe('50px')
+
+        surface.element.dispatchEvent(new Event('animationend', { bubbles: true }))
+        await nextTick()
+        expect(surface.attributes('data-talos-motion-intent')).toBeUndefined()
+        expect(surface.element.style.getPropertyValue('--talos-composer-layout-shift')).toBe('')
+
+        field.element.blur()
+        await flushPromises()
+        expect(document.activeElement).not.toBe(field.element)
+        expect(surface.attributes('data-talos-motion-intent')).toBe('composer-collapse')
+        expect(surface.element.style.getPropertyValue('--talos-composer-layout-shift')).toBe('-50px')
+
+        wrapper.unmount()
+        document.body.replaceChildren()
+    })
+
+    it('MOTION-COMPOSER-03 suppresses a stale expansion during rapid focus reversal', async () => {
+        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        document.body.appendChild(wrapper.element)
+        const surface = wrapper.get<HTMLElement>('[data-testid="talos-mobile-composer"]')
+        const field = wrapper.get<HTMLTextAreaElement>('textarea')
+        surface.element.style.setProperty('--talos-motion-duration-composer-expand', '180ms')
+        surface.element.style.setProperty('--talos-motion-duration-composer-collapse', '150ms')
+        vi.spyOn(surface.element, 'offsetHeight', 'get').mockImplementation(
+            () => wrapper.find('[data-testid="talos-composer-model-chip"]').exists() ? 100 : 50,
+        )
+
+        field.element.focus()
+        await nextTick()
+        field.element.blur()
+        await flushPromises()
+
+        expect(surface.attributes('data-talos-motion-intent')).not.toBe('composer-expand')
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+
+        wrapper.unmount()
+        document.body.replaceChildren()
+    })
+
     it('immersive: the controls row is hidden when unfocused+empty, and returns on focus', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
         // compact: no model chip row

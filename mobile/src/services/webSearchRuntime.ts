@@ -8,6 +8,7 @@ import {
     type TalosSearchSourceId,
 } from '@/lib/search/searchSources'
 import type { TalosExtractedPage } from '@/lib/search/pageExtract'
+import { readTalosSafeWebPage } from '@/services/safeWebRead'
 
 /**
  * The network half of F1.
@@ -73,37 +74,25 @@ export async function runTalosSearch(
 }
 
 /**
- * Fetch ONE page and extract it here on the device.
+ * Fetch ONE page through the Android public-network boundary and extract it
+ * here on the device.
  *
- * A browser User-Agent is sent deliberately: many sites serve a stripped or
- * hostile page to unknown agents, and the goal is to read what a person would
- * read. Redirects are followed by the native layer; the url recorded is the one
- * we asked for, because a citation must name what was actually requested.
+ * DNS answers and redirect hops are validated by the native adapter before the
+ * bounded body crosses the bridge. The final validated URL is recorded because
+ * it is the page actually read.
  */
 export async function readTalosPage(url: string): Promise<TalosExtractedPage | null> {
-    let response: { status: number; data: unknown }
+    let response: { status: number; url: string; body: string }
     try {
-        response = await CapacitorHttp.request({
-            method: 'GET',
-            url,
-            headers: {
-                accept: 'text/html,application/xhtml+xml',
-                'user-agent': 'Mozilla/5.0 (Android) AppleWebKit/537.36 Chrome/146 Mobile Safari/537.36',
-            },
-            connectTimeout: 20_000,
-            readTimeout: 20_000,
-            // Some hosts answer HTML with a JSON content-type; asking for text
-            // stops the bridge from parsing it into an object we cannot read.
-            responseType: 'text',
-        })
+        response = await readTalosSafeWebPage(url)
     } catch (error) {
         throw asNetworkFailure(error)
     }
 
     if (response.status < 200 || response.status >= 300) return null
-    const html = typeof response.data === 'string' ? response.data : ''
+    const html = response.body
     if (html.trim() === '') return null
 
     const { extractTalosPage } = await import('@/lib/search/pageExtract')
-    return extractTalosPage(html, url)
+    return extractTalosPage(html, response.url)
 }

@@ -490,6 +490,27 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             memories.set(memory.id, memory)
             return { ...memory }
         },
+        async upsertMemory(input: CreateMemoryInput) {
+            const id = normalizeRepositoryId(input.id)
+            const existing = memories.get(id)
+            const memory: TalosLocalMemory = {
+                id,
+                scope_type: input.scope_type,
+                scope_id: input.scope_id,
+                kind: input.kind,
+                status: 'active',
+                title: input.title,
+                content: input.content,
+                source: input.source,
+                metadata: cloneJsonObject(input.metadata),
+                trust_level: 'untrusted',
+                last_used_at: existing?.last_used_at ?? null,
+                created_at: existing?.created_at ?? input.created_at,
+                updated_at: input.created_at,
+            }
+            memories.set(memory.id, memory)
+            return { ...memory, metadata: cloneJsonObject(memory.metadata) }
+        },
         async listMemories() {
             return [...memories.values()]
                 .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))

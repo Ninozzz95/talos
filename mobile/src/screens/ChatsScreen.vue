@@ -8,13 +8,13 @@
  */
 import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useTalosI18n } from '@/i18n'
 import { Archive, ArchiveRestore, Check, CheckSquare, ChevronDown, LoaderCircle, MessageSquarePlus, MessageSquareText, Pencil, Search, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
 import {
-    describeTalosCleanup,
     planTalosSessionCleanupFor,
     talosCleanupCount,
     type TalosSessionCleanupPlan,
@@ -33,6 +33,7 @@ const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: fa
 const emit = defineEmits<{ activated: [] }>()
 
 const router = useRouter()
+const { t } = useTalosI18n()
 const controller = useChatController()
 
 const query = ref('')
@@ -40,15 +41,45 @@ const ordered = computed(() => orderChatSessions(controller.chat.sessions))
 const filtered = computed(() => {
     const needle = query.value.trim().toLowerCase()
     if (!needle) return ordered.value
-    return ordered.value.filter((session) => (session.title || 'New chat').toLowerCase().includes(needle))
+    return ordered.value.filter((session) => sessionTitle(session).toLocaleLowerCase().includes(needle))
 })
 const archived = computed(() => {
     const needle = query.value.trim().toLowerCase()
     const entries = archivedChatSessions(controller.chat.sessions)
     if (!needle) return entries
-    return entries.filter((session) => (session.title || 'New chat').toLowerCase().includes(needle))
+    return entries.filter((session) => sessionTitle(session).toLocaleLowerCase().includes(needle))
 })
 const showArchived = ref(false)
+const relativeTimeLabels = computed(() => ({
+    justNow: t('chat.justNow'),
+    minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
+    hoursAgo: (count: number) => t('chat.hoursAgo', { count }),
+    daysAgo: (count: number) => t('chat.daysAgo', { count }),
+}))
+function sessionTitle(session: { title: string }): string {
+    return session.title || t('chat.newChat')
+}
+function updatedAt(value: string): string {
+    return talosRelativeTime(value, new Date(), relativeTimeLabels.value)
+}
+function cleanupDescription(plan: TalosSessionCleanupPlan): string {
+    const parts: string[] = []
+    if (plan.documents.length) {
+        parts.push(t(plan.documents.length === 1 ? 'chat.cleanupDocumentOne' : 'chat.cleanupDocumentMany', {
+            count: plan.documents.length,
+        }))
+    }
+    if (plan.sources.length) {
+        parts.push(t(plan.sources.length === 1 ? 'chat.cleanupSavedPageOne' : 'chat.cleanupSavedPageMany', {
+            count: plan.sources.length,
+        }))
+    }
+    return parts.length === 2 ? t('chat.cleanupJoin', { first: parts[0], second: parts[1] }) : parts[0] ?? ''
+}
+function bulkDeleteDescription(): string {
+    const count = bulk.count.value
+    return t(count === 1 ? 'chats.bulkDeleteDescriptionOne' : 'chats.bulkDeleteDescriptionMany', { count })
+}
 
 async function openSession(id: string): Promise<void> {
     if (actionBusy.value) return
@@ -64,7 +95,7 @@ async function openSession(id: string): Promise<void> {
         if (props.embedded) emit('activated')
         else void router.push({ name: 'chat' })
     } catch (error) {
-        actionError.value = `The chat could not be opened: ${actionErrorText(error)}`
+        actionError.value = t('chats.openFailed', { detail: actionErrorText(error) })
     } finally {
         actionBusy.value = false
     }
@@ -80,7 +111,7 @@ async function newChat(): Promise<void> {
         if (props.embedded) emit('activated')
         else void router.push({ name: 'chat' })
     } catch (error) {
-        actionError.value = `The chat could not be started: ${actionErrorText(error)}`
+        actionError.value = t('chats.startFailed', { detail: actionErrorText(error) })
     } finally {
         actionBusy.value = false
     }
@@ -119,7 +150,7 @@ async function submitRename(): Promise<void> {
         renameTarget.value = null
         actionError.value = null
     } catch (error) {
-        actionError.value = `The chat could not be renamed: ${actionErrorText(error)}`
+        actionError.value = t('chats.renameFailed', { detail: actionErrorText(error) })
     } finally {
         actionBusy.value = false
     }
@@ -141,13 +172,15 @@ async function confirmDelete(choice: { deleteMedia: boolean }): Promise<void> {
         if (choice.deleteMedia) {
             const failed = await controller.deleteSessionMedia(target.id)
             if (failed.length) {
-                actionError.value = `${failed.length} file${failed.length === 1 ? '' : 's'} could not be removed from the Library.`
+                actionError.value = t(failed.length === 1 ? 'chats.filesRemoveFailedOne' : 'chats.filesRemoveFailedMany', {
+                    count: failed.length,
+                })
             }
         }
         await controller.sessionLifecycle.deleteSession(target.id)
         deleteTarget.value = null
     } catch (error) {
-        actionError.value = `The chat could not be deleted: ${actionErrorText(error)}`
+        actionError.value = t('chats.deleteFailed', { detail: actionErrorText(error) })
     } finally {
         actionBusy.value = false
     }
@@ -219,8 +252,16 @@ async function confirmBulkDelete(): Promise<void> {
         // Both halves are reported. Dropping the file failures on the floor left
         // the user believing a deletion that never happened.
         const problems: string[] = []
-        if (stubborn.length) problems.push(`${stubborn.length} chat${stubborn.length === 1 ? '' : 's'} could not be deleted`)
-        if (strandedFiles) problems.push(`${strandedFiles} file${strandedFiles === 1 ? '' : 's'} could not be removed from the Library`)
+        if (stubborn.length) {
+            problems.push(t(stubborn.length === 1 ? 'chats.chatsDeleteFailedOne' : 'chats.chatsDeleteFailedMany', {
+                count: stubborn.length,
+            }))
+        }
+        if (strandedFiles) {
+            problems.push(t(strandedFiles === 1 ? 'chats.filesRemoveFailedShortOne' : 'chats.filesRemoveFailedShortMany', {
+                count: strandedFiles,
+            }))
+        }
         actionError.value = problems.length ? `${problems.join(', ')}.` : null
         bulkDeleteOpen.value = false
         bulkDeleteMedia.value = false
@@ -240,7 +281,9 @@ async function archiveSession(session: { id: string; title: string }, value: boo
         actionError.value = null
         void talosLightImpact()
     } catch (error) {
-        actionError.value = `The chat could not be ${value ? 'archived' : 'unarchived'}: ${actionErrorText(error)}`
+        actionError.value = t(value ? 'chats.archiveFailed' : 'chats.unarchiveFailed', {
+            detail: actionErrorText(error),
+        })
     } finally {
         actionBusy.value = false
     }
@@ -346,8 +389,8 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     v-model="query"
                     data-testid="talos-chats-search"
                     type="search"
-                    aria-label="Search chats"
-                    placeholder="Search chats"
+                    :aria-label="t('chats.search')"
+                    :placeholder="t('chats.search')"
                     class="min-h-11 w-full rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 >
             </div>
@@ -361,7 +404,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                 size="icon"
                 variant="ghost"
                 data-testid="talos-chats-select-header"
-                aria-label="Select chats"
+                :aria-label="t('chats.selectChats')"
                 class="min-h-11 min-w-11 shrink-0 rounded-xl"
                 @click="bulk.enter()"
             >
@@ -374,12 +417,12 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                 v-if="props.embedded"
                 type="button"
                 data-testid="talos-chats-new"
-                aria-label="New chat"
+                :aria-label="t('chat.newChat')"
                 class="talos-pressable min-h-11 gap-2 rounded-xl bg-[var(--talos-accent,var(--primary))] px-3 text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                 @click="newChat"
             >
                 <MessageSquarePlus class="size-4" aria-hidden="true" />
-                New
+                {{ t('chats.newShort') }}
             </Button>
         </div>
 
@@ -390,10 +433,10 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             data-testid="talos-chats-selection-bar"
             class="mx-5 mt-2 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
-            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" aria-label="Cancel selection" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
-            <span class="text-sm font-medium">{{ bulk.count.value }} selected</span>
+            <Button type="button" size="icon" variant="ghost" class="min-h-11 min-w-11 rounded-full" :aria-label="t('chats.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
+            <span class="text-sm font-medium">{{ t('chats.selected', { count: bulk.count.value }) }}</span>
             <Button type="button" variant="ghost" size="sm" class="ml-auto" @click="bulk.selectAll(selectableIds)">
-                {{ bulk.allSelected(selectableIds) ? 'None' : 'All' }}
+                {{ bulk.allSelected(selectableIds) ? t('common.none') : t('library.all') }}
             </Button>
             <Button
                 type="button"
@@ -401,12 +444,12 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                 variant="ghost"
                 class="min-h-11 min-w-11 rounded-full text-[var(--talos-danger,#dc5b5b)]"
                 data-testid="talos-chats-bulk-delete"
-                aria-label="Delete selected chats"
+                :aria-label="t('chats.deleteSelected')"
                 :disabled="bulk.count.value === 0 || actionBusy"
                 @click="bulkDeleteOpen = true"
             ><Trash2 class="size-4" aria-hidden="true" /></Button>
         </div>
-        <p v-else class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">Hold a chat for actions.</p>
+        <p v-else class="px-5 pt-2 text-2xs text-[var(--talos-muted)]">{{ t('chats.holdForActions') }}</p>
 
         <p
             v-if="actionError && renameTarget === null && deleteTarget === null"
@@ -415,7 +458,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
         >{{ actionError }}</p>
 
         <p v-if="!filtered.length && !archived.length" class="px-5 py-6 text-sm text-[var(--talos-muted)]">
-            {{ query ? 'No chats match your search.' : 'No chats yet — start one above.' }}
+            {{ query ? t('chats.noMatches') : t('chats.noChats') }}
         </p>
 
         <div v-else class="mt-1 flex-1 overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -446,8 +489,8 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                             <Check v-if="bulk.isSelected(session.id)" class="size-3.5" />
                         </span>
                         <span class="flex min-w-0 flex-1 flex-col items-start">
-                        <span class="w-full truncate text-sm text-[var(--talos-text)]">{{ session.title || 'New chat' }}</span>
-                        <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
+                        <span class="w-full truncate text-sm text-[var(--talos-text)]">{{ sessionTitle(session) }}</span>
+                        <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ updatedAt(session.updated_at) }}</span>
                         </span>
                     </button>
                 </li>
@@ -463,7 +506,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     @click="showArchived = !showArchived"
                 >
                     <ChevronDown class="size-4 transition-transform" :class="showArchived ? '' : '-rotate-90'" aria-hidden="true" />
-                    Archived ({{ archived.length }})
+                    {{ t('chats.archivedCount', { count: archived.length }) }}
                 </button>
                 <ul v-if="showArchived">
                     <li
@@ -490,8 +533,8 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                                 <Check v-if="bulk.isSelected(session.id)" class="size-3.5" />
                             </span>
                             <span class="flex min-w-0 flex-1 flex-col items-start">
-                            <span class="w-full truncate text-sm text-[var(--talos-muted)]">{{ session.title || 'New chat' }}</span>
-                            <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ talosRelativeTime(session.updated_at) }}</span>
+                            <span class="w-full truncate text-sm text-[var(--talos-muted)]">{{ sessionTitle(session) }}</span>
+                            <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ updatedAt(session.updated_at) }}</span>
                             </span>
                         </button>
                     </li>
@@ -515,7 +558,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                 <div
                     data-testid="talos-chats-row-menu"
                     role="menu"
-                    :aria-label="`Actions for ${rowMenu.session.title || 'New chat'}`"
+                    :aria-label="t('chats.actionsFor', { title: sessionTitle(rowMenu.session) })"
                     class="absolute rounded-xl border border-[var(--talos-border)] bg-[var(--talos-card)] p-1 shadow-[0_8px_30px_rgba(0,0,0,0.16)]"
                     :class="rowMenu.left === null ? 'inset-x-6' : ''"
                     :style="rowMenu.left === null
@@ -524,10 +567,10 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                     @click.stop
                 >
                     <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('open')">
-                        <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Open
+                        <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.open') }}
                     </button>
                     <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('rename')">
-                        <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Rename
+                        <Pencil class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.rename') }}
                     </button>
                     <button
                         v-if="!rowMenu.session.archived"
@@ -535,7 +578,7 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="menuAction('archive')"
                     >
-                        <Archive class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Archive
+                        <Archive class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('chats.archive') }}
                     </button>
                     <button
                         v-else
@@ -543,13 +586,13 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
                         class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
                         @click="menuAction('unarchive')"
                     >
-                        <ArchiveRestore class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> Unarchive
+                        <ArchiveRestore class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('chats.unarchive') }}
                     </button>
                     <button type="button" role="menuitem" data-testid="talos-chats-select" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="menuAction('select')">
-                        <CheckSquare class="size-4" aria-hidden="true" /> Select
+                        <CheckSquare class="size-4" aria-hidden="true" /> {{ t('common.select') }}
                     </button>
                     <button type="button" role="menuitem" class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-danger,#dc5b5b)] hover:bg-[var(--talos-active)]" @click="menuAction('delete')">
-                        <Trash2 class="size-4" aria-hidden="true" /> Delete
+                        <Trash2 class="size-4" aria-hidden="true" /> {{ t('common.delete') }}
                     </button>
                 </div>
             </div>
@@ -559,22 +602,22 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
              the owner's WebView). -->
         <TalosMobileConfirmDialog
             v-if="renameTarget !== null"
-            title="Rename chat"
-            description="Choose a concise name for this conversation."
+            :title="t('chats.renameTitle')"
+            :description="t('chat.renameDescription')"
             @close="renameTarget = null"
         >
             <input
                 ref="renameInput"
                 v-model="renameValue"
-                aria-label="Chat name"
+                :aria-label="t('chat.chatName')"
                 class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                 @keydown.enter.prevent="submitRename"
             >
             <p v-if="actionError" role="alert" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
             <template #footer>
-                <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
                 <Button type="button" :disabled="!renameValue.trim() || actionBusy" @click="submitRename">
-                    <Check class="size-4" aria-hidden="true" /> Save
+                    <Check class="size-4" aria-hidden="true" /> {{ t('common.save') }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>
@@ -590,8 +633,8 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
 
         <TalosMobileConfirmDialog
             v-if="bulkDeleteOpen"
-            title="Delete selected chats?"
-            :description="`This permanently removes ${bulk.count.value} chat${bulk.count.value === 1 ? '' : 's'} and their messages.`"
+            :title="t('chats.bulkDeleteTitle')"
+            :description="bulkDeleteDescription()"
             @close="actionBusy ? undefined : bulkDeleteOpen = false"
         >
             <label
@@ -602,16 +645,16 @@ function menuAction(action: 'open' | 'rename' | 'archive' | 'unarchive' | 'delet
             >
                 <input v-model="bulkDeleteMedia" type="checkbox" class="mt-0.5 size-4 shrink-0 accent-[var(--talos-danger,#dc5b5b)]" :disabled="actionBusy">
                 <span class="text-sm leading-5">
-                    Also delete these chats' files
-                    <span class="block text-xs text-[var(--talos-muted)]">{{ describeTalosCleanup(bulkPlan) }} in the Library</span>
+                    {{ t('chats.bulkDeleteFiles') }}
+                    <span class="block text-xs text-[var(--talos-muted)]">{{ cleanupDescription(bulkPlan) }} {{ t('chats.inLibrary') }}</span>
                 </span>
             </label>
             <template #footer>
-                <Button type="button" variant="ghost" :disabled="actionBusy" @click="bulkDeleteOpen = false"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+                <Button type="button" variant="ghost" :disabled="actionBusy" @click="bulkDeleteOpen = false"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
                 <Button type="button" variant="destructive" data-testid="talos-chats-bulk-delete-confirm" :disabled="actionBusy" @click="confirmBulkDelete">
                     <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
                     <Trash2 v-else class="size-4" aria-hidden="true" />
-                    {{ actionBusy ? 'Deleting…' : 'Delete' }}
+                    {{ actionBusy ? t('chat.deleting') : t('common.delete') }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>

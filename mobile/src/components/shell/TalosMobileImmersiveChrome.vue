@@ -43,7 +43,7 @@ const emit = defineEmits<{
                 type="button"
                 size="icon-lg"
                 variant="ghost"
-                aria-label="Open menu"
+                :aria-label="$t('navigation.openMenu')"
                 class="talos-pressable pointer-events-auto min-h-11 min-w-11 rounded-full border border-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 backdrop-blur"
                 @click="emit('openMenu')"
             >

@@ -13,10 +13,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // and diagnostics must therefore NEVER await the plugin OBJECT (only its
 // method results). This mock reproduces that thenable proxy.
 const platform = vi.hoisted(() => ({ native: false }))
+const behavior = vi.hoisted(() => ({ availableError: null as Error | null }))
 const thenableProxy = vi.hoisted(() => new Proxy({}, {
     get(_t, prop) {
         if (prop === 'checkPermissions') return () => Promise.resolve({ speechRecognition: 'granted' })
-        if (prop === 'available') return () => Promise.resolve({ available: true })
+        if (prop === 'available') return () => behavior.availableError
+            ? Promise.reject(behavior.availableError)
+            : Promise.resolve({ available: true })
         if (prop === 'getPluginVersion') return () => Promise.resolve({ version: '8.1.7' })
         if (prop === 'start' || prop === 'stop' || prop === 'addListener' || prop === 'removeAllListeners') return () => Promise.resolve()
         // The lethal part: `then` is a function → the object is thenable, and
@@ -34,8 +37,13 @@ vi.mock('@capacitor/core', () => ({
 vi.mock('@capgo/capacitor-speech-recognition', () => ({ SpeechRecognition: thenableProxy }))
 
 import { talosDictationDiagnostics } from '@/services/dictation'
+import { talosDeviceIssues } from '@/lib/talosDeviceLog'
 
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => {
+    behavior.availableError = null
+    platform.native = false
+    vi.unstubAllGlobals()
+})
 
 describe('talosDictationDiagnostics deep report', () => {
     it('always carries a build stamp so we know EXACTLY which APK is running', async () => {
@@ -60,7 +68,33 @@ describe('talosDictationDiagnostics deep report', () => {
         expect(report).toHaveProperty('permissionsRaw')
         expect(report).toHaveProperty('availableRaw')
         expect(report).toHaveProperty('available')
+        expect(report).toHaveProperty('trace')
         expect(report).toHaveProperty('error')
+    })
+
+    it('DICT-DIAG-01 keeps a healthy deep trace out of error and Recent issues', async () => {
+        platform.native = true
+        const before = talosDeviceIssues().filter((issue) => issue.tag === 'TALOS_SPEECH_DEEP').length
+
+        const report = await talosDictationDiagnostics()
+
+        expect(report.trace).toContain('available:ok')
+        expect(report.error).toBeNull()
+        expect(talosDeviceIssues().filter((issue) => issue.tag === 'TALOS_SPEECH_DEEP')).toHaveLength(before)
+    })
+
+    it('DICT-DIAG-02 retains failed-step evidence as a truthful error and issue', async () => {
+        platform.native = true
+        behavior.availableError = new Error('recognizer probe refused')
+        const before = talosDeviceIssues()
+            .filter((issue) => issue.tag === 'TALOS_SPEECH_STEP_available').length
+
+        const report = await talosDictationDiagnostics()
+
+        expect(report.trace).toContain('available:FAIL')
+        expect(report.error).toContain('recognizer probe refused')
+        expect(talosDeviceIssues()
+            .filter((issue) => issue.tag === 'TALOS_SPEECH_STEP_available')).toHaveLength(before + 1)
     })
 
     it('R-mic: native diagnostics resolve WITHOUT hanging on the thenable plugin proxy', async () => {
@@ -80,7 +114,8 @@ describe('talosDictationDiagnostics deep report', () => {
             // The `then` trap must NEVER be inventoried as a real method.
             expect(report.methods).not.toContain('then')
             expect(report.available).toBe(true)
-            expect(report.error).not.toMatch(/resolve:FAIL/)
+            expect(report.trace).not.toMatch(/resolve:FAIL/)
+            expect(report.error).toBeNull()
         } finally {
             vi.useRealTimers()
             platform.native = false

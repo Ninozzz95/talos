@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Sparkles } from '@lucide/vue'
+import { Brain } from '@lucide/vue'
 import TalosMobileTraceRow from '@/components/chat/TalosMobileTraceRow.vue'
 import { talosElapsedLabel, useTalosElapsed } from '@/composables/useTalosElapsed'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
@@ -51,19 +51,19 @@ const elapsedLabel = computed(() => (props.live ? talosElapsedLabel(elapsed.valu
     <div v-if="trimmed" data-testid="talos-reasoning-block" class="mb-1">
         <TalosMobileTraceRow
             testid="talos-reasoning-toggle"
-            :label="live ? 'Reasoning…' : 'Reasoning'"
+            :label="live ? $t('chat.reasoningLive') : $t('chat.reasoning')"
             :detail="elapsedLabel"
             :live="live"
             @open="showTrace = true"
         >
             <template #icon>
-                <Sparkles class="size-3.5" />
+                <Brain class="size-3.5" />
             </template>
         </TalosMobileTraceRow>
 
         <TalosMobileComposerSheet
             v-if="showTrace"
-            :title="elapsedLabel ? `Reasoning · ${elapsedLabel}` : 'Reasoning'"
+            :title="elapsedLabel ? $t('chat.reasoningWithTime', { time: elapsedLabel }) : $t('chat.reasoning')"
             testid="talos-reasoning-drawer"
             @close="showTrace = false"
         >

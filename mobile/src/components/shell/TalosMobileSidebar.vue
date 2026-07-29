@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
 import {
     Activity, BookMarked, BookOpen, Check, CheckSquare, StickyNote, Stethoscope, FileArchive, FlaskConical, MessageSquareText,
     Pencil, Trash2, X,
@@ -47,24 +48,36 @@ const emit = defineEmits<{
 }>()
 
 const account = useTalosAccountStore()
+const { t } = useTalosI18n()
 
-const TOOLS: Array<{ label: string; route: TalosMobileRouteName; icon: unknown }> = [
-    { label: 'Memory', route: 'memory', icon: BookMarked },
-    { label: 'Tasks', route: 'tasks', icon: CheckSquare },
-    { label: 'Notes', route: 'notes', icon: StickyNote },
-    { label: 'Doctor', route: 'doctor', icon: Stethoscope },
-    { label: 'Research', route: 'research', icon: BookOpen },
-    { label: 'Cockpit', route: 'runs', icon: Activity },
-    { label: 'Library', route: 'context', icon: FileArchive },
+const TOOL_DEFINITIONS: Array<{ key: string; route: TalosMobileRouteName; icon: unknown }> = [
+    { key: 'navigation.memory', route: 'memory', icon: BookMarked },
+    { key: 'navigation.tasks', route: 'tasks', icon: CheckSquare },
+    { key: 'navigation.notes', route: 'notes', icon: StickyNote },
+    { key: 'navigation.doctor', route: 'doctor', icon: Stethoscope },
+    { key: 'navigation.research', route: 'research', icon: BookOpen },
+    { key: 'navigation.cockpit', route: 'runs', icon: Activity },
+    { key: 'navigation.library', route: 'context', icon: FileArchive },
 ]
+const tools = computed(() => TOOL_DEFINITIONS.map(tool => ({ ...tool, label: t(tool.key) })))
 
 const renameTarget = ref<TalosLocalChatSession | null>(null)
 const renameValue = ref('')
 const renameInput = ref<HTMLInputElement | null>(null)
 const deleteTarget = ref<TalosLocalChatSession | null>(null)
+const restoreSidebarFocusOnClose = ref(true)
+
+function suppressSidebarFocusRestore(): void {
+    restoreSidebarFocusOnClose.value = false
+}
+
+function onSidebarCloseAutoFocus(event: Event): void {
+    if (!restoreSidebarFocusOnClose.value) event.preventDefault()
+    restoreSidebarFocusOnClose.value = true
+}
 
 function sessionTitle(session: TalosLocalChatSession): string {
-    return session.title || 'Untitled chat'
+    return session.title || t('chat.untitledChat')
 }
 
 async function openRename(session: TalosLocalChatSession): Promise<void> {
@@ -72,6 +85,7 @@ async function openRename(session: TalosLocalChatSession): Promise<void> {
     // trap) — a teleported dialog over it gets its taps stolen and its input
     // can never hold focus. Close the drawer FIRST; the dialog lives outside
     // the Drawer subtree so it survives the close.
+    suppressSidebarFocusRestore()
     emit('update:open', false)
     renameTarget.value = session
     renameValue.value = session.title
@@ -90,6 +104,7 @@ function submitRename(): void {
 
 function openDelete(session: TalosLocalChatSession): void {
     // R1-SF-B2: same drawer-modality rule as openRename.
+    suppressSidebarFocusRestore()
     emit('update:open', false)
     deleteTarget.value = session
 }
@@ -127,13 +142,14 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
         <DrawerContent
             data-testid="talos-mobile-sidebar"
             class="h-[100dvh] w-full max-w-none rounded-none border-0 bg-[var(--talos-sidebar)] text-[var(--talos-text)] data-[vaul-drawer-direction=left]:w-full data-[vaul-drawer-direction=left]:max-w-none data-[vaul-drawer-direction=left]:rounded-none data-[vaul-drawer-direction=left]:border-0 data-[vaul-drawer-direction=left]:sm:max-w-none md:!w-[380px] md:!max-w-[380px] md:!border-r md:border-[var(--talos-border)]"
+            @close-auto-focus="onSidebarCloseAutoFocus"
         >
             <DrawerHeader class="flex-row items-center gap-3 border-b border-[var(--talos-border)] px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] text-left">
                 <div class="min-w-0 flex-1">
                     <DrawerTitle class="talos-orbitron-brand text-base tracking-[0.2em] text-[var(--talos-text)]">TALOS</DrawerTitle>
-                    <DrawerDescription class="text-xs text-[var(--talos-muted)]">Chats, tools and settings</DrawerDescription>
+                    <DrawerDescription class="text-xs text-[var(--talos-muted)]">{{ $t('shell.sidebarDescription') }}</DrawerDescription>
                 </div>
-                <Button type="button" size="icon-lg" variant="ghost" class="min-h-11 min-w-11" aria-label="Close menu" @click="emit('update:open', false)">
+                <Button type="button" size="icon-lg" variant="ghost" class="min-h-11 min-w-11" :aria-label="$t('navigation.closeMenu')" @click="emit('update:open', false)">
                     <X aria-hidden="true" />
                 </Button>
             </DrawerHeader>
@@ -148,8 +164,8 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                      Tools rows (one visual language), and the huge flex-1 spacer
                      that pushed Tools to the bottom is gone — the sections now sit
                      together and the footer is pinned with mt-auto. -->
-                <nav aria-label="Chats" class="px-3 py-3 md:hidden">
-                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Chats</p>
+                <nav :aria-label="$t('navigation.chats')" class="px-3 py-3 md:hidden">
+                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('navigation.chats') }}</p>
                     <button
                         type="button"
                         data-testid="talos-sidebar-chats-entry"
@@ -157,26 +173,28 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                         @click="emit('navigate', 'chats')"
                     >
                         <MessageSquareText class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                        <span class="min-w-0 flex-1 truncate">All chats</span>
+                        <span class="min-w-0 flex-1 truncate">{{ $t('shell.allChats') }}</span>
                         <span class="text-xs text-[var(--talos-muted)]">{{ props.sessions.length }}</span>
                     </button>
                 </nav>
 
                 <nav
                     data-testid="talos-sidebar-recents"
-                    aria-label="Recent chats"
+                    :aria-label="$t('shell.recentChats')"
                     class="hidden min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 md:block"
                 >
-                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Recents</p>
+                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('shell.recents') }}</p>
                     <p class="px-1 pb-2 text-xs text-[var(--talos-muted)]">
-                        {{ props.sessions.length }} conversation{{ props.sessions.length === 1 ? '' : 's' }} on this device
+                        {{ props.sessions.length === 1
+                            ? $t('shell.conversationCountOne')
+                            : $t('shell.conversationCountMany', { count: props.sessions.length }) }}
                     </p>
-                    <p v-if="!props.sessions.length" class="px-1 py-2 text-sm text-[var(--talos-muted)]">No chats yet.</p>
-                    <ul v-else class="space-y-0.5" aria-label="Chat history">
+                    <p v-if="!props.sessions.length" class="px-1 py-2 text-sm text-[var(--talos-muted)]">{{ $t('shell.noChats') }}</p>
+                    <ul v-else class="space-y-0.5" :aria-label="$t('shell.chatHistory')">
                         <li v-for="session in props.sessions" :key="session.id" class="group flex items-center gap-1">
                             <button
                                 type="button"
-                                :aria-label="`Open chat ${sessionTitle(session)}`"
+                                :aria-label="$t('chat.openNamed', { title: sessionTitle(session) })"
                                 :aria-current="session.id === props.activeSessionId ? 'page' : undefined"
                                 class="talos-pressable min-h-11 min-w-0 flex-1 truncate rounded-md px-2 text-left text-sm"
                                 :class="session.id === props.activeSessionId
@@ -186,10 +204,10 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                             >
                                 {{ sessionTitle(session) }}
                             </button>
-                            <Button type="button" size="icon" variant="ghost" :aria-label="`Rename ${sessionTitle(session)}`" @click="openRename(session)">
+                            <Button type="button" size="icon" variant="ghost" :aria-label="$t('chat.renameNamed', { title: sessionTitle(session) })" @click="openRename(session)">
                                 <Pencil class="size-3.5" aria-hidden="true" />
                             </Button>
-                            <Button type="button" size="icon" variant="ghost" :aria-label="`Delete ${sessionTitle(session)}`" @click="openDelete(session)">
+                            <Button type="button" size="icon" variant="ghost" :aria-label="$t('chat.deleteNamed', { title: sessionTitle(session) })" @click="openDelete(session)">
                                 <Trash2 class="size-3.5" aria-hidden="true" />
                             </Button>
                         </li>
@@ -198,17 +216,17 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
 
                 <nav
                     data-testid="talos-sidebar-tools"
-                    aria-label="Tools"
+                    :aria-label="$t('shell.tools')"
                     class="px-3 pb-3 md:border-t md:border-[var(--talos-border)] md:pt-3"
                 >
-                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">Tools</p>
+                    <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">{{ $t('shell.tools') }}</p>
                     <ul class="space-y-0.5">
-                        <li v-for="tool in TOOLS" :key="tool.route">
+                        <li v-for="tool in tools" :key="tool.route">
                             <button
                                 type="button"
-                                :aria-label="`Open ${tool.label}`"
+                                :aria-label="$t('shell.openItem', { item: tool.label })"
                                 class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
-                                @click="emit('navigate', tool.route)"
+                                @click="suppressSidebarFocusRestore(); emit('navigate', tool.route)"
                             >
                                 <component :is="tool.icon" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                                 {{ tool.label }}
@@ -217,12 +235,12 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                         <li>
                             <button
                                 type="button"
-                                aria-label="Open Model Lab"
+                                :aria-label="$t('shell.openItem', { item: $t('navigation.modelLab') })"
                                 class="talos-pressable flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
-                                @click="emit('openModelLab')"
+                                @click="suppressSidebarFocusRestore(); emit('openModelLab')"
                             >
                                 <FlaskConical class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
-                                Model Lab
+                                {{ $t('navigation.modelLab') }}
                             </button>
                         </li>
                     </ul>
@@ -236,12 +254,12 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
                 >
                     <button
                         type="button"
-                        aria-label="Open Settings"
+                        :aria-label="$t('shell.openSettings')"
                         class="talos-pressable flex min-h-11 items-center gap-2 rounded-full pr-3 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]"
-                        @click="emit('openSettings')"
+                        @click="suppressSidebarFocusRestore(); emit('openSettings')"
                     >
                         <TalosAccountAvatar size="sm" />
-                        <span class="max-w-[120px] truncate text-[var(--talos-muted)]">{{ account.state.display_name || 'Account' }}</span>
+                        <span class="max-w-[120px] truncate text-[var(--talos-muted)]">{{ account.state.display_name || $t('navigation.account') }}</span>
                     </button>
                     <TalosMobileNewChatFab :disabled="props.creatingSession" @click="emit('newChat')" />
                 </div>
@@ -254,21 +272,21 @@ const deletePlan = computed<TalosSessionCleanupPlan>(() => (
          their taps and focus), and they must survive that unmount. -->
     <TalosMobileConfirmDialog
         v-if="renameTarget !== null"
-        title="Rename chat"
-        description="Choose a concise name for this conversation."
+        :title="$t('chat.renameChat')"
+        :description="$t('chat.renameDescription')"
         @close="renameTarget = null"
     >
         <input
             ref="renameInput"
             v-model="renameValue"
-            aria-label="Chat name"
+            :aria-label="$t('chat.chatName')"
             class="min-h-11 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-input,var(--talos-background))] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
             @keydown.enter.prevent="submitRename"
         >
         <template #footer>
-            <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> Cancel</Button>
+            <Button type="button" variant="ghost" @click="renameTarget = null"><X class="size-4" aria-hidden="true" /> {{ $t('common.cancel') }}</Button>
             <Button type="button" data-testid="talos-session-rename-submit" :disabled="!renameValue.trim() || props.busy" @click="submitRename">
-                <Check class="size-4" aria-hidden="true" /> Save
+                <Check class="size-4" aria-hidden="true" /> {{ $t('common.save') }}
             </Button>
         </template>
     </TalosMobileConfirmDialog>

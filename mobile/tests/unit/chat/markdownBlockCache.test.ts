@@ -51,4 +51,26 @@ describe('parsing a streamed answer', () => {
         expect(renderTalosMarkdownBlock('riga numero 599')).toBe(late)
         expect(early).toContain('riga numero 0')
     })
+
+    it('I18N-06 never serves a cached block rendered for another locale', () => {
+        const source = '- [x] fatto'
+        const italian = renderTalosMarkdownBlock(source, {
+            labels: {
+                completedTask: 'Attività completata',
+                openTask: 'Attività aperta',
+                scrollableTable: 'Tabella del messaggio scorrevole',
+                image: 'Immagine',
+                externalImageOmitted: 'Immagine esterna omessa:',
+                code: 'codice',
+                copyCode: 'Copia codice',
+                copy: 'Copia',
+                truncatedMessage: 'Messaggio troncato per una visualizzazione sicura.',
+            },
+        })
+        const english = renderTalosMarkdownBlock(source)
+
+        expect(italian).toContain('Attività completata')
+        expect(english).toContain('Completed task')
+        expect(italian).not.toBe(english)
+    })
 })

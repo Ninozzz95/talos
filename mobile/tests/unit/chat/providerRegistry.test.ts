@@ -19,7 +19,15 @@ describe('mobile provider registry', () => {
     })
 
     it('fails closed for an unknown provider', () => {
-        expect(() => providerAdapterFor('made-up-provider')).toThrow(/unsupported provider/i)
+        expect(() => providerAdapterFor('made-up-provider')).toThrow('TALOS_PROVIDER_UNSUPPORTED')
+        try {
+            providerAdapterFor('made-up-provider')
+        } catch (error) {
+            expect(error).toMatchObject({
+                uiMessageKey: 'models.providerUnsupported',
+                uiMessageParameters: { provider: 'made-up-provider' },
+            })
+        }
     })
 
     it('keeps every provider implementation behind a dynamic import', () => {

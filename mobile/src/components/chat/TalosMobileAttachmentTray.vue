@@ -30,7 +30,7 @@ function isImage(mediaType: string): boolean {
     <section
         v-if="items.length || busy || error"
         class="space-y-2 border-b border-[var(--talos-border)] px-3 py-2"
-        aria-label="Message attachments"
+        :aria-label="$t('chat.messageAttachments')"
         data-testid="talos-mobile-attachment-tray"
     >
         <div
@@ -45,7 +45,7 @@ function isImage(mediaType: string): boolean {
                 size="icon"
                 variant="ghost"
                 class="min-h-11 min-w-11 shrink-0"
-                aria-label="Dismiss attachment error"
+                :aria-label="$t('chat.dismissAttachmentError')"
                 @click="emit('dismissError')"
             >
                 <X class="size-4" aria-hidden="true" />
@@ -76,9 +76,9 @@ function isImage(mediaType: string): boolean {
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-xs font-medium text-[var(--talos-text)]">{{ item.displayName }}</p>
                     <p class="truncate text-3xs text-[var(--talos-muted)]">
-                        <template v-if="item.status === 'ingesting'">Adding file</template>
-                        <template v-else-if="item.status === 'failed'">Could not add file</template>
-                        <template v-else>{{ formatBytes(item.sizeBytes) }} · Model read · Browser upload</template>
+                        <template v-if="item.status === 'ingesting'">{{ $t('chat.addingFile') }}</template>
+                        <template v-else-if="item.status === 'failed'">{{ $t('chat.addFileFailed') }}</template>
+                        <template v-else>{{ $t('chat.attachmentCapabilities', { size: formatBytes(item.sizeBytes) }) }}</template>
                     </p>
                     <p v-if="item.error" class="truncate text-3xs text-[var(--talos-danger,var(--destructive))]">
                         {{ item.error }}
@@ -90,7 +90,7 @@ function isImage(mediaType: string): boolean {
                     size="icon"
                     variant="ghost"
                     class="min-h-11 min-w-11 shrink-0"
-                    :aria-label="`Remove ${item.displayName}`"
+                    :aria-label="$t('chat.removeAttachment', { name: item.displayName })"
                     @click="emit('remove', item.id)"
                 >
                     <X class="size-4" aria-hidden="true" />
@@ -98,6 +98,6 @@ function isImage(mediaType: string): boolean {
             </article>
         </div>
 
-        <span v-if="busy" role="status" aria-live="polite" class="sr-only">Adding files</span>
+        <span v-if="busy" role="status" aria-live="polite" class="sr-only">{{ $t('chat.addingFiles') }}</span>
     </section>
 </template>

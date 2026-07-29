@@ -19,6 +19,13 @@ interface FixtureOptions {
     eagerModelAdvanced?: boolean
     eagerToolset?: boolean
     eagerDocuments?: boolean
+    eagerLauncherIconDialog?: boolean
+    eagerWelcomeEnglish?: boolean
+    eagerWelcomeItalian?: boolean
+    eagerWelcomeRuntime?: boolean
+    eagerWelcomeEasterEgg?: boolean
+    eagerWelcomeTitle?: boolean
+    eagerWorkspaceBackground?: boolean
     syntheticSettingsEntry?: boolean
 }
 
@@ -40,7 +47,22 @@ function createFixture(options: FixtureOptions = {}): string {
     const toolConsentKey = 'src/components/chat/TalosMobileToolConsentSheet.vue'
     const chatMediaKey = 'src/components/chat/TalosMobileChatMediaPanel.vue'
     const documentGeneratorKey = 'src/lib/documents/documentGenerator.ts'
+    const launcherIconDialogKey = 'src/components/talos/settings/TalosLauncherIconDialog.vue'
+    const chatScreenKey = 'src/screens/ChatScreen.vue'
+    const welcomeEnglishKey = 'src/lib/welcome/catalogs/en.json'
+    const welcomeItalianKey = 'src/lib/welcome/catalogs/it.json'
+    const welcomeRuntimeKey = 'src/lib/welcome/runtime.ts'
+    const welcomeEasterEggKey = 'src/components/chat/TalosWelcomeEasterEgg.vue'
+    const welcomeTitleKey = 'src/components/chat/TalosWelcomeTitle.vue'
+    const workspaceBackgroundKey = 'src/components/talos/workspace/TalosMobileBackground.vue'
     const documentsAreDynamic = options.eagerDocuments !== true
+    const launcherIconDialogIsDynamic = options.eagerLauncherIconDialog !== true
+    const welcomeEnglishIsDynamic = options.eagerWelcomeEnglish !== true
+    const welcomeItalianIsDynamic = options.eagerWelcomeItalian !== true
+    const welcomeRuntimeIsDynamic = options.eagerWelcomeRuntime !== true
+    const welcomeEasterEggIsDynamic = options.eagerWelcomeEasterEgg !== true
+    const welcomeTitleIsDynamic = options.eagerWelcomeTitle !== true
+    const workspaceBackgroundIsDynamic = options.eagerWorkspaceBackground !== true
     const toolsetIsDynamic = options.eagerToolset !== true
     const sqliteIsDynamic = options.sqliteIsDynamic ?? true
     const messageRendererIsDynamic = options.eagerMessageRenderer !== true
@@ -78,6 +100,13 @@ function createFixture(options: FixtureOptions = {}): string {
                 ...(slashCommandMenuIsDynamic ? [] : [slashCommandMenuKey]),
                 ...(toolsetIsDynamic ? [] : [toolsetKey]),
                 ...(documentsAreDynamic ? [] : [documentGeneratorKey]),
+                ...(launcherIconDialogIsDynamic ? [] : [launcherIconDialogKey]),
+                ...(welcomeEnglishIsDynamic ? [] : [welcomeEnglishKey]),
+                ...(welcomeItalianIsDynamic ? [] : [welcomeItalianKey]),
+                ...(welcomeRuntimeIsDynamic ? [] : [welcomeRuntimeKey]),
+                ...(welcomeEasterEggIsDynamic ? [] : [welcomeEasterEggKey]),
+                ...(welcomeTitleIsDynamic ? [] : [welcomeTitleKey]),
+                ...(workspaceBackgroundIsDynamic ? [] : [workspaceBackgroundKey]),
                 ...staticRouteKeys,
             ],
             dynamicImports: [
@@ -91,6 +120,12 @@ function createFixture(options: FixtureOptions = {}): string {
                 toolConsentKey,
                 chatMediaKey,
                 ...(documentsAreDynamic ? [documentGeneratorKey] : []),
+                ...(launcherIconDialogIsDynamic ? [launcherIconDialogKey] : []),
+                chatScreenKey,
+                ...(welcomeRuntimeIsDynamic ? [welcomeRuntimeKey] : []),
+                ...(welcomeEasterEggIsDynamic ? [welcomeEasterEggKey] : []),
+                ...(welcomeTitleIsDynamic ? [welcomeTitleKey] : []),
+                ...(workspaceBackgroundIsDynamic ? [workspaceBackgroundKey] : []),
                 ...dynamicRouteKeys,
             ],
         },
@@ -142,6 +177,62 @@ function createFixture(options: FixtureOptions = {}): string {
             file: 'assets/document-generator.js',
             isDynamicEntry: documentsAreDynamic,
         },
+        [launcherIconDialogKey]: {
+            file: 'assets/launcher-icon-dialog.js',
+            isDynamicEntry: launcherIconDialogIsDynamic,
+        },
+        [chatScreenKey]: {
+            file: 'assets/chat-screen.js',
+            isDynamicEntry: true,
+            imports: [
+                ...(welcomeEnglishIsDynamic ? [] : [welcomeEnglishKey]),
+                ...(welcomeItalianIsDynamic ? [] : [welcomeItalianKey]),
+            ],
+            dynamicImports: [
+                ...(welcomeEnglishIsDynamic ? [welcomeEnglishKey] : []),
+                ...(welcomeItalianIsDynamic ? [welcomeItalianKey] : []),
+            ],
+        },
+        [welcomeEnglishKey]: {
+            file: 'assets/welcome-en.js',
+            isDynamicEntry: welcomeEnglishIsDynamic,
+        },
+        [welcomeItalianKey]: {
+            file: 'assets/welcome-it.js',
+            isDynamicEntry: welcomeItalianIsDynamic,
+        },
+        [welcomeRuntimeKey]: {
+            file: 'assets/welcome-runtime.js',
+            isDynamicEntry: welcomeRuntimeIsDynamic,
+            imports: [
+                ...(welcomeEnglishIsDynamic ? [] : [welcomeEnglishKey]),
+                ...(welcomeItalianIsDynamic ? [] : [welcomeItalianKey]),
+            ],
+            dynamicImports: [
+                ...(welcomeEnglishIsDynamic ? [welcomeEnglishKey] : []),
+                ...(welcomeItalianIsDynamic ? [welcomeItalianKey] : []),
+            ],
+        },
+        [welcomeEasterEggKey]: {
+            file: 'assets/welcome-easter-egg.js',
+            isDynamicEntry: welcomeEasterEggIsDynamic,
+        },
+        [welcomeTitleKey]: {
+            file: 'assets/welcome-title.js',
+            isDynamicEntry: welcomeTitleIsDynamic,
+            imports: [
+                ...(welcomeRuntimeIsDynamic ? [] : [welcomeRuntimeKey]),
+                ...(welcomeEasterEggIsDynamic ? [] : [welcomeEasterEggKey]),
+            ],
+            dynamicImports: [
+                ...(welcomeRuntimeIsDynamic ? [welcomeRuntimeKey] : []),
+                ...(welcomeEasterEggIsDynamic ? [welcomeEasterEggKey] : []),
+            ],
+        },
+        [workspaceBackgroundKey]: {
+            file: 'assets/workspace-background.js',
+            isDynamicEntry: workspaceBackgroundIsDynamic,
+        },
     }
     for (const [index, sourceKey] of routeKeys.entries()) {
         const key = manifestKeyForRoute(sourceKey)
@@ -174,6 +265,14 @@ function createFixture(options: FixtureOptions = {}): string {
     writeFileSync(join(root, 'assets', 'slash-command-menu.js'), 'c'.repeat(64))
     writeFileSync(join(root, 'assets', 'model-catalog.js'), 'l'.repeat(64))
     writeFileSync(join(root, 'assets', 'model-advanced.js'), 'a'.repeat(64))
+    writeFileSync(join(root, 'assets', 'launcher-icon-dialog.js'), 'i'.repeat(64))
+    writeFileSync(join(root, 'assets', 'chat-screen.js'), 'h'.repeat(64))
+    writeFileSync(join(root, 'assets', 'welcome-en.js'), 'e'.repeat(64))
+    writeFileSync(join(root, 'assets', 'welcome-it.js'), 't'.repeat(64))
+    writeFileSync(join(root, 'assets', 'welcome-runtime.js'), 'w'.repeat(64))
+    writeFileSync(join(root, 'assets', 'welcome-easter-egg.js'), 'g'.repeat(64))
+    writeFileSync(join(root, 'assets', 'welcome-title.js'), 'v'.repeat(64))
+    writeFileSync(join(root, 'assets', 'workspace-background.js'), 'b'.repeat(64))
     return root
 }
 
@@ -198,6 +297,12 @@ describe('initial JavaScript chunk contract', () => {
         expect(result.stdout).toContain('sqlite_dynamic_entry')
         expect(result.stdout).toContain('model_catalog_dynamic_entry')
         expect(result.stdout).toContain('model_advanced_dynamic_entry')
+        expect(result.stdout).toContain('welcome_en_dynamic_entry')
+        expect(result.stdout).toContain('welcome_it_dynamic_entry')
+        expect(result.stdout).toContain('welcome_runtime_dynamic_entry')
+        expect(result.stdout).toContain('welcome_easter_egg_dynamic_entry')
+        expect(result.stdout).toContain('welcome_title_dynamic_entry')
+        expect(result.stdout).toContain('workspace_background_dynamic_entry')
     })
 
     it('rejects SQLite when it enters the static initial graph', () => {
@@ -223,6 +328,13 @@ describe('initial JavaScript chunk contract', () => {
 
         expect(result.status).toBe(1)
         expect(result.stderr).toContain('TALOS_DOCUMENT_GENERATOR_NOT_LAZY')
+    })
+
+    it('rejects the optional launcher-icon dialog when it enters the static initial graph', () => {
+        const result = verify(createFixture({ eagerLauncherIconDialog: true }), 256)
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_LAUNCHER_ICON_DIALOG_NOT_LAZY')
     })
 
     it('rejects an initial JavaScript graph over its byte budget', () => {
@@ -284,5 +396,39 @@ describe('initial JavaScript chunk contract', () => {
         expect(result.stdout).toContain('_SettingsScreen-fixture.js')
         expect(result.stdout).toContain('model_catalog_dynamic_entry')
         expect(result.stdout).toContain('model_advanced_dynamic_entry')
+    })
+
+    it('WELCOME-CHUNK-02 rejects either welcome locale catalog in the initial static graph', () => {
+        const english = verify(createFixture({ eagerWelcomeEnglish: true }), 256)
+        expect(english.status).toBe(1)
+        expect(english.stderr).toContain('TALOS_WELCOME_CATALOG_NOT_LAZY')
+
+        const italian = verify(createFixture({ eagerWelcomeItalian: true }), 256)
+        expect(italian.status).toBe(1)
+        expect(italian.stderr).toContain('TALOS_WELCOME_CATALOG_NOT_LAZY')
+    })
+
+    it('WELCOME-CHUNK-03 rejects the welcome runtime or icon renderer when either loses its lazy boundary', () => {
+        const runtime = verify(createFixture({ eagerWelcomeRuntime: true }), 256)
+        expect(runtime.status).toBe(1)
+        expect(runtime.stderr).toContain('TALOS_WELCOME_RUNTIME_NOT_LAZY')
+
+        const icon = verify(createFixture({ eagerWelcomeEasterEgg: true }), 256)
+        expect(icon.status).toBe(1)
+        expect(icon.stderr).toContain('TALOS_WELCOME_EASTER_EGG_NOT_LAZY')
+    })
+
+    it('WELCOME-CHUNK-04 rejects the welcome title controller when it enters the initial graph', () => {
+        const result = verify(createFixture({ eagerWelcomeTitle: true }), 256)
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_WELCOME_TITLE_NOT_LAZY')
+    })
+
+    it('TOOL-AUTH-26 rejects the optional procedural background in the initial graph', () => {
+        const result = verify(createFixture({ eagerWorkspaceBackground: true }), 256)
+
+        expect(result.status).toBe(1)
+        expect(result.stderr).toContain('TALOS_WORKSPACE_BACKGROUND_NOT_LAZY')
     })
 })

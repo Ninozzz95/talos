@@ -4,9 +4,63 @@
     will-change: transform, opacity;
 }
 
+@keyframes talos-composer-layout-expand {
+    from {
+        transform: translate3d(0, var(--talos-composer-layout-shift, 0px), 0);
+    }
+    to {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes talos-composer-layout-collapse {
+    from {
+        transform: translate3d(0, var(--talos-composer-layout-shift, 0px), 0);
+    }
+    to {
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes talos-settings-tab-change {
+    from {
+        opacity: var(--talos-motion-tab-change-opacity, 1);
+        transform: var(--talos-motion-tab-change-transform, none);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    }
+}
+
+[data-talos-motion-intent="composer-expand"] {
+    animation: talos-composer-layout-expand
+        var(--talos-motion-duration-composer-expand, 0ms)
+        var(--talos-motion-ease-composer-expand, linear)
+        both;
+}
+
+[data-talos-motion-intent="composer-collapse"] {
+    animation: talos-composer-layout-collapse
+        var(--talos-motion-duration-composer-collapse, 0ms)
+        var(--talos-motion-ease-composer-collapse, linear)
+        both;
+}
+
+[data-talos-motion-intent="tab-change"],
+.talos-motion-tab-panel[data-state="active"] {
+    animation: talos-settings-tab-change
+        var(--talos-motion-duration-tab-change, 0ms)
+        var(--talos-motion-ease-tab-change, linear)
+        both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-    [data-talos-motion-intent] {
+    [data-talos-motion-intent],
+    .talos-motion-tab-panel[data-state="active"] {
         animation: none !important;
         transition: none !important;
+        opacity: 1 !important;
+        transform: none !important;
     }
 }

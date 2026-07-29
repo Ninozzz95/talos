@@ -20,6 +20,11 @@ import { reactive, ref } from 'vue'
 const state = vi.hoisted(() => ({
     security: { app_lock_enabled: false },
     secrets: {} as Record<string, boolean>,
+    account: { display_name: '' },
+    savedNames: [] as string[],
+    memoryNames: [] as string[],
+    memoryFailure: false,
+    memoryExisting: false,
 }))
 
 vi.mock('@/stores/settings', () => ({
@@ -30,7 +35,34 @@ vi.mock('@/stores/settings', () => ({
 }))
 
 vi.mock('@/stores/chatController', () => ({
-    useChatController: () => ({ secrets: state.secrets }),
+    useChatController: () => ({
+        secrets: state.secrets,
+        memories: {
+            list: async () => state.memoryExisting
+                ? [{
+                    id: 'talos-profile-display-name',
+                    status: 'active',
+                    content: state.account.display_name,
+                }]
+                : [],
+            upsertDisplayName: async (name: string) => {
+                state.memoryNames.push(name)
+                if (state.memoryFailure) throw new Error('sqlite unavailable')
+                state.memoryExisting = true
+            },
+        },
+    }),
+}))
+
+vi.mock('@/stores/account', () => ({
+    useTalosAccountStore: () => ({
+        state: reactive(state.account),
+        setDisplayName: async (name: string) => {
+            const normalized = name.trim().slice(0, 60)
+            state.account.display_name = normalized
+            state.savedNames.push(normalized)
+        },
+    }),
 }))
 
 vi.mock('@/services/appLock', () => ({
@@ -60,6 +92,11 @@ import TalosMobileSetupIntro from '@/components/intro/TalosMobileSetupIntro.vue'
 
 beforeEach(() => {
     state.security.app_lock_enabled = false
+    state.account.display_name = ''
+    state.savedNames.length = 0
+    state.memoryNames.length = 0
+    state.memoryFailure = false
+    state.memoryExisting = false
     for (const key of Object.keys(state.secrets)) delete state.secrets[key]
 })
 
@@ -67,35 +104,42 @@ function mountIntro() {
     return mount(TalosMobileSetupIntro, { attachTo: document.body })
 }
 
-/** Past the story screen and into the work. */
-async function mountSetup() {
+async function mountStory() {
     const wrapper = mountIntro()
     await flushPromises()
+    await wrapper.get('[data-testid="talos-language-continue"]').trigger('click')
+    return wrapper
+}
+
+/** Past language and story, into identity/PIN/model setup. */
+async function mountSetup() {
+    const wrapper = await mountStory()
     await wrapper.get('[data-testid="talos-setup-begin"]').trigger('click')
     return wrapper
 }
 
 describe('what TALOS says it is, before asking for anything', () => {
-    it('opens on the story, not on a form', async () => {
+    it('ONBOARD-UNIFIED-01 opens on the separate language page before the story', async () => {
         const wrapper = mountIntro()
         await flushPromises()
-        expect(wrapper.find('[data-testid="talos-setup-story"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-setup-language"]').exists()).toBe(true)
+        expect(wrapper.findAll('[data-testid="talos-language-choice"]')).toHaveLength(3)
+        expect(wrapper.find('[data-testid="talos-setup-story"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="talos-setup-step"]').exists()).toBe(false)
     })
 
-    it('makes the claim against itself, which is the only one worth making', () => {
+    it('makes the claim against itself, which is the only one worth making', async () => {
         // Obsidian sells this with "No one else can read them, not even us".
         // TALOS can say something stronger and still true: there is no server
         // of ours, so there is no "us" for anything to reach.
-        const wrapper = mountIntro()
+        const wrapper = await mountStory()
         expect(wrapper.text()).toMatch(/no us to reach/i)
         expect(wrapper.text()).toMatch(/no backend/i)
         wrapper.unmount()
     })
 
     it('names every thing the owner asked to be named', async () => {
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountStory()
         const text = wrapper.text()
         expect(text).toMatch(/encrypted on this phone/i) // privacy, local-first
         expect(text).toMatch(/download a model/i) // models on the device
@@ -112,16 +156,14 @@ describe('what TALOS says it is, before asking for anything', () => {
     it('does not make the project about the person who built it', async () => {
         // Owner 2026-07-27: "non voglio che metti che e' stato fatto da una sola
         // persona, penso sia troppo egocentrica come cosa".
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountStory()
         expect(wrapper.text()).not.toMatch(/one engineer|single builder|one-person/i)
         wrapper.unmount()
     })
 
     it('keeps what is built apart from what is coming', async () => {
         // The modal this replaces mixed them, and the owner called it fake.
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountStory()
         // The invariant that matters: nothing unbuilt is described in the
         // present tense. Shizuku and cloud sync exist only in the future list,
         // so the four things TALOS says it DOES must not mention them.
@@ -138,8 +180,7 @@ describe('what TALOS says it is, before asking for anything', () => {
     })
 
     it('can be left from the story too', async () => {
-        const wrapper = mountIntro()
-        await flushPromises()
+        const wrapper = await mountStory()
         await wrapper.get('[data-testid="talos-setup-skip"]').trigger('click')
         expect(wrapper.emitted('close')).toEqual([['skipped']])
         wrapper.unmount()
@@ -147,12 +188,13 @@ describe('what TALOS says it is, before asking for anything', () => {
 })
 
 describe('first-run setup', () => {
-    it('is two steps, named after what the person controls', async () => {
+    it('ONBOARD-UNIFIED-02 keeps name, PIN and model in one setup modal', async () => {
         const wrapper = await mountSetup()
         const steps = wrapper.findAll('[data-testid="talos-setup-step"]')
-        expect(steps).toHaveLength(2)
-        expect(steps.map((step) => step.text())).toEqual(['PIN', 'Model'])
+        expect(steps).toHaveLength(3)
+        expect(steps.map((step) => step.text())).toEqual(['Name', 'PIN', 'Model'])
         expect(steps[0]!.attributes('aria-current')).toBe('step')
+        expect(wrapper.find('[data-testid="talos-setup-identity"]').exists()).toBe(true)
         wrapper.unmount()
     })
 
@@ -161,28 +203,66 @@ describe('first-run setup', () => {
         // makes it the database key. Softening that would be the one lie this
         // screen cannot afford.
         const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
         expect(wrapper.text()).toMatch(/no recovery/i)
         wrapper.unmount()
     })
 
-    it('goes forward and back between the two steps', async () => {
+    it('ONBOARD-UNIFIED-03 saves the name and its global memory before advancing', async () => {
         const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('  Ninò 🚀  ')
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
-        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[1]!.attributes('aria-current')).toBe('step')
         await flushPromises()
-        expect(wrapper.find('[data-testid="settings-provider-keys"]').exists()).toBe(true)
-        await wrapper.get('[data-testid="talos-setup-back"]').trigger('click')
-        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[0]!.attributes('aria-current')).toBe('step')
+
+        expect(state.savedNames).toEqual(['Ninò 🚀'])
+        expect(state.memoryNames).toEqual(['Ninò 🚀'])
+        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[1]!.attributes('aria-current')).toBe('step')
         wrapper.unmount()
     })
 
-    it('opens on the model step when a PIN already exists', async () => {
+    it('ONBOARD-UNIFIED-05 keeps a failed memory write visible and retryable', async () => {
+        state.memoryFailure = true
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+
+        expect(wrapper.get('[data-testid="talos-setup-identity-error"]').attributes('role')).toBe('alert')
+        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[0]!.attributes('aria-current')).toBe('step')
+
+        state.memoryFailure = false
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        expect(state.memoryNames).toEqual(['Nino', 'Nino'])
+        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[1]!.attributes('aria-current')).toBe('step')
+        wrapper.unmount()
+    })
+
+    it('goes forward and back across identity, PIN and model', async () => {
+        const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[2]!.attributes('aria-current')).toBe('step')
+        await flushPromises()
+        expect(wrapper.find('[data-testid="settings-provider-keys"]').exists()).toBe(true)
+        await wrapper.get('[data-testid="talos-setup-back"]').trigger('click')
+        expect(wrapper.findAll('[data-testid="talos-setup-step"]')[1]!.attributes('aria-current')).toBe('step')
+        wrapper.unmount()
+    })
+
+    it('opens on the model step when a name and PIN already exist', async () => {
         // Killed between the two steps, or the PIN was set earlier in Settings.
         // Asking again would be the app not looking at its own state.
+        state.account.display_name = 'Nino'
+        state.memoryExisting = true
         state.security.app_lock_enabled = true
         const wrapper = await mountSetup()
         const steps = wrapper.findAll('[data-testid="talos-setup-step"]')
-        expect(steps[1]!.attributes('aria-current')).toBe('step')
+        expect(steps[2]!.attributes('aria-current')).toBe('step')
         wrapper.unmount()
     })
 
@@ -195,7 +275,11 @@ describe('first-run setup', () => {
 
     it('finishes as completed from the last step', async () => {
         const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
+        await flushPromises()
         await wrapper.get('[data-testid="talos-intro-cta"]').trigger('click')
         expect(wrapper.emitted('close')).toEqual([['completed']])
         wrapper.unmount()
@@ -208,6 +292,7 @@ describe('first-run setup', () => {
         const spy = vi.spyOn(permissions, 'requestTalosNotifications')
         const mic = vi.spyOn(permissions, 'requestTalosMicrophone')
         const wrapper = await mountSetup()
+        await wrapper.get('[data-testid="talos-setup-name"]').setValue('Nino')
         await wrapper.get('[data-testid="talos-setup-next"]').trigger('click')
         expect(spy).not.toHaveBeenCalled()
         expect(mic).not.toHaveBeenCalled()

@@ -1,6 +1,6 @@
 {
-    "schema_version": 1,
-    "description": "Frozen hash-conformance manifest for the 24 shadcn-vue 2.8.0 upstream files (drawer, dialog, button, lib/utils). Regenerated in a disposable directory and hash-matched before promotion; never hand-copied.",
+    "schema_version": 2,
+    "description": "Frozen upstream hashes for 24 shadcn-vue 2.8.0 generated files plus a closed list of reviewed TALOS-owned source adaptations. Original generator hashes remain immutable; accepted hashes keep intentional local variants drift-gated.",
     "generator": {
         "name": "shadcn-vue",
         "version": "2.8.0",
@@ -9,6 +9,29 @@
     "source_evidence": "generated-checksums.txt (55 file, Codex-verified 55/55)",
     "extraction_rule": "rows matching ^probe-app/src/(components/ui/(button|dialog|drawer)/|lib/utils.ts); destination = s|^probe-app/src/|mobile/src/|",
     "file_count": 24,
+    "adaptations": [
+        {
+            "destination": "mobile/src/components/ui/dialog/DialogContent.vue",
+            "upstream_sha256": "162aa1e930f9e2ee2f02b7214d923993511d4facd6cc1fe1b978642af2fcdd7d",
+            "accepted_sha256": "3b84600beeec0ada1b64fe0604218635cb871e293358f9048cf8736c02a1e454",
+            "reason": "TALOS localizes the assistive close label through the complete app locale catalog.",
+            "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        },
+        {
+            "destination": "mobile/src/components/ui/dialog/DialogFooter.vue",
+            "upstream_sha256": "40a892cf52426684fdcf05a9c987db69c5097a620273166f2ceccd435c51d91a",
+            "accepted_sha256": "2c00c5978a05571ad9206d193734b76b3eaee20df34fb5fdc7a5cc284d7be43c",
+            "reason": "TALOS localizes the optional visible close action through the complete app locale catalog.",
+            "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        },
+        {
+            "destination": "mobile/src/components/ui/dialog/DialogScrollContent.vue",
+            "upstream_sha256": "44aca8ded817ca375d1338bc8a66dbee1709a4d38d66dc64ec6af70cb99ff449",
+            "accepted_sha256": "1e272ab1c85eff2125eed235abeb56a50d131200b6d5c828169e7f5c6758fb16",
+            "reason": "TALOS localizes the scroll-dialog assistive close label through the complete app locale catalog.",
+            "research": "mobile/docs/superpowers/research/2026-07-29-p0-localization-conformance-closure-research.md"
+        }
+    ],
     "files": [
         {
             "sha256": "03dfcb658cdf0cb49bd6c6dd1e0e2de1b4f0d53014956fa6a6259bb49857ad7a",

@@ -164,6 +164,7 @@ describe('the report the owner asked for, through the real tool', () => {
             },
         }, {
             permissions: { ...TALOS_DEFAULT_TOOL_PERMISSIONS, write: 'allow' as const },
+            isToolEnabled: () => true,
             requestConsent: vi.fn(async () => true),
             audit: vi.fn(async () => {}),
             context: { sessionId: 's1' },

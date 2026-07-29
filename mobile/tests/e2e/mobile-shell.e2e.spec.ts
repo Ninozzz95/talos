@@ -94,12 +94,23 @@ test('a station opens from the sidebar in a tool-sheet over the chat base and re
     await openStation(page, 'Research')
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'research')
     await expect(page.locator(SHEET)).toBeVisible()
-    // chat base persists behind the sheet
-    await expect(page.getByText('What claim should we benchmark?')).toBeVisible()
+    // The chat base persists behind the sheet. Bind to stable structure rather
+    // than one title from the localized, time/date-dependent welcome library.
+    await expect(page.getByTestId('talos-chat-scroll')).toBeVisible()
 
     await page.locator('[aria-label="Back to chat"]').click()
     await expect(page.locator(SHEET)).toHaveCount(0)
     await expect(page.locator('div[data-talos-route]')).toHaveAttribute('data-talos-route', 'chat')
+})
+
+test('Model Lab in the sidebar opens the real models detail instead of generic Settings', async ({ page }) => {
+    await page.goto('/')
+
+    await openStation(page, 'Model Lab')
+
+    await expect(page).toHaveURL(/\/settings\?tab=models$/)
+    await expect(page.locator('[data-settings-panel="models"]')).toBeVisible()
+    await expect(page.getByRole('tablist', { name: 'Model Lab sections' })).toBeVisible()
 })
 
 test('reload restores the active route and presentation preference', async ({ page }) => {

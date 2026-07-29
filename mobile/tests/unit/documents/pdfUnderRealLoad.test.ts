@@ -122,6 +122,7 @@ describe('a table full of numbers, which is what a report is', () => {
             ],
         }, {
             permissions: { ...TALOS_DEFAULT_TOOL_PERMISSIONS, write: 'allow' as const },
+            isToolEnabled: () => true,
             requestConsent: vi.fn(async () => true),
             audit: vi.fn(async () => {}),
             context: { sessionId: 's1' },

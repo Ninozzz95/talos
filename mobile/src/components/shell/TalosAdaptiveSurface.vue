@@ -32,7 +32,7 @@ const surfaceClass = computed(() =>
                 variant="ghost"
                 size="icon"
                 type="button"
-                aria-label="Dismiss"
+                :aria-label="$t('common.dismiss')"
                 data-testid="surface-dismiss"
                 class="min-h-11 min-w-11"
                 @click="emit('dismiss')"

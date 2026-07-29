@@ -74,6 +74,47 @@ describe('talosInteractionMotionStyleV6', () => {
         expect(paused['--talos-motion-intensity']).toBe('0')
     })
 
+    it('MOTION-PRODUCT-01 publishes independently gated composer and tab-change tokens', () => {
+        const activePreferences = createDefaultTalosMotionV6Preferences()
+        const active = talosInteractionMotionStyleV6({
+            themeId: 'forge',
+            preferences: activePreferences,
+            reducedMotion: false,
+            paused: false,
+        })
+        expect(active['--talos-motion-duration-composer-expand']).toMatch(/^[1-9]\d*ms$/)
+        expect(active['--talos-motion-duration-composer-collapse']).toMatch(/^[1-9]\d*ms$/)
+        expect(active['--talos-motion-duration-tab-change']).toMatch(/^[1-9]\d*ms$/)
+        expect(active['--talos-motion-ease-composer-expand']).toContain('cubic-bezier')
+        expect(active['--talos-motion-ease-composer-collapse']).toContain('cubic-bezier')
+        expect(active['--talos-motion-ease-tab-change']).toContain('cubic-bezier')
+        expect(active['--talos-motion-tab-change-transform']).toContain('translate3d')
+        expect(Number(active['--talos-motion-tab-change-opacity'])).toBeLessThan(1)
+
+        const composerOffPreferences = createDefaultTalosMotionV6Preferences()
+        composerOffPreferences.interface.categories.composer = false
+        const composerOff = talosInteractionMotionStyleV6({
+            themeId: 'forge',
+            preferences: composerOffPreferences,
+            reducedMotion: false,
+            paused: false,
+        })
+        expect(composerOff['--talos-motion-duration-composer-expand']).toBe('0ms')
+        expect(composerOff['--talos-motion-duration-composer-collapse']).toBe('0ms')
+        expect(composerOff['--talos-motion-duration-tab-change']).not.toBe('0ms')
+
+        const navigationOffPreferences = createDefaultTalosMotionV6Preferences()
+        navigationOffPreferences.interface.categories.navigation = false
+        const navigationOff = talosInteractionMotionStyleV6({
+            themeId: 'forge',
+            preferences: navigationOffPreferences,
+            reducedMotion: false,
+            paused: false,
+        })
+        expect(navigationOff['--talos-motion-duration-tab-change']).toBe('0ms')
+        expect(navigationOff['--talos-motion-duration-composer-expand']).not.toBe('0ms')
+    })
+
     it('preserves a distinct V6 surface and feedback grammar for each preset profile', () => {
         const preferences = createDefaultTalosMotionV6Preferences()
         const paper = talosInteractionMotionStyleV6({ themeId: 'paper', preferences, reducedMotion: false, paused: false })

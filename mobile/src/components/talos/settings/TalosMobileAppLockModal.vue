@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useTalosI18n } from '@/i18n'
+import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { Fingerprint, ShieldCheck, X } from '@lucide/vue'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import { Button } from '@/components/ui/button'
@@ -23,6 +25,7 @@ const props = defineProps<{
     mode: 'setup' | 'verify'
     biometricEnabled?: boolean
 }>()
+const { t } = useTalosI18n()
 
 const emit = defineEmits<{
     close: []
@@ -56,7 +59,7 @@ function onSetupPinComplete(): void {
 
 async function onSetupConfirmComplete(): Promise<void> {
     if (pinConfirm.value !== pin.value) {
-        error.value = 'The PINs do not match. Confirm the same 6 digits.'
+        error.value = t('lock.pinsMismatch')
         confirmInput.value?.clear()
         return
     }
@@ -66,7 +69,8 @@ async function onSetupConfirmComplete(): Promise<void> {
         // leaves this pair of components and is never persisted in the clear.
         emit('completed', pin.value)
     } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : 'The PIN could not be saved.'
+        error.value = talosTranslatableErrorMessage(cause, t)
+            ?? (cause instanceof Error ? cause.message : t('lock.pinSaveFailed'))
     }
 }
 
@@ -80,18 +84,18 @@ async function onVerifySubmit(): Promise<void> {
     // "not recognized" there would be a lie by this codebase's own standard.
     const waiting = await appLockThrottleRemainingMs().catch(() => 0)
     error.value = waiting > 0
-        ? `Too many attempts. Try again in ${Math.ceil(waiting / 1000)}s.`
-        : 'PIN not recognized. The app lock stays on.'
+        ? t('lock.tooManySecondsShort', { count: Math.ceil(waiting / 1000) })
+        : t('lock.pinNotRecognized')
     verifyInput.value?.clear()
 }
 
 async function verifyWithBiometrics(): Promise<void> {
     error.value = null
-    if (await requestBiometricUnlock('Disable the TALOS app lock')) {
+    if (await requestBiometricUnlock(t('lock.disableBiometricPrompt'))) {
         emit('completed')
         return
     }
-    error.value = 'Biometric confirmation failed. The app lock stays on.'
+    error.value = t('lock.biometricConfirmFailed')
 }
 
 defineExpose({ clearAppLock })
@@ -105,7 +109,7 @@ defineExpose({ clearAppLock })
         role="dialog"
         aria-modal="true"
         tabindex="-1"
-        :aria-label="mode === 'setup' ? 'Set up app lock' : 'Confirm your PIN'"
+        :aria-label="mode === 'setup' ? t('lock.setupLabel') : t('lock.confirmTitle')"
         class="fixed inset-0 z-[85] flex flex-col bg-[var(--talos-window-bg,var(--talos-background))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] text-[var(--talos-text)] outline-none"
         @keydown.escape="emit('close')"
         @keydown="trapTab"
@@ -113,7 +117,7 @@ defineExpose({ clearAppLock })
         <header class="flex items-center px-3">
             <button
                 type="button"
-                aria-label="Cancel"
+                :aria-label="t('common.cancel')"
                 class="talos-pressable flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--talos-muted)]"
                 @click="emit('close')"
             >
@@ -129,12 +133,12 @@ defineExpose({ clearAppLock })
             <template v-if="mode === 'setup'">
                 <template v-if="stage === 'pin'">
                     <div class="text-center">
-                        <h2 class="text-lg font-semibold">Choose a 6-digit PIN</h2>
-                        <p class="mt-1 text-sm text-[var(--talos-muted)]">It never leaves this device.</p>
+                        <h2 class="text-lg font-semibold">{{ t('lock.chooseSixDigit') }}</h2>
+                        <p class="mt-1 text-sm text-[var(--talos-muted)]">{{ t('lock.neverLeaves') }}</p>
                     </div>
                     <TalosMobilePinInput
                         v-model="pin"
-                        label="New PIN"
+                        :label="t('lock.newPin')"
                         testid="talos-applock-pin"
                         autofocus
                         @complete="onSetupPinComplete"
@@ -142,13 +146,13 @@ defineExpose({ clearAppLock })
                 </template>
                 <template v-else>
                     <div class="text-center">
-                        <h2 class="text-lg font-semibold">Confirm your PIN</h2>
-                        <p class="mt-1 text-sm text-[var(--talos-muted)]">Repeat the same 6 digits.</p>
+                        <h2 class="text-lg font-semibold">{{ t('lock.confirmTitle') }}</h2>
+                        <p class="mt-1 text-sm text-[var(--talos-muted)]">{{ t('lock.repeatDigits') }}</p>
                     </div>
                     <TalosMobilePinInput
                         ref="confirmInput"
                         v-model="pinConfirm"
-                        label="Confirm PIN"
+                        :label="t('lock.confirmPin')"
                         testid="talos-applock-pin-confirm"
                         autofocus
                         @complete="onSetupConfirmComplete"
@@ -158,14 +162,14 @@ defineExpose({ clearAppLock })
 
             <template v-else>
                 <div class="text-center">
-                    <h2 class="text-lg font-semibold">Enter your PIN</h2>
-                    <p class="mt-1 text-sm text-[var(--talos-muted)]">Confirm to turn the app lock off.</p>
+                    <h2 class="text-lg font-semibold">{{ t('lock.enterPin') }}</h2>
+                    <p class="mt-1 text-sm text-[var(--talos-muted)]">{{ t('lock.disableDetail') }}</p>
                 </div>
                 <TalosMobilePinInput
                     ref="verifyInput"
                     v-model="verifyValue"
                     :length="8"
-                    label="Current PIN"
+                    :label="t('lock.currentPin')"
                     testid="talos-applock-verify"
                     autofocus
                 />
@@ -176,7 +180,7 @@ defineExpose({ clearAppLock })
                     class="talos-pressable min-h-11 w-full max-w-xs rounded-full bg-[var(--talos-accent,var(--primary))] text-sm text-[var(--talos-accent-contrast,var(--primary-foreground))] disabled:opacity-50"
                     @click="onVerifySubmit"
                 >
-                    Confirm
+                    {{ t('lock.confirm') }}
                 </Button>
                 <Button
                     v-if="props.biometricEnabled && biometricAvailable"
@@ -187,7 +191,7 @@ defineExpose({ clearAppLock })
                     @click="verifyWithBiometrics"
                 >
                     <Fingerprint class="size-4" aria-hidden="true" />
-                    Use biometrics
+                    {{ t('lock.useBiometrics') }}
                 </Button>
             </template>
 

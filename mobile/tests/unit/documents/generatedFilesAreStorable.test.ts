@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { generateTalosDocument } from '@/lib/documents/documentGenerator'
+import {
+    TALOS_SOURCE_TEXT_FORMATS,
+    generateTalosDocument,
+} from '@/lib/documents/documentGenerator'
 import { analyzeTalosMobileAttachment } from '@/lib/chat/attachmentAnalysis'
 
 /**
@@ -55,6 +58,42 @@ describe('every generated format survives the ingestion pipeline', () => {
 })
 
 describe('the exact document the owner asked for', () => {
+    it('SOURCE-FILE-03 every advertised source extension survives the real ingestion guard', async () => {
+        for (const format of TALOS_SOURCE_TEXT_FORMATS) {
+            const body = `sample for .${format}\n`
+            const document = await generateTalosDocument({
+                format,
+                title: `source.${format}`,
+                body,
+            })
+            const analysis = await analyzeTalosMobileAttachment({
+                bytes: document.bytes,
+                name: document.fileName,
+                declaredMediaType: document.mediaType,
+            })
+
+            expect(analysis.extension).toBe(format)
+            expect(analysis.extractedText).toBe(body)
+        }
+    })
+
+    it('SOURCE-FILE-03 a generated Python file survives the real ingestion guard', async () => {
+        const document = await generateTalosDocument({
+            format: 'py',
+            title: 'patch_mock_gps_iterm.py',
+            body: 'print("caffè")\n',
+        })
+        const analysis = await analyzeTalosMobileAttachment({
+            bytes: document.bytes,
+            name: document.fileName,
+            declaredMediaType: document.mediaType,
+        })
+
+        expect(analysis.extension).toBe('py')
+        expect(analysis.mediaType).toBe('text/plain')
+        expect(analysis.extractedText).toBe('print("caffè")\n')
+    })
+
     it('a long title with an en-dash still yields a storable pdf', async () => {
         // His file was "Report Annuale 2025 – Aurora Coffee Italia.pdf". The
         // dash and the length are the only differences from the case that

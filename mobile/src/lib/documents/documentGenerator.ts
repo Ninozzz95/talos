@@ -18,11 +18,23 @@
  */
 
 import type { TalosReportBlock, TalosReportInput, TalosReportSpec } from './reportBuilder'
+import { talosSafeFileStem } from '@/lib/fileNamePolicy'
+
+export const TALOS_SOURCE_TEXT_FORMATS = [
+    'txt', 'json', 'xml',
+    'js', 'jsx', 'ts', 'tsx', 'vue',
+    'css', 'scss', 'php', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'kts',
+    'swift', 'c', 'h', 'cpp', 'hpp', 'cs',
+    'sh', 'bash', 'zsh', 'ps1', 'sql',
+    'yaml', 'yml', 'toml', 'ini',
+] as const
 
 export const TALOS_DOCUMENT_FORMATS = [
     'md', 'csv', 'html', 'docx', 'xlsx', 'pptx', 'pdf',
+    ...TALOS_SOURCE_TEXT_FORMATS,
 ] as const
 
+export type TalosSourceTextFormat = (typeof TALOS_SOURCE_TEXT_FORMATS)[number]
 export type TalosDocumentFormat = (typeof TALOS_DOCUMENT_FORMATS)[number]
 
 export interface TalosDocumentSpec {
@@ -111,6 +123,42 @@ export interface TalosDocumentCheck {
     detail: string
 }
 
+const SOURCE_MEDIA_TYPES: Record<TalosSourceTextFormat, string> = {
+    txt: 'text/plain',
+    json: 'application/json',
+    xml: 'application/xml',
+    js: 'text/javascript',
+    jsx: 'text/javascript',
+    ts: 'text/plain',
+    tsx: 'text/plain',
+    vue: 'text/plain',
+    css: 'text/css',
+    scss: 'text/plain',
+    php: 'text/plain',
+    py: 'text/plain',
+    rb: 'text/plain',
+    go: 'text/plain',
+    rs: 'text/plain',
+    java: 'text/plain',
+    kt: 'text/plain',
+    kts: 'text/plain',
+    swift: 'text/plain',
+    c: 'text/plain',
+    h: 'text/plain',
+    cpp: 'text/plain',
+    hpp: 'text/plain',
+    cs: 'text/plain',
+    sh: 'text/plain',
+    bash: 'text/plain',
+    zsh: 'text/plain',
+    ps1: 'text/plain',
+    sql: 'application/sql',
+    yaml: 'application/yaml',
+    yml: 'application/yaml',
+    toml: 'application/toml',
+    ini: 'text/plain',
+}
+
 const MEDIA_TYPES: Record<TalosDocumentFormat, string> = {
     md: 'text/markdown',
     csv: 'text/csv',
@@ -119,20 +167,42 @@ const MEDIA_TYPES: Record<TalosDocumentFormat, string> = {
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     pdf: 'application/pdf',
+    ...SOURCE_MEDIA_TYPES,
 }
 
 /** A title is not a filename: it can contain anything a person can type. */
-function safeFileName(title: string, format: TalosDocumentFormat): string {
-    const base = title
-        .replace(/[/\\:"*?<>|]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 60) || 'document'
+async function safeFileName(title: string, format: TalosDocumentFormat): Promise<string> {
+    const trimmed = title.trim()
+    const suffix = `.${format}`
+    // A model naturally includes the requested suffix in a code-file title.
+    // Remove one matching final suffix before canonical re-append: never
+    // `script.py.py`, while `migration.v2` remains `migration.v2.py`.
+    const stemSource = trimmed.toLowerCase().endsWith(suffix)
+        ? trimmed.slice(0, -suffix.length)
+        : title
+    const base = await talosSafeFileStem(stemSource, 60, 'document')
     return `${base}.${format}`
+}
+
+const SOURCE_TEXT_FORMAT_SET: ReadonlySet<string> = new Set(TALOS_SOURCE_TEXT_FORMATS)
+
+function isTalosSourceTextFormat(
+    format: TalosDocumentFormat,
+): format is TalosSourceTextFormat {
+    return SOURCE_TEXT_FORMAT_SET.has(format)
 }
 
 function encode(text: string): Uint8Array {
     return new TextEncoder().encode(text)
+}
+
+function verifyUtf8Text(bytes: Uint8Array): TalosDocumentCheck {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    if (text.trim() === '') return { ok: false, detail: 'the file is empty' }
+    return {
+        ok: true,
+        detail: `${text.length} characters, ${text.split('\n').length} lines`,
+    }
 }
 
 function escapeHtml(value: string): string {
@@ -166,6 +236,12 @@ export async function generateTalosDocument(
         )
     }
 
+    if (isTalosSourceTextFormat(spec.format) && (spec.body ?? '').trim() === '') {
+        throw new Error(
+            'TALOS_DOCUMENT_SOURCE_BODY_REQUIRED: a source file requires non-empty `body` text.',
+        )
+    }
+
     const hasContent = (spec.body ?? '').trim() !== ''
         || (spec.rows?.length ?? 0) > 0
         || (spec.slides?.length ?? 0) > 0
@@ -176,8 +252,12 @@ export async function generateTalosDocument(
         throw new Error('TALOS_DOCUMENT_EMPTY: there is nothing to write.')
     }
 
-    const fileName = safeFileName(spec.title, spec.format)
+    const fileName = await safeFileName(spec.title, spec.format)
     const common = { format: spec.format, fileName, mediaType: MEDIA_TYPES[spec.format] }
+
+    if (isTalosSourceTextFormat(spec.format)) {
+        return { ...common, bytes: encode(spec.body!) }
+    }
 
     switch (spec.format) {
         case 'md':
@@ -308,14 +388,15 @@ export async function verifyTalosDocument(
     document: TalosGeneratedDocument,
 ): Promise<TalosDocumentCheck> {
     try {
+        if (isTalosSourceTextFormat(document.format)) {
+            return verifyUtf8Text(document.bytes)
+        }
+
         switch (document.format) {
             case 'md':
             case 'csv':
             case 'html': {
-                const text = new TextDecoder('utf-8', { fatal: true }).decode(document.bytes)
-                if (text.trim() === '') return { ok: false, detail: 'the file is empty' }
-                const lines = text.split('\n').length
-                return { ok: true, detail: `${text.length} characters, ${lines} lines` }
+                return verifyUtf8Text(document.bytes)
             }
 
             case 'docx': {

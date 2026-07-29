@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 
@@ -16,7 +16,10 @@ function withAppRoot(): HTMLElement {
     return app
 }
 
-afterEach(() => { document.body.innerHTML = '' })
+afterEach(() => {
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ''
+})
 
 describe('TalosMobileComposerSheet modality (SF-7)', () => {
     it('marks the app root inert while open and releases it on close', async () => {
@@ -57,6 +60,39 @@ describe('TalosMobileComposerSheet modality (SF-7)', () => {
         // Wrap-around: from the LAST focusable, Tab returns to the first
         // (the Close button in the header).
         expect((document.activeElement as HTMLElement).getAttribute('aria-label')).toBe('Close')
+        wrapper.unmount()
+    })
+
+    it('P1-CTX-UI-05 closes by keyboard without motion delay and keeps phone/tablet bounds', async () => {
+        vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+            matches: true,
+            media: '(prefers-reduced-motion: reduce)',
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+        }))
+        withAppRoot()
+        const wrapper = mount(TalosMobileComposerSheet, {
+            attachTo: document.body,
+            props: { title: 'Library context', testid: 'library-context-sheet' },
+        })
+        const sheet = document.querySelector(
+            '[data-testid="library-context-sheet"]',
+        ) as HTMLElement
+        expect(sheet.classList.contains('max-h-[85dvh]')).toBe(true)
+        expect(sheet.classList.contains('md:w-[clamp(480px,50vw,600px)]')).toBe(true)
+
+        sheet.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        }))
+        await new Promise((resolve) => window.setTimeout(resolve, 0))
+
+        expect(wrapper.emitted('close')).toHaveLength(1)
         wrapper.unmount()
     })
 })

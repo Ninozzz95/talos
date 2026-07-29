@@ -14,6 +14,8 @@ describe('TALOS mobile settings registry', () => {
         // Android runtime permissions have no desktop counterpart at all, and
         // the app will be distributed, where explaining them is expected.
         privacy: 'Android runtime permissions do not exist on the desktop.',
+        // The localized mobile shell ships before the desktop locale runtime.
+        language: 'This release owns Android per-app and mobile UI languages.',
     }
 
     it('adds a mobile-only category only with a reason', () => {
@@ -65,6 +67,6 @@ describe('TALOS mobile settings registry', () => {
         // Privacy is mobile-only (see MOBILE_ONLY) and is a real local panel:
         // it reads live device state rather than gating on a missing service.
         expect(available.map((tab) => tab.id))
-            .toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'privacy', 'account'])
+            .toEqual(['models', 'ai_defaults', 'browser', 'appearance', 'language', 'privacy', 'account', 'agent_tools'])
     })
 })

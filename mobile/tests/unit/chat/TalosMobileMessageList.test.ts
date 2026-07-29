@@ -66,6 +66,12 @@ const messages: TalosMobileMessageView[] = [
     },
 ]
 
+const persistedReasoning = [
+    '**Generating images concisely**',
+    '',
+    'I should keep the visual description concise and concrete.',
+].join('\n')
+
 afterEach(() => {
     document.body.innerHTML = ''
     writeText.mockClear()
@@ -118,9 +124,11 @@ describe('TalosMobileMessageList', () => {
         expect(wrapper.get('[role="status"][data-testid="talos-mobile-message-action-status"]').text()).toBe('Message copied.')
     })
 
-    it('uses the neutral Processing status with no mojibake while a turn is running', () => {
+    it('uses the neutral Processing status with no mojibake while a turn is running', async () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [messages[0]!], sending: true } })
-        expect(wrapper.get('[data-testid="talos-mobile-typing"]').text()).toBe('Processing')
+        await vi.waitFor(() => {
+            expect(wrapper.get('[data-testid="talos-mobile-typing"]').text()).toBe('Processing')
+        })
         expect(wrapper.text()).not.toContain('â')
     })
 })
@@ -128,6 +136,132 @@ describe('TalosMobileMessageList', () => {
 // R2-11 — ONE row-action grammar (competitor pattern: long-press a message
 // opens its actions, same gesture as the chat rows). The hold clicks the SAME
 // overflow trigger — no second menu implementation.
+describe('first-bubble memory disclosure (MEMORY-PILL)', () => {
+    const disclosure = (id: string, title: string) => ({
+        id,
+        title,
+        kind: 'preference',
+        scope_type: 'global',
+        trust_level: 'untrusted',
+    })
+
+    function userMessage(
+        id: string,
+        metadata: Record<string, unknown>,
+    ): TalosMobileMessageView {
+        return {
+            ...messages[0]!,
+            id,
+            content: id,
+            metadata,
+            attachments: [],
+        }
+    }
+
+    it('MEMORY-PILL-01 renders one pill on the first relevant bubble without rewriting later provenance', async () => {
+        const firstUsedMemories = [disclosure('memory-tone', 'Tone')]
+        const laterUsedMemories = [disclosure('memory-tone', 'Tone')]
+        const thread = [
+            userMessage('plain-before-memory', {}),
+            userMessage('first-memory-turn', { used_memories: firstUsedMemories }),
+            userMessage('later-memory-turn', { used_memories: laterUsedMemories }),
+        ]
+        const wrapper = mount(TalosMobileMessageList, {
+            props: { messages: thread, sending: false },
+        })
+        await flushPromises()
+
+        expect(wrapper.findAll('[data-testid="talos-used-memories"]')).toHaveLength(1)
+        expect(wrapper.get('[data-message-id="first-memory-turn"] [data-testid="talos-used-memories"]')
+            .text()).toContain('1 memory used')
+        expect(wrapper.find('[data-message-id="later-memory-turn"] [data-testid="talos-used-memories"]')
+            .exists()).toBe(false)
+        expect(thread[1]!.metadata.used_memories).toBe(firstUsedMemories)
+        expect(thread[2]!.metadata.used_memories).toBe(laterUsedMemories)
+    })
+
+    it('MEMORY-PILL-02 keeps one pill and relocates it when an older relevant page is prepended', async () => {
+        const later = userMessage('later-memory-turn', {
+            used_memories: [disclosure('memory-tone', 'Tone')],
+        })
+        const newest = userMessage('newest-memory-turn', {
+            used_memories: [disclosure('memory-tone', 'Tone')],
+        })
+        const wrapper = mount(TalosMobileMessageList, {
+            props: { messages: [later, newest], sending: false, hasOlderMessages: true },
+        })
+        await flushPromises()
+        expect(wrapper.findAll('[data-testid="talos-used-memories"]')).toHaveLength(1)
+        expect(wrapper.get('[data-message-id="later-memory-turn"] [data-testid="talos-used-memories"]')
+            .exists()).toBe(true)
+
+        const older = userMessage('older-memory-turn', {
+            used_memories: [disclosure('memory-tone', 'Tone')],
+        })
+        await wrapper.setProps({ messages: [older, later, newest], hasOlderMessages: false })
+
+        expect(wrapper.findAll('[data-testid="talos-used-memories"]')).toHaveLength(1)
+        expect(wrapper.get('[data-message-id="older-memory-turn"] [data-testid="talos-used-memories"]')
+            .exists()).toBe(true)
+        expect(wrapper.find('[data-message-id="later-memory-turn"] [data-testid="talos-used-memories"]')
+            .exists()).toBe(false)
+    })
+
+    it('MEMORY-PILL-03 renders nothing for absent, empty or malformed provenance', async () => {
+        const wrapper = mount(TalosMobileMessageList, {
+            props: {
+                messages: [
+                    userMessage('absent-memory', {}),
+                    userMessage('empty-memory', { used_memories: [] }),
+                    userMessage('malformed-memory', { used_memories: 'memory-tone' }),
+                ],
+                sending: false,
+            },
+        })
+        await flushPromises()
+
+        expect(wrapper.find('[data-testid="talos-used-memories"]').exists()).toBe(false)
+    })
+})
+
+describe('persisted reasoning row integration', () => {
+    it('renders typed persisted reasoning above the answer and opens its plain-text drawer', async () => {
+        const assistant = {
+            ...messages[1]!,
+            metadata: {},
+            reasoning: persistedReasoning,
+        }
+        const wrapper = mount(TalosMobileMessageList, {
+            props: { messages: [assistant], sending: false },
+            global: { stubs: { teleport: true } },
+        })
+        await flushPromises()
+
+        const article = wrapper.get('[data-message-id="assistant-1"]')
+        const row = article.get('[data-testid="talos-reasoning-toggle"]')
+        const answer = article.get('[data-testid="talos-mobile-message-content"]')
+        expect(row.text()).toContain('Reasoning')
+        expect(article.element.compareDocumentPosition(answer.element) & Node.DOCUMENT_POSITION_FOLLOWING)
+            .toBeTruthy()
+        expect(wrapper.text()).not.toContain('I should keep the visual description')
+
+        await row.trigger('click')
+        expect(wrapper.get('[data-testid="talos-reasoning-drawer"]').attributes('role')).toBe('dialog')
+        expect(wrapper.get('[data-testid="talos-reasoning-text"]').text()).toBe(persistedReasoning)
+    })
+
+    it('does not expose a reasoning row on a non-assistant message', async () => {
+        const user = {
+            ...messages[0]!,
+            metadata: {},
+            reasoning: 'This must never be presented as model reasoning.',
+        }
+        const wrapper = mount(TalosMobileMessageList, { props: { messages: [user], sending: false } })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-reasoning-toggle"]').exists()).toBe(false)
+    })
+})
+
 describe('message long-press opens the overflow menu (R2-11)', () => {
     it('a 500ms stationary hold opens the message overflow', async () => {
         const wrapper = mount(TalosMobileMessageList, {

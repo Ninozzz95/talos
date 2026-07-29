@@ -23,10 +23,12 @@ describe('providerEndpointStore', () => {
         await expect(getProviderEndpoint('ollama', store)).resolves.toBe('http://10.0.0.4:11434')
     })
 
-    it('rejects non-HTTP URLs and embedded credentials', async () => {
+    it('I18N-CONFORMANCE-09 rejects unsafe endpoints with stable error identities', async () => {
         const store = backend()
-        await expect(setProviderEndpoint('ollama', 'file:///tmp/ollama', store)).rejects.toThrow(/http/i)
-        await expect(setProviderEndpoint('ollama', 'https://user:pass@example.com', store)).rejects.toThrow(/credentials/i)
+        await expect(setProviderEndpoint('ollama', 'file:///tmp/ollama', store))
+            .rejects.toThrow('TALOS_PROVIDER_ENDPOINT_PROTOCOL')
+        await expect(setProviderEndpoint('ollama', 'https://user:pass@example.com', store))
+            .rejects.toThrow('TALOS_PROVIDER_ENDPOINT_CREDENTIALS')
         expect(store.values.size).toBe(0)
     })
 

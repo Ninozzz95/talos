@@ -53,6 +53,51 @@ function mockProvider(page: Page): Promise<void> {
     })
 }
 
+const E2E_REASONING = [
+    '**Checking the persisted path**',
+    '',
+    'I will keep the thought summary separate from the final answer.',
+].join('\n')
+const E2E_REASONING_ANSWER = 'The persisted reasoning path is verified.'
+
+function mockProviderWithReasoning(page: Page): Promise<void> {
+    return page.route('https://generativelanguage.googleapis.com/**', async (route) => {
+        const request = route.request()
+        if (request.method() === 'GET') {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    models: [{
+                        name: 'models/gemini-live', displayName: 'Gemini Live',
+                        inputTokenLimit: 128000, outputTokenLimit: 8192,
+                        supportedGenerationMethods: ['generateContent'],
+                    }],
+                }),
+            })
+            return
+        }
+        const response = geminiResponse(E2E_REASONING_ANSWER)
+        response.candidates[0]!.content.parts = [
+            { text: E2E_REASONING, thought: true },
+            { text: E2E_REASONING_ANSWER },
+        ] as never
+        if (request.url().includes(':streamGenerateContent')) {
+            await route.fulfill({
+                status: 200,
+                contentType: 'text/event-stream',
+                body: `data: ${JSON.stringify(response)}\n\n`,
+            })
+            return
+        }
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(response),
+        })
+    })
+}
+
 test('#19 a pasted URL survives into the sent message text', async ({ page }) => {
     await mockProvider(page)
     await configureGemini(page)
@@ -86,7 +131,7 @@ test.describe('#22 rename/delete on the immersive shell', () => {
                         defaults_v3: true,
                         presentation_v2: true,
                         shell: { immersive_header: true, composer_drawer: false },
-                        onboarding: { intro_version: 1, intro_outcome: 'completed', setup_dismissed: true, wizard_version: 1, wizard_outcome: 'completed' },
+                        onboarding: { intro_version: 2, intro_outcome: 'completed', setup_dismissed: true },
                     }),
                 }],
             }],
@@ -180,12 +225,33 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         expect(chatBody).toContain('TALOS_MEMORY_CONTEXT')
         expect(chatBody).toContain('Rispondi sempre in italiano conciso.')
         expect(chatBody).toContain('USER_TASK')
-        await expect(page.locator('[data-testid="talos-used-memories"]')).toContainText('1 memory used')
+        const memoryDisclosure = page.locator('[data-testid="talos-used-memories"]')
+        await expect(memoryDisclosure).toHaveCount(1)
+        await expect(memoryDisclosure).toContainText('1 memory used')
 
         // Persisted message stays verbatim (no injected block in the thread).
         const userMessage = page.locator('article[data-message-kind="user"]').first()
         await expect(userMessage).toContainText('Che piano abbiamo?')
         await expect(userMessage).not.toContainText('TALOS_MEMORY_CONTEXT')
+
+        // A second natural-language turn still receives the memory, but the
+        // calm thread must not repeat the visual disclosure.
+        await composer.fill('Quali vincoli devo rispettare?')
+        await composer.press('Enter')
+        await expect(page.locator('article[data-message-kind="assistant"]')).toHaveCount(2)
+        const secondBody = providerBodies.find((body) => body.includes('Quali vincoli devo rispettare?'))
+        expect(secondBody).toBeDefined()
+        expect(secondBody).toContain('TALOS_MEMORY_CONTEXT')
+        expect(secondBody).toContain('Rispondi sempre in italiano conciso.')
+        await expect(memoryDisclosure).toHaveCount(1)
+        await expect(page.locator('article[data-message-kind="user"]').nth(1)
+            .locator('[data-testid="talos-used-memories"]')).toHaveCount(0)
+
+        // Reload proves both per-turn metadata records survived while the
+        // presentation remains a single first-bubble disclosure.
+        await page.reload()
+        await expect(page.locator('article[data-message-kind="user"]')).toHaveCount(2)
+        await expect(page.locator('[data-testid="talos-used-memories"]')).toHaveCount(1)
 
         // Disable the memory: the next send must NOT inject it.
         await page.locator(MENU).click()
@@ -194,15 +260,17 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await expect(page.locator('[data-memory-status="disabled"]')).toHaveCount(1)
         if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
         if (await page.locator('[data-testid="talos-mobile-tool-sheet"]').count() > 0) { await page.locator('[data-testid="talos-sheet-back"]').click(); await page.waitForTimeout(320) }
-        await composer.fill('Seconda domanda')
+        await composer.fill('Domanda senza memoria')
         await composer.press('Enter')
-        await expect(page.locator('article[data-message-kind="assistant"]')).toHaveCount(2)
-        const secondBody = providerBodies.find((body) => body.includes('Seconda domanda'))
-        expect(secondBody).toBeDefined()
-        expect(secondBody).not.toContain('TALOS_MEMORY_CONTEXT')
+        await expect(page.locator('article[data-message-kind="assistant"]')).toHaveCount(3)
+        const thirdBody = providerBodies.find((body) => body.includes('Domanda senza memoria'))
+        expect(thirdBody).toBeDefined()
+        expect(thirdBody).not.toContain('TALOS_MEMORY_CONTEXT')
+        await expect(page.locator('[data-testid="talos-used-memories"]')).toHaveCount(1)
     })
 
     test('#16 exports the chat from the 3-dot menu with desktop-parity artifacts', async ({ page }) => {
+        await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
         await mockProvider(page)
         await configureGemini(page)
 
@@ -221,6 +289,13 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         const preview = page.locator('[data-testid="talos-session-export-preview"]')
         await expect(preview).toContainText('# TALOS Session Export')
         await expect(preview).toContainText('Chat da esportare')
+        const expectedMarkdown = (await preview.textContent())!.replace(/\r\n?/g, '\n')
+        await sheet.getByRole('button', { name: 'Copy Markdown transcript' }).click()
+        await expect(sheet.getByTestId('talos-export-copy-status'))
+            .toHaveText('Markdown transcript copied.')
+        await expect.poll(async () => (
+            await page.evaluate(() => navigator.clipboard.readText())
+        ).replace(/\r\n?/g, '\n')).toBe(expectedMarkdown)
         await expect(page.locator('[data-testid="talos-export-share"]')).toBeEnabled()
 
         await sheet.getByLabel('Export JSON evidence pack').click()
@@ -229,6 +304,52 @@ test.describe('#22 rename/delete on the immersive shell', () => {
 
         await sheet.getByLabel('Export Benchmark scenario').click()
         await expect(preview).toContainText('talos_session_benchmark_scenario')
+    })
+
+    test('persisted reasoning row opens its drawer, survives reload, and matches the export', async ({ page }) => {
+        await mockProviderWithReasoning(page)
+        await configureGemini(page)
+
+        const composer = page.getByLabel('Message TALOS')
+        await composer.fill('Verifica il reasoning persistito')
+        await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+        await composer.press('Enter')
+        await expect(page.getByText(E2E_REASONING_ANSWER, { exact: true })).toBeVisible()
+
+        const assistant = page.locator('article[data-message-kind="assistant"]').last()
+        const reasoningRow = assistant.getByTestId('talos-reasoning-toggle')
+        await expect(reasoningRow).toBeVisible()
+        await expect(reasoningRow).toContainText('Reasoning')
+        await expect(reasoningRow.locator('svg.lucide-brain')).toHaveCount(1)
+        await expect(reasoningRow.locator('svg.lucide-sparkles')).toHaveCount(0)
+        await expect(assistant).not.toContainText('I will keep the thought summary')
+
+        await reasoningRow.click()
+        const drawer = page.getByTestId('talos-reasoning-drawer')
+        await expect(drawer).toBeVisible()
+        await expect(drawer.getByTestId('talos-reasoning-text')).toHaveText(E2E_REASONING)
+        await drawer.getByLabel('Close').click()
+        await expect(drawer).toHaveCount(0)
+
+        await page.reload()
+        await expect(page.getByText(E2E_REASONING_ANSWER, { exact: true })).toBeVisible()
+        const reloadedRow = page.locator('article[data-message-kind="assistant"]').last()
+            .getByTestId('talos-reasoning-toggle')
+        await expect(reloadedRow).toBeVisible()
+        await expect(reloadedRow.locator('svg.lucide-brain')).toHaveCount(1)
+        await expect(reloadedRow.locator('svg.lucide-sparkles')).toHaveCount(0)
+        await reloadedRow.click()
+        await expect(page.getByTestId('talos-reasoning-text')).toHaveText(E2E_REASONING)
+        await page.getByTestId('talos-reasoning-drawer').getByLabel('Close').click()
+        await expect(page.getByTestId('talos-reasoning-drawer')).toHaveCount(0)
+
+        await page.getByLabel('Chat options').click()
+        await page.getByRole('menuitem', { name: 'Export chat' }).click()
+        const exportSheet = page.getByTestId('talos-export-sheet')
+        await exportSheet.getByLabel('Export Markdown transcript').click()
+        const preview = exportSheet.getByTestId('talos-session-export-preview')
+        await expect(preview).toContainText('> **Reasoning**')
+        await expect(preview).toContainText('I will keep the thought summary separate')
     })
 
     test('#23/F5.1 hold-dropdown archives a chat and restores it from Archived', async ({ page }) => {
@@ -319,6 +440,77 @@ test.describe('#22 rename/delete on the immersive shell', () => {
         await page.getByRole('button', { name: 'Delete', exact: true }).click()
         await expect(page.locator('[data-testid="talos-chats-row"]')).toHaveCount(0)
     })
+})
+
+test('font size and chat message size remain independent in both directions and after reload', async ({ page }) => {
+    await mockProvider(page)
+    await configureGemini(page)
+
+    const composer = page.getByLabel('Message TALOS')
+    await composer.fill('Verifica che i due controlli tipografici siano indipendenti')
+    await expect(page.getByLabel('Send message')).toBeEnabled({ timeout: 15_000 })
+    await composer.press('Enter')
+    await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
+
+    const messageContent = page.locator('article[data-message-kind="assistant"]').last()
+        .getByTestId('talos-mobile-message-content')
+    const messageSize = (): Promise<number> => messageContent
+        .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
+    const interfaceSize = (): Promise<number> => page.getByText('Chat message size', { exact: true })
+        .evaluate((node) => Number.parseFloat(getComputedStyle(node).fontSize))
+    const select = async (label: string, value: string): Promise<void> => {
+        await page.getByLabel(label, { exact: true }).click()
+        await page.locator(`[data-testid="talos-themed-select-item"][data-value="${value}"]`).click()
+    }
+    const openAppearance = async (): Promise<void> => {
+        const sheet = page.locator(SHEET)
+        if (!await sheet.isVisible().catch(() => false)) {
+            await page.locator('[data-testid="talos-boot-logo"]').waitFor({ state: 'detached', timeout: 20_000 })
+                .catch(() => undefined)
+            await page.locator(MENU).click()
+            await page.locator(`${SIDEBAR} [aria-label="Open Settings"]`).click()
+        }
+        await expect(sheet).toBeVisible()
+        await page.locator('[data-settings-tab="appearance"]').click()
+        await expect(page.getByText('Chat message size', { exact: true })).toBeVisible()
+    }
+
+    await openAppearance()
+    await select('Font size', 'small')
+    await select('Chat message size', 'xcompact')
+    await expect.poll(() => page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--talos-ui-scale').trim(),
+    )).toBe('0.9')
+    const smallInterface = await interfaceSize()
+    const extraSmallMessage = await messageSize()
+
+    await select('Font size', 'xlarge')
+    await expect.poll(interfaceSize).toBeGreaterThan(smallInterface)
+    expect(
+        await messageSize(),
+        'changing interface Font size must not change existing message prose',
+    ).toBe(extraSmallMessage)
+    const extraLargeInterface = await interfaceSize()
+
+    await select('Chat message size', 'expanded')
+    await expect.poll(messageSize).toBeGreaterThan(extraSmallMessage)
+    expect(
+        await interfaceSize(),
+        'changing Chat message size must not change interface labels',
+    ).toBe(extraLargeInterface)
+    const largeMessage = await messageSize()
+
+    await page.reload()
+    await expect(page.getByText('Understood, checking that page.', { exact: true })).toBeVisible()
+    expect(await messageSize(), 'chat scale must survive reload').toBe(largeMessage)
+    await expect.poll(() => page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--talos-ui-scale').trim(),
+    )).toBe('1.3')
+
+    await openAppearance()
+    expect(await interfaceSize(), 'interface scale must survive reload').toBe(extraLargeInterface)
+    await expect(page.getByLabel('Font size', { exact: true })).toContainText('Extra large')
+    await expect(page.getByLabel('Chat message size', { exact: true })).toContainText('Large')
 })
 
 test('#20 the enhancer control is actionable once a prompt exists', async ({ page }) => {

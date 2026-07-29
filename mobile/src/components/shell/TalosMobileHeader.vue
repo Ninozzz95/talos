@@ -50,7 +50,7 @@ const emit = defineEmits<{
             size="icon-lg"
             class="min-h-11 min-w-11"
             variant="ghost"
-            aria-label="Open menu"
+            :aria-label="$t('navigation.openMenu')"
             @click="emit('openMenu')"
         >
             <Menu aria-hidden="true" />
@@ -67,17 +67,17 @@ const emit = defineEmits<{
                 type="button"
                 data-testid="talos-mobile-header-title"
                 aria-haspopup="dialog"
-                :aria-label="`Media in ${title.trim() || 'this chat'}`"
+                :aria-label="$t('chat.mediaIn', { title: title.trim() || $t('chat.thisChat') })"
                 class="talos-pressable talos-title min-h-11 max-w-full truncate rounded-lg px-2 text-md font-semibold leading-tight text-[var(--talos-text)]"
                 @click="emit('media')"
             >
-                {{ title.trim() || 'New chat' }}
+                {{ title.trim() || $t('chat.newChat') }}
             </button>
             <p
                 v-else
                 data-testid="talos-mobile-header-title"
                 class="talos-title truncate text-md font-semibold leading-tight text-[var(--talos-text)]"
-            >{{ title.trim() || 'New chat' }}</p>
+            >{{ title.trim() || $t('chat.newChat') }}</p>
         </div>
 
         <!-- 3-dot chat options (shared with the immersive chrome). New chat

@@ -39,7 +39,7 @@ Fonti primarie ispezionate il 2026-07-18 (charter §3):
 | `@vitejs/plugin-vue` | 6.0.8 | MIT | SFC | con vite 7 |
 | `typescript` | 5.9.3 | Apache-2.0 | compilatore classico richiesto da vue-tsc@3.3.7 | pin amendment 2026-07-20 |
 | `vitest` | 4.1.10 | MIT | unit test M1+ | solo dopo autorizzazione install |
-| `shadcn-vue` CLI | 2.8.0 | MIT | generatore Drawer/Dialog | output hand-authored nel repo |
+| `shadcn-vue` CLI | 2.8.0 | MIT | generatore Drawer/Dialog | sorgente generato e posseduto nel repo; hash upstream e adattamenti TALOS revisionati sono registrati separatamente |
 | `reka-ui` | 2.10.1 | MIT | primitive headless | stessa base del desktop |
 | `vaul-vue` | 0.4.1 | MIT | drawer gesture | dipendenza Drawer shadcn-vue |
 | `tailwindcss` | 4.3.3 | MIT | utility CSS | token bridge come desktop |
@@ -155,6 +155,363 @@ inventoried `npx cap sync android` gate is complete.
   real XLSX generation, reopen and Library ingestion.
 - Rollback never restores `0.18.5`: XLSX generation is disabled and CSV remains
   available until a reviewed replacement is selected.
+
+## Android safe web-read boundary (2026-07-28)
+
+- **ADOPT `com.squareup.okhttp3:okhttp:5.4.0`** (Apache-2.0), published on
+  Maven Central, behind the AVM-owned `TalosSafeWeb` Capacitor adapter.
+- Runtime dependency provenance from the published POM: Kotlin stdlib
+  `2.1.21`, Okio `3.17.0`.
+- Purpose: use a custom `Dns` whose validated A/AAAA results are the same
+  addresses OkHttp connects to; disable proxy and automatic redirects; retain
+  platform TLS/hostname verification and bounded timeouts.
+- Conformance: pure address-policy fixtures, mixed/rebinding DNS fixtures,
+  runtime redirect/limit tests, Android compilation and APK assembly.
+- Capacitor HTTP remains only for configured search-provider endpoints. It is
+  rejected for arbitrary `web_read` because its public API can disable
+  redirects but cannot pin a validated DNS answer to the connection.
+- Rollback disables `web_read` and removes the plugin/dependency. It must not
+  restore unrestricted model-selected native fetching.
+
+## Unicode-safe generated filenames (2026-07-28)
+
+- **ADOPT `unicode-segmenter@0.15.0`** (MIT), registry integrity
+  `sha512-Xmvwqx4F8nGuCv2eGPJVJq73NMTfpqx2Xe9/v5hQoyAUnERVhX+sRkyYVdYoBUbnTok2FTBOlstUeQ5sRleXSA==`,
+  upstream git head `fa2356dd197c982cf0b2cc4f8d676f64ba92460a`.
+- Provenance: <https://github.com/cometkim/unicode-segmenter>. The pinned
+  package declares Unicode 17.0.0 / UAX #29 revision 47, ESM, zero runtime
+  dependencies, and verification against the official Unicode segmentation
+  suite.
+- Purpose: split extended grapheme clusters before document, generated-image,
+  web-source, browser-download and Android SAF display-name stems are bounded.
+  The AVM adapters retain extensions and existing ASCII fallbacks, apply
+  filename security policy, and never rewrite source content.
+- The exact upstream notice is retained at
+  `upstream/licenses/unicode-segmenter-0.15.0-MIT.txt`.
+- The segmenter entry is dynamically imported. The build gate must prove it is
+  emitted outside the initial chat chunk and that the existing 560,000-byte
+  budget remains green.
+- Host-only `Intl.Segmenter` is rejected as the sole boundary because its
+  Unicode/ICU version follows the installed Android System WebView rather than
+  the APK pin. Older `graphemer` and `grapheme-splitter` releases are rejected
+  for stale Unicode data and larger bundles.
+- The native SAF defense-in-depth boundary adopts the standard
+  `java.util.regex.Pattern` `\X` extended-grapheme matcher. Java SE 17 and the
+  Android API both document that contract; supported legacy Android releases
+  implement Java regex through platform ICU. This replaces
+  `java.text.BreakIterator`, which was empirically shown on the installed
+  legacy Temurin Java 17 probe to split a regional-indicator flag. No ICU4J/runtime package
+  is bundled.
+- Upgrade requires new Unicode version/license/integrity review, official
+  grapheme fixtures, bundle-budget verification, and all three producer gates.
+- Rollback removes the dependency and uses fixed ASCII stems until a reviewed
+  replacement exists; raw UTF-16 truncation must not return.
+
+## Orbitron boot wordmark and launcher geometry (2026-07-29)
+
+- **REUSE `@fontsource/orbitron@5.3.0`** (SIL OFL-1.1), already pinned for
+  the in-app TALOS wordmark; package publish hash `8eea555d30e69adc`.
+- Provenance:
+  <https://github.com/fontsource/font-files/tree/main/fonts/google/orbitron>
+  and the Orbitron authors identified by the packaged license.
+- Purpose: Orbitron remains the boot and in-app `TALOS` wordmark at weight 600
+  with `0.35em` tracking. The Android launcher deliberately excludes all text
+  and renders only the exact rested shield plus lit DAG from the final boot
+  frame.
+- The boot-only outline, shared mark geometry and source pin are recorded in
+  `src/assets/talosBootFinalFrame.json`; the exact packaged notice is retained
+  at `upstream/licenses/orbitron-5.3.0-OFL-1.1.txt`.
+- No new runtime package is introduced. Android adaptive-icon guidance is
+  adopted directly: 108 dp layers, meaningful symbol dimensions within
+  48-66 dp, a centered 66 dp safe zone and a monochrome layer. The CSS glow is
+  rejected for the launcher because Android requires clean adaptive foreground
+  edges and VectorDrawable has no blur filter.
+- Upgrade requires license/provenance review for the boot wordmark, generator
+  conformance, Android resource compilation and physical circle/squircle plus
+  themed-icon comparison. Rollback restores the prior generated mark geometry
+  without changing launcher aliases or stored theme preferences.
+
+## Tablet Settings scroll contract (2026-07-29)
+
+- **ADOPT W3C CSS scrolling semantics directly** from CSS Overflow Level 3,
+  Flexbox Level 1 and Overscroll Behavior Level 1; no package is added.
+- **REUSE `reka-ui@2.10.1`** (MIT) for the existing vertical tabs roles,
+  selection and keyboard behavior. TALOS owns only the bounded pane layout.
+- The category rail is structural; one `min-h-0 flex-1 overflow-y-auto
+  overscroll-contain` tablist owns vertical gestures. This follows the existing
+  global-sidebar pattern and avoids an unbounded inner scroll container
+  suppressing its scroll chain.
+- Sources:
+  <https://www.w3.org/TR/css-overflow-3/>,
+  <https://www.w3.org/TR/css-flexbox-1/#min-size-auto>,
+  <https://www.w3.org/TR/css-overscroll-1/>,
+  <https://www.w3.org/WAI/ARIA/apg/patterns/tabs/>, and
+  <https://www.reka-ui.com/docs/components/tabs>.
+- Upgrade requires the focused unit layout contract and real-browser
+  short-viewport scroll/keyboard gate. Rollback restores only the previous
+  rail classes; no setting or persisted sidebar width changes.
+
+## Tavily key-acquisition link (2026-07-29)
+
+- **ADOPT Tavily's official Platform root**,
+  `https://app.tavily.com/`, as the Settings destination for sign-up, sign-in
+  and dashboard API-key management. Tavily's current Quickstart and API
+  introduction link directly to this host.
+- **REUSE `@capacitor/inappbrowser@4.0.1`** through the existing AVM-owned
+  `openTalosLinkOnce(..., "system_browser")` adapter. No Tavily SDK or new
+  runtime package is introduced.
+- Tavily's key-management guidance is adopted: the URL contains no query,
+  fragment, draft, saved-key state or account identifier, while the actual key
+  remains exclusively in TALOS secure storage.
+- Sources:
+  <https://docs.tavily.com/documentation/quickstart>,
+  <https://docs.tavily.com/documentation/api-reference/introduction>, and
+  <https://docs.tavily.com/documentation/best-practices/api-key-management>.
+- Upgrade requires rechecking Tavily's official target, exact-URL unit/E2E
+  gates and native system-browser acceptance. Rollback removes only the
+  source-specific action and translations; stored keys remain untouched.
+
+## Memory disclosure deduplication (2026-07-29)
+
+- **ADAPT current competitor transparency contracts** without importing a
+  package: OpenAI exposes personalization sources through a consistently
+  identified book control, Claude exposes past-chat citations plus a dedicated
+  Memory panel, and Gemini exposes memory controls and an explicit usage check.
+- TALOS retains `metadata.used_memories` on every injected turn and its
+  dedicated Memory station, but renders the localized inline pill only on the
+  earliest relevant message in the materialized chronological window. Older
+  pages may move that one pill earlier; they never duplicate it.
+- W3C WCAG 2.2 SC 3.2.4 consistent-identification guidance is adopted for the
+  surviving label and icon. No message schema, provider payload, dependency or
+  persistence marker is added.
+- Sources:
+  <https://help.openai.com/en/articles/8590148-memory-faq>,
+  <https://support.claude.com/en/articles/11817273-use-claude-s-chat-search-and-memory-to-build-on-previous-context>,
+  <https://support.google.com/gemini/answer/16598469>, and
+  <https://www.w3.org/WAI/WCAG22/Understanding/consistent-identification.html>.
+- Upgrade requires unit proof for pagination relocation and a real multi-turn
+  adapter/reload E2E. Rollback restores only repeated visual pills; persisted
+  provenance remains unchanged.
+
+## Global Library inclusive All projection (2026-07-29)
+
+- **ADAPT current inclusive Library/search contracts** without importing a
+  package: OpenAI describes Library as one browse/search surface with an
+  inclusive “Show all file types” state; Google Drive composes search terms
+  with type-filter chips; Apple exposes Links and Documents as narrow
+  projections inside the containing shared-content set.
+- TALOS `All` aggregates its existing non-link file projection and canonical,
+  deduplicated saved-link rows. A researched page keeps its encrypted Markdown
+  evidence copy but is never duplicated as a document tile. Search matches the
+  visible title, host and URL plus the retained copy's existing text fields.
+- W3C APG Button Pattern guidance is retained for the stable-label
+  `aria-pressed` filter buttons. No schema, repository, persistence dependency
+  or external protocol is added.
+- Sources:
+  <https://help.openai.com/en/articles/20001052-library-for-chatgpt>,
+  <https://support.google.com/drive/answer/2375114?hl=en>,
+  <https://support.apple.com/en-ca/guide/iphone/iphb66cfeaad/ios>, and
+  <https://www.w3.org/WAI/ARIA/apg/patterns/button/>.
+- Upgrade requires a four-chip mixed-content unit matrix plus a real
+  composer-to-tool-to-Vault reload browser gate. Rollback restores only the
+  global projection; stored dossiers remain unchanged.
+
+## Reasoning row semantic icon (2026-07-29)
+
+- **ADOPT DIRECTLY `Brain` from the existing `@lucide/vue@1.25.0` pin**
+  (ISC), registry integrity
+  `sha512-hkEetV+v48ScIn3uwqwWQ66sI8foeP2q6OMI09GzLFH4SfvBlfe3JHYlMBdBCqFC7WRlhFsndyDn/awRKRc2OQ==`.
+- Lucide identifies Brain with mind, intellect, AI, think, thought and insight
+  semantics, while Sparkles is associated with stars, effects, filters and
+  magic. The Reasoning disclosure therefore uses Brain without introducing a
+  custom asset, vendor mark, package or lockfile change.
+- W3C decorative-image guidance is retained: the localized visible Reasoning
+  label names the action and the adjacent icon remains inside the existing
+  `aria-hidden="true"` wrapper, avoiding a duplicate announcement.
+- Sources:
+  <https://lucide.dev/icons/brain>,
+  <https://lucide.dev/icons/sparkles>, and
+  <https://www.w3.org/WAI/tutorials/images/decorative/>.
+- Upgrade requires exact Brain/absence-of-Sparkles unit assertions plus the
+  real provider-to-persistence-to-reload/drawer/export browser gate. Rollback
+  restores only the icon import/render; stored reasoning remains unchanged.
+
+## Composer and Settings interaction motion (2026-07-29)
+
+- **ADAPT the existing pinned `vue@3.5.40` and `reka-ui@2.10.1` primitives
+  behind TALOS Motion V6 tokens**; no dependency or lockfile change.
+- Vue's transition guidance and web.dev's rendering guidance support
+  compositor-only `transform` and `opacity` motion. TALOS commits final text
+  layout before the first frame, measures only the composer's old/new edge,
+  and never animates height, font metrics or text scale.
+- Reka Tabs retains its existing automatic-activation and keyboard semantics.
+  The supported preventable `closeAutoFocus` event is adapted only for
+  navigation into a subsequent Settings workflow; ordinary drawer dismissal
+  continues to restore the invoking trigger as required by the WAI-ARIA dialog
+  pattern.
+- W3C WCAG 2.3.3 and MDN `prefers-reduced-motion` guidance are applied through
+  the existing category gates and an OS-level final-state override. Android's
+  animation guidance is used only as a platform interaction reference; no
+  Compose/native animation layer is added.
+- Sources:
+  <https://vuejs.org/guide/built-ins/transition.html>,
+  <https://reka-ui.com/docs/components/tabs>,
+  <https://www.reka-ui.com/docs/components/drawer>,
+  <https://web.dev/articles/animations-guide>,
+  <https://developer.android.com/develop/ui/compose/animation/composables-modifiers>,
+  <https://developer.android.com/develop/ui/compose/animation/shared-elements/customize>,
+  <https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions>,
+  <https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/%40media/prefers-reduced-motion>,
+  and <https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/>.
+- Upgrade requires compositor-property unit enforcement, focus and rapid
+  reversal races, phone/tablet browser coverage, OS/category reduced-motion
+  coverage and the immutable initial-chunk budget. Rollback restores only the
+  owned Motion V6 projection, composer, Settings and sidebar focus-handoff
+  files; no data migration is involved.
+
+## Vue I18n localization runtime (2026-07-28)
+
+- **ADOPT `vue-i18n@11.4.8`** (MIT), registry integrity
+  `sha512-0ULeHP6Z9CGvAm67S77ZEp41cfGXIREGL8qfhos2BMgcQQewtQcDKuojt6jjasAD/S8GwfTp2ySPmDSpwvrCMQ==`.
+- Provenance: <https://github.com/intlify/vue-i18n> and the package published
+  through npm. The exact upstream notice is retained at
+  `upstream/licenses/vue-i18n-11.4.8-MIT.txt`.
+- Purpose: load exact typed `en` and `it` catalogs before Vue mounts, switch
+  application chrome reactively, and keep provider/model protocol content
+  outside the UI localization boundary.
+- Android per-app locale synchronization remains behind the AVM-owned
+  `TalosLocale` adapter and existing pinned AppCompat `1.7.1`; provider wire
+  formats never become the internal locale contract.
+- Android 12/API 32 and lower adopt AppCompat's official disabled,
+  non-exported `AppLocalesMetadataHolderService` with
+  `autoStoreLocales=true`. The AVM adapter performs the documented one-time
+  handoff from the pre-existing TALOS preference. Because AppCompat cannot
+  discover TALOS's older Capacitor Preferences key, the adapter records
+  `talos.mobile.locale.native-migration.v1=1` only after the custom-store
+  handoff succeeds (or native state is already authoritative). Android 13+
+  native Settings then remains authoritative, including the empty
+  follow-System locale list; a failed handoff leaves the marker absent so the
+  next healthy launch retries.
+- `npm audit --omit=dev --json` reported zero production vulnerabilities after
+  installation. The install also reported eleven development-only findings
+  (one moderate and ten high), which remain visible for the final dependency
+  audit and are not represented as production-cleanup completion.
+- Upgrade requires catalog parity, uncovered-chrome, Android locale-resource,
+  typecheck, bundle-budget and physical language-switch gates. Rollback removes
+  the runtime/adapter and falls back to the complete English catalog; it must
+  not leave mixed-language chrome.
+
+## Localized new-chat welcome library (2026-07-29)
+
+- **ADAPT Unicode CLDR `48.2`, tag `release-48-2`** behind the AVM-owned
+  `talos.welcome/1` parser. Only the exact EN/IT flexible day-period intervals
+  from `common/supplemental/dayPeriods.xml` are represented; the full CLDR data
+  set is not shipped and no runtime dependency is added.
+- **REUSE `@lucide/vue@1.25.0`** (ISC, integrity
+  `sha512-hkEetV+v48ScIn3uwqwWQ66sI8foeP2q6OMI09GzLFH4SfvBlfe3JHYlMBdBCqFC7WRlhFsndyDn/awRKRc2OQ==`)
+  for the exact static PartyPopper, Heart, Ghost, Snowflake, Gift and Clock
+  allowlist. No custom SVG, emoji or second icon package is introduced.
+- **ADAPT Vue `defineAsyncComponent`** with zero-delay loading/error fallback
+  and local async-state ownership. Vue `Suspense` is rejected for this single
+  leaf because its current official status remains experimental and its
+  production runtime exceeded the immutable initial-chunk budget.
+- Google Conversation Design, W3C decorative-image guidance, WCAG 2.3.3,
+  Open WebUI and LibreChat were inspected as design references. TALOS uses
+  original, concise offline copy; competitor strings, model-generated
+  greetings, remote copy services and personal-data inference are rejected.
+- Node's mandatory JSON import attribute is respected in production dynamic
+  imports. The Playwright oracle reads the same packaged JSON bytes through
+  `readFileSync`/`JSON.parse` to avoid transform-specific import-attribute
+  behavior.
+- Sources:
+  <https://unicode.org/reports/tr35/tr35-dates.html>,
+  <https://raw.githubusercontent.com/unicode-org/cldr/release-48-2/common/supplemental/dayPeriods.xml>,
+  <https://vuejs.org/guide/components/async.html>,
+  <https://vuejs.org/guide/built-ins/suspense.html>,
+  <https://developers.google.com/assistant/conversation-design/greetings>,
+  <https://www.w3.org/WAI/tutorials/images/decorative/>,
+  <https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions>,
+  and <https://nodejs.org/api/esm.html#import-attributes>.
+- Upgrade requires exact minute-boundary, schema, EN/IT semantic-index,
+  accessibility, async fallback, manifest-boundary, immutable bundle-budget,
+  browser and physical Android checks. Rollback restores the fixed localized
+  fallback and removes only the five welcome dynamic boundaries.
+
+## Additive Library context policy and immutable sends (2026-07-29)
+
+- **ADAPT Open WebUI full-context/focused Knowledge modes** and **Google
+  NotebookLM source selection** into explicit broad, relevant-only,
+  ask-before-egress and on-demand modes at global, chat and one-turn scope:
+  <https://docs.openwebui.com/features/workspace/knowledge/> and
+  <https://support.google.com/notebooklm/answer/16215270>.
+- **ADAPT OpenAI Vector Store query rewriting/ranking/score thresholds**,
+  **Azure AI Search history-aware agentic retrieval**, and **Anthropic
+  Contextual Retrieval** as the retrieval-quality contract, without adopting a
+  provider wire format as TALOS state:
+  <https://platform.openai.com/docs/api-reference/vector-stores>,
+  <https://learn.microsoft.com/en-us/azure/search/search-agentic-retrieval-concept>,
+  and <https://www.anthropic.com/news/contextual-retrieval>.
+- **ADAPT MCP Elicitation**, **OWASP prompt-injection separation**, and **NIST
+  least privilege/audit** for explicit decisions, untrusted Library bodies,
+  live revocation, dedicated policy capability, optimistic revisions, receipts,
+  audit, and bounded undo:
+  <https://modelcontextprotocol.io/specification/draft/client/elicitation>,
+  <https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html>,
+  and <https://csrc.nist.gov/projects/role-based-access-control>.
+- OpenAI's user-managed Library retention surface was inspected for ownership
+  and deletion expectations:
+  <https://help.openai.com/en/articles/20001052-library-for-chatgpt>.
+- No upstream runtime is integrated. TALOS keeps a provider-neutral,
+  versioned policy/selector/send-snapshot boundary and preserves legacy broad
+  users without a storage rewrite. Provider, model, session, turns, selected
+  files, authorization and artifact ownership are frozen before asynchronous
+  retrieval; live restrictive policy is rechecked immediately before egress.
+- R8 intentionally uses a deterministic multilingual lexical adapter with a
+  positive threshold and abstention. The already pinned development dependency
+  `@huggingface/transformers@4.2.0` is not promoted into an implicit runtime
+  model: no exact model revision, offline cache, APK-size, low-end Android
+  memory/latency, multilingual quality, licence or download-consent gate has
+  been approved.
+- Direct provider vector-store state, automatic migration away from broad
+  compatibility, and an unpinned remote embedding download are rejected.
+  Upgrade requires a separate ledger with a pinned semantic model and real
+  cold/warm physical-device evidence. Rollback removes only the optional R8
+  policy/guard adapters and retains the established Library and send-ownership
+  contracts.
+
+## Nonblocking tool authorization checkpoints (2026-07-29)
+
+- **ADAPT MCP Elicitation `2025-11-25`** for request identity,
+  decline/cancel, out-of-band sensitive authorization, and manual
+  retry/cancel/resume recovery:
+  <https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation>.
+- **ADAPT RFC 8785 JCS (June 2020)** for deterministic validated-input
+  canonicalization before SHA-256 request binding:
+  <https://www.rfc-editor.org/rfc/rfc8785.html>.
+- **ADAPT LangChain HITL checkpoint semantics**, with the inspected
+  conditional-interrupt floor `langchain>=1.3.3`, but do not add LangChain as a
+  runtime dependency:
+  <https://docs.langchain.com/oss/python/langchain/human-in-the-loop>.
+- ChatGPT Apps, Claude Code permissions, OpenHands security, AutoGen HITL, and
+  Android runtime-permission UX were inspected as current primary references:
+  <https://help.openai.com/en/articles/11487775-connectors-in-chatgpt>,
+  <https://code.claude.com/docs/en/permissions>,
+  <https://docs.openhands.dev/sdk/guides/security>,
+  <https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/human-in-the-loop.html>,
+  and <https://developer.android.com/training/permissions/requesting>.
+- No upstream runtime is integrated. TALOS keeps its provider-neutral bounded
+  TypeScript loop, SQLCipher repository, capability policy, evidence, audit,
+  and recovery ownership. The established durable-interrupt semantics are
+  adapted behind `talos.tool.authorization-grants/1` and
+  `talos.tool.authorization-checkpoint/1`.
+- Direct LangGraph/OpenHands/AutoGen integration is rejected because it would
+  introduce a second runtime and product-state owner. The former parked-Promise
+  consent is also rejected because it blocks the composer and cannot survive a
+  process loss.
+- Upgrade requires grant precedence, exact-call binding, whole-round preflight,
+  process-reload, uncertain-side-effect, EN/IT accessibility, real-provider,
+  and physical Android gates. Rollback never deletes unresolved encrypted
+  authorization activity.
 
 ## Compatibilita host (ultimo gate 2026-07-22)
 

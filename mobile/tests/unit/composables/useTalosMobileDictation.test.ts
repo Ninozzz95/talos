@@ -84,12 +84,39 @@ describe('useTalosMobileDictation (F2-T5)', () => {
 
     it('engine error while listening surfaces the message and stops', async () => {
         const { engine, events } = engineStub()
-        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        const errorMessage = vi.fn((code: string) => ({
+            recognitionFailed: 'Riconoscimento vocale non riuscito. Riprova.',
+        })[code] ?? code)
+        const dictation = useTalosMobileDictation({
+            base: () => '',
+            onTranscript: vi.fn(),
+            engine,
+            errorMessage,
+        })
         await flush()
         await dictation.toggle()
-        events().onError('Speech service unavailable.')
+        events().onError('recognitionFailed')
         expect(dictation.status.value).toBe('error')
-        expect(dictation.error.value).toBe('Speech service unavailable.')
+        expect(dictation.error.value).toBe('Riconoscimento vocale non riuscito. Riprova.')
+        expect(errorMessage).toHaveBeenCalledWith('recognitionFailed')
+    })
+
+    it('DICT-I18N-01 passes the selected language to each new session', async () => {
+        const { engine } = engineStub()
+        const dictation = useTalosMobileDictation({
+            base: () => '',
+            onTranscript: vi.fn(),
+            engine,
+            language: () => 'it-IT',
+        })
+        await flush()
+
+        await dictation.toggle()
+
+        expect(engine.start).toHaveBeenCalledWith(
+            expect.any(Object),
+            { language: 'it-IT' },
+        )
     })
 
     it('natural end AFTER speech returns to idle silently', async () => {
@@ -253,12 +280,12 @@ describe('native visibility inversion (F4-#18)', () => {
     it('on native, tap ATTEMPTS the engine even if the probe failed — errors surface honestly', async () => {
         const { engine } = engineStub({
             supported: vi.fn(async () => false),
-            start: vi.fn(async (events) => { events.onError('Plugin not registered.') }),
+            start: vi.fn(async (events) => { events.onError('recognitionFailed') }),
         })
         const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine, native: true })
         await flush()
         await dictation.toggle()
         expect(engine.start).toHaveBeenCalled()
-        expect(dictation.error.value).toBe('Plugin not registered.')
+        expect(dictation.error.value).toMatch(/recognition|speech/i)
     })
 })

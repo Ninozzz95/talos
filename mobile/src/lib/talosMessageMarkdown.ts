@@ -11,6 +11,31 @@ export interface TalosRenderedMessage {
 
 export interface TalosMarkdownRenderOptions {
     origin?: string
+    labels?: Partial<TalosMarkdownLabels>
+}
+
+export interface TalosMarkdownLabels {
+    completedTask: string
+    openTask: string
+    scrollableTable: string
+    image: string
+    externalImageOmitted: string
+    code: string
+    copyCode: string
+    copy: string
+    truncatedMessage: string
+}
+
+export const DEFAULT_TALOS_MARKDOWN_LABELS: Readonly<TalosMarkdownLabels> = {
+    completedTask: 'Completed task',
+    openTask: 'Open task',
+    scrollableTable: 'Scrollable message table',
+    image: 'Image',
+    externalImageOmitted: 'External image omitted:',
+    code: 'code',
+    copyCode: 'Copy code',
+    copy: 'Copy',
+    truncatedMessage: 'Message truncated for safe rendering.',
 }
 
 const allowedTags = [
@@ -34,6 +59,17 @@ function resolvedOrigin(options: TalosMarkdownRenderOptions): string {
     if (options.origin) return options.origin
     if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin
     return 'http://localhost'
+}
+
+function resolvedLabels(labels?: Partial<TalosMarkdownLabels>): TalosMarkdownLabels {
+    return { ...DEFAULT_TALOS_MARKDOWN_LABELS, ...labels }
+}
+
+function labelsFromEnvironment(environment: unknown): TalosMarkdownLabels {
+    if (!environment || typeof environment !== 'object') {
+        return { ...DEFAULT_TALOS_MARKDOWN_LABELS }
+    }
+    return resolvedLabels((environment as { labels?: Partial<TalosMarkdownLabels> }).labels)
 }
 
 function isExternalHttpLink(href: string, origin: string): boolean {
@@ -86,25 +122,31 @@ function createMarkdownRenderer(): MarkdownIt {
         }
     })
 
-    md.renderer.rules.talos_task_marker = (tokens, index) => {
+    md.renderer.rules.talos_task_marker = (tokens, index, _options, environment) => {
         const checked = tokens[index]!.meta?.checked === true
-        const label = checked ? 'Completed task' : 'Open task'
+        const labels = labelsFromEnvironment(environment)
+        const label = checked ? labels.completedTask : labels.openTask
         const symbol = checked ? '&#9745;' : '&#9744;'
-        return `<span class="talos-task-marker" role="img" aria-label="${label}">${symbol}</span> `
+        return `<span class="talos-task-marker" role="img" aria-label="${md.utils.escapeHtml(label)}">${symbol}</span> `
     }
-    md.renderer.rules.table_open = () => '<div class="talos-message-table-scroll" role="region" aria-label="Scrollable message table" tabindex="0"><table>'
+    md.renderer.rules.table_open = (_tokens, _index, _options, environment) => {
+        const label = md.utils.escapeHtml(labelsFromEnvironment(environment).scrollableTable)
+        return `<div class="talos-message-table-scroll" role="region" aria-label="${label}" tabindex="0"><table>`
+    }
     md.renderer.rules.table_close = () => '</table></div>'
-    md.renderer.rules.image = (tokens, index) => {
-        const alt = tokens[index]!.content.trim() || 'Image'
-        return `<span class="talos-external-image-omitted">External image omitted: ${md.utils.escapeHtml(alt)}</span>`
+    md.renderer.rules.image = (tokens, index, _options, environment) => {
+        const labels = labelsFromEnvironment(environment)
+        const alt = tokens[index]!.content.trim() || labels.image
+        return `<span class="talos-external-image-omitted">${md.utils.escapeHtml(labels.externalImageOmitted)} ${md.utils.escapeHtml(alt)}</span>`
     }
-    md.renderer.rules.fence = (tokens, index) => {
+    md.renderer.rules.fence = (tokens, index, _options, environment) => {
         const token = tokens[index]!
+        const labels = labelsFromEnvironment(environment)
         const language = languageClass(token.info)
         const codeClass = language ? ` class="language-${language}"` : ''
-        const languageLabel = language ? md.utils.escapeHtml(language) : 'code'
+        const languageLabel = language ? md.utils.escapeHtml(language) : md.utils.escapeHtml(labels.code)
         const contents = md.utils.escapeHtml(token.content)
-        return `<div class="talos-code-block"><div class="talos-code-block-header"><span>${languageLabel}</span><button type="button" data-talos-copy-code aria-label="Copy code">Copy</button></div><pre tabindex="0"><code${codeClass}>${contents}</code></pre></div>`
+        return `<div class="talos-code-block"><div class="talos-code-block-header"><span>${languageLabel}</span><button type="button" data-talos-copy-code aria-label="${md.utils.escapeHtml(labels.copyCode)}">${md.utils.escapeHtml(labels.copy)}</button></div><pre tabindex="0"><code${codeClass}>${contents}</code></pre></div>`
     }
     md.renderer.rules.link_open = (tokens, index, options, env, renderer) => {
         const token = tokens[index]!
@@ -132,10 +174,14 @@ export function renderTalosMarkdown(
     const sourceLength = source.length
     const truncated = sourceLength > MAX_TALOS_MARKDOWN_SOURCE_LENGTH
     const boundedSource = source.slice(0, MAX_TALOS_MARKDOWN_SOURCE_LENGTH)
+    const labels = resolvedLabels(options.labels)
     const normalized = normalizeSource(truncated
-        ? `${boundedSource}\n\n> Message truncated for safe rendering.`
+        ? `${boundedSource}\n\n> ${labels.truncatedMessage}`
         : boundedSource)
-    const html = markdown.render(normalized, { origin: resolvedOrigin(options) })
+    const html = markdown.render(normalized, {
+        origin: resolvedOrigin(options),
+        labels,
+    })
     const clean = DOMPurify.sanitize(html, {
         ALLOWED_ATTR: allowedAttributes,
         ALLOWED_TAGS: allowedTags,
@@ -205,16 +251,24 @@ export function splitTalosMarkdownBlocks(source: string): string[] {
 const BLOCK_CACHE_LIMIT = 400
 const blockCache = new Map<string, string>()
 
-export function renderTalosMarkdownBlock(source: string): string {
-    const hit = blockCache.get(source)
+export function renderTalosMarkdownBlock(
+    source: string,
+    options: TalosMarkdownRenderOptions = {},
+): string {
+    const cacheKey = JSON.stringify([
+        source,
+        resolvedOrigin(options),
+        resolvedLabels(options.labels),
+    ])
+    const hit = blockCache.get(cacheKey)
     if (hit !== undefined) {
         // Refresh recency so the blocks being read are the ones that survive.
-        blockCache.delete(source)
-        blockCache.set(source, hit)
+        blockCache.delete(cacheKey)
+        blockCache.set(cacheKey, hit)
         return hit
     }
-    const html = renderTalosMarkdown(source).html
-    blockCache.set(source, html)
+    const html = renderTalosMarkdown(source, options).html
+    blockCache.set(cacheKey, html)
     if (blockCache.size > BLOCK_CACHE_LIMIT) {
         const oldest = blockCache.keys().next()
         if (!oldest.done) blockCache.delete(oldest.value)

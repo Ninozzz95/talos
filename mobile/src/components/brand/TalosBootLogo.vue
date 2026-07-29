@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 // In-app animated brand intro — the mobile mirror of the desktop boot loader
-// (partials/talos-loading-logo): the TALOS hex + DAG whose edges stroke-draw
+// (partials/talos-loading-logo): the TALOS hex + DAG whose edges grow
 // (flowData) and whose nodes ignite (igniteNode) on a 2.5s loop, accent-driven,
 // with a prefers-reduced-motion guard. Plays as the first web paint over the static
 // native splash, then fades to the chat. Self-dismisses via `done`.
@@ -42,7 +42,7 @@ onBeforeUnmount(() => {
         :data-leaving="leaving"
         data-testid="talos-boot-logo"
         role="status"
-        aria-label="Loading TALOS"
+        :aria-label="$t('accessibility.loadingTalos')"
     >
         <svg class="talos-boot-svg" viewBox="0 0 500 500" aria-hidden="true">
             <g fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -98,9 +98,11 @@ onBeforeUnmount(() => {
 }
 .edge {
     stroke: var(--talos-accent, #f5a623);
-    stroke-dasharray: 90;
-    stroke-dashoffset: 90;
     opacity: 0;
+    transform: scaleY(0);
+    transform-box: fill-box;
+    transform-origin: center top;
+    will-change: transform, opacity;
 }
 .node {
     stroke: var(--talos-accent, #f5a623);
@@ -153,8 +155,8 @@ onBeforeUnmount(() => {
    looking at was an empty screen. It builds and STAYS built; the overlay's own
    fade is what removes it. */
 @keyframes talosBootFlow {
-    0%, 10% { stroke-dashoffset: 90; opacity: 0; }
-    60%, 100% { stroke-dashoffset: 0; opacity: 1; }
+    0%, 10% { transform: scaleY(0); opacity: 0; }
+    60%, 100% { transform: scaleY(1); opacity: 1; }
 }
 /**
  * Owner 2026-07-27: "l'animazione di boot lagga".
@@ -176,7 +178,7 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
     .edge, .node {
         animation: none !important;
-        stroke-dashoffset: 0;
+        transform: scaleY(1);
         opacity: 1;
     }
 }

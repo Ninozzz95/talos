@@ -34,9 +34,22 @@ import {
 } from '@/lib/talosFontScale'
 import {
     TALOS_DEFAULT_TOOL_PERMISSIONS,
+    type TalosToolAction,
     type TalosToolPermission,
     type TalosToolPermissions,
 } from '@/lib/tools/permissionTypes'
+import {
+    isTalosAgentToolId,
+    parseTalosAgentToolEnabled,
+    type TalosAgentToolEnabled,
+    type TalosAgentToolId,
+} from '@/lib/tools/toolControls'
+import {
+    applyTalosToolAuthorizationGrant,
+    parseTalosToolAuthorizationGrants,
+    revokeTalosToolAuthorizationGrant,
+    type TalosToolAuthorizationGrantsV1,
+} from '@/lib/tools/toolAuthorizations'
 import { talosBridgeCall } from '@/lib/talosBridge'
 import {
     TALOS_DEFAULT_MODEL_LAB_PREFERENCES,
@@ -49,6 +62,16 @@ import {
     type TalosMobileBrowserPreferences,
 } from '@/lib/browser/browserContracts'
 import { TALOS_DEFAULT_TONE, isTalosToneId, type TalosToneId } from '@/lib/tone'
+import {
+    parseTalosDictationLanguageMode,
+    type TalosDictationLanguageMode,
+} from '@/lib/dictationPolicy'
+import {
+    applyTalosLibraryContextPolicyPatch,
+    parseTalosLibraryContextPolicy,
+    type TalosLibraryContextPolicyPatch,
+    type TalosLibraryContextPolicyV1,
+} from '@/lib/chat/libraryPolicy'
 
 export const TALOS_MOBILE_SETTINGS_KEY = 'talos.mobile.settings'
 
@@ -95,13 +118,18 @@ export interface TalosMobileShellPreferences {
     /** Owner 2026-07-25: let the model in ANY chat read the GLOBAL Library
      *  (injected as context). Opt-in — adds tokens to each message. */
     library_context_enabled: boolean
+    /**
+     * Additive versioned policy. Null preserves the exact legacy boolean
+     * contract; hydration never invents or persists policy for old installs.
+     */
+    library_context_policy: TalosLibraryContextPolicyV1 | null
     /** Owner 2026-07-25: the model auto-saves generated files to the Library via a
      *  marker. On by default (owner wants it) but opt-out — when off, the model is
      *  not instructed to emit the marker and no capture runs. */
     library_autosave_generated: boolean
     /** Owner 2026-07-25: remembered Library view (grid gallery / list). */
     library_view: 'grid' | 'list'
-    /** Owner 2026-07-25: GLOBAL text size — chat, menus, settings, chrome. */
+    /** Interface text size only; message prose has independent bubble_scale. */
     ui_font_scale: TalosFontScale
     /**
      * Owner 2026-07-26: an alternative to the typewriter — "un'animazione più
@@ -135,6 +163,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     plus_dropdown: false,
     launcher_icon_follows_theme: false,
     library_context_enabled: false,
+    library_context_policy: null,
     /**
      * Owner 2026-07-27: on by default. A document the model made and did not
      * save is simply lost — the chat scrolls away and the bytes go with it,
@@ -174,6 +203,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         library_context_enabled: typeof record.library_context_enabled === 'boolean'
             ? record.library_context_enabled
             : DEFAULT_SHELL_PREFERENCES.library_context_enabled,
+        library_context_policy: parseTalosLibraryContextPolicy(record.library_context_policy),
         library_autosave_generated: typeof record.library_autosave_generated === 'boolean'
             ? record.library_autosave_generated
             : DEFAULT_SHELL_PREFERENCES.library_autosave_generated,
@@ -193,23 +223,18 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
 // desktop intro spec): compared against TALOS_MOBILE_INTRO_VERSION at open.
 export type TalosMobileIntroOutcome = 'completed' | 'skipped'
 // N1 — guided account-creation wizard outcome (mirrors the intro contract).
-export type TalosMobileWizardOutcome = 'completed' | 'skipped'
 
 export interface TalosMobileOnboardingState {
     intro_version: number
     intro_outcome: TalosMobileIntroOutcome | null
     setup_dismissed: boolean
     /** N1 — account wizard: version gate + outcome, same shape as the intro. */
-    wizard_version: number
-    wizard_outcome: TalosMobileWizardOutcome | null
 }
 
 const DEFAULT_ONBOARDING_STATE: TalosMobileOnboardingState = {
     intro_version: 0,
     intro_outcome: null,
     setup_dismissed: false,
-    wizard_version: 0,
-    wizard_outcome: null,
 }
 
 function parseVersion(candidate: unknown, fallback: number): number {
@@ -226,17 +251,12 @@ function parseOnboarding(value: unknown): TalosMobileOnboardingState {
     const outcome = record.intro_outcome === 'completed' || record.intro_outcome === 'skipped'
         ? record.intro_outcome
         : null
-    const wizardOutcome = record.wizard_outcome === 'completed' || record.wizard_outcome === 'skipped'
-        ? record.wizard_outcome
-        : null
     return {
         intro_version: parseVersion(record.intro_version, DEFAULT_ONBOARDING_STATE.intro_version),
         intro_outcome: outcome,
         setup_dismissed: typeof record.setup_dismissed === 'boolean'
             ? record.setup_dismissed
             : DEFAULT_ONBOARDING_STATE.setup_dismissed,
-        wizard_version: parseVersion(record.wizard_version, DEFAULT_ONBOARDING_STATE.wizard_version),
-        wizard_outcome: wizardOutcome,
     }
 }
 
@@ -333,9 +353,15 @@ export interface TalosMobileVoicePreferences {
     voice_uri: string | null
     rate: number
     pitch: number
+    dictation_language: TalosDictationLanguageMode
 }
 
-const DEFAULT_VOICE_PREFERENCES: TalosMobileVoicePreferences = { voice_uri: null, rate: 1, pitch: 1 }
+const DEFAULT_VOICE_PREFERENCES: TalosMobileVoicePreferences = {
+    voice_uri: null,
+    rate: 1,
+    pitch: 1,
+    dictation_language: 'system',
+}
 
 function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
     const record = (typeof value === 'object' && value !== null) ? value as Record<string, unknown> : {}
@@ -345,12 +371,16 @@ function parseVoicePreferences(value: unknown): TalosMobileVoicePreferences {
         voice_uri: typeof record.voice_uri === 'string' && record.voice_uri.length <= 256 ? record.voice_uri : null,
         rate: num(record.rate, DEFAULT_VOICE_PREFERENCES.rate, 0.5, 2),
         pitch: num(record.pitch, DEFAULT_VOICE_PREFERENCES.pitch, 0, 2),
+        dictation_language: parseTalosDictationLanguageMode(record.dictation_language),
     }
 }
-
 export interface TalosMobileSettingsState {
     /** Owner 2026-07-25: tool permissions per ACTION TYPE, user-configured. */
     tools: TalosToolPermissions
+    /** Per-tool eligibility. Action permissions remain an additional gate. */
+    agent_tools: TalosAgentToolEnabled
+    /** Exact, revocable device grants for tools whose action policy is `ask`. */
+    tool_authorizations: TalosToolAuthorizationGrantsV1
     /** F1: the chosen web-search source. The key itself lives in secure storage. */
     search: TalosMobileSearchPreferences
     shell: TalosMobileShellPreferences
@@ -490,6 +520,8 @@ export function parseTalosMobileSettings(raw: string | null): TalosMobileSetting
         onboarding: parseOnboarding(value.onboarding),
         security: parseSecurityPreferences(value.security),
         tools: parseToolPermissions(value.tools),
+        agent_tools: parseTalosAgentToolEnabled(value.agent_tools),
+        tool_authorizations: parseTalosToolAuthorizationGrants(value.tool_authorizations),
         search: parseSearchPreferences(value.search),
         tone: parseTonePreferences(value.tone),
         chat_layout: chatLayout,
@@ -513,10 +545,20 @@ export interface SettingsStore {
     hydrate(): Promise<void>
     setChatLayout(patch: Partial<TalosChatLayoutPreferences>): Promise<void>
     setShell(patch: Partial<TalosMobileShellPreferences>): Promise<void>
+    setLibraryContextPolicy(
+        patch: TalosLibraryContextPolicyPatch,
+        expectedRevision: number,
+    ): Promise<TalosLibraryContextPolicyV1>
     setOnboarding(patch: Partial<TalosMobileOnboardingState>): Promise<void>
     setSecurity(patch: Partial<TalosMobileSecurityPreferences>): Promise<void>
     /** Owner 2026-07-25: what the model may do without asking. */
     setToolPermissions(patch: Partial<TalosToolPermissions>): Promise<void>
+    setAgentToolEnabled(tool: TalosAgentToolId, enabled: boolean): Promise<void>
+    grantToolAuthorization(
+        tool: TalosAgentToolId,
+        actions: readonly TalosToolAction[],
+    ): Promise<void>
+    revokeToolAuthorization(tool: TalosAgentToolId): Promise<void>
     setSearchPreferences(patch: Partial<TalosMobileSearchPreferences>): Promise<void>
     setTone(preset: TalosToneId): Promise<void>
     setAiDefaults(patch: Partial<TalosAiDefaults>): Promise<void>
@@ -533,8 +575,17 @@ let singleton: SettingsStore | null = null
 export function useSettingsStore(): SettingsStore {
     if (singleton) return singleton
     const state = reactive<TalosMobileSettingsState>(parseTalosMobileSettings(null))
+    let agentToolMutationTail: Promise<void> = Promise.resolve()
+    let toolAuthorizationMutationTail: Promise<void> = Promise.resolve()
+    let libraryPolicyMutationTail: Promise<void> = Promise.resolve()
 
-    async function persist(): Promise<void> {
+    async function persist(
+        overrides: {
+            agent_tools?: TalosAgentToolEnabled
+            tool_authorizations?: TalosToolAuthorizationGrantsV1
+            shell?: TalosMobileShellPreferences
+        } = {},
+    ): Promise<void> {
         // R1-6: fenced — a hung Preferences bridge must reject, not freeze.
         await talosBridgeCall('TALOS_SETTINGS_PERSIST', () => Preferences.set({
             key: TALOS_MOBILE_SETTINGS_KEY,
@@ -543,10 +594,12 @@ export function useSettingsStore(): SettingsStore {
                 defaults_v3: true,
                 library_defaults_v1: true,
                 type_defaults_v1: true,
-                shell: state.shell,
+                shell: overrides.shell ?? state.shell,
                 onboarding: state.onboarding,
                 security: state.security,
                 tools: state.tools,
+                agent_tools: overrides.agent_tools ?? state.agent_tools,
+                tool_authorizations: overrides.tool_authorizations ?? state.tool_authorizations,
                 search: state.search,
                 tone: state.tone,
                 chat_layout: state.chat_layout,
@@ -581,6 +634,8 @@ export function useSettingsStore(): SettingsStore {
             // to its defaults. A user who set "never read my things" got
             // "always allow" back after one restart — a silent escalation.
             state.tools = parsed.tools
+            state.agent_tools = parsed.agent_tools
+            state.tool_authorizations = parsed.tool_authorizations
             // Rehydrated for the same reason `tools` is: a choice that vanishes
             // on restart is a setting that lies, and that defect already shipped
             // once on the tool permissions.
@@ -590,6 +645,35 @@ export function useSettingsStore(): SettingsStore {
         async setShell(patch) {
             state.shell = parseShellPreferences({ ...state.shell, ...patch })
             await persist()
+        },
+        async setLibraryContextPolicy(patch, expectedRevision) {
+            const operation = libraryPolicyMutationTail.then(async () => {
+                const current = state.shell.library_context_policy ?? {
+                    schema_version: 1 as const,
+                    revision: 0,
+                    enabled: state.shell.library_context_enabled,
+                    mode: 'broad_compat_v1' as const,
+                    included_file_ids: [],
+                    excluded_file_ids: [],
+                    updated_at: null,
+                }
+                const candidate = applyTalosLibraryContextPolicyPatch(
+                    current,
+                    patch,
+                    expectedRevision,
+                    new Date().toISOString(),
+                )
+                const shell = parseShellPreferences({
+                    ...state.shell,
+                    library_context_enabled: candidate.enabled,
+                    library_context_policy: candidate,
+                })
+                await persist({ shell })
+                state.shell = shell
+                return candidate
+            })
+            libraryPolicyMutationTail = operation.then(() => undefined, () => undefined)
+            return operation
         },
         async setOnboarding(patch) {
             state.onboarding = parseOnboarding({ ...state.onboarding, ...patch })
@@ -602,6 +686,63 @@ export function useSettingsStore(): SettingsStore {
         async setToolPermissions(patch) {
             state.tools = parseToolPermissions({ ...state.tools, ...patch })
             await persist()
+        },
+        async setAgentToolEnabled(tool, enabled) {
+            if (!isTalosAgentToolId(tool) || typeof enabled !== 'boolean') return
+            // Preferences stores the whole settings snapshot. Compute from the
+            // latest COMMITTED state and serialize these capability changes so
+            // two quick switches cannot overwrite one another. Publish only
+            // after the native write succeeds: the live registry must never
+            // observe a permission that will disappear on restart.
+            const operation = agentToolMutationTail.then(async () => {
+                const candidate = parseTalosAgentToolEnabled({
+                    ...state.agent_tools,
+                    [tool]: enabled,
+                })
+                if (candidate[tool] === state.agent_tools[tool]) return
+                await persist({ agent_tools: candidate })
+                state.agent_tools = candidate
+            })
+            // One rejected write must not poison the ordered mutation lane.
+            agentToolMutationTail = operation.catch(() => undefined)
+            await operation
+        },
+        async grantToolAuthorization(tool, actions) {
+            const operation = toolAuthorizationMutationTail.then(async () => {
+                const current = state.tool_authorizations
+                const candidate = applyTalosToolAuthorizationGrant(
+                    current,
+                    tool,
+                    actions,
+                    current.revision,
+                    new Date().toISOString(),
+                )
+                await persist({ tool_authorizations: candidate })
+                state.tool_authorizations = candidate
+            })
+            toolAuthorizationMutationTail = operation.then(
+                () => undefined,
+                () => undefined,
+            )
+            await operation
+        },
+        async revokeToolAuthorization(tool) {
+            const operation = toolAuthorizationMutationTail.then(async () => {
+                const current = state.tool_authorizations
+                const candidate = revokeTalosToolAuthorizationGrant(
+                    current,
+                    tool,
+                    current.revision,
+                )
+                if (candidate === current) return
+                await persist({ tool_authorizations: candidate })
+                state.tool_authorizations = candidate
+            })
+            toolAuthorizationMutationTail = operation.then(
+                () => undefined,
+                () => undefined,
+            )
+            await operation
         },
         async setSearchPreferences(patch) {
             state.search = parseSearchPreferences({ ...state.search, ...patch })
