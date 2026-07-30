@@ -60,9 +60,25 @@ Perché questa forma e non un flag: un flag va controllato in ogni punto di
 scrittura, e il giorno che se ne aggiunge uno nuovo nessuno se ne ricorda. Con
 l'instradamento, una scrittura temporanea non ha proprio un disco davanti.
 
-**Costo noto, misurato prima di partire:** `TalosChatRepository` ha **38 metodi**
-(debito A6 del registro). Il decoratore è meccanico ma lungo, ed è la ragione per
-cui questo blocco non si improvvisa a fine turno.
+**Correzione al disegno, dopo aver guardato l'interfaccia da vicino.**
+Un decoratore che copia i 38 metodi NON va bene, per due ragioni trovate
+leggendo il codice e non ragionando a mente:
+
+1. I metodi non parlano la stessa lingua. Alcuni prendono un `sessionId`, altri
+   un oggetto che lo contiene, **altri l'id di un messaggio** — e da quello la
+   sessione non si ricava senza chiederla a qualcuno.
+2. Peggio: il giorno che qualcuno aggiunge il **39° metodo**, un decoratore
+   scritto a mano lo lascia cadere sul disco **in silenzio**. Che è esattamente
+   il fallimento che questa funzione esiste per impedire.
+
+**Quindi: una tabella di instradamento che FALLISCE CHIUSO.** Per ogni metodo,
+una riga che dice come si trova la sessione. Un metodo non elencato **solleva un
+errore** invece di scrivere. Il 39° metodo rompe un test il giorno che lo
+aggiungi, invece di far uscire in silenzio una chat che l'utente aveva chiesto
+fosse temporanea.
+
+`TalosChatRepository` ha 38 metodi (debito A6): la tabella è ~38 righe corte e
+leggibili, contro ~400 di copie che possono divergere una per una.
 
 **Da decidere in implementazione:**
 - la sessione temporanea è visibile nell'elenco mentre è viva? (ChatGPT: no,
